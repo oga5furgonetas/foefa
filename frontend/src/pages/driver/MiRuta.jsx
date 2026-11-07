@@ -38,6 +38,8 @@ import { decir, vozActiva } from '../../lib/voz'
 import { textoBriefing } from '../../lib/briefing'
 import { textoAvisoIa } from '../../lib/entregaIa'
 import { Hoja as HojaPieza } from './piezas'
+import Boton from './piezas/Boton'
+import NumeroParada from './piezas/NumeroParada'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
    Lo que hace el repartidor al cargar: escanea el código de la caja. Si el
@@ -2084,22 +2086,21 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
       )}
 
       {encontrado && (
-        <Hoja titulo={tx('Este paquete va en la parada')} onClose={() => setEncontrado(null)}>
-          <div className="flex items-center gap-4">
-            <span className="flex h-20 min-w-20 shrink-0 items-center justify-center rounded-2xl bg-brand-500 px-3 text-[40px] font-extrabold text-brand-tinta">{encontrado.orden ?? '—'}</span>
+        <Hoja titulo={tx('Este paquete va en la parada')} onClose={() => setEncontrado(null)}
+          pie={<Boton variante="principal" icono={ScanLine} texto={tx('Escanear el siguiente')} className="w-full" onClick={() => { setEncontrado(null); setEscaner(true) }} />}>
+          {/* Diseño compacto (07-11-2026, §5.5): el número de 80 en «paquete», los datos en «titulo» / «texto» / «sec»,
+              «Sin número hasta ordenar» cuando aún no hay orden y «Escanear el siguiente» en el pie fijo. */}
+          <div className="flex items-center gap-3 pt-2">
+            <NumeroParada n={encontrado.orden} tam="paquete" estado="siguiente" />
             <div className="min-w-0">
-              <p className="text-[18px] font-bold leading-tight text-dark-50">{encontrado.cliente || tx('Cliente')}</p>
-              <p className="mt-0.5 text-[14px] leading-snug text-dark-200">{encontrado.direccion}</p>
-              <p className="mt-1 text-[12.5px] text-dark-400">{tx('bulto {a} de {b}', { a: encontrado.escaneos, b: encontrado.bultos })}</p>
+              <p className="text-titulo text-dark-50">{encontrado.cliente || tx('Cliente')}</p>
+              <p className="text-texto text-dark-50">{encontrado.direccion}</p>
+              <p className="mt-1 text-sec text-dark-400">{tx('bulto {a} de {b}', { a: encontrado.escaneos, b: encontrado.bultos })}</p>
             </div>
           </div>
-          {encontrado.orden == null && <p className="mt-3 text-[12.5px] text-amber-200">{tx('Aún sin número: pulsa «Ordenar ruta» y tendrá su parada.')}</p>}
-          <p className="mb-1.5 mt-4 text-[13px] text-dark-300">{tx('¿Dónde lo dejas en la furgoneta?')}</p>
+          {encontrado.orden == null && <p className="mt-2 text-sec text-ruta-aviso-texto">{tx('Sin número hasta ordenar')}</p>}
+          <p className="mb-2 mt-4 text-boton text-dark-50">{tx('¿Dónde lo dejas en la furgoneta?')}</p>
           <HuecoRejilla valor={encontrado.hueco} ocupado={ocupado === `hueco-${encontrado.id}`} onElegir={(h) => ponerHueco(encontrado, h)} />
-          <button onClick={() => { setEncontrado(null); setEscaner(true) }}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta">
-            <ScanLine size={18} /> {tx('Escanear el siguiente')}
-          </button>
         </Hoja>
       )}
 
@@ -2178,37 +2179,27 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
         </Hoja>
       )}
       {pegar && (
-        <Hoja titulo={tx('Pegar una lista de direcciones')} onClose={() => setPegar(null)}>
-          <p className="mb-2 text-[13px] text-dark-400">
-            {tx('Una parada por línea (de un correo, un Excel, un WhatsApp…). Si hay columnas con cabecera (dirección, cliente, teléfono, horario…), se leen.')}
-          </p>
-          <div className="mb-2 grid grid-cols-2 gap-2">
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-brand-400/60 py-2.5 text-[13.5px] font-bold text-brand-200">
-              {ocupado === 'hoja' ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />} {ocupado === 'hoja' ? tx('Leyendo…') : tx('Foto de la hoja')}
-              <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'hoja'}
-                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; leerHoja(f) }} />
-            </label>
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dark-600 py-2.5 text-[13.5px] font-semibold text-dark-100">
-              <FileUp size={16} /> {tx('Abrir un fichero')}
-              <input type="file" accept=".csv,.txt,.tsv,text/plain,text/csv,text/tab-separated-values,.xlsx,.xls,.pdf" className="hidden" aria-label={tx('Abrir un fichero')}
-                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; abrirFichero(f) }} />
-            </label>
+        <Hoja titulo={tx('Pegar una lista de direcciones')} onClose={() => setPegar(null)}
+          ayuda={{ texto: tx('Una parada por línea (de un correo, un Excel, un WhatsApp…). Si hay columnas con cabecera (dirección, cliente, teléfono, horario…), se leen.') }}
+          pie={pegar.n == null ? (
+            <Boton variante="principal" className="w-full" onClick={() => pegarLista(false)} disabled={pegar.texto.trim().length < 5 || ocupado === 'pegar'}
+              cargando={ocupado === 'pegar'} texto={ocupado === 'pegar' ? tx('Leyendo…') : tx('Revisar')} />
+          ) : (
+            <Boton variante="principal" tono="ok" className="w-full" onClick={() => pegarLista(true)} disabled={ocupado === 'pegar'} cargando={ocupado === 'pegar'}
+              texto={ocupado === 'pegar' ? tx('Añadiendo…') : pegar.n === 1 ? tx('Añadir 1 parada a mi ruta') : tx('Añadir {n} paradas a mi ruta', { n: pegar.n })} />
+          )}>
+          {/* Diseño compacto (07-11-2026, §5.4): el párrafo, al «?»; la foto y el fichero en una fila de 48; la caja con su
+              ejemplo de siempre; «Revisar» y luego «Añadir {n} paradas a mi ruta», en el pie fijo. */}
+          <div className="grid grid-cols-2 gap-2 pt-2">
+            <BotonFichero variante="normal" contorno icono={Camera} texto={ocupado === 'hoja' ? tx('Leyendo…') : tx('Foto de la hoja')} cargando={ocupado === 'hoja'}
+              accept="image/*" capture="environment" onFichero={leerHoja} />
+            <BotonFichero variante="normal" contorno tono="neutro" icono={FileUp} texto={tx('Abrir un fichero')}
+              accept=".csv,.txt,.tsv,text/plain,text/csv,text/tab-separated-values,.xlsx,.xls,.pdf" onFichero={abrirFichero} />
           </div>
-          {pegar.nota && <p role="status" className="mb-2 text-[12.5px] text-amber-200/90">{pegar.nota}</p>}
-          <textarea className={`${inp} h-40 font-mono text-[13px]`} value={pegar.texto} aria-label={tx('Lista de direcciones')}
+          {pegar.nota && <p role="status" className="mt-2 text-sec text-ruta-aviso-texto">{pegar.nota}</p>}
+          <textarea className="campo mt-2 h-40 resize-none py-3 font-mono" value={pegar.texto} aria-label={tx('Lista de direcciones')}
             onChange={(e) => setPegar({ texto: e.target.value, n: null, nota: pegar.nota })}
             placeholder={EJEMPLO_DIRECCIONES[ruta?.pais] || EJEMPLO_DIRECCIONES.en} />
-          {pegar.n == null ? (
-            <button onClick={() => pegarLista(false)} disabled={pegar.texto.trim().length < 5 || ocupado === 'pegar'}
-              className="mt-3 w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta disabled:opacity-40">
-              {ocupado === 'pegar' ? tx('Leyendo…') : tx('Revisar')}
-            </button>
-          ) : (
-            <button onClick={() => pegarLista(true)} disabled={ocupado === 'pegar'}
-              className="mt-3 w-full rounded-xl bg-emerald-700 py-3 text-[15px] font-bold text-white disabled:opacity-40">
-              {ocupado === 'pegar' ? tx('Añadiendo…') : pegar.n === 1 ? tx('Añadir 1 parada a mi ruta') : tx('Añadir {n} paradas a mi ruta', { n: pegar.n })}
-            </button>
-          )}
         </Hoja>
       )}
 
@@ -2263,41 +2254,32 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
         <CargaGuiada pedidos={pendientes} cargaPor={ruta.ruta?.carga_por} Escaner={Escaner} onClose={() => setCargaGuiada(false)} onCambio={cargar} />
       )}
       {seguidos?.abierto && (
-        <Escaner seguido onCodigo={escaneoSeguido} onClose={cerrarSeguidos}
+        <Escaner seguido onCodigo={escaneoSeguido} onClose={cerrarSeguidos} ultimo={seguidos.ultimo || ''}
           estado={seguidos.nuevos + seguidos.yaEstaban + seguidos.revisar.length === 0 ? '' : [tx('{n} añadidos', { n: seguidos.nuevos }),
             seguidos.yaEstaban ? tx('{n} ya estaban', { n: seguidos.yaEstaban }) : '',
             seguidos.revisar.length ? tx('{n} para revisar', { n: seguidos.revisar.length }) : '',
-            seguidos.enCola ? `${seguidos.enCola} ${tx('en cola')}` : ''].filter(Boolean).join(' · ')
-            + (seguidos.ultimo ? `\n${seguidos.ultimo}` : '')} />
+            seguidos.enCola ? `${seguidos.enCola} ${tx('en cola')}` : ''].filter(Boolean).join(' · ')} />
       )}
 
       {carga && !nuevo && !seguidos?.abierto && (
-        <Hoja titulo={carga.n ? (carga.n > 1 ? tx('{n} paquetes cargados', { n: carga.n }) : tx('1 paquete cargado')) : tx('Cargar paquetes')} onClose={() => setCarga(null)}>
-          <p className="mb-3 text-[13px] text-dark-400">
-            {tx('Haz una foto a la etiqueta de cada paquete: se lee el código, la dirección y el teléfono. Al acabar, «Montar ruta».')}
-          </p>
-          <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-4 text-[16px] font-bold text-brand-tinta">
-            {ocupado === 'ticket' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
-            {ocupado === 'ticket' ? tx('Leyendo…') : carga.n ? tx('Siguiente paquete') : tx('Primer paquete')}
-            <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'ticket'}
-              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setNuevo({ ...VACIO }); leerTicket(f) } }} />
-          </label>
-          <button onClick={() => { medirAccion('ruta_escaner'); setSeguidos((s) => ({ nuevos: 0, yaEstaban: 0, revisar: s?.revisar || [], ultimo: '', abierto: true })) }}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-brand-400/60 py-3 text-[14px] font-bold text-brand-200">
-            <ScanLine size={17} /> {tx('Escanear seguidos')}
-          </button>
-          {seguidos?.revisar?.length > 0 && (
-            <button onClick={revisarSiguiente} className="mt-2 w-full rounded-xl border border-amber-400/60 bg-amber-500/10 py-3 text-[14px] font-bold text-amber-200">
-              {tx('Revisar {n} paquetes sin dirección', { n: seguidos.revisar.length })}
-            </button>
-          )}
-          <button onClick={() => { setNuevo({ ...VACIO }) }} className="mt-2 w-full rounded-xl border border-dark-600 py-3 text-[14px] font-semibold text-dark-100">
-            {tx('Escribirlo a mano')}
-          </button>
-          <button onClick={() => { setCarga(null); if (pendientes.length) ordenar() }} disabled={ocupado === 'ordenar'}
-            className="mt-3 w-full rounded-xl bg-emerald-700 py-3.5 text-[15px] font-bold text-white disabled:opacity-50">
-            {carga.n || pendientes.length ? <><Route size={16} className="mr-1 inline" /> {tx('Montar ruta y empezar')}</> : tx('Cerrar')}
-          </button>
+        <Hoja titulo={carga.n ? (carga.n > 1 ? tx('{n} paquetes cargados', { n: carga.n }) : tx('1 paquete cargado')) : tx('Cargar paquetes')} onClose={() => setCarga(null)}
+          ayuda={{ texto: tx('Haz una foto a la etiqueta de cada paquete: se lee el código, la dirección y el teléfono. Al acabar, «Montar ruta».') }}
+          pie={<Boton variante="principal" tono="ok" className="w-full" icono={carga.n || pendientes.length ? Route : undefined} disabled={ocupado === 'ordenar'}
+            onClick={() => { setCarga(null); if (pendientes.length) ordenar() }} texto={carga.n || pendientes.length ? tx('Montar ruta y empezar') : tx('Cerrar')} />}>
+          {/* Diseño compacto (07-11-2026, §5.4): el párrafo, al «?»; «Primer / Siguiente paquete» (52, marca), «Escanear
+              seguidos» (48, contorno), «Revisar {n} paquetes sin dirección» (aviso, si los hay) y «Escribirlo a mano» (48);
+              «Montar ruta y empezar» (52, ok), en el pie fijo. */}
+          <div className="flex flex-col gap-2 pt-2">
+            <BotonFichero variante="principal" icono={Camera} cargando={ocupado === 'ticket'} accept="image/*" capture="environment"
+              texto={ocupado === 'ticket' ? tx('Leyendo…') : carga.n ? tx('Siguiente paquete') : tx('Primer paquete')}
+              onFichero={(f) => { if (f) { setNuevo({ ...VACIO }); leerTicket(f) } }} />
+            <Boton variante="normal" contorno icono={ScanLine} texto={tx('Escanear seguidos')}
+              onClick={() => { medirAccion('ruta_escaner'); setSeguidos((s) => ({ nuevos: 0, yaEstaban: 0, revisar: s?.revisar || [], ultimo: '', abierto: true })) }} />
+            {seguidos?.revisar?.length > 0 && (
+              <Boton variante="normal" tono="aviso" texto={tx('Revisar {n} paquetes sin dirección', { n: seguidos.revisar.length })} onClick={revisarSiguiente} />
+            )}
+            <Boton variante="normal" contorno tono="neutro" texto={tx('Escribirlo a mano')} onClick={() => { setNuevo({ ...VACIO }) }} />
+          </div>
         </Hoja>
       )}
 
@@ -3133,9 +3115,28 @@ async function fotograma(v) {
   } catch { return null }
 }
 
+/* Un botón que abre el selector de ficheros (diseño compacto, 07-11-2026): la pieza Boton y, escondido, el <input type=file>
+   de siempre, con el texto de nombre accesible (las pruebas lo buscan con getByLabel). Al elegir se vacía el input, para
+   poder repetir el mismo fichero. `onFichero` recibe el fichero (o nada, si se canceló), como los onChange de antes. */
+function BotonFichero({ texto, accept, capture, onFichero, disabled = false, cargando = false, ...resto }) {
+  const entrada = useRef(null)
+  return (
+    <>
+      <Boton texto={texto} disabled={disabled} cargando={cargando} onClick={() => entrada.current?.click()} {...resto} />
+      <input ref={entrada} type="file" accept={accept} capture={capture} className="hidden" aria-label={texto} disabled={disabled || cargando}
+        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; onFichero(f) }} />
+    </>
+  )
+}
+
 /* `seguido` (13-10-2026): la cámara no se cierra tras cada paquete; los que ya
-   se han leído no se repiten y `estado` se enseña abajo («12 añadidos…»). */
-function Escaner({ onCodigo, onClose, seguido = false, estado = '' }) {
+   se han leído no se repiten y lo de abajo cuenta lo que va.
+   Diseño compacto (07-11-2026, §5.5): arriba, la píldora «Apunta al código» y la ✕ de 48 con fondo y zona segura; abajo,
+   en una barra (radio 16, relleno 12, negro al 90 %) y solo si hay algo que contar: `ultimo` (lo último leído, 14/600, dos
+   líneas), `grande` (el hueco o la parada, en «cifra» verde), `aviso` (un error de quien escanea, en rojo) y `estado` (el
+   contador, en «sec»), con el botón «Listo» de 48. Los colores van fijos, como los `escaner*` del tema de la nativa: la
+   pantalla es negra en los tres temas y los tonos de las piezas (que siguen al tema) no se leerían aquí. */
+function Escaner({ onCodigo, onClose, seguido = false, estado = '', ultimo = '', grande = '', aviso = '' }) {
   useAtras(true, onClose)
   const video = useRef(null)
   const [error, setError] = useState('')
@@ -3152,7 +3153,7 @@ function Escaner({ onCodigo, onClose, seguido = false, estado = '' }) {
     async function arrancar() {
       let detector
       try { detector = await lectorDeCodigos() } catch {
-        setError(tx('Este móvil no sabe leer códigos desde el navegador. Escribe el código o haz la foto del ticket.'))
+        setError(tx('Este móvil no lee códigos: escribe el código'))
         return
       }
       try {
@@ -3189,7 +3190,7 @@ function Escaner({ onCodigo, onClose, seguido = false, estado = '' }) {
         }
         mirar()
       } catch {
-        setError(tx('No se pudo abrir la cámara. Dale permiso en el navegador o escribe el código.'))
+        setError(tx('Sin permiso de cámara'))
       }
     }
     arrancar()
@@ -3200,23 +3201,39 @@ function Escaner({ onCodigo, onClose, seguido = false, estado = '' }) {
     }
   }, [seguido])
 
+  const algo = seguido && (ultimo || grande || aviso || estado)
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black" role="dialog" aria-modal="true" aria-label={tx('Escanear')}>
-      <div className="flex items-center justify-between p-4">
-        <span className="text-[15px] font-semibold text-white">{tx('Apunta a la etiqueta, con el código dentro del recuadro')}</span>
-        <button onClick={onClose} className="rounded-full bg-white/10 p-2 text-white" aria-label={tx('Cerrar')}><X size={18} /></button>
-      </div>
-      {error ? <p className="px-6 py-10 text-center text-[14px] text-white/80">{error}</p> : (
-        <div className="relative flex-1">
-          <video ref={video} playsInline muted className="h-full w-full object-cover" />
-          <div className="pointer-events-none absolute inset-x-8 top-1/2 h-40 -translate-y-1/2 rounded-2xl border-2 border-white/70" />
-          {seguido && (
-            <p role="status" aria-live="polite" className="absolute inset-x-4 bottom-6 whitespace-pre-line rounded-xl bg-black/70 px-4 py-3 text-center text-[15px] font-semibold text-white">
-              {estado || tx('Pasa las etiquetas una tras otra')}
-            </p>
+    <div className="fixed inset-0 z-50 flex flex-col bg-black text-white" role="dialog" aria-modal="true" aria-label={tx('Escanear')}>
+      <div className="relative flex-1">
+        {error ? <p className="px-4 pt-20 text-center text-texto">{error}</p> : (
+          <>
+            <video ref={video} playsInline muted className="h-full w-full object-cover" />
+            <div className="pointer-events-none absolute inset-x-8 top-1/2 h-40 -translate-y-1/2 rounded-2xl border-2 border-white/70" />
+          </>
+        )}
+        <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 px-4 pt-[max(8px,env(safe-area-inset-top))]">
+          <span className="w-12 shrink-0" aria-hidden="true" />
+          {!error && (
+            <span className="inline-flex h-8 min-w-0 items-center rounded-full bg-black/60 px-3 text-etiqueta"><span className="truncate">{tx('Apunta al código')}</span></span>
           )}
+          <button type="button" onClick={onClose} aria-label={tx('Cerrar')} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-black/40">
+            <X size={24} aria-hidden="true" />
+          </button>
         </div>
-      )}
+        {seguido && (
+          <div className="absolute inset-x-4 bottom-[max(16px,env(safe-area-inset-bottom))] flex items-end gap-2 rounded-2xl bg-black/90 p-3">
+            {algo ? (
+              <div role="status" aria-live="polite" className="min-w-0 flex-1">
+                {ultimo && <p className="line-clamp-2 text-boton">{ultimo}</p>}
+                {grande && <p className="text-cifra text-emerald-300">{grande}</p>}
+                {aviso && <p className="text-texto text-red-300">{aviso}</p>}
+                {estado && <p className="text-sec text-white/80">{estado}</p>}
+              </div>
+            ) : <span className="flex-1" />}
+            <button type="button" onClick={onClose} className="min-h-12 shrink-0 rounded-xl bg-white/10 px-4 text-boton">{tx('Listo')}</button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

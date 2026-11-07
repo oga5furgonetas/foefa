@@ -1,11 +1,20 @@
+/* diseño compacto */
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, ScanLine, Loader2, Check, List, Truck, Search } from 'lucide-react'
+import { ScanLine, Loader2, Check, List, Truck, Search } from 'lucide-react'
 import { repEscanearCarga, repMiCargado } from '../../services/api'
 import { tx, useIdioma, txError } from '../../lib/idioma'
 import { decir, vozActiva } from '../../lib/voz'
 import { huecoHablado } from '../../lib/briefing'
 import { medirAccion } from '../../lib/analitica'
 import { useAtras } from '../../lib/atras'
+import Ayuda from './piezas/Ayuda'
+import Boton from './piezas/Boton'
+import Cabecera from './piezas/Cabecera'
+import Campo from './piezas/Campo'
+import Chip from './piezas/Chip'
+import ContenedorLista from './piezas/ContenedorLista'
+import Etiqueta from './piezas/Etiqueta'
+import Segmentado from './piezas/Segmentado'
 
 /* ── LA CARGA GUIADA (01-11-2026) ────────────────────────────────────────────
    En la nave, con la ruta ya ordenada: escaneas cada paquete y la app te dice en qué hueco de la furgoneta va (el
@@ -13,7 +22,14 @@ import { useAtras } from '../../lib/atras'
    último, al fondo). Lo dice en grande y por voz, y cuenta cuántos van. Al llegar a cada parada, su ficha ya dice el
    hueco. Quien carga sin escanear tiene la lista por hueco con una casilla por paquete. Es la queja literal de las
    reseñas de Routal («en ruta no puedes ver qué paquetes entran en cada parada») y lo que Bettermile mide en 2-3 min
-   por parada. Los huecos son los seis de siempre (`HUECOS` en MiRuta), con sus traducciones. */
+   por parada. Los huecos son los seis de siempre (`HUECOS` en MiRuta), con sus traducciones.
+
+   Diseño compacto (07-11-2026, §5.6): cabecera de 56 con el chip «{a}/{b}» (nombre «{a} de {b} cargados») y el «?» (la
+   explicación de antes va ahí, con sus claves), segmentado de 40, lo escaneado ARRIBA (antes iba al final y en los
+   móviles pequeños quedaba fuera de la vista), la furgoneta plana con celdas de 64 y «{a}/{b}», el chip «{n} sin hueco ›»,
+   el campo del código a la vista (es la vía del iPhone), la lista por hueco en un ContenedorLista con casillas de 48 y
+   la barra de abajo con la zona segura: «Escanear» (52, ok) y «Salir ({n} faltan)» (48). Lo que hace cada botón y lo
+   que se manda al servidor, igual que antes. */
 export const HUECOS = ['Delante · izq', 'Delante · der', 'Medio · izq', 'Medio · der', 'Detrás · izq', 'Detrás · der']
 const FILAS = [['Delante · izq', 'Delante · der'], ['Medio · izq', 'Medio · der'], ['Detrás · izq', 'Detrás · der']]
 
@@ -72,121 +88,105 @@ export default function CargaGuiada({ pedidos, cargaPor = 'traseras', Escaner, o
   }
 
   const ordenUltimo = ultimo?.pedido?.orden ?? '–'
-  const estadoEscaner = [tx('{a} de {b} cargados', { a: cargados, b: total }),
-    ultimo?.pedido ? `${tx('Parada {n}', { n: ordenUltimo })} · ${ultimo.pedido.cliente || ultimo.pedido.direccion}\n${ultimo.pedido.hueco ? tx(ultimo.pedido.hueco) : tx('Sin hueco')}` : '',
-    error].filter(Boolean).join('\n')
+  const cuenta = tx('{a} de {b} cargados', { a: cargados, b: total })
+  // Lo último escaneado: la parada y, en grande, el hueco (lo mismo arriba y en la barra del escáner).
+  const nombreUltimo = ultimo?.pedido ? `${tx('Parada {n}', { n: ordenUltimo })} · ${ultimo.pedido.cliente || ultimo.pedido.direccion}` : ''
+  const huecoUltimo = ultimo?.pedido ? (ultimo.pedido.hueco ? `→ ${tx(ultimo.pedido.hueco)}` : tx('Sin hueco')) : ''
+  const puerta = lateral ? `← ${tx('Puerta lateral')}` : `↓ ${tx('Puertas traseras')}`
+  const secciones = [...filasEnOrden.flat().map((h) => [h, porHueco[h]]), [tx('Sin hueco'), sinHueco]].filter(([, l]) => l.length)
 
   return (
-    <div className="fixed inset-0 z-[45] overflow-y-auto bg-dark-950 text-dark-50" role="dialog" aria-label={tx('Cargar la furgoneta')}>
-      <div className="mx-auto max-w-md px-4 pb-28 pt-4">
-        <div className="mb-3 flex items-center gap-2">
-          <button onClick={onClose} aria-label={tx('Volver')} className="rounded-lg p-2 text-dark-300 hover:bg-dark-800"><ArrowLeft size={18} /></button>
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-brand-300">{tx('Cargar la furgoneta')}</p>
-            <p className="text-[20px] font-bold leading-tight">{tx('Escanea y te digo dónde va')}</p>
-          </div>
-          <span className="shrink-0 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[12.5px] font-bold text-emerald-200" aria-live="polite">
-            {tx('{a} de {b} cargados', { a: cargados, b: total })}
-          </span>
-        </div>
-        <p className="mb-3 text-[12.5px] text-dark-400">
-          {tx('La ruta ya está ordenada: lo primero que se entrega va junto a la puerta y lo último, al fondo.')}
-          {' '}{lateral ? tx('Cargas por la puerta lateral.') : tx('Cargas por las puertas traseras.')}
-        </p>
+    <div className="fixed inset-0 z-[45] flex flex-col bg-dark-950 text-dark-50" role="dialog" aria-label={tx('Cargar la furgoneta')}>
+      <Cabecera titulo={tx('Cargar la furgoneta')} onVolver={onClose} className="mx-auto w-full max-w-md"
+        acciones={(
+          <>
+            <span role="status" aria-label={cuenta} title={cuenta} className="mr-1"><Etiqueta tono="ok" texto={`${cargados}/${total}`} /></span>
+            <Ayuda titulo={tx('Cargar la furgoneta')}>
+              <p>{tx('La ruta ya está ordenada: lo primero que se entrega va junto a la puerta y lo último, al fondo.')} {lateral ? tx('Cargas por la puerta lateral.') : tx('Cargas por las puertas traseras.')}</p>
+              <p className="mt-2">{lateral ? tx('Lo de delante se entrega primero.') : tx('Lo de detrás se entrega primero.')}</p>
+            </Ayuda>
+          </>
+        )} />
 
-        <div className="mb-3 flex gap-2">
-          <button onClick={() => setVista('furgoneta')} className={`flex-1 rounded-xl py-2 text-[13px] font-semibold ${vista === 'furgoneta' ? 'bg-dark-800 text-dark-50' : 'text-dark-400'}`}>
-            <Truck size={14} className="mr-1 inline" /> {tx('Furgoneta')}
-          </button>
-          <button onClick={() => setVista('lista')} className={`flex-1 rounded-xl py-2 text-[13px] font-semibold ${vista === 'lista' ? 'bg-dark-800 text-dark-50' : 'text-dark-400'}`}>
-            <List size={14} className="mr-1 inline" /> {tx('Lista por hueco')}
-          </button>
-        </div>
+      <div className="mx-auto w-full max-w-md flex-1 overflow-y-auto px-4 pb-4">
+        <Segmentado valor={vista} onChange={setVista}
+          opciones={[{ valor: 'furgoneta', texto: tx('Furgoneta'), icono: Truck }, { valor: 'lista', texto: tx('Lista por hueco'), icono: List }]} />
+
+        {ultimo?.pedido && (
+          <div className="mt-3 rounded-xl border-2 border-ruta-ok p-3" aria-live="polite">
+            <p className="text-nombre">{nombreUltimo}</p>
+            <p className="text-cifra text-ruta-ok-texto">{huecoUltimo}</p>
+          </div>
+        )}
+        {error && <p role="alert" className="mt-3 rounded-xl bg-ruta-peligro/10 px-3 py-2 text-texto text-ruta-peligro-texto">{error}</p>}
 
         {vista === 'furgoneta' ? (
-          <div className="rounded-3xl border border-dark-700 bg-dark-900 p-3">
-            <div className="mb-2 rounded-xl bg-dark-800 py-1.5 text-center text-[11px] font-semibold text-dark-400">{tx('Cabina')}</div>
-            {lateral && <p className="mb-1 text-[11px] font-semibold text-brand-300">← {tx('Puerta lateral')}</p>}
-            {FILAS.map((fila) => (
-              <div key={fila[0]} className="mb-2 grid grid-cols-2 gap-2">
-                {fila.map((h) => {
-                  const l = porHueco[h]
-                  const c = l.filter((p) => p.cargado_en).length
-                  const activo = ultimo?.pedido?.hueco === h
-                  return (
-                    <div key={h} data-hueco={h} className={`rounded-2xl border p-3 text-center ${activo ? 'border-emerald-400 bg-emerald-500/15' : l.length ? 'border-brand-400/40 bg-brand-500/10' : 'border-dark-700 bg-dark-950'}`}>
-                      <p className="text-[12px] font-semibold text-dark-200">{tx(h)}</p>
-                      <p className="text-[24px] font-bold leading-tight">{l.length}</p>
-                      <p className="text-[11px] text-dark-400">{tx('{a} cargados', { a: c })}</p>
-                    </div>
-                  )
-                })}
-              </div>
-            ))}
-            <p className="text-center text-[11px] text-dark-400">
-              {lateral ? tx('Lo de delante se entrega primero.') : `${tx('Puertas traseras')} ↓ · ${tx('Lo de detrás se entrega primero.')}`}
-            </p>
+          <div className="mt-3 rounded-xl bg-dark-900 p-2">
+            <p className="py-1 text-center text-sec text-dark-400">{tx('Cabina')}</p>
+            {lateral && <p className="pb-1 text-sec text-dark-400">{puerta}</p>}
+            <div className="grid grid-cols-2 gap-2">
+              {FILAS.flat().map((h) => {
+                const l = porHueco[h]
+                const c = l.filter((p) => p.cargado_en).length
+                const activo = ultimo?.pedido?.hueco === h
+                return (
+                  <div key={h} data-hueco={h} role="group" aria-label={`${tx(h)}: ${tx('{a} de {b} cargados', { a: c, b: l.length })}`}
+                    className={`flex min-h-16 flex-col items-center justify-center rounded-lg ${activo ? 'border-2 border-ruta-ok' : 'border border-ruta-borde'} ${l.length ? 'bg-ruta-marca-tinte text-ruta-marca-tinte-texto' : 'bg-dark-950 text-dark-400'}`}>
+                    <span className="text-etiqueta">{tx(h)}</span>
+                    <span className="text-titulo tabular-nums">{c}/{l.length}</span>
+                  </div>
+                )
+              })}
+            </div>
+            {!lateral && <p className="pt-1 text-center text-sec text-dark-400">{puerta}</p>}
             {sinHueco.length > 0 && (
-              <p className="mt-2 rounded-xl bg-amber-500/10 px-3 py-2 text-[12px] text-amber-100">
-                {tx('{n} paradas sin hueco (sin ubicar o sin ordenar): salen en «Lista por hueco».', { n: sinHueco.length })}
-              </p>
+              <div className="pt-2">
+                <Chip tono="aviso" texto={`${tx('{n} sin hueco', { n: sinHueco.length })} ›`} onClick={() => setVista('lista')} />
+              </div>
             )}
           </div>
         ) : (
-          <div className="space-y-3">
-            {[...filasEnOrden.flat().map((h) => [h, porHueco[h]]), [tx('Sin hueco'), sinHueco]].filter(([, l]) => l.length).map(([h, l]) => (
-              <section key={h} className="rounded-2xl border border-dark-700 bg-dark-900 p-3">
-                <p className="mb-2 text-[12px] font-bold uppercase tracking-wider text-brand-300">{HUECOS.includes(h) ? tx(h) : h} · {l.length}</p>
-                <ul className="divide-y divide-dark-800">
+          <div className="mt-3 flex flex-col gap-3">
+            {secciones.map(([h, l]) => (
+              <section key={h}>
+                <p className="mb-1 px-1 text-etiqueta text-dark-400">{HUECOS.includes(h) ? tx(h) : h} · {l.length}</p>
+                <ContenedorLista>
                   {l.map((p) => (
-                    <li key={p.id} className="flex items-center gap-3 py-2">
-                      <button onClick={() => marcar(p, !p.cargado_en)} disabled={ocupado === `marca-${p.id}`} role="checkbox" aria-checked={!!p.cargado_en}
+                    <li key={p.id} className="flex min-h-14 items-center gap-3 px-3 py-1">
+                      <button type="button" onClick={() => marcar(p, !p.cargado_en)} disabled={ocupado === `marca-${p.id}`} role="checkbox" aria-checked={!!p.cargado_en}
                         aria-label={`${p.cliente || p.direccion}: ${tx('cargado')}`}
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${p.cargado_en ? 'border-emerald-400 bg-emerald-500 text-[#052e16]' : 'border-dark-600 text-dark-500'}`}>
-                        {ocupado === `marca-${p.id}` ? <Loader2 size={16} className="animate-spin" /> : p.cargado_en ? <Check size={18} /> : null}
+                        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${p.cargado_en ? 'bg-ruta-ok text-white' : 'border border-ruta-borde text-dark-400'}`}>
+                        {ocupado === `marca-${p.id}` ? <Loader2 size={20} className="animate-spin" aria-hidden="true" /> : p.cargado_en ? <Check size={24} aria-hidden="true" /> : null}
                       </button>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[14px] font-semibold">{p.orden ? `${p.orden}. ` : ''}{p.cliente || p.direccion}</p>
-                        <p className="truncate text-[12px] text-dark-400">{p.cliente ? p.direccion : ''}{p.bultos > 1 ? ` · ${tx('{n} bultos', { n: p.bultos })}` : ''}</p>
+                        <p className="truncate text-nombre">{p.orden ? `${p.orden}. ` : ''}{p.cliente || p.direccion}</p>
+                        <p className="truncate text-texto text-dark-400">{p.cliente ? p.direccion : ''}{p.bultos > 1 ? ` · ${tx('{n} bultos', { n: p.bultos })}` : ''}</p>
                       </div>
                     </li>
                   ))}
-                </ul>
+                </ContenedorLista>
               </section>
             ))}
           </div>
         )}
 
-        {ultimo?.pedido && (
-          <div className="mt-3 rounded-2xl border-2 border-emerald-400 bg-dark-900 p-4" aria-live="polite">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">{tx('Escaneado')} · {tx('{a} de {b} cargados', { a: ultimo.cargados ?? cargados, b: ultimo.total ?? total })}</p>
-            <p className="mt-1 text-[17px] font-bold leading-tight">{tx('Parada {n}', { n: ordenUltimo })} · {ultimo.pedido.cliente || ultimo.pedido.direccion}</p>
-            <p className="mt-1 text-[26px] font-bold leading-tight text-emerald-200">→ {ultimo.pedido.hueco ? tx(ultimo.pedido.hueco) : tx('Sin hueco')}</p>
-          </div>
-        )}
-        {error && <p role="alert" className="mt-3 rounded-xl bg-red-500/10 px-3 py-2 text-[13px] text-red-200">{error}</p>}
-
         <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); escaneado(codigo) }}>
-          <input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder={tx('Escribe o pega un código')} aria-label={tx('Escribe o pega un código')}
-            inputMode="text" autoComplete="off" className="min-w-0 flex-1 rounded-xl border border-dark-700 bg-dark-950 px-3 py-2.5 text-[14px]" />
-          <button type="submit" disabled={!codigo.trim() || ocupado === 'escaneo'} className="rounded-xl border border-dark-700 px-3 text-[13px] font-semibold text-dark-200 disabled:opacity-40">
-            {ocupado === 'escaneo' ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
-          </button>
+          <Campo valor={codigo} onChange={setCodigo} ejemplo={tx('Escribe o pega un código')} inputMode="text" autoComplete="off" className="min-w-0 flex-1" />
+          <Boton variante="icono" type="submit" icono={Search} tono="neutro" relleno nombre={tx('Buscar')}
+            disabled={!codigo.trim() || ocupado === 'escaneo'} cargando={ocupado === 'escaneo'} />
         </form>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-dark-800 bg-dark-950/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-md gap-2">
-          <button onClick={() => { setError(''); setEscaner(true) }} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-[15px] font-bold text-[#052e16]">
-            <ScanLine size={18} /> {tx('Escanear para cargar')}
-          </button>
-          <button onClick={onClose} className="rounded-2xl border border-dark-700 px-4 py-3.5 text-[14px] font-semibold text-dark-200">
-            {faltan > 0 ? tx('Salir ({n} faltan)', { n: faltan }) : tx('Todo cargado')}
-          </button>
+      <div className="shrink-0 border-t border-dark-800 bg-dark-950 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+        <div className="mx-auto flex max-w-md items-center gap-2">
+          <Boton variante="principal" tono="ok" icono={ScanLine} texto={tx('Escanear')} className="flex-1" onClick={() => { setError(''); setEscaner(true) }} />
+          <Boton variante="normal" contorno tono="neutro" texto={faltan > 0 ? tx('Salir ({n} faltan)', { n: faltan }) : tx('Todo cargado')} onClick={onClose} />
         </div>
       </div>
 
-      {escaner && Escaner && <Escaner seguido onCodigo={escaneado} onClose={() => setEscaner(false)} estado={estadoEscaner} />}
+      {escaner && Escaner && (
+        <Escaner seguido onCodigo={escaneado} onClose={() => setEscaner(false)} estado={cuenta} ultimo={nombreUltimo} grande={huecoUltimo} aviso={error} />
+      )}
     </div>
   )
 }

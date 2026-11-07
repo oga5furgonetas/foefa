@@ -90,7 +90,12 @@ test('Ruta · cargar la furgoneta por huecos y oír la siguiente parada', async 
   await expect(abrir).toContainText('0 de 3 cargados')
   await abrir.click()
   const carga = page.getByRole('dialog', { name: 'Cargar la furgoneta' })
+  // Diseño compacto (07-11-2026, §5.6): la explicación va detrás del «?» y en la pantalla queda «↓ Puertas traseras».
+  await expect(carga.getByText('↓ Puertas traseras')).toBeVisible()
+  await carga.getByRole('button', { name: 'Ayuda' }).click()
   await expect(carga.getByText('Cargas por las puertas traseras.')).toBeVisible()
+  await expect(carga.getByText('Lo de detrás se entrega primero.')).toBeVisible()
+  await carga.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click()
   await expect(carga.locator('[data-hueco="Detrás · izq"]')).toContainText('1')
   await expect(carga.locator('[data-hueco="Detrás · der"]')).toContainText('1')
   await expect(carga.locator('[data-hueco="Medio · izq"]')).toContainText('1')
@@ -100,16 +105,16 @@ test('Ruta · cargar la furgoneta por huecos y oír la siguiente parada', async 
   await carga.getByPlaceholder('Escribe o pega un código').fill('COD1')
   await carga.getByPlaceholder('Escribe o pega un código').press('Enter')
   await expect(carga.getByText('→ Detrás · izq')).toBeVisible()
-  await expect(carga.getByText('1 de 3 cargados').first()).toBeVisible()
+  await expect(carga.getByRole('status', { name: '1 de 3 cargados' })).toBeVisible()
   expect(escaneos.at(-1)).toEqual({ codigos: ['COD1'], carga: true })
   expect(await page.evaluate(() => window.__dicho.at(-1))).toBe('detrás, a la izquierda')
-  await expect(carga.locator('[data-hueco="Detrás · izq"]')).toContainText('1 cargados')
+  await expect(carga.locator('[data-hueco="Detrás · izq"]')).toContainText('1/1')
 
   // Uno que no es de la ruta: se dice y no cuenta.
   await carga.getByPlaceholder('Escribe o pega un código').fill('NADA')
   await carga.getByPlaceholder('Escribe o pega un código').press('Enter')
   await expect(carga.getByRole('alert')).toContainText('No es de tu ruta de hoy.')
-  await expect(carga.getByText('1 de 3 cargados').first()).toBeVisible()
+  await expect(carga.getByRole('status', { name: '1 de 3 cargados' })).toBeVisible()
 
   // Sin escanear: la lista por hueco, con una casilla por paquete.
   await carga.getByRole('button', { name: 'Lista por hueco' }).click()
@@ -118,7 +123,7 @@ test('Ruta · cargar la furgoneta por huecos y oír la siguiente parada', async 
   await casillaPepe.click()
   await expect(casillaPepe).toHaveAttribute('aria-checked', 'true')
   expect(marcas).toEqual([{ id: 'p2', cargado: true }])
-  await expect(carga.getByText('2 de 3 cargados').first()).toBeVisible()
+  await expect(carga.getByRole('status', { name: '2 de 3 cargados' })).toBeVisible()
   await expect(carga.getByRole('checkbox', { name: /Farmacia Sol/ })).toHaveAttribute('aria-checked', 'true')
 
   // Salir: la ruta sigue diciendo cuántos van.
@@ -180,8 +185,12 @@ test('Ruta · con la guía por voz apagada no se habla, y con la puerta lateral 
   await expect(sig.getByText('Farmacia Sol')).toBeVisible()
   await page.getByRole('button', { name: /Cargar la furgoneta/ }).click()
   const carga = page.getByRole('dialog', { name: 'Cargar la furgoneta' })
+  // Diseño compacto (07-11-2026, §5.6): «← Puerta lateral» arriba; lo demás, detrás del «?».
+  await expect(carga.getByText('← Puerta lateral')).toBeVisible()
+  await carga.getByRole('button', { name: 'Ayuda' }).click()
   await expect(carga.getByText('Cargas por la puerta lateral.')).toBeVisible()
   await expect(carga.getByText('Lo de delante se entrega primero.')).toBeVisible()
+  await carga.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click()
   // En la lista, la fila de la puerta (delante) sale antes que la de detrás.
   await carga.getByRole('button', { name: 'Lista por hueco' }).click()
   const titulos = await carga.locator('section p').allTextContents()

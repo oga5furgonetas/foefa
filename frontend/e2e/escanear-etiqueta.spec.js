@@ -105,8 +105,11 @@ test('Escanear seguidos · guarda la etiqueta completa en lote, evita repetidas 
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Cargar paquetes: uno tras otro' }).click()
   await page.getByRole('button', { name: 'Escanear seguidos' }).click()
-  const estado = page.getByRole('status').filter({ hasText: /añadidos|una tras otra/ })
-  await expect(estado).toHaveText(/Pasa las etiquetas una tras otra/)
+  // Diseño compacto (07-11-2026, §5.5): en reposo la barra de abajo solo trae «Listo»; lo que se cuenta sale al leer.
+  const escaner = page.getByRole('dialog', { name: 'Escanear' })
+  await expect(escaner.getByRole('button', { name: 'Listo' })).toBeVisible()
+  await expect(escaner.getByRole('status')).toHaveCount(0)
+  const estado = escaner.getByRole('status')
 
   await page.evaluate((v) => { window.__ahora = [v] }, GS1)
   await expect(estado).toHaveText(/1 añadidos/)
@@ -119,7 +122,7 @@ test('Escanear seguidos · guarda la etiqueta completa en lote, evita repetidas 
   expect(lotes[0]).toHaveLength(1)
   expect(creados[0]).toMatchObject({ codigo: '384123450000000017', cliente: 'Maria Lopez', telefono: '612345678', lat: 40.4203, lng: -3.705 })
 
-  await page.getByRole('dialog', { name: 'Escanear' }).getByRole('button', { name: 'Cerrar' }).click()
+  await escaner.getByRole('button', { name: 'Listo' }).click()
   await expect(page.getByRole('button', { name: 'Revisar 1 paquetes sin dirección' })).toBeVisible()
   // La hoja de carga vuelve con la cuenta: con un paquete se titula «1 paquete cargado» (no «Cargar paquetes»).
   await expect(page.getByRole('dialog', { name: '1 paquete cargado' })).toBeVisible()
