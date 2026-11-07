@@ -2485,6 +2485,16 @@ test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la s
   await nav.getByRole('button', { name: 'Entregado', exact: true }).click()
   await page.getByRole('button', { name: 'Entregar sin foto' }).click()
 
+  // «Deshacer» (fusión final, 07-11-2026, §1.2 injerto 8): el aviso flotante se pone 8 por encima del panel de la guía y no tapa sus botones.
+  const avisoDeshacer = page.getByRole('status').filter({ has: page.getByRole('button', { name: 'Deshacer' }) })
+  await expect(avisoDeshacer).toBeVisible()
+  const huecoSobrePanel = async () => {
+    const [aviso, panel] = await Promise.all([avisoDeshacer.boundingBox(), nav.getByTestId('guia-panel').boundingBox()])
+    return panel.y - (aviso.y + aviso.height)
+  }
+  await expect.poll(huecoSobrePanel, { message: '«Deshacer» por encima del panel de la guía' }).toBeGreaterThanOrEqual(7)   // 8, menos el redondeo
+  expect(await huecoSobrePanel()).toBeLessThanOrEqual(10)
+
   // Y sola, a la siguiente.
   await expect(nav.getByText('Farmacia Sol')).toBeVisible()
   await expect(nav.getByTestId('guia-texto')).toHaveText('Llegas a tu parada')   // solo queda llegar: 200 m en línea
