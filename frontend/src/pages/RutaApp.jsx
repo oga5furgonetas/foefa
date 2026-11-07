@@ -455,7 +455,7 @@ function ResumenSemana({ porDia, ajustes }) {
       </div>
       <p className="mt-1 text-cifra text-dark-50 tabular-nums">{tx('{n} entregas', { n: semana })}</p>
       {conTarifa && <p className="text-boton text-ruta-ok-texto tabular-nums">{tx('Ganado ≈ {euros}', { euros: importe(ganado) })}</p>}
-      {/* Alto mínimo, no fijo (§1.3, regla 12): con «Letra más grande» las cifras y la inicial del día ocupan más. */}
+      {/* Alto mínimo, no fijo (07-11-2026, §1.3 regla 12): con «Letra más grande» las cifras y la inicial del día ocupan más. */}
       <div className="mt-3 grid grid-cols-7 items-end gap-1" style={{ minHeight: 96 }} role="img"
         aria-label={ultimos.map((d) => `${dia(d.fecha)} ${d.entregados || 0}`).join(', ')}>
         {ultimos.map((d) => (

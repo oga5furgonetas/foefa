@@ -445,9 +445,9 @@ export default function DriverPortal() {
             </button>
           )}
 
-          {/* Las de Dani (17-10-2026), de tres en tres mientras quepan: cada casilla mide 100 como mínimo, × «Letra más
-              grande», así que con esa letra, o en 277 px (el zoom del 130 % de un móvil de 360), pasan a dos en dos en vez
-              de cortar los títulos a media palabra. */}
+          {/* Las de Dani (17-10-2026), de tres en tres mientras quepan (07-11-2026): cada casilla mide 100 como mínimo, ×
+              «Letra más grande», así que con esa letra, o en 277 px (el zoom del 130 % de un móvil de 360), pasan a dos en
+              dos en vez de cortar los títulos a media palabra. */}
           {!esDemo && <div className="mt-1 grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(calc(100px*var(--letra,1)),1fr))]">
           <Casilla
             icono={CalendarDays}

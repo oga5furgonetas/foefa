@@ -45,7 +45,7 @@ const fecha = (iso) => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(locale(), { day: 'numeric', month: 'long', year: 'numeric' })
 }
 const bonito = (c) => (c ? `${c.slice(0, 4)}-${c.slice(4)}` : '')
-// «AHORRA» → «Ahorra»: sin mayúsculas sostenidas (§1.3, regla 9); la clave y sus traducciones no cambian.
+// «AHORRA» → «Ahorra» (07-11-2026): sin mayúsculas sostenidas (§1.3, regla 9); la clave y sus traducciones no cambian.
 const enFrase = (t) => (t ? t.charAt(0) + t.slice(1).toLowerCase() : t)
 
 export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
@@ -111,8 +111,8 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
       <div className="mt-3 rounded-xl bg-dark-900 p-3 text-sec text-dark-400">
         <p className="flex gap-2"><ShieldCheck size={18} className="shrink-0 text-ruta-marca" aria-hidden="true" />
           {tx('Tus datos y los de tus clientes son tuyos: la foto de la etiqueta se lee en tu móvil y los datos de los clientes se borran solos a los días que fijes en Ajustes. Los pagos los procesa Stripe: tu tarjeta no pasa por nosotros.')}</p>
-        {/* Los tres enlaces, cada uno con su zona de toque de 48 (regla 7): una frase con enlaces dentro, al saltar de línea,
-            deja zonas de 14 de alto. */}
+        {/* Los tres enlaces, cada uno con su zona de toque de 48 (07-11-2026, regla 7): una frase con enlaces dentro, al
+            saltar de línea, deja zonas de 14 de alto. */}
         <p className="mt-1 flex flex-wrap items-center gap-x-4">
           <a href="/privacidad" className="inline-flex min-h-12 items-center text-ruta-marca">{tx('Privacidad')}</a>
           <a href="/terminos" className="inline-flex min-h-12 items-center text-ruta-marca">{tx('Términos')}</a>
@@ -357,7 +357,7 @@ function Estado({ b, precios }) {
   }
   return (
     <section className="rounded-xl border-2 border-ruta-marca bg-dark-900 p-3">
-      {/* El estado baja a otra línea antes de cortar el nombre del plan (a 280 px salía «Plan Repa…»). */}
+      {/* El estado baja a otra línea antes de cortar el nombre del plan (07-11-2026: a 280 px salía «Plan Repa…»). */}
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
         <span className="flex items-center gap-2 text-nombre text-dark-50"><Crown size={20} className="shrink-0 text-ruta-marca" aria-hidden="true" /> {tx('Plan Repartidor')}</span>
         <Etiqueta texto={chip[0]} tono={chip[1]} />
@@ -396,7 +396,8 @@ export function Suscribirse({ b, precios, toast, titulo }) {
   return (
     <section className="mt-3 rounded-xl bg-dark-900 p-3">
       <h2 className="text-nombre text-dark-50">{titulo || tx('Suscribirte')}</h2>
-      {/* Lo elegido va en el tinte de marca: sus letras, en la tinta del tinte (§3.6); el gris secundario no llega al 4,5:1 de noche. */}
+      {/* Lo elegido va en el tinte de marca (07-11-2026): sus letras, en la tinta del tinte (§3.6); el gris secundario no
+          llega al 4,5:1 de noche. */}
       <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label={tx('Plan')}>
         {[[false, tx('Mensual'), `${enMoneda(precios.mensual)}`, tx('/mes'), ''], [true, tx('Anual'), `${enMoneda(precios.anual)}`, tx('/año'), `${enMoneda(precios.anual / 12)}${tx('/mes')} · ${tx('2 meses gratis')}`]].map(([v, t, p, per, extra]) => (
           <button key={t} role="radio" aria-checked={anual === v} onClick={() => setAnual(v)}
@@ -870,7 +871,8 @@ function Invitar({ toast }) {
           ))}
         </ul>
       )}
-      {/* Con su propia zona de 48: un enlace dentro de una frase cuela la suya (la del index.css) por encima del botón de arriba. */}
+      {/* Con su propia zona de 48 (07-11-2026): un enlace dentro de una frase cuela la suya (la del index.css) por encima
+          del botón de arriba. */}
       <p className="mt-1"><a href="/terminos#invita" className="inline-flex min-h-12 items-center text-sec text-dark-400 underline">{tx('Condiciones del programa')}</a></p>
     </section>
   )
