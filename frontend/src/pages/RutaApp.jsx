@@ -335,8 +335,10 @@ export default function RutaApp() {
         {tab === 'historial' && <Historial />}
         {tab === 'cuenta' && <Suspense fallback={<Cargando />}><Cuenta billing={billing} recargar={recargar} toast={toast} resaltarRegalo={regaloNuevo} merc={merc} /></Suspense>}
       </div>
-      {/* Las pestañas (07-11-2026, §4): 64 más la zona segura; la activa, en una píldora de 32×56 con el icono de 24. */}
-      <nav className="ruta-pestanas fixed inset-x-0 bottom-0 z-40 border-t border-dark-800 bg-dark-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label={tx('Secciones')}>
+      {/* Las pestañas (07-11-2026, §4): 64 más la zona segura; la activa, en una píldora de 32×56 con el icono de 24. Opacas
+          (revisor, hallazgo 9): con `bg-dark-950/95` y `backdrop-blur`, un contenido teñido debajo (un verde, un aviso) bajaba el
+          fondo de la pestaña activa y su texto #0E7C77 caía a 4,38:1, por debajo de los 4,5:1 de §1.3-8. */}
+      <nav className="ruta-pestanas fixed inset-x-0 bottom-0 z-40 border-t border-dark-800 bg-dark-950 pb-[env(safe-area-inset-bottom)]" aria-label={tx('Secciones')}>
         <div className="mx-auto grid h-16 max-w-md grid-cols-4">
           {PESTANAS.map(([k, t, I]) => (
             <button key={k} onClick={() => setTab(k)}
