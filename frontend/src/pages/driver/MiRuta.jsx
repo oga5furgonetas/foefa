@@ -1855,7 +1855,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
       })()}
 
       {/* LO PASAJERO (§5.1 b): se va solo a los 6 s; encima del «Deshacer» si coinciden. */}
-      {aviso && <AvisoFlotante abajo={(altoGuia || abajoFlotante) + (deshacer ? 60 : 0)} texto={aviso} onCerrar={() => setAviso('')} />}   {/* 52 del «Deshacer» con su detalle + 8 de hueco */}
+      {aviso && <AvisoFlotante abajo={altoGuia || abajoFlotante} apilado={deshacer ? 60 : 0} zonaSegura={!altoGuia} texto={aviso} onCerrar={() => setAviso('')} />}   {/* 52 del «Deshacer» con su detalle + 8 de hueco; con guía, su panel ya lleva la zona segura dentro */}
 
       {encontrado && (
         <Hoja titulo={tx('Este paquete va en la parada')} onClose={() => setEncontrado(null)}
@@ -2024,7 +2024,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
 
       {/* «Deshacer» (§5.1 b): el aviso flotante de 8 s, con la siguiente debajo. */}
       {deshacer && (
-        <AvisoFlotante abajo={altoGuia || abajoFlotante} accion={tx('Deshacer')} onAccion={deshacerUltima} onCerrar={() => setDeshacer(null)}
+        <AvisoFlotante abajo={altoGuia || abajoFlotante} zonaSegura={!altoGuia} accion={tx('Deshacer')} onAccion={deshacerUltima} onCerrar={() => setDeshacer(null)}
           texto={`${deshacer.estado === 'entregado' ? (deshacer.p.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')) : tx('No entregado')} · ${deshacer.p.cliente || deshacer.p.direccion}`}
           detalle={siguiente && siguiente.id !== deshacer.p.id ? `${tx('Siguiente:')} ${siguiente.cliente || siguiente.direccion}${siguiente.eta ? ` ≈ ${siguiente.eta}` : ''}` : ''} />
       )}

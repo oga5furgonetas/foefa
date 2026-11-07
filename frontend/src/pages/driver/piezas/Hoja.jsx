@@ -4,7 +4,8 @@
    12 y la zona segura. Alto máximo, el 92 % de la pantalla (dvh). Se cierra con atrás (useAtras), con ✕ o deslizando la
    cabecera hacia abajo. `ayuda` = { titulo, texto } abre la explicación larga en otra hoja encima (así la frase se muda al
    «?» con su misma clave); `menu` son las opciones del ⋮ (Menu). role="dialog" con el título de nombre: las pruebas lo
-   buscan así, y la ✕ se llama «Cerrar». */
+   buscan así, y la ✕ se llama «Cerrar». El pie lleva `data-hoja-pie`: AvisoFlotante lo mide para ponerse por encima de él y
+   no tapar su botón principal (07-11-2026). */
 import { useRef, useState } from 'react'
 import { HelpCircle, X } from 'lucide-react'
 import { tx } from '../../../lib/idioma'
@@ -38,7 +39,7 @@ export default function Hoja({ titulo, subtitulo, onClose, ayuda, menu, pie, chi
           <Boton variante="icono" icono={X} tono="neutro" nombre={tx('Cerrar')} onClick={onClose} />
         </div>
         <div className={`min-h-0 flex-1 overflow-y-auto px-4 ${pie ? 'pb-4' : 'pb-[max(16px,env(safe-area-inset-bottom))]'}`}>{children}</div>
-        {pie && <div className="shrink-0 border-t border-dark-800 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">{pie}</div>}
+        {pie && <div data-hoja-pie="" className="shrink-0 border-t border-dark-800 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">{pie}</div>}
       </div>
       {verAyuda && (
         <Hoja titulo={ayuda.titulo || titulo} onClose={() => setVerAyuda(false)}>
