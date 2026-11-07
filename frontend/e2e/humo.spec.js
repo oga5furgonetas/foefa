@@ -2467,6 +2467,9 @@ test('Ruta · aviso de la mañana: elige la hora, se activa y no se vuelve a pre
   const fallos = vigilar(page)
   await entrarRepartidor(page, { status: 'trial', days_left: 6, promo: { activa: true, hasta: '2026-12-31' } })
   await page.addInitScript(() => {
+    // Un solo aviso a la vez en «Hoy» (07-11-2026): «Instala la app» va antes que el de la mañana, así que en un Android se
+    // da por cerrado para ver el de la mañana.
+    try { localStorage.setItem('fds_instalar_cerrado', '1') } catch { /* nada */ }
     // Un navegador con avisos: permiso que se concede y una suscripción de mentira.
     window.Notification = { permission: 'default', requestPermission: async () => 'granted' }
     window.PushManager = function () {}
@@ -3342,7 +3345,7 @@ test('Anuncio · quien llega del anuncio ve la app y la prueba con paradas antes
   await expect(video).toHaveAttribute('playsinline', '')
   await page.getByRole('button', { name: /Probarla ahora/ }).first().click()
   await expect(page).toHaveURL(/\/conductor\?vista=ruta/)
-  await expect(page.getByText('Ruta de prueba con paradas de ejemplo. Se borra mañana.')).toBeVisible()
+  await expect(page.getByText('Ruta de prueba · se borra mañana')).toBeVisible()   // «Ruta de prueba · se borra mañana» (07-11-2026, diseño compacto)
   await expect(page.getByText('Cliente 1 (prueba)')).toBeVisible()
   expect(fallos).toEqual([])
 })
