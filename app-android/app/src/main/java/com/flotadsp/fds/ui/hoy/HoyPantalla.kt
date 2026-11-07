@@ -1,11 +1,19 @@
+// diseño compacto
 package com.flotadsp.fds.ui.hoy
+
+/* «HOY» EN EL DISEÑO COMPACTO (07-11-2026, §5.1 de la especificación): la cabecera de 56 con la fecha corta al lado y
+   «Escanear» dentro (fuera el flotante, que tapaba la tarjeta y el buscador), un solo aviso, el resumen del día plano
+   con sus chips, la tarjeta de la siguiente (la única tarjeta), una promo, la lista en una sola superficie (FilaParada)
+   y «Hechas hoy», que se abre sola si hay fallidas. Todo con las piezas de ui/Componentes.kt: aquí no va ningún tamaño
+   de letra, color a mano ni altura fija (lo vigila scripts/check-tokens-nativa.mjs). La lógica (RutaVM, Situar, la
+   guía, lo que se manda al servidor) no cambia. */
 
 import com.flotadsp.fds.ui.tx
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,57 +25,54 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EditLocationAlt
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.LocalShipping
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -81,13 +86,18 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -101,12 +111,40 @@ import com.flotadsp.fds.data.Invitacion
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.data.Referidos
 import com.flotadsp.fds.data.Repositorio
+import com.flotadsp.fds.ui.AccionIcono
 import com.flotadsp.fds.ui.Acciones
-import com.flotadsp.fds.ui.Voz
-import com.flotadsp.fds.ui.LocalExtra
-import com.flotadsp.fds.ui.Region
-import com.flotadsp.fds.ui.TextoNumero
+import com.flotadsp.fds.ui.Alto
+import com.flotadsp.fds.ui.Aviso
+import com.flotadsp.fds.ui.AvisoFlotante
+import com.flotadsp.fds.ui.BotonIcono
+import com.flotadsp.fds.ui.BotonNormal
+import com.flotadsp.fds.ui.BotonPrincipal
+import com.flotadsp.fds.ui.BotonTexto
+import com.flotadsp.fds.ui.Cabecera
+import com.flotadsp.fds.ui.CampoTexto
+import com.flotadsp.fds.ui.ChipAccion
+import com.flotadsp.fds.ui.ContenedorLista
+import com.flotadsp.fds.ui.Esp
+import com.flotadsp.fds.ui.EstadoNumero
+import com.flotadsp.fds.ui.Etiqueta
+import com.flotadsp.fds.ui.FilaCierre
+import com.flotadsp.fds.ui.FilaDeChips
+import com.flotadsp.fds.ui.FilaDeLista
+import com.flotadsp.fds.ui.FilaParada
+import com.flotadsp.fds.ui.Hoja
 import com.flotadsp.fds.ui.LOCALE_APP
+import com.flotadsp.fds.ui.LocalExtra
+import com.flotadsp.fds.ui.Menu
+import com.flotadsp.fds.ui.NotasPuerta
+import com.flotadsp.fds.ui.NumeroParada
+import com.flotadsp.fds.ui.Opcion
+import com.flotadsp.fds.ui.Pastilla
+import com.flotadsp.fds.ui.Promo
+import com.flotadsp.fds.ui.Region
+import com.flotadsp.fds.ui.TamNumero
+import com.flotadsp.fds.ui.TextoNumero
+import com.flotadsp.fds.ui.Tono
+import com.flotadsp.fds.ui.Voz
 import com.flotadsp.fds.ui.patronFecha
 import com.flotadsp.fds.ui.parada.Sugerencia
 import kotlinx.coroutines.delay
@@ -114,7 +152,6 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 @Composable
 fun HoyPantalla(
@@ -125,6 +162,8 @@ fun HoyPantalla(
     alEditar: (Parada) -> Unit,
     /** LA CARGA GUIADA (01-11-2026): la furgoneta por huecos. */
     alCargar: () -> Unit = {},
+    /** En el portal del conductor (07-11-2026): «Mi ruta» con la flecha de volver; se lo pasa RutaConductorNativa. */
+    alVolver: (() -> Unit)? = null,
 ) {
     val e by vm.estado.collectAsState()
     val pendientesEnvio by vm.pendientesDeEnvio.collectAsState()
@@ -135,7 +174,9 @@ fun HoyPantalla(
     val avisos = remember { SnackbarHostState() }
     val ambito = rememberCoroutineScope()
     var verMapa by rememberSaveable { mutableStateOf(false) }
+    var buscador by rememberSaveable { mutableStateOf(false) }       // el 🔍 abierto (07-11-2026): el campo en vez de la cabecera de la lista
     var buscar by rememberSaveable { mutableStateOf("") }
+    var dinero by remember { mutableStateOf(false) }                  // la hoja «Mi dinero hoy» (07-11-2026)
     var abierta by remember { mutableStateOf<Parada?>(null) }
     var entregando by remember { mutableStateOf<Parada?>(null) }
     var fallando by remember { mutableStateOf<Parada?>(null) }
@@ -147,7 +188,7 @@ fun HoyPantalla(
     val pais = e.ruta?.pais?.takeIf { it.isNotBlank() } ?: paisMovil
     val empresa = e.ruta?.takeIf { !it.autonomo }?.empresa.orEmpty()
     // LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): con la cuenta de quien reparte por su cuenta y ≥1 entrega hoy,
-    // la tarjeta de «Invita y gana» debajo de la siguiente parada (o de «Ruta terminada»); «Ahora no» la quita ese día.
+    // la promo de «Invita y gana» debajo de la siguiente parada (o de «Ruta terminada»); «Ahora no» la quita ese día.
     val invitarOculto by app.cuenta.invitarOculto.collectAsState()
     val diaRuta = e.ruta?.fecha?.takeIf { it.isNotBlank() } ?: LocalDate.now().toString()
     val invitacion = e.invitacion?.takeIf { Invitar.seEnsena(e.ruta, e.entregadasReales, it.referidos.codigo, invitarOculto, diaRuta) }
@@ -155,6 +196,15 @@ fun HoyPantalla(
         // Lo que gana el invitado con su primera ruta, solo mientras dura la promoción (promo_hasta viene solo entonces).
         val bono = if (i.referidos.promoHasta != null) (e.ruta?.bono?.cent ?: i.referidos.bono?.cent ?: Invitar.BONO_CENT) else 0
         Invitar.texto(Invitar.enlace(BuildConfig.WEB_URL, i.referidos.codigo), fechaGratis(i.gratisHasta), bono, i.referidos.porInvitado)
+    }
+    // «Mi dinero hoy» (solo quien reparte por su cuenta y ha puesto su tarifa): lo entregado por su precio por parada,
+    // más el día si ha entregado algo, y lo que no se cobra por no entregar (30-10-2026). En céntimos, como lo manda el
+    // servidor. En «Hoy» es un chip con la cifra; el desglose, en su hoja (§5.1 j).
+    val dineroHoy = e.ruta?.ganancias?.let { g ->
+        val cent = e.entregadas * g.pagoParada + (if (e.entregadas > 0) g.pagoDia else 0)
+        val fallidas = e.hechas.count { it.estado == "fallido" }
+        val perdido = fallidas * g.pagoParada
+        if (cent > 0 || perdido > 0) DineroHoy(cent, fallidas, perdido) else null
     }
 
     LaunchedEffect(Unit) { vm.vista("/ruta") }
@@ -198,7 +248,7 @@ fun HoyPantalla(
         if (p.porCobrar) entregando = p else vm.entregar(p)
     }
 
-    // LA GUÍA DENTRO DE LA APP (01-11-2026): «Navegar» con «Esta app» abre la guía (GuiaPantalla) a esa parada; con
+    // LA GUÍA DENTRO DE LA APP (01-11-2026): «Ir» con «Esta app» abre la guía (GuiaPantalla) a esa parada; con
     // Google Maps o Waze elegidos, como siempre.
     // EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): una parada sin situar ya NO se manda a Google Maps (Dani: «eso es un
     // pedazo de mierda, hazlo bien»). Primero el geocodificador del móvil, con «Buscando la dirección…» y sin bloquear
@@ -242,7 +292,7 @@ fun HoyPantalla(
         }
     }
     // La guía va a la parada elegida y, al entregarla, a la siguiente por entregar (en orden); si esa no está situada,
-    // se cierra y se busca como al pulsar «Navegar». Se cierra sola cuando no queda nada. La elegida NO se re-apunta a
+    // se cierra y se busca como al pulsar «Ir». Se cierra sola cuando no queda nada. La elegida NO se re-apunta a
     // la siguiente: si la entrega se deshace o el servidor la rechaza, vuelve a estar pendiente y la guía vuelve a ella
     // (01-11-2026, revisión).
     val siguienteGuia = guiando?.let { id ->
@@ -261,41 +311,21 @@ fun HoyPantalla(
     Scaffold(
         modifier = Modifier.nestedScroll(barra.nestedScrollConnection),
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(tx("Hoy"), style = MaterialTheme.typography.titleLarge)
-                        Text(fechaLarga(e.ruta?.fecha), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                },
-                actions = {
-                    if (e.paradas.isNotEmpty()) {
-                        IconButton(onClick = { verMapa = !verMapa }) {
-                            Icon(if (verMapa) Icons.AutoMirrored.Filled.List else Icons.Default.Map,
-                                contentDescription = if (verMapa) tx("Ver la lista") else tx("Ver el mapa"))
-                        }
-                    }
-                    IconButton(onClick = alAnadir) { Icon(Icons.Default.Add, contentDescription = tx("Añadir una parada")) }
-                },
-                scrollBehavior = barra,
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer),
-            )
-        },
-        floatingActionButton = {
-            // Con su contenido a mano: la variante text/icon dejaba el botón SIN nombre para TalkBack (NAF en el
-            // árbol de accesibilidad, visto en el emulador).
-            ExtendedFloatingActionButton(
-                onClick = alEscanear,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+            // a) La cabecera de 56: «Hoy» (en el portal, «Mi ruta» con ←) y la fecha corta al lado; el mapa y el «+» solo
+            // con paradas; «Escanear paquetes» aquí, que el flotante tapaba el final de la tarjeta y el buscador.
+            Cabecera(
+                titulo = if (alVolver != null) tx("Mi ruta") else tx("Hoy"), subtitulo = fechaCorta(e.ruta?.fecha),
+                alVolver = alVolver, scrollBehavior = barra,
             ) {
-                Icon(Icons.Default.QrCodeScanner, contentDescription = null)
-                Spacer(Modifier.width(12.dp))
-                Text(tx("Escanear"))
+                if (e.paradas.isNotEmpty()) {
+                    BotonIcono(if (verMapa) Icons.AutoMirrored.Filled.List else Icons.Default.Map,
+                        if (verMapa) tx("Ver la lista") else tx("Ver el mapa"), { verMapa = !verMapa })
+                }
+                BotonIcono(Icons.Default.QrCodeScanner, tx("Escanear paquetes"), alEscanear)
+                if (e.paradas.isNotEmpty()) BotonIcono(Icons.Default.Add, tx("Añadir una parada"), alAnadir)
             }
         },
-        snackbarHost = { SnackbarHost(avisos) },
+        snackbarHost = { AvisoFlotante(avisos) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { pad ->
         PullToRefreshBox(isRefreshing = e.refrescando, onRefresh = { vm.cargar(tirando = true) }, modifier = Modifier.padding(pad).fillMaxSize()) {
@@ -309,91 +339,129 @@ fun HoyPantalla(
                     alAparcarEn = { lat, lng -> ambito.launch { app.cuenta.aparcar(lat, lng) } },
                     alQuitarFurgo = { ambito.launch { app.cuenta.quitarFurgo() } }, modifier = Modifier.fillMaxSize())
                 else -> LazyColumn(
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 104.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    // Margen de 16, 12 entre bloques (Bloque) y abajo 24: la barra de pestañas ya la aparta MainActivity.
+                    contentPadding = PaddingValues(start = Esp.l, end = Esp.l, top = Esp.xs, bottom = Esp.xl),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    item {
-                        Resumen(e, ocupado = e.ocupado == "ordenar", alOrdenar = ordenar, furgo = furgo,
-                            alAparcar = { ambito.launch {
-                                val p = Acciones.dondeEstoy(ctx)
-                                if (p == null) vm.avisar(tx("No llega la ubicación del móvil: dale permiso a la app.")) else app.cuenta.aparcar(p.first, p.second)
-                            } },
-                            alQuitarFurgo = { ambito.launch { app.cuenta.quitarFurgo() } },
-                            alIrAPie = { furgo?.let { Acciones.irAPie(ctx, it.lat, it.lng) } })
-                    }
-                    // LA CARGA GUIADA (01-11-2026): con la ruta ordenada y paquetes aún fuera de la furgoneta.
-                    if (e.ruta?.ruta?.fin != null && e.pendientes.any { !it.cargada }) item(key = "carga") {
-                        CargarCard(cargados = Carga.cargadas(e.pendientes), total = e.pendientes.size, alPulsar = alCargar)
-                    }
-                    // EL CLIENTE AVISADO (01-11-2026): con la ruta ordenada, el WhatsApp a cada cliente con móvil.
-                    val conTelefono = e.pendientes.filter { it.telefono.isNotBlank() }
-                    if (e.ruta?.ruta?.fin != null && conTelefono.isNotEmpty()) item(key = "avisar") {
-                        AvisarCard(avisados = conTelefono.count { it.id in avisados }, total = conTelefono.size, alPulsar = { avisando = true })
-                    }
-                    if (e.guardadaEn != null || pendientesEnvio.isNotEmpty()) {
-                        item { SinCobertura(e.guardadaEn, pendientesEnvio.size) }
-                    }
+                    // b) Un solo aviso, el primero que toque: cambios sin enviar, sin conexión, la placa que hoy no circula
+                    // (la que sí circula y la norma sin placa ya no salen en «Hoy») y las paradas de otros días.
+                    val sinEnviar = pendientesEnvio.size
+                    val guardadaEn = e.guardadaEn
+                    val placa = e.incidencias?.avisos?.firstOrNull { it.hoy == true }
                     val previas = e.ruta?.previas ?: 0
-                    if (previas > 0) item(key = "previas") { Previas(previas, alTraer = { vm.traerPrevias() }) }
-                    e.ruta?.bono?.takeIf { !it.pagado || it.nuevo }?.let { b -> item(key = "bono") { BonoCard(b) } }
-                    // LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): debajo de «Ruta terminada» o de la siguiente
-                    // parada, nunca encima de ellas: lo primero sigue siendo repartir.
-                    fun tarjetaInvitar() = invitacion?.let { i ->
-                        item(key = "invitar") {
-                            InvitarCard(i.referidos,
-                                alWhatsapp = { Acciones.whatsappLibre(ctx, textoInvitar(i)) },
-                                alCompartir = { Acciones.compartir(ctx, textoInvitar(i)) },
-                                alAhoraNo = { ambito.launch { app.cuenta.ocultarInvitar(diaRuta) } })
+                    if (sinEnviar > 0 || guardadaEn != null || placa != null || previas > 0) item(key = "aviso") {
+                        Bloque {
+                            when {
+                                sinEnviar > 0 -> Aviso(if (sinEnviar == 1) tx("1 sin enviar") else tx("{n} sin enviar", "n" to sinEnviar),
+                                    tono = Tono.AVISO, icono = Icons.Default.CloudOff)
+                                guardadaEn != null -> Aviso(tx("Sin conexión · ruta de las {h}", "h" to java.text.SimpleDateFormat("HH:mm", LOCALE_APP).format(java.util.Date(guardadaEn))),
+                                    tono = Tono.AVISO, icono = Icons.Default.CloudOff)
+                                // RESTRICCIONES POR PLACA (30-10-2026): rodízio, Hoy No Circula, pico y placa… solo el día que le toca.
+                                placa != null -> Aviso(tx("Hoy tu placa no puede circular."), tono = Tono.PELIGRO, icono = Icons.Default.PriorityHigh,
+                                    accion = tx("Fuente oficial").takeIf { placa.url.isNotBlank() }, alAccion = { Acciones.abrirWeb(ctx, placa.url) })
+                                // Paradas de días anteriores sin cerrar (29-10-2026): la ruta es la del día y lo que quedó se iba de «Hoy».
+                                else -> Aviso(if (previas == 1) tx("1 parada de otro día") else tx("{n} paradas de otros días", "n" to previas),
+                                    icono = Icons.Default.History, accion = tx("Traer a hoy"), alAccion = { vm.traerPrevias() })
+                            }
                         }
                     }
+                    // c) El resumen del día, plano, con los chips de lo que toca.
+                    val ordenada = e.ruta?.ruta?.fin != null
+                    val conTelefono = e.pendientes.filter { it.telefono.isNotBlank() }
+                    item(key = "resumen") {
+                        Bloque {
+                            ResumenDia(
+                                e, ocupado = e.ocupado == "ordenar", alOrdenar = ordenar,
+                                // LA CARGA GUIADA (01-11-2026): con la ruta ordenada y paquetes aún fuera de la furgoneta.
+                                carga = if (ordenada && e.pendientes.any { !it.cargada }) Carga.cargadas(e.pendientes) to e.pendientes.size else null,
+                                alCargar = alCargar,
+                                // EL CLIENTE AVISADO (01-11-2026): con la ruta ordenada, el WhatsApp a cada cliente con móvil.
+                                avisar = if (ordenada && conTelefono.isNotEmpty()) conTelefono.count { it.id in avisados } to conTelefono.size else null,
+                                alAvisar = { avisando = true },
+                                dinero = dineroHoy?.let { Region.importe(it.cent / 100.0) }, alDinero = { dinero = true },
+                                furgo = furgo,
+                                alAparcar = { ambito.launch {
+                                    val p = Acciones.dondeEstoy(ctx)
+                                    if (p == null) vm.avisar(tx("No llega la ubicación del móvil: dale permiso a la app.")) else app.cuenta.aparcar(p.first, p.second)
+                                } },
+                                alQuitarFurgo = { ambito.launch { app.cuenta.quitarFurgo() } },
+                                alIrAPie = { furgo?.let { Acciones.irAPie(ctx, it.lat, it.lng) } },
+                            )
+                        }
+                    }
+                    // La ruta vacía, la ruta terminada o la tarjeta de la siguiente; y debajo, una promo.
                     if (e.paradas.isEmpty()) {
-                        item { Vacia(alEscanear, alAnadir) }
+                        item(key = "vacia") { Bloque { Vacia(alEscanear, alAnadir) } }
                     } else if (e.pendientes.isEmpty()) {
-                        item { Terminada(e.entregadas, e.paradas.size) }
-                        tarjetaInvitar()
+                        item(key = "terminada") { Bloque { Terminada(e.entregadas, e.paradas.size) } }
                     }
                     e.pendientes.firstOrNull()?.let { sig ->
                         item(key = "sig-${sig.id}") {
-                            Siguiente(
-                                p = sig, numero = sig.orden ?: 1, enZbe = e.zbe?.paradas?.get(sig.id)?.tipo.orEmpty(),
-                                alNavegar = { navegarA(sig) }, buscando = buscandoDe == sig.id, alSituar = { situar(sig) },
-                                alLlamar = { vm.apuntar(sig, "llamada"); Acciones.llamar(ctx, sig.telefono) },
-                                alWhatsapp = { vm.apuntar(sig, "whatsapp"); Acciones.whatsapp(ctx, sig.telefono, prefijo, textoWhatsapp(sig, empresa)) },
-                                alEntregar = { entregarRapido(sig) },
-                                alFallar = { fallando = sig },
-                                alAbrir = { abierta = sig },
-                                alEscuchar = { Voz.decir(ctx, Briefing.texto(sig)) },
-                            )
+                            Bloque {
+                                TarjetaSiguiente(
+                                    p = sig, numero = sig.orden ?: 1, enZbe = e.zbe?.paradas?.get(sig.id)?.tipo.orEmpty(),
+                                    alNavegar = { navegarA(sig) }, buscando = buscandoDe == sig.id, alSituar = { situar(sig) },
+                                    alLlamar = { vm.apuntar(sig, "llamada"); Acciones.llamar(ctx, sig.telefono) },
+                                    alWhatsapp = { vm.apuntar(sig, "whatsapp"); Acciones.whatsapp(ctx, sig.telefono, prefijo, textoWhatsapp(sig, empresa)) },
+                                    alEntregar = { entregarRapido(sig) },
+                                    alFallar = { fallando = sig },
+                                    alAbrir = { abierta = sig },
+                                    alEscuchar = { Voz.decir(ctx, Briefing.texto(sig)) },
+                                    alMemoria = { memoriaDe = sig },
+                                    alEditar = { alEditar(sig) },
+                                )
+                            }
                         }
-                        tarjetaInvitar()
                     }
+                    // e) La promo, una a la vez: el bono hasta ganarlo (o recién ganado); si no, invitar tras la primera
+                    // entrega del día. Nunca encima de la tarjeta: lo primero sigue siendo repartir.
+                    val bono = e.ruta?.bono?.takeIf { !it.pagado || it.nuevo }
+                    if (bono != null) {
+                        item(key = "bono") { Bloque { PromoBono(bono) } }
+                    } else invitacion?.let { i ->
+                        item(key = "invitar") {
+                            Bloque {
+                                PromoInvitar(i.referidos,
+                                    alWhatsapp = { Acciones.whatsappLibre(ctx, textoInvitar(i)) },
+                                    alCompartir = { Acciones.compartir(ctx, textoInvitar(i)) },
+                                    alAhoraNo = { ambito.launch { app.cuenta.ocultarInvitar(diaRuta) } })
+                            }
+                        }
+                    }
+                    // f) «Por entregar» y la lista: la cabecera de 40 (o el buscador en su lugar) y las filas, sin hueco
+                    // entre ellas, en una sola superficie con la forma de su sitio (ContenedorLista en un LazyColumn).
                     val resto = e.pendientes.drop(1)
                     if (resto.isNotEmpty()) {
-                        item { Titulo(tx("Por entregar") + " · ${resto.size}") }
-                        // EL BUSCADOR (30-10-2026): con muchas paradas y un cliente al teléfono, encontrarlo por su nombre, la
-                        // calle, el teléfono o el código, como la web a partir de 5 paradas.
-                        if (e.pendientes.size > 5) item(key = "buscar") {
-                            OutlinedTextField(buscar, { buscar = it }, singleLine = true, placeholder = { Text(tx("Buscar cliente, calle, teléfono…")) },
-                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }, modifier = Modifier.fillMaxWidth())
+                        item(key = "por-entregar") {
+                            Bloque {
+                                // EL BUSCADOR (30-10-2026): con muchas paradas y un cliente al teléfono, encontrarlo por su nombre,
+                                // la calle, el teléfono o el código, como la web a partir de 5 paradas. Detrás del 🔍 (07-11-2026).
+                                CabeceraLista(n = resto.size, conBuscador = e.pendientes.size > 5, abierto = buscador, buscar = buscar,
+                                    alAbrir = { buscador = true }, alCambiar = { buscar = it }, alCerrar = { buscador = false; buscar = "" })
+                            }
                         }
                         // Sin ordenar todavía, el número es su puesto en la lista (la siguiente es la 1). Si la ruta ya está
                         // ordenada, la que se añade después no se inventa un número: espera a «Ordenar ruta».
                         val hayOrden = e.pendientes.any { it.orden != null }
                         val visibles = resto.withIndex().filter { Calle.coincide(it.value, buscar) }
-                        if (visibles.isEmpty()) item { Text(tx("Nada con «{q}» en las paradas pendientes.", "q" to buscar), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(8.dp)) }
-                        items(visibles, key = { it.value.id }) { iv ->
+                        if (visibles.isEmpty()) item(key = "sin-resultados") {
+                            Text(tx("Sin resultados"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(Esp.s))
+                        }
+                        itemsIndexed(visibles, key = { _, iv -> iv.value.id }) { i, iv ->
                             val p = iv.value
-                            Fila(p, numero = p.orden ?: (if (hayOrden) null else iv.index + 2), enZbe = e.zbe?.paradas?.get(p.id)?.tipo.orEmpty(), alTocar = { abierta = p },
-                                alSituar = { situar(p) })
+                            FilaDeLista(i, visibles.size) {
+                                FilaParada(p, numero = p.orden ?: (if (hayOrden) null else iv.index + 2), enZbe = e.zbe?.paradas?.get(p.id)?.tipo.orEmpty(),
+                                    alTocar = { abierta = p })
+                            }
                         }
                     }
-                    if (e.hechas.isNotEmpty()) {
-                        item(key = "hechas") { Hechas(e.hechas, alTocar = { abierta = it }) }
-                    }
+                    // g) «Hechas hoy».
+                    if (e.hechas.isNotEmpty()) item(key = "hechas") { Bloque { Hechas(e.hechas, alTocar = { abierta = it }) } }
                 }
             }
-            if (buscandoDe != null) Buscando(Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
+            // «Buscando la dirección…» (02-11-2026): el geocodificador del móvil trabajando tras pulsar «Ir»; no bloquea.
+            if (buscandoDe != null) Pastilla(tx("Buscando la dirección…"), modifier = Modifier.align(Alignment.TopCenter).padding(top = Esp.s))
         }
     }
 
@@ -426,6 +494,7 @@ fun HoyPantalla(
     memoriaDe?.let { p ->
         MemoriaHoja(p, alCerrar = { memoriaDe = null }, alGuardar = { portal, dejar, acceso -> memoriaDe = null; vm.guardarMemoria(p, portal, dejar, acceso) })
     }
+    if (dinero && dineroHoy != null) MiDineroHoja(dineroHoy, alCerrar = { dinero = false })
     // LA ENTREGA VERIFICADA (01-11-2026): la IA pide mirar la foto que se acaba de hacer (o la de una entregada, desde su ficha).
     revisar?.let { r -> RevisarFotoDialogo(r, alRepetir = { vm.repetirFoto(r, it) }, alCerrar = { vm.revisado() }) }
     // «Situar la parada» (02-11-2026): «Es aquí» guarda el punto (sin red, en el móvil) y abre la guía.
@@ -489,505 +558,395 @@ fun HoyPantalla(
     }
 }
 
-/** El día de la RUTA (el del servidor, en la zona de la cuenta), no el del reloj del móvil: pasada la medianoche o
- *  con el móvil en otro huso, la cabecera decía un día y la lista era de otro (visto en el emulador). */
-private fun fechaLarga(fecha: String?): String =
-    (fecha?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()).format(DateTimeFormatter.ofPattern(patronFecha("EEEE, d 'de' MMMM"), LOCALE_APP)).replaceFirstChar { it.uppercase() }
+/** Lo que se lleva hoy (céntimos), las fallidas y lo que no se cobra por ellas: el chip del resumen y su hoja. */
+private class DineroHoy(val cent: Int, val fallidas: Int, val perdido: Int)
+
+/** Un bloque de «Hoy»: 12 por encima, lo que va entre bloques (§3.2); las filas de la lista van sin hueco. */
+@Composable
+private fun Bloque(contenido: @Composable () -> Unit) {
+    Box(Modifier.fillMaxWidth().padding(top = Esp.m)) { contenido() }
+}
+
+/** La fecha corta de la cabecera («mar 3 nov»), sin los puntos de las abreviaturas. El día de la RUTA (el del servidor,
+ *  en la zona de la cuenta), no el del reloj del móvil: pasada la medianoche o con el móvil en otro huso, la cabecera
+ *  decía un día y la lista era de otro (visto en el emulador). */
+private fun fechaCorta(fecha: String?): String =
+    (fecha?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now())
+        .format(DateTimeFormatter.ofPattern(patronFecha("EEE d MMM"), LOCALE_APP)).replace(".", "")
 
 /** «31 de diciembre» en el idioma de la app, para el mensaje de invitar (02-11-2026): hasta cuándo es gratis y sin
  *  límite el plan (/billing/planes). Null si no hay promoción o ya pasó: el mensaje dice entonces «pruébala gratis». */
 private fun fechaGratis(iso: String?): String? = iso?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
     ?.takeIf { !LocalDate.now().isAfter(it) }?.format(DateTimeFormatter.ofPattern(patronFecha("d 'de' MMMM"), LOCALE_APP))
 
-@Composable
-private fun Titulo(t: String) {
-    Text(t.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 8.dp, start = 4.dp))
-}
+/** «+8 min» o «+1 h 15 min»: el retraso de la siguiente parada, en la etiqueta del resumen. */
+private fun textoRetraso(min: Int): String = if (min >= 60) "+${min / 60} h ${min % 60} min" else "+$min min"
 
+/** El resumen del día (§5.1 c), plano: «Quedan {n} paradas» con el retraso al lado, «Acabas ≈ {fin} · {km}», la barra
+ *  de 4 y una fila de chips que se desliza (ordenar, cargar, avisar, el dinero y la furgoneta), solo los que tocan.
+ *  Fuera el anillo, «con tráfico típico», los minutos y la caja del dinero. */
 @Composable
-private fun Resumen(
+private fun ResumenDia(
     e: EstadoRuta, ocupado: Boolean, alOrdenar: () -> Unit,
+    carga: Pair<Int, Int>?, alCargar: () -> Unit, avisar: Pair<Int, Int>?, alAvisar: () -> Unit,
+    dinero: String?, alDinero: () -> Unit,
     /** DÓNDE APARQUÉ (30-10-2026): el punto de la furgoneta, y el camino a pie hasta ella. */
-    furgo: Furgo? = null, alAparcar: () -> Unit = {}, alQuitarFurgo: () -> Unit = {}, alIrAPie: () -> Unit = {},
+    furgo: Furgo?, alAparcar: () -> Unit, alQuitarFurgo: () -> Unit, alIrAPie: () -> Unit,
 ) {
-    val ctx = LocalContext.current
+    val c = MaterialTheme.colorScheme
     val total = e.paradas.size
     val hechas = e.hechas.size
+    val q = e.pendientes.size
+    val r = e.ruta?.ruta
     // EL RETRASO (30-10-2026): la hora prevista de la siguiente parada frente a la de ahora, solo con la ruta de hoy.
     val retraso = if (e.ruta?.fecha == LocalDate.now().toString()) Calle.retraso(e.pendientes.firstOrNull()?.eta, LocalTime.now().let { "%02d:%02d".format(it.hour, it.minute) }) else 0
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), shape = MaterialTheme.shapes.large) {
-      Column(Modifier.padding(16.dp)) {
+    Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(64.dp).semantics { contentDescription = tx("{a} de {b} hechas", "a" to hechas, "b" to total) }) {
-                CircularProgressIndicator(
-                    progress = { if (total == 0) 0f else hechas / total.toFloat() },
-                    modifier = Modifier.size(64.dp), strokeWidth = 6.dp, strokeCap = StrokeCap.Round,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                )
-                Text("$hechas/$total", style = MaterialTheme.typography.titleSmall.merge(TextoNumero), fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
-                val q = e.pendientes.size
-                Text(when (q) { 0 -> if (total == 0) tx("Sin paradas todavía") else tx("Todo entregado"); 1 -> tx("Queda 1 parada"); else -> tx("Quedan {n} paradas", "n" to q) },
-                    style = MaterialTheme.typography.titleMedium)
-                val r = e.ruta?.ruta
-                // LA CABECERA COMPLETA (30-10-2026): de noche la ruta sale a la hora de salida, y sin «Sales a las» las horas
-                // no se entendían («Acabas ≈ 09:24» a las 23:31). Y los minutos, y con qué se calculó.
-                val partes = listOfNotNull(
-                    r?.salida?.takeIf { r.programada == true }?.let { tx("Sales a las {h}", "h" to it) },
-                    r?.fin?.let { tx("Acabas ≈") + " $it" },
-                    r?.km?.takeIf { it > 0 }?.let { Region.distancia(it) },
-                    r?.minutos?.takeIf { it > 0 }?.let { m -> if (m >= 60) "${m / 60} h ${m % 60} min" else "$m min" },
-                )
-                if (partes.isNotEmpty() && q > 0) {
-                    Text(partes.joinToString(" · "), style = MaterialTheme.typography.bodyMedium.merge(TextoNumero),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    val como = when {
-                        r?.manual == true -> tx("tu orden")
-                        r?.fuente == "linea_recta" -> tx("por distancia")
-                        r?.trafico == true -> tx("con tráfico típico")
-                        r?.fin != null -> tx("sin tráfico")
-                        else -> null
-                    }
-                    val aviso = listOfNotNull(como, retraso.takeIf { it > 5 }?.let { tx("vas {n} min por detrás", "n" to it) }).joinToString(" · ")
-                    if (aviso.isNotEmpty()) Text(aviso, style = MaterialTheme.typography.bodySmall,
-                        color = if (retraso > 5) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                // «Mi dinero hoy» (solo quien reparte por su cuenta y ha puesto su tarifa): lo entregado por su
-                // precio por parada, más el día si ha entregado algo. En céntimos, como lo manda el servidor.
-                // LAS FALLIDAS EN EL DINERO (30-10-2026): lo que no se cobra por no entregar, que se vea.
-                e.ruta?.ganancias?.let { g ->
-                    val cent = e.entregadas * g.pagoParada + (if (e.entregadas > 0) g.pagoDia else 0)
-                    val fallidas = e.hechas.count { it.estado == "fallido" }
-                    val perdido = fallidas * g.pagoParada
-                    if (cent > 0 || perdido > 0) Text(
-                        listOfNotNull(tx("Hoy llevas {x}", "x" to Region.importe(cent / 100.0)),
-                            perdido.takeIf { it > 0 }?.let { if (fallidas == 1) tx("1 sin entregar = {euros} sin cobrar", "euros" to Region.importe(it / 100.0)) else tx("{n} sin entregar = {euros} sin cobrar", "n" to fallidas, "euros" to Region.importe(it / 100.0)) }).joinToString(" · "),
-                        style = MaterialTheme.typography.bodyMedium.merge(TextoNumero), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+            Text(when (q) { 0 -> if (total == 0) tx("Sin paradas todavía") else tx("Todo entregado"); 1 -> tx("Queda 1 parada"); else -> tx("Quedan {n} paradas", "n" to q) },
+                style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            if (retraso > 5) { Spacer(Modifier.width(Esp.s)); Etiqueta(textoRetraso(retraso), Tono.PELIGRO) }
         }
-        // RESTRICCIONES POR PLACA (30-10-2026): rodízio, Hoy No Circula, pico y placa… lo que dice la norma de hoy en su
-        // ciudad y, si puso la placa en Ajustes, si le toca; donde la regla cambia por temporada, el enlace oficial.
-        e.incidencias?.avisos?.forEach { a ->
-            Spacer(Modifier.height(10.dp))
-            val (fondo, tinta) = when {
-                a.hoy == true -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
-                a.hoy == false && a.digitos.isNotEmpty() -> LocalExtra.current.entregado.copy(alpha = 0.15f) to MaterialTheme.colorScheme.onSurface
-                else -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
-            }
-            Surface(color = fondo, contentColor = tinta, shape = MaterialTheme.shapes.medium, onClick = { if (a.url.isNotBlank()) Acciones.abrirWeb(ctx, a.url) }) {
-                Column(Modifier.padding(12.dp)) {
-                    Text("${a.ciudad} · ${a.titulo}", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    Text(a.texto, style = MaterialTheme.typography.bodySmall)
-                    if (a.hoy == true) Text(tx("Hoy tu placa no puede circular."), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                    else if (a.hoy == false && a.digitos.isNotEmpty()) Text(tx("Tu placa sí puede circular hoy."), style = MaterialTheme.typography.bodySmall)
-                    if (a.url.isNotBlank()) Text(tx("Fuente oficial"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        // De noche la ruta sale a la hora de salida, y sin «Sales a las» las horas no se entendían (30-10-2026). Sin los minutos.
+        val partes = listOfNotNull(
+            r?.salida?.takeIf { r.programada == true }?.let { tx("Sales a las {h}", "h" to it) },
+            r?.fin?.let { tx("Acabas ≈") + " $it" },
+            r?.km?.takeIf { it > 0 }?.let { Region.distancia(it) },
+        )
+        if (partes.isNotEmpty() && q > 0) {
+            Text(partes.joinToString(" · "), style = MaterialTheme.typography.bodySmall.merge(TextoNumero), color = c.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (total > 0) {
+            Spacer(Modifier.height(Esp.s))
+            LinearProgressIndicator(
+                progress = { hechas / total.toFloat() }, color = c.primary, trackColor = c.surfaceVariant,
+                strokeCap = StrokeCap.Butt, gapSize = 0.dp, drawStopIndicator = {},
+                modifier = Modifier.fillMaxWidth().height(4.dp).clip(MaterialTheme.shapes.extraSmall)
+                    .semantics { contentDescription = tx("{a} de {b} hechas", "a" to hechas, "b" to total) },
+            )
+        }
+        if (q > 0 || dinero != null) {
+            val reordenar = retraso > 15 && q > 1
+            Spacer(Modifier.height(Esp.m))
+            FilaDeChips {
+                if (q >= 2) {
+                    // «Ordenar ruta»: relleno mientras no está ordenada, de contorno si ya lo está; con más de 15 min de
+                    // retraso, «Reordenar» en aviso: un toque recalcula desde donde estás (30-10-2026). La misma acción.
+                    ChipAccion(
+                        when { ocupado -> tx("Ordenando por tiempo…"); reordenar -> tx("Reordenar"); else -> tx("Ordenar ruta") }, alOrdenar,
+                        icono = Icons.Default.Route, tono = when { reordenar -> Tono.AVISO; r?.fin == null -> Tono.MARCA; else -> Tono.NEUTRO },
+                        nombre = if (reordenar && !ocupado) tx("Reordenar desde aquí") else null, enabled = !ocupado, cargando = ocupado,
+                    )
+                }
+                carga?.let { (a, b) -> ChipAccion(tx("Cargar") + " $a/$b", alCargar, icono = Icons.Default.LocalShipping, nombre = tx("Cargar la furgoneta")) }
+                avisar?.let { (a, b) -> ChipAccion(tx("Avisar") + " $a/$b", alAvisar, icono = Icons.AutoMirrored.Filled.Chat, nombre = tx("Avisar a todos por WhatsApp")) }
+                dinero?.let { ChipAccion(it, alDinero, icono = Icons.Default.Payments, nombre = tx("Mi dinero hoy")) }
+                // DÓNDE APARQUÉ (30-10-2026): el punto de la furgoneta al bajarte; aparcada, su menú (a pie, quitar). Solo en el móvil.
+                if (q > 0) {
+                    if (furgo == null) ChipAccion(tx("Aparcada aquí"), alAparcar, icono = Icons.Default.LocalShipping)
+                    else Menu(
+                        listOf(
+                            Opcion(tx("Volver a la furgoneta a pie"), Icons.AutoMirrored.Filled.DirectionsWalk, alPulsar = alIrAPie),
+                            Opcion(tx("Quitar"), Icons.Default.Close, alPulsar = alQuitarFurgo),
+                        ),
+                        nombre = tx("Furgoneta aparcada"),
+                        ancla = { abrir -> ChipAccion(tx("Furgoneta aparcada"), abrir, icono = Icons.Default.LocalShipping) },
+                    )
                 }
             }
-        }
-        if (retraso > 15 && e.pendientes.size > 1) {
-            // REORDENAR DESDE AQUÍ (30-10-2026): con más de 15 min de retraso, un toque recalcula desde donde estás.
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(onClick = alOrdenar, enabled = !ocupado, modifier = Modifier.fillMaxWidth().height(44.dp)) {
-                Icon(Icons.Default.Route, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(tx("Reordenar desde aquí"))
-            }
-        }
-        if (e.pendientes.isNotEmpty()) {
-            // DÓNDE APARQUÉ (30-10-2026): el punto de la furgoneta al bajarte; un toque abre el camino a pie. Solo en el móvil.
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (furgo == null) {
-                    TextButton(onClick = alAparcar) { Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Aparcada aquí")) }
-                } else {
-                    FilledTonalButton(onClick = alIrAPie, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Volver a la furgoneta a pie"))
-                    }
-                    TextButton(onClick = alQuitarFurgo) { Text(tx("Quitar")) }
-                }
-            }
-        }
-        if (e.pendientes.size >= 2) {
-            Spacer(Modifier.height(12.dp))
-            FilledTonalButton(onClick = alOrdenar, enabled = !ocupado, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-                if (ocupado) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                else Icon(Icons.Default.Route, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(if (ocupado) tx("Ordenando por tiempo…") else tx("Ordenar ruta"))
-            }
-        }
-      }
-    }
-}
-
-/** «Buscando la dirección…» (02-11-2026): el geocodificador del móvil trabajando tras pulsar «Navegar»; no bloquea. */
-@Composable
-private fun Buscando(modifier: Modifier) {
-    Surface(color = MaterialTheme.colorScheme.inverseSurface, contentColor = MaterialTheme.colorScheme.inverseOnSurface, shape = CircleShape,
-        shadowElevation = 4.dp, modifier = modifier) {
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.inverseOnSurface)
-            Spacer(Modifier.width(8.dp))
-            Text(tx("Buscando la dirección…"), style = MaterialTheme.typography.labelLarge)
         }
     }
 }
 
-/** EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): una parada sin punto en el mapa lo dice claro, con «Situar» (la
- *  tarjeta de la siguiente parada y su ficha). */
+/** Las etiquetas de una parada en el orden de §5.1 d: cobrar, horario, urgente, recogida, puerta conocida, ZBE, el hueco
+ *  y los bultos (si hay más de uno). La tarjeta enseña 3 y «+N»; la hoja, todas. La hora ya no es un chip. */
+private fun etiquetasDe(p: Parada, enZbe: String): List<Triple<String, Tono, ImageVector?>> = listOfNotNull(
+    if (p.porCobrar) Triple(tx("Cobrar") + " " + Region.importe(p.cobrar ?: 0.0), Tono.AVISO, Icons.Default.Payments) else null,
+    if (p.ventanaDesde != null) Triple("${p.ventanaDesde}–${p.ventanaHasta.orEmpty()}", Tono.NEUTRO, Icons.Default.Schedule) else null,
+    if (p.prioridad) Triple(tx("Urgente"), Tono.PELIGRO, Icons.Default.PriorityHigh) else null,
+    if (p.tipo == "recogida") Triple(tx("Recogida"), Tono.NEUTRO, null) else null,
+    if (p.geo == "puerta" && p.pendiente) Triple(tx("Puerta conocida"), Tono.OK, null) else null,
+    if (enZbe.isNotBlank() && p.pendiente) Triple(enZbe, Tono.ZONA, null) else null,
+    if (p.hueco.isNotBlank()) Triple(tx(p.hueco), Tono.NEUTRO, Icons.Default.Inventory2) else null,
+    if (p.bultos > 1) Triple(tx("{n} bultos", "n" to p.bultos), Tono.NEUTRO, null) else null,
+)
+
+/** La tarjeta de la siguiente parada (§5.1 d), la única tarjeta de «Hoy»: borde de énfasis de 2, radio 16, relleno 12.
+ *  Arriba, lo que abre la hoja (número de 40, nombre en una línea, hora con «+{n}» en peligro si llega tarde y «›»);
+ *  la dirección en dos líneas; las etiquetas en una línea (3 y «+N») con el chip de situar si no tiene sitio; las notas
+ *  de la puerta en dos líneas; «Ir» con «Llamar» y «WhatsApp» solo con teléfono y el ⋮ (escuchar, memoria, editar); y
+ *  el cierre de 52. Fuera el rótulo «SIGUIENTE PARADA» (queda como nombre de la región), el altavoz, la banda «Sin
+ *  situar en el mapa» y los botones grises sin teléfono. */
 @Composable
-internal fun AvisoSinSituar(alSituar: () -> Unit) {
+private fun TarjetaSiguiente(
+    p: Parada, numero: Int, enZbe: String = "",
+    alNavegar: () -> Unit, alLlamar: () -> Unit, alWhatsapp: () -> Unit, alEntregar: () -> Unit, alFallar: () -> Unit, alAbrir: () -> Unit,
+    alEscuchar: () -> Unit, alMemoria: () -> Unit, alEditar: () -> Unit,
+    /** El móvil está buscando la dirección (02-11-2026), y «Situar» para ponerla a mano. */
+    buscando: Boolean = false, alSituar: () -> Unit = {},
+) {
+    val c = MaterialTheme.colorScheme
     val x = LocalExtra.current
-    Surface(color = x.aviso, contentColor = x.enAviso, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.LocationOff, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
-            Text(tx("Sin situar en el mapa"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            TextButton(onClick = alSituar, colors = ButtonDefaults.textButtonColors(contentColor = x.enAviso)) {
-                Text(tx("Situar"), fontWeight = FontWeight.Bold)
+    val nombreRegion = tx("Siguiente parada")
+    val eta = p.eta
+    val tarde = (p.tardeMin ?: 0) > 0
+    Surface(
+        color = c.surfaceContainerLow, shape = MaterialTheme.shapes.large, border = BorderStroke(2.dp, x.enfasis),
+        modifier = Modifier.fillMaxWidth().semantics { stateDescription = nombreRegion },
+    ) {
+        Column(Modifier.padding(Esp.m)) {
+            Row(Modifier.fillMaxWidth().clickable(onClick = alAbrir).semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.Top) {
+                NumeroParada(numero, TamNumero.GRANDE, EstadoNumero.SIGUIENTE)
+                Spacer(Modifier.width(Esp.m))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(p.cliente.ifBlank { p.direccion }, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f))
+                        if (!eta.isNullOrBlank()) {
+                            Spacer(Modifier.width(Esp.s))
+                            Text(if (tarde) "$eta +${p.tardeMin}" else eta, style = MaterialTheme.typography.labelLarge.merge(TextoNumero),
+                                color = if (tarde) c.error else c.onSurfaceVariant, maxLines = 1)
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = c.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                    }
+                    if (p.cliente.isNotBlank()) {
+                        Text(p.direccion, style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                }
             }
+            // Una línea de etiquetas (3 como mucho y «+N») y, sin sitio, el chip que abre «Situar la parada»: «Sin situar ·
+            // Situar» sin punto, o «Situar en el mapa» con solo la calle (geo «aprox»).
+            val etiquetas = etiquetasDe(p, enZbe)
+            val sinSituar = Situar.sinSituar(p)
+            val soloCalle = p.pendiente && p.geo == "aprox"
+            if (etiquetas.isNotEmpty() || sinSituar || soloCalle) {
+                Spacer(Modifier.height(Esp.s))
+                FilaDeChips {
+                    etiquetas.take(3).forEach { (t, tono, i) -> Etiqueta(t, tono, i) }
+                    if (etiquetas.size > 3) Etiqueta("+${etiquetas.size - 3}")
+                    if (sinSituar) ChipAccion(tx("Sin situar") + " · " + tx("Situar"), alSituar, icono = Icons.Default.LocationOff, tono = Tono.AVISO)
+                    else if (soloCalle) ChipAccion(tx("Situar en el mapa"), alSituar, icono = Icons.Default.EditLocationAlt)
+                }
+            }
+            NotasPuerta(p, maxLines = 2, modifier = Modifier.padding(top = Esp.s))
+            Spacer(Modifier.height(Esp.m))
+            Row(horizontalArrangement = Arrangement.spacedBy(Esp.s), verticalAlignment = Alignment.CenterVertically) {
+                BotonNormal(tx("Ir"), alNavegar, icono = Icons.Default.Navigation, tono = Tono.MARCA, enabled = !buscando, modifier = Modifier.weight(1f))
+                if (p.telefono.isNotBlank()) {
+                    BotonIcono(Icons.Default.Call, tx("Llamar"), alLlamar, relleno = true)
+                    BotonIcono(Icons.AutoMirrored.Filled.Chat, tx("WhatsApp"), alWhatsapp, relleno = true)
+                }
+                // EL BRIEFING POR VOZ (01-11-2026), la memoria de la calle y «Editar», en el ⋮ (riesgo 9 f).
+                Menu(listOf(
+                    Opcion(tx("Escuchar"), Icons.AutoMirrored.Filled.VolumeUp, nombre = tx("Escuchar la siguiente parada"), alPulsar = alEscuchar),
+                    Opcion(tx("Memoria de la puerta"), Icons.Default.Key, alPulsar = alMemoria),
+                    Opcion(tx("Editar"), Icons.Default.Edit, alPulsar = alEditar),
+                ))
+            }
+            Spacer(Modifier.height(Esp.s))
+            FilaCierre(recogida = p.tipo == "recogida", alFallar = alFallar, alEntregar = alEntregar)
         }
     }
 }
 
+/** El bono de bienvenida como promo (§5.1 e): «{euros} por tu primera ruta real» con «{a}/{b}» y la barra de 2 (o «¡Has
+ *  ganado {euros}!» en ok, recién pagado); tocarla abre las condiciones. Siempre en euros, como la web (eurosRef): el
+ *  bono lo paga FDS en euros sea cual sea el país de la cuenta (30-10-2026). */
 @Composable
-private fun SinCobertura(guardadaEn: Long?, pendientes: Int) {
-    val x = LocalExtra.current
-    Surface(color = x.aviso, contentColor = x.enAviso, shape = MaterialTheme.shapes.medium) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.CloudOff, contentDescription = null)
-            Spacer(Modifier.width(12.dp))
-            val hora = guardadaEn?.let { java.text.SimpleDateFormat("HH:mm", LOCALE_APP).format(java.util.Date(it)) }
-            Text(buildString {
-                if (hora != null) append(tx("Sin conexión: es tu ruta de las {h}.", "h" to hora) + " ")
-                append(when (pendientes) {
-                    0 -> tx("Se pone al día sola al volver la red.")
-                    1 -> tx("1 cambio guardado en el móvil: se envía solo al volver la red.")
-                    else -> tx("{n} cambios guardados en el móvil: se envían solos al volver la red.", "n" to pendientes)
-                })
-            }, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
-
-/** Paradas de días anteriores sin cerrar (29-10-2026): la ruta es la del día y lo que quedó se iba de «Hoy». */
-@Composable
-private fun Previas(n: Int, alTraer: () -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer, shape = MaterialTheme.shapes.medium) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.History, contentDescription = null)
-            Spacer(Modifier.width(12.dp))
-            Text(if (n == 1) tx("1 parada de otro día sigue sin cerrar.") else tx("{n} paradas de otros días siguen sin cerrar.", "n" to n),
-                style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = alTraer) { Text(tx("Traer a hoy")) }
-        }
-    }
-}
-
-/** El bono de bienvenida de quien reparte por su cuenta: cuánto le falta, o que ya lo tiene. */
-@Composable
-private fun BonoCard(b: Bono) {
-    // Siempre en euros, como la web (eurosRef): el bono lo paga FDS en euros sea cual sea el país de la cuenta (30-10-2026).
+private fun PromoBono(b: Bono) {
     val euros = "${"%.2f".format(LOCALE_APP, b.cent / 100.0)} €"
-    Surface(color = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer, shape = MaterialTheme.shapes.medium) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.CardGiftcard, contentDescription = null)
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text(if (b.pagado) tx("Bono de bienvenida conseguido: {euros} en tu cartera.", "euros" to euros) else tx("Bono de bienvenida: {euros} por tu primera ruta de verdad.", "euros" to euros),
-                    style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                if (!b.pagado) Text(
-                    when {
-                        b.revisar -> tx("Lo estamos revisando: te avisamos en cuanto esté.")
-                        else -> tx("{n} entregas en {d} días distintos", "n" to b.objetivo, "d" to b.diasObjetivo) +
-                            (b.limite?.let { " " + tx("antes del {f}", "f" to "${it.takeLast(2)}/${it.substring(5, 7)}") } ?: "") + ". " +
-                            tx("Llevas {n} {e} en {d} {dd}.", "n" to b.entregas, "e" to (if (b.entregas == 1) tx("entrega") else tx("entregas")),
-                                "d" to b.dias, "dd" to (if (b.dias == 1) tx("día") else tx("días")))
-                    }, style = MaterialTheme.typography.bodySmall.merge(TextoNumero))
-            }
+    if (b.pagado) {
+        Promo(tx("¡Has ganado {euros}!", "euros" to euros), Icons.Default.CardGiftcard, tono = Tono.OK)
+    } else {
+        var condiciones by remember { mutableStateOf(false) }
+        val texto = tx("{euros} por tu primera ruta real", "euros" to euros)
+        Promo(texto, Icons.Default.CardGiftcard, tono = Tono.AVISO, cifra = "${b.entregas}/${b.objetivo}",
+            progreso = if (b.objetivo > 0) b.entregas / b.objetivo.toFloat() else 0f, alTocar = { condiciones = true },
+            pista = if (b.revisar) tx("Lo estamos revisando: te avisamos en cuanto esté.") else null)
+        if (condiciones) {
+            DialogoAyuda(
+                texto,
+                tx("{n} entregas en {d} días distintos", "n" to b.objetivo, "d" to b.diasObjetivo) +
+                    (b.limite?.let { " " + tx("antes del {f}", "f" to "${it.takeLast(2)}/${it.substring(5, 7)}") } ?: "") + ". " +
+                    tx("Llevas {n} {e} en {d} {dd}.", "n" to b.entregas, "e" to (if (b.entregas == 1) tx("entrega") else tx("entregas")),
+                        "d" to b.dias, "dd" to (if (b.dias == 1) tx("día") else tx("días"))),
+                alCerrar = { condiciones = false },
+            )
         }
     }
 }
 
-/** LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): «Invita y gana» justo cuando mejor se cuenta, con la primera
- *  entrega del día hecha. WhatsApp con el mensaje puesto, el compartir del móvil, y «Ahora no» hasta mañana. */
+/** LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026), como promo: «Gana {euros} por compañero» (sin premio, «Invita a
+ *  un compañero…»), el botón de WhatsApp con el mensaje puesto y «Ahora no» hasta mañana; tocar el texto abre las
+ *  condiciones, con «Compartir» (el compartir del móvil). */
 @Composable
-private fun InvitarCard(r: Referidos, alWhatsapp: () -> Unit, alCompartir: () -> Unit, alAhoraNo: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), shape = MaterialTheme.shapes.large) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.CardGiftcard, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                Spacer(Modifier.width(12.dp))
-                Text(if (r.porInvitado > 0) tx("Gana {x} por cada compañero que reparta con FDS", "x" to Invitar.importe(r.porInvitado)) else tx("Invita a un compañero a repartir con FDS"),
-                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.weight(1f))
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(tx("Lo cobras en tu cartera cuando haga {n} entregas en {d} días distintos. Mándale tu enlace: se registra y empieza hoy.", "n" to r.entregasCartera, "d" to r.diasDistintos),
-                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            Spacer(Modifier.height(12.dp))
-            Button(onClick = alWhatsapp, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null); Spacer(Modifier.width(8.dp)); Text(tx("Invitar por WhatsApp"))
-            }
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = alCompartir, modifier = Modifier.weight(1f).height(44.dp)) {
-                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Compartir"))
-                }
-                TextButton(onClick = alAhoraNo, modifier = Modifier.weight(1f).height(44.dp)) { Text(tx("Ahora no")) }
-            }
-        }
+private fun PromoInvitar(r: Referidos, alWhatsapp: () -> Unit, alCompartir: () -> Unit, alAhoraNo: () -> Unit) {
+    var condiciones by remember { mutableStateOf(false) }
+    val texto = if (r.porInvitado > 0) tx("Gana {euros} por compañero", "euros" to Invitar.importe(r.porInvitado)) else tx("Invita a un compañero a repartir con FDS")
+    Promo(texto, Icons.Default.CardGiftcard, tono = Tono.OK, alTocar = { condiciones = true },
+        accion = AccionIcono(Icons.AutoMirrored.Filled.Chat, tx("Invitar por WhatsApp"), alWhatsapp), alCerrar = alAhoraNo, nombreCerrar = tx("Ahora no"))
+    if (condiciones) {
+        DialogoAyuda(
+            texto,
+            tx("Lo cobras en tu cartera cuando haga {n} entregas en {d} días distintos. Mándale tu enlace: se registra y empieza hoy.", "n" to r.entregasCartera, "d" to r.diasDistintos),
+            alCerrar = { condiciones = false }, accion = tx("Compartir"), alAccion = { condiciones = false; alCompartir() },
+        )
     }
 }
 
+/** La explicación larga de una promo, al tocarla: el mismo diálogo que abre el «?» (Ayuda), con «Entendido» y, si hace
+ *  falta, una acción más («Compartir»). */
+@Composable
+private fun DialogoAyuda(titulo: String, texto: String, alCerrar: () -> Unit, accion: String? = null, alAccion: () -> Unit = {}) {
+    val otra: (@Composable () -> Unit)? = if (accion != null) { { BotonTexto(accion, alAccion) } } else null
+    AlertDialog(
+        onDismissRequest = alCerrar,
+        confirmButton = { BotonTexto(tx("Entendido"), alCerrar) },
+        dismissButton = otra,
+        title = { Text(titulo, style = MaterialTheme.typography.titleLarge) },
+        text = { Text(texto, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.verticalScroll(rememberScrollState())) },
+        shape = MaterialTheme.shapes.large,
+    )
+}
+
+/** La ruta vacía (§5.1 h): el título, una línea y «Escanear» + «A mano» en una fila; fuera el icono grande y los párrafos. */
 @Composable
 private fun Vacia(alEscanear: () -> Unit, alAnadir: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), shape = MaterialTheme.shapes.large) {
-        Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
-            Spacer(Modifier.height(12.dp))
-            Text(tx("Carga tus paradas de hoy"), style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(6.dp))
-            Text(tx("Comparte con esta app la hoja de la agencia (foto, captura, PDF o la lista) y las paradas entran solas."),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
-            Text(tx("Escanea la etiqueta de cada paquete: si su código trae la dirección, la parada entra sola. Si no, la lee de la foto."),
-                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(18.dp))
-            Button(onClick = alEscanear, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                Icon(Icons.Default.QrCodeScanner, contentDescription = null); Spacer(Modifier.width(8.dp)); Text(tx("Escanear paquetes"))
-            }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = alAnadir, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(8.dp)); Text(tx("Escribir una dirección"))
-            }
+    Column(Modifier.fillMaxWidth()) {
+        Text(tx("Carga tus paradas de hoy"), style = MaterialTheme.typography.titleLarge)
+        Text(tx("Escanea los paquetes o comparte la hoja de la agencia"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(Esp.m))
+        Row(horizontalArrangement = Arrangement.spacedBy(Esp.s)) {
+            BotonPrincipal(tx("Escanear"), alEscanear, icono = Icons.Default.QrCodeScanner, modifier = Modifier.weight(1f))
+            BotonNormal(tx("A mano"), alAnadir, icono = Icons.Default.Edit, nombre = tx("Añadir una parada"), modifier = Modifier.weight(1f).heightIn(min = Alto.principal))
         }
     }
 }
 
+/** La ruta terminada (§5.1 i): plano, con tinte ok y radio 12; «Ruta terminada» y «{a} de {b} entregadas hoy.». */
 @Composable
 private fun Terminada(entregadas: Int, total: Int) {
-    val x = LocalExtra.current
-    Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.large) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Icon(Icons.Default.Check, contentDescription = null, tint = x.entregado)
-            Text(tx("Ruta terminada"), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onTertiaryContainer)
-            Text(tx("{a} de {b} entregadas hoy.", "a" to entregadas, "b" to total), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onTertiaryContainer)
+    val c = MaterialTheme.colorScheme
+    Surface(color = c.tertiaryContainer, contentColor = c.onTertiaryContainer, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(Esp.m)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(Esp.s))
+                Text(tx("Ruta terminada"), style = MaterialTheme.typography.titleLarge)
+            }
+            Text(tx("{a} de {b} entregadas hoy.", "a" to entregadas, "b" to total), style = MaterialTheme.typography.bodyMedium.merge(TextoNumero))
         }
     }
 }
 
+/** La cabecera de la lista (§5.1 f): «Por entregar · {n}» con el 🔍 a la derecha (con más de 5 paradas); abierto, el
+ *  buscador de 48 en su lugar, con la ✕ que lo cierra y lo vacía. Filtra la lista, no la tarjeta. */
 @Composable
-internal fun Numero(n: Int?, grande: Boolean = false, hecho: Boolean = false) {
-    val tam = if (grande) 40.dp else 32.dp
-    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(tam).background(
-        if (hecho) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary, CircleShape)) {
-        // Números más grandes (30-10-2026): se buscan con la caja en la mano, al sol.
-        Text(n?.toString() ?: "·", style = (if (grande) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium).merge(TextoNumero),
-            fontWeight = FontWeight.Bold,
-            color = if (hecho) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary)
+private fun CabeceraLista(n: Int, conBuscador: Boolean, abierto: Boolean, buscar: String, alAbrir: () -> Unit, alCambiar: (String) -> Unit, alCerrar: () -> Unit) {
+    if (abierto) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            CampoTexto(buscar, alCambiar, icono = Icons.Default.Search, ejemplo = tx("Buscar"), nombre = tx("Buscar en la ruta"), modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(Esp.xs))
+            BotonIcono(Icons.Default.Close, tx("Cerrar"), alCerrar)
+        }
+    } else {
+        Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(tx("Por entregar") + " · $n", style = MaterialTheme.typography.labelMedium.merge(TextoNumero), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = Esp.xs))
+            if (conBuscador) BotonIcono(Icons.Default.Search, tx("Buscar en la ruta"), alAbrir)
+        }
     }
 }
 
+/** «Hechas hoy» (§5.1 g): una fila de 48 con la flecha, «Hechas hoy · {n}» y « · {m} sin entregar» en peligro; se abre
+ *  sola si hay fallidas (como la web, riesgo 9 h); dentro, las hechas en una sola superficie, y tocar una abre su hoja. */
+@Composable
+private fun Hechas(hechas: List<Parada>, alTocar: (Parada) -> Unit) {
+    val c = MaterialTheme.colorScheme
+    val fallidas = hechas.count { it.estado == "fallido" }
+    val hayFallidas = fallidas > 0
+    var abierto by rememberSaveable(hayFallidas) { mutableStateOf(hayFallidas) }
+    Column {
+        Row(Modifier.fillMaxWidth().clickable { abierto = !abierto }.heightIn(min = Alto.boton).padding(horizontal = Esp.xs), verticalAlignment = Alignment.CenterVertically) {
+            Text(buildAnnotatedString {
+                append(tx("Hechas hoy") + " · ${hechas.size}")
+                if (hayFallidas) withStyle(SpanStyle(color = c.error)) { append(" · " + tx("{n} sin entregar", "n" to fallidas)) }
+            }, style = MaterialTheme.typography.labelMedium.merge(TextoNumero), color = c.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f))
+            Icon(if (abierto) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = if (abierto) tx("Ocultar") else tx("Ver"), tint = c.onSurfaceVariant)
+        }
+        AnimatedVisibility(abierto) {
+            ContenedorLista(hechas.size, modifier = Modifier.padding(top = Esp.xs)) { i ->
+                val p = hechas[i]
+                FilaParada(p, numero = p.orden, alTocar = { alTocar(p) })
+            }
+        }
+    }
+}
+
+/** «Mi dinero hoy» (§5.1 j), solo lectura: lo que llevas y lo que no se cobra por no entregar; la tarifa sigue en Ajustes. */
+@Composable
+private fun MiDineroHoja(d: DineroHoy, alCerrar: () -> Unit) {
+    Hoja(titulo = tx("Mi dinero hoy"), alCerrar = alCerrar) {
+        Text(tx("Hoy llevas {x}", "x" to Region.importe(d.cent / 100.0)), style = MaterialTheme.typography.titleMedium.merge(TextoNumero))
+        if (d.perdido > 0) {
+            Spacer(Modifier.height(Esp.xs))
+            Text(
+                if (d.fallidas == 1) tx("1 sin entregar = {euros} sin cobrar", "euros" to Region.importe(d.perdido / 100.0))
+                else tx("{n} sin entregar = {euros} sin cobrar", "n" to d.fallidas, "euros" to Region.importe(d.perdido / 100.0)),
+                style = MaterialTheme.typography.bodyMedium.merge(TextoNumero), color = MaterialTheme.colorScheme.error,
+            )
+        }
+        Spacer(Modifier.height(Esp.s))
+    }
+}
+
+/** EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): una parada sin punto en el mapa lo dice claro, con «Situar». En «Hoy»
+ *  ya lo hace el chip de la tarjeta; la hoja de la parada (Hojas.kt) sigue usándolo hasta que pase a la Hoja común. */
+@Composable
+internal fun AvisoSinSituar(alSituar: () -> Unit) {
+    Aviso(tx("Sin situar en el mapa"), tono = Tono.AVISO, icono = Icons.Default.LocationOff, accion = tx("Situar"), alAccion = alSituar)
+}
+
+/** El número de parada de antes, sobre la pieza NumeroParada (07-11-2026): lo usa la guía hasta que pase a la pieza. */
+@Composable
+internal fun Numero(n: Int?, grande: Boolean = false, hecho: Boolean = false) {
+    NumeroParada(n, if (grande) TamNumero.GRANDE else TamNumero.FILA, if (hecho) EstadoNumero.HECHA else EstadoNumero.SIGUIENTE)
+}
+
+/** Las etiquetas de una parada (todas, con `Etiqueta`), como las usan la hoja de la parada y la tarjeta del mapa hasta
+ *  que pasen a las piezas: sin la hora (ya va al lado del nombre) y, sin sitio, «Sin situar · Situar» con `alSituar`. */
 @Composable
 fun Etiquetas(
     p: Parada, enZbe: String = "",
-    /** Sin situar (02-11-2026): con esto, el chip es «Sin ubicar · Situar» y abre «Situar la parada». */
+    /** Sin situar (02-11-2026): con esto, el chip es «Sin situar · Situar» y abre «Situar la parada». */
     alSituar: (() -> Unit)? = null,
     /** El aviso de sin situar ya va aparte (AvisoSinSituar): sin chip. */
     avisoAparte: Boolean = false,
 ) {
-    val x = LocalExtra.current
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        p.eta?.let { Chip("≈ $it", MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer) }
-        if (p.porCobrar) Chip(tx("Cobrar") + " ${Region.importe(p.cobrar ?: 0.0)}", x.cobrar, x.enCobrar)
-        if (p.prioridad) Chip(tx("Urgente"), MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
-        if (p.bultos > 1) Chip("${p.bultos} " + tx("bultos"), MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
-        if (!p.ubicada && p.pendiente && !avisoAparte) {
-            if (alSituar != null) ChipSituar(alSituar)
-            else Chip(tx("Sin ubicar"), MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        // LA PUERTA APRENDIDA, el retraso y la ZBE (30-10-2026).
-        if (p.geo == "puerta" && p.pendiente) Chip(tx("Puerta conocida"), x.entregado.copy(alpha = 0.15f), MaterialTheme.colorScheme.onSurface)
-        if ((p.tardeMin ?: 0) > 0 && p.pendiente) Chip(tx("llega {n} min tarde", "n" to p.tardeMin), MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
-        if (enZbe.isNotBlank() && p.pendiente) Chip(enZbe, MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
-    }
-}
-
-@Composable
-private fun Chip(t: String, fondo: androidx.compose.ui.graphics.Color, tinta: androidx.compose.ui.graphics.Color) {
-    Surface(color = fondo, contentColor = tinta, shape = RoundedCornerShape(8.dp)) {
-        Text(t, style = MaterialTheme.typography.labelMedium.merge(TextoNumero), modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
-    }
-}
-
-/** «Sin ubicar · Situar» (02-11-2026): un toque abre «Situar la parada». */
-@Composable
-private fun ChipSituar(alSituar: () -> Unit) {
-    val x = LocalExtra.current
-    Surface(onClick = alSituar, color = x.aviso, contentColor = x.enAviso, shape = RoundedCornerShape(8.dp)) {
-        Row(Modifier.padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.LocationOff, contentDescription = null, modifier = Modifier.size(14.dp))
-            Spacer(Modifier.width(4.dp))
-            Text(tx("Sin ubicar") + " · " + tx("Situar"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(Esp.s), verticalArrangement = Arrangement.spacedBy(Esp.xs)) {
+        etiquetasDe(p, enZbe).forEach { (t, tono, i) -> Etiqueta(t, tono, i) }
+        if (Situar.sinSituar(p) && !avisoAparte) {
+            if (alSituar != null) ChipAccion(tx("Sin situar") + " · " + tx("Situar"), alSituar, icono = Icons.Default.LocationOff, tono = Tono.AVISO)
+            else Etiqueta(tx("Sin situar"), Tono.AVISO, Icons.Default.LocationOff)
         }
     }
 }
 
+/** La fila de una parada, con la firma de siempre (la usa el Historial, Pestanas.kt) y el cuerpo de la pieza FilaParada
+ *  (07-11-2026). `alSituar` ya no pinta nada: «Situar» va en la hoja de la parada. */
 @Composable
-private fun Siguiente(
-    p: Parada, numero: Int, enZbe: String = "",
-    alNavegar: () -> Unit, alLlamar: () -> Unit, alWhatsapp: () -> Unit, alEntregar: () -> Unit, alFallar: () -> Unit, alAbrir: () -> Unit,
-    alEscuchar: () -> Unit = {},
-    /** El móvil está buscando la dirección (02-11-2026), y «Situar» para ponerla a mano. */
-    buscando: Boolean = false, alSituar: () -> Unit = {},
-) {
-    val x = LocalExtra.current
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-        shape = MaterialTheme.shapes.large,
-        border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(tx("Siguiente parada").uppercase(LOCALE_APP), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.weight(1f))
-                // EL BRIEFING POR VOZ (01-11-2026): lo que hay que saber de esta parada, en una frase, cuando se quiera.
-                IconButton(onClick = alEscuchar, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = tx("Escuchar la siguiente parada"), modifier = Modifier.size(20.dp))
-                }
-            }
-            Spacer(Modifier.height(4.dp))
-            Row(Modifier.clickable(onClick = alAbrir), verticalAlignment = Alignment.Top) {
-                Numero(numero, grande = true)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(p.cliente.ifBlank { p.direccion }, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    if (p.cliente.isNotBlank()) Text(p.direccion, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (p.notas.isNotBlank()) Text(p.notas, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    p.antes?.let { Text(textoAntes(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary) }
-                    // EL CLIENTE TE AYUDA ANTES DE LLEGAR (30-10-2026): lo que contestó en su enlace, en la parada.
-                    p.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }?.let {
-                        Text(tx("El cliente dice: {t}", "t" to it), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.tertiary)
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Etiquetas(p, enZbe, avisoAparte = true)
-                }
-            }
-            if (Situar.sinSituar(p)) { Spacer(Modifier.height(10.dp)); AvisoSinSituar(alSituar) }
-            Spacer(Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = alNavegar, enabled = !buscando, modifier = Modifier.weight(1f).height(52.dp)) {
-                    if (buscando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Default.Navigation, contentDescription = null)
-                    Spacer(Modifier.width(6.dp)); Text(tx("Navegar"))
-                }
-                FilledTonalButton(onClick = alLlamar, enabled = p.telefono.isNotBlank(), modifier = Modifier.height(52.dp)) {
-                    Icon(Icons.Default.Call, contentDescription = tx("Llamar"))
-                }
-                FilledTonalButton(onClick = alWhatsapp, enabled = p.telefono.isNotBlank(), modifier = Modifier.height(52.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = tx("WhatsApp"))
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = alFallar, modifier = Modifier.weight(1f).height(56.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                    Text(tx("No entregado"), maxLines = 1)
-                }
-                Button(onClick = alEntregar, modifier = Modifier.weight(1.2f).height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = x.entregado, contentColor = x.enEntregado)) {
-                    Icon(Icons.Default.Check, contentDescription = null); Spacer(Modifier.width(4.dp)); Text(tx("Entregado"))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun Fila(p: Parada, numero: Int?, enZbe: String = "", alTocar: () -> Unit, alSituar: (() -> Unit)? = null) {
-    Surface(onClick = alTocar, color = MaterialTheme.colorScheme.surfaceContainerLowest, shape = MaterialTheme.shapes.medium) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Numero(numero, hecho = !p.pendiente)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(p.cliente.ifBlank { p.direccion }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (p.cliente.isNotBlank()) {
-                    Text(p.direccion, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                if (p.pendiente && (p.eta != null || p.porCobrar || p.prioridad || !p.ubicada || p.geo == "puerta" || enZbe.isNotBlank() || (p.tardeMin ?: 0) > 0)) { Spacer(Modifier.height(4.dp)); Etiquetas(p, enZbe, alSituar) }
-                if (!p.pendiente) {
-                    // Con la hora (30-10-2026): «Entregado · 11:02», como en la web.
-                    val hora = Calle.hora(p.cerradoEn).takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""
-                    Text(if (p.estado == "entregado") tx("Entregado") + hora else tx("No entregado") + hora + (p.motivo?.let { " · $it" } ?: ""),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (p.estado == "entregado") LocalExtra.current.entregado else MaterialTheme.colorScheme.error)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun Hechas(hechas: List<Parada>, alTocar: (Parada) -> Unit) {
-    var abierto by rememberSaveable { mutableStateOf(false) }
-    Column {
-        Row(Modifier.fillMaxWidth().clickable { abierto = !abierto }.padding(vertical = 10.dp, horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(tx("HECHAS HOY") + " · ${hechas.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f))
-            Icon(if (abierto) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = if (abierto) "Ocultar" else "Ver")
-        }
-        AnimatedVisibility(abierto) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { hechas.forEach { Fila(it, numero = it.orden, alTocar = { alTocar(it) }) } }
-        }
-    }
+fun Fila(p: Parada, numero: Int?, enZbe: String = "", alTocar: () -> Unit, @Suppress("UNUSED_PARAMETER") alSituar: (() -> Unit)? = null) {
+    FilaParada(p, numero, enZbe, alTocar)
 }
 
 @Composable
 private fun SinRuta(error: String, alReintentar: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(Icons.Default.CloudOff, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Esp.m))
         Text(error, style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.height(16.dp))
-        Button(onClick = alReintentar) { Text(tx("Reintentar")) }
-    }
-}
-
-/** EL CLIENTE AVISADO (01-11-2026): la tarjeta que abre la lista de WhatsApps, con cuántos van. */
-@Composable
-private fun AvisarCard(avisados: Int, total: Int, alPulsar: () -> Unit) {
-    val x = LocalExtra.current
-    Card(onClick = alPulsar, colors = CardDefaults.cardColors(containerColor = x.entregado.copy(alpha = 0.12f)), shape = MaterialTheme.shapes.large) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, tint = x.entregado)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(tx("Avisar a todos por WhatsApp"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(if (avisados == total) tx("Todos avisados") else tx("{a} de {b} avisados · su hora y su enlace", "a" to avisados, "b" to total),
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-/** LA CARGA GUIADA (01-11-2026): el acceso desde «Hoy», con cuántos paquetes van ya en la furgoneta. */
-@Composable
-private fun CargarCard(cargados: Int, total: Int, alPulsar: () -> Unit) {
-    val x = LocalExtra.current
-    Card(onClick = alPulsar, colors = CardDefaults.cardColors(containerColor = x.entregado.copy(alpha = 0.12f)), shape = MaterialTheme.shapes.large) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.LocalShipping, contentDescription = null, tint = x.entregado)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(tx("Cargar la furgoneta"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(tx("Escanea y te digo dónde va") + " · " + tx("{a} de {b} cargados", "a" to cargados, "b" to total),
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        Spacer(Modifier.height(Esp.l))
+        BotonNormal(tx("Reintentar"), alReintentar)
     }
 }
