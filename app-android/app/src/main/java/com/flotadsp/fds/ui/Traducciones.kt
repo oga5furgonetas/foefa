@@ -221,7 +221,7 @@ Escanea los paquetes: la dirección entra sola.	Scan the parcels: the address fi
 Escanea y te digo dónde va	Scan it and I’ll tell you where it goes	Lê o código e digo-te onde vai	Scanne et je te dis où ça va	Scansiona e ti dico dove va	Scanne und ich sage dir, wohin es kommt
 Escaneado	Scanned	Lido	Scanné	Scansionato	Gescannt
 Escanear	Scan	Digitalizar	Scanner	Scansiona	Scannen
-Escanear paquetes	Scan parcels	Ler encomendas	Scanner des colis	Scansiona pacchi	Pakete scannen
+Escanear paquetes	Scan parcels	Digitalizar volumes	Scanner des colis	Scansiona pacchi	Pakete scannen
 Escanear para cargar	Scan to load	Ler para carregar	Scanner pour charger	Scansiona per caricare	Scannen zum Beladen
 Escribe el correo de tu cuenta y te mandamos un enlace para crear una contraseña nueva.	Enter your account email and we will send you a link to create a new password.	Escreve o e-mail da tua conta e enviamos-te um link para criar uma palavra-passe nova.	Saisissez l’e-mail de votre compte et nous vous envoyons un lien pour créer un nouveau mot de passe.	Scrivi l’email del tuo account e ti mandiamo un link per creare una nuova password.	Gib die E-Mail deines Kontos ein und wir schicken dir einen Link für ein neues Passwort.
 Escribe el código de 6 cifras del correo.	Enter the 6-digit code from the email.	Escreve o código de 6 dígitos do e-mail.	Saisissez le code à 6 chiffres reçu par e-mail.	Scrivi il codice di 6 cifre dell’e-mail.	Gib den 6-stelligen Code aus der E-Mail ein.
