@@ -529,8 +529,9 @@ fun Promo(
 
 /* ───────────── Hoja, ayuda y menú ───────────── */
 
-/** Una opción del menú ⋮: lo que borra va en peligro y con su diálogo de siempre, que abre `alPulsar`. */
-class Opcion(val texto: String, val icono: ImageVector? = null, val peligro: Boolean = false, val alPulsar: () -> Unit)
+/** Una opción del menú ⋮: lo que borra va en peligro y con su diálogo de siempre, que abre `alPulsar`. `nombre` es el
+ *  nombre accesible cuando no es el texto (07-11-2026, N2: se ve «Escuchar» y se llama «Escuchar la siguiente parada»). */
+class Opcion(val texto: String, val icono: ImageVector? = null, val peligro: Boolean = false, val nombre: String? = null, val alPulsar: () -> Unit)
 
 /** La hoja de abajo: radio 16 arriba; cabecera de 48 (con el asa de 32 × 4 dentro, arriba y centrada) con el título en
  *  una línea, el subtítulo opcional, «?» y ⋮ si hacen falta y la ✕ de 48; el cuerpo se desplaza con 16 a los lados; el
@@ -597,13 +598,14 @@ fun Ayuda(titulo: String, texto: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** El ⋮: un botón de icono de 48 («Más opciones») con filas de 48, icono de 20 y letra `boton`, de 200 de ancho como mínimo. */
+/** El ⋮: un botón de icono de 48 («Más opciones») con filas de 48, icono de 20 y letra `boton`, de 200 de ancho como mínimo.
+ *  `ancla` (07-11-2026, N2) pinta otra cosa en lugar del ⋮ y recibe `abrir`: el chip «Furgoneta aparcada» de «Hoy». */
 @Composable
-fun Menu(opciones: List<Opcion>, nombre: String = tx("Más opciones"), modifier: Modifier = Modifier) {
+fun Menu(opciones: List<Opcion>, nombre: String = tx("Más opciones"), modifier: Modifier = Modifier, ancla: (@Composable (abrir: () -> Unit) -> Unit)? = null) {
     var abierto by remember { mutableStateOf(false) }
     val c = MaterialTheme.colorScheme
     Box(modifier) {
-        BotonIcono(Icons.Default.MoreVert, nombre, { abierto = true })
+        if (ancla != null) ancla { abierto = true } else BotonIcono(Icons.Default.MoreVert, nombre, { abierto = true })
         DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false }, shape = MaterialTheme.shapes.medium, containerColor = c.surfaceContainerLow) {
             opciones.forEach { o ->
                 DropdownMenuItem(
@@ -611,7 +613,7 @@ fun Menu(opciones: List<Opcion>, nombre: String = tx("Más opciones"), modifier:
                     onClick = { abierto = false; o.alPulsar() },
                     leadingIcon = o.icono?.let { { Icon(it, contentDescription = null, modifier = Modifier.size(20.dp)) } },
                     colors = if (o.peligro) MenuDefaults.itemColors(textColor = c.error, leadingIconColor = c.error) else MenuDefaults.itemColors(),
-                    modifier = Modifier.widthIn(min = 200.dp),
+                    modifier = Modifier.widthIn(min = 200.dp).then(o.nombre?.let { n -> Modifier.semantics { contentDescription = n } } ?: Modifier),
                 )
             }
         }
