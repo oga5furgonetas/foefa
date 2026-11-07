@@ -1703,8 +1703,10 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
                 dice: p.cliente_dice ? textoClienteDice(p.cliente_dice) : null,
               }))} />
           </Suspense>
-          {/* A la derecha del zoom de Leaflet (arriba a la izquierda); las capas van arriba a la derecha (MapaReparto). */}
-          <div className="absolute left-16 top-3 z-[1100] flex max-w-[55%] flex-col items-start gap-2">
+          {/* Debajo del zoom de Leaflet (arriba a la izquierda: 10 + 96 de alto + 10 de hueco = 116); las capas van arriba a la
+              derecha (MapaReparto). A la derecha del zoom, la píldora pisaba «C/D» a 360 y a 280 tapaba «C/D» y «DGT» (revisor,
+              07-11-2026, hallazgo 2). */}
+          <div className="absolute left-3 top-[116px] z-[1100] flex max-w-[55%] flex-col items-start gap-2">
             <Pastilla texto={trazado?.fuente === 'carreteras' ? `${distancia(trazado.km)} · ${minutosATexto(trazado.minutos)}` : trazado ? tx('Sin ruta por calles') : tx('Calculando el recorrido…')} />
             {sinSituar.length > 0 && (
               <Pastilla tono="aviso" icono={MapPinOff} texto={sinSituar.length === 1 ? tx('1 sin situar') : tx('{n} sin situar', { n: sinSituar.length })} onClick={() => abrirSituar(sinSituar[0])} />
