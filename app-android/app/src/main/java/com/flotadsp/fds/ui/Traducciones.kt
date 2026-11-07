@@ -1,6 +1,6 @@
 package com.flotadsp.fds.ui
 
-/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 832 textos de la app nativa con sus
+/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 829 textos de la app nativa con sus
    traducciones (en, pt, fr, it, de), sacadas de la web (frontend/src/lib/textosRuta*.js) y de
    app-android/traducciones-nativa.json. Una fila por línea, columnas con TAB; ⏎ es un salto de línea. En bloques
    porque una constante de Kotlin no puede pasar de 64 KB. */
@@ -19,11 +19,10 @@ internal object Traducciones {
 1 parada traída a hoy. Pulsa «Ordenar ruta».	1 stop moved to today. Tap “Sort route”.	1 paragem trazida para hoje. Toque em «Ordenar rota».	1 arrêt ramené à aujourd’hui. Appuyez sur « Trier la tournée ».	1 fermata portata a oggi. Tocca «Ordina giro».	1 Stopp auf heute geholt. Tippe auf „Route sortieren“.
 1 sin entregar = {euros} sin cobrar	1 not delivered = {euros} unpaid	1 não entregue = {euros} por cobrar	1 non livré = {euros} non payé	1 non consegnato = {euros} non incassati	1 nicht zugestellt = {euros} unbezahlt
 1 sin enviar	1 not sent	1 por enviar	1 non envoyé	1 non inviata	1 nicht gesendet
-1 sin ubicar: toca para situarla en el mapa	1 not located: tap to place it on the map	1 sem localização: toca para a situar no mapa	1 non localisé : touchez pour le placer sur la carte	1 non localizzata: tocca per metterla sulla mappa	1 nicht verortet: Tippe, um ihn auf der Karte zu setzen
+1 sin situar	1 not on the map	1 sem localização	1 non localisé	1 non localizzata	1 nicht auf der Karte
 A cobrar ({moneda}, opcional)	To collect ({moneda}, optional)	A cobrar ({moneda}, opcional)	À encaisser ({moneda}, facultatif)	Da incassare ({moneda}, facoltativo)	Zu kassieren ({moneda}, optional)
 A mano	Manual	Manual	Manuel	A mano	Manuell
 A {d} de ti, en línea recta.	{d} from you, as the crow flies.	A {d} de ti, em linha reta.	À {d} de vous, à vol d’oiseau.	A {d} da te, in linea d’aria.	{d} von dir entfernt, Luftlinie.
-Abrir	Open	Abrir	Ouvrir	Apri	Öffnen
 Abrir en {app}	Open in {app}	Abrir no {app}	Ouvrir dans {app}	Apri in {app}	In {app} öffnen
 Abrir los permisos	Open permissions	Abrir as permissões	Ouvrir les autorisations	Apri i permessi	Berechtigungen öffnen
 Acabas de entrar: no hace falta tu contraseña actual.	You’ve just signed in: you don’t need your current password.	Acabaste de entrar: não precisas da tua palavra-passe atual.	Vous venez de vous connecter : votre mot de passe actuel n’est pas nécessaire.	Hai appena effettuato l’accesso: non serve la tua password attuale.	Du hast dich gerade angemeldet: Dein aktuelles Passwort ist nicht nötig.
@@ -85,7 +84,6 @@ Buscando la dirección…	Looking up the address…	A procurar a morada…	Reche
 Buscar	Search	Pesquisar	Rechercher	Cerca	Suchen
 Buscar en la ruta	Search the route	Pesquisar na rota	Rechercher dans la tournée	Cerca nel percorso	In der Route suchen
 Buzón	Mailbox	Caixa do correio	Boîte aux lettres	Cassetta	Briefkasten
-Búscalo: {sitio}	Look for it: {sitio}	Procure: {sitio}	Cherchez-le : {sitio}	Cercalo: {sitio}	Suche es: {sitio}
 Cabina	Cab	Cabine	Cabine	Cabina	Fahrerhaus
 Calculando la ruta…	Calculating the route…	A calcular a rota…	Calcul de l’itinéraire…	Calcolo del percorso…	Route wird berechnet…
 Calle encontrada, sin el portal	Street found, but not the house number	Rua encontrada, sem o número da porta	Rue trouvée, sans le numéro	Via trovata, senza il numero civico	Straße gefunden, ohne Hausnummer
@@ -178,6 +176,7 @@ En el buzón	In the mailbox	Na caixa do correio	Dans la boîte aux lettres	Nella
 En el mapa	On the map	No mapa	Sur la carte	Sulla mappa	Auf der Karte
 En la bifurcación, mantente {lado}	At the fork, keep {lado}	Na bifurcação, mantenha-se {lado}	À la bifurcation, restez {lado}	Al bivio, tieni la {lado}	An der Gabelung {lado} halten
 En la foto se lee el número {a} y la parada es el {b}: comprueba que es la puerta buena.	The photo shows number {a} and the stop is number {b}: check it’s the right door.	Na foto lê-se o número {a} e a paragem é o {b}: confirma que é a porta certa.	Sur la photo on lit le numéro {a} et l’arrêt est au {b} : vérifie que c’est la bonne porte.	Nella foto si legge il numero {a} e la fermata è il {b}: controlla che sia la porta giusta.	Auf dem Foto steht die Nummer {a}, der Stopp ist Nummer {b}: prüf, ob es die richtige Tür ist.
+En la furgoneta: {sitio}	In the van: {sitio}	Na carrinha: {sitio}	Dans le fourgon : {sitio}	Nel furgone: {sitio}	Im Transporter: {sitio}
 En la furgoneta: {x}	In the van: {x}	Na carrinha: {x}	Dans la camionnette : {x}	Nel furgone: {x}	Im Transporter: {x}
 En la rotonda, toma la {n} salida	At the roundabout, take the {n} exit	Na rotunda, saia na {n} saída	Au rond-point, prenez la {n} sortie	Alla rotonda, prendi la {n} uscita	Im Kreisverkehr die {n} Ausfahrt nehmen
 En la rotonda, {giro}	At the roundabout, {giro}	Na rotunda, {giro}	Au rond-point, {giro}	Alla rotonda, {giro}	Im Kreisverkehr: {giro}
@@ -227,10 +226,10 @@ Escribe un correo válido.	Enter a valid email.	Escreve um e-mail válido.	Saisi
 Escribir a soporte	Write to support	Escrever ao suporte	Écrire au support	Scrivi al supporto	Support schreiben
 Escuchar	Listen	Ouvir	Écouter	Ascolta	Anhören
 Escuchar la siguiente parada	Hear the next stop	Ouvir a próxima paragem	Écouter le prochain arrêt	Ascolta la prossima fermata	Nächsten Stopp anhören
-""",
-        """Ese correo ya está verificado.	That email is already verified.	Esse e-mail já está verificado.	Cet e-mail est déjà vérifié.	Quella e-mail è già verificata.	Diese E-Mail ist bereits bestätigt.
+Ese correo ya está verificado.	That email is already verified.	Esse e-mail já está verificado.	Cet e-mail est déjà vérifié.	Quella e-mail è già verificata.	Diese E-Mail ist bereits bestätigt.
 Ese código no es válido	That code isn’t valid	Esse código não é válido	Ce code n’est pas valide	Quel codice non è valido	Dieser Code ist ungültig
-Ese código ya está en los pedidos de ese día	That code is already in that day’s orders	Esse código já está nas encomendas desse dia	Ce code figure déjà dans les commandes du jour	Quel codice è già negli ordini di quel giorno	Dieser Code ist schon in den Aufträgen des Tages
+""",
+        """Ese código ya está en los pedidos de ese día	That code is already in that day’s orders	Esse código já está nas encomendas desse dia	Ce code figure déjà dans les commandes du jour	Quel codice è già negli ordini di quel giorno	Dieser Code ist schon in den Aufträgen des Tages
 Ese pedido no es tuyo	That order isn’t yours	Essa encomenda não é sua	Cette commande n’est pas la vôtre	Quell’ordine non è tuo	Dieser Auftrag gehört nicht dir
 Ese pedido ya no existe	That order no longer exists	Essa encomenda já não existe	Cette commande n’existe plus	Quell’ordine non esiste più	Diesen Auftrag gibt es nicht mehr
 Ese plan aún no tiene precio en Stripe	That plan doesn’t have a price in Stripe yet	Esse plano ainda não tem preço na Stripe	Cette offre n’a pas encore de prix dans Stripe	Quel piano non ha ancora un prezzo in Stripe	Dieser Tarif hat noch keinen Preis in Stripe
@@ -369,6 +368,7 @@ Limpieza	Cleanliness	Limpeza	Propreté	Pulizia	Sauberkeit
 Lista por hueco	List by slot	Lista por lugar	Liste par emplacement	Elenco per posto	Liste nach Platz
 Listo	Done	Pronto	Terminé	Fatto	Fertig
 Llamar	Call	Ligar	Appeler	Chiama	Anrufen
+Llegas	Arrival	Chega	Arrivée	Arrivo	Ankunft
 Llegas a tu parada	Arriving at your stop	Está a chegar à paragem	Vous arrivez à votre arrêt	Stai arrivando alla fermata	Du erreichst deinen Stopp
 Lleno	Full	Cheio	Plein	Pieno	Voll
 Lleva: {x}	Contents: {x}	Leva: {x}	Contenu : {x}	Contiene: {x}	Inhalt: {x}
@@ -564,6 +564,7 @@ Si marcas un elemento como malo o dañado, adjunta una foto para dejar constanci
 Si te registras con mi enlace y completas 20 entregas a direcciones distintas en 2 días diferentes, repartidas durante el día y dentro de tus primeros 30 días, gano {euros}.	If you sign up through my link and complete 20 deliveries to different addresses across 2 different days, spread throughout each day and within your first 30 days, I earn {euros}.	Se te registares através do meu link e fizeres 20 entregas em moradas diferentes, em 2 dias distintos, distribuídas ao longo do dia e nos teus primeiros 30 dias, ganho {euros}.	Si vous vous inscrivez avec mon lien et effectuez 20 livraisons à des adresses différentes sur 2 jours distincts, réparties tout au long de la journée et pendant vos 30 premiers jours, je gagne {euros}.	Se ti registri con il mio link e completi 20 consegne a indirizzi diversi in 2 giorni distinti, distribuite nell’arco della giornata e nei tuoi primi 30 giorni, guadagno {euros}.	Wenn du dich über meinen Link anmeldest und innerhalb deiner ersten 30 Tage an 2 verschiedenen Tagen über den Tag verteilt 20 Zustellungen an unterschiedliche Adressen abschließt, verdiene ich {euros}.
 Si {correo} tiene una cuenta de repartidor, te hemos mandado un enlace para crear una contraseña nueva. Mira también el spam.	If {correo} has a courier account, we have sent you a link to create a new password. Check the spam folder too.	Se {correo} tiver uma conta de estafeta, enviámos-te um link para criar uma palavra-passe nova. Vê também o spam.	Si {correo} a un compte livreur, nous vous avons envoyé un lien pour créer un nouveau mot de passe. Regardez aussi les spams.	Se {correo} ha un account corriere, ti abbiamo inviato un link per creare una nuova password. Guarda anche nello spam.	Wenn {correo} ein Zustellerkonto hat, haben wir dir einen Link für ein neues Passwort geschickt. Schau auch im Spam nach.
 Sigue	Continue	Continue	Continuez	Prosegui	Weiter
+Sigue la flecha	Follow the arrow	Segue a seta	Suivez la flèche	Segui la freccia	Folge dem Pfeil
 Sigue recto	Go straight	Siga em frente	Continuez tout droit	Prosegui dritto	Geradeaus weiter
 Siguiente parada	Next stop	Próxima paragem	Arrêt suivant	Prossima fermata	Nächster Stopp
 Siguiente parada: {d}	Next stop: {d}	Próxima paragem: {d}	Prochain arrêt : {d}	Prossima fermata: {d}	Nächster Stopp: {d}
@@ -584,7 +585,6 @@ Sin conexión: para traer paradas hace falta red.	No connection: bringing stops 
 Sin conexión: sigues con la ruta guardada en el móvil.	No connection: you carry on with the route saved on the phone.	Sem ligação: continuas com a rota guardada no telemóvel.	Pas de connexion : vous continuez avec la tournée enregistrée sur le téléphone.	Senza connessione: continui con il giro salvato sul telefono.	Keine Verbindung: Du machst mit der auf dem Handy gespeicherten Route weiter.
 Sin el portal	No house number	Sem o número da porta	Sans le numéro	Senza numero civico	Ohne Hausnummer
 Sin hueco	No slot	Sem lugar	Sans emplacement	Senza posto	Kein Platz
-Sin indicaciones ahora: sigue la flecha hasta la parada	No directions right now: follow the arrow to the stop	Sem indicações agora: siga a seta até à paragem	Pas d’indications pour l’instant : suivez la flèche jusqu’à l’arrêt	Nessuna indicazione ora: segui la freccia fino alla fermata	Gerade keine Ansagen: folge dem Pfeil zum Stopp
 Sin paradas todavía	No stops yet	Ainda sem paragens	Pas encore d’arrêts	Ancora nessuna fermata	Noch keine Stopps
 Sin permiso de cámara no se puede hacer la foto. Actívalo en Ajustes › Aplicaciones › FDS › Permisos.	Without camera permission the photo cannot be taken. Turn it on in Settings › Apps › FDS › Permissions.	Sem permissão de câmara não é possível tirar a foto. Ativa-a em Definições › Aplicações › FDS › Permissões.	Sans l’autorisation appareil photo, impossible de prendre la photo. Activez-la dans Paramètres › Applications › FDS › Autorisations.	Senza il permesso della fotocamera non si può scattare la foto. Attivalo in Impostazioni › App › FDS › Autorizzazioni.	Ohne Kameraberechtigung kann kein Foto gemacht werden. Aktiviere sie unter Einstellungen › Apps › FDS › Berechtigungen.
 Sin resultados	No results	Sem resultados	Aucun résultat	Nessun risultato	Keine Treffer
@@ -597,10 +597,10 @@ Situar en el mapa	Place on the map	Situar no mapa	Placer sur la carte	Metti sull
 Situar la parada	Place the stop	Situar a paragem	Placer l’arrêt	Posiziona la fermata	Stopp verorten
 Solicita un turno extra en los días que la empresa necesita refuerzo. La oficina confirma cada solicitud.	Request an extra shift on the days the company needs reinforcement. The office confirms each request.	Pede um turno extra nos dias em que a empresa precisa de reforço. O escritório confirma cada pedido.	Demandez un créneau supplémentaire les jours où l’entreprise a besoin de renfort. Le bureau confirme chaque demande.	Richiedi un turno extra nei giorni in cui l’azienda ha bisogno di rinforzi. L’ufficio conferma ogni richiesta.	Beantrage eine Zusatzschicht an Tagen, an denen die Firma Verstärkung braucht. Das Büro bestätigt jede Anfrage.
 Solicitar día libre	Request a day off	Pedir dia livre	Demander un jour de repos	Richiedi giorno libero	Freien Tag beantragen
-""",
-        """Solicitar pago	Request payout	Pedir pagamento	Demander le paiement	Richiedi pagamento	Auszahlung anfordern
+Solicitar pago	Request payout	Pedir pagamento	Demander le paiement	Richiedi pagamento	Auszahlung anfordern
 Solicitar retirada	Request withdrawal	Pedir levantamento	Demander un retrait	Richiedi prelievo	Auszahlung beantragen
-Solicitar turno	Request shift	Pedir turno	Demander le service	Richiedi turno	Schicht beantragen
+""",
+        """Solicitar turno	Request shift	Pedir turno	Demander le service	Richiedi turno	Schicht beantragen
 Solicitar turno extra	Request extra shift	Pedir turno extra	Demander un créneau supplémentaire	Richiedi turno extra	Zusatzschicht beantragen
 Solicitar un cambio	Request a change	Pedir uma alteração	Demander un changement	Richiedi un cambio	Änderung beantragen
 Solicitud aprobada.	Request approved.	Pedido aprovado.	Demande approuvée.	Richiesta approvata.	Anfrage genehmigt.
@@ -721,7 +721,6 @@ aviso	notice	aviso	avis	avviso	Hinweis
 añadida	added	adicionada	ajoutée	aggiunta	hinzugefügt
 añadidas	added	adicionadas	ajoutées	aggiunte	hinzugefügt
 bloqueado por la oficina	blocked by the office	bloqueado pelo escritório	bloqué par le bureau	bloccato dall’ufficio	vom Büro gesperrt
-bulto	parcel	volume	colis	collo	Paket
 bultos	parcels	volumes	colis	colli	Pakete
 calzada cortada	carriageway closed	faixa de rodagem cortada	chaussée fermée	carreggiata chiusa	Fahrbahn gesperrt
 carretera cortada	road closed	estrada cortada	route fermée	strada chiusa	Straße gesperrt
@@ -758,8 +757,6 @@ entregas en 30 días	deliveries in 30 days	entregas em 30 dias	livraisons en 30 
 estado de la vía	road conditions	estado da via	état de la chaussée	condizioni della strada	Straßenzustand
 hasta las {h}	until {h}	até às {h}	jusqu’à {h}	entro le {h}	bis {h} Uhr
 incidencia	incident	incidente	incident	evento	Vorfall
-incidencia cerca	incident nearby	incidência perto	incident à proximité	incidente vicino	Vorfall in der Nähe
-incidencias cerca	incidents nearby	incidências perto	incidents à proximité	incidenti vicino	Vorfälle in der Nähe
 la parada	the stop	a paragem	l’arrêt	la fermata	dem Stopp
 la siguiente parada	the next stop	a próxima paragem	l’arrêt suivant	la prossima fermata	dem nächsten Stopp
 límite de velocidad	speed limit	limite de velocidade	limitation de vitesse	limite di velocità	Geschwindigkeitsbegrenzung
@@ -821,7 +818,7 @@ ya estaban	were already there	já estavam	étaient déjà là	c’erano già	war
 {n} sin entregar = {euros} sin cobrar	{n} not delivered = {euros} unpaid	{n} não entregues = {euros} por cobrar	{n} non livrés = {euros} non payés	{n} non consegnati = {euros} non incassati	{n} nicht zugestellt = {euros} unbezahlt
 {n} sin enviar	{n} not sent	{n} por enviar	{n} non envoyés	{n} non inviate	{n} nicht gesendet
 {n} sin hueco	{n} without a slot	{n} sem lugar	{n} sans emplacement	{n} senza posto	{n} ohne Platz
-{n} sin ubicar: toca para situarlas en el mapa	{n} not located: tap to place them on the map	{n} sem localização: toca para as situar no mapa	{n} non localisés : touchez pour les placer sur la carte	{n} non localizzate: tocca per metterle sulla mappa	{n} nicht verortet: Tippe, um sie auf der Karte zu setzen
+{n} sin situar	{n} not on the map	{n} sem localização	{n} non localisés	{n} non localizzate	{n} nicht auf der Karte
 ¡Has ganado {euros}!	You’ve earned {euros}!	Ganhaste {euros}!	Vous avez gagné {euros} !	Hai guadagnato {euros}!	Du hast {euros} verdient!
 © OpenStreetMap	© OpenStreetMap	© OpenStreetMap	© OpenStreetMap	© OpenStreetMap	© OpenStreetMap
 © OpenStreetMap · OpenMapTiles	© OpenStreetMap · OpenMapTiles	© OpenStreetMap · OpenMapTiles	© OpenStreetMap · OpenMapTiles	© OpenStreetMap · OpenMapTiles	© OpenStreetMap · OpenMapTiles
@@ -840,14 +837,13 @@ ya estaban	were already there	já estavam	étaient déjà là	c’erano già	war
 ¿Quién lo recoge?	Who receives it?	Quem o recebe?	Qui le réceptionne ?	Chi lo ritira?	Wer nimmt es an?
 ¿Salir de la auditoría?	Leave the audit?	Sair da auditoria?	Quitter le contrôle ?	Uscire dalla verifica?	Prüfung verlassen?
 ¿Sin acceso a tu correo? Sal de la cuenta y vuelve a entrar: nada más entrar podrás cambiarla sin la actual. O pide a la oficina una contraseña temporal.	No access to your email? Sign out and sign in again: right after signing in you can change it without the current one. Or ask the office for a temporary password.	Sem acesso ao teu e-mail? Sai da conta e volta a entrar: logo a seguir podes mudá-la sem a atual. Ou pede ao escritório uma palavra-passe temporária.	Pas d’accès à votre e-mail ? Déconnectez-vous et reconnectez-vous : juste après, vous pourrez le changer sans l’actuel. Ou demandez au bureau un mot de passe temporaire.	Non hai accesso alla tua e-mail? Esci e rientra: appena entrato potrai cambiarla senza quella attuale. Oppure chiedi all’ufficio una password temporanea.	Kein Zugriff auf deine E-Mail? Melde dich ab und wieder an: Direkt danach kannst du es ohne das aktuelle ändern. Oder bitte das Büro um ein vorübergehendes Passwort.
-""",
-        """¿Volver a «por entregar»?	Back to “to deliver”?	Voltar a «por entregar»?	Remettre dans « à livrer » ?	Rimettere in «da consegnare»?	Zurück zu „zuzustellen“?
+¿Volver a «por entregar»?	Back to “to deliver”?	Voltar a «por entregar»?	Remettre dans « à livrer » ?	Rimettere in «da consegnare»?	Zurück zu „zuzustellen“?
 """,
     )
 
     /** { español -> [en, pt, fr, it, de] } */
     val MAPA: Map<String, Array<String>> by lazy {
-        val m = HashMap<String, Array<String>>(1664)
+        val m = HashMap<String, Array<String>>(1658)
         for (b in BLOQUES) for (l in b.lineSequence()) {
             if (l.isBlank()) continue
             val c = l.split('\t')
