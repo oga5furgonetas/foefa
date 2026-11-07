@@ -20,6 +20,7 @@ import { usePlan } from '../../lib/usePlan'
 import { IDIOMAS, idioma, cambiarIdioma, useIdioma, tx, locale } from '../../lib/idioma'
 import MiRuta, { ElegirNavegador } from '../../pages/driver/MiRuta'
 import AjustesMovil from '../../pages/driver/AjustesMovil'
+import Cabecera from '../../pages/driver/piezas/Cabecera'
 import { fijarPais, importe, simboloMoneda } from '../../lib/region'
 
 /* ── REPARTO A DOMICILIO Y A NEGOCIOS ────────────────────────────────────────
@@ -498,6 +499,10 @@ export function Ajustes({ conductores, toast, autonomo }) {
   }
 
   return (
+    <>
+      {/* En la app de reparto (autónomo), la pestaña lleva su Cabecera (diseño compacto, 07-11-2026, §5.11); en el panel
+          la cabecera ya la pone Reparto. */}
+      {autonomo && <Cabecera titulo={tx('Ajustes')} fija className="-mx-4 mb-3" />}
     <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
       <div className="space-y-4">
         {a.paises && (
@@ -648,6 +653,7 @@ export function Ajustes({ conductores, toast, autonomo }) {
       </aside>}
       </div>
     </div>
+    </>
   )
 }
 
