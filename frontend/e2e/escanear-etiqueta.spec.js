@@ -105,11 +105,12 @@ test('Escanear seguidos · guarda la etiqueta completa en lote, evita repetidas 
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Cargar paquetes: uno tras otro' }).click()
   await page.getByRole('button', { name: 'Escanear seguidos' }).click()
-  // Diseño compacto (07-11-2026, §5.5): en reposo la barra de abajo solo trae «Listo»; lo que se cuenta sale al leer.
+  // Diseño compacto (07-11-2026, §5.5): en reposo la barra de abajo solo trae «Listo» (su zona de avisos, vacía); lo que se
+  // cuenta sale al leer.
   const escaner = page.getByRole('dialog', { name: 'Escanear' })
   await expect(escaner.getByRole('button', { name: 'Listo' })).toBeVisible()
-  await expect(escaner.getByRole('status')).toHaveCount(0)
   const estado = escaner.getByRole('status')
+  await expect(estado).toBeEmpty()
 
   await page.evaluate((v) => { window.__ahora = [v] }, GS1)
   await expect(estado).toHaveText(/1 añadidos/)

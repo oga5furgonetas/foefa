@@ -14,6 +14,7 @@ import Campo from './piezas/Campo'
 import Chip from './piezas/Chip'
 import ContenedorLista from './piezas/ContenedorLista'
 import Etiqueta from './piezas/Etiqueta'
+import LetraMax from './piezas/LetraMax'
 import Segmentado from './piezas/Segmentado'
 
 /* ── LA CARGA GUIADA (01-11-2026) ────────────────────────────────────────────
@@ -91,7 +92,7 @@ export default function CargaGuiada({ pedidos, cargaPor = 'traseras', Escaner, o
   const cuenta = tx('{a} de {b} cargados', { a: cargados, b: total })
   // Lo último escaneado: la parada y, en grande, el hueco (lo mismo arriba y en la barra del escáner).
   const nombreUltimo = ultimo?.pedido ? `${tx('Parada {n}', { n: ordenUltimo })} · ${ultimo.pedido.cliente || ultimo.pedido.direccion}` : ''
-  const huecoUltimo = ultimo?.pedido ? (ultimo.pedido.hueco ? `→ ${tx(ultimo.pedido.hueco)}` : tx('Sin hueco')) : ''
+  const huecoUltimo = ultimo?.pedido ? `→ ${ultimo.pedido.hueco ? tx(ultimo.pedido.hueco) : tx('Sin hueco')}` : ''
   const puerta = lateral ? `← ${tx('Puerta lateral')}` : `↓ ${tx('Puertas traseras')}`
   const secciones = [...filasEnOrden.flat().map((h) => [h, porHueco[h]]), [tx('Sin hueco'), sinHueco]].filter(([, l]) => l.length)
 
@@ -108,12 +109,12 @@ export default function CargaGuiada({ pedidos, cargaPor = 'traseras', Escaner, o
           </>
         )} />
 
-      <div className="mx-auto w-full max-w-md flex-1 overflow-y-auto px-4 pb-4">
+      <div className="mx-auto w-full max-w-md flex-1 overflow-y-auto px-4 pb-4 pt-2">
         <Segmentado valor={vista} onChange={setVista}
           opciones={[{ valor: 'furgoneta', texto: tx('Furgoneta'), icono: Truck }, { valor: 'lista', texto: tx('Lista por hueco'), icono: List }]} />
 
         {ultimo?.pedido && (
-          <div className="mt-3 rounded-xl border-2 border-ruta-ok p-3" aria-live="polite">
+          <div className="mt-3 rounded-xl border-2 border-ruta-ok bg-dark-900 p-3" aria-live="polite">
             <p className="text-nombre">{nombreUltimo}</p>
             <p className="text-cifra text-ruta-ok-texto">{huecoUltimo}</p>
           </div>
@@ -131,9 +132,9 @@ export default function CargaGuiada({ pedidos, cargaPor = 'traseras', Escaner, o
                 const activo = ultimo?.pedido?.hueco === h
                 return (
                   <div key={h} data-hueco={h} role="group" aria-label={`${tx(h)}: ${tx('{a} de {b} cargados', { a: c, b: l.length })}`}
-                    className={`flex min-h-16 flex-col items-center justify-center rounded-lg ${activo ? 'border-2 border-ruta-ok' : 'border border-ruta-borde'} ${l.length ? 'bg-ruta-marca-tinte text-ruta-marca-tinte-texto' : 'bg-dark-950 text-dark-400'}`}>
-                    <span className="text-etiqueta">{tx(h)}</span>
-                    <span className="text-titulo tabular-nums">{c}/{l.length}</span>
+                    className={`flex min-h-16 flex-col items-center justify-center rounded-lg ${activo ? 'border-2 border-ruta-ok' : 'border border-dark-800'} ${l.length ? 'bg-ruta-marca-tinte text-ruta-marca-tinte-texto' : 'text-dark-50'}`}>
+                    <LetraMax className="text-etiqueta">{tx(h)}</LetraMax>
+                    <LetraMax base={18} max={21} className="text-titulo tabular-nums">{c}/{l.length}</LetraMax>
                   </div>
                 )
               })}
@@ -141,7 +142,8 @@ export default function CargaGuiada({ pedidos, cargaPor = 'traseras', Escaner, o
             {!lateral && <p className="pt-1 text-center text-sec text-dark-400">{puerta}</p>}
             {sinHueco.length > 0 && (
               <div className="pt-2">
-                <Chip tono="aviso" texto={`${tx('{n} sin hueco', { n: sinHueco.length })} ›`} onClick={() => setVista('lista')} />
+                <Chip tono="aviso" nombre={tx('{n} sin hueco', { n: sinHueco.length })} onClick={() => setVista('lista')}
+                  texto={<>{tx('{n} sin hueco', { n: sinHueco.length })} <span aria-hidden="true">›</span></>} />
               </div>
             )}
           </div>
@@ -179,7 +181,8 @@ export default function CargaGuiada({ pedidos, cargaPor = 'traseras', Escaner, o
 
       <div className="shrink-0 border-t border-dark-800 bg-dark-950 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
         <div className="mx-auto flex max-w-md items-center gap-2">
-          <Boton variante="principal" tono="ok" icono={ScanLine} texto={tx('Escanear')} className="flex-1" onClick={() => { setError(''); setEscaner(true) }} />
+          <Boton variante="principal" tono="ok" icono={ScanLine} texto={tx('Escanear')} nombre={tx('Escanear para cargar')} className="flex-1"
+            onClick={() => { setError(''); setEscaner(true) }} />
           <Boton variante="normal" contorno tono="neutro" texto={faltan > 0 ? tx('Salir ({n} faltan)', { n: faltan }) : tx('Todo cargado')} onClick={onClose} />
         </div>
       </div>

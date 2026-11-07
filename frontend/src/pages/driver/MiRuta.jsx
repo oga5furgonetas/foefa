@@ -39,6 +39,7 @@ import { textoBriefing } from '../../lib/briefing'
 import { textoAvisoIa } from '../../lib/entregaIa'
 import { Hoja as HojaPieza } from './piezas'
 import Boton from './piezas/Boton'
+import LetraMax from './piezas/LetraMax'
 import NumeroParada from './piezas/NumeroParada'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
@@ -3131,11 +3132,13 @@ function BotonFichero({ texto, accept, capture, onFichero, disabled = false, car
 
 /* `seguido` (13-10-2026): la cámara no se cierra tras cada paquete; los que ya
    se han leído no se repiten y lo de abajo cuenta lo que va.
-   Diseño compacto (07-11-2026, §5.5): arriba, la píldora «Apunta al código» y la ✕ de 48 con fondo y zona segura; abajo,
-   en una barra (radio 16, relleno 12, negro al 90 %) y solo si hay algo que contar: `ultimo` (lo último leído, 14/600, dos
-   líneas), `grande` (el hueco o la parada, en «cifra» verde), `aviso` (un error de quien escanea, en rojo) y `estado` (el
-   contador, en «sec»), con el botón «Listo» de 48. Los colores van fijos, como los `escaner*` del tema de la nativa: la
-   pantalla es negra en los tres temas y los tonos de las piezas (que siguen al tema) no se leerían aquí. */
+   Diseño compacto (07-11-2026, §5.5): arriba, la ✕ de 48 con fondo (negro al 40 %, a la izquierda como en la nativa) y la
+   píldora «Apunta al código» (negro al 60 %), con la zona segura; abajo, escaneando seguidos, una barra (radio 16, relleno 12,
+   negro al 90 %) con lo que haya que contar: `ultimo` (lo último leído, 14/600, dos líneas), `grande` (el hueco o la parada,
+   en «cifra» verde), `aviso` (un error de quien escanea: sustituye a lo anterior, con su icono) y `estado` (el contador, en
+   «sec»), y el botón «Listo» de 48; en reposo, solo «Listo». La pantalla es negra en los tres temas, así que los colores van
+   con clases que index.css NO aclara ni oscurece para el papel (text-green-300 y text-rose-400, no los emerald y red de 200 a
+   400: en los temas día e híbrido se vuelven verde y rojo oscuros y sobre negro no se leen) y el botón es el tonal de marca. */
 function Escaner({ onCodigo, onClose, seguido = false, estado = '', ultimo = '', grande = '', aviso = '' }) {
   useAtras(true, onClose)
   const video = useRef(null)
@@ -3201,36 +3204,41 @@ function Escaner({ onCodigo, onClose, seguido = false, estado = '', ultimo = '',
     }
   }, [seguido])
 
-  const algo = seguido && (ultimo || grande || aviso || estado)
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black text-white" role="dialog" aria-modal="true" aria-label={tx('Escanear')}>
       <div className="relative flex-1">
         {error ? <p className="px-4 pt-20 text-center text-texto">{error}</p> : (
           <>
             <video ref={video} playsInline muted className="h-full w-full object-cover" />
-            <div className="pointer-events-none absolute inset-x-8 top-1/2 h-40 -translate-y-1/2 rounded-2xl border-2 border-white/70" />
+            {/* El recuadro, igual; con `border-white opacity-70` y no `border-white/70`, que index.css aclara en los temas día e híbrido. */}
+            <div className="pointer-events-none absolute inset-x-8 top-1/2 h-40 -translate-y-1/2 rounded-2xl border-2 border-white opacity-70" />
           </>
         )}
-        <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 px-4 pt-[max(8px,env(safe-area-inset-top))]">
-          <span className="w-12 shrink-0" aria-hidden="true" />
-          {!error && (
-            <span className="inline-flex h-8 min-w-0 items-center rounded-full bg-black/60 px-3 text-etiqueta"><span className="truncate">{tx('Apunta al código')}</span></span>
-          )}
+        <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 px-2 pt-[max(8px,env(safe-area-inset-top))]">
           <button type="button" onClick={onClose} aria-label={tx('Cerrar')} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-black/40">
             <X size={24} aria-hidden="true" />
           </button>
+          {!error && (
+            <span className="inline-flex h-8 min-w-0 items-center rounded-full bg-black/60 px-3 text-etiqueta"><span className="truncate">{tx('Apunta al código')}</span></span>
+          )}
+          <span className="w-12 shrink-0" aria-hidden="true" />
         </div>
         {seguido && (
           <div className="absolute inset-x-4 bottom-[max(16px,env(safe-area-inset-bottom))] flex items-end gap-2 rounded-2xl bg-black/90 p-3">
-            {algo ? (
-              <div role="status" aria-live="polite" className="min-w-0 flex-1">
-                {ultimo && <p className="line-clamp-2 text-boton">{ultimo}</p>}
-                {grande && <p className="text-cifra text-emerald-300">{grande}</p>}
-                {aviso && <p className="text-texto text-red-300">{aviso}</p>}
-                {estado && <p className="text-sec text-white/80">{estado}</p>}
-              </div>
-            ) : <span className="flex-1" />}
-            <button type="button" onClick={onClose} className="min-h-12 shrink-0 rounded-xl bg-white/10 px-4 text-boton">{tx('Listo')}</button>
+            <div role="status" aria-live="polite" className="min-w-0 flex-1">
+              {aviso ? (
+                <p className="flex items-start gap-2 text-boton text-rose-400">
+                  <AlertTriangle size={20} className="mt-0.5 shrink-0" aria-hidden="true" /><span>{aviso}</span>
+                </p>
+              ) : (
+                <>
+                  {ultimo && <p className="line-clamp-2 text-boton">{ultimo}</p>}
+                  {grande && <p className="text-cifra text-green-300">{grande}</p>}
+                </>
+              )}
+              {estado && <LetraMax as="p" className="text-sec tabular-nums text-white/80">{estado}</LetraMax>}
+            </div>
+            <Boton variante="normal" texto={tx('Listo')} onClick={onClose} className="shrink-0" />
           </div>
         )}
       </div>
