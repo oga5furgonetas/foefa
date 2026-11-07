@@ -350,4 +350,6 @@ export const A = {
   "La foto no se guarda": ["The photo isn’t stored", "A foto não é guardada", "La photo n’est pas conservée", "La foto non viene salvata", "Das Foto wird nicht gespeichert"],
   "Hasta 14:00": ["Until 14:00", "Até às 14:00", "Jusqu’à 14:00", "Fino alle 14:00", "Bis 14:00"],
   "Más datos": ["More details", "Mais dados", "Plus de détails", "Altri dati", "Weitere Angaben"],
+  // W2 (07-11-2026): «Empezar a navegar» se fue de «Hoy» y queda «Ir»; el aviso del ejemplo ya no manda a un botón que no existe.
+  "Son paradas de ejemplo, a tu alrededor: pulsa «Ir» y míralo en acción. Quítalas cuando cargues las tuyas.": ["These are sample stops around you: tap “Go” and watch it work. Remove them when you load your own.", "São paragens de exemplo à tua volta: toca em «Ir» e vê-o em ação. Remove-as quando carregares as tuas.", "Ce sont des arrêts d’exemple autour de toi : touche « Y aller » et regarde. Supprime-les quand tu charges les tiens.", "Sono fermate di esempio intorno a te: tocca «Vai» e guardalo in azione. Rimuovile quando carichi le tue.", "Das sind Beispielstopps in deiner Nähe: tippe auf „Los“ und sieh es in Aktion. Entferne sie, wenn du deine eigenen lädst."],
 }

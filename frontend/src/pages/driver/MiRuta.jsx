@@ -982,7 +982,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
     try {
       await repEjemplo(await posicionAhora())
       cargar()
-      setAviso(tx('Son paradas de ejemplo, a tu alrededor: pulsa «Empezar a navegar» y míralo en acción. Quítalas cuando cargues las tuyas.'))
+      setAviso(tx('Son paradas de ejemplo, a tu alrededor: pulsa «Ir» y míralo en acción. Quítalas cuando cargues las tuyas.'))
     } catch (e) { setAviso(txError(e, 'No se pudo preparar el ejemplo')) } finally { setOcupado('') }
   }
   /* LA PRIMERA VEZ (17-10-2026). Antes salía solo el recorrido de 3 pasos y su botón grande era «Verlo en acción
@@ -1412,9 +1412,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
     } catch (e) { setAviso(txError(e, 'No se pudo leer la lista')) } finally { setOcupado('') }
   }
 
-  if (err) return <Marco onBack={onBack} embebido={embebido}><p className="text-red-300">{err}</p></Marco>
-  if (!ruta) return <Marco onBack={onBack} embebido={embebido}><div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-500" /></div></Marco>
-  if (!ruta.activo) return <Marco onBack={onBack} embebido={embebido}><p className="text-dark-400">{tx('Tu empresa no usa el reparto por aquí.')}</p></Marco>
+  if (err) return <Marco onBack={onBack} embebido={embebido} pantallaCompleta={pantallaCompleta}><p className="text-texto text-ruta-peligro-texto">{err}</p></Marco>
+  if (!ruta) return <Marco onBack={onBack} embebido={embebido} pantallaCompleta={pantallaCompleta}><div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-400" aria-hidden="true" /></div></Marco>
+  if (!ruta.activo) return <Marco onBack={onBack} embebido={embebido} pantallaCompleta={pantallaCompleta}><p className="text-texto text-dark-400">{tx('Tu empresa no usa el reparto por aquí.')}</p></Marco>
 
   const pendientes = lista(ruta.pedidos).filter((p) => !['entregado', 'fallido'].includes(p.estado)).sort(porOrden)
   const hechos = lista(ruta.pedidos).filter((p) => ['entregado', 'fallido'].includes(p.estado))
@@ -1497,16 +1497,17 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
   try { fechaCorta = new Date(`${ruta.fecha}T12:00:00`).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' }).replace(/[.,]/g, '') } catch { fechaCorta = '' }
   const cerrarAnadir = () => setAnadir(false)
   const abrirEscaner = () => { medirAccion('ruta_escaner'); cerrarAnadir(); setEscaner(true) }
-  const acciones = conParadas ? (
+  // Con la ruta vacía no salen «+» ni el mapa; «Escanear paquetes» sí (se llama así para no chocar con el «Escanear» del bloque).
+  const acciones = (
     <>
       {pendientes.length > 0 && !reordenar && (
         <Boton variante="icono" icono={vista === 'mapa' ? List : MapaIcono} tono="neutro" nombre={vista === 'mapa' ? tx('Ver la lista') : tx('Ver el mapa')}
           onClick={() => setVista(vista === 'mapa' ? 'lista' : 'mapa')} />
       )}
       <Boton variante="icono" icono={ScanLine} tono="neutro" nombre={tx('Escanear paquetes')} onClick={abrirEscaner} />
-      <Boton variante="icono" icono={Plus} tono="neutro" nombre={tx('Añadir paradas')} onClick={() => { medirAccion('ruta_anadir'); setAnadir(true) }} />
+      {conParadas && <Boton variante="icono" icono={Plus} tono="neutro" nombre={tx('Añadir paradas')} onClick={() => { medirAccion('ruta_anadir'); setAnadir(true) }} />}
     </>
-  ) : null
+  )
   const abrirTarifa = ruta.autonomo && gan
     ? () => setTarifa({ bizum: gan.bizum || '', parada: aEuros(gan.pago_parada), dia: aEuros(gan.pago_dia), km: aEuros(unidades() === 'mi' ? Math.round(gan.coste_km * KM_POR_MILLA) : gan.coste_km) || (simboloMoneda() === '€' ? '0,12' : '') })
     : null
@@ -1728,7 +1729,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
               {!embebido && (
                 <label className="flex min-w-0 max-w-full items-center gap-2 text-sec text-dark-400">
                   <span className="shrink-0">{tx('Ir con')}</span>
-                  <select value={nav} onChange={(e) => setNav(e.target.value)} aria-label={tx('Navegador')} className="campo min-h-10 w-auto min-w-0 max-w-full py-1 text-boton">
+                  <select value={nav} onChange={(e) => setNav(e.target.value)} aria-label={tx('Navegador')} className="campo w-auto min-w-0 max-w-full py-1 text-boton">
                     {NAVEGADORES.map(([k, t]) => <option key={k} value={k}>{tx(t)}</option>)}
                   </select>
                 </label>
@@ -2491,14 +2492,17 @@ export function ElegirNavegador() {
    en el portal) con «Ver el mapa», «Escanear paquetes» y «+»; fija con `pantallaCompleta` (la app y el portal), sin fijar
    en el panel de escritorio. Entre bloques, 12. */
 function Marco({ onBack, children, embebido, pantallaCompleta = false, fecha = '', acciones = null }) {
+  // En la app, de borde a borde (el contenedor de RutaApp lleva 16 a los lados); la clase va en la propia cabecera para
+  // que la fija se pegue a lo largo de toda la columna, no solo dentro de una caja de su alto.
   const cabecera = (
-    <Cabecera titulo={embebido ? tx('Hoy') : tx('Mi ruta')} subtitulo={fecha} onVolver={embebido ? undefined : onBack} acciones={acciones} fija={pantallaCompleta} />
+    <Cabecera titulo={embebido ? tx('Hoy') : tx('Mi ruta')} subtitulo={fecha} onVolver={embebido ? undefined : onBack} acciones={acciones} fija={pantallaCompleta}
+      className={embebido && pantallaCompleta ? '-mx-4' : ''} />
   )
   // Dentro del panel (el autónomo) va sin pantalla completa ni botón de volver.
   if (embebido) {
     return (
       <div className="mx-auto flex max-w-md flex-col gap-3">
-        {pantallaCompleta ? <div className="-mx-4">{cabecera}</div> : cabecera}
+        {cabecera}
         {children}
       </div>
     )

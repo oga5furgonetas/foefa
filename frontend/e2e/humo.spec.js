@@ -1398,7 +1398,10 @@ test.describe('Reparto', () => {
     await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: /Mi ruta/ }).click()
     await expect(page.getByText('Marta Ríos')).toBeVisible()
-    await expect(page.getByText('3 cajas y agua')).toBeVisible()
+    // Lo que lleva, en la hoja de la parada (07-11-2026, diseño compacto).
+    await page.getByRole('button', { name: /Ver la parada \d+: Marta Ríos/ }).click()
+    await expect(page.getByRole('dialog', { name: 'Marta Ríos' })).toContainText('3 cajas y agua')
+    await page.getByRole('dialog', { name: 'Marta Ríos' }).getByRole('button', { name: 'Cerrar' }).click()
     await page.getByRole('button', { name: /Empezar jornada/ }).click()
     await expect(page.getByText('Antes de empezar: tu ubicación')).toBeVisible()
     expect(fallos).toEqual([])
@@ -1425,7 +1428,7 @@ test('Reparto · el ticket se lee en el móvil sin mandarlo a nadie', async ({ p
     jornada: { empezada: null, terminada: null }, aviso_aceptado: true } }))
   await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: /Mi ruta/ }).click()
-  await page.getByRole('button', { name: /Añadir un pedido sin código/ }).click()
+  await page.getByRole('button', { name: 'A mano', exact: true }).click()   // «Añadir un pedido sin código» es «A mano» (07-11-2026, diseño compacto)
   await page.getByRole('dialog').locator('input[type=file]').setInputFiles('e2e/fixtures/ticket.png')
   await expect(page.getByPlaceholder('Dirección completa')).toHaveValue(/Juana de Vega 14/, { timeout: 60000 })
   await expect(page.getByPlaceholder('Dirección completa')).toHaveValue(/15004/)
@@ -1486,7 +1489,7 @@ test('Reparto · el autónomo mete un paquete con foto y le salen llamar y Whats
   await page.getByRole('button', { name: 'Añadir a mi ruta' }).click()
   await expect(page.getByRole('link', { name: /Llamar/ })).toHaveAttribute('href', 'tel:600 11 22 33')
   await expect(page.getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', /wa\.me\/34600112233/)
-  await expect(page.getByText('≈ 10:42')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Siguiente parada' }).getByText('10:42')).toBeVisible()
 })
 
 /* CADA EMPRESA, SU PANEL (03-10-2026): un súper no ve la portada de flota ni
@@ -2041,9 +2044,11 @@ test('Reparto · entregar con «dónde lo dejas», firma, y el buscador de paque
     activo: true, empresa: 'Súper', fecha: '2026-10-04', ia_tickets: false, jornada: {}, aviso_aceptado: true,
     base: null, ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
-  const primera = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
-  // Ver la puerta: desde la calle y mirando a la casa (rumbo que da el servidor).
-  await expect(primera.getByRole('link', { name: 'Ver la puerta' })).toHaveAttribute('href', /map_action=pano&viewpoint=43\.3697,-8\.4&heading=12/)
+  const primera = page.getByRole('region', { name: 'Siguiente parada' })
+  // Ver la puerta (en la hoja de la parada, 07-11-2026): desde la calle y mirando a la casa (rumbo que da el servidor).
+  await primera.getByRole('button', { name: /Ver la parada 1: Bar Pepe/ }).click()
+  await expect(page.getByRole('dialog', { name: 'Bar Pepe' }).getByRole('link', { name: 'Ver la puerta' })).toHaveAttribute('href', /map_action=pano&viewpoint=43\.3697,-8\.4&heading=12/)
+  await page.getByRole('dialog', { name: 'Bar Pepe' }).getByRole('button', { name: 'Cerrar' }).click()
 
   // Entregar: al vecino, quién lo recoge y firma con el dedo.
   await primera.getByRole('button', { name: 'Entregado', exact: true }).click()
@@ -2066,8 +2071,8 @@ test('Reparto · entregar con «dónde lo dejas», firma, y el buscador de paque
   expect(estados[0].firma).toMatch(/^data:image\/png;base64,/)
 
   // El buscador de paquetes: escribir el código de uno que ya está en la ruta dice su parada en grande.
-  await page.getByRole('button', { name: /Más formas de añadir/ }).click()
-  await page.getByPlaceholder('o escribe el código').fill('XYZ')
+  await page.getByRole('button', { name: 'Añadir paradas' }).click()
+  await page.getByRole('dialog', { name: 'Añadir paradas' }).getByPlaceholder('Código').fill('XYZ')
   await page.getByRole('button', { name: 'Buscar', exact: true }).click()
   const hoja = page.getByRole('dialog', { name: 'Este paquete va en la parada' })
   await expect(hoja.getByText('Farmacia Sol')).toBeVisible()
@@ -2109,8 +2114,8 @@ test('Reparto · lo de otros días se trae a hoy, de noche dice a qué hora sale
   await expect(page.getByText('Sales a las 09:00 ·')).toBeVisible()
   await expect(page.getByTestId('record')).toHaveText('🏆 ¡Récord de entregas!')
   const previas = page.getByTestId('previas')
-  await expect(previas).toContainText('Tienes 3 paradas sin entregar de días anteriores.')
-  await previas.getByRole('button', { name: 'Pasarlas a hoy' }).click()
+  await expect(previas).toContainText('3 paradas de otros días')
+  await previas.getByRole('button', { name: 'Traer a hoy' }).click()
   await expect.poll(() => traidas).toBe(1)
   await expect(page.getByText('3 paradas pasadas a hoy. Pulsa «Ordenar ruta» para ponerlas en su sitio.')).toBeVisible()
   expect(fallos).toEqual([])
@@ -2124,13 +2129,13 @@ test('Reparto · «Ahora no» a lo de otros días no mueve nada; con pocas entre
   await page.route(/\/api\/reparto\/mi-ruta\/traer-previas/, (r) => { traidas += 1; return r.fulfill({ json: { traidas: 1 } }) })
   await page.route(/\/api\/reparto\/mis-marcas/, (r) => r.fulfill({ json: { total: 50, hoy: 3, dias: 4, semana: 2, mejor: 30, mejor_fecha: '2026-10-01', record_hoy: false } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByTestId('previas')).toContainText('Tienes 1 parada sin entregar de otro día.')
+  await expect(page.getByTestId('previas')).toContainText('1 parada de otro día')
   await page.getByTestId('previas').getByRole('button', { name: 'Ahora no' }).click()
   await expect(page.getByTestId('previas')).toHaveCount(0)
   expect(traidas).toBe(0)
   await expect(page.getByText('Sales a las')).toHaveCount(0)            // de día sale «ahora»: no se dice
   await expect(page.getByTestId('record')).toHaveCount(0)
-  await expect(page.getByText('Tu récord: 30')).toBeVisible()
+  await expect(page.getByText('Tu récord')).toHaveCount(0)                // «Tu récord» ya no sale en «Hoy» (07-11-2026): queda en el resumen final
 })
 
 test('Reparto · un consejo cuando viene a cuento: «Ordenar ahora» ordena y no vuelve a salir', async ({ page }) => {
@@ -2146,7 +2151,7 @@ test('Reparto · un consejo cuando viene a cuento: «Ordenar ahora» ordena y no
   await expect.poll(() => ordenadas).toBe(1)
   await expect(page.getByTestId('consejo')).toHaveCount(0)
   await page.reload()
-  await expect(page.getByText('3 por entregar')).toBeVisible()
+  await expect(page.getByText('Por entregar · 2')).toBeVisible()
   await expect(page.getByTestId('consejo')).toHaveCount(0)               // «Entendido» es para siempre
   expect(fallos).toEqual([])
 })
@@ -2162,7 +2167,7 @@ test('Reparto · al escribir una dirección, primero las que ya conoce, y rellen
     { geometry: { coordinates: [-8.4, 43.36] }, properties: { street: 'Rúa Real', housenumber: '50', postcode: '15003', city: 'A Coruña', countrycode: 'ES' } }] } }))
   await page.route(/\/api\/reparto\/mis-marcas/, (r) => r.fulfill({ json: { total: 0, hoy: 0, dias: 0, semana: 0, mejor: 0, mejor_fecha: null, record_hoy: false } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: /Añadir un pedido sin código/ }).click()
+  await page.getByRole('button', { name: 'A mano', exact: true }).click()
   await page.getByRole('dialog').getByPlaceholder('Dirección completa').fill('real 5')
   const sugeridas = page.getByRole('dialog').getByRole('list', { name: 'Direcciones sugeridas' })
   await expect(sugeridas.getByText('Ya estuviste aquí · 3 veces · Bar Pepe')).toBeVisible()
@@ -2191,7 +2196,7 @@ test('Reparto · sin dictado en el navegador, el micro lleva al del teclado; un 
   await page.route(/\/api\/reparto\/escanear/, (r) => r.fulfill({ json: { encontrado: false, codigo: 'GLS123' } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
   // Solo la calle (sin CP ni población): se abre la hoja para completarla. Con todo, entraría sola (25-10-2026).
-  await page.getByPlaceholder('o escribe el código').fill('GLS123|Rúa Real 5|Marta|612345678')
+  await page.getByPlaceholder('Código').fill('GLS123|Rúa Real 5|Marta|612345678')
   await page.getByRole('button', { name: 'Buscar', exact: true }).click()
   const hoja = page.getByRole('dialog')
   await expect(hoja.getByPlaceholder('Dirección completa')).toHaveValue(/Rúa Real 5/)
@@ -2284,10 +2289,10 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
   // Progreso y siguiente parada.
   const cab = page.getByLabel('Progreso del día')
   await expect(cab.getByText('Quedan 2 paradas')).toBeVisible()
-  await expect(cab.getByText('de 3')).toBeVisible()
+  await expect(cab.getByRole('progressbar', { name: '1 de 3 hechas' })).toBeVisible()
   await expect(cab.getByText('Cobrado 12,00 €')).toBeVisible()
-  await expect(page.getByText('Siguiente parada')).toBeVisible()
-  const primera = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
+  const primera = page.getByRole('region', { name: 'Siguiente parada' })
+  await expect(primera).toBeVisible()
   await expect(primera.getByText('Bar Pepe')).toBeVisible()
 
   // Waze en vez de Google Maps, y se recuerda.
@@ -2302,9 +2307,12 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
   // Las demás van plegadas: se despliega al tocarla.
   await expect(page.getByRole('link', { name: 'Ir a Farmacia Sol' })).toBeVisible()
   await page.getByRole('button', { name: /Ver la parada 2: Farmacia Sol/ }).click()
-  await page.locator('div.rounded-2xl', { hasText: 'Parada 2' }).getByRole('button', { name: /Dónde va en la furgoneta/ }).click()
+  // La fila abre su hoja (07-11-2026, diseño compacto); el hueco, desde su chip, y queda puesto en el chip.
+  const hojaParada = page.getByRole('dialog', { name: 'Farmacia Sol' })
+  await hojaParada.getByRole('button', { name: 'Hueco', exact: true }).click()
   await page.getByRole('button', { name: 'Detrás · izq' }).click()
-  await expect(page.getByText('En la furgoneta: Detrás · izq')).toBeVisible()
+  await expect(hojaParada.getByRole('button', { name: 'En la furgoneta: Detrás · izq' })).toBeVisible()
+  await hojaParada.getByRole('button', { name: 'Cerrar' }).click()
   expect(editados).toEqual([{ hueco: 'Detrás · izq' }])
 
   // Orden a mano: Farmacia primero.
@@ -2313,16 +2321,15 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
   await page.getByRole('button', { name: 'Guardar este orden' }).click()
   await expect(page.getByText('Orden guardado. Con este orden acabas ≈ 11:00')).toBeVisible()
   expect(ordenes).toEqual([['p2', 'p1']])
-  await expect(page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' }).getByText('Farmacia Sol')).toBeVisible()
+  await expect(primera.getByText('Farmacia Sol')).toBeVisible()
 
-  // Mapa con el recorrido por las calles y las próximas paradas en Google Maps.
-  await page.getByRole('button', { name: 'Mapa' }).click()
+  // Mapa con el recorrido por las calles (la píldora) y las próximas paradas en Google Maps.
+  await page.getByRole('button', { name: 'Ver el mapa' }).click()
   await expect(page.locator('.leaflet-container')).toBeVisible()
-  await expect(page.getByText('Por las calles:')).toBeVisible()
-  await expect(page.getByText('3,1 km')).toBeVisible()
+  await expect(page.getByText('3,1 km · 9 min')).toBeVisible()
   await expect(page.getByRole('link', { name: 'Las próximas 2 paradas en Google Maps' }))
     .toHaveAttribute('href', /destination=43\.37,-8\.4&waypoints=43\.36%2C-8\.41/)
-  await page.getByRole('button', { name: 'Lista' }).click()
+  await page.getByRole('button', { name: 'Ver la lista' }).click()
 
   // Entregar enseña «Deshacer», y deshacer la devuelve a pendiente.
   const estados = []
@@ -2344,9 +2351,8 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
   await page.reload({ waitUntil: 'domcontentloaded' })
   const resumen = page.getByLabel('Resumen del día')
   await expect(resumen.getByText('Ruta terminada')).toBeVisible()
-  await expect(resumen.getByText('Bizum')).toBeVisible()
   await expect(resumen.getByText('12,00 €').first()).toBeVisible()
-  await expect(resumen.getByText('Ruta planificada: 9,5 km.')).toBeVisible()
+  await expect(resumen.getByText('9,5 km')).toBeVisible()
   expect(fallos).toEqual([])
 })
 
@@ -2368,15 +2374,17 @@ test('Reparto · si ninguna parada está en el mapa, dice por qué no se navega 
   await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
     activo: true, empresa: 'Yo', fecha: '2026-10-06', ia_tickets: false, jornada: {}, aviso_aceptado: true, base: null, ruta: null, pedidos } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText(/No encontramos la dirección en el mapa/)).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Empezar a navegar' })).toHaveCount(0)
-  await page.getByRole('button', { name: 'Corregir la dirección' }).click()
+  // Sin punto (07-11-2026, diseño compacto): el chip «Sin situar · Situar» en la tarjeta y «Editar» en su ⋮.
+  const tarjeta = page.getByRole('region', { name: 'Siguiente parada' })
+  await expect(tarjeta.getByTestId('situar-parada')).toHaveText('Sin situar · Situar')
+  await tarjeta.getByRole('button', { name: 'Más opciones' }).click()
+  await page.getByRole('menuitem', { name: /Editar parada: Cliente/ }).click()
   await expect(page.locator('input[value="Rua inventada 99"]')).toBeVisible()          // abre su ficha para corregirla
   // Mientras se está buscando no se da por perdida.
   pedidos = [{ ...pedidos[0], geo: 'pendiente' }]
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByText(/Queda 1 parada/)).toBeVisible()
-  await expect(page.getByText(/No encontramos la dirección en el mapa/)).toHaveCount(0)
+  await expect(page.getByTestId('situar-parada')).toHaveText('Buscando en el mapa… · Situar')
 })
 
 test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la siguiente', async ({ page, context }) => {
@@ -2422,7 +2430,7 @@ test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la s
     activo: true, empresa: 'Súper', fecha: '2026-10-04', ia_tickets: false, jornada: {}, aviso_aceptado: true,
     base: null, ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Empezar a navegar' }).click()
+  await page.getByRole('region', { name: 'Siguiente parada' }).getByRole('button', { name: 'Ir', exact: true }).click()
 
   const nav = page.getByRole('dialog', { name: 'Navegación' })
   await expect(nav.getByTestId('guia-texto')).toHaveText('Gira a la derecha por Praza de Pontevedra')
@@ -2554,7 +2562,7 @@ test('Reparto · manos libres: «he llegado» y «entregado» por voz, sin foto 
     activo: true, autonomo: true, fecha: '2026-10-11', jornada: {}, aviso_aceptado: true, base: null,
     ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Empezar a navegar' }).click()
+  await page.getByRole('region', { name: 'Siguiente parada' }).getByRole('button', { name: 'Ir', exact: true }).click()
   const nav = page.getByRole('dialog', { name: 'Navegación' })
   await expect(nav.getByText('Bar Pepe')).toBeVisible()
 
@@ -2600,7 +2608,7 @@ test('Cobro · plan gratis: sin pagar se sigue repartiendo con tope y «Quitar e
   await entrarRepartidor(page, { status: 'trial', days_left: 0, required: true, trial_ends: new Date(Date.now() - 86400000).toISOString(),
     bloqueo: '', gratis: { activo: true, tope: 15, usadas: 4 } })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('Plan gratis: hasta 15 paradas nuevas al día.')).toBeVisible()
+  await expect(page.getByText('Gratis: 15 paradas al día')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Tu prueba ha terminado' })).toHaveCount(0)          // sin muro
   await page.getByRole('button', { name: 'Quitar el tope' }).click()
   await expect(page.getByText('Plan gratis', { exact: true })).toBeVisible()
@@ -2736,7 +2744,7 @@ test('Cobro · con la promoción: «Gratis sin límite», sin aviso de prueba ni
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('button', { name: 'Hoy', exact: true })).toBeVisible()
   await expect(page.getByText(/Queda 1 día de prueba/)).toHaveCount(0)
-  await expect(page.getByText('Plan gratis: hasta 15 paradas nuevas al día.')).toHaveCount(0)
+  await expect(page.getByText('Gratis: 15 paradas al día')).toHaveCount(0)
   await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
   await expect(page.getByText('Gratis sin límite', { exact: true })).toBeVisible()
   await expect(page.getByText(/Hasta el 31\/12\/2026 no tienes tope de paradas ni pagas nada|Hasta el .* no tienes tope de paradas ni pagas nada/)).toBeVisible()
@@ -2805,8 +2813,11 @@ test('Bono · la tarjeta de la primera ruta: progreso, ejemplos que no cuentan y
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   const tarjeta = page.getByTestId('bono')
   await expect(tarjeta.getByText('10 € por tu primera ruta real')).toBeVisible()
-  await expect(tarjeta.getByText('Haz 20 entregas con la app en 2 días distintos y son tuyos. Hasta el 31 de diciembre.')).toBeVisible()
-  await expect(tarjeta.getByText('0 de 20 entregas')).toBeVisible()
+  await expect(tarjeta).toContainText('0/20')
+  // Las condiciones, al tocar la promo (07-11-2026, diseño compacto).
+  await tarjeta.getByRole('button', { name: /10 € por tu primera ruta real/ }).click()
+  await expect(page.getByRole('dialog').getByText('Haz 20 entregas con la app en 2 días distintos y son tuyos. Hasta el 31 de diciembre.')).toBeVisible()
+  await page.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click()
   await expect(tarjeta.getByText(/foto a la etiqueta de cada uno, aquí abajo/)).toBeVisible()
   // Con la tarjeta a la vista, el aviso de «invitar» de arriba no se repite.
   await expect(page.getByText(/Gana 10 € por cada compañero que la use/)).toHaveCount(0)
@@ -2818,9 +2829,9 @@ test('Bono · la tarjeta de la primera ruta: progreso, ejemplos que no cuentan y
   pedidos = []
   bono = { ...bono, entregas: 12, dias: 1 }
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(tarjeta.getByText('12 de 20 entregas')).toBeVisible()
+  await expect(tarjeta.getByText('12/20')).toBeVisible()
   await expect(tarjeta.getByText('1 de 2 días')).toBeVisible()
-  await expect(tarjeta.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '12')
+  await expect(tarjeta.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '60')
   // Ganado: se celebra y lleva a la cartera, que lo dice.
   // eslint-disable-next-line require-atomic-updates -- no es una carrera: el bono nuevo no sale del de antes
   bono = { cent: 1000, pagado: true, pagado_en: new Date().toISOString(), nuevo: true }
@@ -3215,7 +3226,7 @@ test('Reparto · en México el WhatsApp lleva el prefijo 52, y con + se respeta 
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('link', { name: /WhatsApp/ }).first()).toHaveAttribute('href', /wa\.me\/525512345678\?/)
   await page.getByRole('button', { name: /Ver la parada 2/ }).click()
-  await expect(page.locator('div.rounded-2xl', { hasText: 'Parada 2' }).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', /wa\.me\/13055550100\?/)
+  await expect(page.getByRole('dialog', { name: 'Café Condesa' }).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', /wa\.me\/13055550100\?/)
   expect(fallos).toEqual([])
 })
 
@@ -3228,10 +3239,10 @@ test.describe('App · instalar desde la web en Android', () => {
     const fallos = vigilar(page)
     await entrarRepartidor(page, { status: 'trial', days_left: 6, trial_ends: new Date(Date.now() + 6 * 86400000).toISOString() })
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    const tarjeta = page.getByLabel('Instalar la app')
+    // El aviso «Instala la app» (07-11-2026, diseño compacto): sin el aviso de Chrome, «Instalar la app» lleva a la tienda.
+    const tarjeta = page.getByRole('status').filter({ hasText: 'Instala la app' })
     await expect(tarjeta).toBeVisible()
-    // Sin aviso de Chrome: el APK.
-    await expect(tarjeta.getByRole('link', { name: 'Descargar la app para Android' })).toHaveAttribute('href', '/descargas/FDS.apk')
+    await expect(tarjeta.getByRole('button', { name: 'Instalar la app' })).toBeVisible()
     // Con el aviso de Chrome: el botón lo lanza.
     await page.evaluate(() => {
       const e = new Event('beforeinstallprompt')
@@ -3239,9 +3250,9 @@ test.describe('App · instalar desde la web en Android', () => {
       e.userChoice = Promise.resolve({ outcome: 'accepted' })
       window.dispatchEvent(e)
     })
-    await page.getByLabel('Instalar la app').getByRole('button', { name: 'Instalar la app' }).click()
+    await tarjeta.getByRole('button', { name: 'Instalar la app' }).click()
     await expect.poll(() => page.evaluate(() => window.__pedido)).toBe(true)
-    await expect(page.getByLabel('Instalar la app')).toHaveCount(0)
+    await expect(page.getByText('Instala la app')).toHaveCount(0)
     expect(fallos).toEqual([])
   })
 })
@@ -3253,7 +3264,7 @@ test.describe('App · dentro de la app (Play o el APK) no se ofrece instalar', (
     await page.addInitScript(() => localStorage.setItem('fds_recien_alta', '1'))
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('button', { name: 'Ruta', exact: false }).first()).toBeVisible()
-    await expect(page.getByLabel('Instalar la app')).toHaveCount(0)
+    await expect(page.getByText('Instala la app')).toHaveCount(0)
     await expect(page.getByRole('dialog', { name: 'Último paso: instala la app' })).toHaveCount(0)
   })
 })
@@ -3407,9 +3418,9 @@ test('Ruta · Mi dinero hoy: poner la tarifa y ver lo ganado', async ({ page }) 
   await expect.poll(() => guardado.length).toBe(1)
   expect(guardado[0]).toEqual({ pago_parada: 110, pago_dia: 0, coste_km: 12, bizum: '' })   // el Bizum de la propina (01-11-2026), vacío
   // 2 entregas × 1,10 € = 2,20 €; gasolina de lo hecho: 20 km × 2/2 × 0,12 € = 2,40 €.
+  // El chip «Mi dinero hoy» (07-11-2026, diseño compacto) enseña lo limpio: 2,20 − 2,40 = −0,20 €; el desglose, en su hoja (W3).
   const tarjeta = page.getByRole('button', { name: 'Mi dinero hoy' })
-  await expect(tarjeta).toContainText('2,20')
-  await expect(tarjeta).toContainText('2,40')
+  await expect(tarjeta).toContainText('0,20')
   expect(fallos).toEqual([])
 })
 
@@ -3579,9 +3590,8 @@ test('Ruta · la primera vez pregunta cómo le llegan las paradas y abre esa her
   await pasos.getByRole('button', { name: 'Cerrar' }).click()
   // Sin paradas, el hueco vacío es la acción misma: las formas de cargar, y la hoja en papel va a la foto de la hoja.
   await expect(page.getByText('Carga tus paradas de hoy')).toBeVisible()
-  await page.getByRole('button', { name: /Una hoja de reparto en papel/ }).click()
+  await page.getByRole('button', { name: 'Lista u hoja' }).click()
   await expect(page.getByRole('dialog', { name: 'Pegar una lista de direcciones' })).toBeVisible()
-  await expect(page.getByText('Pulsa «Foto de la hoja» y se leen todas las paradas de golpe.')).toBeVisible()
   await page.evaluate(() => localStorage.removeItem('fds_tour_ruta'))
   await page.reload({ waitUntil: 'domcontentloaded' })
   await hoja.getByRole('button', { name: 'Todavía no' }).click()
@@ -3602,15 +3612,15 @@ test('Ruta · con la ruta en marcha, añadir va en el «+» y el navegador se el
       { id: 'p2', cliente: 'Bar Pepe', direccion: 'Rúa Nova 2', estado: 'pendiente', orden: 2, lat: 43.36, lng: -8.41 }] } }))
   await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: null } }))
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('Siguiente parada')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Siguiente parada' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Escanear', exact: true })).toHaveCount(0)      // no estorba arriba
   await expect(page.getByTestId('bono')).toContainText('3/20')
   await expect(page.getByLabel('Navegador')).toHaveCount(0)                                       // ni «Ir con» en la lista
   await page.getByRole('button', { name: 'Añadir paradas' }).click()
   const hoja = page.getByRole('dialog', { name: 'Añadir paradas' })
   await expect(hoja.getByRole('button', { name: 'Escanear', exact: true })).toBeVisible()
-  await expect(hoja.getByPlaceholder('o escribe el código')).toBeVisible()
-  await hoja.getByRole('button', { name: /Añadir un pedido sin código/ }).click()
+  await expect(hoja.getByPlaceholder('Código')).toBeVisible()
+  await hoja.getByRole('button', { name: 'A mano', exact: true }).click()
   await expect(hoja).toHaveCount(0)                                                               // se cierra al elegir
   await page.keyboard.press('Escape')
   // Con qué navegar, en Ajustes; se recuerda y «Ir» abre Waze.
@@ -3618,7 +3628,7 @@ test('Ruta · con la ruta en marcha, añadir va en el «+» y el navegador se el
   await page.getByRole('button', { name: 'Ajustes', exact: true }).click()
   await page.getByLabel('Navegador').selectOption('waze')
   await page.getByRole('button', { name: 'Hoy', exact: true }).click()
-  const primera = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
+  const primera = page.getByRole('region', { name: 'Siguiente parada' })
   await expect(primera.getByRole('link', { name: 'Ir' })).toHaveAttribute('href', 'https://waze.com/ul?ll=43.37,-8.4&navigate=yes')
   expect(fallos).toEqual([])
 })
@@ -3751,7 +3761,7 @@ test('Regalo · 10 € en la cartera: aviso en Hoy una vez, línea en la cartera
   } }))
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   const aviso = page.getByTestId('aviso-regalo')
-  await expect(aviso).toContainText('Te hemos regalado 10 €: ya están en tu cartera.')
+  await expect(aviso).toContainText('+10 € en tu cartera')
   await aviso.getByRole('button', { name: 'Verlo' }).click()
   const cartera = page.getByRole('region', { name: 'Tu cartera' })
   await expect(cartera.getByTestId('cartera-regalo')).toContainText('Regalo: 10 € ya en tu saldo')

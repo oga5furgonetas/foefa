@@ -42,13 +42,14 @@ test.describe('fuera de España · Estados Unidos', () => {
     await page.route(/\/api\/reparto\/mi-ruta\/zbe/, (r) => r.fulfill({ json: { zonas: [], paradas: {}, fuente: null, incompleto: false, aplica: false, tipo: 'LEZ' } }))
 
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('Next stop', { exact: false }).first()).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Next stop' })).toBeVisible()
     const cuerpo = page.locator('body')
     // Millas y dólares, con los números en inglés.
     await expect(cuerpo).toContainText('3.2 mi')
     await expect(cuerpo).toContainText('$24.50')
     // Los cortes vienen del WZDx, y se dice (con el mapa abierto); nada de la DGT ni de ZBE.
-    await page.getByRole('button', { name: 'Map', exact: true }).click()
+    await page.getByRole('button', { name: 'Show the map' }).click()
+    await page.getByRole('button', { name: 'What’s on your route' }).click()   // lo de debajo del mapa, en su hoja (07-11-2026)
     const dgt = page.getByTestId('dgt')
     await expect(dgt).toContainText('Closures and roadworks (WZDx): 1 near your route · roadworks · I-5')
     await expect(cuerpo).not.toContainText('DGT')

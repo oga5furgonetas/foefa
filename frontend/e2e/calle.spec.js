@@ -88,15 +88,19 @@ test.describe('lo que pide la calle', () => {
     await page.route(/\/api\/reparto\/mi-ruta\/ordenar/, (r) => { reordenado += 1; r.fulfill({ json: { ordenados: 2, ruta: { fin: '10:50', km: 2.2 } } }) })
 
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('Siguiente parada', { exact: false }).first()).toBeVisible()
+    const sig = page.getByRole('region', { name: 'Siguiente parada' })
+    await expect(sig).toBeVisible()
     // Lo que dijo el cliente, en la parada; la puerta conocida y la ZBE, en sus chips.
     await expect(page.getByTestId('cliente-dice').first()).toContainText('El cliente dice: No estará · Al vecino · Portal: 1234')
     await expect(page.getByText('Puerta conocida')).toBeVisible()
-    await expect(page.getByText('ZBE', { exact: true })).toBeVisible()
+    // La ZBE de Lucía, en su hoja (la fila enseña una etiqueta como mucho, 07-11-2026).
+    await page.getByRole('button', { name: /Ver la parada 2: Lucía M\./ }).click()
+    await expect(page.getByRole('dialog', { name: 'Lucía M.' }).getByText('ZBE', { exact: true })).toBeVisible()
+    await page.getByRole('dialog', { name: 'Lucía M.' }).getByRole('button', { name: 'Cerrar' }).click()
     // Las fallidas, en el dinero: 1 sin entregar a 1,10 €.
-    await expect(page.getByText('1 sin entregar = 1,10 € sin cobrar', { exact: false })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Mi dinero hoy' })).toBeVisible()   // el desglose («1 sin entregar = 1,10 € sin cobrar»), en su hoja (W3)
     // Va 25 minutos tarde: «Reordenar desde aquí».
-    await expect(page.getByText('Vas 25 min por detrás de lo previsto')).toBeVisible()
+    await expect(page.getByText('+25 min')).toBeVisible()
     await page.getByTestId('reordenar').click()
     await expect.poll(() => reordenado).toBe(1)
     // «Aparcada aquí» guarda la furgoneta y dice a cuántos metros está.
@@ -104,14 +108,17 @@ test.describe('lo que pide la calle', () => {
     await expect(page.getByTestId('furgo')).toContainText(/Furgoneta/)
     expect(JSON.parse(await page.evaluate(() => localStorage.getItem('fds_furgo')))).toMatchObject({ lat: 43.3636, lng: -8.4118 })
     // Los atajos del horario, al editar una parada.
-    await page.getByRole('button', { name: /Editar parada: Farmacia Sol/ }).click()
+    await sig.getByRole('button', { name: 'Más opciones' }).click()
+    await page.getByRole('menuitem', { name: /Editar parada: Farmacia Sol/ }).click()
     await page.getByRole('button', { name: 'Cierra a las 14:00' }).click()
     await expect(page.getByPlaceholder('Horario del cliente (ej. de 10 a 12)')).toHaveValue('8-14')
     await page.getByRole('button', { name: 'Cerrar' }).click()
     // El mapa: lo que dice la DGT, con su fuente.
-    await page.getByRole('group', { name: 'Vista' }).getByRole('button', { name: 'Mapa' }).click()
+    await page.getByRole('button', { name: 'Ver el mapa' }).click()
+    await page.getByRole('button', { name: 'Lo que hay en tu ruta' }).click()
     await expect(page.getByTestId('dgt')).toContainText('Cortes y obras (DGT): 1 cerca de tu ruta · calzada cortada (obras) · N-550 · a 0,9 km de la parada 2')
     await expect(page.getByTestId('zbe')).toContainText('Zonas de bajas emisiones (DGT): A Coruña - Marina · 1 parada dentro · Carga y descarga de 6h a 11h.')
+    await page.getByRole('dialog', { name: 'Lo que hay en tu ruta' }).getByRole('button', { name: 'Cerrar' }).click()
 
     // LO QUE SE TOCA EN EL MAPA (30-10-2026): la chincheta abre una ventana con lo que dijo el cliente y qué hacer
     // (ir, llamar, abrir); el corte de la DGT dice qué es y dónde; mantener pulsado (aquí, el botón derecho) deja la
@@ -126,6 +133,7 @@ test.describe('lo que pide la calle', () => {
     await expect(ventana.getByRole('link', { name: 'Llamar' })).toHaveAttribute('href', 'tel:600000001')
     await ventana.getByRole('button', { name: 'Abrir' }).click()
     await expect(ventana).toHaveCount(0)
+    await page.getByRole('dialog', { name: 'Farmacia Sol' }).getByRole('button', { name: 'Cerrar' }).click()   // «Abrir» abre la hoja de la parada (07-11-2026)
     // El corte está a 0,9 km de la ruta: fuera del encuadre hasta alejar el mapa.
     await page.getByRole('button', { name: 'Zoom out' }).click()
     await page.getByRole('button', { name: 'Zoom out' }).click()
