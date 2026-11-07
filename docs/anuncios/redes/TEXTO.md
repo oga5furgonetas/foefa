@@ -99,6 +99,16 @@ Modo foto (7) · Instagram · página de Facebook. TikTok con los `.jpg`. `utm_c
 Hashtags: #repartidor #repartidores #furgoneta #paqueteria #mensajeria #reparto #trucos #invierno
 Comentario fijado: «¿Qué llevas tú que no está aquí? Lo más raro que haya en una furgoneta gana 😂»
 
+## Carrusel I · Errores del primer mes repartiendo (`I-1-portada` … `I-7-cierre`, 07-11)
+Modo foto (7) · Instagram · página de Facebook. TikTok con los `.jpg`. `utm_content=carrusel_errores`.
+
+> Errores del primer mes repartiendo 😅 Cinco que todos hemos cometido. Pásaselo al que empieza.
+> Tres los resuelve la app: la ruta se ordena con una foto a la etiqueta, y cobros y entregas quedan apuntados con su
+> foto. Gratis hasta el 31 de diciembre, enlace en el perfil.
+
+Hashtags: #repartidor #repartidores #paqueteria #mensajeria #reparto #furgoneta #consejos #primertrabajo
+Comentario fijado: «¿Cuál fue el tuyo? El peor error del primer mes, sin vergüenza 👇»
+
 ## Tarjetas 16:9 para X (van con el post del calendario de `REDES.md`)
 | Fichero | Post | Enlace |
 |---|---|---|
@@ -113,5 +123,4 @@ Comentario fijado: «¿Qué llevas tú que no está aquí? Lo más raro que haya
 ## Ideas para las piezas siguientes (misma plantilla, una por ronda)
 - «Lo que cuesta de verdad una furgoneta de reparto al mes» (ejemplo orientativo; cierre: calculadora).
 - «La ruta de 40 paradas: a mano vs. ordenada» (dos capturas; cierre: gratis hasta el 31-12).
-- «Errores del primer mes repartiendo» (cinco; cierre: la ruta ordenada).
 - Los `.jpg` de cada carrusel son para TikTok (no admite PNG en fotos); Instagram, con los `.png`.

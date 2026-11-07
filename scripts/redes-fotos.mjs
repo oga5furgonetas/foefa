@@ -267,10 +267,24 @@ const H = [
   ['H-7-cierre', cierre('¿Y la ruta? <span style="color:var(--marca)">En el móvil</span>', 'Foto a la etiqueta y la ruta se ordena sola. Sin cobertura, sigue abierta.')],
 ]
 
+/* ── I. Errores del primer mes repartiendo (07-11) ───────────────────────────────────────── */
+const ERRORES = [
+  ['🗺️', 'Salir sin ordenar la ruta', 'Ir por donde te parece cuesta vueltas y kilómetros. Diez minutos de orden por la mañana se notan por la tarde.'],
+  ['🪫', 'Fiarse de la batería', 'Navegador, fotos y llamadas todo el día. A mediodía ya vas justo: cargador en la furgoneta desde el primer día.'],
+  ['💶', 'No apuntar los cobros', 'Efectivo aquí, Bizum allá… y al cerrar no cuadra. Apunta cada cobro en el momento, no al final.'],
+  ['📸', 'Dejarlo sin foto', 'Buzón, conserje, vecino. Sin foto, el «no me ha llegado» es tu palabra contra la suya.'],
+  ['🙋', 'No preguntar', 'Al que lleva años en la zona: dónde aparcar, qué portal tiene truco, a qué hora cierra cada tienda.'],
+]
+const I = [
+  ['I-1-portada', portada(fondoLibreta, 'Si estás empezando', 'Errores del <span class="resalta">primer mes</span> repartiendo', 'Cinco que todos hemos cometido')],
+  ...ERRORES.map((p, i) => [`I-${i + 2}`, punto(p, i, 'Pásaselo al que empieza')]),
+  ['I-7-cierre', cierre('Tres, <span style="color:var(--marca)">resueltos</span>', 'La ruta, con una foto a la etiqueta. Cobros y entregas, apuntados con foto.')],
+]
+
 // SOLO=E,F genera solo las piezas que empiezan así (las ya publicadas no se tocan). Cada carrusel sale también en
 // JPEG (TikTok no admite PNG en los posts de fotos: «use image/jpeg», 31-10-2026).
 const SOLO = (process.env.SOLO || '').split(',').map((x) => x.trim()).filter(Boolean)
-const PIEZAS = [...A, ...B, ...C, ...D, ...E, ...F, ...G, ...H, ...X.map(([n, h]) => [n, h, 1600, 900]), ...X2.map(([n, h]) => [n, h, 1600, 900])]
+const PIEZAS = [...A, ...B, ...C, ...D, ...E, ...F, ...G, ...H, ...I, ...X.map(([n, h]) => [n, h, 1600, 900]), ...X2.map(([n, h]) => [n, h, 1600, 900])]
   .filter(([n]) => !SOLO.length || SOLO.some((p) => n.startsWith(p)))
 // PW_CHROMIUM: ruta a un Chromium ya instalado si la versión de Playwright no trae el suyo (p. ej. /opt/pw-browsers/chromium).
 const nav = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {})
