@@ -3766,6 +3766,41 @@ test('Ruta · la primera vez pregunta cómo le llegan las paradas y abre esa her
   expect(fallos).toEqual([])
 })
 
+/* LA TARJETA DE LA SIGUIENTE, A SU MEDIDA (07-11-2026, revisor, hallazgo 5; §5.1 d y §7.4): de 216 a 284. Con cobrar, horario y dos
+   notas (como la captura 10-hoy) medía 292: la fila de acciones iba a 12 de las notas (ahora 8) y las notas llevaban 8 de relleno
+   arriba y abajo (ahora 4): 280. A 360×780 «Entregado» queda entero y por encima de las pestañas, sin desplazar. Lo de las 3 filas
+   a la vista (§5.1) no sale con una tarjeta con notas: se decide con Dani, y aquí solo se mide lo que SÍ se cumple. */
+test('Ruta · la tarjeta de la siguiente, con cobrar, horario y dos notas, mide 284 como mucho a 360×780 y «Entregado» queda sobre las pestañas', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.setViewportSize({ width: 360, height: 780 })
+  await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: { activo: true, autonomo: true, fecha: '2026-11-03', jornada: {}, aviso_aceptado: true,
+    ruta: { fin: '11:13', minutos: 100, km: 14, trafico: true },
+    pedidos: [
+      { id: 'p1', cliente: 'Farmacia Sol', direccion: 'Rúa Sinfónica de Galicia 8', estado: 'pendiente', orden: 1, eta: '09:41', lat: 43.37, lng: -8.40, geo: 'puerta',
+        telefono: '613403123', cobrar: 24.5, ventana_desde: '09:30', ventana_hasta: '11:00',
+        cliente_dice: { estare: 'no', dejar: 'porteria', portal: '4521', nota: '', cuando: '2026-11-03T08:00:00Z' },
+        memoria: { portal: '1234', dejar: 'porteria', acceso: 'Garaje' } },
+      { id: 'p2', cliente: 'Marta G.', direccion: 'Rúa Juan Flórez 46', estado: 'pendiente', orden: 2, eta: '09:47', lat: 43.36, lng: -8.41 }] } }))
+  await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: null } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  const tarjeta = page.getByRole('region', { name: 'Siguiente parada' })
+  await expect(tarjeta.getByTestId('cliente-dice')).toBeVisible()
+  await expect(tarjeta.getByTestId('memoria')).toBeVisible()                                          // las dos notas de la tarjeta
+  await expect(tarjeta.getByText('Cobrar 24,50 €')).toBeVisible()
+  const caja = await tarjeta.boundingBox()
+  expect(caja.height, 'la tarjeta mide 216-284 (§5.1 d)').toBeLessThanOrEqual(284)
+  expect(caja.height).toBeGreaterThanOrEqual(216)
+  const entregado = await tarjeta.getByRole('button', { name: 'Entregado', exact: true }).boundingBox()
+  const pestanas = await page.getByRole('navigation', { name: 'Secciones' }).boundingBox()
+  expect(entregado.y + entregado.height, '«Entregado» por encima de las pestañas, sin desplazar').toBeLessThanOrEqual(pestanas.y)
+  // Las notas de la hoja de la parada se quedan con sus 8 de relleno (el ajuste es solo de la tarjeta).
+  await tarjeta.getByRole('button', { name: /Ver la parada 1: Farmacia Sol/ }).click()
+  const notasHoja = page.getByRole('dialog', { name: 'Farmacia Sol' }).getByTestId('cliente-dice').locator('..')
+  expect(await notasHoja.evaluate((el) => getComputedStyle(el).paddingTop)).toBe('8px')
+  expect(fallos).toEqual([])
+})
+
 /* LA RUTA EN MARCHA (17-10-2026): con paradas, añadir va en el botón «+» (hoja con todo), el bono en una línea y
    «con qué navegar» se elige en Ajustes. */
 test('Ruta · con la ruta en marcha, añadir va en el «+» y el navegador se elige en Ajustes', async ({ page }) => {
