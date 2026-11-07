@@ -396,13 +396,14 @@ export function Suscribirse({ b, precios, toast, titulo }) {
   return (
     <section className="mt-3 rounded-xl bg-dark-900 p-3">
       <h2 className="text-nombre text-dark-50">{titulo || tx('Suscribirte')}</h2>
+      {/* Lo elegido va en el tinte de marca: sus letras, en la tinta del tinte (§3.6); el gris secundario no llega al 4,5:1 de noche. */}
       <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label={tx('Plan')}>
         {[[false, tx('Mensual'), `${enMoneda(precios.mensual)}`, tx('/mes'), ''], [true, tx('Anual'), `${enMoneda(precios.anual)}`, tx('/año'), `${enMoneda(precios.anual / 12)}${tx('/mes')} · ${tx('2 meses gratis')}`]].map(([v, t, p, per, extra]) => (
           <button key={t} role="radio" aria-checked={anual === v} onClick={() => setAnual(v)}
             className={`relative rounded-xl border-2 p-3 text-left ${anual === v ? 'border-ruta-marca bg-ruta-marca-tinte' : 'border-ruta-borde bg-dark-950'}`}>
             {v && <Etiqueta texto={enFrase(tx('AHORRA'))} tono="aviso" className="absolute -top-3 right-2" />}
-            <span className="block text-etiqueta text-dark-400">{t}</span>
-            <span className="block text-cifra text-dark-50 tabular-nums">{p}<span className="text-sec font-semibold text-dark-400">{per}</span></span>
+            <span className={`block text-etiqueta ${anual === v ? 'text-ruta-marca-tinte-texto' : 'text-dark-400'}`}>{t}</span>
+            <span className={`block text-cifra tabular-nums ${anual === v ? 'text-ruta-marca-tinte-texto' : 'text-dark-50'}`}>{p}<span className={`text-sec font-semibold ${anual === v ? 'text-ruta-marca-tinte-texto' : 'text-dark-400'}`}>{per}</span></span>
             {extra && <span className="block text-sec text-ruta-ok-texto">{extra}</span>}
           </button>
         ))}
@@ -537,8 +538,8 @@ export function PagarConPlay({ b, toast, recargar, titulo }) {
             <button key={p.id} role="radio" aria-checked={elegido === p.id} onClick={() => setElegido(p.id)}
               className={`relative rounded-xl border-2 p-3 text-left ${elegido === p.id ? 'border-ruta-marca bg-ruta-marca-tinte' : 'border-ruta-borde bg-dark-950'}`}>
               {anual && <Etiqueta texto={enFrase(tx('AHORRA'))} tono="aviso" className="absolute -top-3 right-2" />}
-              <span className="block text-etiqueta text-dark-400">{anual ? tx('Anual') : tx('Mensual')}</span>
-              <span className="block text-cifra text-dark-50 tabular-nums">{p.precio}<span className="text-sec font-semibold text-dark-400">{anual ? tx('/año') : tx('/mes')}</span></span>
+              <span className={`block text-etiqueta ${elegido === p.id ? 'text-ruta-marca-tinte-texto' : 'text-dark-400'}`}>{anual ? tx('Anual') : tx('Mensual')}</span>
+              <span className={`block text-cifra tabular-nums ${elegido === p.id ? 'text-ruta-marca-tinte-texto' : 'text-dark-50'}`}>{p.precio}<span className={`text-sec font-semibold ${elegido === p.id ? 'text-ruta-marca-tinte-texto' : 'text-dark-400'}`}>{anual ? tx('/año') : tx('/mes')}</span></span>
               {p.diasPrueba > 0 && <span className="block text-sec text-ruta-ok-texto">{tx('{n} días gratis', { n: p.diasPrueba })}</span>}
             </button>
           )
@@ -639,8 +640,8 @@ function Regalar({ precios, toast, resaltar }) {
         {[[1, tx('1 mes'), precios['1']], [12, tx('1 año'), precios['12']]].map(([m, t, p]) => (
           <button key={m} role="radio" aria-checked={meses === m} onClick={() => setMeses(m)}
             className={`rounded-xl border-2 p-3 text-left ${meses === m ? 'border-ruta-marca bg-ruta-marca-tinte' : 'border-ruta-borde bg-dark-950'}`}>
-            <span className="block text-etiqueta text-dark-400">{t}</span>
-            <span className="block text-cifra text-dark-50 tabular-nums">{euros(p)}</span>
+            <span className={`block text-etiqueta ${meses === m ? 'text-ruta-marca-tinte-texto' : 'text-dark-400'}`}>{t}</span>
+            <span className={`block text-cifra tabular-nums ${meses === m ? 'text-ruta-marca-tinte-texto' : 'text-dark-50'}`}>{euros(p)}</span>
           </button>
         ))}
       </div>
@@ -667,7 +668,7 @@ function TarjetaRegalo({ r, nuevo, toast }) {
     <div className={`rounded-xl border p-3 ${nuevo ? 'border-ruta-marca bg-ruta-marca-tinte' : 'border-ruta-borde bg-dark-950'}`}>
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-nombre tracking-widest text-dark-50">{bonito(r.codigo)}</span>
-        <span className={`text-etiqueta ${estado[1]}`}>{que} · {estado[0]}</span>
+        <span className={`text-etiqueta ${nuevo && estado[1] === 'text-dark-400' ? 'text-ruta-marca-tinte-texto' : estado[1]}`}>{que} · {estado[0]}</span>
       </div>
       {r.estado === 'pagado' && (
         <div className="mt-2 grid grid-cols-3 gap-2 text-boton">
