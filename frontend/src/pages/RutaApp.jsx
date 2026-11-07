@@ -34,7 +34,7 @@ import { vestirDeApp } from '../lib/tema'
 /* LO QUE NO HACE FALTA PARA ABRIR LA APP, SE CARGA CUANDO SE USA (25-10-2026). «Ajustes» viene de la pantalla
    de Reparto del panel, que arrastra el mapa entero (Leaflet); la cuenta trae el QR y el cobro, y el mercadillo
    lo suyo: ~74 KB comprimidos (el 28 %) que se bajaban y se ejecutaban al abrir, aunque se fuera a «Hoy». */
-const Ajustes = lazy(() => import('../panel/pages/Reparto').then((m) => ({ default: m.AjustesApp })))   // con su Cabecera (§5.11)
+const Ajustes = lazy(() => import('../panel/pages/Reparto').then((m) => ({ default: m.AjustesApp })))   // con su Cabecera (07-11-2026, §5.11)
 const Cuenta = lazy(() => import('./RutaCuenta').then((m) => ({ default: m.Cuenta })))
 const Muro = lazy(() => import('./RutaCuenta').then((m) => ({ default: m.Muro })))
 const Mercadillo = lazy(() => import('./mercadillo/Mercadillo'))
