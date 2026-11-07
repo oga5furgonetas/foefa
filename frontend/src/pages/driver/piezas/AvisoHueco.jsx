@@ -15,8 +15,9 @@ export default function AvisoHueco({ anadida, sinEnviar, sinConexion, placa, pre
     const { p, onEscanear, onSituar, onCorregir, onCerrar } = anadida
     // SIN SITIO EN EL MAPA (02-11-2026): se dice al momento, con «Situar», y no al ir a navegar.
     const sinSitio = p.lat == null && (p.geo === 'no' || p.geo === 'zona')
+    // El ✓ lo pone el icono del Aviso: con otro escrito en el texto salían dos (08-11-2026).
     return (
-      <Aviso tono="ok" icono={Check} texto={`✓ ${tx('Añadida a tu ruta')} · ${p.cliente || p.direccion}`} onCerrar={onCerrar}
+      <Aviso tono="ok" icono={Check} texto={`${tx('Añadida a tu ruta')} · ${p.cliente || p.direccion}`} onCerrar={onCerrar}
         acciones={[sinSitio ? { texto: tx('Situar'), onClick: onSituar } : { texto: tx('Escanear otro'), onClick: onEscanear }, { texto: tx('Corregir'), onClick: onCorregir }]}>
         {sinSitio && <p className="mt-0.5 flex items-center gap-1 text-sec text-ruta-aviso-texto"><MapPinOff size={14} aria-hidden="true" /> {tx('No la encuentro en el mapa')}</p>}
       </Aviso>

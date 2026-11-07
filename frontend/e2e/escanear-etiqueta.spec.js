@@ -75,6 +75,7 @@ test('Escanear · una etiqueta con la barra y un 2D aparte (como GLS) añade la 
   await page.evaluate(() => { window.__ahora = ['ZX81234567', 'ES|28013|MADRID|MARIA LOPEZ|GRAN VIA 32|612345678'] })
   const hecho = page.getByRole('status').filter({ hasText: 'Añadida a tu ruta' })
   await expect(hecho).toContainText('Añadida a tu ruta · MARIA LOPEZ')
+  await expect(hecho).not.toContainText('✓')   // el ✓ es el icono del aviso: con otro escrito en el texto salían dos (08-11-2026)
   expect(buscados).toContain('ZX81234567')
   expect(creados).toHaveLength(1)
   expect(creados[0]).toMatchObject({ codigo: 'ZX81234567', telefono: '612345678', cliente: 'MARIA LOPEZ', direccion: 'GRAN VIA 32, 28013, MADRID' })
