@@ -2167,9 +2167,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
           {quitando && nuevo.id && (
             <Hoja titulo={tx('¿Quitar esta parada?')} onClose={() => setQuitando(false)}
               pie={(
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-[1fr_1.2fr] gap-2">
                   <Boton variante="normal" contorno tono="neutro" texto={tx('Cancelar')} onClick={() => setQuitando(false)} />
-                  <Boton variante="principal" tono="peligro" icono={Trash2} texto={tx('Quitar de la ruta')} onClick={quitarParada}
+                  <Boton variante="principal" tono="peligro" texto={tx('Quitar de la ruta')} onClick={quitarParada}
                     cargando={ocupado === 'guardar'} disabled={ocupado === 'guardar'} />
                 </div>
               )}>
