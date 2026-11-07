@@ -53,6 +53,9 @@
      directamente si la herramienta lo admite; si no, apúntalo y no publiques esa pieza). **Vídeos:** ficheros de
      `docs/videos/` (sin URL pública: súbelos si la herramienta lo admite; si no, apúntalo).
    - Programa a la hora del calendario; la «mejor hora» de Metricool solo para moverla dentro de ±1 h.
+   - **Revisa lo ya publicado** (getScheduledPosts de los 3 días anteriores): si alguna sale `ERROR`, arregla la
+     causa y reprográmala en un hueco libre. Y nada de PNG en TikTok: usa el `.jpg` de cada pieza (el 06-11 falló
+     «funciones» por eso).
    - **Si no hay conector:** no publiques en ningún sitio ni lo simules. Prepara como mucho UNA pieza nueva
      (`cd frontend && node ../scripts/redes-fotos.mjs` con una idea del final de TEXTO.md, y su texto en TEXTO.md)
      solo si hay menos de 6 piezas sin publicar.
