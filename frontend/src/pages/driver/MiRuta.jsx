@@ -1689,7 +1689,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
       {/* EL MAPA (§5.7): a pantalla completa bajo la cabecera (en el panel, 420). Encima, las píldoras de lo que hay por
           las calles y de lo que falta por situar, «Lo que hay en tu ruta» (ⓘ) y las próximas paradas en Google Maps. */}
       {enMapa && (
-        <div className="relative isolate">
+        <div className="group/mapa relative isolate">
           <Suspense fallback={<div style={{ height: altoMapa }} className="flex items-center justify-center rounded-xl border border-dark-800"><Loader2 className="animate-spin text-dark-400" aria-hidden="true" /></div>}>
             <MapaReparto alto={altoMapa} base={yo ? null : ruta.base} yo={yo} trazado={trazado} zonas={verZonas ? zonas?.zonas || SIN_ZONAS : SIN_ZONAS}
               incidencias={incidencias?.incidencias || SIN_ZONAS} zbe={zbe?.zonas || SIN_ZONAS} furgo={furgo} onAccion={accionMapa}
@@ -1705,8 +1705,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
           </Suspense>
           {/* Debajo del zoom de Leaflet (arriba a la izquierda: 10 + 96 de alto + 10 de hueco = 116); las capas van arriba a la
               derecha (MapaReparto). A la derecha del zoom, la píldora pisaba «C/D» a 360 y a 280 tapaba «C/D» y «DGT» (revisor,
-              07-11-2026, hallazgo 2). */}
-          <div className="absolute left-3 top-[116px] z-[1100] flex max-w-[55%] flex-col items-start gap-2">
+              07-11-2026, hallazgo 2). Con una ventana de una parada abierta (`.leaflet-popup`) se esconden: ahí, a la izquierda, caen
+              las ventanas y las píldoras, por encima de ellas, les tapaban hasta el botón «Ir» (medido a 360 y a 280). */}
+          <div className="absolute left-3 top-[116px] z-[1100] flex max-w-[55%] flex-col items-start gap-2 group-has-[.leaflet-popup]/mapa:hidden">
             <Pastilla texto={trazado?.fuente === 'carreteras' ? `${distancia(trazado.km)} · ${minutosATexto(trazado.minutos)}` : trazado ? tx('Sin ruta por calles') : tx('Calculando el recorrido…')} />
             {sinSituar.length > 0 && (
               <Pastilla tono="aviso" icono={MapPinOff} texto={sinSituar.length === 1 ? tx('1 sin situar') : tx('{n} sin situar', { n: sinSituar.length })} onClick={() => abrirSituar(sinSituar[0])} />

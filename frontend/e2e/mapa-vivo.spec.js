@@ -125,7 +125,9 @@ test('Mapa en vivo · la ventana de una parada cabe en el mapa a 360 y a 280, si
 /* LAS PÍLDORAS Y LAS CAPAS NO SE PISAN (07-11-2026, revisor, hallazgo 2). Con las tres capas a la vez (C/D, DGT y ZBE: lo normal en
    España) la píldora de lo que hay por las calles («{km} · {t}») y la de «{n} sin situar», que iban arriba a la izquierda, pisaban
    las capas a 360 («C/D») y a 280 tapaban «C/D» y «DGT», que ni se veían ni se podían pulsar; y a 280 las capas chocaban con el zoom.
-   Ahora las píldoras van debajo del zoom y las capas hacen dos filas sin pasar del zoom. Ninguna caja se pisa con otra. */
+   Ahora las píldoras van debajo del zoom y las capas hacen dos filas sin pasar del zoom. Ninguna caja se pisa con otra. Y debajo
+   del zoom caen las ventanas de las paradas (medido: a 360 y a 280 las píldoras las tapaban, y a 360 hasta el botón «Ir»): con una
+   ventana abierta, las píldoras se esconden. */
 test('Mapa en vivo · con las tres capas a la vez, las píldoras, las capas y el zoom no se pisan a 360 ni a 280', async ({ page, context }) => {
   await page.clock.install({ time: new Date('2026-10-29T10:30:00+01:00') })
   await page.clock.resume()
@@ -188,6 +190,22 @@ test('Mapa en vivo · con las tres capas a la vez, las píldoras, las capas y el
     // Las capas, a la derecha del zoom: nunca por debajo de su borde derecho.
     const grupo = await capas.boundingBox()
     expect(grupo.x, `las capas pasan del zoom a ${ancho}`).toBeGreaterThanOrEqual(cajas.zoom.x + cajas.zoom.width - 1)
+    // Con la ventana de una parada abierta las píldoras se esconden: ahí, a la izquierda, caen las ventanas y las píldoras, por
+    // encima de ellas, les tapaban hasta el botón «Ir» (medido a 360 y a 280); al cerrarla, vuelven.
+    await page.locator('.leaflet-marker-icon[title="Farmacia Sol"]').click()
+    const ventana = page.locator('.leaflet-popup').last()
+    await expect(ventana).toContainText('1 · Farmacia Sol')
+    await expect(page.getByText('14,2 km · 38 min')).toBeHidden()
+    await expect(page.getByRole('button', { name: '1 sin situar' })).toBeHidden()
+    const ir = ventana.getByRole('button', { name: 'Ir', exact: true })
+    await expect.poll(() => ir.evaluate((el) => {
+      const b = el.getBoundingClientRect()
+      const h = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)
+      return !!h && el.contains(h)
+    }), { message: `«Ir» de la ventana, tapado a ${ancho}` }).toBe(true)
+    await ventana.locator('.leaflet-popup-close-button').click()
+    await expect(page.getByText('14,2 km · 38 min')).toBeVisible()
+    await expect(page.getByRole('button', { name: '1 sin situar' })).toBeVisible()
   }
 })
 
