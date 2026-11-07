@@ -79,3 +79,27 @@ test('Compacto · «Guardar este orden» queda por encima de las pestañas, no d
   const quien = await guardar.evaluate((el) => { const b = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)) })
   expect(quien).toBe(true)
 })
+
+test('Compacto · portal del conductor: «Por entregar · N» cabe en su línea a 390 y a 412 de ancho', async ({ page }) => {
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await page.addInitScript((t) => {
+    localStorage.setItem('flota_driver_token', t)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA' }))
+    localStorage.setItem('cookie_consent', '1')
+  }, token)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: null } }))
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: ruta(Array.from({ length: 6 }, (_, i) => pendiente(i + 1)), { autonomo: false, empresa: 'Súper' }) }))
+  for (const [ancho, alto] of [[390, 844], [393, 852], [412, 915], [360, 740]]) {
+    await page.setViewportSize({ width: ancho, height: alto })
+    await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+    const titulo = page.getByRole('heading', { name: /Por entregar/ })
+    await expect(titulo).toBeVisible()
+    const m = await titulo.evaluate((el) => ({ alto: el.getBoundingClientRect().height, sobra: el.scrollWidth - el.clientWidth }))
+    expect(m.alto, `a ${ancho} de ancho el título mide ${m.alto} de alto (una línea ≈ 16)`).toBeLessThanOrEqual(24)
+    expect(m.sobra, `a ${ancho} el texto se sale de su caja`).toBeLessThanOrEqual(1)
+    // La lupa y «A mano» siguen a la vista y en su fila.
+    await expect(page.getByRole('button', { name: 'Buscar en la ruta' }).or(page.getByRole('button', { name: 'A mano' })).first()).toBeVisible()
+  }
+})

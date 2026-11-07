@@ -1737,7 +1737,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
             </div>
           ) : (
             <div className="flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1">
-              {pendientes.length > 1 && <h2 className="min-w-0 flex-1 text-etiqueta text-dark-400">{tx('Por entregar')} · {pendientes.length - 1}</h2>}
+              {/* El título no se encoge (flex-auto y sin saltar de línea): con flex-1 se quedaba en 10 px y en 4 líneas, pisado por la
+                  lupa, en el portal a 390-412 de ancho; ahora lo que no cabe («Ir con») baja a otra línea (08-11-2026). */}
+              {pendientes.length > 1 && <h2 className="min-w-0 flex-auto whitespace-nowrap text-etiqueta text-dark-400">{tx('Por entregar')} · {pendientes.length - 1}</h2>}
               {pendientes.length > 5 && <Boton variante="icono" icono={Search} tono="neutro" nombre={tx('Buscar en la ruta')} onClick={() => setBuscando(true)} />}
               {pendientes.length > 1 && <Chip icono={ArrowUpDown} texto={tx('A mano')} onClick={() => { setReordenar(pendientes.map((p) => p.id)); setVista('lista') }} />}
               {/* CON QUÉ NAVEGA (17-10-2026): en la app se elige en Ajustes; el portal del conductor lo sigue teniendo aquí. */}
