@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.flotadsp.fds.data.Repositorio
@@ -209,8 +210,10 @@ fun AvisoActualizacion(a: Actualizacion, modifier: Modifier = Modifier) {
             Text(texto, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             TextButton(
                 onClick = { if (a.lista) a.instalar() else Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/app") },
-                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.inversePrimary),
-            ) { Text(if (a.lista) tx("Reiniciar") else tx("Descargar")) }
+                // La acción va con la letra del aviso, en negrita y subrayada, como en el aviso flotante (SnackbarFds): el
+                // inversePrimary daba 3,9:1 de noche sobre la superficie inversa (hallazgo 10 de la revisión, 07-11-2026).
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.inverseOnSurface),
+            ) { Text(if (a.lista) tx("Reiniciar") else tx("Descargar"), style = MaterialTheme.typography.labelLarge.copy(textDecoration = TextDecoration.Underline)) }
         }
     }
 }
