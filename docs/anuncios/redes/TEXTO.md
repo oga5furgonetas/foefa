@@ -109,6 +109,16 @@ Modo foto (7) · Instagram · página de Facebook. TikTok con los `.jpg`. `utm_c
 Hashtags: #repartidor #repartidores #paqueteria #mensajeria #reparto #furgoneta #consejos #primertrabajo
 Comentario fijado: «¿Cuál fue el tuyo? El peor error del primer mes, sin vergüenza 👇»
 
+## Carrusel J · Cuida la espalda repartiendo (`J-1-portada` … `J-7-cierre`, 07-11)
+Modo foto (7) · Instagram · página de Facebook. TikTok con los `.jpg`. `utm_content=carrusel_espalda`.
+
+> Cuida la espalda repartiendo 🦵📦 Cinco gestos que se notan el viernes. Guárdalo y pásaselo a quien carga contigo.
+> ¿Y las vueltas de más? Fuera: la ruta se ordena por tiempo con una foto a la etiqueta. Gratis hasta el 31 de
+> diciembre, enlace en el perfil.
+
+Hashtags: #repartidor #repartidores #paqueteria #mensajeria #reparto #furgoneta #salud #espalda
+Comentario fijado: «¿Qué te duele más al acabar la semana: espalda, rodillas o pies? 👇»
+
 ## Tarjetas 16:9 para X (van con el post del calendario de `REDES.md`)
 | Fichero | Post | Enlace |
 |---|---|---|
@@ -123,4 +133,5 @@ Comentario fijado: «¿Cuál fue el tuyo? El peor error del primer mes, sin verg
 ## Ideas para las piezas siguientes (misma plantilla, una por ronda)
 - «Lo que cuesta de verdad una furgoneta de reparto al mes» (ejemplo orientativo; cierre: calculadora).
 - «La ruta de 40 paradas: a mano vs. ordenada» (dos capturas; cierre: gratis hasta el 31-12).
+- `invita-9x16.jpg` y `funciones-9x16.jpg` (07-11): las mismas en JPEG para TikTok (el 06-11 «funciones» falló en TikTok por ir en PNG).
 - Los `.jpg` de cada carrusel son para TikTok (no admite PNG en fotos); Instagram, con los `.png`.

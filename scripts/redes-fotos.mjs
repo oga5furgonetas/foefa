@@ -281,10 +281,24 @@ const I = [
   ['I-7-cierre', cierre('Tres, <span style="color:var(--marca)">resueltos</span>', 'La ruta, con una foto a la etiqueta. Cobros y entregas, apuntados con foto.')],
 ]
 
+/* ── J. Cuida la espalda repartiendo (07-11) ─────────────────────────────────────────────── */
+const ESPALDA = [
+  ['🦵', 'Dobla las rodillas', 'Agáchate con las piernas, no con la espalda. El bulto sube con las piernas.'],
+  ['🤲', 'Pegado al cuerpo', 'Cuanto más lejos llevas el peso, más carga la espalda. Abrázalo.'],
+  ['🔄', 'Gira con los pies', 'Con peso en las manos, no tuerzas la cintura: mueve los pies.'],
+  ['🚐', 'Baja sin saltar', 'Saltar de la cabina en cada parada lo pagan rodillas y tobillos. Escalón y asidero.'],
+  ['🧘', 'Estira un minuto', 'Entre paradas largas: espalda, cuello y piernas. Se nota al final de la semana.'],
+]
+const J = [
+  ['J-1-portada', portada(fondoInterior, 'Tu herramienta eres tú', 'Cuida la <span class="resalta">espalda</span> repartiendo', 'Cinco gestos que se notan el viernes')],
+  ...ESPALDA.map((p, i) => [`J-${i + 2}`, punto(p, i, 'Guárdalo para mañana')]),
+  ['J-7-cierre', cierre('¿Y las vueltas de más? <span style="color:var(--marca)">Fuera</span>', 'Ruta ordenada por tiempo con una foto a la etiqueta.')],
+]
+
 // SOLO=E,F genera solo las piezas que empiezan así (las ya publicadas no se tocan). Cada carrusel sale también en
 // JPEG (TikTok no admite PNG en los posts de fotos: «use image/jpeg», 31-10-2026).
 const SOLO = (process.env.SOLO || '').split(',').map((x) => x.trim()).filter(Boolean)
-const PIEZAS = [...A, ...B, ...C, ...D, ...E, ...F, ...G, ...H, ...I, ...X.map(([n, h]) => [n, h, 1600, 900]), ...X2.map(([n, h]) => [n, h, 1600, 900])]
+const PIEZAS = [...A, ...B, ...C, ...D, ...E, ...F, ...G, ...H, ...I, ...J, ...X.map(([n, h]) => [n, h, 1600, 900]), ...X2.map(([n, h]) => [n, h, 1600, 900])]
   .filter(([n]) => !SOLO.length || SOLO.some((p) => n.startsWith(p)))
 // PW_CHROMIUM: ruta a un Chromium ya instalado si la versión de Playwright no trae el suyo (p. ej. /opt/pw-browsers/chromium).
 const nav = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {})
