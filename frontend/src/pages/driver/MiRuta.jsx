@@ -63,6 +63,10 @@ import NumeroParada from './piezas/NumeroParada'
 import { DONDE_CORTO } from '../../lib/dejar'   // W3: «¿Dónde?» corto en los chips de «Prueba de entrega» (07-11-2026)
 // W4, escanear y cargar (07-11-2026): Boton y NumeroParada ya los importan W2 y W3.
 import LetraMax from './piezas/LetraMax'
+// W6, la ficha de la parada y «Situar» (07-11-2026): sus piezas en líneas propias; Boton, Campo, Chip, FilaChips y Aviso ya los importan W2 y W3.
+import { Banknote, Minus, Trash2, User } from 'lucide-react'
+import FilaSugerencia from './piezas/FilaSugerencia'
+import Segmentado from './piezas/Segmentado'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
    Lo que hace el repartidor al cargar: escanea el código de la caja. Si el
@@ -74,8 +78,6 @@ import LetraMax from './piezas/LetraMax'
    UBICACIÓN: solo entre «Empezar jornada» y «Terminar jornada», y la primera
    vez se le explica qué se ve, quién y cuánto dura (art. 90 LOPDGDD). Nada en
    segundo plano a escondidas: mientras se comparte, se dice arriba. */
-
-const inp = 'w-full rounded-xl border border-dark-700 bg-dark-900 px-3 py-2.5 text-[15px] text-dark-50 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none'
 
 /* SIN COBERTURA (17-10-2026). En un garaje, un sótano o un pueblo sin datos, «Entregado» daba «No se pudo
    guardar» y había que acordarse de repetirlo. Ahora el cambio se guarda en el móvil, la parada se ve hecha al
@@ -231,7 +233,8 @@ const posicionAhora = () => new Promise((ok) => {
 /* ATAJOS DEL HORARIO DEL CLIENTE (30-10-2026): un toque en vez de escribirlo. «Cierra a las 14:00» es lo que un
    repartidor con diez años de oficio hacía a mano: primero los comercios, luego la ruta normal. */
 // Lo que se guarda va en forma neutra («9-14»: el servidor la lee igual que «de 9 a 14») y vale en cualquier idioma.
-const ATAJOS_HORARIO = [['Mañana (9-14)', '9-14'], ['Tarde (16-20)', '16-20'], ['Cierra a las 14:00', '8-14']]
+// Los rótulos, cortos desde el diseño compacto (07-11-2026, §5.9): «9–14», «16–20» y «Hasta 14:00»; lo que guardan, igual.
+const ATAJOS_HORARIO = [['9–14', '9-14'], ['16–20', '16-20'], ['Hasta 14:00', '8-14']]
 const FURGO = 'fds_furgo'
 // El ejemplo de «pegar la lista», con direcciones de su país (30-10-2026).
 const EJEMPLO_DIRECCIONES = {
@@ -2057,151 +2060,121 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
         </Hoja>
       )}
 
+      {/* LA FICHA DE LA PARADA (diseño compacto, 07-11-2026, §5.9, W6): «Nueva parada» / «Editar parada» sobre la Hoja común, con el pie
+          fijo («Añadir a mi ruta» / «Guardar cambios», de 52) y, al editar, el ⋮ con «Quitar de la ruta» (antes, un botón de abajo con
+          su «¿Seguro? Toca otra vez…»; ahora el diálogo «¿Quitar esta parada?», como en la nativa: el ⋮ es el primer toque y el botón del
+          diálogo, el segundo, con la misma función de antes). A la vista: la foto de la etiqueta (solo al crear), la dirección con su
+          estado en una línea, las sugerencias (cinco como mucho), el cliente y el teléfono; lo demás, tras «Más datos». Lo que hace cada
+          campo y lo que se guarda, igual que antes. */}
       {nuevo && (
-        <Hoja titulo={nuevo.id ? tx('Editar parada') : nuevo.codigo ? tx('El código {c} no está en la lista', { c: nuevo.codigo }) : tx('Pedido nuevo')} onClose={() => { setNuevo(null); setQuitando(false) }}>
-          {!nuevo.id && <>
-          <label className="mb-1 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta">
-            {ocupado === 'ticket' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
-            {ocupado === 'ticket' ? tx('Leyendo el ticket…') : tx('Foto del ticket')}
-            <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'ticket'}
-              onChange={(e) => { leerTicket(e.target.files?.[0]); e.target.value = '' }} />
-          </label>
-          <p className="mb-3 text-center text-[11.5px] text-dark-500">
-            {ruta.ia_tickets ? tx('Lo lee la IA y la foto no se guarda.') : tx('Se lee en tu móvil: la foto no se envía a ningún sitio. La primera vez tarda un poco.')}
-          </p>
-          </>}
-          <div className="flex flex-col gap-2">
-            <div className="flex gap-2">
-              <input ref={dirInput} className={inp} placeholder={escuchando ? tx('Te escucho: di la dirección…') : tx('Dirección completa')} value={nuevo.direccion} autoComplete="street-address"
-                onChange={(e) => setNuevo({ ...conDireccionNueva(nuevo, e.target.value),
-                  ...(nuevo.requiere_confirmar_direccion ? { direccion_confirmada: true } : {}) })} />
-              <button type="button" onClick={dictar} aria-label={escuchando ? tx('Parar de dictar') : tx('Dictar la dirección')} aria-pressed={escuchando}
-                className={`shrink-0 rounded-xl border px-3 ${escuchando ? 'animate-pulse border-red-400 bg-red-500/15 text-red-300' : 'border-dark-600 text-dark-200'}`}>
-                <Mic size={18} />
-              </button>
-            </div>
-            {escuchando && <p className="-mt-1 text-[12px] font-semibold text-red-300">{tx('Te escucho: di la dirección…')}</p>}
-            {/* EL ESTADO DE LA DIRECCIÓN (02-11-2026): antes de guardar se sabe si la parada estará en el mapa y, si no,
-                se elige una sugerencia o se sitúa en nuestro mapa. */}
-            {(() => {
-              // Una sugerencia «Sin el portal» elegida sigue siendo la calle sin la casa (02-11-2026): «Calle encontrada».
-              const st = nuevo.lat != null ? (nuevo.geo_origen === 'mapa' ? 'mano' : nuevo.elegida_precision === 'calle' ? 'calle' : 'elegida')
-                : sinCambiar ? (nuevo.punto_actual ? estadoDeParada(nuevo.punto_actual) : nuevo.geo_actual === 'pendiente' ? 'buscando' : 'no')
-                  : ubicada && ubicada.texto === textoDir ? (ubicada.buscando ? 'buscando' : ubicada.estado) : null
-              if (!st) return null
-              const bien = st === 'elegida' || st === 'mano' || st === 'portal'
-              const texto = st === 'elegida' ? tx('Sitio encontrado en el mapa') : st === 'mano' ? tx('Situada a mano en el mapa')
-                : st === 'portal' ? tx('En el mapa') : st === 'calle' ? tx('Calle encontrada, sin el portal')
-                  : st === 'buscando' ? tx('Buscando la dirección…') : tx('No la encuentro: elige una sugerencia o sitúala en el mapa')
-              return (
-                <div data-testid="estado-direccion" data-estado={st} role="status"
-                  className={`-mt-1 flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-[12.5px] ${bien ? 'bg-emerald-500/10 text-emerald-300'
-                    : st === 'buscando' ? 'text-dark-400' : st === 'calle' ? 'bg-amber-500/10 text-amber-200' : 'bg-amber-500/15 font-semibold text-amber-100'}`}>
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    {st === 'buscando' ? <Loader2 size={13} className="shrink-0 animate-spin" /> : bien ? <Check size={13} className="shrink-0" /> : <AlertTriangle size={13} className="shrink-0" />}
-                    <span>{texto}</span>
-                  </span>
-                  {(st === 'calle' || st === 'no') && (
-                    <button type="button" onClick={abrirSituarFicha}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-amber-400 px-2 py-1 text-[12px] font-bold text-[#1a1300]">
-                      <MapPin size={13} /> {tx('Situar en el mapa')}
-                    </button>
-                  )}
-                  {(st === 'elegida' || st === 'mano') && (
-                    <button type="button" onClick={abrirSituarFicha}
-                      className="shrink-0 rounded-lg border border-emerald-500/40 px-2 py-1 text-[12px] font-semibold text-emerald-200">{tx('Cambiar')}</button>
-                  )}
-                </div>
-              )
-            })()}
-            {sugs.length > 0 && (
-              <ul className="-mt-1 overflow-hidden rounded-xl border border-dark-700 bg-dark-900" aria-label={tx('Direcciones sugeridas')}>
-                {sugs.map((sg) => (
-                  <li key={`${sg.direccion}|${sg.lat}|${sg.lng}`}>
-                    <button type="button" onClick={() => {
+        <Hoja titulo={nuevo.id ? tx('Editar parada') : nuevo.codigo ? tx('El código {c} no está en la lista', { c: nuevo.codigo }) : tx('Nueva parada')}
+          onClose={() => { setNuevo(null); setQuitando(false) }}
+          menu={nuevo.id ? [{ texto: tx('Quitar de la ruta'), icono: Trash2, peligro: true, onClick: () => setQuitando(true) }] : undefined}
+          pie={(
+            <Boton variante="principal" className="w-full" texto={ocupado === 'guardar' ? tx('Guardando…') : nuevo.id ? tx('Guardar cambios') : tx('Añadir a mi ruta')}
+              cargando={ocupado === 'guardar'} onClick={guardarNuevo}
+              disabled={nuevo.direccion.trim().length < 4 || ocupado === 'guardar' || (nuevo.requiere_confirmar_direccion && !nuevo.direccion_confirmada)} />
+          )}>
+          <div className="flex flex-col gap-3 pt-2">
+            {!nuevo.id && (
+              <div>
+                <BotonFichero variante="normal" tono="neutro" icono={Camera} className="w-full" accept="image/*" capture="environment" cargando={ocupado === 'ticket'}
+                  texto={ocupado === 'ticket' ? tx('Leyendo…') : tx('Foto etiqueta')} onFichero={(f) => leerTicket(f)} />
+                <p className="mt-1 px-3 text-sec text-dark-400">{ruta.ia_tickets ? tx('La foto no se guarda') : tx('Se lee en el móvil')}</p>
+              </div>
+            )}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-start gap-2">
+                <Campo className="min-w-0 flex-1" inputRef={dirInput} icono={MapPin} valor={nuevo.direccion} ejemplo={tx('Dirección completa')} autoComplete="street-address" style={ELIPSIS}
+                  onChange={(v) => setNuevo({ ...conDireccionNueva(nuevo, v), ...(nuevo.requiere_confirmar_direccion ? { direccion_confirmada: true } : {}) })} />
+                <Boton variante="icono" relleno tono={escuchando ? 'peligro' : 'neutro'} icono={Mic} nombre={escuchando ? tx('Parar de dictar') : tx('Dictar la dirección')}
+                  aria-pressed={escuchando} onClick={dictar} className={escuchando ? 'animate-pulse' : ''} />
+              </div>
+              {escuchando && <p className="text-sec font-semibold text-ruta-peligro-texto">{tx('Te escucho: di la dirección…')}</p>}
+              {/* EL ESTADO DE LA DIRECCIÓN (02-11-2026): antes de guardar se sabe si la parada estará en el mapa y, si no,
+                  se elige una sugerencia o se sitúa en nuestro mapa. Desde el diseño compacto, en UNA línea con «…» (el texto
+                  entero sigue en la página y en el título) y su acción a la derecha: «Situar» (que sigue llamándose «Situar en
+                  el mapa») o «Cambiar». Sus textos no cambian. */}
+              {(() => {
+                // Una sugerencia «Sin el portal» elegida sigue siendo la calle sin la casa (02-11-2026): «Calle encontrada».
+                const st = nuevo.lat != null ? (nuevo.geo_origen === 'mapa' ? 'mano' : nuevo.elegida_precision === 'calle' ? 'calle' : 'elegida')
+                  : sinCambiar ? (nuevo.punto_actual ? estadoDeParada(nuevo.punto_actual) : nuevo.geo_actual === 'pendiente' ? 'buscando' : 'no')
+                    : ubicada && ubicada.texto === textoDir ? (ubicada.buscando ? 'buscando' : ubicada.estado) : null
+                if (!st) return null
+                const bien = st === 'elegida' || st === 'mano' || st === 'portal'
+                const texto = st === 'elegida' ? tx('Sitio encontrado en el mapa') : st === 'mano' ? tx('Situada a mano en el mapa')
+                  : st === 'portal' ? tx('En el mapa') : st === 'calle' ? tx('Calle encontrada, sin el portal')
+                    : st === 'buscando' ? tx('Buscando la dirección…') : tx('No la encuentro: elige una sugerencia o sitúala en el mapa')
+                return (
+                  <div data-testid="estado-direccion" data-estado={st} role="status"
+                    className={`flex min-h-10 items-center gap-2 text-texto ${bien ? 'text-ruta-ok-texto' : st === 'buscando' ? 'text-dark-400' : st === 'no' ? 'font-semibold text-ruta-aviso-texto' : 'text-ruta-aviso-texto'}`}>
+                    {st === 'buscando' ? <Loader2 size={18} aria-hidden="true" className="shrink-0 animate-spin" /> : bien ? <Check size={18} aria-hidden="true" className="shrink-0" />
+                      : st === 'no' ? <MapPinOff size={18} aria-hidden="true" className="shrink-0" /> : <MapPin size={18} aria-hidden="true" className="shrink-0" />}
+                    <span className="min-w-0 flex-1 truncate" title={texto}>{texto}</span>
+                    {(st === 'calle' || st === 'no') && (
+                      <Boton variante="texto" texto={tx('Situar')} nombre={tx('Situar en el mapa')} onClick={abrirSituarFicha} className="shrink-0" />
+                    )}
+                    {(st === 'elegida' || st === 'mano') && (
+                      <Boton variante="texto" texto={tx('Cambiar')} onClick={abrirSituarFicha} className="shrink-0" />
+                    )}
+                  </div>
+                )
+              })()}
+              {sugs.length > 0 && (
+                // Las sugerencias, sobre un fondo propio (más claro que la hoja) y cinco como mucho, en filas de 48 (FilaSugerencia).
+                <ul className="divide-y divide-dark-700 overflow-hidden rounded-xl bg-dark-800" aria-label={tx('Direcciones sugeridas')}>
+                  {sugs.slice(0, 5).map((sg) => (
+                    <FilaSugerencia key={`${sg.direccion}|${sg.lat}|${sg.lng}`} s={sg} onElegir={(x) => {
                       // Su punto y su dirección con el piso escrito; de su historial, también el cliente y el teléfono
                       // (conSugerencia, antes de MiRuta).
-                      setNuevo({ ...nuevo, ...conSugerencia(nuevo, sg) })
+                      setNuevo({ ...nuevo, ...conSugerencia(nuevo, x) })
                       setSugs([])
-                    }}
-                      className="flex w-full items-center gap-2 border-b border-dark-800 px-3 py-2.5 text-left text-[14px] text-dark-100 last:border-0 active:bg-dark-800">
-                      {sg.conocida ? <History size={15} className="shrink-0 text-emerald-300" /> : <MapPin size={15} className="shrink-0 text-brand-300" />}
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate">{sg.direccion}</span>
-                        {sg.conocida && (
-                          <span className="block truncate text-[11.5px] text-emerald-300">
-                            {tx('Ya estuviste aquí')} · {sg.veces === 1 ? tx('1 vez') : tx('{n} veces', { n: sg.veces })}{sg.cliente ? ` · ${sg.cliente}` : ''}
-                          </span>
-                        )}
-                        {/* OTRA CALLE (03-11-2026, como la app nativa): no es la escrita; va al final y se dice, en rojo. */}
-                        {!sg.conocida && (sg.otraCalle ? <span className="block text-[11.5px] font-semibold text-red-300">{tx('Otra calle')}</span>
-                          : sg.precision === 'calle' && <span className="block text-[11.5px] text-amber-300">{tx('Sin el portal')}</span>)}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <input className={inp} placeholder={tx('Cliente')} value={nuevo.cliente} onChange={(e) => setNuevo({ ...nuevo, cliente: e.target.value })} />
-            <input className={inp} placeholder={tx('Teléfono')} inputMode="tel" value={nuevo.telefono} onChange={(e) => setNuevo({ ...nuevo, telefono: e.target.value })} />
-            <input className={inp} placeholder={tx('Qué lleva')} value={nuevo.contenido} onChange={(e) => setNuevo({ ...nuevo, contenido: e.target.value })} />
-            <input className={inp} placeholder={tx('Horario del cliente (ej. de 10 a 12)')} value={nuevo.horario || ''} onChange={(e) => setNuevo({ ...nuevo, horario: e.target.value })} />
-            <div className="-mt-0.5 flex flex-wrap gap-1.5" data-testid="atajos-horario">
-              {ATAJOS_HORARIO.map(([t, h]) => (
-                <button key={t} type="button" onClick={() => setNuevo({ ...nuevo, horario: nuevo.horario === h ? '' : h })} aria-pressed={nuevo.horario === h}
-                  className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${nuevo.horario === h ? 'border-brand-400 bg-brand-500/15 text-brand-200' : 'border-dark-700 text-dark-300'}`}>{tx(t)}</button>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <input className={inp} inputMode="decimal" placeholder={tx('A cobrar ({moneda})', { moneda: simboloMoneda() })} value={nuevo.cobrar || ''} onChange={(e) => setNuevo({ ...nuevo, cobrar: e.target.value })} />
-              <select className={inp} value={nuevo.tipo || 'entrega'} onChange={(e) => setNuevo({ ...nuevo, tipo: e.target.value })} aria-label={tx('Tipo de parada')}>
-                <option value="entrega">{tx('Entrega')}</option>
-                <option value="recogida">{tx('Recogida')}</option>
-              </select>
-            </div>
-            <label className="flex items-center gap-2 text-[14px] text-dark-200">
-              <input type="checkbox" checked={!!nuevo.prioridad} onChange={(e) => setNuevo({ ...nuevo, prioridad: e.target.checked })} /> {tx('Urgente')}
-            </label>
-            <div className="flex items-center gap-2 text-[13px] text-dark-300">
-              {tx('Bultos')} <input className={`${inp} w-20`} type="number" min="1" max="99" value={nuevo.bultos} onChange={(e) => setNuevo({ ...nuevo, bultos: e.target.value })} />
-            </div>
-            <div>
-              <p className="mb-1.5 text-[13px] text-dark-300">{tx('¿Dónde lo dejas en la furgoneta?')} <span className="text-dark-500">{tx('(opcional)')}</span></p>
-              <HuecoRejilla valor={nuevo.hueco} onElegir={(h) => setNuevo({ ...nuevo, hueco: nuevo.hueco === h ? '' : h })} />
-            </div>
-          </div>
-          {nuevo.requiere_confirmar_direccion ? (
-            <div role="alert" className="mt-2 rounded-xl border border-amber-400/50 bg-amber-500/10 p-3 text-[12px] text-amber-100">
-              <p>{tx('Revisa lo leído del ticket antes de guardar.')}</p>
-              {nuevo.alternativas_direccion?.length > 1 && (
-                <div className="mt-2 flex flex-col gap-1.5">
-                  {nuevo.alternativas_direccion.map((a, i) => (
-                    <button key={`${a.direccion}-${a.cp}-${i}`} type="button"
-                      onClick={() => setNuevo({ ...conDireccionNueva(nuevo, [a.direccion, a.cp, a.localidad].filter(Boolean).join(', ')),
-                        cp: a.cp || '', localidad: a.localidad || '', direccion_confirmada: true })}
-                      className="rounded-lg border border-amber-300/40 px-2.5 py-2 text-left text-[13px] font-semibold text-amber-100">
-                      { [a.direccion, a.cp, a.localidad].filter(Boolean).join(', ') }
-                    </button>
+                    }} />
                   ))}
-                </div>
+                </ul>
               )}
-              <label className="mt-2 flex items-center gap-2">
-                <input type="checkbox" checked={!!nuevo.direccion_confirmada}
-                  onChange={(e) => setNuevo({ ...nuevo, direccion_confirmada: e.target.checked })} />
-                {tx('Revisa lo leído del ticket antes de guardar.')}
-              </label>
             </div>
-          ) : nuevo.de_ticket && <p className="mt-2 text-[12px] text-amber-200/90">{tx('Revisa lo leído del ticket antes de guardar.')}</p>}
-          <button onClick={guardarNuevo} disabled={nuevo.direccion.trim().length < 4 || ocupado === 'guardar' ||
-            (nuevo.requiere_confirmar_direccion && !nuevo.direccion_confirmada)}
-            className="mt-3 w-full rounded-xl bg-emerald-700 py-3 text-[15px] font-bold text-white disabled:opacity-40">
-            {ocupado === 'guardar' ? tx('Guardando…') : nuevo.id ? tx('Guardar cambios') : tx('Añadir a mi ruta')}
-          </button>
-          {nuevo.id && (
-            <button onClick={quitarParada} disabled={ocupado === 'guardar'}
-              className={`mt-2 w-full rounded-xl border py-3 text-[14px] font-semibold ${quitando ? 'border-red-400 bg-red-500/15 text-red-200' : 'border-red-500/30 text-red-300'}`}>
-              {quitando ? tx('¿Seguro? Toca otra vez para quitarla') : tx('Quitar esta parada')}
-            </button>
+            {/* Lo leído de una etiqueta se revisa antes de guardar: el texto sale UNA vez (con la casilla, si el servidor pide confirmar la
+                dirección; si no, solo el aviso). Las otras lecturas de la dirección, para elegir una. */}
+            {nuevo.requiere_confirmar_direccion ? (
+              <div role="alert" className="rounded-xl bg-ruta-aviso px-3 py-2 text-texto text-ruta-aviso-texto">
+                <label className="flex min-h-12 cursor-pointer items-center gap-3">
+                  <input type="checkbox" className="h-6 w-6 shrink-0 accent-ruta-ok" checked={!!nuevo.direccion_confirmada}
+                    onChange={(e) => setNuevo({ ...nuevo, direccion_confirmada: e.target.checked })} />
+                  <span>{tx('Revisa lo leído del ticket antes de guardar.')}</span>
+                </label>
+                {nuevo.alternativas_direccion?.length > 1 && (
+                  <div className="flex flex-col gap-2 pb-1 pt-1">
+                    {nuevo.alternativas_direccion.map((a, i) => (
+                      <button key={`${a.direccion}-${a.cp}-${i}`} type="button"
+                        onClick={() => setNuevo({ ...conDireccionNueva(nuevo, [a.direccion, a.cp, a.localidad].filter(Boolean).join(', ')),
+                          cp: a.cp || '', localidad: a.localidad || '', direccion_confirmada: true })}
+                        className="min-h-12 rounded-lg border border-ruta-aviso-texto/40 px-3 py-2 text-left text-boton">
+                        { [a.direccion, a.cp, a.localidad].filter(Boolean).join(', ') }
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : nuevo.de_ticket && <Aviso tono="aviso" icono={AlertTriangle} texto={tx('Revisa lo leído del ticket antes de guardar.')} />}
+            {/* «Cliente» y «Teléfono», en dos columnas desde 360; en un móvil más estrecho, uno debajo del otro. */}
+            <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
+              <Campo icono={User} valor={nuevo.cliente} ejemplo={tx('Cliente')} style={ELIPSIS} onChange={(v) => setNuevo({ ...nuevo, cliente: v })} />
+              <Campo icono={Phone} valor={nuevo.telefono} ejemplo={tx('Teléfono')} inputMode="tel" style={ELIPSIS} onChange={(v) => setNuevo({ ...nuevo, telefono: v })} />
+            </div>
+            <MasDatos nuevo={nuevo} setNuevo={setNuevo} />
+          </div>
+          {quitando && nuevo.id && (
+            <Hoja titulo={tx('¿Quitar esta parada?')} onClose={() => setQuitando(false)}
+              pie={(
+                <div className="grid grid-cols-2 gap-2">
+                  <Boton variante="normal" contorno tono="neutro" texto={tx('Cancelar')} onClick={() => setQuitando(false)} />
+                  <Boton variante="principal" tono="peligro" icono={Trash2} texto={tx('Quitar de la ruta')} onClick={quitarParada}
+                    cargando={ocupado === 'guardar'} disabled={ocupado === 'guardar'} />
+                </div>
+              )}>
+              <p className="pt-2 text-texto text-dark-50">{tx('{n} sale de tu ruta de hoy.', { n: nuevo.cliente || nuevo.direccion })}</p>
+            </Hoja>
           )}
         </Hoja>
       )}
@@ -2577,6 +2550,66 @@ function HuecoRejilla({ valor, onElegir, ocupado = false, className = '' }) {
         ))}
       </div>
       <p className="mt-1 text-center text-sec text-dark-400">{tx('Puertas')}</p>
+    </div>
+  )
+}
+
+/* «Más datos» de la ficha de la parada (diseño compacto, 07-11-2026, §5.9, W6): cerrado, salvo que algo de dentro ya tenga datos
+   (al editar una parada, o lo leído de una etiqueta); si llegan datos de fuera con él cerrado se abre, y desde ahí se abre y se cierra
+   a mano. Dentro: «Qué lleva» y «Horario» con sus atajos (3 chips que se deslizan), «¿Dónde va en la furgoneta?», «Bultos − 1 +» con el
+   interruptor «Urgente» (una fila de 48) y «Entrega | Recogida» con «A cobrar». Lo que guarda cada campo es lo de siempre (`nuevo`). */
+const ELIPSIS = { textOverflow: 'ellipsis' }   // el ejemplo y lo escrito de los campos de la ficha acaban en «…», no cortados
+const conMasDatos = (n) => !!(n.contenido || n.horario || n.hueco || Number(n.bultos) !== 1 || n.prioridad || (n.tipo || 'entrega') !== 'entrega' || n.cobrar)
+function MasDatos({ nuevo, setNuevo }) {
+  const tiene = conMasDatos(nuevo)
+  const [abierto, setAbierto] = useState(tiene)
+  useEffect(() => { if (tiene) setAbierto(true) }, [tiene])
+  const poner = (campos) => setNuevo({ ...nuevo, ...campos })
+  const bultos = Math.min(99, Math.max(1, Number(nuevo.bultos) || 1))
+  return (
+    <div>
+      <button type="button" onClick={() => setAbierto((v) => !v)} aria-expanded={abierto} className="flex min-h-12 w-full items-center justify-between text-left text-boton text-dark-50">
+        {tx('Más datos')}
+        <ChevronDown size={20} aria-hidden="true" className={`shrink-0 text-dark-400 transition-transform ${abierto ? 'rotate-180' : ''}`} />
+      </button>
+      {abierto && (
+        <div className="flex flex-col gap-3 pt-1">
+          <Campo icono={Package} valor={nuevo.contenido} ejemplo={tx('Qué lleva')} style={ELIPSIS} onChange={(v) => poner({ contenido: v })} />
+          <div className="flex flex-col gap-2">
+            <Campo icono={Clock} valor={nuevo.horario || ''} ejemplo={tx('Horario del cliente (ej. de 10 a 12)')} style={ELIPSIS} onChange={(v) => poner({ horario: v })} />
+            <FilaChips testid="atajos-horario">
+              {ATAJOS_HORARIO.map(([t, h]) => (
+                <ChipOpcion key={t} texto={tx(t)} seleccionado={nuevo.horario === h} onClick={() => poner({ horario: nuevo.horario === h ? '' : h })} />
+              ))}
+            </FilaChips>
+          </div>
+          <div>
+            <p className="mb-2 text-etiqueta text-dark-400">{tx('¿Dónde va en la furgoneta?')}</p>
+            <HuecoRejilla valor={nuevo.hueco} onElegir={(h) => poner({ hueco: nuevo.hueco === h ? '' : h })} />
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div role="group" aria-label={tx('Bultos')} className="flex min-h-12 items-center gap-2">
+              <span className="text-texto text-dark-50">{tx('Bultos')}</span>
+              <Boton variante="icono" relleno tono="neutro" icono={Minus} nombre={tx('Uno menos')} disabled={bultos <= 1} onClick={() => poner({ bultos: bultos - 1 })} />
+              <span className="min-w-6 text-center text-nombre tabular-nums text-dark-50">{bultos}</span>
+              <Boton variante="icono" relleno tono="neutro" icono={Plus} nombre={tx('Uno más')} disabled={bultos >= 99} onClick={() => poner({ bultos: bultos + 1 })} />
+            </div>
+            {/* «Urgente»: un interruptor (la casilla de 13 px se fue) en una fila de 48. El <input> sigue siendo una casilla, con su rol, y
+                cubre toda la fila sin verse: el toque es de 48 y el foco del teclado sale en el interruptor. */}
+            <label className="relative flex min-h-12 cursor-pointer items-center gap-2 text-texto text-dark-50">
+              {tx('Urgente')}
+              <input type="checkbox" role="switch" className="peer absolute inset-0 h-full w-full cursor-pointer opacity-0" checked={!!nuevo.prioridad} onChange={(e) => poner({ prioridad: e.target.checked })} />
+              <span aria-hidden="true"
+                className="relative h-6 w-10 shrink-0 rounded-full border border-ruta-borde bg-dark-800 transition-colors after:absolute after:left-[3px] after:top-1/2 after:h-4 after:w-4 after:-translate-y-1/2 after:rounded-full after:bg-ruta-borde after:transition-transform peer-checked:border-ruta-ok peer-checked:bg-ruta-ok peer-checked:after:translate-x-4 peer-checked:after:bg-white peer-focus-visible:ring-2 peer-focus-visible:ring-ruta-enfasis" />
+            </label>
+          </div>
+          <div className="grid grid-cols-1 items-center gap-2 min-[400px]:grid-cols-2">
+            <Segmentado nombre={tx('Tipo de parada')} valor={nuevo.tipo || 'entrega'} onChange={(v) => poner({ tipo: v })}
+              opciones={[{ valor: 'entrega', texto: tx('Entrega') }, { valor: 'recogida', texto: tx('Recogida') }]} />
+            <Campo icono={Banknote} inputMode="decimal" valor={nuevo.cobrar || ''} ejemplo={tx('A cobrar ({moneda})', { moneda: simboloMoneda() })} style={ELIPSIS} onChange={(v) => poner({ cobrar: v })} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

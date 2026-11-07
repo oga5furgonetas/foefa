@@ -1,8 +1,12 @@
 /* diseño compacto */
 /* La pastilla sobre el mapa (06-11-2026, §4): 32 visible y 48 de toque, redonda, letra «etiqueta» en UNA línea con «…»,
    sombra (flota) y los tonos de §3.6, opacos para que se lean sobre el mapa. Con `onClick` es un botón, con `href` un
-   enlace («Google Maps ↗») y si no, solo texto («{km} · {t}»). */
+   enlace («Google Maps ↗») y si no, solo texto («{km} · {t}»). `lineas` (opcional, W6, 07-11-2026, como el `maxLineas` de la
+   nativa): con más de una línea (2 o 3) va con radio 16 y relleno de 8 arriba y abajo, porque la redonda recortaría las
+   esquinas del texto; las de «Situar» («Sin conexión: …») no caben en una. */
 import icono from './icono'
+
+const LINEAS = { 2: 'line-clamp-2', 3: 'line-clamp-3' }
 
 const TONOS = {
   neutro: 'bg-dark-900 text-dark-50',
@@ -15,12 +19,14 @@ const TONOS = {
   zona: 'bg-violet-100 text-violet-700',
 }
 
-export default function Pastilla({ texto, tono = 'neutro', icono: Icono, onClick, href, nombre, className = '', testid, children, ...resto }) {
-  const clases = `inline-flex h-8 max-w-full items-center gap-1 rounded-full px-3 text-etiqueta shadow-md ${TONOS[tono] || TONOS.neutro} ${className}`
+export default function Pastilla({ texto, tono = 'neutro', icono: Icono, onClick, href, nombre, lineas = 1, className = '', testid, children, ...resto }) {
+  const varias = lineas > 1
+  const forma = varias ? 'min-h-8 rounded-2xl py-2' : 'h-8 rounded-full'
+  const clases = `inline-flex max-w-full items-center gap-1 px-3 text-etiqueta shadow-md ${forma} ${TONOS[tono] || TONOS.neutro} ${className}`
   const dentro = (
     <>
       {icono(Icono, 16, 'shrink-0')}
-      <span className="truncate">{texto ?? children}</span>
+      <span className={varias ? `min-w-0 text-left ${LINEAS[Math.min(lineas, 3)]}` : 'truncate'}>{texto ?? children}</span>
     </>
   )
   const comunes = { className: clases, 'aria-label': nombre, title: nombre, 'data-testid': testid, ...resto }

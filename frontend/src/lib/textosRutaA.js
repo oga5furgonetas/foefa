@@ -352,4 +352,7 @@ export const A = {
   "Más datos": ["More details", "Mais dados", "Plus de détails", "Altri dati", "Weitere Angaben"],
   // W2 (07-11-2026): «Empezar a navegar» se fue de «Hoy» y queda «Ir»; el aviso del ejemplo ya no manda a un botón que no existe.
   "Son paradas de ejemplo, a tu alrededor: pulsa «Ir» y míralo en acción. Quítalas cuando cargues las tuyas.": ["These are sample stops around you: tap “Go” and watch it work. Remove them when you load your own.", "São paragens de exemplo à tua volta: toca em «Ir» e vê-o em ação. Remove-as quando carregares as tuas.", "Ce sont des arrêts d’exemple autour de toi : touche « Y aller » et regarde. Supprime-les quand tu charges les tiens.", "Sono fermate di esempio intorno a te: tocca «Vai» e guardalo in azione. Rimuovile quando carichi le tue.", "Das sind Beispielstopps in deiner Nähe: tippe auf „Los“ und sieh es in Aktion. Entferne sie, wenn du deine eigenen lädst."],
+  // W6 (07-11-2026): los «− 1 +» de los bultos en la ficha de la parada (N→W: la nativa ya los tenía en su JSON; se copian sus 5).
+  "Uno menos": ["One less", "Menos um", "Un de moins", "Uno in meno", "Eins weniger"],
+  "Uno más": ["One more", "Mais um", "Un de plus", "Uno in più", "Eins mehr"],
 }
