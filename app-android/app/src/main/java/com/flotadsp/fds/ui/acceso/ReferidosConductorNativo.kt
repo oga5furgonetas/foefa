@@ -1,6 +1,8 @@
 package com.flotadsp.fds.ui.acceso
 
 import com.flotadsp.fds.ui.tx
+import com.flotadsp.fds.ui.coloresCampo
+import com.flotadsp.fds.ui.coloresBotonTexto
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -112,7 +114,7 @@ fun ReferidosConductorNativo(alVolver: () -> Unit) {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Text(tx("Tu cartera personal"), style = MaterialTheme.typography.titleMedium)
-                        Text(euros(saldo), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text(euros(saldo), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
                         Text(tx("{a} invitados · {b} válidos", "a" to campoSeguro(it, "invitados"), "b" to campoSeguro(it, "premiados")), style = MaterialTheme.typography.bodyMedium)
                         Text(tx("Saldo mínimo para retirar: {x}. Se revisa cada solicitud antes de realizar el pago.", "x" to euros(min)), style = MaterialTheme.typography.bodySmall)
                         Button(onClick = { dialogo = true; metodo = metodos.firstOrNull().orEmpty() }, enabled = saldo >= min && !isPendiente(it), modifier = Modifier.fillMaxWidth()) {
@@ -135,7 +137,7 @@ fun ReferidosConductorNativo(alVolver: () -> Unit) {
                     }
                 }
             }
-            aviso?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+            aviso?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
             Spacer(Modifier.height(12.dp))
         }
     }
@@ -144,9 +146,9 @@ fun ReferidosConductorNativo(alVolver: () -> Unit) {
         title = { Text(tx("Solicitar pago")) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(tx("Elige cómo cobrar. Los datos los recibe únicamente la oficina que procesa el pago."))
-            OutlinedTextField(titular, { titular = it }, label = { Text(tx("Nombre y apellidos del titular")) }, singleLine = true)
+            OutlinedTextField(titular, { titular = it }, label = { Text(tx("Nombre y apellidos del titular")) }, singleLine = true, colors = coloresCampo())
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { metodos.forEach { m -> FilterChip(selected = metodo == m, onClick = { metodo = m }, label = { Text(when (m) { "iban" -> "Transferencia"; else -> m.replaceFirstChar(Char::uppercase) }) }) } }
-            OutlinedTextField(destino, { destino = it }, label = { Text(when (metodo) { "bizum" -> tx("Móvil de Bizum"); "iban" -> "IBAN"; else -> tx("Correo de PayPal") }) }, singleLine = true)
+            OutlinedTextField(destino, { destino = it }, label = { Text(when (metodo) { "bizum" -> tx("Móvil de Bizum"); "iban" -> "IBAN"; else -> tx("Correo de PayPal") }) }, singleLine = true, colors = coloresCampo())
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         } },
         confirmButton = { TextButton(onClick = {
@@ -158,8 +160,8 @@ fun ReferidosConductorNativo(alVolver: () -> Unit) {
                 } catch (e: ErrorApi) { error = e.message }
                 finally { enviando = false }
             }
-        }, enabled = !enviando && titular.trim().length >= 5 && metodo.isNotBlank() && destino.isNotBlank()) { if (enviando) CircularProgressIndicator() else Text(tx("Enviar solicitud")) } },
-        dismissButton = { TextButton(onClick = { dialogo = false }) { Text(tx("Cancelar")) } },
+        }, enabled = !enviando && titular.trim().length >= 5 && metodo.isNotBlank() && destino.isNotBlank(), colors = coloresBotonTexto()) { if (enviando) CircularProgressIndicator() else Text(tx("Enviar solicitud")) } },
+        dismissButton = { TextButton(onClick = { dialogo = false }, colors = coloresBotonTexto()) { Text(tx("Cancelar")) } },
     )
 }
 

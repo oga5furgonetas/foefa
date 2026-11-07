@@ -1,6 +1,8 @@
 package com.flotadsp.fds.ui.acceso
 
 import com.flotadsp.fds.ui.tx
+import com.flotadsp.fds.ui.coloresCampo
+import com.flotadsp.fds.ui.coloresBotonTexto
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +30,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -144,7 +147,8 @@ private fun Inicio(oferta: Oferta?, aviso: String?, alEntrar: () -> Unit, alCrea
         Spacer(Modifier.weight(1.2f))
         Button(onClick = alCrear, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text(tx("Crear mi cuenta gratis")) }
         Spacer(Modifier.height(10.dp))
-        OutlinedButton(onClick = alEntrar, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text(tx("Ya tengo cuenta")) }
+        OutlinedButton(onClick = alEntrar, modifier = Modifier.fillMaxWidth().height(56.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary)) { Text(tx("Ya tengo cuenta")) }
         Spacer(Modifier.height(8.dp))
         Text(tx("Entra con el correo y la contraseña de tu cuenta. FDS abrirá el portal de empresa, conductor o reparto que te corresponde."),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -172,7 +176,7 @@ internal fun CampoClave(valor: String, alCambiar: (String) -> Unit, etiqueta: St
         valor, alCambiar, label = { Text(etiqueta) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
         visualTransformation = if (ver) VisualTransformation.None else PasswordVisualTransformation(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { alListo() }),
+        keyboardActions = KeyboardActions(onDone = { alListo() }), colors = coloresCampo(),
         trailingIcon = {
             IconButton(onClick = { ver = !ver }) {
                 Icon(if (ver) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = if (ver) tx("Ocultar la contraseña") else tx("Ver la contraseña"))
@@ -219,7 +223,7 @@ private fun Entrar(aviso: String?, alVolver: () -> Unit, alAbrirPortal: (Sesion)
         Cabecera(tx("Entrar"), alVolver)
         Aviso(aviso)
         OutlinedTextField(correo, { correo = it }, label = { Text(tx("Correo o usuario")) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next))
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next), colors = coloresCampo())
         Spacer(Modifier.height(12.dp))
         CampoClave(clave, { clave = it }, tx("Contraseña"), alListo = entrar)
         error?.let { Spacer(Modifier.height(10.dp)); Text(it, color = MaterialTheme.colorScheme.error) }
@@ -227,10 +231,10 @@ private fun Entrar(aviso: String?, alVolver: () -> Unit, alAbrirPortal: (Sesion)
         Button(onClick = entrar, enabled = !trabajando && correo.isNotBlank() && clave.isNotBlank(), modifier = Modifier.fillMaxWidth().height(56.dp)) {
             if (trabajando) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary) else Text(tx("Entrar"))
         }
-        TextButton(onClick = { codigoVisible = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+        TextButton(onClick = { codigoVisible = true }, modifier = Modifier.align(Alignment.CenterHorizontally), colors = coloresBotonTexto()) {
             Text(tx("Entrar con un código en mi correo personal"))
         }
-        TextButton(onClick = { recuperarVisible = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+        TextButton(onClick = { recuperarVisible = true }, modifier = Modifier.align(Alignment.CenterHorizontally), colors = coloresBotonTexto()) {
             Text(tx("He olvidado mi contraseña"))
         }
     }
@@ -258,7 +262,7 @@ private fun RecuperarClave(correoInicial: String, alVolver: () -> Unit, alCodigo
             Text(tx("Escribe el correo de tu cuenta y te mandamos un enlace para crear una contraseña nueva."), style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.height(14.dp))
             OutlinedTextField(correo, { correo = it; error = null }, label = { Text(tx("Tu correo")) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done))
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done), colors = coloresCampo())
             error?.let { Spacer(Modifier.height(10.dp)); Text(it, color = MaterialTheme.colorScheme.error) }
             Spacer(Modifier.height(20.dp))
             Button(onClick = {
@@ -275,7 +279,7 @@ private fun RecuperarClave(correoInicial: String, alVolver: () -> Unit, alCodigo
         Spacer(Modifier.height(16.dp))
         Text(tx("¿Eres conductor de una empresa? Tu contraseña te la da la oficina. Si vinculaste tu correo personal, puedes entrar con un código."),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = alCodigo, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text(tx("Entrar con un código en mi correo personal")) }
+        TextButton(onClick = alCodigo, modifier = Modifier.align(Alignment.CenterHorizontally), colors = coloresBotonTexto()) { Text(tx("Entrar con un código en mi correo personal")) }
     }
 }
 
@@ -295,14 +299,14 @@ private fun CodigoConductorNativo(alVolver: () -> Unit, alAbrirPortal: (Sesion) 
         Text(tx("Usa el correo personal que vinculaste en tu cuenta. El código se enviará a ese correo, no al buzón de empresa."), style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(14.dp))
         OutlinedTextField(correo, { correo = it; error = null }, label = { Text(tx("Tu correo personal")) }, singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth())
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
         if (solicitado) {
             Spacer(Modifier.height(12.dp))
             Text(tx("Si ese correo está vinculado a una cuenta, recibirás un código de 6 cifras. Puede tardar unos minutos."), style = MaterialTheme.typography.bodySmall)
             OutlinedTextField(codigo, { codigo = it.filter(Char::isDigit).take(6); error = null }, label = { Text(tx("Código de 6 cifras")) }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done), modifier = Modifier.fillMaxWidth())
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done), modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
         }
-        mensaje?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        mensaje?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.height(16.dp))
         Button(onClick = {
@@ -331,7 +335,7 @@ private fun CodigoConductorNativo(alVolver: () -> Unit, alAbrirPortal: (Sesion) 
                 catch (e: ErrorApi) { error = e.message }
                 finally { ocupado = false }
             }
-        }, enabled = !ocupado, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text(tx("Reenviar código")) }
+        }, enabled = !ocupado, modifier = Modifier.align(Alignment.CenterHorizontally), colors = coloresBotonTexto()) { Text(tx("Reenviar código")) }
     }
 }
 
@@ -365,10 +369,10 @@ private fun Alta(ref: String?, oferta: Oferta?, alVolver: () -> Unit) {
     }
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
         Cabecera(tx("Crea tu cuenta gratis"), alVolver)
-        OutlinedTextField(nombre, { nombre = it }, label = { Text(tx("Tu nombre")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(nombre, { nombre = it }, label = { Text(tx("Tu nombre")) }, singleLine = true, modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(correo, { correo = it }, label = { Text(tx("Tu correo")) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next))
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next), colors = coloresCampo())
         Spacer(Modifier.height(12.dp))
         CampoClave(clave, { clave = it }, tx("Contraseña (8 caracteres o más)"), alListo = crear)
         Spacer(Modifier.height(8.dp))
@@ -378,8 +382,8 @@ private fun Alta(ref: String?, oferta: Oferta?, alVolver: () -> Unit) {
             Text(tx("Acepto los Términos y la Política de Privacidad"), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         }
         Row(Modifier.padding(start = 40.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TextButton(onClick = { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/terminos") }) { Text(tx("Términos")) }
-            TextButton(onClick = { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/privacidad") }) { Text(tx("Privacidad")) }
+            TextButton(onClick = { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/terminos") }, colors = coloresBotonTexto()) { Text(tx("Términos")) }
+            TextButton(onClick = { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/privacidad") }, colors = coloresBotonTexto()) { Text(tx("Privacidad")) }
         }
         error?.let { Spacer(Modifier.height(6.dp)); Text(it, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.height(16.dp))

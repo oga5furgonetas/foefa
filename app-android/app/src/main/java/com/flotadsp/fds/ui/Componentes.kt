@@ -301,6 +301,21 @@ fun BotonTexto(texto: String, onClick: () -> Unit, tono: Tono = Tono.MARCA, enab
     ) { TextoBoton(texto, MaterialTheme.typography.labelLarge) }
 }
 
+/** Los colores de un TextButton de Material que no pasa por `BotonTexto` (la entrada, el portal, Ajustes, los diálogos de
+ *  actualización): Material pone `primary`, que de día es el relleno cian y da 1,8-2,2:1 como letra. Por defecto, el texto de
+ *  marca (`secondary`: 4,7:1 sobre el papel, 5,0:1 sobre el blanco); dentro de una tarjeta tintada, `sobre` (la letra de su
+ *  tarjeta). 07-11-2026. */
+@Composable
+fun coloresBotonTexto(sobre: Color = MaterialTheme.colorScheme.secondary) = ButtonDefaults.textButtonColors(contentColor = sobre)
+
+/** Los colores de un OutlinedTextField de Material que no es `CampoTexto`: al escribir, Material pone `primary` (el cian, 2,05:1
+ *  sobre el papel) en la etiqueta, el borde y el cursor; aquí, el texto de marca y el borde de énfasis, como `CampoTexto`.
+ *  07-11-2026. */
+@Composable
+fun coloresCampo() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = LocalExtra.current.enfasis, focusedLabelColor = MaterialTheme.colorScheme.secondary, cursorColor = MaterialTheme.colorScheme.secondary,
+)
+
 /** «No entregado» (contorno peligro, sin icono) y «✓ Entregado» (relleno ok), de 52, con hueco de 8 y pesos 1 : 1,2.
  *  En las recogidas, «No recogido» / «Recogido». El texto pasa a dos líneas antes de cortarse. */
 @Composable
