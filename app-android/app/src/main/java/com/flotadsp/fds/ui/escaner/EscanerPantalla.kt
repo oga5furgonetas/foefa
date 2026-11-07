@@ -1,3 +1,4 @@
+// diseño compacto
 package com.flotadsp.fds.ui.escaner
 
 import com.flotadsp.fds.ui.tx
@@ -39,16 +40,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -70,11 +72,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -85,12 +88,25 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.flotadsp.fds.etiqueta.Lectura
 import com.flotadsp.fds.etiqueta.TextoDelCodigo
 import com.flotadsp.fds.ui.Acciones
+import com.flotadsp.fds.ui.Alto
+import com.flotadsp.fds.ui.BotonIcono
+import com.flotadsp.fds.ui.BotonNormal
+import com.flotadsp.fds.ui.Esp
+import com.flotadsp.fds.ui.LetraMax
+import com.flotadsp.fds.ui.LocalExtra
+import com.flotadsp.fds.ui.Pastilla
+import com.flotadsp.fds.ui.TextoNumero
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
 
+/* EL ESCÁNER DEL DISEÑO COMPACTO (07-11-2026, §5.5 de la especificación): arriba, la ✕ y la linterna de 48 sobre un
+   fondo redondo y la píldora «Apunta al código»; abajo, una barra de radio 16 y relleno 12 con el último resultado (su
+   icono además del color), en la carga el hueco en grande y, si el paquete ya estaba, su número de parada en grande para
+   buscarlo sin cerrar el escáner; en reposo solo el contador y «Listo». Los colores salen de Extra (ui/Tema.kt). Lo que
+   hace el escáner no cambia: EscanerVM. */
 @Composable
 fun EscanerPantalla(
     pais: String, vuelta: VueltaDeRevisar?, alCerrar: (cambios: Boolean) -> Unit, alRevisar: (Lectura) -> Unit,
@@ -147,37 +163,49 @@ fun EscanerPantalla(
                 ocupado = { vm.estado.value.trabajando })
             Ventana()
         } else {
-            Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp))
-                Spacer(Modifier.height(16.dp))
-                Text(tx("Para escanear hace falta la cámara"), style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    if (bloqueado) tx("Actívala en Permisos › Cámara. Solo se usa mientras escaneas y las imágenes no salen del móvil.")
-                    else tx("Solo se usa mientras escaneas y las imágenes no salen del móvil."),
-                    color = Color.White.copy(alpha = .8f), textAlign = TextAlign.Center,
-                )
-                Spacer(Modifier.height(24.dp))
-                Button(onClick = {
-                    if (bloqueado) ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null)))
-                    else pedir.launch(Manifest.permission.CAMERA)
-                }) { Text(if (bloqueado) tx("Abrir los permisos") else tx("Permitir la cámara")) }
-            }
+            Permiso(bloqueado,
+                alPedir = { pedir.launch(Manifest.permission.CAMERA) },
+                alAjustes = { ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null))) })
         }
         Arriba(alCerrar = cerrar, linterna = permiso)
         Abajo(e, modo = modo, alTerminar = cerrar, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
 
+/** Sin permiso de cámara (§5.5): el icono de 40, el título, una línea y el botón de 48. La explicación de dónde activarla
+ *  ya no hace falta: el botón abre los permisos de la app. */
+@Composable
+private fun Permiso(bloqueado: Boolean, alPedir: () -> Unit, alAjustes: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(Esp.xl), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = Color.White, modifier = Modifier.size(40.dp))
+        Spacer(Modifier.height(Esp.l))
+        Text(tx("Para escanear hace falta la cámara"), style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(Esp.s))
+        Text(tx("Solo se usa mientras escaneas y las imágenes no salen del móvil."), style = MaterialTheme.typography.bodyMedium,
+            color = Color.White.copy(alpha = .8f), textAlign = TextAlign.Center)
+        Spacer(Modifier.height(Esp.xl))
+        BotonNormal(if (bloqueado) tx("Abrir los permisos") else tx("Permitir la cámara"), if (bloqueado) alAjustes else alPedir)
+    }
+}
+
+/** Arriba (§5.5): la ✕ y la linterna de 48, blancas sobre negro al 40 %, y en el centro la píldora «Apunta al código»
+ *  (negro al 60 %). Sin linterna (sin permiso), un hueco de 48 para que la píldora siga centrada. */
 @Composable
 private fun Arriba(alCerrar: () -> Unit, linterna: Boolean) {
-    Row(Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = alCerrar, colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White)) {
-            Icon(Icons.Default.Close, contentDescription = tx("Cerrar el escáner"))
+    val x = LocalExtra.current
+    Row(Modifier.fillMaxWidth().statusBarsPadding().padding(Esp.s), verticalAlignment = Alignment.CenterVertically) {
+        SobreCamara { BotonIcono(Icons.Default.Close, tx("Cerrar el escáner"), alCerrar) }
+        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Pastilla(tx("Apunta al código"), color = x.escaner.copy(alpha = 0.6f), contentColor = Color.White)
         }
-        Text(tx("Apunta a la etiqueta"), color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-        if (linterna) Linterna()
+        if (linterna) Linterna() else Spacer(Modifier.size(Alto.boton))
     }
+}
+
+/** El fondo redondo de un botón sobre la cámara: el negro del escáner al 40 %, con el icono en blanco. */
+@Composable
+private fun SobreCamara(contenido: @Composable () -> Unit) {
+    Surface(shape = CircleShape, color = LocalExtra.current.escaner.copy(alpha = 0.4f), contentColor = Color.White, content = contenido)
 }
 
 internal tailrec fun Context.actividad(): Activity? = when (this) {
@@ -193,55 +221,78 @@ private val FORMATOS_2D = setOf(Barcode.FORMAT_QR_CODE, Barcode.FORMAT_DATA_MATR
 @Composable
 private fun Linterna() {
     var encendida by remember { mutableStateOf(false) }
-    IconButton(onClick = { encendida = !encendida; camaraActual?.cameraControl?.enableTorch(encendida) },
-        colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White)) {
-        Icon(if (encendida) Icons.Default.FlashOn else Icons.Default.FlashOff, contentDescription = if (encendida) tx("Apagar la linterna") else tx("Encender la linterna"))
+    SobreCamara {
+        BotonIcono(
+            if (encendida) Icons.Default.FlashOn else Icons.Default.FlashOff,
+            if (encendida) tx("Apagar la linterna") else tx("Encender la linterna"),
+            { encendida = !encendida; camaraActual?.cameraControl?.enableTorch(encendida) },
+        )
     }
 }
 
+/** La barra de abajo (§5.5): radio 16, relleno 12, el negro del escáner. Con un resultado, su icono además del color
+ *  (✓ nueva, ↺ ya estaba, ⚠ revisar, ✗ error) y el texto en dos líneas; en la carga, «→ {hueco}» en `cifra`; si el
+ *  paquete ya estaba, «Parada {n}» en `cifra`. Debajo, el contador y «Listo», con la letra topada a 1,3 (§3.8). */
 @Composable
 private fun Abajo(e: EstadoEscaner, modo: String, alTerminar: () -> Unit, modifier: Modifier) {
-    Surface(color = Color(0xEE111114), contentColor = Color.White, shape = MaterialTheme.shapes.extraLarge,
-        modifier = modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp)) {
-        Column(Modifier.padding(18.dp)) {
+    val x = LocalExtra.current
+    Surface(color = x.escaner, contentColor = Color.White, shape = MaterialTheme.shapes.large,
+        modifier = modifier.fillMaxWidth().navigationBarsPadding().padding(Esp.m)) {
+        Column(Modifier.padding(Esp.m), verticalArrangement = Arrangement.spacedBy(Esp.s)) {
             val u = e.ultimo
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (e.trabajando) { CircularProgressIndicator(Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp, color = Color.White); Spacer(Modifier.width(10.dp)) }
-                Text(
-                    when {
-                        e.trabajando -> tx("Leyendo la etiqueta…")
-                        u != null -> u.texto
-                        modo == "carga" -> tx("Pasa cada paquete por la cámara: te digo en qué hueco va.")
-                        else -> tx("Pasa las etiquetas una tras otra: cada paquete entra en tu ruta.")
-                    },
-                    style = MaterialTheme.typography.bodyLarge, fontWeight = if (u != null) FontWeight.SemiBold else FontWeight.Normal,
-                    color = when { u?.aviso == true -> Color(0xFFFCD34D); u?.tipo == "nueva" -> Color(0xFF6EE7B7); u?.tipo == "error" -> Color(0xFFFCA5A5); else -> Color.White },
-                    modifier = Modifier.weight(1f),
-                )
+            if (e.trabajando) {
+                Linea(null, tx("Leyendo…"), Color.White, cargando = true)
+            } else if (u != null) {
+                val (icono, color) = when {
+                    u.tipo == "error" -> Icons.Default.Close to x.escanerError
+                    u.aviso -> Icons.Default.Warning to x.escanerAviso
+                    u.tipo == "ya" -> Icons.Default.Replay to Color.White
+                    else -> Icons.Default.Check to x.escanerOk
+                }
+                Linea(icono, u.texto, color)
+                // LA CARGA GUIADA (01-11-2026): el hueco del último paquete, en grande (por voz lo dice el ViewModel).
+                if (modo == "carga" && u.tipo == "carga") Cifra("→ " + (e.hueco?.takeIf { it.isNotBlank() }?.let { tx(it) } ?: tx("Sin hueco")))
+                // El número de parada de un paquete que ya estaba (07-11-2026): para buscarlo sin cerrar el escáner.
+                else if (u.tipo == "ya" && u.parada != null) Cifra(tx("Parada {n}", "n" to u.parada))
             }
-            // LA CARGA GUIADA (01-11-2026): el hueco del último paquete, en grande (por voz lo dice el ViewModel).
-            if (modo == "carga" && u?.tipo == "carga" && !e.trabajando) {
-                Text("→ " + (e.hueco?.takeIf { it.isNotBlank() }?.let { tx(it) } ?: tx("Sin hueco")),
-                    style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF6EE7B7))
-            }
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (modo == "carga") tx("{a} de {b} cargados", "a" to (e.cargados ?: 0), "b" to (e.total ?: 0))
-                    else "${e.anadidas} ${if (e.anadidas == 1) tx("añadida") else tx("añadidas")} · ${e.yaEstaban} ${if (e.yaEstaban == 1) tx("ya estaba") else tx("ya estaban")}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = .8f), modifier = Modifier.weight(1f))
-                Button(onClick = alTerminar) { Text(tx("Listo")) }
+            LetraMax(1.3f) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (modo == "carga") tx("{a} de {b} cargados", "a" to (e.cargados ?: 0), "b" to (e.total ?: 0))
+                        else "${e.anadidas} ${if (e.anadidas == 1) tx("añadida") else tx("añadidas")} · ${e.yaEstaban} ${if (e.yaEstaban == 1) tx("ya estaba") else tx("ya estaban")}",
+                        style = MaterialTheme.typography.bodySmall.merge(TextoNumero), color = Color.White.copy(alpha = .8f),
+                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(Esp.s))
+                    BotonNormal(tx("Listo"), alTerminar)
+                }
             }
         }
     }
 }
 
-/** El recuadro donde poner la etiqueta, con el resto oscurecido. */
+/** Una línea de la barra: el icono (o el círculo mientras lee) de 20 y el texto en `boton`, dos líneas como mucho. */
+@Composable
+private fun Linea(icono: ImageVector?, texto: String, color: Color, cargando: Boolean = false) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (cargando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = color)
+        else if (icono != null) Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(Esp.s))
+        Text(texto, style = MaterialTheme.typography.labelLarge, color = color, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+    }
+}
+
+/** Lo que se lee de un vistazo con el paquete en la mano: el hueco o el número de parada, en `cifra` y en verde. */
+@Composable
+private fun Cifra(texto: String) {
+    Text(texto, style = MaterialTheme.typography.headlineMedium, color = LocalExtra.current.escanerOk, maxLines = 1, overflow = TextOverflow.Ellipsis)
+}
+
+/** El recuadro donde poner la etiqueta, con el resto oscurecido (el negro del escáner al 60 %). */
 @Composable
 private fun Ventana() {
+    val sombra = LocalExtra.current.escaner.copy(alpha = 0.6f)
     Canvas(Modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
-        drawRect(Color(0x99000000))
+        drawRect(sombra)
         val ancho = size.width * 0.84f
         val alto = minOf(size.height * 0.36f, ancho * 0.8f)
         val esquina = Offset((size.width - ancho) / 2, size.height * 0.42f - alto / 2)

@@ -1,3 +1,4 @@
+// diseño compacto
 package com.flotadsp.fds.ui.escaner
 
 import com.flotadsp.fds.ui.tx
@@ -28,8 +29,9 @@ import kotlinx.serialization.json.JsonPrimitive
 data class VueltaDeRevisar(val guardada: Boolean, val sinSituar: Boolean = false)
 
 /** Lo que pasó con la última etiqueta, para enseñarlo abajo (y sonar o vibrar). `aviso`: entró, pero hay algo que
- *  mirar (sin situar en el mapa, 02-11-2026): suena como añadida y se pinta en ámbar. */
-data class Resultado(val tipo: String, val texto: String, val n: Long = System.nanoTime(), val aviso: Boolean = false)
+ *  mirar (sin situar en el mapa, 02-11-2026): suena como añadida y se pinta en ámbar. `parada` (07-11-2026, diseño
+ *  compacto): el número de parada del paquete, para pintarlo en grande si ya estaba y buscarlo sin cerrar el escáner. */
+data class Resultado(val tipo: String, val texto: String, val n: Long = System.nanoTime(), val aviso: Boolean = false, val parada: Int? = null)
 
 data class EstadoEscaner(
     val anadidas: Int = 0,
@@ -105,8 +107,10 @@ class EscanerVM(app: Application) : AndroidViewModel(app) {
                     val hace = p?.id?.let { yaContada(it) }
                     if (hace != null && hace < 3000) return@launch
                     if (p != null && hace == null) contados[p.id] = System.currentTimeMillis()
+                    // «Ya estaba · parada 4» (07-11-2026): el número va además en grande, abajo; sin número, el cliente.
+                    val que = p?.orden?.let { tx("parada") + " $it" } ?: p?.cliente?.ifBlank { p.direccion }?.takeIf { it.isNotBlank() }
                     _e.value = _e.value.copy(yaEstaban = _e.value.yaEstaban + (if (hace == null) 1 else 0), ultimo = Resultado("ya",
-                        tx("Ya estaba") + (p?.orden?.let { ": " + tx("parada") + " $it" } ?: "") + " · ${p?.cliente?.ifBlank { p.direccion } ?: ""}"))
+                        listOfNotNull(tx("Ya estaba"), que).joinToString(" · "), parada = p?.orden))
                 } else if (l.completa) {
                     val nueva = repo.nuevaParada(cuerpo(l))
                     contados[nueva.id] = System.currentTimeMillis()
@@ -114,7 +118,7 @@ class EscanerVM(app: Application) : AndroidViewModel(app) {
                     // EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): si el servidor no la sitúa, se dice; el móvil la
                     // intenta solo en segundo plano (Repositorio.sinSituar → RutaVM) y, si no, se sitúa al navegar.
                     _e.value = _e.value.copy(anadidas = _e.value.anadidas + 1, ultimo = if (nueva.ubicada) Resultado("nueva", tx("Añadida: {d}", "d" to donde))
-                        else Resultado("nueva", tx("Añadida, sin situar: la sitúo al navegar.") + " · " + donde, aviso = true))
+                        else Resultado("nueva", tx("Añadida, sin situar") + " · " + donde, aviso = true))
                 } else {
                     // Lo que el código no dice, de la foto de la etiqueta (sin pisar lo que sí venía en el código).
                     val leido = fotograma?.let { runCatching { ocr.process(InputImage.fromBitmap(it, giro)).await().text }.getOrNull() }
@@ -132,7 +136,7 @@ class EscanerVM(app: Application) : AndroidViewModel(app) {
             } catch (e: ErrorApi) {
                 codigos.forEach { vistos.remove(it) }      // que se pueda volver a intentar
                 _e.value = _e.value.copy(ultimo = Resultado("error",
-                    if (e.sinRed) tx("Sin conexión: para meter paradas nuevas hace falta red.") else e.message ?: tx("No se ha podido")))
+                    if (e.sinRed) tx("Sin conexión: hace falta red") else e.message ?: tx("No se ha podido")))
             } finally {
                 _e.value = _e.value.copy(trabajando = false)
             }
@@ -147,19 +151,19 @@ class EscanerVM(app: Application) : AndroidViewModel(app) {
             val esc = repo.escanearCarga(limpios)
             val p = esc.pedido
             if (!esc.encontrado || p == null) {
-                _e.value = _e.value.copy(ultimo = Resultado("error", tx("No es de tu ruta de hoy.")))
+                _e.value = _e.value.copy(ultimo = Resultado("error", tx("No es de hoy")))
                 return
             }
             val hace = yaContada(p.id)
             if (hace != null && hace < 3000) return
             contados[p.id] = System.currentTimeMillis()
             _e.value = _e.value.copy(cargados = esc.cargados ?: _e.value.cargados, total = esc.total ?: _e.value.total, hueco = p.hueco,
-                ultimo = Resultado("carga", tx("Parada {n}", "n" to (p.orden ?: "–")) + " · " + p.cliente.ifBlank { p.direccion }))
+                ultimo = Resultado("carga", tx("Parada {n}", "n" to (p.orden ?: "–")) + " · " + p.cliente.ifBlank { p.direccion }, parada = p.orden))
             if (cuenta.voz.value) Voz.decir(getApplication(), if (p.hueco.isNotBlank()) Briefing.huecoHablado(p.hueco) else tx("Sin hueco"))
         } catch (e: ErrorApi) {
             codigos.forEach { vistos.remove(it) }      // que se pueda volver a intentar
             _e.value = _e.value.copy(ultimo = Resultado("error",
-                if (e.sinRed) tx("Sin conexión: para cargar hace falta red.") else e.message ?: tx("No se ha podido")))
+                if (e.sinRed) tx("Sin conexión: hace falta red") else e.message ?: tx("No se ha podido")))
         } finally {
             _e.value = _e.value.copy(trabajando = false)
         }
@@ -182,7 +186,7 @@ class EscanerVM(app: Application) : AndroidViewModel(app) {
         pausado = false
         _e.value = _e.value.copy(revisar = null, trabajando = false)
         if (guardada) _e.value = _e.value.copy(anadidas = _e.value.anadidas + 1, ultimo =
-            if (sinSituar) Resultado("nueva", tx("Añadida, sin situar: la sitúo al navegar."), aviso = true) else Resultado("nueva", tx("Añadida a tu ruta.")))
+            if (sinSituar) Resultado("nueva", tx("Añadida, sin situar"), aviso = true) else Resultado("nueva", tx("Añadida a tu ruta.")))
     }
 
     override fun onCleared() { ocr.close() }
