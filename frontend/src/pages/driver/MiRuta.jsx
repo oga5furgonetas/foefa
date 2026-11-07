@@ -29,7 +29,7 @@ import { salirDeLaDemoDeReparto, decodeToken } from '../../panel/auth'
 import { eurosRef, fechaRefPromo, refCentActual, refPromoActiva, promoGratis, fechaPromo, BONO_CENT } from '../../lib/precios'
 import { textoClienteDice } from './ClienteDice'
 import { MemoriaHoja } from './MemoriaPuerta'
-import { queIncidencia } from '../../panel/components/MapaReparto'
+import { queIncidencia, colorConductor } from '../../panel/components/MapaReparto'
 import { useAtras } from '../../lib/atras'
 import { PedirAviso, mensajeAviso } from '../AvisoManana'
 import CargaGuiada from './CargaGuiada'
@@ -1693,7 +1693,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
               incidencias={incidencias?.incidencias || SIN_ZONAS} zbe={zbe?.zonas || SIN_ZONAS} furgo={furgo} onAccion={accionMapa}
               fuente={incidencias?.fuente || ''} tipoZona={zbe?.tipo || 'ZBE'}
               paradas={lista(ruta.pedidos).map((p, i) => ({
-                id: p.id, lat: p.lat, lng: p.lng, estado: p.estado, motivo: p.motivo, orden: p.orden, color: '#0ea5e9', grande: siguiente?.id === p.id,
+                id: p.id, lat: p.lat, lng: p.lng, estado: p.estado, motivo: p.motivo, orden: p.orden, color: colorConductor(0), grande: siguiente?.id === p.id,
                 etiqueta: p.orden ?? i + 1, titulo: p.cliente || p.direccion, sub: p.eta ? `≈ ${p.eta} · ${p.direccion}` : p.direccion,
                 // Lo que enseña la ventana al tocar la chincheta (30-10-2026).
                 telefono: p.telefono || '', tipo: p.tipo, prioridad: !!p.prioridad, cobrar: p.cobrar > 0 ? euros(p.cobrar) : null,

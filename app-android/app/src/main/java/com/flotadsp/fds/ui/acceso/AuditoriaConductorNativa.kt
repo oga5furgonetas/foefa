@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -268,7 +269,7 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf(10, 25, 50, 75, 100).forEach { v -> FilterChip(selected = combustible == v, onClick = { combustible = v }, label = { Text(if (v == 10) tx("Reserva") else if (v == 100) tx("Lleno") else "$v%") }) } }
                     val kmFinal = km ?: kmManual.toIntOrNull()
                     val kmValido = kmFinal != null && kmFinal > 0 && kmFinal < 1_000_000 && (kmMin == null || kmFinal >= kmMin!!) && (kmMax == null || kmFinal <= kmMax!!)
-                    Button(onClick = { paso = 2; error = null }, enabled = fotos.keys.containsAll(ANGULOS.map { it.first }) && fotos["odometro"] != null && kmValido && fotos["combustible"] != null && combustible != null && procesando == null, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(tx("Continuar · checklist")) }
+                    Button(onClick = { paso = 2; error = null }, enabled = fotos.keys.containsAll(ANGULOS.map { it.first }) && fotos["odometro"] != null && kmValido && fotos["combustible"] != null && combustible != null && procesando == null, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(tx("Continuar · checklist")) }
                 }
                 else -> {
                     Text(tx("Revisa el estado"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -334,7 +335,7 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
                             catch (_: Exception) { error = tx("No se pudo enviar la inspección. Las fotos siguen guardadas en esta pantalla; vuelve a intentarlo con conexión.") }
                             finally { enviando = false }
                         }
-                    }, enabled = !enviando && procesando == null && rueda != null && !faltaFotoDanio && fotos.keys.containsAll(ANGULOS.map { it.first }) && fotos["odometro"] != null && fotos["combustible"] != null && combustible != null && (km ?: kmManual.toIntOrNull())?.let { it > 0 && (kmMin == null || it >= kmMin!!) && (kmMax == null || it <= kmMax!!) } == true, modifier = Modifier.fillMaxWidth().height(54.dp)) {
+                    }, enabled = !enviando && procesando == null && rueda != null && !faltaFotoDanio && fotos.keys.containsAll(ANGULOS.map { it.first }) && fotos["odometro"] != null && fotos["combustible"] != null && combustible != null && (km ?: kmManual.toIntOrNull())?.let { it > 0 && (kmMin == null || it >= kmMin!!) && (kmMax == null || it <= kmMax!!) } == true, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
                         if (enviando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text(tx("Enviar auditoría"))
                     }
                 }
