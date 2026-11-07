@@ -655,26 +655,27 @@ fun formaDeLista(indice: Int, total: Int): Shape {
     return RoundedCornerShape(topStart = arriba, topEnd = arriba, bottomStart = abajo, bottomEnd = abajo)
 }
 
-/** El separador de 1 entre filas, desde el texto (a 56: relleno 12 + número 32 + hueco 12). */
+/** El separador de 1 entre filas, desde el texto (a 56: relleno 12 + número 32 + hueco 12). `desde` lo mueve en las
+ *  listas sin número de parada (07-11-2026, N7: los días del Historial, Cuenta y el portal). */
 @Composable
-fun SeparadorLista(modifier: Modifier = Modifier) {
-    HorizontalDivider(modifier.padding(start = 56.dp), color = MaterialTheme.colorScheme.outlineVariant)
+fun SeparadorLista(modifier: Modifier = Modifier, desde: Dp = 56.dp) {
+    HorizontalDivider(modifier.padding(start = desde), color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 /** Una fila dentro de una lista que va en un `LazyColumn`: la superficie con la forma de su sitio y, si no es la última,
  *  el separador debajo. Sin hueco entre filas. */
 @Composable
-fun FilaDeLista(indice: Int, total: Int, modifier: Modifier = Modifier, contenido: @Composable ColumnScope.() -> Unit) {
+fun FilaDeLista(indice: Int, total: Int, modifier: Modifier = Modifier, separadorDesde: Dp = 56.dp, contenido: @Composable ColumnScope.() -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = formaDeLista(indice, total), modifier = modifier.fillMaxWidth()) {
-        Column { contenido(); if (indice < total - 1) SeparadorLista() }
+        Column { contenido(); if (indice < total - 1) SeparadorLista(desde = separadorDesde) }
     }
 }
 
 /** Una lista entera en una sola superficie (radio 12, sin borde): `total` filas con su separador entre ellas. */
 @Composable
-fun ContenedorLista(total: Int, modifier: Modifier = Modifier, fila: @Composable (Int) -> Unit) {
+fun ContenedorLista(total: Int, modifier: Modifier = Modifier, separadorDesde: Dp = 56.dp, fila: @Composable (Int) -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.medium, modifier = modifier.fillMaxWidth()) {
-        Column { for (i in 0 until total) { fila(i); if (i < total - 1) SeparadorLista() } }
+        Column { for (i in 0 until total) { fila(i); if (i < total - 1) SeparadorLista(desde = separadorDesde) } }
     }
 }
 
