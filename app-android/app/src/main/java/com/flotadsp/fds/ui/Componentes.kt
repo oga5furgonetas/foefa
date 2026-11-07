@@ -749,20 +749,26 @@ fun notasDe(p: Parada): List<Nota> = listOfNotNull(
 internal fun sinPrefijo(frase: String): String =
     Regex("""\)\s*:\s*""").find(frase)?.let { frase.substring(it.range.last + 1) }?.takeIf { it.isNotBlank() } ?: frase
 
-/** La caja de notas de la puerta (tinte neutro, radio 8, relleno 8): cada dato con su icono de 16 y `texto`; en la
- *  tarjeta, dos líneas como mucho (`maxLines = 2`); en la hoja, entero. No pinta nada si no hay nada. */
+/** Los datos que enseña la caja: en la tarjeta (`maxLines` finito), los `maxLines` primeros; en la hoja (`Int.MAX_VALUE`), todos. */
+internal fun notasVisibles(notas: List<Nota>, maxLines: Int): List<Nota> = if (maxLines == Int.MAX_VALUE) notas else notas.take(maxLines)
+
+/** La caja de notas de la puerta (tinte neutro, radio 8): cada dato con su icono de 16 y `texto`. En la tarjeta
+ *  (`maxLines` finito), como en la web: los `maxLines` primeros datos, cada uno en UNA línea con «…», y 4 de relleno
+ *  arriba y abajo; en la hoja (`Int.MAX_VALUE`), entera y con 8. F3, 08-11-2026: antes cada dato podía ocupar dos líneas y la
+ *  tarjeta de «Hoy» medía 310 dp con las notas de 10-hoy (§5.1 d: 284 como mucho); así, 281. No pinta nada si no hay nada. */
 @Composable
 fun NotasPuerta(p: Parada, maxLines: Int = 2, modifier: Modifier = Modifier) {
     val notas = notasDe(p)
     if (notas.isEmpty()) return
     val c = MaterialTheme.colorScheme
+    val resumen = maxLines != Int.MAX_VALUE
     Surface(color = c.surfaceVariant, contentColor = c.onSurface, shape = MaterialTheme.shapes.small, modifier = modifier.fillMaxWidth()) {
-        Column(Modifier.padding(Esp.s), verticalArrangement = Arrangement.spacedBy(Esp.xs)) {
-            notas.forEach { n ->
+        Column(Modifier.padding(horizontal = Esp.s, vertical = if (resumen) Esp.xs else Esp.s), verticalArrangement = Arrangement.spacedBy(Esp.xs)) {
+            notasVisibles(notas, maxLines).forEach { n ->
                 Row(Modifier.semantics(mergeDescendants = true) { contentDescription = n.nombre }, verticalAlignment = Alignment.Top) {
                     Icon(n.icono, contentDescription = null, tint = c.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp).size(16.dp))
                     Spacer(Modifier.width(Esp.s))
-                    Text(n.texto, style = MaterialTheme.typography.bodyMedium, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+                    Text(n.texto, style = MaterialTheme.typography.bodyMedium, maxLines = if (resumen) 1 else Int.MAX_VALUE, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
