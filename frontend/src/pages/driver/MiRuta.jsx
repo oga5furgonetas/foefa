@@ -269,18 +269,16 @@ const lee = (k, def) => { try { return localStorage.getItem(k) || def } catch { 
 /* ENSEÑAR CADA COSA EN SU MOMENTO (25-10-2026). Dani: «enseña cómo utilizar las cosas, que tengan sentido, cuándo y
    por qué». Un consejo al día como mucho, solo de lo que aún no usa y justo cuando le sirve; dice por qué y cómo, y
    «Entendido» lo quita para siempre. `cuando` mira la ruta de verdad: nada de consejos que no vienen a cuento. */
+// 08-11-2026: sin el párrafo largo de cada consejo; la línea corta que se ve vive en piezas/AvisoHueco.jsx.
 const CONSEJOS = [
   { id: 'ordenar', cuando: (e) => e.pendientes >= 3 && !e.ordenada, boton: 'Ordenar ahora',
-    titulo: 'Deja que la app ponga el orden',
-    texto: 'Pulsa «Ordenar ruta»: pone las paradas en el orden que menos tarda, respeta el horario de cada cliente y te dice a qué hora llegas a cada una.' },
+    titulo: 'Deja que la app ponga el orden' },
   { id: 'hueco', cuando: (e) => e.pendientes >= 5 && e.entregados === 0 && !e.conHueco,
-    titulo: 'Apunta dónde va cada paquete',
-    texto: 'Al cargar, toca «¿Dónde va en la furgoneta?» en cada parada (delante, medio, detrás). Al llegar sabrás en qué hueco buscarlo sin revolver la carga.' },
+    titulo: 'Apunta dónde va cada paquete' },
   // 01-11-2026 (Dani: «una app de reparto con Google Maps no la va a pagar nadie»): el consejo ya no manda fuera; invita
   // a la guía de la app a quien eligió Google Maps o Waze.
   { id: 'guia_app', cuando: (e) => e.entregados >= 3 && e.pendientes > 0 && e.nav !== 'app',
-    titulo: 'Prueba la guía de la app',
-    texto: 'Pulsa «Ir con» → «Esta app»: te lleva hasta la puerta con voz, recalcula si te sales y al llegar marcas la entrega sin salir de la app.' },
+    titulo: 'Prueba la guía de la app' },
 ]
 // El consejo de hoy: el mismo todo el día (no salta de uno a otro) y ninguno más tras «Entendido».
 function consejoDeHoy(fecha, estado) {
