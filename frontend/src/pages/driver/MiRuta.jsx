@@ -2427,7 +2427,7 @@ function Bono({ b, total, soloEjemplo }) {
   const dias = Math.min(b.dias || 0, diasObjetivo)
   const pista = b.revisar ? tx('Lo estamos revisando. Te avisamos por correo.')
     : soloEjemplo ? tx('Las paradas de ejemplo no cuentan: quítalas y mete las tuyas.')
-      : total === 0 ? tx('Empieza con los paquetes de hoy: foto a la etiqueta de cada uno, aquí abajo.') : ''
+      : total === 0 ? tx('Empieza con los paquetes de hoy: foto a la etiqueta de cada uno.') : ''
   // Los días («1 de 2 días») bajan a la línea de la pista en cuanto hay avance: junto a «{a}/{b}» cortaban el texto a 360.
   const dosLineas = [hechas > 0 || dias > 0 ? tx('{a} de {b} días', { a: dias, b: diasObjetivo }) : '', pista].filter(Boolean).join(' · ')
   return (

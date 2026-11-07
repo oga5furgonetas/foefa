@@ -281,4 +281,6 @@ export const BR = {
   // Fusión final (07-11-2026): el paso 3 del recorrido nombra «Ir», no «Empezar a navegar».
   'Pulsa «Ir»: te lleva con voz a cada puerta. Al llegar, «Entregado» con foto o firma, y pasa a la siguiente.':
     'Toque em «Ir»: o app te leva por voz até cada porta. Ao chegar, «Entregue» com foto ou assinatura, e vai para a próxima.',
+  // Revisor, hallazgo 8 (07-11-2026): la pista del bono de la ruta vacía, sin «aquí abajo».
+  'Empieza con los paquetes de hoy: foto a la etiqueta de cada uno.': 'Comece com os pacotes de hoje: uma foto da etiqueta de cada um.',
 }

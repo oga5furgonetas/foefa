@@ -2906,6 +2906,47 @@ test('Cobro · con la promoción: «Gratis sin límite», sin aviso de prueba ni
   expect(fallos).toEqual([])
 })
 
+/* LOS DÍAS DE PRUEBA QUE QUEDAN (07-11-2026, revisor, hallazgo 6; §6.2): el aviso dice «Quedan {n} días de prueba» y su acción es
+   «Ver mi plan», cada una una vez y a su sitio. Antes el texto ya llevaba «· Ver mi plan» y la acción era «Verlo»: «Ver mi plan»
+   salía dos veces y el texto saltaba de línea a 360 («Quedan 2 días de prueba · Ver mi / plan   Verlo»). */
+test('Cobro · a punto de acabar la prueba: «Quedan 2 días de prueba» con la acción «Ver mi plan» (una vez), y «Queda 1 día de prueba»', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.setViewportSize({ width: 360, height: 780 })
+  await entrarRepartidor(page, { status: 'trial', days_left: 2, required: false, trial_ends: new Date(Date.now() + 2 * 86400000).toISOString() })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  const aviso = page.getByRole('status').filter({ hasText: 'Quedan 2 días de prueba' })
+  const texto = aviso.getByText('Quedan 2 días de prueba', { exact: true })
+  await expect(texto).toBeVisible()
+  await expect(aviso.getByRole('button', { name: 'Ver mi plan', exact: true })).toBeVisible()
+  await expect(page.getByText('Ver mi plan'), '«Ver mi plan» una sola vez').toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Verlo', exact: true }), 'sin «Verlo» en este aviso').toHaveCount(0)
+  expect((await texto.boundingBox()).height, 'el texto cabe en una línea').toBeLessThanOrEqual(21)          // «texto»: 14/20
+  await aviso.getByRole('button', { name: 'Ver mi plan', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Cuenta', exact: true })).toHaveAttribute('aria-current', 'page')
+  // Con un día, en singular.
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { ...BILLING_BASE, status: 'trial', days_left: 1, required: false } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Hoy', exact: true }).click()
+  await expect(page.getByRole('status').getByText('Queda 1 día de prueba', { exact: true })).toBeVisible()
+  await expect(page.getByText('Ver mi plan')).toHaveCount(1)
+  expect(fallos).toEqual([])
+})
+
+test.describe('Cobro · a punto de acabar la prueba, en alemán', () => {
+  test.use({ locale: 'de-DE' })
+  test('«Noch 2 Testtage» con la acción «Mein Tarif», y «Noch 1 Testtag»', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 780 })
+    await entrarRepartidor(page, { status: 'trial', days_left: 2, required: false, trial_ends: new Date(Date.now() + 2 * 86400000).toISOString() })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    const aviso = page.getByRole('status').filter({ hasText: 'Noch 2 Testtage' })
+    await expect(aviso.getByRole('button', { name: 'Mein Tarif', exact: true })).toBeVisible()
+    await expect(page.getByText('Quedan 2 días de prueba')).toHaveCount(0)                           // la clave está traducida, no cae al español
+    await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { ...BILLING_BASE, status: 'trial', days_left: 1, required: false } }))
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('status').getByText('Noch 1 Testtag', { exact: true })).toBeVisible()
+  })
+})
+
 /* LA CARTERA «INVITA Y GANA» (10-10-2026): saldo, invitar y pedir el pago por Bizum. */
 test('Cartera · ve su saldo, invita y pide cobrar por Bizum', async ({ page }) => {
   const fallos = vigilar(page)
@@ -2972,7 +3013,9 @@ test('Bono · la tarjeta de la primera ruta: progreso, ejemplos que no cuentan y
   await tarjeta.getByRole('button', { name: /10 € por tu primera ruta real/ }).click()
   await expect(page.getByRole('dialog').getByText('Haz 20 entregas con la app en 2 días distintos y son tuyos. Hasta el 31 de diciembre.')).toBeVisible()
   await page.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click()
-  await expect(tarjeta.getByText(/foto a la etiqueta de cada uno, aquí abajo/)).toBeVisible()
+  // La pista de la ruta vacía, sin «aquí abajo»: la promo va debajo de los botones de cargar, no encima (revisor, hallazgo 8).
+  await expect(tarjeta.getByText('Empieza con los paquetes de hoy: foto a la etiqueta de cada uno.')).toBeVisible()
+  await expect(tarjeta).not.toContainText('aquí abajo')
   // Con la tarjeta a la vista, el aviso de «invitar» de arriba no se repite.
   await expect(page.getByText(/Gana 10 € por cada compañero que la use/)).toHaveCount(0)
   // Solo paradas de ejemplo: no cuentan, y se dice.
