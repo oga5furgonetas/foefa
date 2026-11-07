@@ -1,3 +1,4 @@
+// diseño compacto
 package com.flotadsp.fds.ui.hoy
 
 import com.flotadsp.fds.ui.tx
@@ -14,39 +15,34 @@ import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.OpenInNew
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -56,11 +52,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -73,8 +67,27 @@ import com.flotadsp.fds.data.Incidencia
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.data.ZonaZbe
 import com.flotadsp.fds.ui.Acciones
+import com.flotadsp.fds.ui.Alto
+import com.flotadsp.fds.ui.Atribucion
+import com.flotadsp.fds.ui.BotonIcono
+import com.flotadsp.fds.ui.BotonMapa
+import com.flotadsp.fds.ui.BotonNormal
+import com.flotadsp.fds.ui.BotonTexto
+import com.flotadsp.fds.ui.Esp
+import com.flotadsp.fds.ui.EstadoNumero
+import com.flotadsp.fds.ui.Etiqueta
+import com.flotadsp.fds.ui.FilaDeChips
 import com.flotadsp.fds.ui.Idioma
+import com.flotadsp.fds.ui.LetraMax
+import com.flotadsp.fds.ui.LocalExtra
+import com.flotadsp.fds.ui.NotasPuerta
+import com.flotadsp.fds.ui.NumeroParada
+import com.flotadsp.fds.ui.Pastilla
 import com.flotadsp.fds.ui.Region
+import com.flotadsp.fds.ui.TamNumero
+import com.flotadsp.fds.ui.TextoNumero
+import com.flotadsp.fds.ui.Tono
+import com.flotadsp.fds.ui.ZoomMapa
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
@@ -111,7 +124,11 @@ import com.google.android.gms.location.Priority
    el móvil un punto azul con la flecha hacia donde mira. Tocar cualquier cosa abre una tarjeta abajo con lo que es
    y qué hacer: ir, llamar o abrir la parada; ver la incidencia en Google Maps; la web de la ZBE; volver a pie a la
    furgoneta o quitarla. Mantener pulsado el mapa deja la furgoneta ahí. Arriba a la derecha: seguirme, centrar la
-   ruta y el zoom; arriba a la izquierda, lo que dice la DGT (un toque lleva allí). */
+   ruta y el zoom; arriba a la izquierda, lo que dice la DGT (un toque lleva allí).
+
+   EL DISEÑO COMPACTO (07-11-2026, §5.7 de la especificación): lo de encima del mapa va con las piezas de
+   ui/Componentes.kt (Pastilla, BotonMapa, ZoomMapa, Atribucion, NumeroParada, Etiqueta, NotasPuerta y los botones); el
+   motor y los dibujos no cambian. */
 
 /** Lo que está tocado en el mapa: una parada, una incidencia, una ZBE, la furgoneta o un punto (mantener pulsado). */
 sealed class Tocado {
@@ -329,59 +346,82 @@ fun MapaRuta(
             m.invalidate()
         })
 
-        // Arriba a la izquierda: lo que hay que saber (sin ubicar, la DGT, la ZBE); un toque lleva allí.
-        Column(Modifier.align(Alignment.TopStart).padding(10.dp).widthIn(max = 250.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (ubicadas.size < paradas.size) {
-                val sin = paradas.size - ubicadas.size
-                Etiqueta(if (sin == 1) tx("1 sin ubicar: toca para situarla en el mapa") else tx("{n} sin ubicar: toca para situarlas en el mapa", "n" to sin),
-                    MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.onSurface) {
-                    paradas.firstOrNull { !it.ubicada }?.let(alSituar)
+        // ENCIMA DEL MAPA (07-11-2026, diseño compacto, §5.7). Arriba a la izquierda, pastillas de una línea: «{n} sin
+        // situar» (un toque sitúa la primera), lo que dice la DGT y la ZBE; con el tope de letra, para que con la letra
+        // grande no tapen el mapa. Dejan sitio a la derecha para los botones.
+        Column(Modifier.align(Alignment.TopStart).padding(start = Esp.m, top = Esp.m, end = Esp.m + Alto.boton + Esp.s),
+            verticalArrangement = Arrangement.spacedBy(Esp.s)) {
+            LetraMax(1.3f) {
+                if (ubicadas.size < paradas.size) {
+                    val sin = paradas.size - ubicadas.size
+                    Pastilla(if (sin == 1) tx("1 sin situar") else tx("{n} sin situar", "n" to sin), Tono.AVISO, Icons.Default.LocationOff,
+                        onClick = { paradas.firstOrNull { !it.ubicada }?.let(alSituar) })
                 }
-            }
-            if (incidencias.isNotEmpty()) {
-                Etiqueta("${fuente.substringBefore(" · ").ifBlank { "DGT" }} · ${incidencias.size} ${if (incidencias.size == 1) tx("incidencia cerca") else tx("incidencias cerca")}", Color(0xFFFEF3C7), Color(0xFF92400E)) {
-                    val i = incidencias.first()
-                    ubicacion.disableFollowLocation(); mapa.controller.animateTo(GeoPoint(i.lat, i.lng))
-                    tocado = Tocado.Inc(i)
+                if (incidencias.isNotEmpty()) {
+                    Pastilla("${fuente.substringBefore(" · ").ifBlank { "DGT" }} · ${incidencias.size}", Tono.AVISO, onClick = {
+                        val i = incidencias.first()
+                        ubicacion.disableFollowLocation(); mapa.controller.animateTo(GeoPoint(i.lat, i.lng))
+                        tocado = Tocado.Inc(i)
+                    })
                 }
-            }
-            zbe.firstOrNull()?.let { z ->
-                Etiqueta("${z.tipo.ifBlank { tipoZona }} · ${z.nombre}", Color(0xFFEDE9FE), Color(0xFF6D28D9)) {
-                    Calle.centroide(z.poligonos.firstOrNull().orEmpty())?.let { c ->
-                        ubicacion.disableFollowLocation(); mapa.controller.animateTo(GeoPoint(c.first, c.second))
-                    }
-                    tocado = Tocado.Zona(z)
+                zbe.firstOrNull()?.let { z ->
+                    Pastilla("${z.tipo.ifBlank { tipoZona }} · ${z.nombre}", Tono.ZONA, onClick = {
+                        Calle.centroide(z.poligonos.firstOrNull().orEmpty())?.let { c ->
+                            ubicacion.disableFollowLocation(); mapa.controller.animateTo(GeoPoint(c.first, c.second))
+                        }
+                        tocado = Tocado.Zona(z)
+                    })
                 }
             }
         }
-        // Arriba a la derecha: seguirme, centrar la ruta y el zoom (a algunos les cuesta el pellizco con guantes).
-        Column(Modifier.align(Alignment.TopEnd).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            BotonMapa(Icons.Default.MyLocation, if (siguiendo) tx("Dejar de seguirme") else tx("Seguirme"), activo = siguiendo) { seguir() }
-            BotonMapa(Icons.Default.CenterFocusStrong, tx("Centrar la ruta")) {
-                ubicacion.disableFollowLocation(); siguiendo = false
-                encuadra(mapa, ubicadas.map { GeoPoint(it.lat!!, it.lng!!) }, animar = true)
+        // Arriba a la derecha: seguirme, centrar la ruta (botones de 48) y el zoom en una píldora (a algunos les cuesta el
+        // pellizco con guantes).
+        Column(Modifier.align(Alignment.TopEnd).padding(Esp.m), verticalArrangement = Arrangement.spacedBy(Esp.s)) {
+            LetraMax(1.3f) {
+                BotonMapa(Icons.Default.MyLocation, if (siguiendo) tx("Dejar de seguirme") else tx("Seguirme"), activo = siguiendo, onClick = { seguir() })
+                BotonMapa(Icons.Default.CenterFocusStrong, tx("Centrar la ruta"), onClick = {
+                    ubicacion.disableFollowLocation(); siguiendo = false
+                    encuadra(mapa, ubicadas.map { GeoPoint(it.lat!!, it.lng!!) }, animar = true)
+                })
+                ZoomMapa(alAcercar = { mapa.controller.zoomIn() }, alAlejar = { mapa.controller.zoomOut() })
             }
-            BotonMapa(Icons.Default.Add, tx("Acercar")) { mapa.controller.zoomIn() }
-            BotonMapa(Icons.Default.Remove, tx("Alejar")) { mapa.controller.zoomOut() }
         }
-        Text(tx("© OpenStreetMap"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.align(Alignment.BottomStart).padding(8.dp))
+        Atribucion(tx("© OpenStreetMap"), Modifier.align(Alignment.BottomStart).padding(Esp.s))
 
-        // La tarjeta de lo tocado, encima del botón de escanear.
+        // La tarjeta de lo tocado: radio 16, relleno 12, a 16 del borde (antes 84, por el flotante de escanear, que ya no
+        // está). En una parada, la cabecera lleva su número y la hora prevista, y tocarla abre su hoja (sale «Abrir»);
+        // la ✕ la cierra.
         tocado?.let { t ->
-            Card(
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 84.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+            val p = (t as? Tocado.Una)?.p
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.large, shadowElevation = 6.dp,
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(Esp.l),
             ) {
-                Column(Modifier.padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(tituloDe(t), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2,
+                Column(Modifier.padding(Esp.m)) {
+                    Row(
+                        Modifier.fillMaxWidth().then(if (p != null) Modifier.clickable { alTocar(p); tocado = null } else Modifier),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (p != null) {
+                            NumeroParada(p.orden, TamNumero.FILA, estadoDe(p, siguiente = p.id == paradas.firstOrNull()?.id))
+                            Spacer(Modifier.width(Esp.m))
+                        }
+                        Text(tituloDe(t), style = MaterialTheme.typography.titleMedium, maxLines = if (p != null) 1 else 2,
                             overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { tocado = null }) { Icon(Icons.Default.Close, contentDescription = tx("Cerrar")) }
+                        if (p != null) {
+                            // La hora prevista, junto al nombre como en la fila («10:05 +8» en peligro si llega tarde).
+                            val tarde = p.pendiente && (p.tardeMin ?: 0) > 0
+                            if (p.pendiente && !p.eta.isNullOrBlank()) {
+                                Spacer(Modifier.width(Esp.s))
+                                Text(if (tarde) "${p.eta} +${p.tardeMin}" else p.eta, style = MaterialTheme.typography.labelMedium.merge(TextoNumero),
+                                    color = if (tarde) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                        }
+                        BotonIcono(Icons.Default.Close, tx("Cerrar"), { tocado = null })
                     }
                     when (t) {
-                        is Tocado.Una -> TarjetaParada(t.p, enZbe = if (t.p.id in enZbe) tipoZona else "", alNavegar = { alNavegar(t.p) }, alAbrir = { alTocar(t.p); tocado = null })
+                        is Tocado.Una -> TarjetaParada(t.p, enZbe = if (t.p.id in enZbe) tipoZona else "", alNavegar = { alNavegar(t.p) })
                         is Tocado.Inc -> TarjetaIncidencia(t.i, fuente)
                         is Tocado.Zona -> TarjetaZbe(t.z, tipoZona)
                         Tocado.LaFurgo -> furgo?.let { f -> TarjetaFurgo(f, ubicacion.myLocation, alQuitar = { alQuitarFurgo(); tocado = null }) }
@@ -394,12 +434,34 @@ fun MapaRuta(
 }
 
 private fun tituloDe(t: Tocado): String = when (t) {
-    is Tocado.Una -> (t.p.orden?.let { "$it · " } ?: "") + t.p.cliente.ifBlank { t.p.direccion }
+    is Tocado.Una -> t.p.cliente.ifBlank { t.p.direccion }
     is Tocado.Inc -> Calle.queIncidencia(t.i.que).replaceFirstChar { it.uppercase() }
     is Tocado.Zona -> "${t.z.tipo.ifBlank { "ZBE" }} ${t.z.nombre}"
     Tocado.LaFurgo -> tx("Tu furgoneta")
     is Tocado.Punto -> tx("¿Dejar aquí la furgoneta?")
 }
+
+/** El número de la tarjeta (07-11-2026): la siguiente en relleno de marca, las pendientes en su tinte, las hechas en
+ *  gris y las fallidas en peligro, como en la lista de «Hoy». */
+private fun estadoDe(p: Parada, siguiente: Boolean): EstadoNumero = when {
+    p.estado == "fallido" -> EstadoNumero.FALLIDA
+    !p.pendiente -> EstadoNumero.HECHA
+    siguiente -> EstadoNumero.SIGUIENTE
+    else -> EstadoNumero.PENDIENTE
+}
+
+/** Las etiquetas de una parada pendiente en su tarjeta (07-11-2026): las de la tarjeta de la siguiente de «Hoy», sin
+ *  la hora (va junto al nombre) ni «Sin situar» (en el mapa solo hay situadas); «{n} bultos» solo con más de uno. */
+private fun etiquetasDe(p: Parada, enZbe: String): List<Triple<String, Tono, ImageVector?>> = listOfNotNull(
+    if (p.porCobrar) Triple(tx("Cobrar") + " " + Region.importe(p.cobrar ?: 0.0), Tono.AVISO, Icons.Default.Payments) else null,
+    p.ventanaDesde?.let { Triple("$it–${p.ventanaHasta.orEmpty()}", Tono.NEUTRO, Icons.Default.Schedule) },
+    if (p.prioridad) Triple(tx("Urgente"), Tono.PELIGRO, Icons.Default.PriorityHigh) else null,
+    if (p.tipo == "recogida") Triple(tx("Recogida"), Tono.NEUTRO, null) else null,
+    if (p.geo == "puerta") Triple(tx("Puerta conocida"), Tono.OK, null) else null,
+    if (enZbe.isNotBlank()) Triple(enZbe, Tono.ZONA, null) else null,
+    if (p.hueco.isNotBlank()) Triple(tx(p.hueco), Tono.NEUTRO, Icons.Default.Inventory2) else null,
+    if (p.bultos > 1) Triple("${p.bultos} " + tx("bultos"), Tono.NEUTRO, null) else null,
+)
 
 private fun encuadra(m: MapView, puntos: List<GeoPoint>, animar: Boolean) {
     when {
@@ -409,87 +471,62 @@ private fun encuadra(m: MapView, puntos: List<GeoPoint>, animar: Boolean) {
     }
 }
 
+/** La tarjeta de una parada (07-11-2026, diseño compacto): una línea de detalle, las etiquetas en una fila que se
+ *  desliza, las notas de la puerta en una línea cada una, y «Ir» (48, el resto) con «Llamar» de icono si hay teléfono.
+ *  Hecha: «Entregado · 11:02» en verde (o «No entregado · 11:02 · motivo» en peligro) y sin botones. */
 @Composable
-private fun BotonMapa(icono: ImageVector, nombre: String, activo: Boolean = false, alPulsar: () -> Unit) {
-    Surface(shape = CircleShape, shadowElevation = 3.dp,
-        color = if (activo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-        contentColor = if (activo) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface) {
-        IconButton(onClick = alPulsar, modifier = Modifier.size(42.dp)) { Icon(icono, contentDescription = nombre) }
-    }
-}
-
-@Composable
-private fun Etiqueta(texto: String, fondo: Color, tinta: Color, alPulsar: () -> Unit) {
-    Surface(onClick = alPulsar, color = fondo, contentColor = tinta, shape = RoundedCornerShape(10.dp), shadowElevation = 2.dp) {
-        Text(texto, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
-    }
-}
-
-@Composable
-private fun TarjetaParada(p: Parada, enZbe: String, alNavegar: () -> Unit, alAbrir: () -> Unit) {
+private fun TarjetaParada(p: Parada, enZbe: String, alNavegar: () -> Unit) {
     val ctx = LocalContext.current
-    // La hora prevista va en los chips de Etiquetas cuando está pendiente; aquí solo si ya está hecha.
-    val detalle = listOfNotNull(
-        p.direccion.takeIf { p.cliente.isNotBlank() && it.isNotBlank() }, p.eta?.takeIf { !p.pendiente }?.let { "≈ $it" },
-        "${p.bultos} ${if (p.bultos == 1) tx("bulto") else tx("bultos")}",
-    ).joinToString(" · ")
-    Text(detalle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    val c = MaterialTheme.colorScheme
+    val x = LocalExtra.current
+    // El detalle: la dirección (si el título es el cliente) y, hecha, la hora prevista. «1 bulto» ya no se dice.
+    val detalle = listOfNotNull(p.direccion.takeIf { p.cliente.isNotBlank() && it.isNotBlank() }, p.eta?.takeIf { !p.pendiente }?.let { "≈ $it" }).joinToString(" · ")
+    if (detalle.isNotBlank()) {
+        Text(detalle, style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = Esp.xs))
+    }
     if (!p.pendiente) {
         val cuando = Calle.hora(p.cerradoEn).takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""
         val motivo = p.motivo?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""
         Text(if (p.estado == "fallido") tx("No entregado") + cuando + motivo else tx("Entregado") + cuando,
-            style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
-            color = if (p.estado == "fallido") MaterialTheme.colorScheme.error else Color(0xFF15803D), modifier = Modifier.padding(top = 2.dp))
+            style = MaterialTheme.typography.bodyMedium.merge(TextoNumero), color = if (p.estado == "fallido") c.error else x.entregadoTexto,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = Esp.xs))
     } else {
-        Spacer(Modifier.height(4.dp))
-        Etiquetas(p, enZbe)
+        val etiquetas = etiquetasDe(p, enZbe)
+        if (etiquetas.isNotEmpty()) FilaDeChips(Modifier.padding(top = Esp.s)) { etiquetas.forEach { (t, tono, i) -> Etiqueta(t, tono, i) } }
     }
-    p.clienteDice?.let { c ->
-        Text(tx("El cliente dice: {t}", "t" to textoClienteDice(c)), style = MaterialTheme.typography.bodySmall, color = Color(0xFF065F46),
-            modifier = Modifier.padding(top = 4.dp, end = 8.dp))
-    }
-    Row(Modifier.padding(top = 8.dp, end = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (p.pendiente) {
-            Button(onClick = alNavegar, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Ir"))
-            }
-            if (p.telefono.isNotBlank()) {
-                FilledTonalButton(onClick = { Acciones.llamar(ctx, p.telefono) }, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Llamar"))
-                }
-            }
+    NotasPuerta(p, maxLines = 1, modifier = Modifier.padding(top = Esp.s))
+    if (p.pendiente) {
+        Row(Modifier.padding(top = Esp.m), horizontalArrangement = Arrangement.spacedBy(Esp.s), verticalAlignment = Alignment.CenterVertically) {
+            BotonNormal(tx("Ir"), alNavegar, icono = Icons.Default.Navigation, modifier = Modifier.weight(1f))
+            if (p.telefono.isNotBlank()) BotonIcono(Icons.Default.Call, tx("Llamar"), { Acciones.llamar(ctx, p.telefono) }, relleno = true)
         }
-        FilledTonalButton(onClick = alAbrir, modifier = Modifier.weight(1f)) { Text(tx("Abrir")) }
     }
 }
 
 @Composable
 private fun TarjetaIncidencia(i: Incidencia, fuente: String) {
     val ctx = LocalContext.current
-    if (i.texto.isNotBlank()) Text(i.texto, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 8.dp))
-    Text(Calle.dondeIncidencia(i), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val c = MaterialTheme.colorScheme
+    if (i.texto.isNotBlank()) Text(i.texto, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = Esp.xs))
+    Text(Calle.dondeIncidencia(i), style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant)
     Text(tx("{f}: cortes y obras declarados, no el tráfico en tiempo real.", "f" to fuente.ifBlank { "DGT" }), style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp, end = 8.dp))
-    Row(Modifier.padding(top = 8.dp, end = 8.dp)) {
-        FilledTonalButton(onClick = { Acciones.abrirWeb(ctx, "https://www.google.com/maps/search/?api=1&query=${i.lat},${i.lng}") }, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Ver en Google Maps"))
-        }
-    }
+        color = c.onSurfaceVariant, modifier = Modifier.padding(top = Esp.xs))
+    BotonNormal(tx("Ver en Google Maps"), { Acciones.abrirWeb(ctx, "https://www.google.com/maps/search/?api=1&query=${i.lat},${i.lng}") },
+        icono = Icons.Default.OpenInNew, modifier = Modifier.fillMaxWidth().padding(top = Esp.m))
 }
 
 @Composable
 private fun TarjetaZbe(z: ZonaZbe, tipoZona: String) {
     val ctx = LocalContext.current
+    val c = MaterialTheme.colorScheme
     val fuente = mapOf("dgt" to "DGT", "bnzfe" to "BNZFE (data.gouv.fr)", "ndw" to "NDW", "gla" to "TfL", "osm" to "OpenStreetMap")[z.fuente] ?: z.fuente.ifBlank { "DGT" }
-    if (z.descripcion.isNotBlank()) Text(z.descripcion, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 8.dp))
+    if (z.descripcion.isNotBlank()) Text(z.descripcion, style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant, modifier = Modifier.padding(top = Esp.xs))
     if (z.etiquetas.isNotEmpty()) Text(tx("Etiquetas") + ": ${z.etiquetas.joinToString(", ")}", style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
-    if (z.version.isNotBlank()) Text(tx("Según {f}, a {v}", "f" to fuente, "v" to z.version), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    if (z.url.isNotBlank()) Row(Modifier.padding(top = 8.dp, end = 8.dp)) {
-        FilledTonalButton(onClick = { Acciones.abrirWeb(ctx, z.url) }, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Más información"))
-        }
+        color = c.onSurfaceVariant, modifier = Modifier.padding(top = Esp.xs))
+    if (z.version.isNotBlank()) Text(tx("Según {f}, a {v}", "f" to fuente, "v" to z.version), style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
+    if (z.url.isNotBlank()) {
+        BotonNormal(tx("Más información"), { Acciones.abrirWeb(ctx, z.url) }, icono = Icons.Default.OpenInNew, modifier = Modifier.fillMaxWidth().padding(top = Esp.m))
     }
 }
 
@@ -497,22 +534,18 @@ private fun TarjetaZbe(z: ZonaZbe, tipoZona: String) {
 private fun TarjetaFurgo(f: Furgo, yo: GeoPoint?, alQuitar: () -> Unit) {
     val ctx = LocalContext.current
     Text(yo?.let { tx("A {d} de ti, en línea recta.", "d" to Calle.distancia(Calle.metros(it.latitude, it.longitude, f.lat, f.lng), Region.unidades == "mi", Idioma.locale)) } ?: tx("Donde la dejaste al bajarte."),
-        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Row(Modifier.padding(top = 8.dp, end = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = { Acciones.irAPie(ctx, f.lat, f.lng) }, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Default.DirectionsWalk, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Volver a pie"))
-        }
-        TextButton(onClick = alQuitar) { Text(tx("Quitar")) }
+        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = Esp.xs))
+    Row(Modifier.padding(top = Esp.m), horizontalArrangement = Arrangement.spacedBy(Esp.s), verticalAlignment = Alignment.CenterVertically) {
+        BotonNormal(tx("Volver a pie"), { Acciones.irAPie(ctx, f.lat, f.lng) }, icono = Icons.Default.DirectionsWalk, modifier = Modifier.weight(1f))
+        BotonTexto(tx("Quitar"), alQuitar)
     }
 }
 
 @Composable
 private fun TarjetaPunto(alAparcar: () -> Unit) {
     Text(tx("Para volver a ella a pie sin dar vueltas. Se queda solo en este móvil."), style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 8.dp))
-    Row(Modifier.padding(top = 8.dp, end = 8.dp)) {
-        Button(onClick = alAparcar, modifier = Modifier.weight(1f)) { Text(tx("Aparcada aquí")) }
-    }
+        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = Esp.xs))
+    BotonNormal(tx("Aparcada aquí"), alAparcar, modifier = Modifier.fillMaxWidth().padding(top = Esp.m))
 }
 
 /** La posición para el punto azul, del proveedor «fused» de Google (GPS + wifi + red, el que usan todas las apps):
