@@ -1,4 +1,12 @@
+// diseño compacto
 package com.flotadsp.fds.ui.hoy
+
+/* LAS HOJAS DE «HOY» EN EL DISEÑO COMPACTO (07-11-2026, §5.2 y §5.3 de la especificación): la hoja de la parada,
+   «Entregar», «No entregado», «Avisar a todos por WhatsApp», la memoria de la puerta y «Mira la foto de entrega», todas
+   sobre la Hoja y las piezas de ui/Componentes.kt: el título en una línea, la acción principal en el pie fijo y lo
+   largo detrás del «?». Lo que hace cada botón y lo que se manda al servidor, como antes. Los textos que se componen
+   (textoWhatsapp, textoClienteDice, textoAntes, textoMemoria, textoAvisoIa) no cambian: los prueban TextosHojaTest,
+   MemoriaTest y EntregaIaTest. */
 
 import com.flotadsp.fds.ui.tx
 import android.content.Context
@@ -15,40 +23,37 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EditLocationAlt
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,9 +62,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -72,8 +81,31 @@ import com.flotadsp.fds.data.EntregaIa
 import com.flotadsp.fds.data.Memoria
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.ui.Acciones
+import com.flotadsp.fds.ui.Alto
+import com.flotadsp.fds.ui.Aviso
+import com.flotadsp.fds.ui.BotonIcono
+import com.flotadsp.fds.ui.BotonNormal
+import com.flotadsp.fds.ui.BotonPrincipal
+import com.flotadsp.fds.ui.BotonTexto
+import com.flotadsp.fds.ui.CampoTexto
+import com.flotadsp.fds.ui.ChipAccion
+import com.flotadsp.fds.ui.ChipOpcion
+import com.flotadsp.fds.ui.Esp
+import com.flotadsp.fds.ui.EstadoNumero
+import com.flotadsp.fds.ui.Etiqueta
+import com.flotadsp.fds.ui.FilaCierre
+import com.flotadsp.fds.ui.FilaDato
+import com.flotadsp.fds.ui.FilaDeChips
+import com.flotadsp.fds.ui.Hoja
 import com.flotadsp.fds.ui.LocalExtra
+import com.flotadsp.fds.ui.NotasPuerta
+import com.flotadsp.fds.ui.NumeroParada
+import com.flotadsp.fds.ui.Opcion
 import com.flotadsp.fds.ui.Region
+import com.flotadsp.fds.ui.TamNumero
+import com.flotadsp.fds.ui.TextoNumero
+import com.flotadsp.fds.ui.Tono
+import com.flotadsp.fds.ui.notasDe
 import com.flotadsp.fds.ui.rememberHacerFoto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -84,6 +116,9 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 
 private val DONDE = listOf("mano" to tx("En mano"), "vecino" to tx("Al vecino"), "buzon" to tx("En el buzón"), "porteria" to tx("En portería"), "seguro" to tx("En un lugar seguro"))
+/** «¿Dónde?» corto (07-11-2026, §4): lo que cabe en un chip, para los de «Entregar» y de la memoria. Las frases
+ *  («La última vez (12/10): en portería», «dejar en portería») siguen con DONDE; las claves que se guardan no cambian. */
+private val DONDE_CORTO = listOf("mano" to tx("Mano"), "vecino" to tx("Vecino"), "buzon" to tx("Buzón"), "porteria" to tx("Portería"), "seguro" to tx("Lugar seguro"))
 private val MOTIVOS = listOf(tx("No había nadie"), tx("Dirección incorrecta"), tx("Rechazado"), tx("Fuera de horario"), tx("Otro"))
 
 /** El WhatsApp al cliente, como en la web (29-10-2026): con la hora estimada y el enlace de seguimiento, que no
@@ -125,28 +160,42 @@ fun textoAntes(a: Antes): String {
     return tx("La última vez ({f}): {que}", "f" to f, "que" to que)
 }
 
+/** El rótulo de un grupo de la hoja («¿Dónde?», «Cómo se entra»), en `boton` (07-11-2026). */
+@Composable
+private fun Rotulo(texto: String) {
+    Text(texto, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(bottom = Esp.xs))
+}
+
+/** Los chips de «¿Dónde?» (DONDE_CORTO), en una fila que se desliza; tocar el elegido lo quita. */
+@Composable
+private fun ChipsDonde(elegido: String, alElegir: (String) -> Unit) {
+    FilaDeChips { DONDE_CORTO.forEach { (k, t) -> ChipOpcion(t, elegido == k, { alElegir(if (elegido == k) "" else k) }) } }
+}
+
 /** EL CLIENTE AVISADO (01-11-2026): con la ruta ordenada, un WhatsApp a cada cliente con móvil, uno tras otro, con su
- *  hora y su enlace (textoWhatsapp). Lo que más fallidas evita, según la calle. */
+ *  hora y su enlace (textoWhatsapp). Lo que más fallidas evita, según la calle. Filas de 56 con el número, el nombre y
+ *  «≈ 09:58 · 613 403 123», y a la derecha el WhatsApp de icono o «✓ Avisado» (07-11-2026). */
 @Composable
 fun AvisarHoja(paradas: List<Parada>, avisados: Set<String>, alAvisar: (Parada) -> Unit, alCerrar: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = alCerrar, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
-            Text(tx("Avisar a todos por WhatsApp"), style = MaterialTheme.typography.headlineSmall)
-            Text(tx("Un WhatsApp a cada cliente con su hora aproximada y su enlace para seguirte. Se abre uno a uno: envía y vuelve."),
-                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(12.dp))
-            paradas.forEach { p ->
-                val hecho = p.id in avisados
-                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text((p.orden?.let { "$it. " } ?: "") + p.cliente.ifBlank { p.direccion }, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(listOfNotNull(p.eta?.let { "≈ $it" }, p.telefono).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (hecho) Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Check, contentDescription = null, tint = LocalExtra.current.entregado); Spacer(Modifier.width(4.dp)); Text(tx("Avisado"), color = LocalExtra.current.entregado)
-                    } else OutlinedButton(onClick = { alAvisar(p) }) { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("WhatsApp") }
+    Hoja(
+        titulo = tx("Avisar a todos por WhatsApp"), subtitulo = tx("Su hora y su enlace, uno a uno"), alCerrar = alCerrar,
+        ayuda = tx("Un WhatsApp a cada cliente con su hora aproximada y su enlace para seguirte. Se abre uno a uno: envía y vuelve."),
+    ) {
+        paradas.forEachIndexed { i, p ->
+            val hecho = p.id in avisados
+            Row(Modifier.fillMaxWidth().heightIn(min = Alto.fila).padding(vertical = Esp.xs), verticalAlignment = Alignment.CenterVertically) {
+                NumeroParada(p.orden, TamNumero.FILA)
+                Spacer(Modifier.width(Esp.m))
+                Column(Modifier.weight(1f)) {
+                    Text(p.cliente.ifBlank { p.direccion }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(listOfNotNull(p.eta?.let { "≈ $it" }, p.telefono).joinToString(" · "), style = MaterialTheme.typography.bodySmall.merge(TextoNumero),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+                Spacer(Modifier.width(Esp.s))
+                if (hecho) Etiqueta(tx("Avisado"), Tono.OK, Icons.Default.Check)
+                else BotonIcono(Icons.AutoMirrored.Filled.Chat, tx("WhatsApp"), { alAvisar(p) }, tono = Tono.OK, relleno = true)
             }
+            if (i < paradas.lastIndex) HorizontalDivider(Modifier.padding(start = 44.dp), color = MaterialTheme.colorScheme.outlineVariant)
         }
     }
 }
@@ -162,35 +211,32 @@ fun textoMemoria(m: Memoria): String {
 }
 
 /** LA MEMORIA DE LA CALLE (01-11-2026): la hoja para apuntar el portal, dónde dejar y cómo se entra. Si el cliente dio el
- *  portal en su enlace, ya viene puesto. Todo vacío (o «Borrar lo guardado») lo borra. */
+ *  portal en su enlace, ya viene puesto. Todo vacío (o «Borrar») lo borra. La frase larga, detrás del «?» (07-11-2026). */
 @Composable
 fun MemoriaHoja(p: Parada, alCerrar: () -> Unit, alGuardar: (portal: String, dejar: String, acceso: String) -> Unit) {
     var portal by remember { mutableStateOf(p.memoria?.portal?.ifBlank { null } ?: p.clienteDice?.portal ?: "") }
     var dejar by remember { mutableStateOf(p.memoria?.dejar ?: "") }
     var acceso by remember { mutableStateOf(p.memoria?.acceso ?: "") }
-    ModalBottomSheet(onDismissRequest = alCerrar, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
-            Text(tx("Para la próxima vez en esta puerta"), style = MaterialTheme.typography.headlineSmall)
-            Text(p.direccion, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(tx("Lo verá quien venga a esta dirección, también un compañero. Se borra al año."), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(portal, { portal = it.take(40) }, label = { Text(tx("Código del portal")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(12.dp))
-            Text(tx("¿Dónde lo has dejado? (opcional)"), style = MaterialTheme.typography.titleMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DONDE.forEach { (k, t) -> FilterChip(selected = dejar == k, onClick = { dejar = if (dejar == k) "" else k }, label = { Text(t) }) }
+    Hoja(
+        titulo = tx("Memoria de la puerta"), subtitulo = p.direccion, alCerrar = alCerrar,
+        ayuda = tx("Lo verá quien venga a esta dirección, también un compañero. Se borra al año."),
+        pie = {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Esp.s), verticalAlignment = Alignment.CenterVertically) {
+                if (p.memoria != null) BotonTexto(tx("Borrar"), { alGuardar("", "", "") }, tono = Tono.PELIGRO)
+                BotonPrincipal(tx("Guardar"), { alGuardar(portal.trim(), dejar, acceso.trim()) }, icono = Icons.Default.Key,
+                    enabled = portal.isNotBlank() || dejar.isNotBlank() || acceso.isNotBlank(), modifier = Modifier.weight(1f))
             }
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(acceso, { acceso = it.take(200) }, label = { Text(tx("Cómo se entra")) },
-                placeholder = { Text(tx("«Entrada por el garaje», «timbre 2», «sin ascensor»…")) }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(18.dp))
-            Button(onClick = { alGuardar(portal.trim(), dejar, acceso.trim()) }, enabled = portal.isNotBlank() || dejar.isNotBlank() || acceso.isNotBlank(),
-                modifier = Modifier.fillMaxWidth().height(54.dp)) {
-                Icon(Icons.Default.Key, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Guardar para la próxima"))
-            }
-            if (p.memoria != null) TextButton(onClick = { alGuardar("", "", "") }, modifier = Modifier.fillMaxWidth()) { Text(tx("Borrar lo guardado")) }
-        }
+        },
+    ) {
+        Text(tx("La ven tus compañeros · se borra al año"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(Esp.m))
+        CampoTexto(portal, { portal = it.take(40) }, icono = Icons.Default.Key, ejemplo = tx("Código del portal"))
+        Spacer(Modifier.height(Esp.m))
+        Rotulo(tx("¿Dónde?"))
+        ChipsDonde(dejar) { dejar = it }
+        Spacer(Modifier.height(Esp.m))
+        Rotulo(tx("Cómo se entra"))
+        CampoTexto(acceso, { acceso = it.take(200) }, ejemplo = tx("Garaje, timbre 2, sin ascensor…"), nombre = tx("Cómo se entra"), unaLinea = false)
     }
 }
 
@@ -205,7 +251,8 @@ fun textoAvisoIa(ia: EntregaIa): String = when (ia.aviso) {
 }
 
 /** LA ENTREGA VERIFICADA (01-11-2026): la IA pide mirar la foto de entrega. «Repetir la foto» abre la cámara y manda la
- *  nueva (la parada sigue entregada; el servidor la vuelve a mirar); «Está bien así» la deja. Nunca bloquea. */
+ *  nueva (la parada sigue entregada; el servidor la vuelve a mirar); «Está bien así» la deja. Nunca bloquea. Sobre la
+ *  Hoja, como en la web (07-11-2026): el aviso tal cual y «Es tu prueba de entrega. ¿La repites?». */
 @Composable
 fun RevisarFotoDialogo(r: Revisar, alRepetir: (String) -> Unit, alCerrar: () -> Unit) {
     val ctx = LocalContext.current
@@ -223,135 +270,200 @@ fun RevisarFotoDialogo(r: Revisar, alRepetir: (String) -> Unit, alCerrar: () -> 
             }
         }
     }
-    AlertDialog(
-        onDismissRequest = alCerrar,
-        title = { Text(tx("Mira la foto de entrega")) },
-        text = { Text(listOfNotNull(textoAvisoIa(r.ia).takeIf { it.isNotBlank() },
-            tx("La foto es tu prueba si alguien dice que no le ha llegado. Puedes repetirla ahora o dejarla así."), avisoFoto).joinToString("\n\n")) },
-        confirmButton = { TextButton(onClick = hacerFoto, enabled = !preparando) { Text(if (preparando) tx("Guardando…") else tx("Repetir la foto")) } },
-        dismissButton = { TextButton(onClick = alCerrar) { Text(tx("Está bien así")) } },
-    )
+    val x = LocalExtra.current
+    Hoja(
+        titulo = tx("Mira la foto de entrega"), alCerrar = alCerrar,
+        pie = {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Esp.s), verticalAlignment = Alignment.CenterVertically) {
+                BotonTexto(tx("Está bien así"), alCerrar, tono = Tono.NEUTRO)
+                BotonPrincipal(if (preparando) tx("Guardando…") else tx("Repetir la foto"), hacerFoto, icono = Icons.Default.PhotoCamera,
+                    cargando = preparando, modifier = Modifier.weight(1f))
+            }
+        },
+    ) {
+        textoAvisoIa(r.ia).takeIf { it.isNotBlank() }?.let {
+            Row(verticalAlignment = Alignment.Top) {
+                Icon(Icons.Default.PriorityHigh, contentDescription = null, tint = x.enAviso, modifier = Modifier.padding(top = 2.dp).size(18.dp))
+                Spacer(Modifier.width(Esp.s))
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = x.enAviso)
+            }
+            Spacer(Modifier.height(Esp.s))
+        }
+        Text(tx("Es tu prueba de entrega. ¿La repites?"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        avisoFoto?.let {
+            Spacer(Modifier.height(Esp.s))
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+        }
+    }
 }
 
+/** LA HOJA DE LA PARADA (07-11-2026, §5.2): el número de 40, la dirección y la hora; las acciones en una fila de chips
+ *  que se desliza («Ir», llamar y WhatsApp solo con teléfono, situar si no tiene sitio); las etiquetas de la tarjeta sin
+ *  el tope de 3; los datos con su icono y sin rótulo a la vista; el ⋮ con «Editar», «Memoria de la puerta» y «Quitar de
+ *  la ruta»; y el pie fijo: «No entregado / Entregado» (pendiente) o «Volver a «por entregar»» (cerrada). */
 @Composable
 fun ParadaHoja(
     p: Parada, prefijo: String, empresa: String = "",
     alCerrar: () -> Unit, alEntregar: () -> Unit, alFallar: () -> Unit, alDeshacer: () -> Unit, alEditar: () -> Unit, alQuitar: () -> Unit,
-    /** «Navegar»: la guía de la app o el navegador elegido, lo decide «Hoy» (01-11-2026). */
+    /** «Ir»: la guía de la app o el navegador elegido, lo decide «Hoy» (01-11-2026). */
     alNavegar: () -> Unit = {},
     /** El registro del intento (30-10-2026): «llamada» o «whatsapp» al pulsarlos. */
     alApuntar: (String) -> Unit = {},
     /** LA ENTREGA VERIFICADA (01-11-2026): repetir la foto de una entrega que la IA pide revisar. */
     alRepetirFoto: () -> Unit = {},
-    /** LA MEMORIA DE LA CALLE (01-11-2026): «Guardar para la próxima» en esta puerta. */
+    /** LA MEMORIA DE LA CALLE (01-11-2026): la memoria de esta puerta, desde el ⋮. */
     alMemoria: () -> Unit = {},
     /** EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): sin punto en el mapa, «Situar» la pone a mano. */
     alSituar: () -> Unit = {},
+    /** La ZBE en la que cae (07-11-2026): su etiqueta, como en la tarjeta; «Hoy» la pasa si la sabe. */
+    enZbe: String = "",
 ) {
     val ctx = LocalContext.current
+    val c = MaterialTheme.colorScheme
+    val x = LocalExtra.current
     var quitar by remember { mutableStateOf(false) }
     var deshacer by remember { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = alCerrar, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
-            Text(p.cliente.ifBlank { "Parada" }, style = MaterialTheme.typography.headlineSmall)
-            // La dirección ya suele llevar el CP y la población: no se repiten.
-            Text((listOf(p.direccion) + listOf(p.cp, p.localidad).filter { it.isNotBlank() && !p.direccion.contains(it, ignoreCase = true) })
-                .filter { it.isNotBlank() }.joinToString(", "),
-                style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(8.dp))
-            Etiquetas(p, avisoAparte = true)
-            if (Situar.sinSituar(p)) { Spacer(Modifier.height(8.dp)); AvisoSinSituar(alSituar) }
-            val datos = listOfNotNull(
-                p.telefono.takeIf { it.isNotBlank() }?.let { tx("Teléfono: {x}", "x" to it) },
-                p.codigo.takeIf { it.isNotBlank() }?.let { tx("Código: {x}", "x" to it) },
-                p.contenido.takeIf { it.isNotBlank() }?.let { tx("Lleva: {x}", "x" to it) },
-                p.notas.takeIf { it.isNotBlank() }?.let { tx("Notas: {x}", "x" to it) },
-                p.hueco.takeIf { it.isNotBlank() }?.let { tx("En la furgoneta: {x}", "x" to tx(it)) },
-                if (p.ventanaDesde != null) tx("Horario: de {a} a {b}", "a" to p.ventanaDesde, "b" to p.ventanaHasta) else null,
-                p.motivo?.takeIf { it.isNotBlank() && p.estado == "fallido" }?.let { tx("Motivo: {x}", "x" to it) },
-                p.entregaIa?.takeIf { p.estado == "entregado" }?.let { if (it.nivel == "verificada") tx("Entrega verificada por IA") else textoAvisoIa(it).takeIf { t -> t.isNotBlank() } },
-                p.antes?.takeIf { p.pendiente }?.let { textoAntes(it) },
-                p.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }?.let { tx("El cliente dice: {t}", "t" to it) },
-                p.memoria?.let { textoMemoria(it) }?.takeIf { it.isNotBlank() }?.let { tx("Memoria de la puerta: {t}", "t" to it) },
-                p.valoracion?.takeIf { it.estrellas in 1..5 }?.let { tx("Valoración del cliente: {e}", "e" to "★".repeat(it.estrellas) + "☆".repeat(5 - it.estrellas)) },
-            )
-            if (datos.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                datos.forEach { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 2.dp)) }
-            }
-            if (p.estado == "entregado" && p.entregaIa?.nivel == "revisar") {
-                TextButton(onClick = alRepetirFoto) { Icon(Icons.Default.PhotoCamera, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Repetir la foto")) }
-            }
-            TextButton(onClick = alMemoria) {
-                Icon(Icons.Default.Key, contentDescription = null); Spacer(Modifier.width(6.dp))
-                Text(if (p.memoria == null) tx("Guardar para la próxima") else tx("Para la próxima vez en esta puerta"))
-            }
-            Spacer(Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = alNavegar, modifier = Modifier.weight(1f).height(50.dp)) {
-                    Icon(Icons.Default.Navigation, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Navegar"))
-                }
-                FilledTonalButton(onClick = { alApuntar("llamada"); Acciones.llamar(ctx, p.telefono) }, enabled = p.telefono.isNotBlank(), modifier = Modifier.height(50.dp)) {
-                    Icon(Icons.Default.Call, contentDescription = tx("Llamar"))
-                }
-                FilledTonalButton(onClick = { alApuntar("whatsapp"); Acciones.whatsapp(ctx, p.telefono, prefijo, textoWhatsapp(p, empresa)) },
-                    enabled = p.telefono.isNotBlank(), modifier = Modifier.height(50.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = tx("WhatsApp"))
+    // Cerrada no se edita ni se quita (el servidor solo deja cambiar la nota): primero «Volver a por entregar».
+    val menu = buildList<Opcion> {
+        if (p.pendiente) add(Opcion(tx("Editar"), Icons.Default.Edit) { alEditar() })
+        add(Opcion(tx("Memoria de la puerta"), Icons.Default.Key) { alMemoria() })
+        if (p.pendiente) add(Opcion(tx("Quitar de la ruta"), Icons.Default.Delete, peligro = true) { quitar = true })
+    }
+    Hoja(
+        titulo = p.cliente.ifBlank { tx("Cliente") }, alCerrar = alCerrar, menu = menu,
+        pie = {
+            if (p.pendiente) FilaCierre(recogida = p.tipo == "recogida", alFallar = alFallar, alEntregar = alEntregar)
+            // Una entregada vuelve atrás con pregunta: se borra su prueba de entrega (29-10-2026). Una no entregada no
+            // tiene nada que perder.
+            else BotonNormal(tx("Volver a «por entregar»"), { if (p.estado == "entregado") deshacer = true else alDeshacer() },
+                icono = Icons.AutoMirrored.Filled.Undo, tono = Tono.NEUTRO, contorno = true, modifier = Modifier.fillMaxWidth())
+        },
+    ) {
+        val tarde = p.pendiente && (p.tardeMin ?: 0) > 0
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            NumeroParada(p.orden, TamNumero.GRANDE, when { p.estado == "fallido" -> EstadoNumero.FALLIDA; !p.pendiente -> EstadoNumero.HECHA; else -> EstadoNumero.PENDIENTE })
+            Spacer(Modifier.width(Esp.m))
+            Column(Modifier.weight(1f)) {
+                // La dirección ya suele llevar el CP y la población: no se repiten.
+                Text((listOf(p.direccion) + listOf(p.cp, p.localidad).filter { it.isNotBlank() && !p.direccion.contains(it, ignoreCase = true) })
+                    .filter { it.isNotBlank() }.joinToString(", "),
+                    style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (!p.pendiente) {
+                    // Cerrada: «11:02 · Entregado · 24,50 €» en verde o «11:02 · No entregado» en peligro, como en su fila.
+                    val hora = Calle.hora(p.cerradoEn).takeIf { it.isNotBlank() }
+                    val cobrado = p.cobradoImporte?.takeIf { p.estado == "entregado" && it > 0.0 }?.let { Region.importe(it) }
+                    Text(listOfNotNull(hora, if (p.estado == "entregado") tx("Entregado") else tx("No entregado"), cobrado).joinToString(" · "),
+                        style = MaterialTheme.typography.labelMedium.merge(TextoNumero), color = if (p.estado == "entregado") x.entregadoTexto else c.error,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            if (p.pendiente) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = alFallar, modifier = Modifier.weight(1f).height(54.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                        Text(tx("No entregado"), maxLines = 1)
-                    }
-                    Button(onClick = alEntregar, modifier = Modifier.weight(1.2f).height(54.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = LocalExtra.current.entregado, contentColor = LocalExtra.current.enEntregado)) {
-                        Icon(Icons.Default.Check, contentDescription = null); Spacer(Modifier.width(4.dp)); Text(tx("Entregado"))
-                    }
-                }
-            } else {
-                // Una entregada vuelve atrás con pregunta: se borra su prueba de entrega (29-10-2026). Una no
-                // entregada no tiene nada que perder.
-                OutlinedButton(onClick = { if (p.estado == "entregado") deshacer = true else alDeshacer() }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Volver a «por entregar»"))
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            HorizontalDivider()
-            Row {
-                // Cerrada no se edita (el servidor solo deja cambiar la nota): primero «Volver a por entregar».
-                if (p.pendiente) TextButton(onClick = alEditar) { Icon(Icons.Default.Edit, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Editar")) }
-                if (p.pendiente) {
-                    TextButton(onClick = { quitar = true }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                        Icon(Icons.Default.Delete, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Quitar de la ruta"))
-                    }
-                }
+            if (p.pendiente && !p.eta.isNullOrBlank()) {
+                Spacer(Modifier.width(Esp.s))
+                Text(if (tarde) "${p.eta} +${p.tardeMin}" else p.eta, style = MaterialTheme.typography.labelLarge.merge(TextoNumero),
+                    color = if (tarde) c.error else c.onSurfaceVariant, maxLines = 1)
             }
         }
+        Spacer(Modifier.height(Esp.m))
+        FilaDeChips {
+            ChipAccion(tx("Ir"), alNavegar, icono = Icons.Default.Navigation, tono = Tono.MARCA)
+            if (p.telefono.isNotBlank()) {
+                ChipAccion(tx("Llamar"), { alApuntar("llamada"); Acciones.llamar(ctx, p.telefono) }, icono = Icons.Default.Call)
+                ChipAccion(tx("WhatsApp"), { alApuntar("whatsapp"); Acciones.whatsapp(ctx, p.telefono, prefijo, textoWhatsapp(p, empresa)) },
+                    icono = Icons.AutoMirrored.Filled.Chat)
+            }
+            // Sin sitio, «Sin situar · Situar»; con solo la calle, «Situar en el mapa»: las dos abren «Situar la parada».
+            if (Situar.sinSituar(p)) ChipAccion(tx("Sin situar") + " · " + tx("Situar"), alSituar, icono = Icons.Default.LocationOff, tono = Tono.AVISO)
+            else if (p.pendiente && p.geo == "aprox") ChipAccion(tx("Situar en el mapa"), alSituar, icono = Icons.Default.EditLocationAlt)
+        }
+        EtiquetasHoja(p, enZbe)
+        DatosHoja(p, alRepetirFoto)
     }
     if (quitar) {
         AlertDialog(
             onDismissRequest = { quitar = false },
-            title = { Text(tx("¿Quitar esta parada?")) },
-            text = { Text(tx("{n} sale de tu ruta de hoy.", "n" to p.cliente.ifBlank { p.direccion })) },
-            confirmButton = { TextButton(onClick = { quitar = false; alQuitar() }) { Text(tx("Quitar")) } },
-            dismissButton = { TextButton(onClick = { quitar = false }) { Text(tx("Cancelar")) } },
+            title = { Text(tx("¿Quitar esta parada?"), style = MaterialTheme.typography.titleLarge) },
+            text = { Text(tx("{n} sale de tu ruta de hoy.", "n" to p.cliente.ifBlank { p.direccion }), style = MaterialTheme.typography.bodyMedium) },
+            confirmButton = { BotonTexto(tx("Quitar"), { quitar = false; alQuitar() }, tono = Tono.PELIGRO) },
+            dismissButton = { BotonTexto(tx("Cancelar"), { quitar = false }, tono = Tono.NEUTRO) },
+            shape = MaterialTheme.shapes.large,
         )
     }
     if (deshacer) {
         AlertDialog(
             onDismissRequest = { deshacer = false },
-            title = { Text(tx("¿Volver a «por entregar»?")) },
-            text = { Text(tx("Se borra la prueba de entrega de {n}: la foto, dónde se dejó, quién lo recogió y la hora.", "n" to p.cliente.ifBlank { p.direccion })) },
-            confirmButton = { TextButton(onClick = { deshacer = false; alDeshacer() }) { Text(tx("Volver atrás")) } },
-            dismissButton = { TextButton(onClick = { deshacer = false }) { Text(tx("Cancelar")) } },
+            title = { Text(tx("¿Volver a «por entregar»?"), style = MaterialTheme.typography.titleLarge) },
+            text = { Text(tx("Se borra la prueba de entrega de {n}: la foto, dónde se dejó, quién lo recogió y la hora.", "n" to p.cliente.ifBlank { p.direccion }),
+                style = MaterialTheme.typography.bodyMedium) },
+            confirmButton = { BotonTexto(tx("Volver atrás"), { deshacer = false; alDeshacer() }) },
+            dismissButton = { BotonTexto(tx("Cancelar"), { deshacer = false }, tono = Tono.NEUTRO) },
+            shape = MaterialTheme.shapes.large,
         )
     }
 }
 
+/** Las etiquetas de la hoja (§5.2): las de la tarjeta (cobrar, horario, urgente, recogida, puerta conocida, sin el
+ *  portal, ZBE y el hueco), sin el tope de 3 y, si no caben, en otra línea. El horario y el hueco llevan su frase de
+ *  siempre («Horario: de … a …», «En la furgoneta: …») como nombre accesible. */
+@Composable
+private fun EtiquetasHoja(p: Parada, enZbe: String) {
+    val puerta = p.pendiente && p.geo == "puerta"
+    val sinPortal = p.pendiente && p.geo == "aprox"
+    val zbe = enZbe.takeIf { it.isNotBlank() && p.pendiente }
+    if (!(p.porCobrar || p.ventanaDesde != null || p.prioridad || p.tipo == "recogida" || puerta || sinPortal || zbe != null || p.hueco.isNotBlank())) return
+    Spacer(Modifier.height(Esp.m))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(Esp.s), verticalArrangement = Arrangement.spacedBy(Esp.xs)) {
+        if (p.porCobrar) Etiqueta(tx("Cobrar") + " " + Region.importe(p.cobrar ?: 0.0), Tono.AVISO, Icons.Default.Payments)
+        if (p.ventanaDesde != null) Etiqueta("${p.ventanaDesde}–${p.ventanaHasta.orEmpty()}", Tono.NEUTRO, Icons.Default.Schedule,
+            modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = tx("Horario: de {a} a {b}", "a" to p.ventanaDesde, "b" to p.ventanaHasta) })
+        if (p.prioridad) Etiqueta(tx("Urgente"), Tono.PELIGRO, Icons.Default.PriorityHigh)
+        if (p.tipo == "recogida") Etiqueta(tx("Recogida"))
+        if (puerta) Etiqueta(tx("Puerta conocida"), Tono.OK)
+        if (sinPortal) Etiqueta(tx("Sin el portal"))
+        if (zbe != null) Etiqueta(zbe, Tono.ZONA)
+        if (p.hueco.isNotBlank()) Etiqueta(tx(p.hueco), Tono.NEUTRO, Icons.Default.Inventory2,
+            modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = tx("En la furgoneta: {x}", "x" to tx(p.hueco)) })
+    }
+}
+
+/** Los datos de la parada (§5.2), cada uno con su icono y sin «Teléfono:», «Código:», «Lleva:»… a la vista (la frase
+ *  entera queda en el nombre accesible); los cortos, de dos en dos; las notas de la puerta (el cliente dice, la
+ *  memoria, las notas y la última vez), enteras, con NotasPuerta; la IA, verificada o con su aviso y «Repetir la foto»
+ *  al lado; las estrellas del cliente y el motivo de una no entregada. */
+@Composable
+private fun DatosHoja(p: Parada, alRepetirFoto: () -> Unit) {
+    val telefono = p.telefono.takeIf { it.isNotBlank() }
+    val codigo = p.codigo.takeIf { it.isNotBlank() }
+    val lleva = listOfNotNull(
+        p.contenido.takeIf { it.isNotBlank() },
+        if (p.bultos > 1) tx("{n} bultos", "n" to p.bultos) else null,
+        when { p.escaneos > 1 -> tx("{n} escaneados", "n" to p.escaneos); p.escaneos == 1 -> tx("1 escaneado"); else -> null },
+    ).joinToString(" · ")
+    val ia = p.entregaIa?.takeIf { p.estado == "entregado" }
+    val avisoIa = ia?.takeIf { it.nivel != "verificada" }?.let { textoAvisoIa(it) }?.takeIf { it.isNotBlank() }
+    val estrellas = p.valoracion?.takeIf { it.estrellas in 1..5 }?.let { "★".repeat(it.estrellas) + "☆".repeat(5 - it.estrellas) }
+    val motivo = p.motivo?.takeIf { it.isNotBlank() && p.estado == "fallido" }
+    if (telefono == null && codigo == null && lleva.isBlank() && notasDe(p).isEmpty() && ia == null && estrellas == null && motivo == null) return
+    Spacer(Modifier.height(Esp.s))
+    if (telefono != null || codigo != null) {
+        Row(Modifier.fillMaxWidth()) {
+            if (telefono != null) FilaDato(Icons.Default.Call, telefono, tx("Teléfono: {x}", "x" to telefono), modifier = Modifier.weight(1f))
+            if (codigo != null) FilaDato(Icons.Default.Receipt, codigo, tx("Código: {x}", "x" to codigo), modifier = Modifier.weight(1f))
+        }
+    }
+    if (lleva.isNotBlank()) FilaDato(Icons.Default.Inventory2, lleva, tx("Lleva: {x}", "x" to lleva))
+    NotasPuerta(p, maxLines = Int.MAX_VALUE, modifier = Modifier.padding(vertical = Esp.xs))
+    if (ia != null && ia.nivel == "verificada") FilaDato(Icons.Default.Verified, tx("Entrega verificada por IA"), tx("Entrega verificada por IA"))
+    // LA ENTREGA VERIFICADA (01-11-2026): el aviso de la IA y, si pide revisarla, «Repetir la foto» (la parada sigue
+    // entregada; el servidor vuelve a mirar la nueva).
+    if (avisoIa != null) Aviso(avisoIa, tono = Tono.AVISO, icono = Icons.Default.PhotoCamera,
+        accion = if (ia?.nivel == "revisar") tx("Repetir la foto") else null, alAccion = alRepetirFoto, modifier = Modifier.padding(vertical = Esp.xs))
+    if (estrellas != null) FilaDato(Icons.Default.Star, estrellas, tx("Valoración del cliente: {e}", "e" to estrellas))
+    if (motivo != null) FilaDato(Icons.Default.ErrorOutline, motivo, tx("Motivo: {x}", "x" to motivo))
+}
+
+/** «ENTREGAR» (§5.3): el cobro si lo hay (la etiqueta «Cobrar {x}», «¿Cómo ha pagado?», los métodos en chips y el
+ *  importe), «¿Dónde?», «¿Quién lo recoge?» (en mano, al vecino o en portería), la nota, la foto con su miniatura y, en
+ *  el pie, «✓ Entregar» (o «Elige cómo ha pagado» mientras falte el método). Lo que se manda al servidor, igual. */
 @Composable
 fun EntregaHoja(p: Parada, alCerrar: () -> Unit, alConfirmar: (JsonObject) -> Unit) {
     val ctx = LocalContext.current
@@ -377,43 +489,11 @@ fun EntregaHoja(p: Parada, alCerrar: () -> Unit, alConfirmar: (JsonObject) -> Un
         }
     }
     val falta = p.porCobrar && metodo.isEmpty()
-    ModalBottomSheet(onDismissRequest = alCerrar, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
-            Text(tx("Entregar"), style = MaterialTheme.typography.headlineSmall)
-            Text(p.cliente.ifBlank { p.direccion }, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (p.porCobrar) {
-                Spacer(Modifier.height(16.dp))
-                Text(tx("Cobro de {x}: ¿cómo ha pagado?", "x" to Region.importe(p.cobrar ?: 0.0)), style = MaterialTheme.typography.titleMedium)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Region.metodosCobro.forEach { (k, t) -> FilterChip(selected = metodo == k, onClick = { metodo = k }, label = { Text(t) }) }
-                }
-                OutlinedTextField(importe, { importe = it }, label = { Text(tx("Importe cobrado")) }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
-            }
-            Spacer(Modifier.height(16.dp))
-            Text(tx("¿Dónde lo has dejado? (opcional)"), style = MaterialTheme.typography.titleMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DONDE.forEach { (k, t) -> FilterChip(selected = donde == k, onClick = { donde = if (donde == k) "" else k }, label = { Text(t) }) }
-            }
-            if (donde in setOf("mano", "vecino", "porteria")) {
-                OutlinedTextField(recibe, { recibe = it }, label = { Text(tx("¿Quién lo recoge?")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            }
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(nota, { nota = it }, label = { Text(tx("Nota (opcional)")) }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = hacerFoto, enabled = !preparando) {
-                    Icon(Icons.Default.PhotoCamera, contentDescription = null); Spacer(Modifier.width(6.dp))
-                    Text(if (foto == null) tx("Foto de la entrega") else tx("Repetir la foto"))
-                }
-                Spacer(Modifier.width(12.dp))
-                if (preparando) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                miniatura?.let { Image(it.asImageBitmap(), contentDescription = tx("Foto de la entrega"), contentScale = ContentScale.Crop, modifier = Modifier.size(56.dp)) }
-            }
-            Text(avisoFoto ?: tx("La foto, del paquete en la puerta: sin personas."), style = MaterialTheme.typography.bodySmall,
-                color = if (avisoFoto != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(18.dp))
-            Button(
+    Hoja(
+        titulo = tx("Entregar") + " · " + p.cliente.ifBlank { p.direccion }, alCerrar = alCerrar,
+        pie = {
+            BotonPrincipal(
+                if (falta) tx("Elige cómo ha pagado") else tx("Entregar"),
                 onClick = {
                     val c = buildMap<String, kotlinx.serialization.json.JsonElement> {
                         if (donde.isNotEmpty()) put("donde", JsonPrimitive(donde))
@@ -427,31 +507,75 @@ fun EntregaHoja(p: Parada, alCerrar: () -> Unit, alConfirmar: (JsonObject) -> Un
                     }
                     alConfirmar(JsonObject(c))
                 },
-                enabled = !falta && !preparando,
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = LocalExtra.current.entregado, contentColor = LocalExtra.current.enEntregado),
-            ) { Icon(Icons.Default.Check, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(if (falta) tx("Elige cómo ha pagado") else tx("Confirmar la entrega")) }
+                icono = Icons.Default.Check, tono = Tono.OK, enabled = !falta && !preparando, modifier = Modifier.fillMaxWidth(),
+            )
+        },
+    ) {
+        if (p.porCobrar) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Etiqueta(tx("Cobrar") + " " + Region.importe(p.cobrar ?: 0.0), Tono.AVISO, Icons.Default.Payments)
+                Spacer(Modifier.width(Esp.s))
+                Text(tx("¿Cómo ha pagado?"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.height(Esp.s))
+            FilaDeChips { Region.metodosCobro.forEach { (k, t) -> ChipOpcion(tx(t), metodo == k, { metodo = k }) } }
+            Spacer(Modifier.height(Esp.s))
+            CampoTexto(importe, { importe = it }, icono = Icons.Default.Payments, ejemplo = tx("Importe cobrado"),
+                teclado = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+            Spacer(Modifier.height(Esp.m))
         }
+        Rotulo(tx("¿Dónde?"))
+        ChipsDonde(donde) { donde = it }
+        if (donde in setOf("mano", "vecino", "porteria")) {
+            Spacer(Modifier.height(Esp.s))
+            CampoTexto(recibe, { recibe = it }, ejemplo = tx("¿Quién lo recoge?"))
+        }
+        Spacer(Modifier.height(Esp.m))
+        CampoTexto(nota, { nota = it }, ejemplo = tx("Nota"), unaLinea = false)
+        Spacer(Modifier.height(Esp.m))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BotonNormal(if (foto == null) tx("Foto de la entrega") else tx("Repetir la foto"), hacerFoto, icono = Icons.Default.PhotoCamera,
+                tono = Tono.NEUTRO, contorno = true, enabled = !preparando)
+            Spacer(Modifier.width(Esp.m))
+            if (preparando) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+            miniatura?.let {
+                Image(it.asImageBitmap(), contentDescription = tx("Foto de la entrega"), contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(56.dp).clip(MaterialTheme.shapes.small))
+            }
+        }
+        Spacer(Modifier.height(Esp.xs))
+        Text(avisoFoto ?: tx("Foto del paquete, sin personas."), style = MaterialTheme.typography.bodySmall,
+            color = if (avisoFoto != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
+/** «NO ENTREGADO» (§5.3): «¿Por qué no se ha entregado?», los cinco motivos en una rejilla de dos por fila (se elige
+ *  uno), la nota y, en el pie, «No entregado» en peligro con letra blanca, activo al elegir. El texto de los motivos no
+ *  cambia (se guarda y se cuenta). `recogida` pone «¿Por qué no se ha recogido?» y «No recogido», como en la web. */
 @Composable
-fun NoEntregadoHoja(alCerrar: () -> Unit, alConfirmar: (String, String) -> Unit) {
+fun NoEntregadoHoja(alCerrar: () -> Unit, alConfirmar: (String, String) -> Unit, recogida: Boolean = false) {
     var motivo by remember { mutableStateOf("") }
     var nota by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = alCerrar, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp).navigationBarsPadding()) {
-            Text(tx("No entregado"), style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.height(12.dp))
-            Text(tx("¿Qué ha pasado?"), style = MaterialTheme.typography.titleMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MOTIVOS.forEach { m -> FilterChip(selected = motivo == m, onClick = { motivo = m }, label = { Text(m) }) }
+    Hoja(
+        titulo = if (recogida) tx("¿Por qué no se ha recogido?") else tx("¿Por qué no se ha entregado?"), alCerrar = alCerrar,
+        pie = {
+            BotonPrincipal(if (recogida) tx("No recogido") else tx("No entregado"), { alConfirmar(motivo, nota.trim()) }, tono = Tono.PELIGRO,
+                enabled = motivo.isNotEmpty(), modifier = Modifier.fillMaxWidth())
+        },
+    ) {
+        MOTIVOS.chunked(2).forEach { fila ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Esp.s)) {
+                fila.forEach { m ->
+                    val elegido = motivo == m
+                    BotonNormal(m, { motivo = m }, tono = if (elegido) Tono.MARCA else Tono.NEUTRO, contorno = !elegido,
+                        modifier = Modifier.weight(1f).semantics { selected = elegido })
+                }
+                if (fila.size == 1) Spacer(Modifier.weight(1f))
             }
-            OutlinedTextField(nota, { nota = it }, label = { Text(tx("Nota (opcional)")) }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = { alConfirmar(motivo, nota.trim()) }, enabled = motivo.isNotEmpty(), modifier = Modifier.fillMaxWidth().height(54.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text(tx("Marcar como no entregado")) }
+            Spacer(Modifier.height(Esp.s))
         }
+        Spacer(Modifier.height(Esp.xs))
+        CampoTexto(nota, { nota = it }, ejemplo = tx("Nota"), unaLinea = false)
     }
 }
 
