@@ -355,4 +355,6 @@ export const A = {
   // W6 (07-11-2026): los «− 1 +» de los bultos en la ficha de la parada (N→W: la nativa ya los tenía en su JSON; se copian sus 5).
   "Uno menos": ["One less", "Menos um", "Un de moins", "Uno in meno", "Eins weniger"],
   "Uno más": ["One more", "Mais um", "Un de plus", "Uno in più", "Eins mehr"],
+  // Fusión final (07-11-2026): el paso 3 del recorrido de la primera vez ya no manda a «Empezar a navegar» (se fue de «Hoy»): el botón es «Ir».
+  "Pulsa «Ir»: te lleva con voz a cada puerta. Al llegar, «Entregado» con foto o firma, y pasa a la siguiente.": ["Tap «Go»: it guides you by voice to each door. When you arrive, «Delivered» with a photo or signature, and on to the next.", "Toca em «Ir»: leva-te com voz a cada porta. Ao chegar, «Entregue» com foto ou assinatura, e passa à seguinte.", "Touchez « Y aller » : guidage vocal jusqu’à chaque porte. À l’arrivée, « Livré » avec photo ou signature, et on passe au suivant.", "Tocca «Vai»: ti guida con la voce a ogni porta. All’arrivo, «Consegnato» con foto o firma, e si passa alla successiva.", "Tippe auf «Los»: Die App führt dich per Sprache zu jeder Tür. Bei Ankunft «Zugestellt» mit Foto oder Unterschrift, dann zum nächsten."],
 }

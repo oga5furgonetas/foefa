@@ -1891,7 +1891,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
         const PASOS = [
           [ScanLine, tx('1. Mete tus paquetes'), tx('Escanea el código o haz una foto a la etiqueta: la dirección y el teléfono entran solos. También puedes escribirla o pegar una lista.')],
           [Route, tx('2. Ordena la ruta'), tx('Pulsa «Ordenar ruta»: la app pone las paradas en el orden que menos tardas, con el tráfico de cada hora y la hora de llegada a cada una.')],
-          [Navigation, tx('3. Navega y entrega'), tx('Pulsa «Empezar a navegar»: te lleva con voz a cada puerta. Al llegar, «Entregado» con foto o firma, y pasa a la siguiente.')],
+          [Navigation, tx('3. Navega y entrega'), tx('Pulsa «Ir»: te lleva con voz a cada puerta. Al llegar, «Entregado» con foto o firma, y pasa a la siguiente.')],
         ]
         const [Icono, titulo, texto] = PASOS[tour]
         const ultimo = tour === PASOS.length - 1
