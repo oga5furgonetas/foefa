@@ -5,7 +5,9 @@
    línea con «…»); en la hoja de la parada, entero (cada dato en su sitio, hasta donde llegue). El prefijo («El cliente
    dice:», «Memoria de la puerta:», «La última vez (21 oct):») va solo para el lector de pantalla, y cada dato conserva su
    data-testid (cliente-dice, memoria, antes). La memoria sigue abriendo su hoja (`onMemoria`); sin memoria no sale nada:
-   «Memoria de la puerta» está en el ⋮. Los textos salen de ClienteDice, MemoriaPuerta y AntesPuerta, sin cambiarlos. */
+   «Memoria de la puerta» está en el ⋮. Los textos salen de ClienteDice, MemoriaPuerta y AntesPuerta, sin cambiarlos.
+   En la tarjeta (`maxLineas`), 4 de relleno arriba y abajo en vez de 8 (la hoja se queda con los 8): con la fila de acciones a 8
+   de la caja, la tarjeta de 10-hoy pasa de 292 a 280, dentro de los 284 de §5.1 d (revisor, 07-11-2026, hallazgo 5). */
 import { History, KeyRound, MessageSquareText, StickyNote } from 'lucide-react'
 import { tx } from '../../../lib/idioma'
 import { textoClienteDice } from '../ClienteDice'
@@ -53,7 +55,7 @@ export default function NotasPuerta({ p, maxLineas = 0, onMemoria, className = '
     ),
   ].filter(Boolean)
   return (
-    <div data-testid={testid} className={`flex flex-col gap-1 rounded-lg bg-dark-800 p-2 text-texto text-dark-50 ${className}`}>
+    <div data-testid={testid} className={`flex flex-col gap-1 rounded-lg bg-dark-800 ${una ? 'px-2 py-1' : 'p-2'} text-texto text-dark-50 ${className}`}>
       {una ? datos.slice(0, maxLineas) : datos}
     </div>
   )

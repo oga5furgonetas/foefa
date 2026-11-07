@@ -225,4 +225,65 @@ test.describe('contraste real en los tres temas', () => {
     }
     expect(fallos.join('\n') || 'sin fallos', `${fallos.length} textos por debajo de 4,5:1`).toBe('sin fallos')
   })
+
+  /* LA BARRA DE PESTAÑAS, CON CONTENIDO TEÑIDO DEBAJO (07-11-2026, revisor, hallazgo 9). La barra era `bg-dark-950/95` con
+     `backdrop-blur`: con un contenido teñido pegado por debajo (el verde de una tarjeta «ok», el ámbar de un aviso), el fondo
+     resultante bajaba y el texto de la pestaña activa (#0E7C77 de día) caía a 4,38:1 sobre #E9F1ED, por debajo de los 4,5:1 de
+     §1.3-8. El test de arriba no lo veía porque no hay contenido teñido bajo la barra: aquí se pone uno a propósito, un verde
+     fuerte y fijo por debajo de ella, y se mide la barra en los tres temas. Ahora la barra es opaca. */
+  test('la barra de pestañas de la app de ruta se lee con contenido teñido debajo, en los tres temas', async ({ page }) => {
+    test.setTimeout(120_000)
+    await page.addInitScript({ content: AXE })
+    await page.addInitScript({ content: `
+      const e = document.createElement('style')
+      e.textContent = '*,*::before,*::after{animation-duration:0s!important;'
+        + 'animation-delay:0s!important;transition-duration:0s!important;'
+        + 'transition-delay:0s!important}'
+      document.addEventListener('DOMContentLoaded', () => document.head.appendChild(e))
+    ` })
+    await entrarComoAdmin(page)
+    await page.addInitScript(() => {
+      try { localStorage.setItem('cookie_consent', JSON.stringify({ v: 3, anuncios: false, at: '2026-10-10T00:00:00Z' })) } catch { /* nada */ }
+    })
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: {
+      status: 'active', suscrita: true, plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'] } }))
+    await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: {
+      activo: true, autonomo: true, fecha: '2026-10-10', pedidos: [], base: null, ia_tickets: false, jornada: {}, aviso_aceptado: true } }))
+
+    const fallos = []
+    for (const tema of TEMAS) {
+      await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+      await page.evaluate((t) => {
+        try {
+          localStorage.setItem('panel_theme', t)
+          localStorage.setItem('panel_theme_elegido', '1')
+        } catch { /* incógnito */ }
+      }, tema)
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      await page.waitForFunction(
+        (t) => (document.documentElement.getAttribute('data-panel-theme') || 'dark') === t, tema, { timeout: 20_000 })
+      await page.getByRole('button', { name: 'Hoy', exact: true }).click()
+      const barra = page.getByRole('navigation', { name: 'Secciones' })
+      await expect(barra).toBeVisible()
+      // Un verde fuerte, fijo y por debajo de la barra (z-index 30 contra el 40 de ella), a todo lo ancho.
+      await page.evaluate(() => {
+        const d = document.createElement('div')
+        d.setAttribute('data-test', 'tinte-bajo-la-barra')
+        d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;height:96px;z-index:30;background:#047857'
+        document.body.appendChild(d)
+      })
+      const fondo = await barra.evaluate((el) => getComputedStyle(el).backgroundColor)
+      if (/^rgba\(/.test(fondo) && !/, 1\)$/.test(fondo)) fallos.push(`[${tema}] la barra es translúcida: ${fondo}`)
+      const malos = await page.evaluate(async () => {
+        const r = await window.axe.run(document.querySelector('nav.ruta-pestanas'), { runOnly: { type: 'rule', values: ['color-contrast'] } })
+        return r.violations.flatMap((v) => v.nodes.map((n) => ({
+          msg: (n.any?.[0]?.message || '').slice(0, 120),
+          html: (n.html || '').replace(/\s+/g, ' ').slice(0, 150),
+        })))
+      })
+      for (const m of malos) fallos.push(`[${tema}] barra de pestañas con contenido teñido debajo · ${m.msg} · ${m.html}`)
+    }
+    expect(fallos.join('\n') || 'sin fallos', `${fallos.length} fallos en la barra de pestañas`).toBe('sin fallos')
+  })
 })

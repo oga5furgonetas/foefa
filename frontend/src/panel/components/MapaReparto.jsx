@@ -449,8 +449,11 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
     <div className="relative isolate">
       <style>{CSS}</style>
       <div ref={caja} style={{ height: alto }} className="fds-mapa w-full overflow-hidden rounded-xl border border-dark-700" />
+      {/* Las capas, arriba a la derecha: de ancho, lo que queda hasta el zoom (72 = 12 de margen a la derecha + 58 hasta el borde
+          del zoom, que es 10 + 48, + 2 de hueco); con tres a la vez a 280 pasan a dos filas en vez de pisar el zoom (revisor,
+          07-11-2026, hallazgo 2). */}
       {(zonas.length > 0 || incidencias.length > 0 || zbe.length > 0) && (
-        <div className="absolute right-3 top-3 z-[1100] flex flex-wrap justify-end gap-2" role="group" aria-label={tx('Capas del mapa')}>
+        <div className="absolute right-3 top-3 z-[1100] flex max-w-[calc(100%-72px)] flex-wrap justify-end gap-2" role="group" aria-label={tx('Capas del mapa')}>
           {zonas.length > 0 && capaBoton('cd', `C/D ${zonas.length}`, 'zona')}
           {incidencias.length > 0 && capaBoton('dgt', `${(fuente || 'DGT').split(' · ')[0].split(' + ')[0]} ${incidencias.length}`, 'aviso')}
           {zbe.length > 0 && capaBoton('zbe', `${tipoZona} ${zbe.length}`, 'zona')}

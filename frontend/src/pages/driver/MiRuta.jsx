@@ -1689,7 +1689,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
       {/* EL MAPA (§5.7): a pantalla completa bajo la cabecera (en el panel, 420). Encima, las píldoras de lo que hay por
           las calles y de lo que falta por situar, «Lo que hay en tu ruta» (ⓘ) y las próximas paradas en Google Maps. */}
       {enMapa && (
-        <div className="relative isolate">
+        <div className="group/mapa relative isolate">
           <Suspense fallback={<div style={{ height: altoMapa }} className="flex items-center justify-center rounded-xl border border-dark-800"><Loader2 className="animate-spin text-dark-400" aria-hidden="true" /></div>}>
             <MapaReparto alto={altoMapa} base={yo ? null : ruta.base} yo={yo} trazado={trazado} zonas={verZonas ? zonas?.zonas || SIN_ZONAS : SIN_ZONAS}
               incidencias={incidencias?.incidencias || SIN_ZONAS} zbe={zbe?.zonas || SIN_ZONAS} furgo={furgo} onAccion={accionMapa}
@@ -1703,8 +1703,11 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
                 dice: p.cliente_dice ? textoClienteDice(p.cliente_dice) : null,
               }))} />
           </Suspense>
-          {/* A la derecha del zoom de Leaflet (arriba a la izquierda); las capas van arriba a la derecha (MapaReparto). */}
-          <div className="absolute left-16 top-3 z-[1100] flex max-w-[55%] flex-col items-start gap-2">
+          {/* Debajo del zoom de Leaflet (arriba a la izquierda: 10 + 96 de alto + 10 de hueco = 116); las capas van arriba a la
+              derecha (MapaReparto). A la derecha del zoom, la píldora pisaba «C/D» a 360 y a 280 tapaba «C/D» y «DGT» (revisor,
+              07-11-2026, hallazgo 2). Con una ventana de una parada abierta (`.leaflet-popup`) se esconden: ahí, a la izquierda, caen
+              las ventanas y las píldoras, por encima de ellas, les tapaban hasta el botón «Ir» (medido a 360 y a 280). */}
+          <div className="absolute left-3 top-[116px] z-[1100] flex max-w-[55%] flex-col items-start gap-2 group-has-[.leaflet-popup]/mapa:hidden">
             <Pastilla texto={trazado?.fuente === 'carreteras' ? `${distancia(trazado.km)} · ${minutosATexto(trazado.minutos)}` : trazado ? tx('Sin ruta por calles') : tx('Calculando el recorrido…')} />
             {sinSituar.length > 0 && (
               <Pastilla tono="aviso" icono={MapPinOff} texto={sinSituar.length === 1 ? tx('1 sin situar') : tx('{n} sin situar', { n: sinSituar.length })} onClick={() => abrirSituar(sinSituar[0])} />
@@ -1772,7 +1775,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
             {hechos.map((p, i) => (
               <FilaParada key={p.id} p={p} numero={i + 1} onTocar={(x) => setAbierta(x.id)}
                 extra={p.estado === 'fallido' ? (
-                  <div className="grid grid-cols-[1fr_1.2fr] gap-2">
+                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-2 max-[300px]:grid-cols-1">
                     <Boton variante="normal" contorno tono="marca" icono={RotateCcw} texto={tx('Volver a intentarlo')} onClick={() => marcar(p, 'pendiente', '')} disabled={ocupado === p.id} />
                     <Boton variante="normal" tono="ok" icono={Check} texto={p.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')} onClick={() => marcar(p, 'entregado')} disabled={ocupado === p.id} />
                   </div>
@@ -1853,7 +1856,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
       })()}
 
       {/* LO PASAJERO (§5.1 b): se va solo a los 6 s; encima del «Deshacer» si coinciden. */}
-      {aviso && <AvisoFlotante abajo={(altoGuia || abajoFlotante) + (deshacer ? 60 : 0)} texto={aviso} onCerrar={() => setAviso('')} />}   {/* 52 del «Deshacer» con su detalle + 8 de hueco */}
+      {aviso && <AvisoFlotante abajo={altoGuia || abajoFlotante} apilado={deshacer ? 60 : 0} zonaSegura={!altoGuia} texto={aviso} onCerrar={() => setAviso('')} />}   {/* 52 del «Deshacer» con su detalle + 8 de hueco; con guía, su panel ya lleva la zona segura dentro */}
 
       {encontrado && (
         <Hoja titulo={tx('Este paquete va en la parada')} onClose={() => setEncontrado(null)}
@@ -2022,7 +2025,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
 
       {/* «Deshacer» (§5.1 b): el aviso flotante de 8 s, con la siguiente debajo. */}
       {deshacer && (
-        <AvisoFlotante abajo={altoGuia || abajoFlotante} accion={tx('Deshacer')} onAccion={deshacerUltima} onCerrar={() => setDeshacer(null)}
+        <AvisoFlotante abajo={altoGuia || abajoFlotante} zonaSegura={!altoGuia} accion={tx('Deshacer')} onAccion={deshacerUltima} onCerrar={() => setDeshacer(null)}
           texto={`${deshacer.estado === 'entregado' ? (deshacer.p.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')) : tx('No entregado')} · ${deshacer.p.cliente || deshacer.p.direccion}`}
           detalle={siguiente && siguiente.id !== deshacer.p.id ? `${tx('Siguiente:')} ${siguiente.cliente || siguiente.direccion}${siguiente.eta ? ` ≈ ${siguiente.eta}` : ''}` : ''} />
       )}
@@ -2168,7 +2171,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
           {quitando && nuevo.id && (
             <Hoja titulo={tx('¿Quitar esta parada?')} onClose={() => setQuitando(false)}
               pie={(
-                <div className="grid grid-cols-[1fr_1.2fr] gap-2">
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-2 max-[300px]:grid-cols-1">
                   <Boton variante="normal" contorno tono="neutro" texto={tx('Cancelar')} onClick={() => setQuitando(false)} />
                   <Boton variante="principal" tono="peligro" texto={tx('Quitar de la ruta')} onClick={quitarParada}
                     cargando={ocupado === 'guardar'} disabled={ocupado === 'guardar'} />
@@ -2425,7 +2428,7 @@ function Bono({ b, total, soloEjemplo }) {
   const dias = Math.min(b.dias || 0, diasObjetivo)
   const pista = b.revisar ? tx('Lo estamos revisando. Te avisamos por correo.')
     : soloEjemplo ? tx('Las paradas de ejemplo no cuentan: quítalas y mete las tuyas.')
-      : total === 0 ? tx('Empieza con los paquetes de hoy: foto a la etiqueta de cada uno, aquí abajo.') : ''
+      : total === 0 ? tx('Empieza con los paquetes de hoy: foto a la etiqueta de cada uno.') : ''
   // Los días («1 de 2 días») bajan a la línea de la pista en cuanto hay avance: junto a «{a}/{b}» cortaban el texto a 360.
   const dosLineas = [hechas > 0 || dias > 0 ? tx('{a} de {b} días', { a: dias, b: diasObjetivo }) : '', pista].filter(Boolean).join(' · ')
   return (

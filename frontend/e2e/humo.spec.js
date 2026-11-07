@@ -2222,6 +2222,45 @@ test('Reparto · un no entregado se puede volver a intentar o dar por entregado 
   expect(fallos).toEqual([])
 })
 
+/* A 280 DE ANCHO (un móvil de 360 al 130 % de zoom) «Volver a intentarlo» y «Entregado» de una fallida caben (07-11-2026, revisor,
+   hallazgo 3). Iban en dos columnas `1fr` y `1.2fr` sin `minmax(0, …)` y sin apilarse: «Entregado» salía por la derecha, cortado
+   («En…»), en la fila de «Hechas hoy» y, con «Letra más grande», en la hoja de la fallida. Ahora, como el cierre de la tarjeta
+   (FilaCierre), las columnas se encogen y con 300 o menos van una debajo de otra. */
+test('Reparto · a 280 de ancho, «Volver a intentarlo» y «Entregado» de una fallida caben en su fila y en su hoja, también con letra grande', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.setViewportSize({ width: 280, height: 640 })
+  await rutaDeAna(page, [
+    { id: 'p1', cliente: 'Bar Pepe', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 1, lat: 43.37, lng: -8.40 },
+    { id: 'p2', cliente: 'Farmacia Sol', direccion: 'Avda Montero Ríos 12', estado: 'fallido', motivo: 'No había nadie', bultos: 1, orden: 2 },
+  ])
+  // Dentro de la pantalla (280) y, con 300 o menos, una debajo de otra.
+  const caben = async (ambito, donde) => {
+    const reintentar = await ambito.getByRole('button', { name: 'Volver a intentarlo' }).boundingBox()
+    const entregado = await ambito.getByRole('button', { name: 'Entregado', exact: true }).boundingBox()
+    for (const [nombre, caja] of [['Volver a intentarlo', reintentar], ['Entregado', entregado]]) {
+      expect(caja.x, `«${nombre}» por la izquierda ${donde}`).toBeGreaterThanOrEqual(-0.5)
+      expect(caja.x + caja.width, `«${nombre}» por la derecha ${donde}`).toBeLessThanOrEqual(280.5)
+    }
+    expect(reintentar.y + reintentar.height, `una debajo de otra ${donde}`).toBeLessThanOrEqual(entregado.y + 1)
+  }
+  for (const letra of ['normal', 'grande']) {
+    await page.addInitScript((l) => { try { if (l === 'grande') localStorage.setItem('fds_letra', 'grande'); else localStorage.removeItem('fds_letra') } catch { /* nada */ } }, letra)
+    await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+    // La fila de «Hechas hoy» (abierta por haber una fallida).
+    await expect(page.getByText('1 sin entregar')).toBeVisible()
+    await caben(page.locator('#parada-p2'), `en la fila (letra ${letra})`)
+    // Y su hoja.
+    await page.getByRole('button', { name: /Ver la parada 1: Farmacia Sol/ }).click()
+    const hoja = page.getByRole('dialog', { name: 'Farmacia Sol' })
+    await expect(hoja).toBeVisible()
+    await caben(hoja, `en la hoja (letra ${letra})`)
+    const hojaCaja = await hoja.locator(':scope > div').first().boundingBox()
+    expect(hojaCaja.x + hojaCaja.width, `la hoja no se ensancha (letra ${letra})`).toBeLessThanOrEqual(280.5)
+    await hoja.getByRole('button', { name: 'Cerrar' }).click()
+  }
+  expect(fallos).toEqual([])
+})
+
 test('Historial · cada día en su pantalla, con la prueba de entrega y «Pasar a hoy»', async ({ page }) => {
   const fallos = vigilar(page)
   await entrarRepartidor(page, { status: 'trial', days_left: 6 })
@@ -2311,7 +2350,11 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
   const hojaParada = page.getByRole('dialog', { name: 'Farmacia Sol' })
   await hojaParada.getByRole('button', { name: 'Hueco', exact: true }).click()
   await page.getByRole('button', { name: 'Detrás · izq' }).click()
-  await expect(hojaParada.getByRole('button', { name: 'En la furgoneta: Detrás · izq' })).toBeVisible()
+  const chipHueco = hojaParada.getByRole('button', { name: 'En la furgoneta: Detrás · izq' })
+  await expect(chipHueco).toBeVisible()
+  // El chip lleva el icono del paquete y el sitio, sin un 📦 escrito además (§0: esos símbolos son los iconos; revisor, hallazgo 7).
+  await expect(chipHueco).toHaveText('Detrás · izq')
+  await expect(chipHueco.locator('svg')).toHaveCount(1)
   await hojaParada.getByRole('button', { name: 'Cerrar' }).click()
   expect(editados).toEqual([{ hueco: 'Detrás · izq' }])
 
@@ -2501,6 +2544,64 @@ test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la s
   expect(pedidas).toEqual(['p1', 'p2'])
   await nav.getByRole('button', { name: 'Salir de la navegación' }).click()
   await expect(nav).toHaveCount(0)
+  expect(fallos).toEqual([])
+})
+
+/* LA ZONA SEGURA DE ABAJO, UNA SOLA VEZ (07-11-2026, revisor, hallazgo 11). El panel de la guía ya lleva la zona segura en su relleno
+   (`pb-[max(12px,env(safe-area-inset-bottom))]`) y `Navegacion` pasa a «Deshacer» lo que mide; el aviso sumaba la zona otra vez: en
+   un iPhone (34 px) quedaba a unos 42 del panel en vez de 8 (§5.8). Chromium simula la zona segura por el protocolo
+   (`Emulation.setSafeAreaInsetsOverride`): sin el arreglo, el hueco medía 42. */
+test('Reparto · con la zona segura de un iPhone, «Deshacer» queda a 8 del panel de la guía (la zona no se cuenta dos veces)', async ({ page, context, browserName }) => {
+  test.skip(browserName !== 'chromium', 'la zona segura se simula por el protocolo de Chromium')
+  const fallos = vigilar(page)
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await page.addInitScript((t) => {
+    localStorage.setItem('flota_driver_token', t)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA' }))
+    localStorage.setItem('cookie_consent', '1')
+    localStorage.setItem('guia_voz', '0')
+  }, token)
+  await context.grantPermissions(['geolocation'])
+  await context.setGeolocation({ latitude: 43.3665, longitude: -8.4065 })
+  await simularApi(page, 'vacio')
+  const pedidos = [
+    { id: 'p1', cliente: 'Bar Pepe', direccion: 'Rúa Galera 10', estado: 'pendiente', bultos: 1, orden: 1, lat: 43.3704, lng: -8.4003 },
+    { id: 'p2', cliente: 'Farmacia Sol', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 2, lat: 43.3690, lng: -8.4010 },
+  ]
+  await page.route(/\/api\/reparto\/mi-ruta\/navegar/, (r) => r.fulfill({ json: { fuente: 'carreteras', metros: 999, minutos: 4.1,
+    linea: [[43.3665, -8.4065], [43.3704, -8.4003]],
+    pasos: [{ texto: 'Sal por Túnel Praza de Lugo', icono: 'recto', punto: [43.3665, -8.4065], metros: 999 }, { texto: 'Has llegado', icono: 'llegada', punto: [43.3704, -8.4003], metros: 0 }] } }))
+  await page.route(/\/api\/reparto\/pedidos\/p1\/estado/, (r) => r.fulfill({ json: {} }))
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, empresa: 'Súper', fecha: '2026-10-04', ia_tickets: false, jornada: {}, aviso_aceptado: true,
+    base: null, ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos } }))
+  const cdp = await context.newCDPSession(page)
+  await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 0, bottom: 34, left: 0, right: 0 } })
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  // La zona segura llega de verdad a la página (si no, la prueba no mide nada).
+  expect(await page.evaluate(() => {
+    const d = document.createElement('div')
+    d.style.paddingBottom = 'env(safe-area-inset-bottom, 0px)'
+    document.body.appendChild(d)
+    const v = getComputedStyle(d).paddingBottom
+    d.remove()
+    return v
+  }), 'la zona segura de abajo, simulada').toBe('34px')
+  await page.getByRole('region', { name: 'Siguiente parada' }).getByRole('button', { name: 'Ir', exact: true }).click()
+  const nav = page.getByRole('dialog', { name: 'Navegación' })
+  await expect(nav.getByTestId('guia-texto')).toBeVisible()
+  await nav.getByRole('button', { name: 'Ya he llegado' }).click()
+  await nav.getByRole('button', { name: 'Entregado', exact: true }).click()
+  await page.getByRole('button', { name: 'Entregar sin foto' }).click()
+  const avisoDeshacer = page.getByRole('status').filter({ has: page.getByRole('button', { name: 'Deshacer' }) })
+  await expect(avisoDeshacer).toBeVisible()
+  const huecoSobrePanel = async () => {
+    const [aviso, panel] = await Promise.all([avisoDeshacer.boundingBox(), nav.getByTestId('guia-panel').boundingBox()])
+    return panel.y - (aviso.y + aviso.height)
+  }
+  await expect.poll(huecoSobrePanel, { message: '«Deshacer» a 8 del panel de la guía, con la zona segura de un iPhone' }).toBeGreaterThanOrEqual(7)   // 8, menos el redondeo
+  expect(await huecoSobrePanel()).toBeLessThanOrEqual(10)
   expect(fallos).toEqual([])
 })
 
@@ -2809,6 +2910,47 @@ test('Cobro · con la promoción: «Gratis sin límite», sin aviso de prueba ni
   expect(fallos).toEqual([])
 })
 
+/* LOS DÍAS DE PRUEBA QUE QUEDAN (07-11-2026, revisor, hallazgo 6; §6.2): el aviso dice «Quedan {n} días de prueba» y su acción es
+   «Ver mi plan», cada una una vez y a su sitio. Antes el texto ya llevaba «· Ver mi plan» y la acción era «Verlo»: «Ver mi plan»
+   salía dos veces y el texto saltaba de línea a 360 («Quedan 2 días de prueba · Ver mi / plan   Verlo»). */
+test('Cobro · a punto de acabar la prueba: «Quedan 2 días de prueba» con la acción «Ver mi plan» (una vez), y «Queda 1 día de prueba»', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.setViewportSize({ width: 360, height: 780 })
+  await entrarRepartidor(page, { status: 'trial', days_left: 2, required: false, trial_ends: new Date(Date.now() + 2 * 86400000).toISOString() })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  const aviso = page.getByRole('status').filter({ hasText: 'Quedan 2 días de prueba' })
+  const texto = aviso.getByText('Quedan 2 días de prueba', { exact: true })
+  await expect(texto).toBeVisible()
+  await expect(aviso.getByRole('button', { name: 'Ver mi plan', exact: true })).toBeVisible()
+  await expect(page.getByText('Ver mi plan'), '«Ver mi plan» una sola vez').toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Verlo', exact: true }), 'sin «Verlo» en este aviso').toHaveCount(0)
+  expect((await texto.boundingBox()).height, 'el texto cabe en una línea').toBeLessThanOrEqual(21)          // «texto»: 14/20
+  await aviso.getByRole('button', { name: 'Ver mi plan', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Cuenta', exact: true })).toHaveAttribute('aria-current', 'page')
+  // Con un día, en singular.
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { ...BILLING_BASE, status: 'trial', days_left: 1, required: false } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Hoy', exact: true }).click()
+  await expect(page.getByRole('status').getByText('Queda 1 día de prueba', { exact: true })).toBeVisible()
+  await expect(page.getByText('Ver mi plan')).toHaveCount(1)
+  expect(fallos).toEqual([])
+})
+
+test.describe('Cobro · a punto de acabar la prueba, en alemán', () => {
+  test.use({ locale: 'de-DE' })
+  test('«Noch 2 Testtage» con la acción «Mein Tarif», y «Noch 1 Testtag»', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 780 })
+    await entrarRepartidor(page, { status: 'trial', days_left: 2, required: false, trial_ends: new Date(Date.now() + 2 * 86400000).toISOString() })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    const aviso = page.getByRole('status').filter({ hasText: 'Noch 2 Testtage' })
+    await expect(aviso.getByRole('button', { name: 'Mein Tarif', exact: true })).toBeVisible()
+    await expect(page.getByText('Quedan 2 días de prueba')).toHaveCount(0)                           // la clave está traducida, no cae al español
+    await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { ...BILLING_BASE, status: 'trial', days_left: 1, required: false } }))
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('status').getByText('Noch 1 Testtag', { exact: true })).toBeVisible()
+  })
+})
+
 /* LA CARTERA «INVITA Y GANA» (10-10-2026): saldo, invitar y pedir el pago por Bizum. */
 test('Cartera · ve su saldo, invita y pide cobrar por Bizum', async ({ page }) => {
   const fallos = vigilar(page)
@@ -2875,7 +3017,9 @@ test('Bono · la tarjeta de la primera ruta: progreso, ejemplos que no cuentan y
   await tarjeta.getByRole('button', { name: /10 € por tu primera ruta real/ }).click()
   await expect(page.getByRole('dialog').getByText('Haz 20 entregas con la app en 2 días distintos y son tuyos. Hasta el 31 de diciembre.')).toBeVisible()
   await page.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click()
-  await expect(tarjeta.getByText(/foto a la etiqueta de cada uno, aquí abajo/)).toBeVisible()
+  // La pista de la ruta vacía, sin «aquí abajo»: la promo va debajo de los botones de cargar, no encima (revisor, hallazgo 8).
+  await expect(tarjeta.getByText('Empieza con los paquetes de hoy: foto a la etiqueta de cada uno.')).toBeVisible()
+  await expect(tarjeta).not.toContainText('aquí abajo')
   // Con la tarjeta a la vista, el aviso de «invitar» de arriba no se repite.
   await expect(page.getByText(/Gana 10 € por cada compañero que la use/)).toHaveCount(0)
   // Solo paradas de ejemplo: no cuentan, y se dice.
@@ -3294,15 +3438,23 @@ test('Reparto · en México el WhatsApp lleva el prefijo 52, y con + se respeta 
 const UA_ANDROID = 'Mozilla/5.0 (Linux; Android 14; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Mobile Safari/537.36'
 test.describe('App · instalar desde la web en Android', () => {
   test.use({ userAgent: UA_ANDROID })
-  test('ofrece el APK y, si Chrome deja, instalar en un toque (y no sale si ya es app)', async ({ page }) => {
+  /* El aviso «Instala la app» (07-11-2026, diseño compacto, §5.1 b): en Android «Instalar la app» lleva a Google Play, con el
+     aviso de Chrome para instalar en un toque o sin él. REVISOR, hallazgo 1: con el aviso de Chrome, lo normal en Android,
+     lanzaba la instalación de la PWA y no abría la tienda (esa vía sigue en el último paso del alta: `activacion.spec.js`).
+     Sin el arreglo, la segunda parte ve `prompt()` llamado y la tienda abierta una sola vez. */
+  test('el aviso «Instala la app» lleva a Google Play, con o sin el aviso de Chrome, y no lanza la instalación', async ({ page }) => {
     const fallos = vigilar(page)
+    const PLAY = 'https://play.google.com/store/apps/details?id=com.flotadsp.flota'
+    await page.addInitScript(() => { window.__abiertas = []; window.open = (url) => { window.__abiertas.push(String(url)); return null } })
     await entrarRepartidor(page, { status: 'trial', days_left: 6, trial_ends: new Date(Date.now() + 6 * 86400000).toISOString() })
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    // El aviso «Instala la app» (07-11-2026, diseño compacto): sin el aviso de Chrome, «Instalar la app» lleva a la tienda.
     const tarjeta = page.getByRole('status').filter({ hasText: 'Instala la app' })
     await expect(tarjeta).toBeVisible()
     await expect(tarjeta.getByRole('button', { name: 'Instalar la app' })).toBeVisible()
-    // Con el aviso de Chrome: el botón lo lanza.
+    // Sin el aviso de Chrome: la tienda.
+    await tarjeta.getByRole('button', { name: 'Instalar la app' }).click()
+    await expect.poll(() => page.evaluate(() => window.__abiertas)).toEqual([PLAY])
+    // Con el aviso de Chrome: también la tienda, y la instalación de la PWA sin lanzar.
     await page.evaluate(() => {
       const e = new Event('beforeinstallprompt')
       e.prompt = () => { window.__pedido = true }
@@ -3310,8 +3462,9 @@ test.describe('App · instalar desde la web en Android', () => {
       window.dispatchEvent(e)
     })
     await tarjeta.getByRole('button', { name: 'Instalar la app' }).click()
-    await expect.poll(() => page.evaluate(() => window.__pedido)).toBe(true)
-    await expect(page.getByText('Instala la app')).toHaveCount(0)
+    await expect.poll(() => page.evaluate(() => window.__abiertas)).toEqual([PLAY, PLAY])
+    expect(await page.evaluate(() => window.__pedido), 'la instalación de la PWA no se lanza desde el aviso').toBeUndefined()
+    await expect(tarjeta).toBeVisible()
     expect(fallos).toEqual([])
   })
 })
@@ -3660,6 +3813,41 @@ test('Ruta · la primera vez pregunta cómo le llegan las paradas y abre esa her
   expect(fallos).toEqual([])
 })
 
+/* LA TARJETA DE LA SIGUIENTE, A SU MEDIDA (07-11-2026, revisor, hallazgo 5; §5.1 d y §7.4): de 216 a 284. Con cobrar, horario y dos
+   notas (como la captura 10-hoy) medía 292: la fila de acciones iba a 12 de las notas (ahora 8) y las notas llevaban 8 de relleno
+   arriba y abajo (ahora 4): 280. A 360×780 «Entregado» queda entero y por encima de las pestañas, sin desplazar. Lo de las 3 filas
+   a la vista (§5.1) no sale con una tarjeta con notas: se decide con Dani, y aquí solo se mide lo que SÍ se cumple. */
+test('Ruta · la tarjeta de la siguiente, con cobrar, horario y dos notas, mide 284 como mucho a 360×780 y «Entregado» queda sobre las pestañas', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.setViewportSize({ width: 360, height: 780 })
+  await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: { activo: true, autonomo: true, fecha: '2026-11-03', jornada: {}, aviso_aceptado: true,
+    ruta: { fin: '11:13', minutos: 100, km: 14, trafico: true },
+    pedidos: [
+      { id: 'p1', cliente: 'Farmacia Sol', direccion: 'Rúa Sinfónica de Galicia 8', estado: 'pendiente', orden: 1, eta: '09:41', lat: 43.37, lng: -8.40, geo: 'puerta',
+        telefono: '613403123', cobrar: 24.5, ventana_desde: '09:30', ventana_hasta: '11:00',
+        cliente_dice: { estare: 'no', dejar: 'porteria', portal: '4521', nota: '', cuando: '2026-11-03T08:00:00Z' },
+        memoria: { portal: '1234', dejar: 'porteria', acceso: 'Garaje' } },
+      { id: 'p2', cliente: 'Marta G.', direccion: 'Rúa Juan Flórez 46', estado: 'pendiente', orden: 2, eta: '09:47', lat: 43.36, lng: -8.41 }] } }))
+  await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: null } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  const tarjeta = page.getByRole('region', { name: 'Siguiente parada' })
+  await expect(tarjeta.getByTestId('cliente-dice')).toBeVisible()
+  await expect(tarjeta.getByTestId('memoria')).toBeVisible()                                          // las dos notas de la tarjeta
+  await expect(tarjeta.getByText('Cobrar 24,50 €')).toBeVisible()
+  const caja = await tarjeta.boundingBox()
+  expect(caja.height, 'la tarjeta mide 216-284 (§5.1 d)').toBeLessThanOrEqual(284)
+  expect(caja.height).toBeGreaterThanOrEqual(216)
+  const entregado = await tarjeta.getByRole('button', { name: 'Entregado', exact: true }).boundingBox()
+  const pestanas = await page.getByRole('navigation', { name: 'Secciones' }).boundingBox()
+  expect(entregado.y + entregado.height, '«Entregado» por encima de las pestañas, sin desplazar').toBeLessThanOrEqual(pestanas.y)
+  // Las notas de la hoja de la parada se quedan con sus 8 de relleno (el ajuste es solo de la tarjeta).
+  await tarjeta.getByRole('button', { name: /Ver la parada 1: Farmacia Sol/ }).click()
+  const notasHoja = page.getByRole('dialog', { name: 'Farmacia Sol' }).getByTestId('cliente-dice').locator('..')
+  expect(await notasHoja.evaluate((el) => getComputedStyle(el).paddingTop)).toBe('8px')
+  expect(fallos).toEqual([])
+})
+
 /* LA RUTA EN MARCHA (17-10-2026): con paradas, añadir va en el botón «+» (hoja con todo), el bono en una línea y
    «con qué navegar» se elige en Ajustes. */
 test('Ruta · con la ruta en marcha, añadir va en el «+» y el navegador se elige en Ajustes', async ({ page }) => {
@@ -3689,6 +3877,62 @@ test('Ruta · con la ruta en marcha, añadir va en el «+» y el navegador se el
   await page.getByRole('button', { name: 'Hoy', exact: true }).click()
   const primera = page.getByRole('region', { name: 'Siguiente parada' })
   await expect(primera.getByRole('link', { name: 'Ir' })).toHaveAttribute('href', 'https://waze.com/ul?ll=43.37,-8.4&navigate=yes')
+  expect(fallos).toEqual([])
+})
+
+/* LOS AVISOS SE VEN ENCIMA DE LAS HOJAS (07-11-2026, revisor, hallazgo 4). El aviso flotante tenía el mismo z-index que las hojas
+   (50) y se pinta antes que ellas, así que una hoja abierta lo cubría: si el servidor rechazaba «Añadir a mi ruta» (el tope de
+   paradas del plan gratis, un 403), el repartidor tocaba el botón y no veía nada. Ahora el aviso queda encima de la hoja y, con
+   una hoja con pie fijo abierta, por encima de ese pie: no tapa su botón principal. Lo que hay en el centro del aviso (elementFromPoint)
+   es el propio aviso. */
+const avisoEncima = (aviso) => aviso.evaluate((el) => {
+  const b = el.getBoundingClientRect()
+  const h = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)
+  return !!h && el.contains(h)
+})
+test('Ruta · el error de «Añadir a mi ruta» (el tope del plan gratis) se ve encima de la ficha y no tapa su botón', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: { activo: true, autonomo: true, fecha: '2026-10-17', jornada: {}, aviso_aceptado: true,
+    pedidos: [{ id: 'p1', cliente: 'Farmacia Sol', direccion: 'Rúa Real 5', estado: 'pendiente', orden: 1, lat: 43.37, lng: -8.40 }] } }))
+  await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: null } }))
+  await page.route(/\/api\/reparto\/mis-pedidos$/, (r) => r.fulfill({ status: 403, json: { detail: 'Has llegado al tope de paradas del plan gratis.' } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Añadir paradas' }).click()
+  await page.getByRole('dialog', { name: 'Añadir paradas' }).getByRole('button', { name: 'A mano', exact: true }).click()
+  const ficha = page.getByRole('dialog', { name: 'Nueva parada' })
+  await ficha.getByRole('textbox', { name: 'Dirección completa' }).fill('Rúa Real 5, A Coruña')
+  const guardar = ficha.getByRole('button', { name: 'Añadir a mi ruta' })
+  await expect(guardar).toBeEnabled()
+  await guardar.click()
+  const aviso = page.getByRole('status').filter({ hasText: 'Has llegado al tope de paradas del plan gratis.' })
+  await expect(aviso).toBeVisible()
+  expect(await avisoEncima(aviso), 'el aviso queda tapado por la ficha').toBe(true)
+  const [caja, boton] = await Promise.all([aviso.boundingBox(), guardar.boundingBox()])
+  expect(caja.y + caja.height, 'el aviso tapa «Añadir a mi ruta»').toBeLessThanOrEqual(boton.y)
+  await expect(ficha).toBeVisible()                                                        // la ficha sigue abierta, para corregir
+  expect(fallos).toEqual([])
+})
+
+/* Y en el portal del conductor, que no lleva barra de pestañas: el aviso caía a 8 del borde, justo encima del pie de la hoja
+   («Entregar sin foto» y «Foto y entregar»). Un error al guardar la entrega con la prueba abierta se ve, encima del pie. */
+test('Portal · el error al guardar la entrega se ve encima de la prueba de entrega y no tapa sus botones', async ({ page }) => {
+  const fallos = vigilar(page)
+  await rutaDeAna(page, [{ id: 'p1', cliente: 'Bar Pepe', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 1, lat: 43.37, lng: -8.40 }])
+  await page.route(/\/api\/reparto\/pedidos\/p1\/estado/, (r) => r.fulfill({ status: 500, json: { detail: 'No se pudo guardar la entrega: prueba otra vez.' } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('region', { name: 'Siguiente parada' }).getByRole('button', { name: 'Entregado', exact: true }).click()
+  const prueba = page.getByRole('dialog', { name: 'Prueba de entrega' })
+  await expect(prueba).toBeVisible()
+  const sinFoto = prueba.getByRole('button', { name: 'Entregar sin foto' })
+  await sinFoto.click()
+  const aviso = page.getByRole('status').filter({ hasText: 'No se pudo guardar la entrega: prueba otra vez.' })
+  await expect(aviso).toBeVisible()
+  expect(await avisoEncima(aviso), 'el aviso queda tapado por la prueba de entrega').toBe(true)
+  const pie = await prueba.locator('[data-hoja-pie]').boundingBox()
+  const caja = await aviso.boundingBox()
+  expect(caja.y + caja.height, 'el aviso tapa el pie de la prueba de entrega').toBeLessThanOrEqual(pie.y)
+  await expect(prueba).toBeVisible()                                                       // la hoja sigue abierta, para repetirlo
   expect(fallos).toEqual([])
 })
 

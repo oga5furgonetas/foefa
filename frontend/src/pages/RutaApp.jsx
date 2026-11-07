@@ -285,8 +285,10 @@ export default function RutaApp() {
     // Con la prueba ya acabada (0 días) y el plan gratis en marcha, manda el del plan gratis: «Quedan 0 días de prueba» no dice nada.
     ) : billing?.status === 'trial' && !billing.promo?.activa && !billing.bloqueo && !billing.falta_tarjeta && billing.days_left != null && billing.days_left <= 3
       && !(billing.gratis?.activo && billing.days_left <= 0) ? (
-      <Aviso tono="aviso" icono={Clock} texto={billing.days_left === 1 ? tx('Queda 1 día de prueba · Ver mi plan') : tx('Quedan {n} días de prueba · Ver mi plan', { n: billing.days_left })}
-        accion={tx('Verlo')} onAccion={() => setTab('cuenta')} />
+      // El texto y la acción por separado (§6.2; revisor, hallazgo 6): con las claves viejas, que ya llevaban «· Ver mi plan»,
+      // «Ver mi plan» salía dos veces y el texto saltaba de línea («… · Ver mi / plan   Verlo»).
+      <Aviso tono="aviso" icono={Clock} texto={billing.days_left === 1 ? tx('Queda 1 día de prueba') : tx('Quedan {n} días de prueba', { n: billing.days_left })}
+        accion={tx('Ver mi plan')} onAccion={() => setTab('cuenta')} />
     ) : !bloqueado && billing?.gratis?.activo ? (
       <Aviso tono="neutro" icono={Package} texto={tx('Gratis: {n} paradas al día', { n: billing.gratis.tope })} accion={tx('Quitar el tope')} onAccion={() => setTab('cuenta')} />
     ) : verInstalar ? <InstalarApp compacto />
@@ -333,8 +335,10 @@ export default function RutaApp() {
         {tab === 'historial' && <Historial />}
         {tab === 'cuenta' && <Suspense fallback={<Cargando />}><Cuenta billing={billing} recargar={recargar} toast={toast} resaltarRegalo={regaloNuevo} merc={merc} /></Suspense>}
       </div>
-      {/* Las pestañas (07-11-2026, §4): 64 más la zona segura; la activa, en una píldora de 32×56 con el icono de 24. */}
-      <nav className="ruta-pestanas fixed inset-x-0 bottom-0 z-40 border-t border-dark-800 bg-dark-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label={tx('Secciones')}>
+      {/* Las pestañas (07-11-2026, §4): 64 más la zona segura; la activa, en una píldora de 32×56 con el icono de 24. Opacas
+          (revisor, hallazgo 9): con `bg-dark-950/95` y `backdrop-blur`, un contenido teñido debajo (un verde, un aviso) bajaba el
+          fondo de la pestaña activa y su texto #0E7C77 caía a 4,38:1, por debajo de los 4,5:1 de §1.3-8. */}
+      <nav className="ruta-pestanas fixed inset-x-0 bottom-0 z-40 border-t border-dark-800 bg-dark-950 pb-[env(safe-area-inset-bottom)]" aria-label={tx('Secciones')}>
         <div className="mx-auto grid h-16 max-w-md grid-cols-4">
           {PESTANAS.map(([k, t, I]) => (
             <button key={k} onClick={() => setTab(k)}

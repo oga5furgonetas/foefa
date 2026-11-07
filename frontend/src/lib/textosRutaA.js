@@ -357,4 +357,10 @@ export const A = {
   "Uno más": ["One more", "Mais um", "Un de plus", "Uno in più", "Eins mehr"],
   // Fusión final (07-11-2026): el paso 3 del recorrido de la primera vez ya no manda a «Empezar a navegar» (se fue de «Hoy»): el botón es «Ir».
   "Pulsa «Ir»: te lleva con voz a cada puerta. Al llegar, «Entregado» con foto o firma, y pasa a la siguiente.": ["Tap «Go»: it guides you by voice to each door. When you arrive, «Delivered» with a photo or signature, and on to the next.", "Toca em «Ir»: leva-te com voz a cada porta. Ao chegar, «Entregue» com foto ou assinatura, e passa à seguinte.", "Touchez « Y aller » : guidage vocal jusqu’à chaque porte. À l’arrivée, « Livré » avec photo ou signature, et on passe au suivant.", "Tocca «Vai»: ti guida con la voce a ogni porta. All’arrivo, «Consegnato» con foto o firma, e si passa alla successiva.", "Tippe auf «Los»: Die App führt dich per Sprache zu jeder Tür. Bei Ankunft «Zugestellt» mit Foto oder Unterschrift, dann zum nächsten."],
+  // Revisor, hallazgos 6 y 8 (07-11-2026): el aviso de los días de prueba con el texto y la acción por separado («Ver mi plan» salía
+  // dos veces) y la pista del bono de la ruta vacía sin «aquí abajo» (la promo va ahora debajo de los botones, no encima).
+  "Quedan {n} días de prueba": ["{n} trial days left", "Faltam {n} dias de teste", "Il reste {n} jours d’essai", "Mancano {n} giorni di prova", "Noch {n} Testtage"],
+  "Queda 1 día de prueba": ["1 trial day left", "Falta 1 dia de teste", "Il reste 1 jour d’essai", "Manca 1 giorno di prova", "Noch 1 Testtag"],
+  "Ver mi plan": ["See my plan", "Ver o meu plano", "Voir mon offre", "Vedi il mio piano", "Mein Tarif"],
+  "Empieza con los paquetes de hoy: foto a la etiqueta de cada uno.": ["Start with today’s parcels: snap each label.", "Começa com os volumes de hoje: uma foto à etiqueta de cada um.", "Commencez avec les colis du jour : photographiez chaque étiquette.", "Inizia con i pacchi di oggi: una foto all’etichetta di ognuno.", "Fang mit den Paketen von heute an: fotografiere jedes Etikett."],
 }

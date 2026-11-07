@@ -11,7 +11,9 @@
      «Escuchar la siguiente parada»), «Ver la puerta» (situada y no aproximada; Street View con el rumbo que calcula el
      servidor, piezas/HojaParada useFachada), «Hueco», «Memoria de la puerta» y «Editar» (nombre «Editar parada: …»).
    - Fila de 52: FilaCierre («No recogido» / «Recogido» en las recogidas).
-   Fuera el rótulo «SIGUIENTE PARADA», el teléfono escrito, «1 bulto», los chips-botón y los botones grises sin teléfono. */
+   Fuera el rótulo «SIGUIENTE PARADA», el teléfono escrito, «1 bulto», los chips-botón y los botones grises sin teléfono.
+   Medida (07-11-2026, hallazgo 5 del revisor): con los datos de 10-hoy a 360×780, 280 (era 292: la fila de acciones a 8 de las notas
+   y no a 12, y las notas con 4 de relleno arriba y abajo). */
 import { ChevronRight, Eye, KeyRound, MessageCircle, Navigation, Package, Pencil, Phone, Volume2 } from 'lucide-react'
 import { tx } from '../../../lib/idioma'
 import Boton from './Boton'
@@ -100,7 +102,7 @@ export default function TarjetaSiguiente({
         </div>
       )}
       <NotasPuerta p={p} maxLineas={2} onMemoria={onMemoria ? () => onMemoria(p) : undefined} className="mt-2" />
-      <div className="mt-3 flex items-center gap-2">
+      <div className="mt-2 flex items-center gap-2">
         {/* Con las cuatro acciones a 280 de ancho «Ir» se queda en 52: el texto pasa a solo-lector y queda el icono. */}
         {hrefIr
           ? <Boton variante="normal" icono={Navigation} texto={textoIr} href={hrefIr} target="_blank" rel="noreferrer" className="min-w-0 flex-1" />

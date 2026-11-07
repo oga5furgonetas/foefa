@@ -122,6 +122,93 @@ test('Mapa en vivo · la ventana de una parada cabe en el mapa a 360 y a 280, si
   }
 })
 
+/* LAS PÍLDORAS Y LAS CAPAS NO SE PISAN (07-11-2026, revisor, hallazgo 2). Con las tres capas a la vez (C/D, DGT y ZBE: lo normal en
+   España) la píldora de lo que hay por las calles («{km} · {t}») y la de «{n} sin situar», que iban arriba a la izquierda, pisaban
+   las capas a 360 («C/D») y a 280 tapaban «C/D» y «DGT», que ni se veían ni se podían pulsar; y a 280 las capas chocaban con el zoom.
+   Ahora las píldoras van debajo del zoom y las capas hacen dos filas sin pasar del zoom. Ninguna caja se pisa con otra. Y debajo
+   del zoom caen las ventanas de las paradas (medido: a 360 y a 280 las píldoras las tapaban, y a 360 hasta el botón «Ir»): con una
+   ventana abierta, las píldoras se esconden. */
+test('Mapa en vivo · con las tres capas a la vez, las píldoras, las capas y el zoom no se pisan a 360 ni a 280', async ({ page, context }) => {
+  await page.clock.install({ time: new Date('2026-10-29T10:30:00+01:00') })
+  await page.clock.resume()
+  await page.addInitScript(() => {
+    localStorage.setItem('cookie_consent', JSON.stringify({ v: 3, anuncios: false, at: '2026-10-29T00:00:00Z' }))
+    localStorage.setItem('fds_aviso_manana', 'no'); localStorage.setItem('fds_instalar_cerrado', '1'); localStorage.setItem('guia_voz', '0')
+    localStorage.setItem('ruta_vista', 'mapa')
+  })
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await context.grantPermissions(['geolocation'])
+  await context.setGeolocation({ latitude: 43.3636, longitude: -8.4118 })
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'],
+    precios: { mensual: 9.99, anual: 99 }, status: 'active', suscrita: true } }))
+  await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { fuente: 'carreteras', km: 14.2, minutos: 38,
+    linea: [[43.3636, -8.4118], [43.3639, -8.4099]] } }))
+  await page.route(/\/api\/reparto\/mi-ruta\/zonas-carga/, (r) => r.fulfill({ json: { fuente: 'OpenStreetMap', incompleto: false,
+    zonas: [1, 2, 3, 4, 5].map((n) => ({ id: `z${n}`, lat: 43.364 + n / 1000, lng: -8.409, calle: `Rúa ${n}`, horario: 'Mo-Fr 08:00-20:00', maximo: '30 min' })) } }))
+  await page.route(/\/api\/reparto\/mi-ruta\/incidencias/, (r) => r.fulfill({ json: { fuente: 'DGT', publicado: '2026-10-29T10:11:52+01:00', incompleto: false, aplica: true, incidencias: [
+    { id: '1', clase: 'corte', que: 'calzada cortada (obras)', gravedad: 'alta', carretera: 'N-550', pk: '12.1', municipio: 'Culleredo', provincia: 'A Coruña',
+      lat: 43.352, lng: -8.408, desde: '2025-12-12T08:05:19+01:00', distancia_km: 0.9, parada: 1 }] } }))
+  await page.route(/\/api\/reparto\/mi-ruta\/zbe/, (r) => r.fulfill({ json: { fuente: 'DGT', incompleto: false, tipo: 'ZBE', paradas: { p1: { id: 'z1', nombre: 'A Coruña - Marina' } },
+    zonas: [{ id: 'z1', ciudad: 'ACoruña', nombre: 'A Coruña - Marina', descripcion: 'Carga y descarga de 6h a 11h.', estado: 'active', url: '', version: '2023-10-25',
+      etiquetas: ['ECO', 'C'], negado: true, poligonos: [[[43.368, -8.406], [43.37, -8.406], [43.37, -8.404], [43.368, -8.404]]] }] } }))
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, autonomo: true, empresa: '', fecha: '2026-10-29', ia_tickets: false, jornada: {}, aviso_aceptado: true,
+    base: null, ruta: { fin: '10:30', minutos: 30, km: 2, trafico: true },
+    pedidos: [
+      { id: 'p1', cliente: 'Farmacia Sol', direccion: 'Rúa Sinfónica de Galicia 8, A Coruña', estado: 'pendiente', bultos: 1, orden: 1, eta: '10:05', lat: 43.363889, lng: -8.409899 },
+      { id: 'p2', cliente: 'Bar Pepe', direccion: 'Rúa que no está en el mapa 3', estado: 'pendiente', bultos: 1, orden: 2, lat: null, lng: null, geo: 'no' },
+    ] } }))
+
+  // Dos rectángulos se pisan si comparten más de 2 px en los dos ejes.
+  const pisan = (a, b) => a.x < b.x + b.width - 2 && a.x + a.width > b.x + 2 && a.y < b.y + b.height - 2 && a.y + a.height > b.y + 2
+  for (const ancho of [360, 280]) {
+    await page.setViewportSize({ width: ancho, height: 800 })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    const capas = page.getByRole('group', { name: 'Capas del mapa' })
+    await expect(capas.getByRole('button')).toHaveCount(3)
+    await expect(page.getByText('14,2 km · 38 min')).toBeVisible()
+    await expect(page.getByRole('button', { name: '1 sin situar' })).toBeVisible()
+    const cajas = {
+      'C/D': await capas.getByRole('button', { name: /^C\/D/ }).boundingBox(),
+      DGT: await capas.getByRole('button', { name: /^DGT/ }).boundingBox(),
+      ZBE: await capas.getByRole('button', { name: /^ZBE/ }).boundingBox(),
+      zoom: await page.locator('.leaflet-control-zoom').boundingBox(),
+      'la píldora de la ruta': await page.getByText('14,2 km · 38 min').locator('..').boundingBox(),
+      'la píldora de sin situar': await page.getByRole('button', { name: '1 sin situar' }).boundingBox(),
+    }
+    const mapa = await page.locator('.leaflet-container').boundingBox()
+    const nombres = Object.keys(cajas)
+    for (let i = 0; i < nombres.length; i += 1) {
+      const a = cajas[nombres[i]]
+      expect(a.x, `${nombres[i]} dentro del mapa por la izquierda a ${ancho}`).toBeGreaterThanOrEqual(mapa.x - 1)
+      expect(a.x + a.width, `${nombres[i]} dentro del mapa por la derecha a ${ancho}`).toBeLessThanOrEqual(mapa.x + mapa.width + 1)
+      for (let j = i + 1; j < nombres.length; j += 1) {
+        expect(pisan(a, cajas[nombres[j]]), `${nombres[i]} pisa a ${nombres[j]} a ${ancho}: ${JSON.stringify([a, cajas[nombres[j]]])}`).toBe(false)
+      }
+    }
+    // Las capas, a la derecha del zoom: nunca por debajo de su borde derecho.
+    const grupo = await capas.boundingBox()
+    expect(grupo.x, `las capas pasan del zoom a ${ancho}`).toBeGreaterThanOrEqual(cajas.zoom.x + cajas.zoom.width - 1)
+    // Con la ventana de una parada abierta las píldoras se esconden: ahí, a la izquierda, caen las ventanas y las píldoras, por
+    // encima de ellas, les tapaban hasta el botón «Ir» (medido a 360 y a 280); al cerrarla, vuelven.
+    await page.locator('.leaflet-marker-icon[title="Farmacia Sol"]').click()
+    const ventana = page.locator('.leaflet-popup').last()
+    await expect(ventana).toContainText('1 · Farmacia Sol')
+    await expect(page.getByText('14,2 km · 38 min')).toBeHidden()
+    await expect(page.getByRole('button', { name: '1 sin situar' })).toBeHidden()
+    const ir = ventana.getByRole('button', { name: 'Ir', exact: true })
+    await expect.poll(() => ir.evaluate((el) => {
+      const b = el.getBoundingClientRect()
+      const h = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)
+      return !!h && el.contains(h)
+    }), { message: `«Ir» de la ventana, tapado a ${ancho}` }).toBe(true)
+    await ventana.locator('.leaflet-popup-close-button').click()
+    await expect(page.getByText('14,2 km · 38 min')).toBeVisible()
+    await expect(page.getByRole('button', { name: '1 sin situar' })).toBeVisible()
+  }
+})
+
 /* El mapa es el mismo componente en el panel de escritorio (riesgo 11 de la especificación): ahí el zoom de Leaflet se queda como
    estaba (la regla de 48 es de la app de reparto, `.app-ruta`) y «Centrar la ruta» es el BotonMapa de 48. */
 test('Mapa en vivo · el mapa del panel de reparto conserva su zoom de Leaflet y lleva el botón de 48', async ({ page }) => {
