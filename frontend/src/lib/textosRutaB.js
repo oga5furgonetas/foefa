@@ -989,7 +989,6 @@ export const B = {
   "Entrega verificada por IA": ["Delivery verified by AI", "Entrega verificada por IA", "Livraison vérifiée par l’IA", "Consegna verificata dall’IA", "Zustellung per KI bestätigt"],
   "Entrega verificada: la foto enseña el paquete en tu dirección.": ["Verified delivery: the photo shows the parcel at your address.", "Entrega verificada: a foto mostra a encomenda na tua morada.", "Livraison vérifiée : la photo montre le colis à ton adresse.", "Consegna verificata: la foto mostra il pacco al tuo indirizzo.", "Zustellung bestätigt: Das Foto zeigt das Paket an deiner Adresse."],
   // LA MEMORIA DE LA CALLE (01-11-2026): el portal, dónde dejar y cómo se entra, para la próxima vez.
-  "Guardar para la próxima": ["Save for next time", "Guardar para a próxima", "Garder pour la prochaine fois", "Salva per la prossima volta", "Fürs nächste Mal merken"],
   "Memoria de la puerta: {t}": ["Door memory: {t}", "Memória da porta: {t}", "Mémoire de la porte : {t}", "Memoria della porta: {t}", "Gemerkt zur Tür: {t}"],
   "portal {c}": ["door code {c}", "portão {c}", "code {c}", "portone {c}", "Code {c}"],
   "dejar {d}": ["leave {d}", "deixar {d}", "laisser {d}", "lasciare {d}", "ablegen: {d}"],

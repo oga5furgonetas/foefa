@@ -27,27 +27,6 @@ export function textoMemoria(m) {
   return partes.join(', ')
 }
 
-/* Lo que enseña la tarjeta de la parada, hasta que NotasPuerta lo sustituya (W2; lo quita F). Solo con los tokens del
-   diseño compacto (07-11-2026): lo que hace, igual. */
-export default function MemoriaPuerta({ m, onEditar, className = '' }) {
-  const t = textoMemoria(m)
-  if (!t) {
-    return (
-      <button type="button" onClick={onEditar}
-        className={`inline-flex min-h-8 items-center gap-1 rounded-lg border border-dashed border-ruta-borde px-2 text-etiqueta text-dark-400 ${className}`}>
-        <KeyRound size={14} aria-hidden="true" /> {tx('Guardar para la próxima')}
-      </button>
-    )
-  }
-  return (
-    <button type="button" data-testid="memoria" onClick={onEditar}
-      className={`flex w-full items-start gap-2 rounded-lg bg-dark-800 px-2 py-1 text-left text-sec text-dark-50 ${className}`}>
-      <KeyRound size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-      <span>{tx('Memoria de la puerta: {t}', { t })}</span>
-    </button>
-  )
-}
-
 /* LA HOJA (diseño compacto, 07-11-2026, §5.3), sobre piezas/Hoja: «Memoria de la puerta» con la dirección de subtítulo y
    «La ven tus compañeros · se borra al año» (la frase larga, en el «?»); el código del portal (si el cliente lo dio en su
    enlace, ya viene puesto), «¿Dónde?» con los chips cortos y «Cómo se entra» con su ejemplo; en el pie, «Guardar» y, si ya

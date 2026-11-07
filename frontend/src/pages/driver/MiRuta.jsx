@@ -1,13 +1,13 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
-  MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
-  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff, Plus, FileText, Mail, CalendarClock, Lightbulb, History,
-  AlertTriangle, CarFront, Truck, Volume2, ShieldCheck, Copy,
+  ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Package,
+  MessageCircle, Clock, Search, List, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
+  PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, Plus, FileText, Mail,
+  AlertTriangle, Copy,
 } from 'lucide-react'
 import {
   repMiRuta, repZonasCarga, repEscanear, repEscanearLote, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
-  repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado, repFachada, repGanancias,
+  repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado, repGanancias,
   repTraerPrevias, repMisMarcas, repMisDirecciones, repFormasCodigo, repIncidencias, repZbe, getReferidos, repUbicar,
 } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
@@ -134,9 +134,9 @@ const aplicarPuntos = (r, puntos) => {
   }) }
 }
 const MOTIVOS = ['No había nadie', 'Dirección incorrecta', 'Rechazado', 'Fuera de horario', 'Otro']
-/* DÓNDE SE DEJA (10-10-2026, como Circuit/Spoke): un toque en vez de escribirlo.
-   El cliente lo ve en su enlace de seguimiento. Mismas claves que el servidor. */
-const DONDE = [['mano', 'En mano'], ['vecino', 'Al vecino'], ['buzon', 'En el buzón'], ['porteria', 'En portería o recepción'], ['seguro', 'En un lugar seguro']]
+/* DÓNDE SE DEJA (10-10-2026, como Circuit/Spoke): un toque en vez de escribirlo. El cliente lo ve en su enlace de
+   seguimiento. Mismas claves que el servidor. Los chips con su texto corto salen de lib/dejar.js (DONDE_CORTO); la lista
+   larga que había aquí la dejó sin uso el diseño compacto (08-11-2026). */
 const CON_QUIEN = ['mano', 'vecino', 'porteria']
 const VACIO = { codigo: '', cliente: '', telefono: '', direccion: '', contenido: '', bultos: 1, notas: '', horario: '', prioridad: false, cobrar: '', tipo: 'entrega', hueco: '' }
 

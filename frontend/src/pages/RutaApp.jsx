@@ -1,8 +1,8 @@
 import { useTitulo } from '../lib/titulo'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Route, History, Settings2, UserCircle2, Loader2, CheckCircle2, XCircle, Package, Euro, ChevronRight, ChevronDown, ArrowLeft,
-  MapPin, Phone, Camera, Clock, RotateCcw, FileSpreadsheet, X,
+  Route, History, Settings2, UserCircle2, Loader2, CheckCircle2, XCircle, Package, Euro, ChevronRight, ChevronDown,
+  MapPin, Phone, Camera, Clock, RotateCcw, FileSpreadsheet,
 } from 'lucide-react'
 import MiRuta from './driver/MiRuta'
 import { Cabecera, Hoja, ContenedorLista, Boton } from './driver/piezas'
@@ -11,7 +11,6 @@ import {
   getRepartoAjustes, getRepartoEntregasMes,
 } from '../panel/api'
 import { enAppPlay } from '../lib/enApp'
-import { MARCA } from '../marca'
 import { medirAccion } from '../lib/analitica'
 import { servicioPlay, comprasPlay } from '../lib/playBilling'
 import { enviarPendiente, olvidarPendiente } from '../lib/metaPixel'

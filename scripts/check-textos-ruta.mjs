@@ -43,6 +43,8 @@ for (const f of readdirSync(join(raiz, 'pages/driver/piezas')).sort()) if (/\.js
 const DE_DATOS = ['Repartidor', 'Bizum', 'Transferencia']
 // Listas cuyos textos se traducen al pintarlos.
 const LISTAS = ['MOTIVOS', 'DONDE', 'DONDE_CORTO', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO', 'VENTAJAS', 'FORMAS', 'DEJAR', 'ATAJOS_HORARIO',
+  // Dónde se dejó, en las frases de «La última vez» y de la memoria de la puerta (08-11-2026): tx(SITIO[donde]).
+  'SITIO', 'SITIOS',
   // La portada (/): lo que hace la app, la IA y lo de la empresa.
   'PASOS_PORTADA', 'FUNCIONES_RUTA', 'PREGUNTAS_PORTADA', 'IA_PORTADA', 'MODULOS_EMPRESA',
   // La guía de iPhone (/iphone).
