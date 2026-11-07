@@ -43,18 +43,19 @@ test('Ruta · editar una parada y quitarla con doble toque', async ({ page }) =>
     base: null, ruta: { fin: '10:30', minutos: 30, km: 2, trafico: true }, pedidos } }))
 
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  const sig = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
+  const sig = page.getByRole('region', { name: 'Siguiente parada' })
   await expect(sig.getByText('Farmacia Sol')).toBeVisible()
 
   // Con paradas cargadas (17-10-2026), añadir va en el botón «+»: la hoja trae escanear, el código y lo demás.
-  await expect(page.getByPlaceholder('o escribe el código')).toHaveCount(0)
+  await expect(page.getByPlaceholder('Código')).toHaveCount(0)
   await page.getByRole('button', { name: 'Añadir paradas' }).click()
   await expect(page.getByRole('dialog', { name: 'Añadir paradas' }).getByRole('button', { name: 'Escanear', exact: true })).toBeVisible()
-  await expect(page.getByPlaceholder('o escribe el código')).toBeVisible()
+  await expect(page.getByPlaceholder('Código')).toBeVisible()
   await page.getByRole('dialog', { name: 'Añadir paradas' }).getByRole('button', { name: 'Cerrar' }).click()
 
   // Editar: se abre la hoja con los datos de la parada y sin la foto del ticket.
-  await sig.getByRole('button', { name: /Editar parada: Farmacia Sol/ }).click()
+  await sig.getByRole('button', { name: 'Más opciones' }).click()
+  await page.getByRole('menuitem', { name: /Editar parada: Farmacia Sol/ }).click()
   await expect(page.getByRole('heading', { name: 'Editar parada' })).toBeVisible()
   await expect(page.getByText('Foto del ticket')).toHaveCount(0)
   await page.getByPlaceholder('Dirección completa').fill('Montero Ríos 12')
@@ -68,7 +69,8 @@ test('Ruta · editar una parada y quitarla con doble toque', async ({ page }) =>
   await expect(page.getByText('Farmacia Sol 2')).toBeVisible()
 
   // Quitar: el primer toque pide confirmar, el segundo la quita.
-  await page.getByRole('button', { name: /Editar parada: Farmacia Sol 2/ }).click()
+  await sig.getByRole('button', { name: 'Más opciones' }).click()
+  await page.getByRole('menuitem', { name: /Editar parada: Farmacia Sol 2/ }).click()
   await page.getByRole('button', { name: 'Quitar esta parada' }).click()
   expect(quitados).toEqual([])
   await page.getByRole('button', { name: '¿Seguro? Toca otra vez para quitarla' }).click()

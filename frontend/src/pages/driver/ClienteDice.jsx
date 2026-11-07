@@ -1,10 +1,12 @@
+/* diseño compacto */
 import { MessageSquareText } from 'lucide-react'
 import { tx } from '../../lib/idioma'
 
 /* EL CLIENTE TE AYUDA ANTES DE LLEGAR (30-10-2026). Lo que el cliente contestó en su enlace de seguimiento (si
    estará, dónde dejarlo si no, el código del portal, una franja): el servidor lo guarda en la parada como
    `cliente_dice` y aquí se enseña en la tarjeta (MiRuta) y al llegar (Navegacion). Mismas claves que el servidor;
-   los sitios, los mismos textos que «¿Dónde lo dejas?» de la hoja de entrega. */
+   los sitios, los mismos textos que «¿Dónde lo dejas?» de la hoja de entrega. Desde el diseño compacto (07-11-2026) la
+   tarjeta y la hoja de la parada lo pintan con piezas/NotasPuerta, que toma de aquí el texto. */
 const DEJAR = { buzon: 'En el buzón', porteria: 'En portería o recepción', vecino: 'Al vecino', seguro: 'En un lugar seguro', punto_recogida: 'En un punto de recogida' }
 
 export function textoClienteDice(d) {
@@ -22,8 +24,8 @@ export default function ClienteDice({ d, className = '' }) {
   const texto = textoClienteDice(d)
   if (!texto) return null
   return (
-    <p data-testid="cliente-dice" className={`flex items-start gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[12px] leading-snug text-emerald-100 ${className}`}>
-      <MessageSquareText size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
+    <p data-testid="cliente-dice" className={`flex items-start gap-2 rounded-lg bg-dark-800 px-2 py-1 text-sec text-dark-50 ${className}`}>
+      <MessageSquareText size={14} className="mt-0.5 shrink-0 text-ruta-ok-texto" aria-hidden="true" />
       <span><b>{tx('El cliente dice')}:</b> {texto}</span>
     </p>
   )

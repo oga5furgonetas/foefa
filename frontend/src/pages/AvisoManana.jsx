@@ -1,3 +1,4 @@
+/* diseño compacto */
 import { useEffect, useId, useState } from 'react'
 import { Bell, Loader2, ExternalLink } from 'lucide-react'
 import { tx, txError, useIdioma } from '../lib/idioma'
@@ -6,6 +7,8 @@ import { medirAccion } from '../lib/analitica'
 import { yaEsApp } from '../lib/instalar'
 import { repAvisoManana, repAvisoMananaVer } from '../services/api'
 import { useInstalar, NoSeAbrio } from './InstalarApp'
+import Aviso from './driver/piezas/Aviso'
+import Hoja from './driver/piezas/Hoja'
 
 /* AVISO DE LA MAÑANA (11-10-2026). Medido: casi todos se dan de alta (de noche, en fin de semana) y no
    vuelven el día que reparten. Se les ofrece UN aviso por la mañana, de lunes a sábado, solo si ese día aún
@@ -31,6 +34,8 @@ export function mensajeAviso(r, hora) {
   return tx('No se han podido activar los avisos en este móvil.')
 }
 
+const principal = 'flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 px-4 py-2 text-boton text-brand-tinta disabled:opacity-60'
+
 /* Elegir la hora y activar el aviso, o llevarle a donde se puede activar. Devuelve null si en este móvil no
    hay nada que ofrecer (un navegador sin avisos que tampoco se puede cambiar). */
 export function PedirAviso({ horaInicial, onHecho, textoBoton }) {
@@ -44,12 +49,11 @@ export function PedirAviso({ horaInicial, onHecho, textoBoton }) {
     const nav = ins.iphone ? 'Safari' : 'Chrome'
     return (
       <div className="space-y-2">
-        <p className="text-[13px] leading-snug text-dark-300">
+        <p className="text-texto text-dark-50">
           {tx('Desde aquí el móvil no deja recibir avisos. Ábrela en {nav}: entras ya con tu cuenta y te lo pregunto allí.', { nav })}
         </p>
-        <button type="button" onClick={() => { medirAccion('aviso_manana_fuera'); ins.abrirFuera() }} disabled={ins.ocupado}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta disabled:opacity-60">
-          {ins.ocupado ? <Loader2 size={17} className="animate-spin" /> : <ExternalLink size={17} />}
+        <button type="button" onClick={() => { medirAccion('aviso_manana_fuera'); ins.abrirFuera() }} disabled={ins.ocupado} className={principal}>
+          {ins.ocupado ? <Loader2 size={20} className="animate-spin" aria-hidden="true" /> : <ExternalLink size={20} aria-hidden="true" />}
           {ins.iphone ? tx('Abrir en Safari') : tx('Abrir en Chrome')}
         </button>
         {ins.fallo && <NoSeAbrio iphone={ins.iphone} enlace={ins.enlace} />}
@@ -58,14 +62,14 @@ export function PedirAviso({ horaInicial, onHecho, textoBoton }) {
   }
   if (!pushSupported()) {
     if (ins.iphone && !yaEsApp()) {
-      return <p className="text-[12.5px] leading-snug text-dark-300">{tx('En iPhone los avisos llegan con la app en la pantalla de inicio: pulsa Compartir y «Añadir a pantalla de inicio».')}</p>
+      return <p className="text-sec text-dark-400">{tx('En iPhone los avisos llegan con la app en la pantalla de inicio: pulsa Compartir y «Añadir a pantalla de inicio».')}</p>
     }
     return null
   }
   let denegado = false
   try { denegado = Notification.permission === 'denied' } catch { denegado = false }
   if (denegado) {
-    return <p className="text-[12.5px] leading-snug text-dark-300">{tx('El móvil no ha dado permiso para avisos. Puedes activarlo en los ajustes del navegador.')}</p>
+    return <p className="text-sec text-dark-400">{tx('El móvil no ha dado permiso para avisos. Puedes activarlo en los ajustes del navegador.')}</p>
   }
 
   async function activar() {
@@ -84,54 +88,88 @@ export function PedirAviso({ horaInicial, onHecho, textoBoton }) {
 
   return (
     <div>
-      <p id={idHora} className="text-[13px] font-semibold text-dark-100">{tx('¿A qué hora cargas la furgoneta?')}</p>
-      <div role="radiogroup" aria-labelledby={idHora} className="mt-2 grid grid-cols-4 gap-1.5">
+      <p id={idHora} className="text-boton text-dark-50">{tx('¿A qué hora cargas la furgoneta?')}</p>
+      <div role="radiogroup" aria-labelledby={idHora} className="mt-2 grid grid-cols-4 gap-2">
         {HORAS_CARGA.map((h) => (
           <button key={h} type="button" role="radio" aria-checked={hora === h} onClick={() => setHora(h)}
-            className={`rounded-lg border py-2 text-[13.5px] font-semibold tabular-nums ${hora === h
-              ? 'border-brand-400 bg-brand-500/20 text-brand-200' : 'border-dark-700 text-dark-200'}`}>
+            className={`min-h-12 rounded-lg border text-boton tabular-nums ${hora === h ? 'border-ruta-marca bg-ruta-marca-tinte text-ruta-marca-tinte-texto' : 'border-ruta-borde text-dark-50'}`}>
             {etiqueta(h)}
           </button>
         ))}
       </div>
-      <button type="button" onClick={activar} disabled={ocupado}
-        className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta disabled:opacity-60">
-        {ocupado ? <Loader2 size={17} className="animate-spin" /> : <Bell size={17} />}
+      <button type="button" onClick={activar} disabled={ocupado} className={`mt-3 ${principal}`}>
+        {ocupado ? <Loader2 size={20} className="animate-spin" aria-hidden="true" /> : <Bell size={20} aria-hidden="true" />}
         {textoBoton || tx('Avísame a las {hora}', { hora: etiqueta(hora) })}
       </button>
-      <p className="mt-1.5 text-[12px] leading-snug text-dark-400">{tx('De lunes a sábado, solo los días que aún no hayas metido paquetes.')}</p>
+      <p className="mt-2 text-sec text-dark-400">{tx('De lunes a sábado, solo los días que aún no hayas metido paquetes.')}</p>
     </div>
   )
 }
 
-/* La tarjeta de la pestaña «Hoy», para quien no lo eligió en la bienvenida. */
-export default function AvisoManana({ toast }) {
-  useIdioma()
+/* Si toca preguntarlo ahora: un navegador con avisos, sin contestar todavía y sin haberlo pedido o rechazado antes. */
+function verAhora() {
+  try { return pushSupported() && Notification.permission === 'default' && !localStorage.getItem(CLAVE) } catch { return false }
+}
+/* Para quien elige el aviso de «Hoy» (RutaApp, 07-11-2026, diseño compacto): se vuelve a mirar al contestar
+   (evento `fds-aviso-manana`, que también manda la bienvenida). */
+export function useVerAvisoManana() {
   const [ver, setVer] = useState(false)
   useEffect(() => {
-    try {
-      if (pushSupported() && Notification.permission === 'default' && !localStorage.getItem(CLAVE)) setVer(true)
-    } catch { /* sin almacenamiento o sin avisos: no se ofrece */ }
-    const ya = () => setVer(false)
+    setVer(verAhora())
+    const mirar = () => setVer(verAhora())
+    window.addEventListener('fds-aviso-manana', mirar)
+    return () => window.removeEventListener('fds-aviso-manana', mirar)
+  }, [])
+  return ver
+}
+
+/* La tarjeta de la pestaña «Hoy», para quien no lo eligió en la bienvenida. Con `compacto` (07-11-2026, §5.1 b), un Aviso
+   de una línea: «¿Te aviso por la mañana?» + «Avísame a las 8:00» (abre la hoja con la hora) + ✕ «No, gracias». */
+export default function AvisoManana({ toast, compacto = false }) {
+  useIdioma()
+  const [ver, setVer] = useState(false)
+  const [hoja, setHoja] = useState(false)
+  useEffect(() => {
+    setVer(verAhora())
+    const ya = () => setVer(verAhora())
     window.addEventListener('fds-aviso-manana', ya)
     return () => window.removeEventListener('fds-aviso-manana', ya)
   }, [])
   if (!ver) return null
-  const cerrar = (v) => { try { localStorage.setItem(CLAVE, v) } catch { /* nada */ } setVer(false) }
+  const cerrar = (v) => {
+    try { localStorage.setItem(CLAVE, v) } catch { /* nada */ }
+    setVer(false)
+    window.dispatchEvent(new Event('fds-aviso-manana'))
+  }
+  const hecho = (r, hora) => {
+    const m = mensajeAviso(r, hora)
+    if (r === 'ok' && hora) toast?.success(m)
+    else toast?.error(m)
+    setHoja(false)
+    setVer(false)
+  }
 
+  if (compacto) {
+    return (
+      <div role="region" aria-label={tx('Aviso por la mañana')}>
+        <Aviso tono="neutro" icono={Bell} texto={tx('¿Te aviso por la mañana?')} accion={tx('Avísame a las {hora}', { hora: etiqueta('08:00') })} onAccion={() => setHoja(true)}
+          onCerrar={() => { medirAccion('aviso_manana_no'); cerrar('no') }} nombreCerrar={tx('No, gracias')} />
+        {hoja && (
+          <Hoja titulo={tx('Aviso por la mañana')} onClose={() => setHoja(false)}>
+            <div className="pt-2"><PedirAviso onHecho={hecho} /></div>
+          </Hoja>
+        )}
+      </div>
+    )
+  }
   return (
-    <div className="mx-auto mb-3 max-w-md rounded-2xl border border-sky-400/30 bg-sky-500/[.08] px-3.5 py-3" role="region" aria-label={tx('Aviso por la mañana')}>
-      <p className="mb-2.5 flex items-start gap-2 text-[13.5px] font-semibold leading-snug text-sky-100">
-        <Bell size={17} className="mt-0.5 shrink-0" /> {tx('¿Te aviso por la mañana para cargar tu ruta?')}
+    <div className="mx-auto mb-3 max-w-md rounded-xl bg-dark-900 p-3" role="region" aria-label={tx('Aviso por la mañana')}>
+      <p className="mb-3 flex items-start gap-2 text-boton text-dark-50">
+        <Bell size={18} className="mt-0.5 shrink-0 text-ruta-marca" aria-hidden="true" /> {tx('¿Te aviso por la mañana?')}
       </p>
-      <PedirAviso onHecho={(r, hora) => {
-        const m = mensajeAviso(r, hora)
-        if (r === 'ok' && hora) toast?.success(m)
-        else toast?.error(m)
-        setVer(false)
-      }} />
+      <PedirAviso onHecho={hecho} />
       <button onClick={() => { medirAccion('aviso_manana_no'); cerrar('no') }}
-        className="mt-2 w-full py-1.5 text-center text-[13px] font-semibold text-dark-400">{tx('No, gracias')}</button>
+        className="mt-2 min-h-12 w-full py-2 text-center text-boton text-dark-400">{tx('No, gracias')}</button>
     </div>
   )
 }
@@ -165,18 +203,18 @@ export function AvisoCuenta({ toast }) {
   }
 
   return (
-    <section className="mt-4 rounded-3xl border border-dark-700 bg-dark-900 p-4" aria-label={tx('Aviso por la mañana')}>
+    <section className="mt-4 rounded-xl bg-dark-900 p-4" aria-label={tx('Aviso por la mañana')}>
       {activo ? (<>
-        <label className="flex items-center justify-between gap-3 text-[14px] font-semibold text-dark-100">
+        <label className="flex items-center justify-between gap-3 text-boton text-dark-50">
           🔔 {tx('Aviso por la mañana')}
           <select value={hora} onChange={(e) => cambiar(e.target.value)} aria-label={tx('¿A qué hora cargas la furgoneta?')}
-            className="rounded-xl border border-dark-700 bg-dark-950 px-3 py-2 text-[14px] tabular-nums text-dark-50">
+            className="campo w-auto px-3 py-2 tabular-nums">
             {HORAS_CARGA.concat(HORAS_CARGA.includes(hora) ? [] : [hora]).map((h) => <option key={h} value={h}>{etiqueta(h)}</option>)}
           </select>
         </label>
-        <p className="mt-1.5 text-[12px] leading-snug text-dark-400">{tx('De lunes a sábado, solo los días que aún no hayas metido paquetes.')}</p>
+        <p className="mt-2 text-sec text-dark-400">{tx('De lunes a sábado, solo los días que aún no hayas metido paquetes.')}</p>
       </>) : (<>
-        <p className="mb-2.5 text-[14px] font-semibold text-dark-100">🔔 {tx('Aviso por la mañana')}</p>
+        <p className="mb-3 text-boton text-dark-50">🔔 {tx('Aviso por la mañana')}</p>
         <PedirAviso horaInicial={hora} onHecho={(r, h) => {
           const m = mensajeAviso(r, h)
           if (r === 'ok') { setActivo(true); if (h) setHora(h) }

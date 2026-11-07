@@ -61,8 +61,12 @@ test.describe('la entrega verificada', () => {
     // «Está bien así» la deja; en lo hecho queda el aviso y «Repetir la foto».
     await page.getByRole('button', { name: 'Está bien así' }).click()
     await expect(revisar).toHaveCount(0)
-    await page.getByText('1 hechos hoy').click()
-    const hecha = page.locator('details').filter({ hasText: 'Bea' })
+    await page.getByText('Hechas hoy · 1').click()
+    const fila = page.locator('details').filter({ hasText: 'Bea' })
+    await expect(fila).toContainText('Revisar la foto')
+    // El aviso de la IA y «Repetir la foto», en la hoja de la parada (07-11-2026, diseño compacto).
+    await fila.getByRole('button', { name: /Ver la parada 1: Bea/ }).click()
+    const hecha = page.getByRole('dialog', { name: 'Bea' })
     await expect(hecha).toContainText('En la foto se lee el número 7 y la parada es el 5')
     await hecha.getByRole('button', { name: /Repetir la foto/ }).click()
     await expect(revisar).toBeVisible()
@@ -72,6 +76,8 @@ test.describe('la entrega verificada', () => {
     expect(estados).toHaveLength(2)
     expect(estados[1].estado).toBe('entregado')
     expect(estados[1].foto).toMatch(/^data:image\/jpeg;base64,/)
+    await expect(fila).toContainText('Verificada por IA')
+    await fila.getByRole('button', { name: /Ver la parada 1: Bea/ }).click()
     await expect(hecha).toContainText('Entrega verificada por IA')
     await expect(hecha).not.toContainText('Repetir la foto')
   })

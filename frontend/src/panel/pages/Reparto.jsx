@@ -20,6 +20,7 @@ import { usePlan } from '../../lib/usePlan'
 import { IDIOMAS, idioma, cambiarIdioma, useIdioma, tx, locale } from '../../lib/idioma'
 import MiRuta, { ElegirNavegador } from '../../pages/driver/MiRuta'
 import AjustesMovil from '../../pages/driver/AjustesMovil'
+import Cabecera from '../../pages/driver/piezas/Cabecera'
 import { fijarPais, importe, simboloMoneda } from '../../lib/region'
 
 /* ── REPARTO A DOMICILIO Y A NEGOCIOS ────────────────────────────────────────
@@ -648,6 +649,18 @@ export function Ajustes({ conductores, toast, autonomo }) {
       </aside>}
       </div>
     </div>
+  )
+}
+
+/* «Ajustes» DENTRO DE LA APP DE REPARTO (diseño compacto, 07-11-2026, §5.11): la misma pantalla que ve el panel, con su
+   Cabecera (56, fija, sin logo) como las demás pestañas. Aparte de `Ajustes` para que el panel no la lleve: ahí la
+   cabecera ya la pone `Reparto`, aunque la cuenta sea de quien reparte solo (`autonomo`). La usa RutaApp. */
+export function AjustesApp(props) {
+  return (
+    <>
+      <Cabecera titulo={tx('Ajustes')} fija className="-mx-4 mb-3" />
+      <Ajustes {...props} />
+    </>
   )
 }
 

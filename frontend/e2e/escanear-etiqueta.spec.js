@@ -74,7 +74,7 @@ test('Escanear · una etiqueta con la barra y un 2D aparte (como GLS) añade la 
   await page.waitForTimeout(120)
   await page.evaluate(() => { window.__ahora = ['ZX81234567', 'ES|28013|MADRID|MARIA LOPEZ|GRAN VIA 32|612345678'] })
   const hecho = page.getByRole('status').filter({ hasText: 'Añadida a tu ruta' })
-  await expect(hecho).toContainText('MARIA LOPEZ · GRAN VIA 32, 28013, MADRID')
+  await expect(hecho).toContainText('Añadida a tu ruta · MARIA LOPEZ')
   expect(buscados).toContain('ZX81234567')
   expect(creados).toHaveLength(1)
   expect(creados[0]).toMatchObject({ codigo: 'ZX81234567', telefono: '612345678', cliente: 'MARIA LOPEZ', direccion: 'GRAN VIA 32, 28013, MADRID' })
@@ -103,10 +103,14 @@ test('Escanear · si el 2D solo trae la calle, se abre la hoja para completarla'
 test('Escanear seguidos · guarda la etiqueta completa en lote, evita repetidas y deja la incompleta para revisar', async ({ page }) => {
   const { creados, lotes } = await preparar(page)
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Cargar paquetes: uno tras otro' }).click()
+  await page.getByRole('button', { name: 'Cargar paquetes', exact: true }).click()   // «Cargar paquetes: uno tras otro» ya es «Cargar paquetes» (07-11-2026, diseño compacto)
   await page.getByRole('button', { name: 'Escanear seguidos' }).click()
-  const estado = page.getByRole('status').filter({ hasText: /añadidos|una tras otra/ })
-  await expect(estado).toHaveText(/Pasa las etiquetas una tras otra/)
+  // Diseño compacto (07-11-2026, §5.5): en reposo la barra de abajo solo trae «Listo» (su zona de avisos, vacía); lo que se
+  // cuenta sale al leer.
+  const escaner = page.getByRole('dialog', { name: 'Escanear' })
+  await expect(escaner.getByRole('button', { name: 'Listo' })).toBeVisible()
+  const estado = escaner.getByRole('status')
+  await expect(estado).toBeEmpty()
 
   await page.evaluate((v) => { window.__ahora = [v] }, GS1)
   await expect(estado).toHaveText(/1 añadidos/)
@@ -119,7 +123,7 @@ test('Escanear seguidos · guarda la etiqueta completa en lote, evita repetidas 
   expect(lotes[0]).toHaveLength(1)
   expect(creados[0]).toMatchObject({ codigo: '384123450000000017', cliente: 'Maria Lopez', telefono: '612345678', lat: 40.4203, lng: -3.705 })
 
-  await page.getByRole('dialog', { name: 'Escanear' }).getByRole('button', { name: 'Cerrar' }).click()
+  await escaner.getByRole('button', { name: 'Listo' }).click()
   await expect(page.getByRole('button', { name: 'Revisar 1 paquetes sin dirección' })).toBeVisible()
   // La hoja de carga vuelve con la cuenta: con un paquete se titula «1 paquete cargado» (no «Cargar paquetes»).
   await expect(page.getByRole('dialog', { name: '1 paquete cargado' })).toBeVisible()
@@ -138,7 +142,7 @@ async function abrirPegar(page) {
     await r.fulfill({ json: b.confirmar ? { creados: n, repetidos: 0 } : { n, filas: [] } })
   })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Pegar una lista de direcciones' }).click()
+  await page.getByRole('button', { name: 'Lista u hoja', exact: true }).click()   // el botón es «Lista u hoja»; su hoja guarda el título «Pegar una lista de direcciones»
   return { hoja: page.getByRole('dialog', { name: 'Pegar una lista de direcciones' }), pegados }
 }
 
@@ -195,7 +199,8 @@ test('Mapa · las zonas de carga y descarga cerca de las paradas, y se pueden qu
     { id: 'node5', lat: 43.3713, lng: -8.3992, horario: '', maximo: '', calle: '' }] } }) })
   await page.route(/tile\.openstreetmap\.org/, (r) => r.fulfill({ status: 204 }))
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Mapa' }).click()
+  await page.getByRole('button', { name: 'Ver el mapa' }).click()
+  await page.getByRole('button', { name: 'Lo que hay en tu ruta' }).click()   // las zonas, en su hoja (07-11-2026)
   await expect(page.getByText('2 cerca de tus paradas', { exact: false })).toBeVisible()
   await expect(page.locator('.leaflet-marker-icon', { hasText: 'C/D' })).toHaveCount(2)
   const interruptor = page.getByRole('checkbox', { name: /Zonas de carga y descarga/ })
@@ -204,7 +209,9 @@ test('Mapa · las zonas de carga y descarga cerca de las paradas, y se pueden qu
   // Apagado se recuerda: al volver, ni se piden.
   const antes = pedidas
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Mapa' }).click()
+  // La vista se recuerda: tras recargar el mapa ya está abierto («Ver la lista» en vez de «Ver el mapa»).
+  await expect(page.getByRole('button', { name: 'Ver la lista' })).toBeVisible()
+  await page.getByRole('button', { name: 'Lo que hay en tu ruta' }).click()
   await expect(page.getByRole('checkbox', { name: /Zonas de carga y descarga/ })).not.toBeChecked()
   await page.waitForTimeout(800)
   expect(pedidas).toBe(antes)

@@ -10,6 +10,9 @@ const TONOS = {
   ok: 'bg-ruta-ok text-white',
   peligro: 'bg-ruta-peligro text-white',
   aviso: 'bg-ruta-aviso text-ruta-aviso-texto',
+  // Solo para las capas del mapa (C/D, ZBE; «zona» de §3.6; W5, 07-11-2026): los morados de papel, opacos sobre el
+  // mapa, que es claro con cualquier tema. Un tono más; lo que ya había no cambia.
+  zona: 'bg-violet-100 text-violet-700',
 }
 
 export default function Pastilla({ texto, tono = 'neutro', icono: Icono, onClick, href, nombre, className = '', testid, children, ...resto }) {

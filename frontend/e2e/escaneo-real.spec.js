@@ -97,7 +97,7 @@ async function preparar(page, etiqueta) {
 
 test('Escaneo real · SEUR/DPD (Aztec): calle con portal y piso, teléfono y el punto GPS', async ({ page }) => {
   const { creados, hecho } = await preparar(page, 'seur')
-  await expect(hecho).toContainText('María López · Rúa Real 5, 2º B, 15003, A Coruña', { timeout: 20000 })
+  await expect(hecho).toContainText('Añadida a tu ruta · María López', { timeout: 20000 })   // «✓ Añadida a tu ruta · {cliente}» (07-11-2026, diseño compacto)
   expect(creados).toHaveLength(1)
   expect(creados[0]).toMatchObject({ codigo: '05123456789012', cliente: 'María López', telefono: '612345678', cp: '15003',
     localidad: 'A Coruña', lat: 43.3712, lng: -8.399 })
@@ -106,6 +106,6 @@ test('Escaneo real · SEUR/DPD (Aztec): calle con portal y piso, teléfono y el 
 
 test('Escaneo real · GLS (DataMatrix con la dirección y la barra del bulto)', async ({ page }) => {
   const { creados, hecho } = await preparar(page, 'gls')
-  await expect(hecho).toContainText('Bar O Peto · Calle del Villar 12, Santiago de Compostela', { timeout: 20000 })
+  await expect(hecho).toContainText('Añadida a tu ruta · Bar O Peto', { timeout: 20000 })
   expect(creados[0]).toMatchObject({ codigo: '61234567890', cliente: 'Bar O Peto', telefono: '612345678', localidad: 'Santiago de Compostela' })
 })
