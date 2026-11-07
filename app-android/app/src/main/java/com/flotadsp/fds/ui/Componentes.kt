@@ -421,6 +421,8 @@ fun FilaDeChips(modifier: Modifier = Modifier, contenido: @Composable RowScope.(
 fun Aviso(
     texto: String, tono: Tono = Tono.NEUTRO, icono: ImageVector? = null, accion: String? = null, alAccion: () -> Unit = {},
     alCerrar: (() -> Unit)? = null, nombreCerrar: String = tx("Cerrar"), accion2: String? = null, alAccion2: () -> Unit = {},
+    /** Líneas como mucho (07-11-2026, N6): la ficha enseña entero lo que dice de la etiqueta leída. */
+    maxLineas: Int = 2,
     modifier: Modifier = Modifier,
 ) {
     val (fondo, letra) = tinteDe(tono)
@@ -431,7 +433,7 @@ fun Aviso(
             Row(Modifier.heightIn(min = Alto.boton).padding(start = Esp.m, end = if (alCerrar == null && (accion == null || dosAcciones)) Esp.m else Esp.xs),
                 verticalAlignment = Alignment.CenterVertically) {
                 if (icono != null) { Icon(icono, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(Esp.s)) }
-                Text(texto, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                Text(texto, style = MaterialTheme.typography.bodyMedium, maxLines = maxLineas, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f).padding(vertical = Esp.s))
                 if (accion != null && !dosAcciones) BotonTexto(accion, alAccion, tono = Tono.NEUTRO)
                 if (alCerrar != null) BotonIcono(Icons.Default.Close, nombreCerrar, alCerrar)
@@ -861,18 +863,23 @@ fun ZoomMapa(alAcercar: () -> Unit, alAlejar: () -> Unit, modifier: Modifier = M
 @Composable
 fun Pastilla(
     texto: String, tono: Tono = Tono.NEUTRO, icono: ImageVector? = null, onClick: (() -> Unit)? = null,
-    color: Color? = null, contentColor: Color? = null, modifier: Modifier = Modifier,
+    color: Color? = null, contentColor: Color? = null,
+    /** Líneas como mucho (07-11-2026, N6): las de «Situar» («Sin conexión: …») no caben en una. Con más de una línea
+     *  va con radio 16 y relleno de 8 arriba y abajo: la redonda recortaría las esquinas del texto. */
+    maxLineas: Int = 1,
+    modifier: Modifier = Modifier,
 ) {
     val c = MaterialTheme.colorScheme
     val (fondo, letra) = if (tono == Tono.NEUTRO) c.surfaceContainerLow to c.onSurface else rellenoDe(tono)
+    val forma = if (maxLineas > 1) MaterialTheme.shapes.large else CircleShape
     val contenido: @Composable () -> Unit = {
-        Row(Modifier.heightIn(min = Alto.chip).padding(horizontal = Esp.m), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.heightIn(min = Alto.chip).padding(horizontal = Esp.m, vertical = if (maxLineas > 1) Esp.s else 0.dp), verticalAlignment = Alignment.CenterVertically) {
             if (icono != null) { Icon(icono, contentDescription = null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(Esp.xs)) }
-            Text(texto, style = MaterialTheme.typography.labelMedium.merge(TextoNumero), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(texto, style = MaterialTheme.typography.labelMedium.merge(TextoNumero), maxLines = maxLineas, overflow = TextOverflow.Ellipsis)
         }
     }
-    if (onClick != null) Surface(onClick = onClick, shape = CircleShape, shadowElevation = 3.dp, color = color ?: fondo, contentColor = contentColor ?: letra, modifier = modifier, content = contenido)
-    else Surface(shape = CircleShape, shadowElevation = 3.dp, color = color ?: fondo, contentColor = contentColor ?: letra, modifier = modifier, content = contenido)
+    if (onClick != null) Surface(onClick = onClick, shape = forma, shadowElevation = 3.dp, color = color ?: fondo, contentColor = contentColor ?: letra, modifier = modifier, content = contenido)
+    else Surface(shape = forma, shadowElevation = 3.dp, color = color ?: fondo, contentColor = contentColor ?: letra, modifier = modifier, content = contenido)
 }
 
 /** La atribución del mapa: letra `pie` sobre la superficie al 85 %, radio 6, en una esquina (la pone quien la llama). */

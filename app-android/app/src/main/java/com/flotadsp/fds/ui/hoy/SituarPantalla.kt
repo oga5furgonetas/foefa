@@ -1,3 +1,4 @@
+// diseño compacto
 package com.flotadsp.fds.ui.hoy
 
 import com.flotadsp.fds.ui.tx
@@ -20,7 +21,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -38,20 +38,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -68,7 +64,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
@@ -84,7 +81,18 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.flotadsp.fds.FdsApp
 import com.flotadsp.fds.data.ErrorApi
 import com.flotadsp.fds.ui.Acciones
+import com.flotadsp.fds.ui.Alto
+import com.flotadsp.fds.ui.Atribucion
+import com.flotadsp.fds.ui.BotonIcono
+import com.flotadsp.fds.ui.BotonMapa
+import com.flotadsp.fds.ui.BotonPrincipal
+import com.flotadsp.fds.ui.CampoTexto
+import com.flotadsp.fds.ui.Esp
+import com.flotadsp.fds.ui.LetraMax
+import com.flotadsp.fds.ui.LocalExtra
+import com.flotadsp.fds.ui.Pastilla
 import com.flotadsp.fds.ui.esNoche
+import com.flotadsp.fds.ui.parada.FilaSugerencia
 import com.flotadsp.fds.ui.parada.Sugerencia
 import com.flotadsp.fds.ui.parada.buscarEnMapa
 import kotlinx.coroutines.Dispatchers
@@ -329,27 +337,30 @@ private fun Situando(
         capas.mover(Punto(la, lo), if (s.precision == "calle") 17.0 else 18.0, animar = true)
     }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        // ARRIBA: qué parada es y su dirección, que se puede corregir para buscar.
-        Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 4.dp) {
-            Column(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 4.dp, end = 12.dp, top = 4.dp, bottom = 10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onCerrar) { Icon(Icons.Default.Close, contentDescription = tx("Cerrar")) }
-                    Column(Modifier.weight(1f)) {
-                        Text(tx("Situar la parada"), style = MaterialTheme.typography.titleLarge)
-                        if (cliente.isNotBlank()) Text(cliente, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
+    val c = MaterialTheme.colorScheme
+    val x = LocalExtra.current
+    // EL DISEÑO COMPACTO (07-11-2026, §5.10), solo lo visual: «Situar la parada» queda como nombre de la pantalla (la
+    // cabecera de dos líneas se va y el cliente baja al panel), una fila de 56 con la ✕ y el buscador, una píldora cada
+    // vez sobre el mapa, «Mi ubicación» de 48 abajo a la derecha y el panel con 🗺 y «Es aquí». Los textos, los de antes.
+    Column(Modifier.fillMaxSize().background(c.background).semantics { paneTitle = tx("Situar la parada") }) {
+        // ARRIBA: la ✕ y la dirección, que se puede corregir para buscar (con ⟳ mientras busca).
+        Surface(color = c.surface) {
+            Row(
+                Modifier.fillMaxWidth().statusBarsPadding().heightIn(min = 56.dp).padding(start = Esp.xs, end = Esp.l, top = Esp.xs, bottom = Esp.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BotonIcono(Icons.Default.Close, tx("Cerrar"), onCerrar)
+                Spacer(Modifier.width(Esp.xs))
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                    CampoTexto(
+                        valor = texto, alCambiar = { texto = it; tocado = true; verLista = true },
+                        icono = Icons.Default.Search, ejemplo = tx("Calle, número y población"), nombre = tx("Dirección"),
+                        teclado = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Search),
+                        acciones = KeyboardActions(onSearch = { teclado?.hide() }),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (buscando) CircularProgressIndicator(Modifier.padding(end = Esp.m).size(18.dp), strokeWidth = 2.dp)
                 }
-                OutlinedTextField(
-                    value = texto, onValueChange = { texto = it; tocado = true; verLista = true }, singleLine = true,
-                    label = { Text(tx("Dirección")) }, placeholder = { Text(tx("Calle, número y población")) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = { if (buscando) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) },
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { teclado?.hide() }),
-                    modifier = Modifier.fillMaxWidth().padding(start = 12.dp),
-                )
             }
         }
 
@@ -357,60 +368,62 @@ private fun Situando(
         Box(Modifier.weight(1f).fillMaxWidth()) {
             AndroidView(factory = { mapa }, modifier = Modifier.fillMaxSize(), update = { capas.yo(yo) })
             Chincheta(Modifier.align(Alignment.Center))
-            Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (verLista && sugerencias.isNotEmpty()) {
-                    Lista(sugerencias, atribucion, alElegir = ::elegir, alCerrar = { verLista = false })
-                } else {
-                    Pildora(tx("Mueve el mapa hasta la puerta"))
+            Column(
+                Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(Esp.m),
+                verticalArrangement = Arrangement.spacedBy(Esp.s), horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                val lista = verLista && sugerencias.isNotEmpty()
+                if (lista) Lista(sugerencias, atribucion, alElegir = ::elegir, alCerrar = { verLista = false })
+                LetraMax(1.3f) {
+                    // Una píldora cada vez: «sin red» y «no la encuentro» sustituyen a «Mueve el mapa hasta la puerta».
+                    // «Esa dirección» es la buscada aquí (03-11-2026): las marcas de «Otra calle» ya son con la de la parada.
+                    when {
+                        sinRed -> Pastilla(tx("Sin conexión: no puedo buscar la dirección. Si estás en la puerta, pulsa «Mi ubicación» y «Es aquí»."),
+                            icono = Icons.Default.CloudOff, color = x.guiaPildora, contentColor = Color.White, maxLineas = 3)
+                        !buscando && tocado && sugerencias.none { Situar.deLaBuscada(texto.trim(), it) } && texto.trim().length >= 4 ->
+                            Pastilla(tx("No encuentro esa dirección: mueve el mapa hasta la puerta."), maxLineas = 2)
+                        !lista -> Pastilla(tx("Mueve el mapa hasta la puerta"))
+                    }
+                    if (errMapa.isNotEmpty()) Pastilla(errMapa, icono = Icons.Default.CloudOff, color = x.guiaPildora, contentColor = Color.White, maxLineas = 2)
+                    if (avisoYo.isNotEmpty()) Pastilla(avisoYo, icono = Icons.Default.CloudOff, color = x.guiaPildora, contentColor = Color.White, maxLineas = 2)
                 }
-                if (sinRed) Pildora(tx("Sin conexión: no puedo buscar la dirección. Si estás en la puerta, pulsa «Mi ubicación» y «Es aquí»."), aviso = true)
-                // «Esa dirección» es la buscada aquí (03-11-2026): las marcas de «Otra calle» ya son con la de la parada.
-                else if (!buscando && tocado && sugerencias.none { Situar.deLaBuscada(texto.trim(), it) } && texto.trim().length >= 4) Pildora(tx("No encuentro esa dirección: mueve el mapa hasta la puerta."))
-                if (errMapa.isNotEmpty()) Pildora(errMapa, aviso = true)
-                if (avisoYo.isNotEmpty()) Pildora(avisoYo, aviso = true)
             }
-            Surface(shape = CircleShape, shadowElevation = 3.dp, color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)) {
-                IconButton(onClick = { if (conPermiso()) irAMiPosicion(centrar = true, boton = true) else pedirPermiso.launch(permisos) }, modifier = Modifier.size(52.dp)) {
-                    if (buscandoYo) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Default.MyLocation, contentDescription = tx("Mi ubicación"))
+            // «Mi ubicación» (48), abajo a la derecha, encima del panel; mientras busca la posición, un anillo alrededor.
+            Box(Modifier.align(Alignment.BottomEnd).padding(Esp.m), contentAlignment = Alignment.Center) {
+                LetraMax(1.3f) {
+                    BotonMapa(Icons.Default.MyLocation, tx("Mi ubicación"), onClick = { if (conPermiso()) irAMiPosicion(centrar = true, boton = true) else pedirPermiso.launch(permisos) })
                 }
+                if (buscandoYo) CircularProgressIndicator(Modifier.size(40.dp), strokeWidth = 2.dp, color = c.primary)
             }
-            Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), shape = RoundedCornerShape(6.dp),
-                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)) {
-                Text(tx("© OpenStreetMap · OpenMapTiles"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.clickable { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, "https://www.openstreetmap.org/copyright".toUri())) } }
-                        .padding(horizontal = 6.dp, vertical = 2.dp))
-            }
+            Atribucion(tx("© OpenStreetMap · OpenMapTiles"), modifier = Modifier.align(Alignment.BottomStart).padding(Esp.s)
+                .clickable { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, "https://www.openstreetmap.org/copyright".toUri())) } })
         }
 
-        // ABAJO: lo que hay bajo la chincheta y el botón grande.
-        Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp), shadowElevation = 10.dp) {
-            Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 8.dp).navigationBarsPadding()) {
-                // De lejos la chincheta no está en ninguna puerta (el centro del CP, el país entero): primero, acercarse.
-                val lejos = elegida == null && zoom < ZOOM_PUERTA
-                Text(if (lejos) tx("Acerca el mapa hasta ver la puerta") else (elegida?.direccion ?: debajo)?.let { tx("Aquí: {d}", "d" to it) } ?: tx("Mueve el mapa hasta la puerta"),
-                    style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (direccion.isNotBlank()) Text(direccion, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                error?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp)) }
-                Spacer(Modifier.height(10.dp))
-                Button(
-                    onClick = {
-                        val s = elegida
-                        val p = if (s?.lat != null && s.lng != null) Punto(s.lat, s.lng) else capas.centro() ?: centro
-                        if (p != null) onElegir(p, if (s != null) "sugerencia" else "mapa", s)
-                    },
-                    enabled = !ocupado && (elegida != null || (centro != null && zoom >= ZOOM_PUERTA)),
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                ) {
-                    if (ocupado) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                    else { Icon(Icons.Default.Check, contentDescription = null); Spacer(Modifier.width(8.dp)); Text(tx("Es aquí"), style = MaterialTheme.typography.titleMedium) }
+        // ABAJO, el panel: lo que hay bajo la chincheta, el cliente con su dirección, 🗺 y «Es aquí».
+        Surface(color = c.surfaceContainerLow, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp), shadowElevation = 3.dp) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = Esp.l, vertical = Esp.m).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(Esp.m)) {
+                Column(verticalArrangement = Arrangement.spacedBy(Esp.xs)) {
+                    // De lejos la chincheta no está en ninguna puerta (el centro del CP, el país entero): primero, acercarse.
+                    val lejos = elegida == null && zoom < ZOOM_PUERTA
+                    Text(if (lejos) tx("Acerca el mapa hasta ver la puerta") else (elegida?.direccion ?: debajo)?.let { tx("Aquí: {d}", "d" to it) } ?: tx("Mueve el mapa hasta la puerta"),
+                        style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    val deLaParada = listOf(cliente, direccion).filter { it.isNotBlank() }.joinToString(" · ")
+                    if (deLaParada.isNotBlank()) Text(deLaParada, style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    error?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = c.error) }
                 }
-                if (textoFuera != null) {
-                    TextButton(onClick = onFuera, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                        Text(textoFuera, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                Row(horizontalArrangement = Arrangement.spacedBy(Esp.s), verticalAlignment = Alignment.CenterVertically) {
+                    // «Abrir en Google Maps» (o Waze), de icono: el mismo nombre y el mismo enlace que el texto suelto de antes.
+                    if (textoFuera != null) BotonIcono(Icons.Default.Map, textoFuera, onFuera, relleno = true)
+                    BotonPrincipal(
+                        tx("Es aquí"),
+                        onClick = {
+                            val s = elegida
+                            val p = if (s?.lat != null && s.lng != null) Punto(s.lat, s.lng) else capas.centro() ?: centro
+                            if (p != null) onElegir(p, if (s != null) "sugerencia" else "mapa", s)
+                        },
+                        icono = Icons.Default.Check, enabled = elegida != null || (centro != null && zoom >= ZOOM_PUERTA), cargando = ocupado,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
         }
@@ -421,52 +434,29 @@ private fun Situando(
 @Composable
 private fun Chincheta(modifier: Modifier) {
     Box(modifier) {
-        Box(Modifier.align(Alignment.Center).size(6.dp).background(Color(0x99000000), CircleShape))
+        Box(Modifier.align(Alignment.Center).size(6.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape))
         Icon(Icons.Default.Place, contentDescription = null, tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.align(Alignment.Center).offset(y = (-20).dp).size(48.dp))
     }
 }
 
-@Composable
-private fun Pildora(texto: String, aviso: Boolean = false) {
-    Surface(color = if (aviso) Color(0xFF9A3412) else MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-        contentColor = if (aviso) Color.White else MaterialTheme.colorScheme.onSurface, shape = RoundedCornerShape(14.dp), shadowElevation = 2.dp) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (aviso) { Icon(Icons.Default.CloudOff, contentDescription = null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)) }
-            Text(texto, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
-
-/** Las sugerencias encima del mapa (las del servidor primero, Situar.ordenar), con de dónde salen los datos. */
+/** Las sugerencias encima del mapa (las del servidor primero, Situar.ordenar): cinco como mucho (07-11-2026, §5.10), en
+ *  filas de 48 con `texto` (FilaSugerencia, la misma de la ficha), y de dónde salen los datos. */
 @Composable
 private fun Lista(sugerencias: List<Sugerencia>, atribucion: String?, alElegir: (Sugerencia) -> Unit, alCerrar: () -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(14.dp), shadowElevation = 4.dp) {
-        Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
-            Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(tx("¿Es alguna de estas?"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                IconButton(onClick = alCerrar) { Icon(Icons.Default.Close, contentDescription = tx("Cerrar")) }
+    val c = MaterialTheme.colorScheme
+    Surface(color = c.surfaceContainerLow, shape = MaterialTheme.shapes.medium, shadowElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
+            Row(Modifier.fillMaxWidth().heightIn(min = Alto.boton).padding(start = Esp.m), verticalAlignment = Alignment.CenterVertically) {
+                Text(tx("¿Es alguna de estas?"), style = MaterialTheme.typography.labelMedium, color = c.onSurfaceVariant, modifier = Modifier.weight(1f))
+                BotonIcono(Icons.Default.Close, tx("Cerrar"), alCerrar)
             }
-            sugerencias.forEachIndexed { i, s ->
-                if (i > 0) HorizontalDivider()
-                Row(Modifier.fillMaxWidth().clickable { alElegir(s) }.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(if (s.veces > 0) Icons.Default.History else Icons.Default.Place, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(s.direccion, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        val detalle = when {
-                            s.veces > 0 -> tx("Ya estuviste aquí") + " · ${s.veces} ${if (s.veces == 1) tx("vez") else tx("veces")}"
-                            s.otraCalle -> tx("Otra calle")            // no es la escrita (02-11-2026): va al final
-                            s.precision == "calle" -> tx("Sin el portal")
-                            else -> ""
-                        }
-                        if (detalle.isNotEmpty()) Text(detalle, style = MaterialTheme.typography.bodySmall,
-                            color = if (s.otraCalle && s.veces == 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary)
-                    }
-                }
+            sugerencias.take(5).forEachIndexed { i, s ->
+                if (i > 0) HorizontalDivider(color = c.outlineVariant)
+                FilaSugerencia(s, alElegir = { alElegir(s) }, conCliente = false)
             }
             atribucion?.takeIf { it.isNotBlank() && sugerencias.any { it.fuente == "servidor" } }?.let {
-                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+                Text(it, style = MaterialTheme.typography.labelSmall, color = c.onSurfaceVariant, modifier = Modifier.padding(horizontal = Esp.m, vertical = 6.dp))
             }
         }
     }
