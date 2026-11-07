@@ -1774,7 +1774,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
             {hechos.map((p, i) => (
               <FilaParada key={p.id} p={p} numero={i + 1} onTocar={(x) => setAbierta(x.id)}
                 extra={p.estado === 'fallido' ? (
-                  <div className="grid grid-cols-[1fr_1.2fr] gap-2">
+                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-2 max-[300px]:grid-cols-1">
                     <Boton variante="normal" contorno tono="marca" icono={RotateCcw} texto={tx('Volver a intentarlo')} onClick={() => marcar(p, 'pendiente', '')} disabled={ocupado === p.id} />
                     <Boton variante="normal" tono="ok" icono={Check} texto={p.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')} onClick={() => marcar(p, 'entregado')} disabled={ocupado === p.id} />
                   </div>
@@ -2170,7 +2170,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
           {quitando && nuevo.id && (
             <Hoja titulo={tx('¿Quitar esta parada?')} onClose={() => setQuitando(false)}
               pie={(
-                <div className="grid grid-cols-[1fr_1.2fr] gap-2">
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-2 max-[300px]:grid-cols-1">
                   <Boton variante="normal" contorno tono="neutro" texto={tx('Cancelar')} onClick={() => setQuitando(false)} />
                   <Boton variante="principal" tono="peligro" texto={tx('Quitar de la ruta')} onClick={quitarParada}
                     cargando={ocupado === 'guardar'} disabled={ocupado === 'guardar'} />

@@ -120,7 +120,7 @@ export default function HojaParada({
   else if (p.estado === 'entregado') pie = <Boton variante="normal" contorno tono="peligro" texto={tx('Corregir: no se entregó')} onClick={() => onFallar?.(p)} disabled={ocupado} className="w-full" />
   else {
     pie = (
-      <div className="grid grid-cols-[1fr_1.2fr] gap-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-2 max-[300px]:grid-cols-1">
         <Boton variante="normal" contorno tono="marca" icono={RotateCcw} texto={tx('Volver a intentarlo')} onClick={() => onReintentar?.(p)} disabled={ocupado} />
         <Boton variante="principal" tono="ok" icono={Check} texto={p.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')} onClick={() => onEntregar?.(p)} disabled={ocupado} cargando={ocupado} />
       </div>

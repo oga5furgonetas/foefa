@@ -2222,6 +2222,45 @@ test('Reparto · un no entregado se puede volver a intentar o dar por entregado 
   expect(fallos).toEqual([])
 })
 
+/* A 280 DE ANCHO (un móvil de 360 al 130 % de zoom) «Volver a intentarlo» y «Entregado» de una fallida caben (07-11-2026, revisor,
+   hallazgo 3). Iban en dos columnas `1fr` y `1.2fr` sin `minmax(0, …)` y sin apilarse: «Entregado» salía por la derecha, cortado
+   («En…»), en la fila de «Hechas hoy» y, con «Letra más grande», en la hoja de la fallida. Ahora, como el cierre de la tarjeta
+   (FilaCierre), las columnas se encogen y con 300 o menos van una debajo de otra. */
+test('Reparto · a 280 de ancho, «Volver a intentarlo» y «Entregado» de una fallida caben en su fila y en su hoja, también con letra grande', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.setViewportSize({ width: 280, height: 640 })
+  await rutaDeAna(page, [
+    { id: 'p1', cliente: 'Bar Pepe', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 1, lat: 43.37, lng: -8.40 },
+    { id: 'p2', cliente: 'Farmacia Sol', direccion: 'Avda Montero Ríos 12', estado: 'fallido', motivo: 'No había nadie', bultos: 1, orden: 2 },
+  ])
+  // Dentro de la pantalla (280) y, con 300 o menos, una debajo de otra.
+  const caben = async (ambito, donde) => {
+    const reintentar = await ambito.getByRole('button', { name: 'Volver a intentarlo' }).boundingBox()
+    const entregado = await ambito.getByRole('button', { name: 'Entregado', exact: true }).boundingBox()
+    for (const [nombre, caja] of [['Volver a intentarlo', reintentar], ['Entregado', entregado]]) {
+      expect(caja.x, `«${nombre}» por la izquierda ${donde}`).toBeGreaterThanOrEqual(-0.5)
+      expect(caja.x + caja.width, `«${nombre}» por la derecha ${donde}`).toBeLessThanOrEqual(280.5)
+    }
+    expect(reintentar.y + reintentar.height, `una debajo de otra ${donde}`).toBeLessThanOrEqual(entregado.y + 1)
+  }
+  for (const letra of ['normal', 'grande']) {
+    await page.addInitScript((l) => { try { if (l === 'grande') localStorage.setItem('fds_letra', 'grande'); else localStorage.removeItem('fds_letra') } catch { /* nada */ } }, letra)
+    await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+    // La fila de «Hechas hoy» (abierta por haber una fallida).
+    await expect(page.getByText('1 sin entregar')).toBeVisible()
+    await caben(page.locator('#parada-p2'), `en la fila (letra ${letra})`)
+    // Y su hoja.
+    await page.getByRole('button', { name: /Ver la parada 1: Farmacia Sol/ }).click()
+    const hoja = page.getByRole('dialog', { name: 'Farmacia Sol' })
+    await expect(hoja).toBeVisible()
+    await caben(hoja, `en la hoja (letra ${letra})`)
+    const hojaCaja = await hoja.locator(':scope > div').first().boundingBox()
+    expect(hojaCaja.x + hojaCaja.width, `la hoja no se ensancha (letra ${letra})`).toBeLessThanOrEqual(280.5)
+    await hoja.getByRole('button', { name: 'Cerrar' }).click()
+  }
+  expect(fallos).toEqual([])
+})
+
 test('Historial · cada día en su pantalla, con la prueba de entrega y «Pasar a hoy»', async ({ page }) => {
   const fallos = vigilar(page)
   await entrarRepartidor(page, { status: 'trial', days_left: 6 })
