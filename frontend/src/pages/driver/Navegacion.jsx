@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
@@ -60,7 +60,7 @@ const Reconocedor = typeof window !== 'undefined' ? (window.SpeechRecognition ||
 const leeManos = () => { try { return localStorage.getItem('guia_manos') === '1' } catch { return false } }
 // La explicación larga de manos libres sale la primera vez; después se recuerda en el navegador (07-11-2026, §5.8).
 const leeAyudaManos = () => { try { return localStorage.getItem('guia_manos_ayuda') !== '1' } catch { return true } }
-const sinAcentos = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+const sinAcentos = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 const ORDENES = {
   es: [['deshacer', /\bdeshac(er|e)\b|\bdeshaz\b|\bme he equivocado\b/], ['no_entregado', /\bno (lo |la )?(he )?entregad[oa]\b|\bno esta\b|\bno hay nadie\b|\bausente\b/],
     ['entregado', /\bentregad[oa]\b|\bentregue\b|\bhecho\b|\blisto\b/], ['llegado', /\b(he|ya) llegad[oa]\b|\bllegue\b|\bya estoy\b/],
@@ -84,10 +84,6 @@ const horaMas = (min) => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-/* Lo que va delante del dato en una frase («Búscalo: {sitio}» → «Búscalo: »), para leerlo como nombre accesible mientras a
-   la vista solo queda el dato con su icono (07-11-2026, §4 NotasPuerta). */
-const prefijoDe = (clave, variable) => tx(clave, { [variable]: '\u0001' }).split('\u0001')[0]
-
 /* La última vez en esa puerta, en una línea: la misma frase que pinta AntesPuerta (su caja no cabe en el panel). */
 const SITIO_ANTES = { mano: 'En mano', vecino: 'Al vecino', buzon: 'En el buzón', porteria: 'En portería o recepción', seguro: 'En un lugar seguro' }
 function textoAntes(a) {
@@ -100,8 +96,10 @@ function textoAntes(a) {
 }
 
 /* `onLlegar` (30-10-2026): se avisa a la ruta cuando se llega a la parada (solo o con «Ya he llegado»), para el
-   registro del intento (a qué hora se llegó) y para pedir la posición de la puerta. */
-export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar, onNoEntregar, onEntregarVoz, onDeshacer, enlaceFuera, nombreFuera = 'Google Maps', onLlegar = null }) {
+   registro del intento (a qué hora se llegó) y para pedir la posición de la puerta.
+   `onAlto` (07-11-2026, §5.8): opcional; recibe lo que mide el panel de abajo (y 0 al salir), para que «Deshacer» y los
+   errores se pongan 8 por encima de él (`abajo` del AvisoFlotante). Sin él, la guía hace lo de siempre. */
+export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar, onNoEntregar, onEntregarVoz, onDeshacer, enlaceFuera, nombreFuera = 'Google Maps', onLlegar = null, onAlto = null }) {
   useIdioma()
   useAtras(true, onSalir)   // el «atrás» del móvil sale de la navegación, no de la app
   const [pos, setPos] = useState(null)          // {p:[lat,lng], rumbo}
@@ -127,7 +125,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
   // Lo que mide el panel de abajo, para poner los botones del mapa 12 por encima (y la atribución, 4).
   const panel = useRef(null)
   const [panelAlto, setPanelAlto] = useState(0)
-  useEffect(() => {
+  useLayoutEffect(() => {   // antes de pintar: los botones salen ya encima del panel y no saltan
     const el = panel.current
     if (!el || typeof ResizeObserver === 'undefined') return undefined
     const medir = () => setPanelAlto(el.offsetHeight)
@@ -136,6 +134,10 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
     medir()
     return () => vigia.disconnect()
   }, [])
+  const alAlto = useRef(onAlto)
+  alAlto.current = onAlto
+  useEffect(() => { alAlto.current?.(panelAlto) }, [panelAlto])
+  useEffect(() => () => alAlto.current?.(0), [])
   // Escucha mientras está activado; Chrome corta tras un silencio, así que se vuelve a arrancar.
   useEffect(() => {
     try { localStorage.setItem('guia_manos', manos ? '1' : '0') } catch { /* nada */ }
@@ -293,7 +295,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
   const antes = parada ? textoAntes(parada.antes) : ''
   const notas = !parada ? [] : [
     parada.cobrar > 0 && { icono: Banknote, texto: `${tx('Cobrar')} ${importe(parada.cobrar)}` },
-    parada.hueco && { icono: Package, prefijo: prefijoDe('Búscalo: {sitio}', 'sitio'), texto: tx(parada.hueco) },
+    parada.hueco && { icono: Package, prefijo: tx('Búscalo: {sitio}', { sitio: '' }), texto: tx(parada.hueco) },
     parada.bultos > 1 && { texto: tx('{n} bultos', { n: parada.bultos }) },
     (parada.notas || parada.contenido) && { icono: StickyNote, texto: [parada.contenido, parada.notas].filter(Boolean).join(' · ') },
     dice && { icono: MessageSquareText, prefijo: `${tx('El cliente dice')}: `, texto: dice },
@@ -356,7 +358,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
       </div>
 
       {/* LOS BOTONES SOBRE EL MAPA: en columna a la derecha, 12 por encima del panel. */}
-      <div className="absolute right-3 z-10 flex flex-col gap-2" style={{ bottom: panelAlto + 12 }}>
+      <div data-testid="guia-botones" className="absolute right-3 z-10 flex flex-col gap-2" style={{ bottom: panelAlto + 12 }}>
         <BotonMapa icono={voz ? Volume2 : VolumeX} nombre={voz ? tx('Silenciar la voz') : tx('Activar la voz')} onClick={() => setVoz((v) => !v)} />
         {parada && !haLlegado && <BotonMapa icono={Navigation} nombre={nombreFuera} href={enlaceFuera(parada)} target="_blank" rel="noreferrer" />}
         {Reconocedor && ORDENES[idioma()] && (
@@ -367,7 +369,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
       </div>
 
       {/* ABAJO: el panel de la parada (radio 16 arriba, relleno 12), o al llegar, entregar. */}
-      <div ref={panel} className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-dark-900 p-3 pb-[max(12px,env(safe-area-inset-bottom))] shadow-md">
+      <div ref={panel} data-testid="guia-panel" className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-dark-900 p-3 pb-[max(12px,env(safe-area-inset-bottom))] shadow-md">
         {!parada ? (
           <div className="text-center">
             <p className="text-titulo text-dark-50">{tx('No quedan paradas')}</p>
@@ -395,7 +397,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
               </p>
             )}
             {notas.length > 0 && (
-              <p className="mt-1 truncate text-texto text-dark-200" title={notas.map((n) => `${n.prefijo || ''}${n.texto}`).join(' · ')}>
+              <p data-testid="guia-notas" className="mt-1 truncate text-texto text-dark-200" title={notas.map((n) => `${n.prefijo || ''}${n.texto}`).join(' · ')}>
                 {notas.map((n, i) => (
                   <span key={n.texto}>
                     {i > 0 && ' · '}

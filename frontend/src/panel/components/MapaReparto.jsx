@@ -22,8 +22,9 @@ import Pastilla from '../../pages/driver/piezas/Pastilla'
 
    LO DE ENCIMA, CON LAS PIEZAS DEL DISEÑO COMPACTO (07-11-2026, §5.7): «Seguirme» y «Centrar la ruta» son `BotonMapa`
    de 48, las capas son `Pastilla`s (32 visibles, 48 de toque; tono zona las C/D y ZBE, aviso la DGT), el zoom de Leaflet
-   mide 48 en la app de reparto (`.app-ruta`; en el panel sigue a 30) y las ventanas no se salen de la pantalla (260 de
-   ancho, `keepInView`, la letra del tema y botones de 40). Los dibujos (chinchetas, iconos, líneas) no cambian: por eso
+   mide 48 en la app de reparto (`.app-ruta`; en el panel sigue a 30) y las ventanas no se salen del mapa ni quedan bajo el
+   zoom o las capas (260 de ancho como mucho y lo que quepa, `keepInView`, la letra del tema y botones de 40). Los dibujos
+   (chinchetas, iconos, líneas) no cambian: por eso
    este fichero lleva colores hex en sus SVG y en el CSS de las ventanas, y no la marca de `check-tokens-ruta.mjs`. */
 
 const COLORES = ['#0ea5e9', '#f97316', '#22c55e', '#a855f7', '#ef4444', '#eab308', '#14b8a6', '#ec4899']
@@ -86,9 +87,24 @@ function svgHecho(fallido) {
 const SVG_FURGO = `<svg viewBox="0 0 32 32" width="32" height="32" style="${SOMBRA}"><rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="#0f172a" stroke="#fff" stroke-width="2"/><path d="M5 21v-8.5A1.5 1.5 0 0 1 6.5 11H18l4.6 4.6H26a1.5 1.5 0 0 1 1.5 1.5V21z" fill="#fff"/><path d="M15 13.2h2.6l2.8 2.8H15z" fill="#0f172a"/><circle cx="10" cy="21.3" r="2.5" fill="#0f172a" stroke="#fff" stroke-width="1.8"/><circle cx="22.5" cy="21.3" r="2.5" fill="#0f172a" stroke="#fff" stroke-width="1.8"/></svg>`
 const SVG_BASE = `<svg viewBox="0 0 30 30" width="30" height="30" style="${SOMBRA}"><rect x="1.5" y="1.5" width="27" height="27" rx="7" fill="#0f172a" stroke="#fff" stroke-width="2"/><path d="M6.5 14.5 15 7.5l8.5 7V23h-17z" fill="#fff"/><rect x="13" y="17" width="4" height="6" fill="#0f172a"/></svg>`
 
-// La ventana se aparta del control del zoom (arriba a la izquierda: 10 + 48) y de los bordes (16). Desde el 07-11-2026,
-// 260 de ancho y `keepInView`: a 360 se cortaban por los lados (captura 62 del «antes»).
-const POP = { className: 'fds-pop', maxWidth: 260, minWidth: 190, keepInView: true, autoPanPadding: [16, 16], autoPanPaddingTopLeft: [58, 16] }
+// La ventana se aparta del control del zoom (arriba a la izquierda: 10 + 48), de las capas (arriba a la derecha: 12 + 32 + 8) y
+// de los bordes (16). Desde el 07-11-2026, 260 de ancho como mucho y `keepInView`: a 360 se cortaban por el lado (captura 62
+// del «antes») y las capas tapaban el título. El ancho y el margen de la izquierda se ajustan al mapa (`ventana`).
+const POP = { className: 'fds-pop', maxWidth: 260, minWidth: 190, keepInView: true, autoPanPadding: [16, 16], autoPanPaddingTopLeft: [58, 52] }
+const CROMO_VENTANA = 26   // el margen de 12 a cada lado y el borde de 1 que Leaflet no cuenta en `maxWidth`
+// Las medidas de la ventana en un mapa de este ancho: lo que cabe entre el control del zoom (58) y el borde (16), con el máximo
+// de 260; A 360 (un mapa de 328) salen 228. En un mapa de menos de 290 no queda sitio para apartarse del zoom por el lado con
+// los 190 de ancho mínimo: se apartan por arriba (la ventana por debajo de él, 106 + 8) y a la izquierda se queda 16 (a 280, un
+// mapa de 248, salen 190).
+function medidasVentana(m) {
+  const ancho = m?.getSize?.().x || 0
+  if (!ancho) return {}
+  const estrecho = ancho < 290
+  const izquierda = estrecho ? 16 : 58
+  const maxWidth = Math.max(150, Math.min(260, ancho - izquierda - 16 - CROMO_VENTANA))
+  return { maxWidth, minWidth: Math.min(190, maxWidth), autoPanPaddingTopLeft: [izquierda, estrecho ? 114 : 52] }
+}
+const ventana = (m) => ({ ...POP, ...medidasVentana(m) })
 const km = (n) => String(n).replace('.', ',')
 const fecha = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' }) }
 const chip = (texto, fondo, tinta) => `<span style="background:${fondo};color:${tinta}">${esc(texto)}</span>`
@@ -241,6 +257,10 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
     m.on('popupopen', (e) => {
       const el = e.popup?.getElement?.()
       if (!el) return
+      // Si el mapa ya no mide lo que medía al crearse la ventana (el móvil se giró, la página acabó de montarse), se vuelve a
+      // ajustar su ancho. Antes de recoger los botones: `update()` rehace el contenido.
+      const medidas = medidasVentana(m)
+      if (medidas.maxWidth && medidas.maxWidth !== e.popup.options.maxWidth) { Object.assign(e.popup.options, medidas); e.popup.update() }
       el.querySelectorAll('[data-accion]').forEach((b) => {
         b.onclick = (ev) => {
           const esEnlace = !!b.getAttribute('href')
@@ -257,7 +277,7 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
     const aparcarEn = (latlng) => {
       if (!onAccionRef.current || Date.now() - ultimo < 1200) return
       ultimo = Date.now(); m.closePopup()
-      const pop = L.popup(POP).setLatLng(latlng).setContent(popupAparcar())
+      const pop = L.popup(ventana(m)).setLatLng(latlng).setContent(popupAparcar())
       pop.fds = { dato: { lat: latlng.lat, lng: latlng.lng } }
       pop.openOn(m)
     }
@@ -290,7 +310,7 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
     const interactivo = !!onAccionRef.current
     if (base?.lat != null) {
       L.marker([base.lat, base.lng], { icon: L.divIcon({ className: '', html: SVG_BASE, iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -14] }), zIndexOffset: 100 })
-        .bindPopup(`<b>${esc(tx('Almacén'))}</b>${base.direccion ? `<div class="fds-sub">${esc(base.direccion)}</div>` : ''}`, POP).addTo(capa.current)
+        .bindPopup(`<b>${esc(tx('Almacén'))}</b>${base.direccion ? `<div class="fds-sub">${esc(base.direccion)}</div>` : ''}`, ventana(m)).addTo(capa.current)
       puntos.push([base.lat, base.lng])
     }
     const porConductor = {}
@@ -309,7 +329,7 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
           iconSize: [w, h], iconAnchor: [w / 2, Math.round(42 * s)], popupAnchor: [0, -Math.round(40 * s)] })
       }
       const marcador = L.marker([p.lat, p.lng], { icon: icono, zIndexOffset: p.grande ? 1000 : hecho ? -500 : 0, title: p.titulo || '' })
-        .bindPopup(popupParada(p, hecho, interactivo), POP).addTo(capa.current)
+        .bindPopup(popupParada(p, hecho, interactivo), ventana(m)).addTo(capa.current)
       marcador.getPopup().fds = { dato: p }
       puntos.push([p.lat, p.lng])
       if (!hecho) (porConductor[color] ||= []).push([p.orden ?? 9999, [p.lat, p.lng]])
@@ -351,7 +371,7 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
       })
       const detalle = [z.calle, z.horario, z.maximo && `${tx('máx.')} ${z.maximo}`].filter(Boolean).map(esc).join(' · ')
       L.marker([z.lat, z.lng], { icon: icono, zIndexOffset: -800 })
-        .bindPopup(`<b>${esc(tx('Carga y descarga'))}</b>${detalle ? `<div class="fds-sub">${detalle}</div>` : ''}<div class="fds-sub">OpenStreetMap</div>`, POP)
+        .bindPopup(`<b>${esc(tx('Carga y descarga'))}</b>${detalle ? `<div class="fds-sub">${detalle}</div>` : ''}<div class="fds-sub">OpenStreetMap</div>`, ventana(mapa.current))
         .addTo(capaZonas.current)
     })
   }, [zonas])
@@ -366,10 +386,10 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
       const etiqueta = esc(z.tipo || tipoZona)
       ;(z.poligonos || []).forEach((pol) => {
         if (!pol?.length) return
-        L.polygon(pol, { color: '#7c3aed', weight: 2, dashArray: '6 4', fillColor: '#7c3aed', fillOpacity: 0.08 }).bindPopup(texto, POP).addTo(capaZbe.current)
+        L.polygon(pol, { color: '#7c3aed', weight: 2, dashArray: '6 4', fillColor: '#7c3aed', fillOpacity: 0.08 }).bindPopup(texto, ventana(mapa.current)).addTo(capaZbe.current)
         // La etiqueta mide lo que mide su texto («ZBE», «Umweltzone»): sin tamaño fijo, centrada con la transformación.
         const icono = L.divIcon({ className: '', html: `<div style="display:inline-block;transform:translate(-50%,-50%);padding:0 7px;height:18px;border-radius:9px;background:#7c3aed;color:#fff;font:800 10px/18px system-ui,sans-serif;white-space:nowrap;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)">${etiqueta}</div>`, iconSize: null, iconAnchor: [0, 0], popupAnchor: [0, -8] })
-        L.marker(centroide(pol), { icon: icono, zIndexOffset: -900 }).bindPopup(texto, POP).addTo(capaZbe.current)
+        L.marker(centroide(pol), { icon: icono, zIndexOffset: -900 }).bindPopup(texto, ventana(mapa.current)).addTo(capaZbe.current)
       })
     })
   }, [zbe, tipoZona])
@@ -381,7 +401,7 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
       if (i.lat == null) return
       const color = COLOR_INC[i.clase] || COLOR_INC.otro
       const icono = L.divIcon({ className: '', html: svgIncidencia(i.clase), iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -13] })
-      L.marker([i.lat, i.lng], { icon: icono, zIndexOffset: 600, title: queIncidencia(i.que) }).bindPopup(popupIncidencia(i, fuente), POP).addTo(capaInc.current)
+      L.marker([i.lat, i.lng], { icon: icono, zIndexOffset: 600, title: queIncidencia(i.que) }).bindPopup(popupIncidencia(i, fuente), ventana(mapa.current)).addTo(capaInc.current)
       if (i.lat2 != null) L.polyline([[i.lat, i.lng], [i.lat2, i.lng2]], { color, weight: 4, opacity: 0.7, dashArray: '2 6', interactive: false }).addTo(capaInc.current)
     })
   }, [incidencias, fuente])
@@ -392,7 +412,7 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
     if (furgo?.lat == null) return
     const icono = L.divIcon({ className: '', html: SVG_FURGO, iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -15] })
     const marcador = L.marker([furgo.lat, furgo.lng], { icon: icono, zIndexOffset: 700, title: tx('Tu furgoneta') })
-      .bindPopup(() => popupFurgo(furgo, yoRef.current, !!onAccionRef.current), POP).addTo(capaFurgo.current)
+      .bindPopup(() => popupFurgo(furgo, yoRef.current, !!onAccionRef.current), ventana(mapa.current)).addTo(capaFurgo.current)
     marcador.getPopup().fds = { dato: furgo }
   }, [furgo])
 

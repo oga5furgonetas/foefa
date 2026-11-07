@@ -2379,6 +2379,29 @@ test('Reparto · si ninguna parada está en el mapa, dice por qué no se navega 
   await expect(page.getByText(/No encontramos la dirección en el mapa/)).toHaveCount(0)
 })
 
+/* LA GUÍA COMPACTA (07-11-2026, W5, §5.8): los botones sobre el mapa van en una columna a la derecha, 12 por encima del panel (antes, a
+   media pantalla, y la hoja de llegada los tapaba en los móviles de 800 o menos); el panel de abajo mide de 165 a 225; y todo lo que
+   se toca dentro de la guía mide 48 como poco. */
+async function expectGuiaCompacta(nav) {
+  // Los botones siguen al panel con un ResizeObserver: se espera a que asienten, 12 por encima de él.
+  await expect.poll(async () => {
+    const [panel, columna] = await Promise.all([nav.getByTestId('guia-panel').boundingBox(), nav.getByTestId('guia-botones').boundingBox()])
+    return Math.abs(columna.y + columna.height + 12 - panel.y)
+  }).toBeLessThanOrEqual(1)
+  const panel = await nav.getByTestId('guia-panel').boundingBox()
+  const columna = await nav.getByTestId('guia-botones').boundingBox()
+  const dialogo = await nav.boundingBox()
+  expect(panel.height).toBeGreaterThanOrEqual(165)
+  expect(panel.height).toBeLessThanOrEqual(225)
+  expect(Math.abs(dialogo.x + dialogo.width - 12 - (columna.x + columna.width))).toBeLessThanOrEqual(1)   // y a 12 del borde derecho
+  for (const b of await nav.locator('button, a[href]').all()) {
+    const caja = await b.boundingBox()
+    const nombre = (await b.getAttribute('aria-label')) || (await b.innerText())
+    expect(caja.width, `ancho de «${nombre}»`).toBeGreaterThanOrEqual(47.9)    // 48, menos el redondeo del móvil
+    expect(caja.height, `alto de «${nombre}»`).toBeGreaterThanOrEqual(47.9)
+  }
+}
+
 test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la siguiente', async ({ page, context }) => {
   const fallos = vigilar(page)
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -2430,6 +2453,11 @@ test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la s
   await expect(nav.getByText('Bar Pepe')).toBeVisible()
   await expect(nav.getByText(/Llegas ≈ \d\d:\d\d/)).toBeVisible()
   await expect(nav.locator('.leaflet-container')).toBeVisible()
+  // Antes de llegar: la voz y el mapa de fuera sobre el mapa, y «Ya he llegado» en el panel.
+  await expectGuiaCompacta(nav)
+  await expect(nav.getByTestId('guia-botones').getByRole('button', { name: 'Activar la voz' })).toBeVisible()
+  await expect(nav.getByTestId('guia-botones').getByRole('link', { name: 'Google Maps' })).toBeVisible()
+  await expect(nav.getByTestId('guia-panel').getByRole('button', { name: 'Ya he llegado' })).toBeVisible()
 
   // Gira y avanza: la siguiente maniobra.
   await context.setGeolocation({ latitude: 43.3677, longitude: -8.4070 })
@@ -2440,7 +2468,12 @@ test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la s
   // En la puerta: has llegado, dónde está el paquete, y entregar.
   await context.setGeolocation({ latitude: 43.37038, longitude: -8.40032 })
   await expect(nav.getByText('Has llegado')).toBeVisible()
-  await expect(nav.getByText('Búscalo: Detrás · izq')).toBeVisible()
+  // «Búscalo: {sitio}» pasa a «📦 {sitio}»: a la vista, el icono y el dato; la frase de antes, solo para el lector de pantalla.
+  await expect(nav.getByTestId('guia-notas').getByText('Detrás · izq')).toBeVisible()
+  await expect(nav.getByTestId('guia-notas').locator('.sr-only')).toHaveText('Búscalo:')
+  // Al llegar, «No entregado» y «Entregado» (52), y el mapa de fuera ya no está.
+  await expectGuiaCompacta(nav)
+  await expect(nav.getByTestId('guia-botones').getByRole('link', { name: 'Google Maps' })).toHaveCount(0)
   await nav.getByRole('button', { name: 'Entregado', exact: true }).click()
   await page.getByRole('button', { name: 'Entregar sin foto' }).click()
 
@@ -2575,6 +2608,14 @@ test('Reparto · manos libres: «he llegado» y «entregado» por voz, sin foto 
   await expect(nav.getByText('Farmacia Sol')).toBeVisible()                              // y sola, a la siguiente
   // Se queda activado para la próxima vez.
   expect(await page.evaluate(() => localStorage.getItem('guia_manos'))).toBe('1')
+  // La explicación larga sale solo la primera vez (se recuerda en el navegador): al volver a abrir la guía, la píldora «Escuchando».
+  expect(await page.evaluate(() => localStorage.getItem('guia_manos_ayuda'))).toBe('1')
+  await nav.getByRole('button', { name: 'Salir de la navegación' }).click()
+  await expect(nav).toHaveCount(0)
+  await page.getByRole('button', { name: /^(Empezar a navegar|Ir)$/ }).first().click()   // «Ir» desde que «Hoy» es el compacto (y la fila también tiene su «Ir»)
+  await expect(nav.getByText('Farmacia Sol')).toBeVisible()
+  await expect(nav.getByText('Escuchando')).toBeVisible()
+  await expect(nav.getByText(/Di «entregado», «no entregado»/)).toHaveCount(0)
   expect(fallos).toEqual([])
 })
 
