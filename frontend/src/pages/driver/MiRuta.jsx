@@ -1679,7 +1679,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
               )
             })}
           </ol>
-          <div className="sticky bottom-0 grid grid-cols-[1fr_2fr] gap-2 rounded-b-xl border-t border-dark-800 bg-dark-900 p-3">
+          {/* El pie fijo se pega por encima de las pestañas de la app (64 y la zona segura), no detrás de ellas (08-11-2026). */}
+          <div style={{ bottom: abajoFlotante ? `calc(${abajoFlotante}px + env(safe-area-inset-bottom, 0px))` : 0 }}
+            className="sticky grid grid-cols-[1fr_2fr] gap-2 rounded-b-xl border-t border-dark-800 bg-dark-900 p-3">
             <Boton variante="normal" contorno tono="neutro" texto={tx('Cancelar')} onClick={() => setReordenar(null)} />
             <Boton variante="normal" texto={tx('Guardar este orden')} onClick={guardarOrden} disabled={ocupado === 'orden'} cargando={ocupado === 'orden'} />
           </div>

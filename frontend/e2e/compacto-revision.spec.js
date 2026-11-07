@@ -62,3 +62,20 @@ test('Compacto · la tarjeta «¿Qué tal te va la app?» ocupa todo el ancho de
   expect(Math.abs(o.w - columna.w), `opinión ${o.w}, columna ${columna.w}`).toBeLessThanOrEqual(1)
   expect(Math.abs(o.x - columna.x)).toBeLessThanOrEqual(1)
 })
+
+test('Compacto · «Guardar este orden» queda por encima de las pestañas, no detrás', async ({ page, context }) => {
+  await preparar(page, context)
+  const pedidos = Array.from({ length: 14 }, (_, i) => pendiente(i + 1))
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: ruta(pedidos) }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'A mano' }).click()
+  const guardar = page.getByRole('button', { name: 'Guardar este orden' })
+  await expect(guardar).toBeVisible()
+  await page.evaluate(() => window.scrollTo(0, 0))
+  const caja = await guardar.boundingBox()
+  const pestanas = await page.getByRole('navigation', { name: 'Secciones' }).boundingBox()
+  expect(caja.y + caja.height, `el pie acaba en ${caja.y + caja.height} y las pestañas empiezan en ${pestanas.y}`).toBeLessThanOrEqual(pestanas.y + 0.5)
+  // Y se puede tocar: lo que hay en su centro es el propio botón.
+  const quien = await guardar.evaluate((el) => { const b = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)) })
+  expect(quien).toBe(true)
+})
