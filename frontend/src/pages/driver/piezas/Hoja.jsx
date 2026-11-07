@@ -26,7 +26,7 @@ export default function Hoja({ titulo, subtitulo, onClose, ayuda, menu, pie, chi
   }
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" role="dialog" aria-modal="true" aria-label={titulo} data-testid={testid}>
-      <div className={`flex max-h-[92dvh] w-full max-w-md flex-col rounded-t-2xl bg-dark-900 ${className}`}>
+      <div className={`flex max-h-[92dvh] w-full min-w-0 max-w-md flex-col rounded-t-2xl bg-dark-900 ${className}`}>
         <div className="relative flex min-h-12 shrink-0 items-center gap-1 pl-4 pr-1" onTouchStart={alTocar} onTouchEnd={alSoltar}>
           <span className="absolute left-1/2 top-1 h-1 w-8 -translate-x-1/2 rounded-full bg-dark-700" aria-hidden="true" />
           <div className="min-w-0 flex-1 py-2">

@@ -27,6 +27,12 @@ import { ChipSituar, enlacePuerta, etiquetasDe, useFachada } from './HojaParada'
    estima por los caracteres (12 px en negrita, ≈ 6 px cada uno, más el relleno y el icono) contra lo que queda libre en un
    móvil de 360 de ancho: no se mide, así que es lo mismo en cada pintado; el `overflow-hidden` de la línea es la red. */
 const LIBRE = 296
+const libreAhora = () => {
+  if (typeof window === 'undefined') return LIBRE
+  let escala = 1
+  try { escala = Number(getComputedStyle(document.documentElement).getPropertyValue('--letra')) || 1 } catch { escala = 1 }
+  return Math.min(LIBRE, window.innerWidth - 64) / escala   // la letra más grande ensancha cada etiqueta: se divide lo que cabe
+}
 const anchoDe = (e) => 20 + (e.icono ? 18 : 0) + String(e.texto).length * 6
 function queCaben(etiquetas, libre) {
   const caben = []
@@ -51,7 +57,7 @@ export default function TarjetaSiguiente({
   const tarde = p.tarde_min > 0
   const etiquetas = etiquetasDe(p, { juntas, zbe })
   const conChip = !!onSituar && (p.lat == null || p.geo === 'aprox')
-  const visibles = queCaben(etiquetas, conChip ? LIBRE - 150 : LIBRE)
+  const visibles = queCaben(etiquetas, libreAhora() - (conChip ? 150 : 0))
   const demas = etiquetas.length - visibles.length
   const conPuerta = p.lat != null && p.geo !== 'aprox'
   const fachada = useFachada(p, conPuerta)
@@ -104,7 +110,7 @@ export default function TarjetaSiguiente({
         {!hrefSms && hrefWhatsapp && <Boton variante="icono" icono={MessageCircle} tono="ok" relleno nombre="WhatsApp" href={hrefWhatsapp} target="_blank" rel="noreferrer" onClick={onWhatsapp} />}
         {menu.length > 0 && <Menu opciones={menu} relleno />}
       </div>
-      <FilaCierre recogida={p.tipo === 'recogida'} onFallar={() => onFallar?.(p)} onEntregar={() => onEntregar?.(p)} disabled={ocupado} cargando={ocupado} className="mt-2" />
+      <FilaCierre recogida={p.tipo === 'recogida'} onFallar={() => onFallar?.(p)} onEntregar={() => onEntregar?.(p)} disabled={ocupado} cargando={ocupado} apretado className="mt-2" />
     </section>
   )
 }

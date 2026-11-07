@@ -1911,7 +1911,7 @@ test('Cuenta del repartidor · ve con qué entra, cambia correo y contraseña; �
   // «Entrar como» desde la plataforma: franja con «Volver a mi cuenta» y nada que pueda fallar.
   await page.addInitScript(() => localStorage.setItem('flota_token_super', 'token-de-la-plataforma'))
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.getByText(/Estás viendo la cuenta de Admin Test como plataforma/)).toBeVisible()
+  await expect(page.getByText('Viendo a Admin Test')).toBeVisible()   // «Viendo a {nombre}» (07-11-2026, diseño compacto)
   await expect(page.getByRole('button', { name: 'Volver a mi cuenta' })).toBeVisible()
   await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
   await expect(page.getByRole('region', { name: 'Tu acceso' })).toBeVisible()
@@ -2480,10 +2480,13 @@ test('Ruta · aviso de la mañana: elige la hora, se activa y no se vuelve a pre
   await page.route(/\/api\/reparto\/aviso-manana$/, async (r) => { horas.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true, hora: '07:30' } }) })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   const tarjeta = page.getByRole('region', { name: 'Aviso por la mañana' })
-  await expect(tarjeta.getByText('¿Te aviso por la mañana para cargar tu ruta?')).toBeVisible()
-  await expect(tarjeta.getByRole('radio', { name: '8:00' })).toHaveAttribute('aria-checked', 'true')     // sin elegir, las 8
-  await tarjeta.getByRole('radio', { name: '7:30' }).click()
-  await tarjeta.getByRole('button', { name: 'Avísame a las 7:30' }).click()
+  await expect(tarjeta.getByText('¿Te aviso por la mañana?')).toBeVisible()
+  // El aviso de una línea abre su hoja con la hora (07-11-2026, diseño compacto).
+  await tarjeta.getByRole('button', { name: 'Avísame a las 8:00' }).click()
+  const hoja = page.getByRole('dialog', { name: 'Aviso por la mañana' })
+  await expect(hoja.getByRole('radio', { name: '8:00' })).toHaveAttribute('aria-checked', 'true')     // sin elegir, las 8
+  await hoja.getByRole('radio', { name: '7:30' }).click()
+  await hoja.getByRole('button', { name: 'Avísame a las 7:30' }).click()
   await expect.poll(() => suscritas.length).toBe(1)
   expect(suscritas[0].subscription.endpoint).toBe('https://push.example/e1')
   await expect.poll(() => horas).toEqual([{ hora: '07:30' }])
@@ -2854,7 +2857,7 @@ test.describe('App del repartidor en el móvil', () => {
     let veces = 0
     await page.route(/\/api\/reparto\/mi-ruta$/, (r) => { veces += 1; r.fulfill({ json: { activo: true, autonomo: true, fecha: '2026-10-17', pedidos: [], jornada: {}, aviso_aceptado: true } }) })
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('button', { name: 'Escanear' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Escanear', exact: true })).toBeVisible()
     await expect.poll(() => veces).toBeGreaterThan(0)
     const antes = veces
     const tirar = (desde, hasta, selector = 'body') => page.evaluate(([y0, y1, sel]) => {
@@ -2898,7 +2901,7 @@ test.describe('App del repartidor en el móvil', () => {
     }
     await entregar()                                                      // Farmacia Sol, sin red
     await expect(page.getByText('Sin cobertura: guardado en el móvil. Se envía solo cuando vuelva la conexión.')).toBeVisible()
-    await expect(page.getByTestId('sin-enviar')).toContainText('1 cambio guardado en el móvil')
+    await expect(page.getByTestId('sin-enviar')).toContainText('1 sin enviar')   // «1 sin enviar» + «Enviar ahora» (07-11-2026)
     await expect(page.getByText('Bar Pepe').first()).toBeVisible()        // la siguiente ya es Bar Pepe
     // Deshacer algo que no ha salido del móvil: se olvida, sin mandar nada.
     await page.getByRole('button', { name: 'Deshacer' }).click()
@@ -3265,7 +3268,7 @@ test.describe('App · dentro de la app (Play o el APK) no se ofrece instalar', (
     await entrarRepartidor(page, { status: 'trial', days_left: 6 }, { enApp: true })
     await page.addInitScript(() => localStorage.setItem('fds_recien_alta', '1'))
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('button', { name: 'Ruta', exact: false }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Hoy', exact: true })).toBeVisible()
     await expect(page.getByText('Instala la app')).toHaveCount(0)
     await expect(page.getByRole('dialog', { name: 'Último paso: instala la app' })).toHaveCount(0)
   })

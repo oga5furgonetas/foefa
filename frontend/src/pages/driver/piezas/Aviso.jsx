@@ -15,8 +15,9 @@ const TONOS = {
   ok: 'bg-ruta-ok/10 text-dark-50',
 }
 const ICONO = { neutro: 'text-dark-400', aviso: 'text-ruta-aviso-texto', peligro: 'text-ruta-peligro-texto', ok: 'text-ruta-ok-texto' }
-// El tono de la acción y de la ✕: el verde sobre el tinte ok no llega al 4,5:1 de día, así que ahí van en tinta.
-const ACCION = { neutro: 'marca', aviso: 'aviso', peligro: 'peligro', ok: 'neutro' }
+// El tono de la acción y de la ✕: el verde sobre el tinte ok no llega al 4,5:1 de día, así que ahí van en tinta. Lo mismo el
+// cian sobre el gris del aviso neutro (4,1:1 de día, medido por contraste.spec.js, 07-11-2026, W2): tinta y subrayada.
+const ACCION = { neutro: 'neutro', aviso: 'aviso', peligro: 'peligro', ok: 'neutro' }
 
 export default function Aviso({
   texto, tono = 'neutro', icono: Icono, accion, onAccion, acciones, onCerrar, nombreCerrar, className = '', testid, children,
@@ -25,7 +26,8 @@ export default function Aviso({
   const lista = (acciones || (accion ? [{ texto: accion, onClick: onAccion }] : [])).filter(Boolean)
   // `href` en una acción (opcional, 07-11-2026, W2): la acción es un enlace («Crear mi cuenta» de la ruta de prueba).
   const botones = lista.map((a) => (
-    <Boton key={a.texto} variante="texto" tono={ACCION[t]} texto={a.texto} nombre={a.nombre} onClick={a.onClick} href={a.href} testid={a.testid} className="shrink-0 font-semibold" />
+    <Boton key={a.texto} variante="texto" tono={ACCION[t]} texto={a.texto} nombre={a.nombre} onClick={a.onClick} href={a.href} testid={a.testid}
+      className={`shrink-0 font-semibold ${ACCION[t] === 'neutro' ? 'underline underline-offset-2' : ''}`} />
   ))
   const dos = lista.length > 1
   return (

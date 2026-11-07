@@ -75,6 +75,17 @@ export function enlacePuerta(p, vista) {
   return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${v.lat},${v.lng}` + (v.rumbo != null ? `&heading=${v.rumbo}&pitch=5&fov=75` : '')
 }
 
+/* Lo que dijo la IA de la foto, ENTERO: es lo que explica por qué se pide repetirla (los avisos de la IA se quedan aunque
+   sean largos), así que no se corta a dos líneas como el resto de los datos. */
+function AvisoIa({ texto, aviso = false, className = '' }) {
+  return (
+    <div className={`flex min-h-9 items-start gap-2 py-1 text-texto ${aviso ? 'text-ruta-aviso-texto' : 'text-dark-50'} ${className}`}>
+      <AlertTriangle size={18} aria-hidden="true" className={`mt-0.5 shrink-0 ${aviso ? '' : 'text-dark-400'}`} />
+      <span className="min-w-0 flex-1">{texto}</span>
+    </div>
+  )
+}
+
 /* Un dato sin su etiqueta a la vista: la frase entera («Teléfono: 613 403 123») para el lector de pantalla. */
 const dato = (frase, visible) => (
   <>
@@ -153,11 +164,11 @@ export default function HojaParada({
       {ia?.nivel === 'verificada' && <FilaDato icono={ShieldCheck} texto={tx('Entrega verificada por IA')} className="mt-1 text-ruta-ok-texto" />}
       {ia?.nivel === 'revisar' && (
         <div className="mt-1 flex items-start gap-2">
-          <FilaDato icono={AlertTriangle} texto={textoAvisoIa(ia)} className="min-w-0 flex-1 text-ruta-aviso-texto" />
+          <AvisoIa texto={textoAvisoIa(ia)} aviso className="min-w-0 flex-1" />
           {onRevisar && <Boton variante="texto" tono="aviso" texto={tx('Repetir la foto')} onClick={() => onRevisar(p)} className="shrink-0" />}
         </div>
       )}
-      {ia?.nivel === 'parcial' && ia.aviso && <FilaDato icono={AlertTriangle} texto={textoAvisoIa(ia)} className="mt-1" />}
+      {ia?.nivel === 'parcial' && ia.aviso && <AvisoIa texto={textoAvisoIa(ia)} className="mt-1" />}
       {/* LA VALORACIÓN DEL CLIENTE (01-11-2026): lo que puso en su enlace. */}
       {estrellas > 0 && (
         <FilaDato icono={Star} texto={dato(tx('Valoración del cliente: {e}', { e: estrellas === 1 ? tx('1 estrella') : tx('{n} estrellas', { n: estrellas }) }),

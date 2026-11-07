@@ -281,7 +281,9 @@ export default function RutaApp() {
     : saldoRegalo ? (
       <Aviso testid="aviso-regalo" tono="ok" icono={Gift} texto={tx('+{euros} en tu cartera', { euros: eurosRef(saldoRegalo.cent, locale()) })}
         accion={tx('Verlo')} onAccion={() => { verRegalo(); setTab('cuenta') }} onCerrar={verRegalo} />
-    ) : billing?.status === 'trial' && !billing.promo?.activa && !billing.bloqueo && !billing.falta_tarjeta && billing.days_left != null && billing.days_left <= 3 ? (
+    // Con la prueba ya acabada (0 días) y el plan gratis en marcha, manda el del plan gratis: «Quedan 0 días de prueba» no dice nada.
+    ) : billing?.status === 'trial' && !billing.promo?.activa && !billing.bloqueo && !billing.falta_tarjeta && billing.days_left != null && billing.days_left <= 3
+      && !(billing.gratis?.activo && billing.days_left <= 0) ? (
       <Aviso tono="aviso" icono={Clock} texto={billing.days_left === 1 ? tx('Queda 1 día de prueba · Ver mi plan') : tx('Quedan {n} días de prueba · Ver mi plan', { n: billing.days_left })}
         accion={tx('Verlo')} onAccion={() => setTab('cuenta')} />
     ) : !bloqueado && billing?.gratis?.activo ? (

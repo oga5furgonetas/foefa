@@ -1838,7 +1838,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
       })()}
 
       {/* LO PASAJERO (§5.1 b): se va solo a los 6 s; encima del «Deshacer» si coinciden. */}
-      {aviso && <AvisoFlotante abajo={abajoFlotante + (deshacer ? 56 : 0)} texto={aviso} onCerrar={() => setAviso('')} />}
+      {aviso && <AvisoFlotante abajo={abajoFlotante + (deshacer ? 60 : 0)} texto={aviso} onCerrar={() => setAviso('')} />}   {/* 52 del «Deshacer» con su detalle + 8 de hueco */}
 
       {encontrado && (
         <Hoja titulo={tx('Este paquete va en la parada')} onClose={() => setEncontrado(null)}>
@@ -2494,7 +2494,8 @@ function Marco({ onBack, children, embebido, pantallaCompleta = false, fecha = '
   // En la app, de borde a borde (el contenedor de RutaApp lleva 16 a los lados); la clase va en la propia cabecera para
   // que la fija se pegue a lo largo de toda la columna, no solo dentro de una caja de su alto.
   const cabecera = (
-    <Cabecera titulo={embebido ? tx('Hoy') : tx('Mi ruta')} subtitulo={fecha} onVolver={embebido ? undefined : onBack} acciones={acciones} fija={pantallaCompleta}
+    <Cabecera titulo={embebido ? tx('Hoy') : tx('Mi ruta')} onVolver={embebido ? undefined : onBack} acciones={acciones} fija={pantallaCompleta}
+      subtitulo={fecha ? <span className={embebido ? '' : 'max-[300px]:hidden'}>{fecha}</span> : ''}
       className={embebido && pantallaCompleta ? '-mx-4' : ''} />
   )
   // Dentro del panel (el autónomo) va sin pantalla completa ni botón de volver.
