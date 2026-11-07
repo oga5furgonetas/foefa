@@ -131,6 +131,16 @@ test.describe('lo que pide la calle', () => {
     await expect(ventana).toContainText('El cliente dice: No estará · Al vecino · Portal: 1234')
     await expect(ventana.getByRole('button', { name: 'Ir', exact: true })).toBeVisible()
     await expect(ventana.getByRole('link', { name: 'Llamar' })).toHaveAttribute('href', 'tel:600000001')
+    // La ventana (diseño compacto, §5.7): cabe en el mapa (antes se cortaba por el lado), con la letra del tema y los botones de
+    // 40 como poco. Se mide cuando asienta, que se coloca con una animación. A 360 y a 280 lo prueba mapa-vivo.
+    await expect.poll(async () => {
+      const [mapa, v] = await Promise.all([page.locator('.leaflet-container').boundingBox(), ventana.boundingBox()])
+      return v.x >= mapa.x - 1 && v.x + v.width <= mapa.x + mapa.width + 1 && v.y >= mapa.y - 1 && v.y + v.height <= mapa.y + mapa.height + 1
+    }).toBe(true)
+    expect(await ventana.locator('.leaflet-popup-content').evaluate((el) => getComputedStyle(el).fontSize)).toBe('14px')
+    for (const [rol, nombre] of [['button', 'Ir'], ['link', 'Llamar'], ['button', 'Abrir']]) {
+      expect((await ventana.getByRole(rol, { name: nombre, exact: true }).boundingBox()).height, nombre).toBeGreaterThanOrEqual(40)
+    }
     await ventana.getByRole('button', { name: 'Abrir' }).click()
     await expect(ventana).toHaveCount(0)
     await page.getByRole('dialog', { name: 'Farmacia Sol' }).getByRole('button', { name: 'Cerrar' }).click()   // «Abrir» abre la hoja de la parada (07-11-2026)
