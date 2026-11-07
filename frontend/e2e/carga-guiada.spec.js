@@ -64,7 +64,7 @@ test('Ruta · cargar la furgoneta por huecos y oír la siguiente parada', async 
     base: null, ruta, pedidos } }))
 
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  const sig = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
+  const sig = page.getByRole('region', { name: 'Siguiente parada' })
   await expect(sig.getByText('Farmacia Sol')).toBeVisible()
   // Sin ordenar: ni se carga ni se habla.
   await expect(page.getByRole('button', { name: /Cargar la furgoneta/ })).toHaveCount(0)
@@ -82,12 +82,13 @@ test('Ruta · cargar la furgoneta por huecos y oír la siguiente parada', async 
   await expect(sig.getByText('Detrás · izq')).toBeVisible()
 
   // El altavoz de la tarjeta lo repite cuando se quiera.
-  await sig.getByRole('button', { name: 'Escuchar la siguiente parada' }).click()
+  await sig.getByRole('button', { name: 'Más opciones' }).click()
+  await page.getByRole('menuitem', { name: 'Escuchar la siguiente parada' }).click()
   expect(await page.evaluate(() => window.__dicho.length)).toBe(2)
 
   // Cargar: la furgoneta por huecos, con lo que va en cada uno.
   const abrir = page.getByRole('button', { name: /Cargar la furgoneta/ })
-  await expect(abrir).toContainText('0 de 3 cargados')
+  await expect(abrir).toContainText('0/3')
   await abrir.click()
   const carga = page.getByRole('dialog', { name: 'Cargar la furgoneta' })
   await expect(carga.getByText('Cargas por las puertas traseras.')).toBeVisible()
@@ -124,7 +125,7 @@ test('Ruta · cargar la furgoneta por huecos y oír la siguiente parada', async 
   // Salir: la ruta sigue diciendo cuántos van.
   await carga.getByRole('button', { name: 'Salir (1 faltan)' }).click()
   await expect(carga).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /Cargar la furgoneta/ })).toContainText('2 de 3 cargados')
+  await expect(page.getByRole('button', { name: /Cargar la furgoneta/ })).toContainText('2/3')
 
   // Entregada la primera (con su cobro y sin foto), se dice la siguiente (su hora límite y sus bultos), sin tocar nada.
   await sig.getByRole('button', { name: 'Entregado', exact: true }).click()
@@ -132,7 +133,7 @@ test('Ruta · cargar la furgoneta por huecos y oír la siguiente parada', async 
   await page.getByRole('button', { name: 'Bizum' }).click()
   await expect(page.getByRole('heading', { name: 'Prueba de entrega' })).toBeVisible()
   await page.getByRole('button', { name: 'Entregar sin foto' }).click()
-  await expect(page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' }).getByText('Bar Pepe')).toBeVisible()
+  await expect(sig.getByText('Bar Pepe')).toBeVisible()
   await expect.poll(() => page.evaluate(() => window.__dicho.length)).toBe(4)
   const segunda = (await page.evaluate(() => window.__dicho.at(-1))).replace(/\u00a0/g, ' ')
   expect(segunda).toContain('Siguiente parada: Bar Pepe, Rúa Real 5')
@@ -176,7 +177,7 @@ test('Ruta · con la guía por voz apagada no se habla, y con la puerta lateral 
     base: null, ruta: { fin: '10:30', minutos: 30, km: 2, trafico: true, carga_por: 'lateral' }, pedidos } }))
 
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  const sig = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
+  const sig = page.getByRole('region', { name: 'Siguiente parada' })
   await expect(sig.getByText('Farmacia Sol')).toBeVisible()
   await page.getByRole('button', { name: /Cargar la furgoneta/ }).click()
   const carga = page.getByRole('dialog', { name: 'Cargar la furgoneta' })
@@ -195,6 +196,6 @@ test('Ruta · con la guía por voz apagada no se habla, y con la puerta lateral 
   await sig.getByRole('button', { name: 'Entregado', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Prueba de entrega' })).toBeVisible()
   await page.getByRole('button', { name: 'Entregar sin foto' }).click()
-  await expect(page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' }).getByText('Bar Pepe')).toBeVisible()
+  await expect(sig.getByText('Bar Pepe')).toBeVisible()
   expect(await page.evaluate(() => window.__dicho)).toEqual([])
 })

@@ -201,7 +201,7 @@ test.describe('contraste real en los tres temas', () => {
           (t) => (document.documentElement.getAttribute('data-panel-theme') || 'dark') === t, tema, { timeout: 20_000 })
         // La app recuerda la última pestaña: se vuelve a «Hoy».
         await page.getByRole('button', { name: 'Hoy', exact: true }).click()
-        await expect(page.getByText(conEjemplos ? 'Estas paradas son de ejemplo.' : 'Verlo en acción con 3 paradas de ejemplo')).toBeVisible()
+        await expect(page.getByText(conEjemplos ? 'Paradas de ejemplo' : 'Ver un ejemplo')).toBeVisible()
         const medir = () => page.evaluate(async () => {
           const r = await window.axe.run(document.querySelector('main') || document, {
             runOnly: { type: 'rule', values: ['color-contrast'] },

@@ -35,8 +35,8 @@ test('Mapa en vivo · el recorrido se recalcula desde donde estás cuando avanza
       bultos: 1, orden: 1, eta: '10:05', lat: 43.3639, lng: -8.4099 }] } }))
 
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Mapa' }).click()
-  await expect(page.getByText('Por las calles:')).toBeVisible()
+  await page.getByRole('button', { name: 'Ver el mapa' }).click()
+  await expect(page.getByText('0,2 km · 1 min')).toBeVisible()   // la píldora de lo que hay por las calles (07-11-2026)
   await expect(page.getByRole('button', { name: 'Seguirme' })).toBeVisible()
   expect(desdes.length).toBe(1)
   expect(desdes[0]).toMatchObject({ lat: 43.3636, lng: -8.4118 })   // desde el 30-10 va también la precisión del GPS

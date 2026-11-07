@@ -46,7 +46,10 @@ test.describe('la memoria de la calle', () => {
     await page.goto('/ruta', { waitUntil: 'networkidle' })
 
     // Sin memoria: el botón; la hoja trae el portal que dio el cliente.
-    await page.getByRole('button', { name: 'Guardar para la próxima' }).click()
+    // Sin memoria, «Memoria de la puerta» en el ⋮ de la tarjeta (07-11-2026, diseño compacto).
+    const sig = page.getByRole('region', { name: 'Siguiente parada' })
+    await sig.getByRole('button', { name: 'Más opciones' }).click()
+    await page.getByRole('menuitem', { name: 'Memoria de la puerta' }).click()
     const hoja = page.getByRole('dialog', { name: 'Para la próxima vez en esta puerta' })
     await expect(hoja).toContainText('Rúa Real 22, A Coruña')
     await expect(hoja.getByLabel('Código del portal')).toHaveValue('4321')
@@ -60,7 +63,8 @@ test.describe('la memoria de la calle', () => {
     // La tarjeta lo enseña y el briefing lo dice.
     const memoria = page.getByTestId('memoria')
     await expect(memoria).toContainText('Memoria de la puerta: portal 1234B, dejar en portería o recepción, Entrada por el garaje')
-    await page.getByRole('button', { name: 'Escuchar la siguiente parada' }).click()
+    await sig.getByRole('button', { name: 'Más opciones' }).click()
+    await page.getByRole('menuitem', { name: 'Escuchar la siguiente parada' }).click()
     const dicho = await page.evaluate(() => window.__dicho)
     expect(dicho.at(-1)).toContain('Siguiente parada: Bea Castro, Rúa Real 22, A Coruña')
     expect(dicho.at(-1)).toContain('portal 1234B, dejar en portería o recepción, Entrada por el garaje')
@@ -70,7 +74,8 @@ test.describe('la memoria de la calle', () => {
     await hoja.getByRole('button', { name: 'Borrar lo guardado' }).click()
     await expect(hoja).toHaveCount(0)
     expect(guardado.at(-1)).toEqual({})
-    await expect(page.getByRole('button', { name: 'Guardar para la próxima' })).toBeVisible()
     await expect(page.getByTestId('memoria')).toHaveCount(0)
+    await sig.getByRole('button', { name: 'Más opciones' }).click()
+    await expect(page.getByRole('menuitem', { name: 'Memoria de la puerta' })).toBeVisible()
   })
 })

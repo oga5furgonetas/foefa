@@ -1,4 +1,4 @@
-import { Fragment, Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
@@ -27,9 +27,8 @@ import { fijarPais, importe, simboloMoneda, metodosCobro, paisActual, distancia,
 import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 import { salirDeLaDemoDeReparto, decodeToken } from '../../panel/auth'
 import { eurosRef, fechaRefPromo, refCentActual, refPromoActiva, promoGratis, fechaPromo, BONO_CENT } from '../../lib/precios'
-import AntesPuerta from './AntesPuerta'
-import ClienteDice, { textoClienteDice } from './ClienteDice'
-import MemoriaPuerta, { MemoriaHoja } from './MemoriaPuerta'
+import { textoClienteDice } from './ClienteDice'
+import { MemoriaHoja } from './MemoriaPuerta'
 import { queIncidencia } from '../../panel/components/MapaReparto'
 import { useAtras } from '../../lib/atras'
 import { PedirAviso, mensajeAviso } from '../AvisoManana'
@@ -38,6 +37,24 @@ import { decir, vozActiva } from '../../lib/voz'
 import { textoBriefing } from '../../lib/briefing'
 import { textoAvisoIa } from '../../lib/entregaIa'
 import { Hoja as HojaPieza } from './piezas'
+// El diseño compacto (07-11-2026, W2): las piezas de «Hoy» y de la hoja de la parada, una por línea.
+import { ExternalLink, Info, MapPinOff } from 'lucide-react'
+import Boton from './piezas/Boton'
+import Cabecera from './piezas/Cabecera'
+import Chip from './piezas/Chip'
+import Campo from './piezas/Campo'
+import Etiqueta from './piezas/Etiqueta'
+import LineaEstado from './piezas/LineaEstado'
+import AvisoFlotante from './piezas/AvisoFlotante'
+import Promo from './piezas/Promo'
+import ContenedorLista from './piezas/ContenedorLista'
+import FilaParada from './piezas/FilaParada'
+import Pastilla from './piezas/Pastilla'
+import BotonMapa from './piezas/BotonMapa'
+import ResumenDia from './piezas/ResumenDia'
+import AvisoHueco from './piezas/AvisoHueco'
+import TarjetaSiguiente from './piezas/TarjetaSiguiente'
+import HojaParada from './piezas/HojaParada'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
    Lo que hace el repartidor al cargar: escanea el código de la caja. Si el
@@ -327,7 +344,10 @@ const Reconocedor = typeof window !== 'undefined' ? (window.SpeechRecognition ||
 
 /* `referido` (02-11-2026): la respuesta de /referidos que la app del autónomo (RutaApp) ya pide al abrir; si no se pasa
    (el portal del conductor), se pide aquí solo cuando hace falta. */
-export default function MiRuta({ onBack, embebido = false, alTerminar = null, referido: referidoDado }) {
+/* `avisoApp`, `pantallaCompleta` y `pieApp` (07-11-2026, diseño compacto): el aviso de la cuenta que elige RutaApp (uno, en el
+   hueco de aviso de «Hoy»), si la cabecera va fija y el mapa a pantalla completa (la app y el portal; el panel, no) y la
+   línea final de la app («Invita y gana»), que se pinta al final de la lista si no hay promo de invitar a la vista. */
+export default function MiRuta({ onBack, embebido = false, alTerminar = null, referido: referidoDado, avisoApp = null, pantallaCompleta = false, pieApp = null }) {
   useIdioma()
   const [ruta, setRuta] = useState(() => { const c = copiaDeHoy(); return c ? aplicarCola(c.data, leerCola().filter(deMi)) : null })
   // La ruta que se ve es la guardada en el móvil y el servidor no contesta: se dice de cuándo es.
@@ -377,6 +397,8 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
   const [tour, setTour] = useState(-1)               // recorrido de bienvenida: -1 cerrado, 0..2 el paso
   const [bienvenida, setBienvenida] = useState(null)  // la primera vez: null | 'inicio' | 'luego'
   const [anadir, setAnadir] = useState(false)          // la hoja de «Añadir paradas» (botón «+»)
+  const [verCapas, setVerCapas] = useState(false)      // la hoja «Lo que hay en tu ruta» del mapa (07-11-2026, diseño compacto)
+  const [buscando, setBuscando] = useState(false)      // el buscador de la lista, detrás de 🔍 (07-11-2026, diseño compacto)
   // SU PROGRESO DE VERDAD (25-10-2026): entregas con la app y su mejor día (antes de hoy), para el récord y el
   // resumen. Lo de hoy se cuenta aquí mismo con las paradas, así no hace falta preguntar tras cada entrega.
   const [marcas, setMarcas] = useState(null)
@@ -422,7 +444,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
     const s = abiertas.find((p) => p.id === guiando) || abiertas[0]
     if (s && s.lat == null) { setGuiando(null); setErrorPunto(''); setSituando({ id: s.id, luego: 'guia', parada: s }) }
   }, [guiando, ruta])
-  const [abierta, setAbierta] = useState(null)       // la parada desplegada (además de la siguiente)
+  const [abierta, setAbierta] = useState(null)       // la parada cuya hoja está abierta (07-11-2026: antes, la desplegada en la lista)
   const [deshacer, setDeshacer] = useState(null)     // {p, estado} recién cerrada, para volver atrás
   const [trazado, setTrazado] = useState(null)
   const [yo, setYo] = useState(null)
@@ -888,7 +910,6 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
   /* QUITAR UNA PARADA: dos toques (el segundo confirma), para que un dedo
      torpe en el coche no borre una entrega. */
   const [quitando, setQuitando] = useState(false)
-  const [masCarga, setMasCarga] = useState(false)   // «Más formas de añadir» abierto
 
   /* SUGERENCIAS DE DIRECCIÓN al escribir en la hoja de una parada: al tocar
      una, la parada queda con su punto exacto en el mapa. Si se sigue
@@ -945,13 +966,23 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
       setNuevo(null); setQuitando(false); setAbierta(null); cargar(); setAviso(tx('Parada quitada de tu ruta'))
     } catch (e) { setAviso(txError(e, 'No se pudo quitar')) } finally { setOcupado('') }
   }
+  // «Quitar de la ruta» desde el ⋮ de la hoja de la parada (07-11-2026, diseño compacto, §5.2): la hoja ya ha preguntado
+  // «¿Quitar esta parada?»; aquí, la misma llamada que al quitarla desde la ficha.
+  async function quitarDeRuta(p) {
+    if (!p?.id) return
+    setOcupado('guardar')
+    try {
+      await repMiQuitar(p.id)
+      setAbierta(null); cargar(); setAviso(tx('Parada quitada de tu ruta'))
+    } catch (e) { setAviso(txError(e, 'No se pudo quitar')) } finally { setOcupado('') }
+  }
   /* PARADAS DE EJEMPLO: para ver la app trabajando sin tener paquetes. */
   async function cargarEjemplo() {
     setOcupado('ejemplo'); medirAccion('ejemplo_cargar')
     try {
       await repEjemplo(await posicionAhora())
       cargar()
-      setAviso(tx('Son paradas de ejemplo, a tu alrededor: pulsa «Empezar a navegar» y míralo en acción. Quítalas cuando cargues las tuyas.'))
+      setAviso(tx('Son paradas de ejemplo, a tu alrededor: pulsa «Ir» y míralo en acción. Quítalas cuando cargues las tuyas.'))
     } catch (e) { setAviso(txError(e, 'No se pudo preparar el ejemplo')) } finally { setOcupado('') }
   }
   /* LA PRIMERA VEZ (17-10-2026). Antes salía solo el recorrido de 3 pasos y su botón grande era «Verlo en acción
@@ -1381,9 +1412,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
     } catch (e) { setAviso(txError(e, 'No se pudo leer la lista')) } finally { setOcupado('') }
   }
 
-  if (err) return <Marco onBack={onBack} embebido={embebido}><p className="text-red-300">{err}</p></Marco>
-  if (!ruta) return <Marco onBack={onBack} embebido={embebido}><div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-500" /></div></Marco>
-  if (!ruta.activo) return <Marco onBack={onBack} embebido={embebido}><p className="text-dark-400">{tx('Tu empresa no usa el reparto por aquí.')}</p></Marco>
+  if (err) return <Marco onBack={onBack} embebido={embebido} pantallaCompleta={pantallaCompleta}><p className="text-texto text-ruta-peligro-texto">{err}</p></Marco>
+  if (!ruta) return <Marco onBack={onBack} embebido={embebido} pantallaCompleta={pantallaCompleta}><div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-400" aria-hidden="true" /></div></Marco>
+  if (!ruta.activo) return <Marco onBack={onBack} embebido={embebido} pantallaCompleta={pantallaCompleta}><p className="text-texto text-dark-400">{tx('Tu empresa no usa el reparto por aquí.')}</p></Marco>
 
   const pendientes = lista(ruta.pedidos).filter((p) => !['entregado', 'fallido'].includes(p.estado)).sort(porOrden)
   const hechos = lista(ruta.pedidos).filter((p) => ['entregado', 'fallido'].includes(p.estado))
@@ -1392,10 +1423,8 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
   // EL CLIENTE AVISADO (01-11-2026): las pendientes con móvil, y cuántas se avisaron hoy.
   const conTelefono = pendientes.filter((p) => movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo))
   const avisadosHoy = conTelefono.filter((p) => avisados.includes(p.id)).length
-  /* LA RUTA EN MARCHA, EN LA APP DE QUIEN REPARTE SOLO (17-10-2026): lo que se usa cien veces al día es la siguiente
-     parada y su «Entregado», y quedaba a media pantalla debajo del bloque de añadir. Con paradas, añadir va en el
-     botón «+» y el bono en una línea. El portal del conductor de empresa sigue como estaba. */
-  const enMarcha = embebido && pendientes.length > 0 && !reordenar
+  /* LA RUTA EN MARCHA (17-10-2026): lo que se usa cien veces al día es la siguiente parada y su «Entregado». Con paradas,
+     añadir va en el botón «+» de la cabecera (en la app, el portal y el panel) y el bono en una línea. */
   const q = sinTildes(filtro.trim())
   const visibles = q
     ? pendientes.filter((p) => sinTildes([p.cliente, p.direccion, p.telefono, p.codigo, p.contenido, p.notas].join(' ')).includes(q))
@@ -1405,8 +1434,6 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
   // La guía va a la elegida y, hecha esa, a la siguiente EN ORDEN (02-11-2026); sin punto, a «Situar la parada».
   const sigGuia = guiando ? (porId[guiando] || pendientes[0] || null) : null
   const objetivo = sigGuia?.lat != null ? sigGuia : null
-  // Ninguna en el mapa y alguna que el servidor no encontró (o solo su zona): la cabecera lo dice, con «Situar».
-  const perdida = pendientes.some((p) => p.lat != null) ? null : pendientes.find((p) => p.geo === 'no' || p.geo === 'zona') || null
   const enPuerta = {}
   pendientes.forEach((p) => { const k = clavePuerta(p); if (k) enPuerta[k] = (enPuerta[k] || 0) + 1 })
   // Retraso: solo con hora prevista de HOY y la parada siguiente aún sin hacer.
@@ -1452,321 +1479,204 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
       onCopiado={(ok) => setAviso(ok ? tx('Enlace copiado: pégalo en un WhatsApp o en el grupo de tus compañeros.') : tx('No se pudo copiar'))} />
   ) : null
 
-  return (
-    <Marco onBack={onBack} embebido={embebido}>
-      {/* JORNADA Y UBICACIÓN. El autónomo no tiene oficina que le siga: a él
-          no se le pide compartir nada. */}
-      {ruta.autonomo ? null : jornadaAbierta ? (
-        <div className="mb-3 flex items-center justify-between gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/[.07] px-3.5 py-2.5">
-          <span className="flex items-center gap-2 text-[12.5px] text-emerald-200">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" /> {tx('En jornada · la oficina ve tu ubicación')}
-          </span>
-          <button onClick={() => jornada('terminar')} disabled={ocupado === 'jornada'}
-            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-emerald-500/40 px-2.5 py-1.5 text-[12px] font-semibold text-emerald-200">
-            <Square size={12} /> {tx('Terminar')}
-          </button>
-        </div>
-      ) : (
-        <button onClick={() => (ruta.aviso_aceptado ? jornada('empezar') : setVerAviso(true))} disabled={ocupado === 'jornada'}
-          className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-dark-700 bg-dark-900 py-3 text-[14px] font-semibold text-dark-100">
-          <Play size={15} /> {ruta.jornada?.terminada ? tx('Volver a empezar la jornada') : tx('Empezar jornada')}
-        </button>
+  /* EL DISEÑO COMPACTO (07-11-2026, §5.1 de la especificación). El orden: Cabecera · LineaEstado · un Aviso · el resumen
+     del día · [ruta vacía | ruta terminada | la siguiente] · Promo · «Por entregar» y la lista · «Hechas hoy» · la línea
+     final de la app. Lo que hace cada botón y lo que se manda al servidor no cambia; solo cómo se ve y dónde está: las
+     filas abren su hoja (HojaParada) en vez de desplegarse, «Escanear» y «+» van en la cabecera, el buscador detrás de
+     🔍, Escuchar · Ver la puerta · Hueco · Memoria · Editar en el ⋮ de la tarjeta, lo de debajo del mapa en «Lo que hay
+     en tu ruta», los avisos pasajeros se van solos y la tarjeta no se va al buscar. */
+  const conParadas = total > 0
+  const enMapa = !reordenar && vista === 'mapa' && pendientes.length > 0
+  const soloMapa = enMapa && pantallaCompleta   // en la app y el portal, el mapa ocupa la pantalla; en el panel, 420 y la lista
+  const abajoFlotante = embebido && pantallaCompleta ? 64 : 0   // las pestañas de la app; en el portal y el panel, el borde
+  let fechaCorta = ''
+  try { fechaCorta = new Date(`${ruta.fecha}T12:00:00`).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' }).replace(/[.,]/g, '') } catch { fechaCorta = '' }
+  const cerrarAnadir = () => setAnadir(false)
+  const abrirEscaner = () => { medirAccion('ruta_escaner'); cerrarAnadir(); setEscaner(true) }
+  // Con la ruta vacía no salen «+» ni el mapa; «Escanear paquetes» sí (se llama así para no chocar con el «Escanear» del bloque).
+  const acciones = (
+    <>
+      {pendientes.length > 0 && !reordenar && (
+        <Boton variante="icono" icono={vista === 'mapa' ? List : MapaIcono} tono="neutro" nombre={vista === 'mapa' ? tx('Ver la lista') : tx('Ver el mapa')}
+          onClick={() => setVista(vista === 'mapa' ? 'lista' : 'mapa')} />
       )}
-
-      {/* LA PRUEBA SIN CUENTA: se dice que lo es y cómo quedársela. */}
-      {ruta.prueba && (
-        <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-amber-400/40 bg-amber-500/[.08] px-3.5 py-2.5">
-          <span className="text-[12.5px] leading-snug text-amber-100">{tx('Ruta de prueba con paradas de ejemplo. Se borra mañana.')}</span>
-          <div className="flex shrink-0 flex-col items-stretch gap-1.5">
-            <a href="/registro?sector=autonomo&plan=autonomo" className="rounded-lg bg-amber-400 px-3 py-1.5 text-center text-[12.5px] font-bold text-[#1a1300]">{tx('Crear mi cuenta')}</a>
-            {/* Quien ya tiene cuenta tiene que poder SALIR de la demo (Dani Brao, 05-10). */}
-            <button type="button" onClick={() => { salirDeLaDemoDeReparto(); window.location.href = '/panel/login' }}
-              className="rounded-lg border border-amber-400/50 px-3 py-1.5 text-[12px] font-semibold text-amber-100">{tx('Ya tengo cuenta')}</button>
-          </div>
-        </div>
-      )}
-
-      {ruta.previas > 0 && !previasNo && lee(`previas_no_${ruta.fecha}`, '') !== '1' && (
-        <div data-testid="previas" className="mb-3 rounded-2xl border border-sky-400/40 bg-sky-500/[.08] px-3.5 py-3">
-          <p className="flex items-start gap-2 text-[13.5px] font-semibold leading-snug text-sky-100">
-            <CalendarClock size={17} className="mt-0.5 shrink-0" />
-            {ruta.previas === 1 ? tx('Tienes 1 parada sin entregar de otro día.')
-              : tx('Tienes {n} paradas sin entregar de días anteriores.', { n: ruta.previas })}
-          </p>
-          <div className="mt-2.5 flex gap-2">
-            <button onClick={traerPrevias} disabled={ocupado === 'previas'}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-sky-400 py-2.5 text-[14px] font-bold text-[#04121a] disabled:opacity-50">
-              {ocupado === 'previas' && <Loader2 size={15} className="animate-spin" />} {tx('Pasarlas a hoy')}
-            </button>
-            <button onClick={() => { guarda(`previas_no_${ruta.fecha}`, '1'); setPreviasNo(true) }}
-              className="rounded-xl border border-sky-400/40 px-3.5 py-2.5 text-[13px] font-semibold text-sky-100">{tx('Ahora no')}</button>
-          </div>
-        </div>
-      )}
-
-      {/* LA CABECERA DEL DÍA: lo primero que se ve. Cuánto llevas, cuánto
-          queda, a qué hora acabas y si vas tarde respecto a lo previsto. */}
-      {total > 0 && (
-        <Cabecera fecha={ruta.fecha} hechos={hechos.length} total={total} entregados={entregados.length}
-          pendientes={pendientes.length} rr={ruta.ruta} retraso={retraso} cobrado={cobradoHoy} mejor={marcas?.mejor || 0}
-          dinero={dinero} onTarifa={ruta.autonomo && gan ? () => setTarifa({ bizum: gan.bizum || '', parada: aEuros(gan.pago_parada), dia: aEuros(gan.pago_dia), km: aEuros(unidades() === 'mi' ? Math.round(gan.coste_km * KM_POR_MILLA) : gan.coste_km) || (simboloMoneda() === '€' ? '0,12' : '') }) : null}
-          onCompartir={entregados.length >= 5 && pendientes.length === 0 ? () => {
-            const ini = ruta.jornada?.empezada ? new Date(ruta.jornada.empezada).getTime() : 0
-            const fin = ruta.jornada?.terminada ? new Date(ruta.jornada.terminada).getTime() : Date.now()
-            // EL DÍA EN UNA TARJETA (01-11-2026): a la primera, lo limpio por hora (si hay tarifa) y a qué hora acabó.
-            const fallidas = hechos.filter((p) => p.estado === 'fallido').length
-            const cierres = hechos.map((p) => p.cerrado_en).filter(Boolean).sort()
-            compartirDia({ paradas: entregados.length, minutos: ini ? (fin - ini) / 60000 : 0, km: Number(ruta?.ruta?.km) || 0,
-              aLaPrimera: Math.round((entregados.length / (entregados.length + fallidas)) * 100), porHora: dinero?.porHora ?? null,
-              horaFin: cierres.length ? new Date(cierres[cierres.length - 1]).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) : '' })
-              .then((r) => { if (r === 'descargado') setAviso(tx('Imagen descargada y texto copiado: pégalo donde quieras.')) })
-              .catch(() => setAviso(tx('No se pudo preparar la imagen')))
-          } : null}
-          fueraHorario={pendientes.filter((p) => p.tarde_min > 0).length}
-          onReordenar={retraso > 15 && pendientes.length > 1 && ocupado !== 'ordenar' ? ordenar : null}
-          furgo={furgo} yo={yo} onAparcar={ruta.autonomo || embebido ? aparcarAqui : null} onQuitarFurgo={quitarFurgo}
-          onGuiar={nav === 'app' && pendientes.some((p) => p.lat != null) ? () => irA(siguiente) : null}
-          onAnadir={enMarcha ? () => { medirAccion('ruta_anadir'); setAnadir(true) } : null}
-          onCorregir={perdida ? () => editar(perdida) : null} onSituar={perdida ? () => abrirSituar(perdida, 'guia') : null} />
-      )}
-
-      {copiaSinRed > 0 && (
-        <div role="status" className="mb-3 flex items-center gap-2 rounded-2xl border border-sky-400/40 bg-sky-500/10 px-3.5 py-2.5 text-[12.5px] leading-snug text-sky-100">
-          <WifiOff size={16} className="shrink-0" />
-          {tx('Sin conexión: es tu ruta de las {h}. Se pone al día sola al volver la cobertura.', { h: new Date(copiaSinRed).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) })}
-        </div>
-      )}
-
-      {cola.length > 0 && (
-        <div data-testid="sin-enviar" className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-sky-400/40 bg-sky-500/10 px-3.5 py-2.5">
-          <span className="flex min-w-0 items-center gap-2 text-[12.5px] leading-snug text-sky-100">
-            <WifiOff size={16} className="shrink-0" />
-            {cola.length === 1
-              ? tx('1 cambio guardado en el móvil, sin enviar. Se envía solo al volver la conexión.')
-              : tx('{n} cambios guardados en el móvil, sin enviar. Se envían solos al volver la conexión.', { n: cola.length })}
-          </span>
-          <button type="button" onClick={vaciarColaEntregas} className="shrink-0 rounded-lg border border-sky-400/50 px-2.5 py-1.5 text-[12px] font-bold text-sky-100">{tx('Enviar ahora')}</button>
-        </div>
-      )}
-
-      {/* EL BONO DE BIENVENIDA (17-10-2026): 10 € por la primera ruta de verdad, con lo que lleva a la vista. */}
-      {ruta.autonomo && ruta.bono && (
-        <Bono b={ruta.bono} total={total} compacto={enMarcha} soloEjemplo={total > 0 && lista(ruta.pedidos).every((p) => p.ejemplo)} />
-      )}
-
-      {/* AÑADIR PARADAS: sin ruta todavía, a la vista (es lo primero que se hace); con la ruta en marcha, en la hoja
-          del botón «+» (ver enMarcha). */}
-      {(!enMarcha || anadir) && (() => {
-        const enHoja = enMarcha
-        const cerrar = () => setAnadir(false)
-        const bloque = (
-      <div className="rounded-2xl border border-brand-400/40 bg-brand-500/[.08] p-3.5">
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => { medirAccion('ruta_escaner'); cerrar(); setEscaner(true) }}
-            className="flex items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta active:scale-[.99]">
-            <ScanLine size={19} /> {tx('Escanear')}
-          </button>
-          {/* La etiqueta del paquete trae dirección y teléfono: con una foto
-              entra en la ruta sin que nadie haya metido la lista antes. Es lo
-              que usa el autónomo que carga sus paquetes y sale. */}
-          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-brand-400/60 py-3.5 text-[15px] font-bold text-brand-200 active:scale-[.99]">
-            {ocupado === 'ticket' ? <Loader2 size={19} className="animate-spin" /> : <Camera size={19} />} {tx('Foto etiqueta')}
-            <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'ticket'}
-              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { cerrar(); setNuevo({ ...VACIO }); leerTicket(f) } }} />
-          </label>
-        </div>
-        {total > 0 && !enHoja && (
-          <button onClick={() => setMasCarga((v) => !v)} aria-expanded={masCarga}
-            className="mt-2.5 flex w-full items-center justify-center gap-1.5 text-[12.5px] font-semibold text-brand-300">
-            {tx('Más formas de añadir')} <ChevronDown size={14} className={masCarga ? 'rotate-180' : ''} />
-          </button>
-        )}
-        {(total === 0 || masCarga || enHoja) && (<>
-        <div className="mt-2.5 flex gap-2">
-          <input className={inp} value={codigo} onChange={(e) => setCodigo(e.target.value)} inputMode="text"
-            placeholder={tx('o escribe el código')} onKeyDown={(e) => { if (e.key === 'Enter') { cerrar(); buscar(codigo) } }} />
-          <button onClick={() => { cerrar(); buscar(codigo) }} disabled={!codigo.trim() || ocupado === 'buscar'}
-            className="shrink-0 rounded-xl border border-dark-600 px-4 text-[14px] font-semibold text-dark-100 disabled:opacity-40">
-            {ocupado === 'buscar' ? <Loader2 size={15} className="animate-spin" /> : tx('Buscar')}
-          </button>
-        </div>
-        <button onClick={() => { cerrar(); setNuevo({ ...VACIO }) }} className="mt-2 text-[12.5px] font-semibold text-brand-300">
-          + {tx('Añadir un pedido sin código')}
-        </button>
-        {ruta.autonomo && (
-          <button onClick={() => { cerrar(); setCarga({ n: 0 }) }}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-amber-400/50 bg-amber-500/10 py-3 text-[14px] font-bold text-amber-200">
-            <Package size={17} /> {tx('Cargar paquetes: uno tras otro')}
-          </button>
-        )}
+      <Boton variante="icono" icono={ScanLine} tono="neutro" nombre={tx('Escanear paquetes')} onClick={abrirEscaner} />
+      {conParadas && <Boton variante="icono" icono={Plus} tono="neutro" nombre={tx('Añadir paradas')} onClick={() => { medirAccion('ruta_anadir'); setAnadir(true) }} />}
+    </>
+  )
+  const abrirTarifa = ruta.autonomo && gan
+    ? () => setTarifa({ bizum: gan.bizum || '', parada: aEuros(gan.pago_parada), dia: aEuros(gan.pago_dia), km: aEuros(unidades() === 'mi' ? Math.round(gan.coste_km * KM_POR_MILLA) : gan.coste_km) || (simboloMoneda() === '€' ? '0,12' : '') })
+    : null
+  // EL DÍA EN UNA TARJETA (01-11-2026): a la primera, lo limpio por hora (si hay tarifa) y a qué hora acabó.
+  const compartir = entregados.length >= 5 && pendientes.length === 0 ? () => {
+    const ini = ruta.jornada?.empezada ? new Date(ruta.jornada.empezada).getTime() : 0
+    const fin = ruta.jornada?.terminada ? new Date(ruta.jornada.terminada).getTime() : Date.now()
+    const fallidas = hechos.filter((p) => p.estado === 'fallido').length
+    const cierres = hechos.map((p) => p.cerrado_en).filter(Boolean).sort()
+    compartirDia({ paradas: entregados.length, minutos: ini ? (fin - ini) / 60000 : 0, km: Number(ruta?.ruta?.km) || 0,
+      aLaPrimera: Math.round((entregados.length / (entregados.length + fallidas)) * 100), porHora: dinero?.porHora ?? null,
+      horaFin: cierres.length ? new Date(cierres[cierres.length - 1]).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) : '' })
+      .then((r) => { if (r === 'descargado') setAviso(tx('Imagen descargada y texto copiado: pégalo donde quieras.')) })
+      .catch(() => setAviso(tx('No se pudo preparar la imagen')))
+  } : null
+  // Con qué se va a cada parada: la guía de la app (botón) o el enlace a Google Maps / Waze; sin punto, «Situar la parada».
+  const comoIr = (p, desdeFila = false) => (p.lat != null && nav !== 'app' ? { hrefIr: navegar(p, nav) } : { onIr: desdeFila ? (x) => setGuiando(x.id) : irA })
+  const hrefWhatsappDe = (p) => { const m = movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo); return m ? `https://wa.me/${m}?text=${encodeURIComponent(mensaje(p, ruta.empresa))}` : '' }
+  const hrefSmsDe = (p) => (ruta.pais === 'cn' && p.telefono ? `sms:${p.telefono.replace(/[^\d+]/g, '')}?&body=${encodeURIComponent(mensaje(p, ruta.empresa))}` : '')
+  const zbeDe = (p) => (zbe?.paradas?.[p.id] ? zbe.paradas[p.id].tipo || zbe.tipo || 'ZBE' : '')
+  const sinSituar = pendientes.filter((p) => p.lat == null)
+  const enLista = visibles.filter((p) => p.id !== siguiente?.id)
+  const fallidas = hechos.filter((p) => p.estado === 'fallido').length
+  const altoMapa = pantallaCompleta ? 'calc(100dvh - 56px - 64px - env(safe-area-inset-bottom) - 24px)' : 420
+  /* AÑADIR PARADAS (§5.4): la rejilla de 2×2 («Escanear», «Foto etiqueta», «Lista u hoja» con puede_pegar, «A mano»), el
+     código con «Buscar» y «Cargar paquetes» (el autónomo). Con la ruta vacía, a la vista; con paradas, en la hoja del «+». */
+  const bloqueAnadir = (
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-2 gap-2">
+        <Boton variante="principal" icono={ScanLine} texto={tx('Escanear')} onClick={abrirEscaner} className="min-h-14" />
+        {/* La etiqueta del paquete trae dirección y teléfono: con una foto entra en la ruta sin que nadie haya metido la
+            lista antes. Es lo que usa el autónomo que carga sus paquetes y sale. */}
+        <label className={`flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ruta-marca px-3 py-2 text-center text-boton text-ruta-marca ${ocupado === 'ticket' ? 'opacity-50' : ''}`}>
+          {ocupado === 'ticket' ? <Loader2 size={20} className="shrink-0 animate-spin" aria-hidden="true" /> : <Camera size={20} className="shrink-0" aria-hidden="true" />}
+          <span>{tx('Foto etiqueta')}</span>
+          <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'ticket'}
+            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { cerrarAnadir(); setNuevo({ ...VACIO }); leerTicket(f) } }} />
+        </label>
         {ruta.puede_pegar && (
-          <button onClick={() => { cerrar(); setPegar({ texto: '', n: null }) }}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dark-600 py-2.5 text-[13.5px] font-semibold text-dark-100">
-            <ClipboardPaste size={16} /> {tx('Pegar una lista de direcciones')}
-          </button>
+          <Boton variante="normal" contorno tono="neutro" icono={ClipboardPaste} texto={tx('Lista u hoja')} onClick={() => { cerrarAnadir(); setPegar({ texto: '', n: null }) }} className="min-h-14" />
         )}
-              </>)}
+        <Boton variante="normal" contorno tono="neutro" icono={PenLine} texto={tx('A mano')} onClick={() => { cerrarAnadir(); setNuevo({ ...VACIO }) }} className="min-h-14" />
       </div>
-        )
-        return enHoja ? <Hoja titulo={tx('Añadir paradas')} onClose={cerrar}>{bloque}</Hoja> : bloque
-      })()}
+      <div className="flex gap-2">
+        <Campo valor={codigo} onChange={setCodigo} ejemplo={tx('Código')} inputMode="text" className="min-w-0 flex-1"
+          onKeyDown={(e) => { if (e.key === 'Enter') { cerrarAnadir(); buscar(codigo) } }} />
+        <Boton variante="icono" icono={Search} tono="neutro" relleno nombre={tx('Buscar')} onClick={() => { cerrarAnadir(); buscar(codigo) }}
+          disabled={!codigo.trim() || ocupado === 'buscar'} cargando={ocupado === 'buscar'} />
+      </div>
+      {ruta.autonomo && <Boton variante="normal" tono="aviso" icono={Package} texto={tx('Cargar paquetes')} onClick={() => { cerrarAnadir(); setCarga({ n: 0 }) }} />}
+    </div>
+  )
+  const bono = ruta.autonomo && ruta.bono && !soloMapa
+    ? <Bono b={ruta.bono} total={total} soloEjemplo={total > 0 && lista(ruta.pedidos).every((p) => p.ejemplo)} />
+    : null
 
-      {aviso && (
-        <button onClick={() => setAviso('')} className="mt-3 w-full rounded-xl border border-dark-700 bg-dark-900 px-3.5 py-2.5 text-left text-[13px] text-dark-100">
-          {aviso}
-        </button>
+  return (
+    <Marco onBack={onBack} embebido={embebido} pantallaCompleta={pantallaCompleta} fecha={fechaCorta} acciones={acciones}>
+      {/* JORNADA Y UBICACIÓN. El autónomo no tiene oficina que le siga: a él no se le pide compartir nada. */}
+      {ruta.autonomo ? null : jornadaAbierta ? (
+        <LineaEstado punto="ok" texto={tx('En jornada · la oficina ve tu ubicación')} accion={tx('Terminar')} onAccion={() => jornada('terminar')} />
+      ) : (
+        <Boton variante="normal" contorno tono="neutro" icono={Play} texto={ruta.jornada?.terminada ? tx('Volver a empezar la jornada') : tx('Empezar jornada')}
+          onClick={() => (ruta.aviso_aceptado ? jornada('empezar') : setVerAviso(true))} disabled={ocupado === 'jornada'} className="w-full" />
       )}
 
-      {anadida && (
-        <div role="status" className="mt-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2.5 text-[13px] text-dark-100">
-          <p className="font-semibold text-emerald-300">✓ {tx('Añadida a tu ruta')}</p>
-          <p className="mt-0.5 truncate">{[anadida.cliente, anadida.direccion].filter(Boolean).join(' · ')}</p>
-          {/* SIN SITIO EN EL MAPA (02-11-2026): se dice al momento, con «Situar», y no al ir a navegar. */}
-          {anadida.lat == null && (anadida.geo === 'no' || anadida.geo === 'zona') && (
-            <p className="mt-1 flex items-center gap-1.5 text-[12.5px] font-semibold text-amber-200"><MapPin size={14} className="shrink-0" /> {tx('No la encuentro en el mapa')}</p>
-          )}
-          <div className="mt-2 flex gap-2">
-            <button onClick={() => { setAnadida(null); setEscaner(true) }} className="flex-1 rounded-lg bg-brand-500 py-2 text-[13px] font-bold text-brand-tinta">
-              {tx('Escanear otro')}
-            </button>
-            {anadida.lat == null && (anadida.geo === 'no' || anadida.geo === 'zona') && (
-              <button onClick={() => { abrirSituar(anadida); setAnadida(null) }} className="rounded-lg bg-amber-400 px-3 py-2 text-[13px] font-bold text-[#1a1300]">
-                {tx('Situar')}
-              </button>
-            )}
-            <button onClick={() => { editar(anadida); setAnadida(null) }} className="rounded-lg border border-dark-600 px-3 py-2 text-[13px] font-semibold text-dark-100">
-              {tx('Corregir')}
-            </button>
-            <button onClick={() => setAnadida(null)} aria-label={tx('Cerrar')} className="px-2 text-dark-400">✕</button>
-          </div>
-        </div>
-      )}
-
-      {/* FIN DE LA RUTA: el resumen del día, como al cerrar un bloque. */}
-      {total > 0 && pendientes.length === 0 && <><Resumen hechos={hechos} ruta={ruta.ruta} marcas={marcas} invitacion={tarjetaInvitar} />{alTerminar}</>}
-
-      {(() => {
+      {/* UN SOLO AVISO, el primero que toque (§5.1 b): la recién añadida, lo guardado sin enviar, sin conexión, la placa
+          que hoy no circula, lo de otros días, la ruta de prueba, los ejemplos, lo de la cuenta (RutaApp) y el consejo
+          del día (25-10-2026: uno al día, de lo que aún no usa y cuando le sirve; «Entendido» lo quita para siempre). */}
+      {!soloMapa && (() => {
         const c = consejoDeHoy(ruta.fecha, { pendientes: pendientes.length, entregados: entregados.length, nav,
           ordenada: !!ruta.ruta?.fin, conHueco: lista(ruta.pedidos).some((p) => p.hueco) })
-        if (!c) return null
-        if (lee('consejo_hoy', '') !== `${ruta.fecha}|${c.id}`) guarda('consejo_hoy', `${ruta.fecha}|${c.id}`)
-        const entendido = () => { guarda(`consejo_${c.id}`, 'visto'); medirAccion(`consejo_${c.id}`); setConsejoVisto((n) => n + 1) }
+        if (c && lee('consejo_hoy', '') !== `${ruta.fecha}|${c.id}`) guarda('consejo_hoy', `${ruta.fecha}|${c.id}`)
+        const entendido = c ? () => { guarda(`consejo_${c.id}`, 'visto'); medirAccion(`consejo_${c.id}`); setConsejoVisto((n) => n + 1) } : null
+        const placa = (incidencias?.avisos || []).find((a) => a.hoy === true)
         return (
-          <section data-testid="consejo" aria-label={tx('Consejo')} className="mt-3 rounded-2xl border border-amber-400/30 bg-amber-500/[.06] px-3.5 py-3">
-            <p className="flex items-center gap-2 text-[13.5px] font-bold text-amber-100"><Lightbulb size={16} className="shrink-0 text-amber-300" /> {tx(c.titulo)}</p>
-            <p className="mt-1 text-[13px] leading-snug text-dark-200">{tx(c.texto)}</p>
-            <div className="mt-2.5 flex gap-2">
-              {c.id === 'ordenar' && (
-                <button onClick={() => { entendido(); ordenar() }} disabled={ocupado === 'ordenar'}
-                  className="flex-1 rounded-xl bg-amber-400 py-2 text-[13.5px] font-bold text-[#1a1300] disabled:opacity-50">{tx(c.boton)}</button>
-              )}
-              <button onClick={entendido}
-                className={`rounded-xl border border-amber-400/40 px-3.5 py-2 text-[13px] font-semibold text-amber-100 ${c.id === 'ordenar' ? '' : 'flex-1'}`}>{tx('Entendido')}</button>
-            </div>
-          </section>
+          <AvisoHueco
+            anadida={anadida ? { p: anadida, onEscanear: () => { setAnadida(null); setEscaner(true) }, onSituar: () => { abrirSituar(anadida); setAnadida(null) },
+              onCorregir: () => { editar(anadida); setAnadida(null) }, onCerrar: () => setAnadida(null) } : null}
+            sinEnviar={cola.length > 0 ? { n: cola.length, onEnviar: vaciarColaEntregas } : null}
+            sinConexion={copiaSinRed > 0 ? { hora: new Date(copiaSinRed).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) } : null}
+            placa={placa ? { url: placa.url } : null}
+            previas={ruta.previas > 0 && !previasNo && lee(`previas_no_${ruta.fecha}`, '') !== '1'
+              ? { n: ruta.previas, onTraer: traerPrevias, ocupado: ocupado === 'previas', onCerrar: () => { guarda(`previas_no_${ruta.fecha}`, '1'); setPreviasNo(true) } } : null}
+            prueba={ruta.prueba ? { onYaTengo: () => { salirDeLaDemoDeReparto(); window.location.href = '/panel/login' } } : null}
+            ejemplos={pendientes.some((p) => p.ejemplo) ? { onQuitar: quitarEjemplos, ocupado: ocupado === 'ejemplo' } : null}
+            avisoApp={avisoApp}
+            consejo={c ? { c, onAccion: () => { entendido(); ordenar() }, onEntendido: entendido } : null} />
         )
       })()}
 
-      {/* LA RUTA */}
-      <div className="mb-2 mt-5 flex items-center justify-between gap-2">
-        <h2 className="text-[15px] font-bold text-dark-50">{tx('{n} por entregar', { n: pendientes.length })}</h2>
-        {!reordenar && (
-          <div className="flex gap-1.5">
-            {pendientes.length > 1 && (
-              <button onClick={() => { setReordenar(pendientes.map((p) => p.id)); setVista('lista') }}
-                className="inline-flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1.5 text-[12.5px] font-semibold text-dark-200">
-                <ArrowUpDown size={13} /> {tx('A mano')}
-              </button>
-            )}
-            <button onClick={ordenar} disabled={!pendientes.length || ocupado === 'ordenar'}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1.5 text-[12.5px] font-semibold text-dark-200 disabled:opacity-40">
-              {ocupado === 'ordenar' ? <Loader2 size={13} className="animate-spin" /> : <Route size={13} />} {tx('Ordenar ruta')}
-            </button>
-          </div>
-        )}
-      </div>
-      {/* LA CARGA GUIADA (01-11-2026): con la ruta ordenada y paquetes aún fuera de la furgoneta. */}
-      {!reordenar && !!ruta.ruta?.fin && pendientes.some((p) => !p.cargado_en) && (
-        <button onClick={() => setCargaGuiada(true)}
-          className="mb-2 flex w-full items-center gap-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-3 text-left">
-          <Truck size={20} className="shrink-0 text-emerald-300" />
-          <span className="min-w-0 flex-1">
-            <span className="block text-[14px] font-bold text-emerald-100">{tx('Cargar la furgoneta')}</span>
-            <span className="block text-[12.5px] text-dark-300">{tx('Escanea y te digo dónde va')} · {tx('{a} de {b} cargados', { a: pendientes.filter((p) => p.cargado_en).length, b: pendientes.length })}</span>
-          </span>
-        </button>
+      {/* EL RESUMEN DEL DÍA (§5.1 c): cuánto queda, a qué hora acabas, si vas tarde, y los chips de la ruta. */}
+      {conParadas && !soloMapa && (
+        <ResumenDia pendientes={pendientes.length} hechos={hechos.length} total={total} rr={ruta.ruta} retraso={retraso}
+          onOrdenar={reordenar ? null : ordenar} ordenando={ocupado === 'ordenar'}
+          cargar={!reordenar && !!ruta.ruta?.fin && pendientes.some((p) => !p.cargado_en) ? { a: pendientes.filter((p) => p.cargado_en).length, b: pendientes.length, onClick: () => setCargaGuiada(true) } : null}
+          avisar={!reordenar && !!ruta.ruta?.fin && conTelefono.length > 0 ? { a: avisadosHoy, b: conTelefono.length, onClick: () => setAvisarTodos(true) } : null}
+          dinero={dinero && abrirTarifa ? { texto: euros(dinero.neto), onClick: abrirTarifa } : null} sinTarifa={!dinero ? abrirTarifa : null}
+          cobrado={cobradoHoy} furgo={pendientes.length > 0 ? furgo : null} yo={yo} onAparcar={ruta.autonomo || embebido ? aparcarAqui : null} onQuitarFurgo={quitarFurgo}
+          record={entregados.length >= 10 && entregados.length > (marcas?.mejor || 0)} />
       )}
-      {/* EL CLIENTE AVISADO (01-11-2026): con la ruta ordenada, un WhatsApp a cada cliente con móvil, uno tras otro, con su
-          hora y su enlace. Es lo que más fallidas evita, según la calle (docs/NECESIDADES-REPARTIDOR-30-10.md). */}
-      {!reordenar && !!ruta.ruta?.fin && conTelefono.length > 0 && (
-        <button onClick={() => setAvisarTodos(true)} className="mb-2 flex w-full items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/[.07] px-3.5 py-3 text-left">
-          <MessageCircle size={22} className="shrink-0 text-emerald-300" />
-          <span className="min-w-0">
-            <span className="block text-[14px] font-bold text-emerald-100">{tx('Avisar a todos por WhatsApp')}</span>
-            <span className="block text-[12px] text-emerald-200/80">{avisadosHoy === conTelefono.length ? tx('Todos avisados') : tx('{a} de {b} avisados · su hora y su enlace', { a: avisadosHoy, b: conTelefono.length })}</span>
-          </span>
-        </button>
+
+      {/* LA RUTA VACÍA (§5.1 h): la acción misma, las formas de meter las paradas, y el ejemplo como enlace (quien va al
+          ejemplo no suele volver a lo suyo: 14-10). El conductor de empresa, la misma rejilla con su texto de hoy. */}
+      {!conParadas && (
+        <div className="rounded-xl border border-dashed border-ruta-borde p-3">
+          <p className="text-titulo text-dark-50">{tx('Carga tus paradas de hoy')}</p>
+          <p className="mb-3 text-sec text-dark-400">{ruta.autonomo ? tx('Escanea los paquetes o pega la lista') : tx('Escanea los bultos según los cargas y se irán poniendo aquí.')}</p>
+          {bloqueAnadir}
+          {ruta.autonomo && (
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4">
+              <Boton variante="texto" icono={Play} texto={tx('Ver un ejemplo')} onClick={cargarEjemplo} disabled={ocupado === 'ejemplo'} cargando={ocupado === 'ejemplo'} />
+              <Boton variante="texto" icono={HelpCircle} texto={tx('¿Cómo funciona?')} onClick={() => setTour(0)} />
+            </div>
+          )}
+        </div>
       )}
-      {/* CAMBIAR EL ORDEN A MANO: el repartidor conoce la zona mejor que nadie. */}
+
+      {/* FIN DE LA RUTA (§5.1 i): el resumen del día, como al cerrar un bloque. */}
+      {conParadas && pendientes.length === 0 && <><Resumen hechos={hechos} ruta={ruta.ruta} marcas={marcas} invitacion={tarjetaInvitar} onCompartir={compartir} />{alTerminar}</>}
+
+      {/* LA SIGUIENTE PARADA (§5.1 d): la única tarjeta; tocarla abre su hoja. Debajo, la invitación tras la primera
+          entrega (02-11-2026), justo detrás de la tarjeta. */}
+      {siguiente && !reordenar && !soloMapa && (
+        <TarjetaSiguiente p={siguiente} numero={siguiente.orden ?? 1} juntas={enPuerta[clavePuerta(siguiente)] || 1} zbe={zbeDe(siguiente)}
+          onAbrir={(p) => setAbierta(p.id)} {...comoIr(siguiente)}
+          onLlamar={() => apuntar(siguiente, 'llamada')} hrefWhatsapp={hrefWhatsappDe(siguiente)} onWhatsapp={() => apuntar(siguiente, 'whatsapp')} hrefSms={hrefSmsDe(siguiente)}
+          onSituar={(p) => abrirSituar(p)} onEscuchar={() => decir(textoBriefing(siguiente))}
+          onHueco={(p) => setHuecoDe(p)} onMemoria={(p) => setMemoriaDe(p)} onEditar={editar}
+          onFallar={(p) => setFallo(p)} onEntregar={(p) => marcar(p, 'entregado')} ocupado={ocupado === siguiente.id} />
+      )}
+      {siguiente && !reordenar && !soloMapa && tarjetaInvitar}
+
+      {/* LA PROMO (§5.1 e), una a la vez: el bono de bienvenida (17-10-2026) mientras no haya invitación a la vista. */}
+      {!tarjetaInvitar && bono}
+
+      {/* CAMBIAR EL ORDEN A MANO: el repartidor conoce la zona mejor que nadie. Filas de 56 y el pie fijo. */}
       {reordenar && (
-        <div className="rounded-2xl border border-brand-400/40 bg-dark-900 p-3">
-          <p className="mb-2 text-[12.5px] text-dark-300">{tx('Arrastra cada parada por el asa, o usa las flechas. Al guardar se recalculan las horas con tu orden.')}</p>
-          <ol className="flex flex-col gap-1.5">
+        <div className="rounded-xl bg-dark-900">
+          <p className="px-3 pt-3 text-sec text-dark-400">{tx('Arrastra cada parada por el asa, o usa las flechas. Al guardar se recalculan las horas con tu orden.')}</p>
+          <ol className="mt-2 divide-y divide-dark-800">
             {reordenar.map((id, i) => {
               const p = porId[id]
               if (!p) return null
               return (
                 <li key={id} ref={(el) => { filasOrden.current[id] = el }}
-                  className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 ${arrastrando === id ? 'border-brand-400 bg-brand-500/10 shadow-lg' : 'border-dark-700'}`}>
+                  className={`flex min-h-14 items-center gap-2 px-2 ${arrastrando === id ? 'bg-ruta-marca-tinte' : ''}`}>
                   <button type="button" onPointerDown={(e) => empezarArrastre(e, id)} aria-label={`${tx('Arrastrar')} ${p.cliente || p.direccion}`}
-                    style={{ touchAction: 'none' }} className="-ml-1 shrink-0 cursor-grab rounded-lg p-1.5 text-dark-400 active:cursor-grabbing"><GripVertical size={18} /></button>
-                  <span className="w-6 text-center text-[13px] font-bold text-brand-200">{i + 1}</span>
+                    style={{ touchAction: 'none' }} className="flex h-12 w-8 shrink-0 cursor-grab items-center justify-center rounded-lg text-dark-400 active:cursor-grabbing"><GripVertical size={20} aria-hidden="true" /></button>
+                  <span className="w-6 shrink-0 text-center text-etiqueta tabular-nums text-ruta-marca">{i + 1}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13.5px] font-semibold text-dark-50">{p.cliente || p.direccion}</span>
-                    {p.cliente && <span className="block truncate text-[12px] text-dark-400">{p.direccion}</span>}
+                    <span className="block truncate text-nombre text-dark-50">{p.cliente || p.direccion}</span>
+                    {p.cliente && <span className="block truncate text-sec text-dark-400">{p.direccion}</span>}
                   </span>
-                  <button onClick={() => mover(i, -1)} disabled={i === 0} aria-label={`${tx('Subir')} ${p.cliente || p.direccion}`}
-                    className="rounded-lg border border-dark-700 p-2 text-dark-200 disabled:opacity-30"><ArrowUp size={15} /></button>
-                  <button onClick={() => mover(i, 1)} disabled={i === reordenar.length - 1} aria-label={`${tx('Bajar')} ${p.cliente || p.direccion}`}
-                    className="rounded-lg border border-dark-700 p-2 text-dark-200 disabled:opacity-30"><ArrowDown size={15} /></button>
+                  <Boton variante="icono" icono={ArrowUp} tono="neutro" nombre={`${tx('Subir')} ${p.cliente || p.direccion}`} onClick={() => mover(i, -1)} disabled={i === 0} />
+                  <Boton variante="icono" icono={ArrowDown} tono="neutro" nombre={`${tx('Bajar')} ${p.cliente || p.direccion}`} onClick={() => mover(i, 1)} disabled={i === reordenar.length - 1} />
                 </li>
               )
             })}
           </ol>
-          <div className="mt-3 grid grid-cols-[1fr_2fr] gap-2">
-            <button onClick={() => setReordenar(null)} className="rounded-xl border border-dark-600 py-2.5 text-[14px] text-dark-200">{tx('Cancelar')}</button>
-            <button onClick={guardarOrden} disabled={ocupado === 'orden'}
-              className="flex items-center justify-center gap-1.5 rounded-xl bg-brand-500 py-2.5 text-[14px] font-bold text-brand-tinta disabled:opacity-50">
-              {ocupado === 'orden' && <Loader2 size={15} className="animate-spin" />} {tx('Guardar este orden')}
-            </button>
+          <div className="sticky bottom-0 grid grid-cols-[1fr_2fr] gap-2 rounded-b-xl border-t border-dark-800 bg-dark-900 p-3">
+            <Boton variante="normal" contorno tono="neutro" texto={tx('Cancelar')} onClick={() => setReordenar(null)} />
+            <Boton variante="normal" texto={tx('Guardar este orden')} onClick={guardarOrden} disabled={ocupado === 'orden'} cargando={ocupado === 'orden'} />
           </div>
         </div>
       )}
 
-      {!reordenar && pendientes.length > 0 && (
-        <div className="mb-2.5 flex items-center gap-2">
-          <div className="inline-flex rounded-lg border border-dark-700 p-0.5" role="group" aria-label={tx('Vista')}>
-            {[['lista', 'Lista', List], ['mapa', 'Mapa', MapaIcono]].map(([k, t, I]) => (
-              <button key={k} onClick={() => setVista(k)} aria-pressed={vista === k}
-                className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[12.5px] font-semibold ${vista === k ? 'bg-dark-700 text-dark-50' : 'text-dark-400'}`}>
-                <I size={13} /> {tx(t)}
-              </button>
-            ))}
-          </div>
-          {!embebido && <label className="ml-auto flex items-center gap-1 text-[12px] text-dark-400">
-            {tx('Ir con')}
-            <select value={nav} onChange={(e) => setNav(e.target.value)} aria-label={tx('Navegador')}
-              className="rounded-lg border border-dark-700 bg-dark-900 px-1.5 py-1 text-[12.5px] text-dark-100">
-              {NAVEGADORES.map(([k, t]) => <option key={k} value={k}>{tx(t)}</option>)}
-            </select>
-          </label>}
-        </div>
-      )}
-
-      {!reordenar && vista === 'mapa' && pendientes.length > 0 && (
-        <div className="mb-3">
-          <Suspense fallback={<div className="flex h-[420px] items-center justify-center rounded-xl border border-dark-700"><Loader2 className="animate-spin text-dark-500" /></div>}>
-            <MapaReparto alto={420} base={yo ? null : ruta.base} yo={yo} trazado={trazado} zonas={verZonas ? zonas?.zonas || SIN_ZONAS : SIN_ZONAS}
+      {/* EL MAPA (§5.7): a pantalla completa bajo la cabecera (en el panel, 420). Encima, las píldoras de lo que hay por
+          las calles y de lo que falta por situar, «Lo que hay en tu ruta» (ⓘ) y las próximas paradas en Google Maps. */}
+      {enMapa && (
+        <div className="relative isolate">
+          <Suspense fallback={<div style={{ height: altoMapa }} className="flex items-center justify-center rounded-xl border border-dark-800"><Loader2 className="animate-spin text-dark-400" aria-hidden="true" /></div>}>
+            <MapaReparto alto={altoMapa} base={yo ? null : ruta.base} yo={yo} trazado={trazado} zonas={verZonas ? zonas?.zonas || SIN_ZONAS : SIN_ZONAS}
               incidencias={incidencias?.incidencias || SIN_ZONAS} zbe={zbe?.zonas || SIN_ZONAS} furgo={furgo} onAccion={accionMapa}
               fuente={incidencias?.fuente || ''} tipoZona={zbe?.tipo || 'ZBE'}
               paradas={lista(ruta.pedidos).map((p, i) => ({
@@ -1778,310 +1688,157 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
                 dice: p.cliente_dice ? textoClienteDice(p.cliente_dice) : null,
               }))} />
           </Suspense>
-          <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[12px] text-dark-400">
-            {trazado?.fuente === 'carreteras'
-              ? <><span className="inline-block h-1 w-5 rounded bg-sky-600" /> {tx('Por las calles:')} <b className="text-dark-200">{distancia(trazado.km)}</b> · {tx('{t} conduciendo (sin contar paradas)', { t: minutosATexto(trazado.minutos) })}</>
-              : trazado ? tx('Sin servidor de rutas ahora: rayas rectas entre paradas.') : tx('Calculando el recorrido…')}
-          </p>
-          <label className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-dark-300">
-            <input type="checkbox" checked={verZonas} onChange={(e) => cambiarZonas(e.target.checked)} className="h-4 w-4 accent-violet-600" />
-            <span className="rounded bg-violet-600 px-1 text-[9px] font-extrabold leading-4 text-white">C/D</span>
-            {tx('Zonas de carga y descarga')}
-            {verZonas && zonas && (
-              <span className="text-dark-400">
-                · {zonas.zonas.length ? tx('{n} cerca de tus paradas', { n: zonas.zonas.length }) : tx('ninguna apuntada cerca')}
-                {zonas.incompleto ? ` ${tx('(no se han podido cargar todas)')}` : ''} · OpenStreetMap
-              </span>
+          {/* A la derecha del zoom de Leaflet (arriba a la izquierda); las capas van arriba a la derecha (MapaReparto). */}
+          <div className="absolute left-16 top-3 z-[1100] flex max-w-[55%] flex-col items-start gap-2">
+            <Pastilla texto={trazado?.fuente === 'carreteras' ? `${distancia(trazado.km)} · ${minutosATexto(trazado.minutos)}` : trazado ? tx('Sin ruta por calles') : tx('Calculando el recorrido…')} />
+            {sinSituar.length > 0 && (
+              <Pastilla tono="aviso" icono={MapPinOff} texto={sinSituar.length === 1 ? tx('1 sin situar') : tx('{n} sin situar', { n: sinSituar.length })} onClick={() => abrirSituar(sinSituar[0])} />
             )}
-          </label>
-          {/* LO QUE DICE LA CALLE (30-10-2026): cortes y obras cerca y las zonas de bajas emisiones que tocan la ruta, de
-              la fuente abierta de cada país (DGT, Bison Futé, NDW, WZDx; ZBE, ZFE, ULEZ, Umweltzone…), con su fuente.
-              Donde no hay fuente, el servidor contesta `aplica: false` y no se dice nada (ni «ninguna cerca»). */}
-          {incidencias?.aplica !== false && <p data-testid="dgt" className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-[12px] text-dark-300">
-            <AlertTriangle size={13} className="shrink-0 text-amber-300" /> {tx('Cortes y obras')}{incidencias?.fuente ? ` (${incidencias.fuente.split(' · ')[0]})` : ''}:{' '}
-            <span className="text-dark-400">
-              {incidencias == null ? '…' : incidencias.incidencias.length
-                ? `${incidencias.incidencias.length === 1 ? tx('1 cerca de tu ruta') : tx('{n} cerca de tu ruta', { n: incidencias.incidencias.length })} · ${queIncidencia(incidencias.incidencias[0].que)}${incidencias.incidencias[0].carretera ? ` · ${incidencias.incidencias[0].carretera}` : ''}${incidencias.incidencias[0].parada ? ` · ${tx('a {km} km de la parada {n}', { km: String(incidencias.incidencias[0].distancia_km).replace('.', ','), n: incidencias.incidencias[0].parada })}` : ''}`
-                : tx('ninguna cerca de tu ruta')}
-              {incidencias?.incompleto ? ` ${tx('(no se han podido cargar)')}` : ''}
-            </span>
-          </p>}
-          {/* RESTRICCIONES POR PLACA (30-10-2026): rodízio, Hoy No Circula, pico y placa… Lo que dice la norma de hoy
-              en su ciudad y, si puso su placa en Ajustes, si le toca; donde la regla cambia por temporada, el enlace. */}
-          {incidencias?.avisos?.map((a) => (
-            <p key={`${a.ciudad}-${a.titulo}`} data-testid="norma"
-              className={`mt-1.5 rounded-lg px-2.5 py-1.5 text-[12px] leading-snug ${a.hoy === true ? 'bg-red-500/15 text-red-100' : a.hoy === false && a.digitos?.length ? 'bg-emerald-500/10 text-emerald-100' : 'bg-amber-500/10 text-amber-100'}`}>
-              <b>{a.ciudad} · {a.titulo}:</b> {a.texto}
-              {a.hoy === true ? <b> {tx('Hoy tu placa no puede circular.')}</b> : a.hoy === false && a.digitos?.length ? ` ${tx('Tu placa sí puede circular hoy.')}` : ''}
-              {' '}<a href={a.url} target="_blank" rel="noreferrer" className="underline">{tx('Fuente oficial')}</a>
-            </p>
-          ))}
-          {zbe?.zonas?.length > 0 && (
-            <p data-testid="zbe" className="mt-1 text-[12px] leading-snug text-violet-200">
-              {tx('Zonas de bajas emisiones')}{zbe.fuente ? ` (${zbe.fuente})` : ''}: {zbe.zonas.map((z) => z.nombre).join(', ')}
-              {Object.keys(zbe.paradas || {}).length ? ` · ${Object.keys(zbe.paradas).length === 1 ? tx('1 parada dentro') : tx('{n} paradas dentro', { n: Object.keys(zbe.paradas).length })}` : ''}
-              {zbe.zonas[0].descripcion ? ` · ${zbe.zonas[0].descripcion}` : ''}
-            </p>
+          </div>
+          <div className="absolute bottom-7 left-3 z-[1100] flex flex-col items-start gap-2">
+            <BotonMapa icono={Info} nombre={tx('Lo que hay en tu ruta')} onClick={() => setVerCapas(true)} />
+            {/* Las próximas paradas de golpe en Google Maps (hasta 4; Waze no admite varias). */}
+            {enlaceVarias(pendientes) && (
+              <Pastilla href={enlaceVarias(pendientes)} target="_blank" rel="noreferrer" icono={ExternalLink} texto="Google Maps"
+                nombre={tx('Las próximas {n} paradas en Google Maps', { n: Math.min(4, pendientes.filter((p) => p.lat != null).length) })} />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* «POR ENTREGAR» Y LA LISTA (§5.1 f): la cabecera de 40 con 🔍 (con más de 5), «A mano» (con más de 1) y, en el
+          portal, «Ir con»; filas en una sola superficie que abren su hoja. El buscador filtra la lista, no la tarjeta. */}
+      {conParadas && !reordenar && !soloMapa && pendientes.length > 0 && (pendientes.length > 1 || !embebido) && (
+        <div>
+          {buscando ? (
+            <div className="flex items-center gap-2">
+              <Campo valor={filtro} onChange={setFiltro} icono={Search} ejemplo={tx('Buscar')} nombre={tx('Buscar en la ruta')} className="min-w-0 flex-1" autoFocus />
+              <Boton variante="icono" icono={X} tono="neutro" nombre={tx('Cerrar')} onClick={() => { setBuscando(false); setFiltro('') }} />
+            </div>
+          ) : (
+            <div className="flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1">
+              {pendientes.length > 1 && <h2 className="min-w-0 flex-1 text-etiqueta text-dark-400">{tx('Por entregar')} · {pendientes.length - 1}</h2>}
+              {pendientes.length > 5 && <Boton variante="icono" icono={Search} tono="neutro" nombre={tx('Buscar en la ruta')} onClick={() => setBuscando(true)} />}
+              {pendientes.length > 1 && <Chip icono={ArrowUpDown} texto={tx('A mano')} onClick={() => { setReordenar(pendientes.map((p) => p.id)); setVista('lista') }} />}
+              {/* CON QUÉ NAVEGA (17-10-2026): en la app se elige en Ajustes; el portal del conductor lo sigue teniendo aquí. */}
+              {!embebido && (
+                <label className="flex min-w-0 max-w-full items-center gap-2 text-sec text-dark-400">
+                  <span className="shrink-0">{tx('Ir con')}</span>
+                  <select value={nav} onChange={(e) => setNav(e.target.value)} aria-label={tx('Navegador')} className="campo w-auto min-w-0 max-w-full py-1 text-boton">
+                    {NAVEGADORES.map(([k, t]) => <option key={k} value={k}>{tx(t)}</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
           )}
-          {pendientes.some((p) => p.lat == null) && (
-            <p className="mt-1 text-[12px] text-amber-200/90">
-              {tx('{n} sin situar en el mapa todavía (la dirección no se ha encontrado o se está buscando).', { n: pendientes.filter((p) => p.lat == null).length })}
-            </p>
-          )}
-          {enlaceVarias(pendientes) && (
-            <a href={enlaceVarias(pendientes)} target="_blank" rel="noreferrer"
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-sky-500/50 bg-sky-500/10 py-3 text-[14px] font-bold text-sky-200">
-              <Navigation size={16} /> {tx('Las próximas {n} paradas en Google Maps', { n: Math.min(4, pendientes.filter((p) => p.lat != null).length) })}
-            </a>
+          {q && enLista.length === 0 && <p className="py-4 text-center text-texto text-dark-400">{tx('Sin resultados')}</p>}
+          {enLista.length > 0 && (
+            <ContenedorLista className="mt-1">
+              {enLista.map((p) => (
+                <FilaParada key={p.id} p={p} numero={p.orden ?? pendientes.indexOf(p) + 1} juntas={enPuerta[clavePuerta(p)] || 1} zbe={zbeDe(p)}
+                  onTocar={(x) => setAbierta(x.id)} onSituar={(x) => abrirSituar(x)} {...(p.lat != null ? comoIr(p, true) : {})} />
+              ))}
+            </ContenedorLista>
           )}
         </div>
       )}
 
-      {!reordenar && pendientes.length > 5 && (
-        <div className="relative mb-2.5">
-          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-dark-500" />
-          <input className={`${inp} pl-9`} value={filtro} onChange={(e) => setFiltro(e.target.value)}
-            placeholder={tx('Buscar cliente, calle, teléfono…')} aria-label={tx('Buscar en la ruta')} />
-        </div>
-      )}
-
-      {/* EL HUECO VACÍO (23-10-2026): antes era una frase y un botón grande al ejemplo; ahora es la acción misma,
-          las cuatro formas de meter las paradas, y el ejemplo queda como enlace (quien va al ejemplo no suele
-          volver a lo suyo: 14-10). */}
-      {pendientes.length === 0 && total === 0 && (
-        ruta.autonomo ? (
-          <div className="rounded-xl border border-dashed border-dark-700 px-3.5 py-4">
-            <p className="text-[15px] font-bold leading-tight text-dark-50">{tx('Carga tus paradas de hoy')}</p>
-            <p className="mt-0.5 text-[12.5px] text-dark-400">{tx('¿Cómo te llegan las paradas?')}</p>
-            <FormasDeCargar className="mt-3" compacto puedePegar={!!ruta.puede_pegar} onElegir={abrirForma} />
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[12.5px] font-semibold">
-              <button onClick={() => setTour(0)} className="inline-flex items-center gap-1 text-brand-300 underline underline-offset-2">
-                <HelpCircle size={14} /> {tx('¿Cómo funciona?')}
-              </button>
-              <button onClick={cargarEjemplo} disabled={ocupado === 'ejemplo'}
-                className="inline-flex items-center gap-1 text-fuchsia-300 underline underline-offset-2 disabled:opacity-60">
-                {ocupado === 'ejemplo' ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} {tx('Verlo en acción con 3 paradas de ejemplo')}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-dark-700 px-4 py-5 text-center">
-            <p className="text-[13px] text-dark-400">{tx('Escanea los bultos según los cargas y se irán poniendo aquí.')}</p>
-          </div>
-        )
-      )}
-      {pendientes.some((p) => p.ejemplo) && (
-        <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-fuchsia-400/30 bg-fuchsia-500/[.07] px-3 py-2">
-          <span className="text-[12.5px] leading-snug text-fuchsia-100">{tx('Estas paradas son de ejemplo.')}</span>
-          <button onClick={quitarEjemplos} disabled={ocupado === 'ejemplo'}
-            className="shrink-0 rounded-lg border border-fuchsia-400/50 px-2.5 py-1.5 text-[12px] font-bold text-fuchsia-100">{tx('Quitar los ejemplos')}</button>
-        </div>
-      )}
-      {q && visibles.length === 0 && <p className="py-4 text-center text-[13px] text-dark-400">{tx('Nada con «{q}» en las paradas pendientes.', { q: filtro.trim() })}</p>}
-      {/* LAS PARADAS. La siguiente, entera y destacada; las demás, en una
-          línea (número, cliente, calle, hora) y se despliegan al tocarlas:
-          con 80 paradas, una lista de tarjetas enormes no hay quien la lleve. */}
-      {!reordenar && (
-      <div className="flex flex-col gap-2">
-        {visibles.map((p, i) => {
-          const esSiguiente = siguiente && p.id === siguiente.id
-          const juntas = enPuerta[clavePuerta(p)] || 1
-          const etiquetas = (
-            <>
-              {p.ejemplo && <span className="rounded bg-fuchsia-500/15 px-1.5 font-bold text-fuchsia-300">{tx('EJEMPLO')}</span>}
-              {p.prioridad && <span className="rounded bg-amber-500/15 px-1.5 font-bold text-amber-300">{tx('URGENTE')}</span>}
-              {p.tipo === 'recogida' && <span className="rounded bg-violet-500/15 px-1.5 font-bold text-violet-300">{tx('RECOGIDA')}</span>}
-              {p.cobrar > 0 && <span className="rounded bg-emerald-500/15 px-1.5 font-bold text-emerald-300">{tx('COBRAR')} {euros(p.cobrar)}</span>}
-              {p.ventana_desde && <span className="rounded bg-dark-800 px-1.5 text-dark-300">{tx('Horario')} {p.ventana_desde}–{p.ventana_hasta}</span>}
-              {p.tarde_min > 0 && <span className="rounded bg-red-500/15 px-1.5 text-red-300">{tx('llega {n} min tarde', { n: p.tarde_min })}</span>}
-              {juntas > 1 && <span className="rounded bg-sky-500/15 px-1.5 font-semibold text-sky-300">{tx('{n} paradas en esta puerta', { n: juntas })}</span>}
-              {/* LA PUERTA APRENDIDA y la ZBE (30-10-2026): el pin es donde se entregó la última vez; la parada cae en una zona de bajas emisiones. */}
-              {p.geo === 'puerta' && <span className="rounded bg-emerald-500/15 px-1.5 font-semibold text-emerald-300">{tx('Puerta conocida')}</span>}
-              {zbe?.paradas?.[p.id] && <span className="rounded bg-violet-500/15 px-1.5 font-bold text-violet-300" title={zbe.paradas[p.id].nombre}>{zbe.paradas[p.id].tipo || zbe.tipo || 'ZBE'}</span>}
-            </>
-          )
-          const hayEtiquetas = p.ejemplo || p.prioridad || p.tipo === 'recogida' || p.cobrar > 0 || p.ventana_desde || p.tarde_min > 0 || juntas > 1 || p.geo === 'puerta' || !!zbe?.paradas?.[p.id]
-          if (!esSiguiente && abierta !== p.id) {
-            return (
-              <div key={p.id} id={`parada-${p.id}`} className="flex items-stretch gap-1 rounded-2xl border border-dark-800 bg-dark-900/70">
-                <button onClick={() => setAbierta(p.id)} aria-label={`${tx('Ver la parada {n}', { n: p.orden ?? i + 1 })}: ${p.cliente || p.direccion}`}
-                  className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left">
-                  <span className="flex h-7 min-w-7 items-center justify-center rounded-full border border-brand-400/50 px-1.5 text-[12.5px] font-bold text-brand-200">{p.orden ?? i + 1}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-[14px] font-semibold text-dark-50">{p.cliente || p.direccion}</span>
-                      {p.eta && <span className={`shrink-0 text-[12.5px] font-semibold ${p.tarde_min ? 'text-red-300' : 'text-dark-300'}`}>{p.eta}</span>}
-                    </span>
-                    {p.cliente && <span className="block truncate text-[12.5px] text-dark-400">{p.direccion}</span>}
-                    {(hayEtiquetas || p.hueco || p.lat == null) && (
-                      <span className="mt-1 flex flex-wrap gap-1 text-[10.5px]">
-                        {p.lat == null && <span className="rounded bg-amber-500/15 px-1.5 font-bold text-amber-300">{p.geo === 'pendiente' ? tx('Buscando en el mapa…') : tx('Sin situar')}</span>}
-                        {etiquetas}
-                        {p.hueco && <span className="rounded bg-sky-500/15 px-1.5 text-sky-200">{tx(p.hueco)}</span>}
-                      </span>
-                    )}
-                  </span>
-                </button>
-                {p.lat == null ? (
-                  <button onClick={() => abrirSituar(p)} aria-label={`${tx('Situar')}: ${p.cliente || p.direccion}`}
-                    className="flex w-14 shrink-0 flex-col items-center justify-center gap-0.5 border-l border-dark-800 text-[10.5px] font-bold text-amber-300"><MapPin size={16} /> {tx('Situar')}</button>
-                ) : nav === 'app' ? (
-                  <button onClick={() => setGuiando(p.id)} aria-label={`${tx('Ir a')} ${p.cliente || p.direccion}`}
-                    className="flex w-12 shrink-0 items-center justify-center border-l border-dark-800 text-brand-300"><Navigation size={17} /></button>
-                ) : (
-                  <a href={navegar(p, nav)} target="_blank" rel="noreferrer" aria-label={`${tx('Ir a')} ${p.cliente || p.direccion}`}
-                    className="flex w-12 shrink-0 items-center justify-center border-l border-dark-800 text-dark-300"><Navigation size={17} /></a>
-                )}
-              </div>
-            )
-          }
-          return (
-          <Fragment key={p.id}>
-          <div id={`parada-${p.id}`} className={`rounded-2xl border p-3.5 ${esSiguiente ? 'border-brand-400/70 bg-gradient-to-b from-brand-500/[.12] to-dark-900 shadow-lg shadow-black/20' : 'border-dark-600 bg-dark-900'}`}>
-            <div className="mb-2 flex items-center justify-between">
-              <p className={`text-[11px] font-bold uppercase tracking-wider ${esSiguiente ? 'text-brand-300' : 'text-dark-400'}`}>{esSiguiente ? tx('Siguiente parada') : tx('Parada {n}', { n: p.orden ?? i + 1 })}</p>
-              {esSiguiente && (
-                <button onClick={() => decir(textoBriefing(p))} aria-label={tx('Escuchar la siguiente parada')} title={tx('Escuchar la siguiente parada')}
-                  className="rounded-lg p-1 text-brand-300 hover:bg-dark-800"><Volume2 size={16} /></button>
-              )}
-              {!esSiguiente && <button onClick={() => setAbierta(null)} className="text-[12px] font-semibold text-dark-400">{tx('Plegar')}</button>}
-            </div>
-            <div className="flex items-start gap-3">
-              <span className={`mt-0.5 flex items-center justify-center rounded-full bg-brand-500 px-1.5 font-bold text-brand-tinta ${esSiguiente ? 'h-9 min-w-9 text-[15px]' : 'h-7 min-w-7 text-[13px]'}`}>{p.orden ?? i + 1}</span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <p className={`${esSiguiente ? 'text-[18px]' : 'text-[15px]'} font-bold leading-tight text-dark-50`}>{p.cliente || tx('Cliente')}</p>
-                  {p.eta && <span className={`shrink-0 rounded-lg px-2 py-0.5 text-[13px] font-bold ${p.tarde_min ? 'bg-red-500/15 text-red-300' : 'bg-brand-500/15 text-brand-200'}`}>≈ {p.eta}</span>}
-                </div>
-                {hayEtiquetas && <div className="mt-1 flex flex-wrap gap-1.5 text-[11px]">{etiquetas}</div>}
-                <p className={`${esSiguiente ? 'text-[14.5px]' : 'text-[13px]'} mt-0.5 leading-snug text-dark-200`}>{p.direccion}</p>
-                {p.telefono && <p className="text-[12.5px] text-dark-400">{p.telefono}</p>}
-                {p.contenido && <p className="mt-1 flex items-start gap-1 text-[12.5px] text-dark-400"><Package size={13} className="mt-0.5 shrink-0" /> {p.contenido}</p>}
-                <p className="mt-0.5 text-[11.5px] text-dark-500">
-                  {p.bultos > 1 ? tx('{n} bultos', { n: p.bultos }) : tx('1 bulto')}{p.escaneos ? ` · ${p.escaneos > 1 ? tx('{n} escaneados', { n: p.escaneos }) : tx('1 escaneado')}` : ''}
-                  {p.geo === 'aprox' && ` · ${tx('ubicación aproximada (la calle)')}`}{p.notas && ` · ${p.notas}`}
-                </p>
-                <AntesPuerta a={p.antes} className="mt-1.5" />
-                <ClienteDice d={p.cliente_dice} className="mt-1.5" />
-                <MemoriaPuerta m={p.memoria} onEditar={() => setMemoriaDe(p)} className="mt-1.5" />
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {/* SIN SITUAR (02-11-2026): un toque abre «Situar la parada»; con solo la calle, se puede afinar la puerta. */}
-                  {p.lat == null ? (
-                    <button onClick={() => abrirSituar(p)} data-testid="situar-parada"
-                      className="inline-flex items-center gap-1 rounded-lg bg-amber-500/20 px-2 py-1 text-[12px] font-bold text-amber-200">
-                      <MapPin size={12} /> {p.geo === 'pendiente' ? tx('Buscando en el mapa…') : tx('Sin situar')} · {tx('Situar')}
-                    </button>
-                  ) : p.geo === 'aprox' && (
-                    <button onClick={() => abrirSituar(p)} className="inline-flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1 text-[12px] font-semibold text-dark-200">
-                      <MapPin size={12} /> {tx('Situar en el mapa')}
-                    </button>
-                  )}
-                  <button onClick={() => setHuecoDe(p)}
-                    className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-semibold ${p.hueco ? 'bg-sky-500/15 text-sky-200' : 'border border-dashed border-dark-700 text-dark-400'}`}>
-                    <Package size={12} /> {p.hueco ? tx('En la furgoneta: {sitio}', { sitio: tx(p.hueco) }) : tx('¿Dónde va en la furgoneta?')}
-                  </button>
-                  {/* VER LA PUERTA antes de llegar: solo si la dirección está situada en su portal
-                      (no «aproximada», que es solo la calle). */}
-                  {p.lat != null && p.geo !== 'aprox' && <VerPuerta p={p} />}
-                  <button onClick={() => editar(p)} aria-label={`${tx('Editar parada')}: ${p.cliente || p.direccion}`}
-                    className="inline-flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1 text-[12px] font-semibold text-dark-200">
-                    <Pencil size={12} /> {tx('Editar')}
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="mt-3 grid grid-cols-3 gap-1.5">
-              {p.lat == null || nav === 'app' ? (
-                <button onClick={() => irA(p)}
-                  className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> {tx('Ir')}</button>
-              ) : (
-                <a href={navegar(p, nav)} target="_blank" rel="noreferrer"
-                  className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> {tx('Ir')}</a>
-              )}
-              {p.telefono
-                ? <a href={`tel:${p.telefono}`} onClick={() => apuntar(p, 'llamada')} className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-700 py-2 text-[11px] text-dark-200"><Phone size={16} /> {tx('Llamar')}</a>
-                : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><Phone size={16} /> {tx('Sin teléfono')}</span>}
-              {ruta.pais === 'cn' ? (p.telefono
-                ? <a href={`sms:${p.telefono.replace(/[^\d+]/g, '')}?&body=${encodeURIComponent(mensaje(p, ruta.empresa))}`}
-                    className="flex flex-col items-center gap-0.5 rounded-xl border border-emerald-600/50 py-2 text-[11px] text-emerald-300"><MessageCircle size={16} /> {tx('SMS')}</a>
-                : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><MessageCircle size={16} /> —</span>)
-              : movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo)
-                ? <a href={`https://wa.me/${movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo)}?text=${encodeURIComponent(mensaje(p, ruta.empresa))}`} target="_blank" rel="noreferrer"
-                    onClick={() => apuntar(p, 'whatsapp')}
-                    className="flex flex-col items-center gap-0.5 rounded-xl border border-emerald-600/50 py-2 text-[11px] text-emerald-300"><MessageCircle size={16} /> WhatsApp</a>
-                : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><MessageCircle size={16} /> —</span>}
-            </div>
-            <div className="mt-1.5 grid grid-cols-[1fr_2fr] gap-1.5">
-              <button onClick={() => setFallo(p)} disabled={ocupado === p.id} className="flex items-center justify-center gap-1 rounded-xl border border-red-500/30 py-3 text-[13px] text-red-300"><X size={15} /> {p.tipo === 'recogida' ? tx('No recogido') : tx('No entregado')}</button>
-              <button onClick={() => marcar(p, 'entregado')} disabled={ocupado === p.id} className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-700 py-3 text-[15px] font-bold text-white active:scale-[.99]">
-                {ocupado === p.id ? <Loader2 size={16} className="animate-spin" /> : <Check size={17} />} {p.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')}
-              </button>
-            </div>
-          </div>
-          {/* LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): justo debajo de la siguiente parada. */}
-          {esSiguiente && tarjetaInvitar}
-          </Fragment>
-          )
-        })}
-      </div>
-      )}
-      {/* LO HECHO HOY, Y CORREGIBLE (10-10-2026): un «no entregado» se puede
-          volver a intentar (vuelve a la ruta) o dar por entregado si al final se
-          entregó; un entregado por error, pasarlo a no entregado. Si hay
-          incidencias, la lista sale abierta. */}
-      {hechos.length > 0 && (
-        <details className="mt-4" open={hechos.some((p) => p.estado === 'fallido')}>
-          <summary className="cursor-pointer text-[13px] text-dark-400">
-            {tx('{n} hechos hoy', { n: hechos.length })}
-            {hechos.some((p) => p.estado === 'fallido') && <span className="text-red-300"> · {tx('{n} sin entregar', { n: hechos.filter((p) => p.estado === 'fallido').length })}</span>}
+      {/* LO HECHO HOY, Y CORREGIBLE (§5.1 g; 10-10-2026): abierto si hay fallidas; las fallidas conservan en la fila «Volver
+          a intentarlo» y «Entregado»; «Corregir: no se entregó» y «Repetir la foto», en la hoja de la parada. */}
+      {hechos.length > 0 && !soloMapa && (
+        <details className="group" open={fallidas > 0}>
+          {/* El texto va suelto en el summary (no en un span): así «Hechas hoy · 1» es el propio summary, el que lleva la zona de
+              toque de 48 en el móvil, y tocarlo no lo intercepta nadie. */}
+          <summary className="min-h-12 cursor-pointer list-none py-4 text-etiqueta text-dark-400 [&::-webkit-details-marker]:hidden">
+            <ChevronDown size={18} className="mr-2 inline-block align-middle transition-transform group-open:rotate-180" aria-hidden="true" />
+            {tx('Hechas hoy')} · {hechos.length}{fallidas > 0 && <span className="text-ruta-peligro-texto"> · {tx('{n} sin entregar', { n: fallidas })}</span>}
           </summary>
-          <div className="mt-2 flex flex-col gap-1.5">
-            {hechos.map((p) => (
-              <div key={p.id} className={`rounded-xl border px-3 py-2 text-[12.5px] ${p.estado === 'fallido' ? 'border-red-500/30 bg-red-500/[.05]' : 'border-dark-800'}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate text-dark-200">{p.cliente || p.direccion}</span>
-                  <span className={`shrink-0 ${p.estado === 'entregado' ? 'text-emerald-300' : 'text-red-300'}`}>
-                    {p.estado === 'entregado' ? `${tx('Entregado')}${p.cobrado_importe ? ` · ${euros(p.cobrado_importe)}` : ''}` : `${tx('No')} · ${p.motivo ? tx(p.motivo) : ''}`}
-                  </span>
-                </div>
-                {/* LA ENTREGA VERIFICADA (01-11-2026): lo que dijo la IA de la foto; con aviso, se puede repetir. */}
-                {p.estado === 'entregado' && p.entrega_ia?.nivel === 'verificada' && (
-                  <p className="mt-1 flex items-center gap-1 text-[11.5px] text-emerald-300"><ShieldCheck size={12} /> {tx('Entrega verificada por IA')}</p>
-                )}
-                {p.estado === 'entregado' && p.entrega_ia?.nivel === 'revisar' && (
-                  <button onClick={() => setRevisar({ p, ia: p.entrega_ia })} className="mt-1 flex items-start gap-1 text-left text-[11.5px] font-semibold text-amber-300">
-                    <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span>{textoAvisoIa(p.entrega_ia)} <u>{tx('Repetir la foto')}</u></span>
-                  </button>
-                )}
-                {p.estado === 'entregado' && p.entrega_ia?.nivel === 'parcial' && p.entrega_ia.aviso && (
-                  <p className="mt-1 text-[11px] text-dark-500">{textoAvisoIa(p.entrega_ia)}</p>
-                )}
-                {/* LA VALORACIÓN DEL CLIENTE (01-11-2026): lo que puso en su enlace. */}
-                {p.estado === 'entregado' && p.valoracion?.estrellas > 0 && (
-                  <p className="mt-1 text-[12px] text-amber-300" aria-label={p.valoracion.estrellas === 1 ? tx('1 estrella') : tx('{n} estrellas', { n: p.valoracion.estrellas })}>
-                    {'★'.repeat(p.valoracion.estrellas)}{'☆'.repeat(5 - p.valoracion.estrellas)} <span className="text-[11px] text-dark-400">{tx('el cliente')}</span>
-                  </p>
-                )}
-                {p.estado === 'fallido' ? (
-                  <div className="mt-2 grid grid-cols-2 gap-1.5">
-                    <button onClick={() => marcar(p, 'pendiente', '')} disabled={ocupado === p.id}
-                      className="flex items-center justify-center gap-1 rounded-lg border border-brand-400/50 py-2 text-[12.5px] font-semibold text-brand-200">
-                      <RotateCcw size={13} /> {tx('Volver a intentarlo')}
-                    </button>
-                    <button onClick={() => marcar(p, 'entregado')} disabled={ocupado === p.id}
-                      className="flex items-center justify-center gap-1 rounded-lg bg-emerald-700 py-2 text-[12.5px] font-bold text-white">
-                      <Check size={13} /> {p.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')}
-                    </button>
+          <ContenedorLista>
+            {hechos.map((p, i) => (
+              <FilaParada key={p.id} p={p} numero={i + 1} onTocar={(x) => setAbierta(x.id)}
+                extra={p.estado === 'fallido' ? (
+                  <div className="grid grid-cols-[1fr_1.2fr] gap-2">
+                    <Boton variante="normal" contorno tono="marca" icono={RotateCcw} texto={tx('Volver a intentarlo')} onClick={() => marcar(p, 'pendiente', '')} disabled={ocupado === p.id} />
+                    <Boton variante="normal" tono="ok" icono={Check} texto={p.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')} onClick={() => marcar(p, 'entregado')} disabled={ocupado === p.id} />
                   </div>
-                ) : (
-                  <button onClick={() => setFallo(p)} disabled={ocupado === p.id}
-                    className="mt-1 text-[11.5px] font-semibold text-dark-400 underline underline-offset-2">{tx('Corregir: no se entregó')}</button>
-                )}
-              </div>
+                ) : null} />
             ))}
-          </div>
+          </ContenedorLista>
         </details>
       )}
+
+      {/* La línea final de la app («Invita y gana», RutaApp), solo sin la promo de invitar a la vista. */}
+      {!soloMapa && !tarjetaInvitar && pieApp}
+
+      {/* AÑADIR PARADAS, desde el «+» de la cabecera (§5.4; el título y el nombre no cambian: los buscan las pruebas). */}
+      {anadir && conParadas && <Hoja titulo={tx('Añadir paradas')} onClose={cerrarAnadir}><div className="pt-2">{bloqueAnadir}</div></Hoja>}
+
+      {/* LO QUE HAY EN TU RUTA (§5.7): lo que iba debajo del mapa, con sus textos. Las zonas de carga y descarga
+          (13-10-2026, OpenStreetMap: solo las apuntadas, sin saber si están libres); los cortes y obras y las zonas de bajas
+          emisiones (30-10-2026), de la fuente abierta de cada país (DGT, Bison Futé, NDW, WZDx; ZBE, ZFE, ULEZ…), con su fuente
+          (donde no hay, el servidor contesta `aplica: false` y no se dice nada); y lo que dice la norma de la placa en su
+          ciudad (rodízio, Hoy No Circula, pico y placa…). */}
+      {verCapas && (
+        <Hoja titulo={tx('Lo que hay en tu ruta')} onClose={() => setVerCapas(false)}>
+          <div className="flex flex-col gap-2 pt-2 text-texto text-dark-50">
+            <label className="flex min-h-12 items-center gap-2">
+              <input type="checkbox" checked={verZonas} onChange={(e) => cambiarZonas(e.target.checked)} className="h-5 w-5 shrink-0 accent-brand-500" />
+              <Etiqueta texto="C/D" />
+              <span className="min-w-0">
+                {tx('Zonas de carga y descarga')}
+                {verZonas && zonas && (
+                  <span className="text-dark-400">
+                    {' '}· {zonas.zonas.length ? tx('{n} cerca de tus paradas', { n: zonas.zonas.length }) : tx('ninguna apuntada cerca')}
+                    {zonas.incompleto ? ` ${tx('(no se han podido cargar todas)')}` : ''} · OpenStreetMap
+                  </span>
+                )}
+              </span>
+            </label>
+            {incidencias?.aplica !== false && <p data-testid="dgt" className="flex flex-wrap items-center gap-x-1">
+              <AlertTriangle size={18} className="shrink-0 text-ruta-aviso-texto" aria-hidden="true" /> {tx('Cortes y obras')}{incidencias?.fuente ? ` (${incidencias.fuente.split(' · ')[0]})` : ''}:{' '}
+              <span className="text-dark-400">
+                {incidencias == null ? '…' : incidencias.incidencias.length
+                  ? `${incidencias.incidencias.length === 1 ? tx('1 cerca de tu ruta') : tx('{n} cerca de tu ruta', { n: incidencias.incidencias.length })} · ${queIncidencia(incidencias.incidencias[0].que)}${incidencias.incidencias[0].carretera ? ` · ${incidencias.incidencias[0].carretera}` : ''}${incidencias.incidencias[0].parada ? ` · ${tx('a {km} km de la parada {n}', { km: String(incidencias.incidencias[0].distancia_km).replace('.', ','), n: incidencias.incidencias[0].parada })}` : ''}`
+                  : tx('ninguna cerca de tu ruta')}
+                {incidencias?.incompleto ? ` ${tx('(no se han podido cargar)')}` : ''}
+              </span>
+            </p>}
+            {incidencias?.avisos?.map((a) => (
+              <p key={`${a.ciudad}-${a.titulo}`} data-testid="norma"
+                className={`rounded-xl px-3 py-2 ${a.hoy === true ? 'bg-ruta-peligro/10 text-ruta-peligro-texto' : a.hoy === false && a.digitos?.length ? 'bg-ruta-ok/10 text-dark-50' : 'bg-ruta-aviso text-ruta-aviso-texto'}`}>
+                <b>{a.ciudad} · {a.titulo}:</b> {a.texto}
+                {a.hoy === true ? <b> {tx('Hoy tu placa no puede circular.')}</b> : a.hoy === false && a.digitos?.length ? ` ${tx('Tu placa sí puede circular hoy.')}` : ''}
+                {' '}<a href={a.url} target="_blank" rel="noreferrer" className="underline">{tx('Fuente oficial')}</a>
+              </p>
+            ))}
+            {zbe?.zonas?.length > 0 && (
+              <p data-testid="zbe" className="text-dark-50">
+                {tx('Zonas de bajas emisiones')}{zbe.fuente ? ` (${zbe.fuente})` : ''}: {zbe.zonas.map((z) => z.nombre).join(', ')}
+                {Object.keys(zbe.paradas || {}).length ? ` · ${Object.keys(zbe.paradas).length === 1 ? tx('1 parada dentro') : tx('{n} paradas dentro', { n: Object.keys(zbe.paradas).length })}` : ''}
+                {zbe.zonas[0].descripcion ? ` · ${zbe.zonas[0].descripcion}` : ''}
+              </p>
+            )}
+          </div>
+        </Hoja>
+      )}
+
+      {/* LA HOJA DE LA PARADA (§5.2): la de una fila o la tarjeta; sustituye a la tarjeta que se desplegaba en la lista. */}
+      {abierta && (() => {
+        const p = lista(ruta.pedidos).find((x) => x.id === abierta)
+        if (!p) return null
+        const hecha = ['entregado', 'fallido'].includes(p.estado)
+        return (
+          <HojaParada p={p} numero={hecha ? hechos.indexOf(p) + 1 : (p.orden ?? pendientes.indexOf(p) + 1)} juntas={enPuerta[clavePuerta(p)] || 1} zbe={zbeDe(p)}
+            onClose={() => setAbierta(null)} {...comoIr(p)}
+            onLlamar={() => apuntar(p, 'llamada')} hrefWhatsapp={hrefWhatsappDe(p)} onWhatsapp={() => apuntar(p, 'whatsapp')} hrefSms={hrefSmsDe(p)}
+            onHueco={(x) => setHuecoDe(x)} onSituar={(x) => abrirSituar(x)} onEditar={editar} onMemoria={(x) => setMemoriaDe(x)} onQuitar={quitarDeRuta}
+            onRevisar={(x) => setRevisar({ p: x, ia: x.entrega_ia })} onFallar={(x) => setFallo(x)} onEntregar={(x) => marcar(x, 'entregado')}
+            onReintentar={(x) => marcar(x, 'pendiente', '')} ocupado={ocupado === p.id} />
+        )
+      })()}
+
+      {/* LO PASAJERO (§5.1 b): se va solo a los 6 s; encima del «Deshacer» si coinciden. */}
+      {aviso && <AvisoFlotante abajo={abajoFlotante + (deshacer ? 60 : 0)} texto={aviso} onCerrar={() => setAviso('')} />}   {/* 52 del «Deshacer» con su detalle + 8 de hueco */}
 
       {encontrado && (
         <Hoja titulo={tx('Este paquete va en la parada')} onClose={() => setEncontrado(null)}>
@@ -2243,19 +2000,11 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
         )
       })()}
 
+      {/* «Deshacer» (§5.1 b): el aviso flotante de 8 s, con la siguiente debajo. */}
       {deshacer && (
-        <div className="fixed inset-x-0 bottom-20 z-[46] flex justify-center px-4" role="status">
-          <div className="flex w-full max-w-md items-center gap-3 rounded-2xl border border-dark-600 bg-dark-800 px-4 py-3 shadow-2xl">
-            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${deshacer.estado === 'entregado' ? 'bg-emerald-600' : 'bg-red-600'} text-white`}>
-              {deshacer.estado === 'entregado' ? <Check size={16} /> : <X size={16} />}
-            </span>
-            <span className="min-w-0 flex-1 text-[13px] leading-tight text-dark-100">
-              <b className="block truncate">{deshacer.estado === 'entregado' ? (deshacer.p.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')) : tx('No entregado')} · {deshacer.p.cliente || deshacer.p.direccion}</b>
-              {siguiente && siguiente.id !== deshacer.p.id && <span className="block truncate text-dark-400">{tx('Siguiente:')} {siguiente.cliente || siguiente.direccion}{siguiente.eta ? ` ≈ ${siguiente.eta}` : ''}</span>}
-            </span>
-            <button onClick={deshacerUltima} className="shrink-0 rounded-lg px-2 py-1.5 text-[13px] font-bold text-brand-300">{tx('Deshacer')}</button>
-          </div>
-        </div>
+        <AvisoFlotante abajo={abajoFlotante} accion={tx('Deshacer')} onAccion={deshacerUltima} onCerrar={() => setDeshacer(null)}
+          texto={`${deshacer.estado === 'entregado' ? (deshacer.p.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')) : tx('No entregado')} · ${deshacer.p.cliente || deshacer.p.direccion}`}
+          detalle={siguiente && siguiente.id !== deshacer.p.id ? `${tx('Siguiente:')} ${siguiente.cliente || siguiente.direccion}${siguiente.eta ? ` ≈ ${siguiente.eta}` : ''}` : ''} />
       )}
 
       {escaner && <Escaner onCodigo={buscar} onClose={() => setEscaner(false)} />}
@@ -2653,9 +2402,6 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
   )
 }
 
-/* EL BONO DE BIENVENIDA: cuánto le falta para los 10 € de su primera ruta de verdad (20 entregas reales
-   en 2 días distintos; lo cuenta el servidor con la misma vara que «Invita y gana»). Ganado, se celebra
-   tres días y lleva a la cartera. */
 /* LAS FORMAS DE RECIBIR LAS PARADAS (23-10-2026): la pregunta de la primera vez y el hueco vacío de la ruta
    enseñan las mismas cuatro, cada una con su herramienta (abrirForma). Sin «pegar» (no es el admin de la
    cuenta) solo quedan las etiquetas y a mano. */
@@ -2684,67 +2430,43 @@ function FormasDeCargar({ onElegir, puedePegar, compacto = false, className = ''
   )
 }
 
-function Bono({ b, total, soloEjemplo, compacto = false }) {
+/* EL BONO DE BIENVENIDA: cuánto le falta para los 10 € de su primera ruta de verdad (20 entregas reales
+   en 2 días distintos; lo cuenta el servidor con la misma vara que «Invita y gana»). Ganado, se celebra
+   tres días y lleva a la cartera. Desde el diseño compacto (07-11-2026, §5.1 e) es una Promo de una línea: «{euros} por
+   tu primera ruta real» con «{a}/{b} · {d} de {e} días», la barra de 2 y la pista debajo; tocarla abre las condiciones. */
+function Bono({ b, total, soloEjemplo }) {
+  const [ver, setVer] = useState(false)
   const euros = eurosRef(b.cent, locale())
   if (b.pagado) {
     const reciente = b.nuevo || (b.pagado_en && Date.now() - new Date(b.pagado_en).getTime() < 3 * 86400000)
     if (!reciente) return null
     return (
-      <button type="button" onClick={() => window.dispatchEvent(new Event('fds-ir-cuenta'))} data-testid="bono-ganado"
-        className="mb-3 flex w-full items-center gap-3 rounded-2xl border border-emerald-400/40 bg-emerald-500/[.12] px-3.5 py-3 text-left">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400/20 text-emerald-100"><Trophy size={20} /></span>
-        <span className="min-w-0">
-          <span className="block text-[15px] font-extrabold text-emerald-100">{tx('¡Has ganado {euros}!', { euros })}</span>
-          <span className="block text-[12.5px] leading-snug text-emerald-200/80">{tx('Ya están en tu cartera. Invita a un compañero y gana {euros} más.', { euros })}</span>
-        </span>
-      </button>
+      <Promo tono="ok" icono={Trophy} testid="bono-ganado" texto={tx('¡Has ganado {euros}!', { euros })}
+        pista={tx('Ya están en tu cartera. Invita a un compañero y gana {euros} más.', { euros })}
+        onTocar={() => window.dispatchEvent(new Event('fds-ir-cuenta'))} />
     )
   }
   const objetivo = b.objetivo || 20
   const diasObjetivo = b.dias_objetivo || 2
   const hechas = Math.min(b.entregas || 0, objetivo)
-  const pct = Math.round((hechas / objetivo) * 100)
   const dias = Math.min(b.dias || 0, diasObjetivo)
   const pista = b.revisar ? tx('Lo estamos revisando. Te avisamos por correo.')
     : soloEjemplo ? tx('Las paradas de ejemplo no cuentan: quítalas y mete las tuyas.')
       : total === 0 ? tx('Empieza con los paquetes de hoy: foto a la etiqueta de cada uno, aquí abajo.') : ''
-  const barra = (alto) => (
-    <div className={`${alto} overflow-hidden rounded-full bg-dark-950/70`} role="progressbar" aria-valuemin={0} aria-valuemax={objetivo}
-      aria-valuenow={hechas} aria-label={tx('Entregas para el bono')}>
-      <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-lime-300 transition-[width] duration-700" style={{ width: `${hechas ? Math.max(pct, 4) : 0}%` }} />
-    </div>
-  )
-  if (compacto) {
-    return (
-      <div className="mb-3 rounded-2xl border border-amber-300/40 bg-amber-400/[.10] px-3 py-2.5" data-testid="bono">
-        <div className="flex items-center gap-2">
-          <Gift size={16} className="shrink-0 text-amber-200" />
-          <p className="min-w-0 flex-1 truncate text-[13px] font-bold text-amber-100">{tx('{euros} por tu primera ruta real', { euros })}</p>
-          <span className="shrink-0 text-[12px] font-semibold tabular-nums text-amber-100">{hechas}/{objetivo} · {tx('{a} de {b} días', { a: dias, b: diasObjetivo })}</span>
-        </div>
-        <div className="mt-2">{barra('h-1.5')}</div>
-        {pista && <p className="mt-1.5 text-[12px] leading-snug text-amber-200/90">{pista}</p>}
-      </div>
-    )
-  }
+  // Los días («1 de 2 días») bajan a la línea de la pista en cuanto hay avance: junto a «{a}/{b}» cortaban el texto a 360.
+  const dosLineas = [hechas > 0 || dias > 0 ? tx('{a} de {b} días', { a: dias, b: diasObjetivo }) : '', pista].filter(Boolean).join(' · ')
   return (
-    <div className="mb-3 rounded-2xl border border-amber-300/40 bg-gradient-to-br from-amber-400/[.16] via-amber-500/[.06] to-transparent p-3.5" data-testid="bono">
-      <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-300/20 text-amber-200"><Gift size={20} /></span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-extrabold leading-tight text-amber-100">{tx('{euros} por tu primera ruta real', { euros })}</p>
-          <p className="mt-0.5 text-[12.5px] leading-snug text-amber-200/90">
-            {tx('Haz {n} entregas con la app en {d} días distintos y son tuyos. Hasta el {fecha}.', { n: objetivo, d: diasObjetivo, fecha: fechaRefPromo(locale(), b.hasta) })}
-          </p>
-        </div>
-      </div>
-      <div className="mt-3">{barra('h-2.5')}</div>
-      <p className="mt-1.5 flex items-center justify-between text-[12px] font-semibold text-amber-100">
-        <span>{tx('{a} de {b} entregas', { a: hechas, b: objetivo })}</span>
-        <span>{tx('{a} de {b} días', { a: dias, b: diasObjetivo })}</span>
-      </p>
-      {pista && <p className="mt-1.5 text-[12px] leading-snug text-amber-200/90">{pista}</p>}
-    </div>
+    <>
+      <Promo tono="aviso" icono={Gift} testid="bono" texto={tx('{euros} por tu primera ruta real', { euros })}
+        cifra={`${hechas}/${objetivo}`} progreso={hechas / objetivo} pista={dosLineas}
+        onTocar={() => setVer(true)} />
+      {ver && (
+        <Hoja titulo={tx('{euros} por tu primera ruta real', { euros })} onClose={() => setVer(false)}>
+          <p className="pt-2 text-texto text-dark-50">{tx('Haz {n} entregas con la app en {d} días distintos y son tuyos. Hasta el {fecha}.', { n: objetivo, d: diasObjetivo, fecha: fechaRefPromo(locale(), b.hasta) })}</p>
+          <p className="mt-2 text-texto text-dark-400">{tx('{a} de {b} entregas', { a: hechas, b: objetivo })} · {tx('{a} de {b} días', { a: dias, b: diasObjetivo })}</p>
+        </Hoja>
+      )}
+    </>
   )
 }
 
@@ -2765,192 +2487,33 @@ export function ElegirNavegador() {
   )
 }
 
-function Marco({ onBack, children, embebido }) {
+/* EL MARCO (diseño compacto, 07-11-2026, §5.1 a): la Cabecera común («Hoy» y la fecha corta en la app; «Mi ruta» con ←
+   en el portal) con «Ver el mapa», «Escanear paquetes» y «+»; fija con `pantallaCompleta` (la app y el portal), sin fijar
+   en el panel de escritorio. Entre bloques, 12. */
+function Marco({ onBack, children, embebido, pantallaCompleta = false, fecha = '', acciones = null }) {
+  // En la app, de borde a borde (el contenedor de RutaApp lleva 16 a los lados); la clase va en la propia cabecera para
+  // que la fija se pegue a lo largo de toda la columna, no solo dentro de una caja de su alto.
+  const cabecera = (
+    <Cabecera titulo={embebido ? tx('Hoy') : tx('Mi ruta')} onVolver={embebido ? undefined : onBack} acciones={acciones} fija={pantallaCompleta}
+      subtitulo={fecha ? <span className={embebido ? '' : 'max-[300px]:hidden'}>{fecha}</span> : ''}
+      className={embebido && pantallaCompleta ? '-mx-4' : ''} />
+  )
   // Dentro del panel (el autónomo) va sin pantalla completa ni botón de volver.
-  if (embebido) return <div className="mx-auto max-w-md">{children}</div>
-  return (
-    <div className="min-h-screen bg-dark-950 px-4 py-5">
-      <div className="mx-auto max-w-md">
-        <header className="mb-4 flex items-center gap-3">
-          <button onClick={onBack} className="rounded-lg border border-dark-700 p-2 text-dark-400" aria-label={tx('Volver')}><ArrowLeft size={16} /></button>
-          <h1 className="font-display text-[22px] font-bold text-dark-50">{tx('Mi ruta')}</h1>
-        </header>
+  if (embebido) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col gap-3">
+        {cabecera}
         {children}
       </div>
+    )
+  }
+  return (
+    <div className="min-h-[100dvh] bg-dark-950 pb-6">
+      <div className="mx-auto flex max-w-md flex-col gap-3">
+        {cabecera}
+        <div className="flex flex-col gap-3 px-4">{children}</div>
+      </div>
     </div>
-  )
-}
-
-/* LA CABECERA DEL DÍA: anillo de progreso, lo que queda y a qué hora se
-   acaba. «Vas X min por detrás» compara la hora de ahora con la prevista
-   para la parada siguiente; solo sale si de verdad va más de 5 min tarde. */
-/* `onCorregir` (06-10-2026): a Arturo no le salía «Empezar a navegar» y no sabía por qué. Su
-   única parada no estaba en el mapa (la dirección no se encontró) y sin un punto no hay
-   adónde guiar; el aviso quedaba abajo, debajo del mapa. Ahora lo dice aquí y lleva a
-   corregirla: al escribirla salen sugerencias, y elegir una la sitúa. */
-function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario, onGuiar, onCorregir, dinero, onTarifa, onCompartir, onAnadir, mejor = 0,
-  onReordenar = null, furgo = null, yo = null, onAparcar = null, onQuitarFurgo = null, onSituar = null }) {
-  const pct = total ? hechos / total : 0
-  const R = 26
-  const L = 2 * Math.PI * R
-  let dia = ''
-  try { dia = new Date(`${fecha}T12:00:00`).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }) } catch { dia = '' }
-  return (
-    <section aria-label={tx('Progreso del día')}
-      className="mb-3 overflow-hidden rounded-3xl border border-brand-400/30 bg-gradient-to-br from-brand-500/[.18] via-dark-900 to-dark-900 p-4 shadow-lg shadow-black/20">
-      <div className="flex items-center gap-4">
-        <div className="relative h-[68px] w-[68px] shrink-0">
-          <svg viewBox="0 0 64 64" className="h-full w-full -rotate-90" aria-hidden="true">
-            <circle cx="32" cy="32" r={R} fill="none" strokeWidth="7" className="stroke-dark-700" />
-            <circle cx="32" cy="32" r={R} fill="none" strokeWidth="7" strokeLinecap="round"
-              className="stroke-brand-400 transition-all duration-700" strokeDasharray={L} strokeDashoffset={L * (1 - pct)} />
-          </svg>
-          <span className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-            <b className="text-[17px] text-dark-50">{hechos}</b>
-            <span className="text-[10.5px] text-dark-400">{tx('de {n}', { n: total })}</span>
-          </span>
-        </div>
-        <div className="min-w-0 flex-1">
-          {dia && <p className="text-[11.5px] font-semibold uppercase tracking-wider text-brand-300">{dia}</p>}
-          <p className="text-[19px] font-bold leading-tight text-dark-50">
-            {pendientes ? (pendientes === 1 ? tx('Queda 1 parada') : tx('Quedan {n} paradas', { n: pendientes })) : tx('Todo hecho')}
-          </p>
-          {pendientes > 0 && rr?.fin && (
-            <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12.5px] text-dark-300">
-              <Clock size={12} className="text-brand-300" />
-              {/* De noche la ruta sale a su hora de salida (25-10-2026): que se vea, o las horas no se entienden. */}
-              {rr.programada && rr.salida ? <span>{tx('Sales a las {h}', { h: rr.salida })} ·</span> : null}
-              {tx('Acabas ≈')} <b className="text-dark-50">{rr.fin}</b>
-              {rr.km ? <span>· {distancia(rr.km)}</span> : null}
-              {rr.minutos ? <span>· {minutosATexto(rr.minutos)}</span> : null}
-            </p>
-          )}
-        </div>
-      </div>
-      <div className="mt-3 flex flex-wrap gap-1.5 text-[11.5px]">
-        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-300">{entregados === 1 ? tx('1 hecha') : tx('{n} hechas', { n: entregados })}</span>
-        {hechos - entregados > 0 && <span className="rounded-full bg-red-500/15 px-2 py-0.5 font-semibold text-red-300">{tx('{n} sin hacer', { n: hechos - entregados })}</span>}
-        {cobrado > 0 && <span className="rounded-full bg-dark-800 px-2 py-0.5 text-dark-200">{tx('Cobrado')} {euros(cobrado)}</span>}
-        {/* Su récord, solo con datos suyos: más que cualquier día anterior y al menos 10. */}
-        {entregados >= 10 && entregados > mejor
-          ? <span data-testid="record" className="rounded-full bg-amber-400/20 px-2 py-0.5 font-bold text-amber-200">🏆 {tx('¡Récord de entregas!')}</span>
-          : mejor >= 10 && entregados > 0 && <span className="rounded-full bg-dark-800 px-2 py-0.5 text-dark-300">{tx('Tu récord: {n}', { n: mejor })}</span>}
-        {pendientes > 0 && rr?.fin && (
-          <span className="rounded-full bg-dark-800 px-2 py-0.5 text-dark-400">
-            {rr.manual ? tx('tu orden') : rr.fuente === 'linea_recta' ? tx('por distancia') : rr.trafico ? tx('con tráfico típico') : tx('sin tráfico')}
-          </span>
-        )}
-        {fueraHorario > 0 && <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-red-300">{tx('{n} fuera de su horario', { n: fueraHorario })}</span>}
-        {pendientes > 0 && retraso > 5 && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-300">{tx('Vas {t} por detrás de lo previsto', { t: minutosATexto(retraso) })}</span>}
-      </div>
-      {/* REORDENAR DESDE AQUÍ (30-10-2026): con más de 15 min de retraso, un toque recalcula desde donde estás. */}
-      {onReordenar && (
-        <button onClick={onReordenar} data-testid="reordenar"
-          className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl border border-amber-400/50 bg-amber-500/10 py-2.5 text-[13.5px] font-bold text-amber-100">
-          <Route size={15} /> {tx('Reordenar desde aquí')}
-        </button>
-      )}
-      {dinero && (
-        <button onClick={onTarifa} aria-label={tx('Mi dinero hoy')}
-          className="mt-3 flex w-full items-center justify-between gap-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/[.08] px-3 py-2 text-left">
-          <span className="min-w-0">
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-emerald-300">{tx('Mi dinero hoy')}</span>
-            <span className="block text-[12.5px] text-dark-300">
-              {tx('Llevas {a} · gasolina ≈ {b}', { a: euros(dinero.bruto), b: euros(dinero.gasolina) })}
-              {dinero.porHora != null ? ` · ${tx('{c}/hora', { c: euros(dinero.porHora) })}` : ''}
-              {dinero.fallidas > 0 ? ` · ${dinero.fallidas === 1 ? tx('1 sin entregar = {euros} sin cobrar', { euros: euros(dinero.perdido) }) : tx('{n} sin entregar = {euros} sin cobrar', { n: dinero.fallidas, euros: euros(dinero.perdido) })}` : ''}
-            </span>
-          </span>
-          <span className="shrink-0 text-right">
-            <span className="block text-[10.5px] text-dark-400">{tx('Limpio')}</span>
-            <b className="text-[19px] leading-none text-emerald-200">{euros(dinero.neto)}</b>
-          </span>
-        </button>
-      )}
-      {onCompartir && (
-        <button onClick={onCompartir} className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 py-3 text-[15px] font-bold text-white">
-          <Share2 size={17} /> {tx('Comparte tu día')}
-        </button>
-      )}
-      {!dinero && onTarifa && (
-        <button onClick={onTarifa} className="mt-3 w-full rounded-2xl border border-dashed border-emerald-400/40 px-3 py-2 text-[12.5px] font-semibold text-emerald-200">
-          💶 {tx('¿Cuánto llevas ganado hoy? Pon tu tarifa')}
-        </button>
-      )}
-      {/* Con la ruta en marcha (app del autónomo), «Añadir paradas» va aquí, junto a navegar (17-10-2026): un botón
-          flotante tapaba con la pantalla quieta los botones de la siguiente parada. */}
-      {(onGuiar || onAnadir) && (
-        <div className="mt-3.5 flex gap-2">
-          {onGuiar && (
-            <button onClick={onGuiar}
-              className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-brand-500 py-3.5 text-[16px] font-bold text-brand-tinta shadow-lg shadow-brand-500/20 active:scale-[.99]">
-              <Navigation size={18} /> {tx('Empezar a navegar')}
-            </button>
-          )}
-          {onAnadir && (
-            <button type="button" onClick={onAnadir} aria-label={tx('Añadir paradas')}
-              className={`flex items-center justify-center gap-1.5 rounded-2xl border border-brand-400/60 text-[15px] font-bold text-brand-200 ${onGuiar ? 'w-14 shrink-0' : 'flex-1 py-3.5'}`}>
-              <Plus size={onGuiar ? 24 : 19} strokeWidth={2.5} /> {!onGuiar && tx('Añadir paradas')}
-            </button>
-          )}
-        </div>
-      )}
-      {/* DÓNDE APARQUÉ (30-10-2026): el punto de la furgoneta al bajarte; los metros mientras andas; un toque
-          abre el camino a pie. Se queda en el móvil, no se envía. */}
-      {(onAparcar || furgo) && pendientes > 0 && (
-        <div className="mt-2.5 flex items-center gap-2 text-[12.5px]">
-          {furgo ? (<>
-            <a href={`https://www.google.com/maps/dir/?api=1&destination=${furgo.lat},${furgo.lng}&travelmode=walking`} target="_blank" rel="noreferrer" data-testid="furgo"
-              className="inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-xl border border-dark-700 bg-dark-900 px-3 py-2 font-semibold text-dark-100">
-              <CarFront size={15} className="shrink-0 text-brand-300" />
-              <span className="truncate">{yo?.lat != null ? tx('Furgoneta a {m} m', { m: Math.round(metrosEntre(yo, furgo)) }) : tx('Furgoneta aparcada')}</span>
-            </a>
-            <button type="button" onClick={onQuitarFurgo} className="shrink-0 rounded-xl border border-dark-700 px-3 py-2 text-dark-300">{tx('Quitar')}</button>
-          </>) : (
-            <button type="button" onClick={onAparcar} data-testid="aparcar"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-dark-600 px-3 py-2 font-semibold text-dark-300">
-              <CarFront size={15} /> {tx('Aparcada aquí')}
-            </button>
-          )}
-        </div>
-      )}
-      {!onGuiar && onCorregir && (
-        <div role="status" className="mt-3.5 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3">
-          <p className="text-[13px] leading-snug text-amber-100">{tx('No encontramos la dirección en el mapa. Sitúala en el mapa o corrígela, y te llevamos hasta la puerta.')}</p>
-          {/* «Situar la parada» (02-11-2026): ponerla en nuestro mapa y, al guardarla, a guiar. */}
-          {onSituar && (
-            <button onClick={onSituar} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 py-2.5 text-[14px] font-bold text-[#1a1300]">
-              <MapPin size={15} /> {tx('Situar en el mapa')}
-            </button>
-          )}
-          <button onClick={onCorregir} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500/25 py-2.5 text-[14px] font-bold text-amber-100">
-            <Pencil size={15} /> {tx('Corregir la dirección')}
-          </button>
-        </div>
-      )}
-    </section>
-  )
-}
-
-/* VER LA PUERTA (10-10-2026). Street View desde la calle de la dirección y
-   mirando a la casa (el servidor calcula el punto y el rumbo). El enlace existe
-   desde el principio, apuntando a la casa; en cuanto llega el rumbo, se afina:
-   así nunca es un botón muerto ni lo bloquea el navegador como ventana emergente. */
-function VerPuerta({ p }) {
-  const [vista, setVista] = useState(null)
-  useEffect(() => {
-    let vivo = true
-    repFachada(p.id).then(({ data }) => { if (vivo) setVista(data) }).catch(() => {})
-    return () => { vivo = false }
-  }, [p.id, p.lat, p.lng])
-  const v = vista || { lat: p.lat, lng: p.lng, rumbo: null }
-  const href = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${v.lat},${v.lng}`
-    + (v.rumbo != null ? `&heading=${v.rumbo}&pitch=5&fov=75` : '')
-  return (
-    <a href={href} target="_blank" rel="noreferrer"
-      className="inline-flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1 text-[12px] font-semibold text-dark-200">
-      <Eye size={12} /> {tx('Ver la puerta')}
-    </a>
   )
 }
 
@@ -3016,9 +2579,10 @@ function HuecoRejilla({ valor, onElegir, ocupado = false }) {
 }
 
 /* LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026, Dani: «que empiecen a descargarla masivamente… lo más barato
-   posible»). Nada más entregar la primera real de hoy, una tarjeta discreta: lo que gana por cada compañero que
-   reparta (el importe y las condiciones los dice el servidor), un WhatsApp ya escrito, corto y en su idioma, con su
-   enlace y su código, y «Copiar el enlace» para el grupo de compañeros. «Ahora no» la quita hasta mañana. */
+   posible»). Nada más entregar la primera real de hoy, una Promo discreta (diseño compacto, 07-11-2026, §5.1 e): «Gana
+   {euros} por compañero» con el WhatsApp ya escrito, corto y en su idioma, con su enlace y su código, y ✕ «Ahora no»
+   (hasta mañana). Tocar el texto abre las condiciones (el importe y las condiciones los dice el servidor) con «Invitar por
+   WhatsApp» y «Copiar el enlace» para el grupo de compañeros. */
 function textoInvitarCorto(codigo) {
   const gratis = promoGratis() ? ` ${tx('Es gratis y sin límite hasta el {fecha}.', { fecha: fechaPromo(locale()) })}` : ''
   // El bono del invitado (lo que le convence a él), mientras dure: el mismo que anuncia compartir.js.
@@ -3026,45 +2590,40 @@ function textoInvitarCorto(codigo) {
   return `${tx('Reparto con FDS: me ordena la ruta y me guía hasta cada puerta.')}${gratis}${bono} ${enlaceInvitar(codigo)}`
 }
 function TarjetaInvitar({ r, onCerrar, onCopiado }) {
+  const [ver, setVer] = useState(false)
   const euros = eurosRef(Number(r.por_invitado) || refCentActual(), locale())
   const enlace = enlaceInvitar(r.codigo)
+  const whatsapp = `https://wa.me/?text=${encodeURIComponent(textoInvitarCorto(r.codigo))}`
   async function copiar() {
     medirAccion('invitar_entrega_copiar')
     try { await navigator.clipboard.writeText(enlace); onCopiado(true) } catch { onCopiado(false) }
   }
   return (
-    <section data-testid="invitar-entrega" aria-label={tx('Invitar a un compañero')}
-      className="rounded-2xl border border-emerald-400/30 bg-emerald-500/[.07] px-3.5 py-3">
-      <div className="flex items-start gap-2.5">
-        <Gift size={18} className="mt-0.5 shrink-0 text-emerald-300" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[14px] font-bold leading-tight text-emerald-100">{tx('Gana {euros} por cada compañero que reparta con FDS', { euros })}</p>
-          <p className="mt-0.5 text-[12px] leading-snug text-emerald-200/80">
-            {tx('Lo cobras cuando haga {n} entregas en {d} días distintos.', { n: r.entregas_cartera ?? 20, d: r.dias_distintos ?? 2 })}
-          </p>
-        </div>
-        <button type="button" onClick={onCerrar} className="shrink-0 py-0.5 text-[12px] font-semibold text-emerald-200/80">{tx('Ahora no')}</button>
-      </div>
-      {/* Los dos botones en una línea; donde no caben (el resumen), el de copiar baja entero a la suya. */}
-      <div className="mt-2.5 flex flex-wrap gap-1.5">
-        <a href={`https://wa.me/?text=${encodeURIComponent(textoInvitarCorto(r.codigo))}`} target="_blank" rel="noreferrer"
-          onClick={() => medirAccion('invitar_entrega_whatsapp')}
-          className="flex min-w-[170px] flex-[3] items-center justify-center gap-1.5 rounded-xl bg-emerald-700 py-2.5 text-[13.5px] font-bold text-white">
-          <MessageCircle size={15} /> {tx('Invitar por WhatsApp')}
-        </a>
-        <button type="button" onClick={copiar}
-          className="flex min-w-[128px] flex-[2] items-center justify-center gap-1.5 rounded-xl border border-emerald-400/50 py-2.5 text-[13px] font-semibold text-emerald-100">
-          <Copy size={14} /> {tx('Copiar el enlace')}
-        </button>
-      </div>
-    </section>
+    <>
+      <Promo tono="ok" icono={Gift} testid="invitar-entrega" texto={tx('Gana {euros} por compañero', { euros })} onTocar={() => setVer(true)}
+        accion={<Boton variante="icono" icono={MessageCircle} tono="ok" relleno nombre={tx('Invitar por WhatsApp')} href={whatsapp} target="_blank" rel="noreferrer" onClick={() => medirAccion('invitar_entrega_whatsapp')} />}
+        onCerrar={onCerrar} nombreCerrar={tx('Ahora no')} />
+      {ver && (
+        <Hoja titulo={tx('Invitar a un compañero')} onClose={() => setVer(false)}
+          pie={(
+            <div className="flex flex-col gap-2">
+              <Boton variante="principal" tono="ok" icono={MessageCircle} texto={tx('Invitar por WhatsApp')} href={whatsapp} target="_blank" rel="noreferrer" onClick={() => medirAccion('invitar_entrega_whatsapp')} />
+              <Boton variante="normal" contorno tono="neutro" icono={Copy} texto={tx('Copiar el enlace')} onClick={copiar} />
+            </div>
+          )}>
+          <p className="pt-2 text-nombre text-dark-50">{tx('Gana {euros} por cada compañero que reparta con FDS', { euros })}</p>
+          <p className="mt-1 text-texto text-dark-400">{tx('Lo cobras cuando haga {n} entregas en {d} días distintos.', { n: r.entregas_cartera ?? 20, d: r.dias_distintos ?? 2 })}</p>
+        </Hoja>
+      )}
+    </>
   )
 }
 
-/* El cierre del día: lo hecho, lo que no y lo cobrado por cada vía. Solo
-   cuenta lo que hay en las paradas; nada inventado. `invitacion` (02-11-2026): la tarjeta de invitar del día, en el
-   lugar del botón de siempre. */
-function Resumen({ hechos, ruta, marcas = null, invitacion = null }) {
+/* El cierre del día (diseño compacto, 07-11-2026, §5.1 i): plano con tinte ok, «✓ Ruta terminada», las tres cifras
+   (hechas · sin hacer · cobrado; con más de una vía de cobro, una fila por vía), «{duración} · {km}», las marcas, «Comparte
+   tu día» (con 5 o más) y la invitación. Solo cuenta lo que hay en las paradas; nada inventado. `invitacion` (02-11-2026):
+   la tarjeta de invitar del día, en el lugar del botón de siempre. */
+function Resumen({ hechos, ruta, marcas = null, invitacion = null, onCompartir = null }) {
   const ok = hechos.filter((p) => p.estado === 'entregado')
   const no = hechos.filter((p) => p.estado === 'fallido')
   const cobros = {}
@@ -3072,43 +2631,44 @@ function Resumen({ hechos, ruta, marcas = null, invitacion = null }) {
   const horas = hechos.map((p) => p.cerrado_en).filter(Boolean).sort()
   const durMin = horas.length > 1 ? Math.round((new Date(horas[horas.length - 1]) - new Date(horas[0])) / 60000) : 0
   const NOMBRE = { efectivo: tx('Efectivo'), tarjeta: tx('Tarjeta'), bizum: 'Bizum', pix: 'Pix', transferencia: tx('Transferencia'), pagado: tx('Ya pagado'), otro: tx('Otro') }
+  const cobrado = Object.values(cobros).reduce((a, b) => a + b, 0)
+  const cifra = (valor, etiqueta, clase = 'text-dark-50') => (
+    <div className="rounded-xl bg-dark-900 px-1 py-2 text-center">
+      <p className={`break-words text-cifra tabular-nums ${clase}`}>{valor}</p>
+      <p className="text-sec text-dark-400">{etiqueta}</p>
+    </div>
+  )
+  const detalle = [durMin > 0 ? minutosATexto(durMin) : '', ruta?.km ? distancia(ruta.km) : ''].filter(Boolean).join(' · ')
   return (
-    <div className="mt-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/[.07] p-4" aria-label={tx('Resumen del día')}>
-      <p className="flex items-center gap-2 text-[16px] font-bold text-emerald-200"><Trophy size={18} /> {tx('Ruta terminada')}</p>
-      <div className="mt-3 grid grid-cols-2 gap-2 text-center">
-        <div className="rounded-xl bg-dark-900 py-2.5"><p className="text-[22px] font-bold text-dark-50">{ok.length}</p><p className="text-[11.5px] text-dark-400">{tx('hechas')}</p></div>
-        <div className="rounded-xl bg-dark-900 py-2.5"><p className={`text-[22px] font-bold ${no.length ? 'text-red-300' : 'text-dark-50'}`}>{no.length}</p><p className="text-[11.5px] text-dark-400">{tx('sin hacer')}</p></div>
+    <section className="rounded-xl bg-ruta-ok/10 p-3" aria-label={tx('Resumen del día')}>
+      <p className="flex items-center gap-2 text-titulo text-dark-50"><Check size={20} className="shrink-0 text-ruta-ok-texto" aria-hidden="true" /> {tx('Ruta terminada')}</p>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {cifra(ok.length, tx('hechas'))}
+        {cifra(no.length, tx('sin hacer'), no.length ? 'text-ruta-peligro-texto' : 'text-dark-50')}
+        {cifra(euros(cobrado), tx('Cobrado'))}
       </div>
-      {Object.keys(cobros).length > 0 && (
-        <div className="mt-3 text-[13px] text-dark-200">
-          <p className="mb-1 font-semibold">{tx('Cobrado')}</p>
+      {Object.keys(cobros).length > 1 && (
+        <div className="mt-2 text-texto text-dark-50">
           {Object.entries(cobros).map(([m, v]) => (
-            <p key={m} className="flex justify-between"><span className="text-dark-400">{NOMBRE[m] || m}</span><span>{euros(v)}</span></p>
+            <p key={m} className="flex justify-between"><span className="text-dark-400">{NOMBRE[m] || m}</span><span className="tabular-nums">{euros(v)}</span></p>
           ))}
-          <p className="mt-1 flex justify-between border-t border-dark-700 pt-1 font-bold"><span>{tx('Total')}</span><span>{euros(Object.values(cobros).reduce((a, b) => a + b, 0))}</span></p>
         </div>
       )}
+      {detalle && <p className="mt-2 text-sec text-dark-400">{detalle}</p>}
       {/* SU PROGRESO (25-10-2026): solo lo que ha hecho él, contado por el servidor; lo de hoy, con las paradas. */}
       {marcas && (
-        <div data-testid="marcas" className="mt-3 space-y-0.5 text-[13px] text-dark-200">
+        <div data-testid="marcas" className="mt-2 text-texto text-dark-50">
           {ok.length >= 10 && ok.length > (marcas.mejor || 0)
-            ? <p className="font-bold text-amber-200">🏆 {tx('Tu mejor día: nunca habías entregado tantas.')}</p>
+            ? <p className="font-semibold text-ruta-aviso-texto">🏆 {tx('¡Tu mejor día!')}</p>
             : marcas.mejor > 0 && <p>{tx('Tu mejor día: {n} entregas.', { n: marcas.mejor })}</p>}
           <p>{tx('Llevas {n} entregas con FDS.', { n: (marcas.total || 0) - (marcas.hoy || 0) + ok.length })}</p>
         </div>
       )}
+      {onCompartir && <Boton variante="normal" tono="ok" icono={Share2} texto={tx('Comparte tu día')} onClick={onCompartir} className="mt-3 w-full" />}
       {invitacion ? <div className="mt-3">{invitacion}</div> : (
-        <button onClick={invitar}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/40 py-2.5 text-[13.5px] font-bold text-emerald-200">
-          <MessageCircle size={15} /> {tx('Invitar a un compañero')}
-        </button>
+        <Boton variante="normal" contorno tono="ok" icono={MessageCircle} texto={tx('Invitar a un compañero')} onClick={invitar} className="mt-3 w-full" />
       )}
-      <p className="mt-3 text-[12px] text-dark-400">
-        {durMin > 0 && <>{tx('De la primera a la última parada: {t}.', { t: minutosATexto(durMin) })} </>}
-        {ruta?.km ? <>{tx('Ruta planificada: {d}.', { d: distancia(ruta.km) })}</> : null}
-      </p>
-      {no.length > 0 && <p className="mt-1 text-[12px] text-dark-400">{tx('Las no hechas siguen en «hechos hoy» con su motivo.')}</p>}
-    </div>
+    </section>
   )
 }
 

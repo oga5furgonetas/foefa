@@ -41,14 +41,14 @@ test('Activación · sin paquetes, 3 paradas de ejemplo con un toque, y se quita
     base: null, ruta: pedidos.length ? { fin: '10:30', minutos: 30, km: 2, trafico: true } : null, pedidos } }))
 
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Verlo en acción con 3 paradas de ejemplo' }).click()
+  await page.getByRole('button', { name: 'Ver un ejemplo' }).click()
   await expect(page.getByText('Cliente de ejemplo 1')).toBeVisible()
-  await expect(page.getByText('Estas paradas son de ejemplo.')).toBeVisible()
-  await expect(page.getByText('EJEMPLO').first()).toBeVisible()
+  await expect(page.getByText('Paradas de ejemplo', { exact: true })).toBeVisible()
+  await expect(page.getByText('Ejemplo', { exact: true }).first()).toBeVisible()
   // Se manda la posición del móvil para ponerlas a su alrededor.
   expect(llamadas.ejemplo).toHaveLength(1)
   expect(llamadas.ejemplo[0].lat).toBeCloseTo(40.4168, 3)
-  await page.getByRole('button', { name: 'Quitar los ejemplos' }).click()
+  await page.getByRole('button', { name: 'Quitar', exact: true }).click()
   await expect(page.getByText('Ejemplos quitados. Ya puedes cargar tus paquetes.')).toBeVisible()
   expect(llamadas.quitar).toBe(1)
   await expect(page.getByText('Cliente de ejemplo 1')).toHaveCount(0)
@@ -153,7 +153,7 @@ test.describe('Instalar · Android', () => {
     await page.addInitScript(() => localStorage.removeItem('fds_instalar_cerrado'))
     await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: SIN_PAQUETES }))
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('Instala FDS en tu móvil')).toBeVisible()
+    await expect(page.getByText('Instala la app')).toBeVisible()
     await page.evaluate(() => {
       const e = new Event('beforeinstallprompt')
       e.prompt = () => { window.__lanzado = true }
@@ -162,7 +162,7 @@ test.describe('Instalar · Android', () => {
     })
     await page.getByRole('button', { name: 'Instalar la app' }).click()
     await expect.poll(() => page.evaluate(() => window.__lanzado)).toBe(true)
-    await expect(page.getByText('Instala FDS en tu móvil')).toHaveCount(0)
+    await expect(page.getByText('Instala la app')).toHaveCount(0)
   })
 })
 

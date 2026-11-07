@@ -109,8 +109,7 @@ test('Sin cobertura la app abre igual, con la ruta que tenía y diciendo de cuá
   await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.abort('internetdisconnected'))
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByText('Farmacia Sol').first()).toBeVisible({ timeout: 15000 })
-  await expect(page.getByRole('status').filter({ hasText: 'Sin conexión: es tu ruta de las' })).toBeVisible()
-  // El logo de arriba también sale (antes, sin red, una imagen rota).
-  await expect.poll(() => page.evaluate(() => document.querySelector('main header img')?.naturalWidth || 0)).toBeGreaterThan(0)
+  await expect(page.getByRole('status').filter({ hasText: 'Sin conexión · ruta de las' })).toBeVisible()   // «Sin conexión · ruta de las {h}» (07-11-2026, diseño compacto)
+  // Sin el logo de arriba (07-11-2026: «Hoy» lleva su cabecera sin logo), ya no hay imagen que se pueda ver rota sin red.
   await context.setOffline(false)
 })
