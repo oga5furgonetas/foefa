@@ -392,9 +392,9 @@ private fun ElegirPais(pais: String, paisesServidor: List<Triple<String, String,
                 LazyColumn(Modifier.heightIn(max = 440.dp)) {
                     items(paises, key = { it.first }) { (k, nombre, _) ->
                         Row(Modifier.fillMaxWidth().selectable(k == pais, role = Role.RadioButton) { alElegir(k); abierto = false }
-                            .padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            .padding(vertical = Esp.m), verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = k == pais, onClick = null)
-                            Spacer(Modifier.width(12.dp))
+                            Spacer(Modifier.width(Esp.m))
                             Text(nombre, style = MaterialTheme.typography.bodyLarge)
                         }
                     }
@@ -537,10 +537,10 @@ private fun BorrarCuenta(alCerrar: () -> Unit) {
         text = {
             Column {
                 Text(tx("Tu cuenta se desactiva ahora mismo y borramos tus datos (tus rutas y las de tus clientes) en un plazo máximo de 30 días. No se puede deshacer."))
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Esp.m))
                 OutlinedTextField(clave, { clave = it }, label = { Text(tx("Tu contraseña")) }, singleLine = true, shape = MaterialTheme.shapes.medium,
                     visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp)) }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = Esp.s)) }
             }
         },
         confirmButton = {
