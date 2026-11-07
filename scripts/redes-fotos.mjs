@@ -253,10 +253,24 @@ const G = [
   ['G-7-cierre', cierre('¿El doble? <span style="color:var(--marca)">Que ordene la app</span>', 'Con el pico de paquetes, foto a la etiqueta y la ruta se ordena sola, también la noche antes.')],
 ]
 
+/* ── H. Lo que no puede faltar en la furgoneta (07-11) ───────────────────────────────────── */
+const KIT = [
+  ['🔋', 'Cargador y batería externa', 'El móvil es tu ruta. Cable de repuesto y una batería cargada: si se apaga el móvil, se apaga el día.'],
+  ['🛒', 'Carretilla plegable', 'Para los bultos pesados y los portales sin ascensor. Ocupa poco y tu espalda lo nota.'],
+  ['✂️', 'Cúter, cinta y rotulador', 'Cajas que se abren, etiquetas que se despegan y huecos que marcar. Caben en la puerta.'],
+  ['🔦', 'Linterna frontal', 'En invierno anochece pronto: números de portal, garajes y buzones a oscuras. Con las manos libres.'],
+  ['🧤', 'Guantes y chubasquero', 'El frío y la lluvia no avisan. Y el chaleco reflectante, siempre a mano.'],
+]
+const H = [
+  ['H-1-portada', portada(fondoFurgoneta, 'Revisa la tuya', 'Lo que no puede faltar en <span class="resalta">la furgoneta</span>', 'Cinco cosas que salvan el día')],
+  ...KIT.map((p, i) => [`H-${i + 2}`, punto(p, i, 'Guárdalo y revisa la tuya')]),
+  ['H-7-cierre', cierre('¿Y la ruta? <span style="color:var(--marca)">En el móvil</span>', 'Foto a la etiqueta y la ruta se ordena sola. Sin cobertura, sigue abierta.')],
+]
+
 // SOLO=E,F genera solo las piezas que empiezan así (las ya publicadas no se tocan). Cada carrusel sale también en
 // JPEG (TikTok no admite PNG en los posts de fotos: «use image/jpeg», 31-10-2026).
 const SOLO = (process.env.SOLO || '').split(',').map((x) => x.trim()).filter(Boolean)
-const PIEZAS = [...A, ...B, ...C, ...D, ...E, ...F, ...G, ...X.map(([n, h]) => [n, h, 1600, 900]), ...X2.map(([n, h]) => [n, h, 1600, 900])]
+const PIEZAS = [...A, ...B, ...C, ...D, ...E, ...F, ...G, ...H, ...X.map(([n, h]) => [n, h, 1600, 900]), ...X2.map(([n, h]) => [n, h, 1600, 900])]
   .filter(([n]) => !SOLO.length || SOLO.some((p) => n.startsWith(p)))
 // PW_CHROMIUM: ruta a un Chromium ya instalado si la versión de Playwright no trae el suyo (p. ej. /opt/pw-browsers/chromium).
 const nav = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {})

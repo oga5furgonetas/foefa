@@ -89,6 +89,16 @@ vez a mediados de diciembre.
 Hashtags: #repartidor #repartidores #blackfriday #navidad #paqueteria #mensajeria #reparto #furgoneta
 Comentario fijado: «¿Cuántas paradas hiciste el día más bestia del año pasado? Sin mentir 😅»
 
+## Carrusel H · Lo que no puede faltar en la furgoneta (`H-1-portada` … `H-7-cierre`, 07-11)
+Modo foto (7) · Instagram · página de Facebook. TikTok con los `.jpg`. `utm_content=carrusel_kit`.
+
+> Lo que no puede faltar en la furgoneta 🔦🔋 Cinco cosas que salvan el día (la 4 se agradece en cuanto anochece a las seis).
+> ¿Y la ruta? En el móvil: foto a la etiqueta y se ordena sola, y si te quedas sin cobertura sigue abierta. Gratis hasta
+> el 31 de diciembre, enlace en el perfil.
+
+Hashtags: #repartidor #repartidores #furgoneta #paqueteria #mensajeria #reparto #trucos #invierno
+Comentario fijado: «¿Qué llevas tú que no está aquí? Lo más raro que haya en una furgoneta gana 😂»
+
 ## Tarjetas 16:9 para X (van con el post del calendario de `REDES.md`)
 | Fichero | Post | Enlace |
 |---|---|---|
@@ -103,6 +113,5 @@ Comentario fijado: «¿Cuántas paradas hiciste el día más bestia del año pas
 ## Ideas para las piezas siguientes (misma plantilla, una por ronda)
 - «Lo que cuesta de verdad una furgoneta de reparto al mes» (ejemplo orientativo; cierre: calculadora).
 - «La ruta de 40 paradas: a mano vs. ordenada» (dos capturas; cierre: gratis hasta el 31-12).
-- «Lo que no puede faltar en la furgoneta» (cargador, cinta, rotulador, chaleco, agua, bolsas; cierre: la app sin cobertura).
 - «Errores del primer mes repartiendo» (cinco; cierre: la ruta ordenada).
 - Los `.jpg` de cada carrusel son para TikTok (no admite PNG en fotos); Instagram, con los `.png`.
