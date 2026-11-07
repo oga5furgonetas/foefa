@@ -76,17 +76,18 @@ function Opcion({ icono: Icono, titulo, sub, onClick, principal, bloqueado, pron
    ancho y arriba: es lo de todos los días. El resto es secundario y cabe en una pantalla sin bajar.
    Desde el diseño compacto (07-11-2026, §5.11): 96 de alto mínimo, icono de 20 sin caja, el título en «boton» (dos
    líneas; tres si una palabra larga, «recuperación», se parte antes que salirse: a 360 px no cabe entera en dos, y
-   cortarla con «…» dejaba «recupera-…») y sin el detalle a la vista: sigue en el nombre accesible, que es el de siempre
-   («Título. Detalle»: lo que lee el lector de pantalla y lo que buscan las pruebas). «Pronto», en «pie» bajo el título;
-   las respuestas sin leer, en su número arriba a la derecha. Sin degradado ni sombra; el tono (verde, ámbar) queda en
+   cortarla con «…» dejaba «recupera-…») y sin el detalle a la vista: sigue ahí como texto solo para el lector de
+   pantalla («Título . Detalle»: lo que lee el lector y lo que buscan por texto las pruebas de cambiar-clave y del
+   mercadillo). «Pronto», en «pie» bajo el título; las respuestas sin leer, en su número arriba a la derecha (el
+   detalle ya las dice, así que el número no se lee dos veces). Sin degradado ni sombra; el tono (verde, ámbar) queda en
    el icono. */
 function Casilla({ icono: Icono, titulo, detalle, onClick, pronto, aviso, tono }) {
   const color = pronto ? 'text-dark-400' : { verde: 'text-ruta-ok-texto', ambar: 'text-ruta-aviso-texto' }[tono] || 'text-dark-400'
   return (
-    <button type="button" onClick={pronto ? undefined : onClick} disabled={pronto} aria-label={detalle ? `${titulo}. ${detalle}` : titulo}
+    <button type="button" onClick={pronto ? undefined : onClick} disabled={pronto}
       className={`relative flex min-h-24 flex-col justify-between rounded-xl bg-dark-900 p-3 text-left ${pronto ? 'cursor-not-allowed' : 'active:opacity-80'}`}>
       {aviso > 0 && (
-        <span className="absolute right-2 top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-ruta-peligro px-1 text-etiqueta text-white">
+        <span aria-hidden="true" className="absolute right-2 top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-ruta-peligro px-1 text-etiqueta text-white">
           {aviso}
         </span>
       )}
@@ -94,6 +95,7 @@ function Casilla({ icono: Icono, titulo, detalle, onClick, pronto, aviso, tono }
       <span className="mt-2 block">
         <span className={`line-clamp-3 break-words text-boton hyphens-auto ${pronto ? 'text-dark-400' : 'text-dark-50'}`}>{titulo}</span>
         {pronto && <span className="block text-pie text-dark-400">Pronto</span>}
+        {detalle && <span className="sr-only">. {detalle}</span>}
       </span>
     </button>
   )
