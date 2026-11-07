@@ -456,7 +456,7 @@ private fun DatosHoja(p: Parada, alRepetirFoto: () -> Unit) {
     // LA ENTREGA VERIFICADA (01-11-2026): el aviso de la IA y, si pide revisarla, «Repetir la foto» (la parada sigue
     // entregada; el servidor vuelve a mirar la nueva).
     if (avisoIa != null) Aviso(avisoIa, tono = Tono.AVISO, icono = Icons.Default.PhotoCamera,
-        accion = if (ia?.nivel == "revisar") tx("Repetir la foto") else null, alAccion = alRepetirFoto, modifier = Modifier.padding(vertical = Esp.xs))
+        accion = if (ia.nivel == "revisar") tx("Repetir la foto") else null, alAccion = alRepetirFoto, modifier = Modifier.padding(vertical = Esp.xs))
     if (estrellas != null) FilaDato(Icons.Default.Star, estrellas, tx("Valoración del cliente: {e}", "e" to estrellas))
     if (motivo != null) FilaDato(Icons.Default.ErrorOutline, motivo, tx("Motivo: {x}", "x" to motivo))
 }
