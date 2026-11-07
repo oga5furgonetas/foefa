@@ -3,11 +3,10 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
   ArrowUp, ArrowUpLeft, ArrowUpRight, CornerUpLeft, CornerUpRight, RotateCw, Undo2, MapPin, X, Phone, Volume2, VolumeX,
-  LocateFixed, Loader2, Check, Package, Navigation, Flag, Mic, MicOff,
+  LocateFixed, Loader2, Package, Navigation, Flag, Mic, MicOff, Banknote, StickyNote, MessageSquareText, History,
 } from 'lucide-react'
 import { repNavegar } from '../../services/api'
-import AntesPuerta from './AntesPuerta'
-import ClienteDice from './ClienteDice'
+import { textoClienteDice } from './ClienteDice'
 import {
   prepararLinea, proyectar, situarPasos, proximoPaso, textoDistancia, distanciaHablada, metrosEntre, rumbo as rumboEntre, textoPaso,
 } from '../../lib/guia'
@@ -15,6 +14,14 @@ import { importe } from '../../lib/region'
 import { tx, useIdioma, locale, txError, idioma } from '../../lib/idioma'
 import { useAtras } from '../../lib/atras'
 import { decir } from '../../lib/voz'
+import Atribucion from './piezas/Atribucion'
+import Boton from './piezas/Boton'
+import BotonMapa from './piezas/BotonMapa'
+import FilaCierre from './piezas/FilaCierre'
+import LetraMax from './piezas/LetraMax'
+import NumeroParada from './piezas/NumeroParada'
+import Pastilla from './piezas/Pastilla'
+import icono from './piezas/icono'
 
 /* ── LA GUÍA DENTRO DE LA APP (04-10-2026) ───────────────────────────────────
    Dani: «yo quiero el navegador ya dentro, que coja la ruta y te vaya
@@ -24,7 +31,16 @@ import { decir } from '../../lib/voz'
 
    Las indicaciones salen del servidor de rutas de OpenStreetMap; la voz, del
    propio móvil. Sin tráfico en directo ni carriles: para eso, el botón de
-   Google Maps sigue ahí. La ubicación se usa para guiar y NO se guarda. */
+   Google Maps sigue ahí. La ubicación se usa para guiar y NO se guarda.
+
+   LO QUE SE VE, CON EL DISEÑO COMPACTO (07-11-2026, §5.8): la banda de arriba con el icono de 40, la distancia en
+   «guia» y la instrucción en dos líneas como mucho; los botones (voz, el mapa de fuera, manos libres y «Seguirme»)
+   son BotonMapa en una columna a la derecha, 12 por encima del panel (se mide con ResizeObserver: antes iban a media
+   pantalla y la hoja de llegada los tapaba en los móviles de 800 o menos); y el panel de abajo con el número de 40, el
+   nombre, «Llamar» y la ✕ de icono, «Llegas ≈ …», las notas en una línea y «Ya he llegado» a lo ancho (al llegar, la
+   FilaCierre). Lo que hace cada botón y lo que se manda al servidor, igual que antes. Los dibujos del mapa (la ruta, la
+   flecha, la chincheta) no cambian: por eso MapaGuia lleva colores hex y este fichero no lleva la marca de
+   `check-tokens-ruta.mjs`. */
 
 const ICONOS = {
   derecha: CornerUpRight, izquierda: CornerUpLeft, 'ligera-derecha': ArrowUpRight, 'ligera-izquierda': ArrowUpLeft,
@@ -42,7 +58,9 @@ const leeVoz = () => { try { return localStorage.getItem('guia_voz') !== '0' } c
    palabras y entre orden y orden pasan 2,5 s. Lo reconoce el propio móvil (en Android, el servicio de Google). */
 const Reconocedor = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null
 const leeManos = () => { try { return localStorage.getItem('guia_manos') === '1' } catch { return false } }
-const sinAcentos = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+// La explicación larga de manos libres sale la primera vez; después se recuerda en el navegador (07-11-2026, §5.8).
+const leeAyudaManos = () => { try { return localStorage.getItem('guia_manos_ayuda') !== '1' } catch { return true } }
+const sinAcentos = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 const ORDENES = {
   es: [['deshacer', /\bdeshac(er|e)\b|\bdeshaz\b|\bme he equivocado\b/], ['no_entregado', /\bno (lo |la )?(he )?entregad[oa]\b|\bno esta\b|\bno hay nadie\b|\bausente\b/],
     ['entregado', /\bentregad[oa]\b|\bentregue\b|\bhecho\b|\blisto\b/], ['llegado', /\b(he|ya) llegad[oa]\b|\bllegue\b|\bya estoy\b/],
@@ -64,6 +82,21 @@ export function ordenDeVoz(texto, lengua = 'es') {
 const horaMas = (min) => {
   const d = new Date(Date.now() + min * 60000)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/* Lo que va delante del dato en una frase («Búscalo: {sitio}» → «Búscalo: »), para leerlo como nombre accesible mientras a
+   la vista solo queda el dato con su icono (07-11-2026, §4 NotasPuerta). */
+const prefijoDe = (clave, variable) => tx(clave, { [variable]: '\u0001' }).split('\u0001')[0]
+
+/* La última vez en esa puerta, en una línea: la misma frase que pinta AntesPuerta (su caja no cabe en el panel). */
+const SITIO_ANTES = { mano: 'En mano', vecino: 'Al vecino', buzon: 'En el buzón', porteria: 'En portería o recepción', seguro: 'En un lugar seguro' }
+function textoAntes(a) {
+  if (!a) return ''
+  const d = new Date(`${a.fecha}T12:00:00`)
+  const fecha = Number.isNaN(d.getTime()) ? a.fecha : d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' })
+  const nota = a.nota ? `«${a.nota}»` : ''
+  if (a.estado === 'fallido') return `${tx('La última vez ({fecha}) no se pudo: {motivo}', { fecha, motivo: a.motivo ? tx(a.motivo) : '—' })}${nota ? ` · ${nota}` : ''}`
+  return tx('La última vez ({fecha}): {como}', { fecha, como: [a.donde && SITIO_ANTES[a.donde] ? tx(SITIO_ANTES[a.donde]) : '', nota].filter(Boolean).join(' · ') })
 }
 
 /* `onLlegar` (30-10-2026): se avisa a la ruta cuando se llega a la parada (solo o con «Ya he llegado»), para el
@@ -88,8 +121,21 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
   const [manos, setManos] = useState(() => leeManos() && !!Reconocedor && !!ORDENES[idioma()])
   const [oido, setOido] = useState('')
   const [avisoManos, setAvisoManos] = useState('')
+  const [ayudaManos] = useState(leeAyudaManos)  // la explicación larga, solo la primera vez
   const ultimaOrden = useRef(0)
   const alOir = useRef(() => {})
+  // Lo que mide el panel de abajo, para poner los botones del mapa 12 por encima (y la atribución, 4).
+  const panel = useRef(null)
+  const [panelAlto, setPanelAlto] = useState(0)
+  useEffect(() => {
+    const el = panel.current
+    if (!el || typeof ResizeObserver === 'undefined') return undefined
+    const medir = () => setPanelAlto(el.offsetHeight)
+    const vigia = new ResizeObserver(medir)
+    vigia.observe(el)
+    medir()
+    return () => vigia.disconnect()
+  }, [])
   // Escucha mientras está activado; Chrome corta tras un silencio, así que se vuelve a arrancar.
   useEffect(() => {
     try { localStorage.setItem('guia_manos', manos ? '1' : '0') } catch { /* nada */ }
@@ -118,6 +164,8 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
     arrancar()
     return () => { vivo = false; try { r?.abort() } catch { /* nada */ } }
   }, [manos])
+  // Vista la explicación larga una vez con el micro encendido, la próxima vez solo sale la píldora «Escuchando».
+  useEffect(() => { if (manos && ayudaManos) try { localStorage.setItem('guia_manos_ayuda', '1') } catch { /* nada */ } }, [manos, ayudaManos])
   useEffect(() => { try { localStorage.setItem('guia_voz', voz ? '1' : '0') } catch { /* nada */ } if (!voz) try { window.speechSynthesis?.cancel() } catch { /* nada */ } }, [voz])
 
   // La posición, mientras esta pantalla está abierta. Y la pantalla encendida.
@@ -238,125 +286,136 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
   }
   const flecha = guia?.fuente === 'linea_recta' && pos && parada ? rumboEntre(pos.p, [parada.lat, parada.lng]) : null
 
+  // Las notas de la parada en una línea («Cobrar 24,50 € · 📦 Detrás · izq · 💬 No estará…»): el dato con su icono, y lo
+  // que iba delante («Búscalo:», «El cliente dice:») solo para el lector de pantalla. Lo que se cobra va primero, que la
+  // línea se corta por el final.
+  const dice = parada ? textoClienteDice(parada.cliente_dice) : ''
+  const antes = parada ? textoAntes(parada.antes) : ''
+  const notas = !parada ? [] : [
+    parada.cobrar > 0 && { icono: Banknote, texto: `${tx('Cobrar')} ${importe(parada.cobrar)}` },
+    parada.hueco && { icono: Package, prefijo: prefijoDe('Búscalo: {sitio}', 'sitio'), texto: tx(parada.hueco) },
+    parada.bultos > 1 && { texto: tx('{n} bultos', { n: parada.bultos }) },
+    (parada.notas || parada.contenido) && { icono: StickyNote, texto: [parada.contenido, parada.notas].filter(Boolean).join(' · ') },
+    dice && { icono: MessageSquareText, prefijo: `${tx('El cliente dice')}: `, texto: dice },
+    antes && { icono: History, texto: antes },
+  ].filter(Boolean)
+  const instruccion = 'line-clamp-2 text-nombre'
+
   return (
     <div className="fixed inset-0 z-[45] bg-dark-950" role="dialog" aria-modal="true" aria-label={tx('Navegación')}>
       <MapaGuia linea={lista ? guia.prep.linea : null} yo={pos?.p} rumbo={pos?.rumbo}
         destino={parada ? [parada.lat, parada.lng] : null} numero={numero} seguir={seguir} onMover={() => setSeguir(false)} />
+      {/* La atribución del mapa, justo encima del panel (Leaflet la ponía debajo de él). */}
+      <div className="pointer-events-none absolute inset-x-0 h-0" style={{ bottom: panelAlto }}>
+        <Atribucion texto="© OpenStreetMap" className="!left-1 !right-auto" />
+      </div>
 
-      {/* ARRIBA: la próxima maniobra, en grande. */}
+      {/* ARRIBA: la próxima maniobra, en grande (icono 40, la distancia en «guia», la instrucción en dos líneas). */}
       <div className="pointer-events-none absolute inset-x-0 top-0 p-3">
         {!parada ? null : errPos ? (
-          <Banda tono="ambar"><MapPin size={30} /><span className="text-[16px] font-bold leading-snug">{errPos}</span></Banda>
+          <Banda tono="ambar"><MapPin size={40} className="shrink-0" /><LetraMax base={16} max={18} className={instruccion}>{errPos}</LetraMax></Banda>
         ) : !lista ? (
-          <Banda><Loader2 size={30} className="animate-spin" /><span className="text-[17px] font-bold">{errGuia || tx('Calculando la ruta…')}</span></Banda>
+          <Banda><Loader2 size={40} className="shrink-0 animate-spin" /><LetraMax base={16} max={18} className={instruccion}>{errGuia || tx('Calculando la ruta…')}</LetraMax></Banda>
         ) : haLlegado ? (
-          <Banda><Flag size={34} /><span className="text-[20px] font-bold">{tx('Has llegado')}</span></Banda>
+          <Banda><Flag size={40} className="shrink-0" /><span className="text-titulo">{tx('Has llegado')}</span></Banda>
         ) : guia.fuente === 'linea_recta' ? (
           <Banda tono="ambar">
-            <Navigation size={34} style={{ transform: `rotate(${flecha ?? 0}deg)` }} />
-            <span><b className="block text-[24px] leading-none">{textoDistancia(restante)}</b><span className="text-[14px]">{tx('Sin indicaciones ahora: sigue la flecha hasta la parada')}</span></span>
+            <Navigation size={40} className="shrink-0" style={{ transform: `rotate(${flecha ?? 0}deg)` }} />
+            <span className="min-w-0 flex-1">
+              <b className="block text-guia tabular-nums">{textoDistancia(restante)}</b>
+              <LetraMax base={16} max={18} className={instruccion}>{tx('Sigue la flecha')}</LetraMax>
+            </span>
           </Banda>
         ) : (
-          <div>
-            <Banda>
-              <Icono size={44} strokeWidth={2.6} className="shrink-0" />
-              <span className="min-w-0">
-                <b className="block text-[30px] leading-none tracking-tight" data-testid="guia-distancia">{textoDistancia(falta)}</b>
-                <span className="mt-1 block text-[16px] font-semibold leading-snug" data-testid="guia-texto">{paso?.icono === 'llegada' ? tx('Llegas a tu parada') : textoPaso(paso, tx)}</span>
-              </span>
-            </Banda>
-            {luego && luego.icono !== 'llegada' && (
-              <div className="ml-3 inline-flex items-center gap-1.5 rounded-b-xl bg-emerald-900/95 px-3 py-1.5 text-[13px] text-emerald-50">
-                {tx('Luego')} {(() => { const I = ICONOS[luego.icono] || ArrowUp; return <I size={15} /> })()} {textoPaso(luego, tx)}
-              </div>
-            )}
-          </div>
+          <Banda>
+            <Icono size={40} strokeWidth={2.6} className="shrink-0" />
+            <span className="min-w-0 flex-1">
+              <b className="block text-guia tabular-nums" data-testid="guia-distancia">{textoDistancia(falta)}</b>
+              <LetraMax base={16} max={18} className={instruccion} data-testid="guia-texto">{paso?.icono === 'llegada' ? tx('Llegas a tu parada') : textoPaso(paso, tx)}</LetraMax>
+              {luego && luego.icono !== 'llegada' && (
+                <LetraMax base={12} max={14} className="mt-0.5 block truncate text-sec">
+                  {tx('Luego')} {(() => { const I = ICONOS[luego.icono] || ArrowUp; return <I size={14} className="inline-block align-text-bottom" aria-hidden="true" /> })()} {textoPaso(luego, tx)}
+                </LetraMax>
+              )}
+            </span>
+          </Banda>
         )}
-        {pidiendo && lista && <p className="mt-2 inline-block rounded-full bg-dark-900/90 px-3 py-1 text-[12px] text-dark-200">{tx('Recalculando…')}</p>}
-        {(manos || avisoManos) && (
-          <div className="pointer-events-auto mt-2 max-w-[22rem] rounded-xl bg-dark-900/95 px-3 py-2 text-[12.5px] text-dark-100 shadow-lg" role="status">
-            {avisoManos || (<>
-              <b className="text-emerald-300">🎤 {tx('Manos libres')}</b> · {tx('Di «entregado», «no entregado», «he llegado», «llamar» o «repite»')}
-              {oido && <span className="mt-0.5 block text-dark-300">{tx('Entendido: «{texto}»', { texto: oido })}</span>}
-              <span className="mt-0.5 block text-[10.5px] text-dark-400">{tx('Para entenderte, el móvil usa su reconocimiento de voz (en Android, el de Google).')}</span>
-            </>)}
+        {pidiendo && lista && <Pastilla className="pointer-events-auto mt-2" role="status" texto={tx('Recalculando…')} />}
+        {avisoManos ? (
+          <div className="pointer-events-auto mt-2 max-w-sm rounded-xl bg-dark-900 p-3 text-texto text-dark-50 shadow-md" role="status">{avisoManos}</div>
+        ) : manos && ayudaManos ? (
+          <div className="pointer-events-auto mt-2 max-w-sm rounded-xl bg-dark-900 p-3 text-texto text-dark-50 shadow-md" role="status">
+            <b className="text-ruta-ok-texto"><Mic size={16} className="mr-1 inline-block align-text-bottom" aria-hidden="true" />{tx('Manos libres')}</b> · {tx('Di «entregado», «no entregado», «he llegado», «llamar» o «repite»')}
+            {oido && <span className="mt-0.5 block text-dark-400">{tx('Entendido: «{texto}»', { texto: oido })}</span>}
+            <span className="mt-0.5 block text-sec text-dark-400">{tx('Para entenderte, el móvil usa su reconocimiento de voz (en Android, el de Google).')}</span>
           </div>
-        )}
+        ) : manos ? (
+          <Pastilla className="pointer-events-auto mt-2" tono="ok" icono={Mic} role="status"
+            texto={oido ? `${tx('Escuchando')} · ${tx('Entendido: «{texto}»', { texto: oido })}` : tx('Escuchando')} />
+        ) : null}
       </div>
 
-      {/* BOTONES DEL MAPA */}
-      <div className="absolute right-3 top-1/2 flex -translate-y-1/2 flex-col gap-2">
-        <button onClick={() => setVoz((v) => !v)} aria-label={voz ? tx('Silenciar la voz') : tx('Activar la voz')}
-          className="rounded-full border border-dark-700 bg-dark-900/95 p-3 text-dark-100 shadow-lg">{voz ? <Volume2 size={20} /> : <VolumeX size={20} />}</button>
+      {/* LOS BOTONES SOBRE EL MAPA: en columna a la derecha, 12 por encima del panel. */}
+      <div className="absolute right-3 z-10 flex flex-col gap-2" style={{ bottom: panelAlto + 12 }}>
+        <BotonMapa icono={voz ? Volume2 : VolumeX} nombre={voz ? tx('Silenciar la voz') : tx('Activar la voz')} onClick={() => setVoz((v) => !v)} />
+        {parada && !haLlegado && <BotonMapa icono={Navigation} nombre={nombreFuera} href={enlaceFuera(parada)} target="_blank" rel="noreferrer" />}
         {Reconocedor && ORDENES[idioma()] && (
-          <button onClick={() => { setAvisoManos(''); setOido(''); setManos((m) => !m) }} aria-pressed={manos}
-            aria-label={manos ? tx('Quitar manos libres') : tx('Manos libres')}
-            className={`rounded-full border p-3 shadow-lg ${manos ? 'border-emerald-500 bg-emerald-700 text-white' : 'border-dark-700 bg-dark-900/95 text-dark-100'}`}>
-            {manos ? <Mic size={20} /> : <MicOff size={20} />}
-          </button>
+          <BotonMapa icono={manos ? Mic : MicOff} activo={manos} nombre={manos ? tx('Quitar manos libres') : tx('Manos libres')}
+            onClick={() => { setAvisoManos(''); setOido(''); setManos((m) => !m) }} />
         )}
-        {!seguir && (
-          <button onClick={() => setSeguir(true)} aria-label={tx('Centrar en mí')}
-            className="rounded-full border border-dark-700 bg-dark-900/95 p-3 text-sky-300 shadow-lg"><LocateFixed size={20} /></button>
-        )}
+        {!seguir && <BotonMapa icono={LocateFixed} nombre={tx('Seguirme')} onClick={() => setSeguir(true)} />}
       </div>
 
-      {/* ABAJO: la parada, o al llegar, entregar. */}
-      <div className="absolute inset-x-0 bottom-0 rounded-t-3xl border-t border-dark-700 bg-dark-950/[.97] p-4 pb-6 shadow-2xl">
+      {/* ABAJO: el panel de la parada (radio 16 arriba, relleno 12), o al llegar, entregar. */}
+      <div ref={panel} className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-dark-900 p-3 pb-[max(12px,env(safe-area-inset-bottom))] shadow-md">
         {!parada ? (
           <div className="text-center">
-            <p className="text-[20px] font-bold text-dark-50">{tx('No quedan paradas')}</p>
-            <p className="mt-1 text-[13px] text-dark-400">{tx('Ruta terminada. Buen trabajo.')}</p>
-            <button onClick={onSalir} className="mt-4 w-full rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta">{tx('Volver a la ruta')}</button>
+            <p className="text-titulo text-dark-50">{tx('No quedan paradas')}</p>
+            <p className="mt-1 text-sec text-dark-400">{tx('Ruta terminada. Buen trabajo.')}</p>
+            <Boton variante="principal" className="mt-4 w-full" texto={tx('Volver a la ruta')} onClick={onSalir} />
           </div>
-        ) : haLlegado ? (
-          <>
-            <p className="text-[12px] font-bold uppercase tracking-wider text-emerald-300">{tx('Parada {n}', { n: numero })}{quedan > 1 ? ` · ${tx('quedan {n}', { n: quedan })}` : ''}</p>
-            <p className="text-[20px] font-bold leading-tight text-dark-50">{parada.cliente || tx('Cliente')}</p>
-            <p className="text-[14px] text-dark-300">{parada.direccion}</p>
-            <div className="mt-2 flex flex-wrap gap-1.5 text-[12px]">
-              {parada.hueco && <span className="inline-flex items-center gap-1 rounded-lg bg-sky-500/20 px-2 py-1 font-bold text-sky-200"><Package size={13} /> {tx('Búscalo: {sitio}', { sitio: tx(parada.hueco) })}</span>}
-              {parada.cobrar > 0 && <span className="rounded-lg bg-emerald-500/15 px-2 py-1 font-bold text-emerald-300">{tx('Cobrar')} {importe(parada.cobrar)}</span>}
-              {parada.bultos > 1 && <span className="rounded-lg bg-dark-800 px-2 py-1 text-dark-200">{tx('{n} bultos', { n: parada.bultos })}</span>}
-            </div>
-            {(parada.notas || parada.contenido) && <p className="mt-1.5 text-[13px] text-dark-400">{[parada.contenido, parada.notas].filter(Boolean).join(' · ')}</p>}
-            <AntesPuerta a={parada.antes} className="mt-1.5" />
-            <ClienteDice d={parada.cliente_dice} className="mt-1.5" />
-            <div className="mt-3 grid grid-cols-[auto_1fr_2fr] gap-2">
-              {parada.telefono
-                ? <a href={`tel:${parada.telefono}`} aria-label={tx('Llamar')} className="flex items-center justify-center rounded-xl border border-dark-600 px-4 text-dark-100"><Phone size={18} /></a>
-                : <span />}
-              <button onClick={() => onNoEntregar(parada)} className="rounded-xl border border-red-500/40 py-3.5 text-[14px] font-semibold text-red-300">{tx('No entregado')}</button>
-              <button onClick={() => onEntregar(parada)} className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-700 py-3.5 text-[16px] font-bold text-white">
-                <Check size={18} /> {parada.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')}
-              </button>
-            </div>
-          </>
         ) : (
           <>
-            <div className="flex items-start gap-3">
-              <span className="flex h-9 min-w-9 items-center justify-center rounded-full bg-brand-500 px-1.5 text-[15px] font-bold text-brand-tinta">{numero}</span>
+            {haLlegado && (
+              <p className="mb-1 text-etiqueta text-ruta-ok-texto">{tx('Parada {n}', { n: numero })}{quedan > 1 ? ` · ${tx('quedan {n}', { n: quedan })}` : ''}</p>
+            )}
+            <div className="flex items-center gap-2">
+              <NumeroParada n={numero} tam="siguiente" estado="siguiente" />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[17px] font-bold text-dark-50">{parada.cliente || tx('Cliente')}</p>
-                <p className="truncate text-[13px] text-dark-300">{parada.direccion}</p>
-                {lista && (
-                  <p className="mt-0.5 text-[13px] text-dark-200">
-                    {minRest != null && <>{tx('Llegas')} <b className="text-emerald-300">≈ {horaMas(minRest)}</b> · </>}{textoDistancia(restante)}
-                    {minRest != null && <> · {Math.max(1, Math.round(minRest))} min</>}
-                  </p>
-                )}
+                <p className="truncate text-nombre text-dark-50">{parada.cliente || parada.direccion || tx('Cliente')}</p>
+                {parada.cliente && parada.direccion && <p className="truncate text-sec text-dark-400">{parada.direccion}</p>}
               </div>
-              <button onClick={onSalir} aria-label={tx('Salir de la navegación')} className="rounded-full border border-dark-700 p-2.5 text-dark-300"><X size={18} /></button>
+              {parada.telefono && <Boton variante="icono" tono="neutro" icono={Phone} nombre={tx('Llamar')} href={`tel:${parada.telefono}`} />}
+              <Boton variante="icono" tono="neutro" icono={X} nombre={tx('Salir de la navegación')} onClick={onSalir} />
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-[12px]">
-              {parada.telefono
-                ? <a href={`tel:${parada.telefono}`} className="flex items-center justify-center gap-1 rounded-xl border border-dark-700 py-2.5 text-dark-100"><Phone size={15} /> {tx('Llamar')}</a>
-                : <span className="flex items-center justify-center rounded-xl border border-dark-800 py-2.5 text-dark-600">{tx('Sin teléfono')}</span>}
-              <a href={enlaceFuera(parada)} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 rounded-xl border border-dark-700 py-2.5 text-dark-100"><Navigation size={15} /> {nombreFuera}</a>
-              <button onClick={() => { setLlegado(parada.id); onLlegar?.(parada); if (navigator.vibrate) navigator.vibrate(60) }}
-                className="rounded-xl border border-emerald-600/50 py-2.5 font-semibold text-emerald-300">{tx('Ya he llegado')}</button>
-            </div>
-            <p className="mt-2 text-center text-[10.5px] text-dark-500">{tx('Tu ubicación se usa para guiarte y no se guarda.')}</p>
+            {!haLlegado && lista && (
+              <p className="mt-1 text-texto tabular-nums text-dark-200">
+                {minRest != null && <>{tx('Llegas')} <b className="text-ruta-ok-texto">≈ {horaMas(minRest)}</b> · </>}{textoDistancia(restante)}
+                {minRest != null && <> · {Math.max(1, Math.round(minRest))} min</>}
+              </p>
+            )}
+            {notas.length > 0 && (
+              <p className="mt-1 truncate text-texto text-dark-200" title={notas.map((n) => `${n.prefijo || ''}${n.texto}`).join(' · ')}>
+                {notas.map((n, i) => (
+                  <span key={n.texto}>
+                    {i > 0 && ' · '}
+                    {icono(n.icono, 14, 'mr-1 inline-block align-text-bottom')}
+                    {n.prefijo && <span className="sr-only">{n.prefijo}</span>}
+                    {n.texto}
+                  </span>
+                ))}
+              </p>
+            )}
+            {haLlegado ? (
+              <FilaCierre className="mt-2" recogida={parada.tipo === 'recogida'} onFallar={() => onNoEntregar(parada)} onEntregar={() => onEntregar(parada)} />
+            ) : (
+              <>
+                <Boton variante="normal" contorno tono="ok" icono={Flag} className="mt-2 w-full" texto={tx('Ya he llegado')}
+                  onClick={() => { setLlegado(parada.id); onLlegar?.(parada); if (navigator.vibrate) navigator.vibrate(60) }} />
+                {/* Se queda aquí (en «pie») mientras la ficha de datos de Play y REVISION_LEGAL.md no digan lo de la guía (§8, riesgo 16). */}
+                <p className="mt-2 text-center text-pie text-dark-400">{tx('Tu ubicación se usa para guiarte y no se guarda.')}</p>
+              </>
+            )}
           </>
         )}
       </div>
@@ -364,9 +423,11 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
   )
 }
 
+/* La banda de la maniobra: radio 16, relleno 12, en «guia» (#047857 = ruta-ok) o «guiaAviso» (#B45309 = amber-700) si
+   falta algo; flota sobre el mapa, así que lleva sombra. */
 function Banda({ children, tono }) {
   return (
-    <div className={`pointer-events-auto flex items-center gap-3 rounded-2xl px-4 py-3.5 text-white shadow-2xl ${tono === 'ambar' ? 'bg-amber-700' : 'bg-emerald-700'}`}>
+    <div className={`pointer-events-auto flex items-center gap-3 rounded-2xl p-3 text-white shadow-md ${tono === 'ambar' ? 'bg-amber-700' : 'bg-ruta-ok'}`}>
       {children}
     </div>
   )
@@ -374,7 +435,8 @@ function Banda({ children, tono }) {
 
 /* El mapa de la guía: te sigue (si no lo mueves con el dedo), la ruta en
    azul gruesa como un navegador, tu flecha girada hacia donde vas y la
-   parada con su número. Norte arriba: Leaflet no gira el mapa. */
+   parada con su número. Norte arriba: Leaflet no gira el mapa. La atribución
+   la pinta Navegacion con la pieza Atribucion, encima del panel. */
 function MapaGuia({ linea, yo, rumbo, destino, numero, seguir, onMover }) {
   const caja = useRef(null)
   const mapa = useRef(null)
@@ -385,7 +447,7 @@ function MapaGuia({ linea, yo, rumbo, destino, numero, seguir, onMover }) {
   yoAhora.current = yo
 
   useEffect(() => {
-    const m = L.map(caja.current, { zoomControl: false, attributionControl: true }).setView(destino || [40.4, -3.7], destino ? 16 : 6)
+    const m = L.map(caja.current, { zoomControl: false, attributionControl: false }).setView(destino || [40.4, -3.7], destino ? 16 : 6)
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(m)
     m.on('dragstart', () => avisa.current())
     mapa.current = m

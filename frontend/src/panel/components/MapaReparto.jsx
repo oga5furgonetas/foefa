@@ -3,6 +3,8 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Crosshair, LocateFixed } from 'lucide-react'
 import { tx, useIdioma } from '../../lib/idioma'
+import BotonMapa from '../../pages/driver/piezas/BotonMapa'
+import Pastilla from '../../pages/driver/piezas/Pastilla'
 
 /* EL MAPA DEL REPARTO. Puntos dibujados (SVG en línea), no los iconos de Leaflet: esos son imágenes que el
    empaquetador no encuentra y salían como cuadrados rotos. Cada conductor con su color; el almacén en negro; los
@@ -16,7 +18,13 @@ import { tx, useIdioma } from '../../lib/idioma'
    un rombo ámbar, la retención un coche, el tiempo una nube, la furgoneta una furgoneta y el almacén una nave.
    Tocar cualquier cosa abre una ventana con lo que es y, en la app del repartidor (`onAccion`), con qué hacer: ir,
    llamar, abrir la parada; volver a pie a la furgoneta o quitarla. Mantener pulsado el mapa deja la furgoneta ahí.
-   Arriba a la derecha, las capas (C/D, DGT, ZBE) se apagan y encienden. */
+   Arriba a la derecha, las capas (C/D, DGT, ZBE) se apagan y encienden.
+
+   LO DE ENCIMA, CON LAS PIEZAS DEL DISEÑO COMPACTO (07-11-2026, §5.7): «Seguirme» y «Centrar la ruta» son `BotonMapa`
+   de 48, las capas son `Pastilla`s (32 visibles, 48 de toque; tono zona las C/D y ZBE, aviso la DGT), el zoom de Leaflet
+   mide 48 en la app de reparto (`.app-ruta`; en el panel sigue a 30) y las ventanas no se salen de la pantalla (260 de
+   ancho, `keepInView`, la letra del tema y botones de 40). Los dibujos (chinchetas, iconos, líneas) no cambian: por eso
+   este fichero lleva colores hex en sus SVG y en el CSS de las ventanas, y no la marca de `check-tokens-ruta.mjs`. */
 
 const COLORES = ['#0ea5e9', '#f97316', '#22c55e', '#a855f7', '#ef4444', '#eab308', '#14b8a6', '#ec4899']
 export const colorConductor = (i) => COLORES[((i % COLORES.length) + COLORES.length) % COLORES.length]
@@ -78,8 +86,9 @@ function svgHecho(fallido) {
 const SVG_FURGO = `<svg viewBox="0 0 32 32" width="32" height="32" style="${SOMBRA}"><rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="#0f172a" stroke="#fff" stroke-width="2"/><path d="M5 21v-8.5A1.5 1.5 0 0 1 6.5 11H18l4.6 4.6H26a1.5 1.5 0 0 1 1.5 1.5V21z" fill="#fff"/><path d="M15 13.2h2.6l2.8 2.8H15z" fill="#0f172a"/><circle cx="10" cy="21.3" r="2.5" fill="#0f172a" stroke="#fff" stroke-width="1.8"/><circle cx="22.5" cy="21.3" r="2.5" fill="#0f172a" stroke="#fff" stroke-width="1.8"/></svg>`
 const SVG_BASE = `<svg viewBox="0 0 30 30" width="30" height="30" style="${SOMBRA}"><rect x="1.5" y="1.5" width="27" height="27" rx="7" fill="#0f172a" stroke="#fff" stroke-width="2"/><path d="M6.5 14.5 15 7.5l8.5 7V23h-17z" fill="#fff"/><rect x="13" y="17" width="4" height="6" fill="#0f172a"/></svg>`
 
-// La ventana se aparta del control del zoom (arriba a la izquierda) y de los botones de la derecha.
-const POP = { className: 'fds-pop', maxWidth: 270, minWidth: 190, autoPanPaddingTopLeft: [58, 16], autoPanPaddingBottomRight: [16, 16] }
+// La ventana se aparta del control del zoom (arriba a la izquierda: 10 + 48) y de los bordes (16). Desde el 07-11-2026,
+// 260 de ancho y `keepInView`: a 360 se cortaban por los lados (captura 62 del «antes»).
+const POP = { className: 'fds-pop', maxWidth: 260, minWidth: 190, keepInView: true, autoPanPadding: [16, 16], autoPanPaddingTopLeft: [58, 16] }
 const km = (n) => String(n).replace('.', ',')
 const fecha = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' }) }
 const chip = (texto, fondo, tinta) => `<span style="background:${fondo};color:${tinta}">${esc(texto)}</span>`
@@ -151,21 +160,29 @@ function metros(a, b) {
 }
 const centroide = (pol) => [pol.reduce((s, p) => s + p[0], 0) / pol.length, pol.reduce((s, p) => s + p[1], 0) / pol.length]
 
+/* Las ventanas con la letra del tema (07-11-2026, §5.7): `font: inherit` y los tamaños de §3.1 × --letra (texto 14, nombre
+   16, sec y etiqueta 12), radio 12 y botones de 40. Los colores de dentro no cambian: la ventana de Leaflet es blanca
+   con cualquier tema. */
 const CSS = `
-.fds-pop .leaflet-popup-content-wrapper{border-radius:14px;padding:0;box-shadow:0 8px 28px rgba(0,0,0,.28)}
-.fds-pop .leaflet-popup-content{margin:11px 13px 12px;font:13px/1.35 system-ui,sans-serif;color:#0f172a}
-.fds-pop .leaflet-popup-content b{font-size:14px}
-.fds-pop .fds-sub{color:#475569;margin-top:2px}
-.fds-pop .fds-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;font-size:10.5px;font-weight:700}
-.fds-pop .fds-chips span{border-radius:5px;padding:1px 6px}
-.fds-pop .fds-dice{margin-top:6px;border-radius:9px;background:#ecfdf5;color:#065f46;padding:5px 8px;font-size:12px;line-height:1.3}
-.fds-pop .fds-dice b{font-size:12px}
-.fds-pop .fds-acc{display:flex;gap:6px;margin-top:10px}
-.fds-pop .fds-acc button,.fds-pop .fds-acc a{flex:1;border:0;border-radius:10px;padding:9px 6px;font:700 12.5px system-ui,sans-serif;text-align:center;background:#e2e8f0;color:#0f172a;cursor:pointer;text-decoration:none;white-space:nowrap}
+.fds-mapa.leaflet-container{font-family:inherit}
+.fds-pop .leaflet-popup-content-wrapper{border-radius:12px;padding:0;box-shadow:0 4px 12px rgba(0,0,0,.25)}
+.fds-pop .leaflet-popup-content{margin:12px;font:inherit;font-size:calc(14px * var(--letra, 1));line-height:1.43;color:#0f172a}
+.fds-pop .leaflet-popup-content b{font-size:calc(16px * var(--letra, 1));font-weight:600}
+.fds-pop .fds-sub{color:#475569;margin-top:2px;font-size:calc(12px * var(--letra, 1));line-height:1.34}
+.fds-pop .fds-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;font-size:calc(12px * var(--letra, 1));font-weight:600;line-height:1.34}
+.fds-pop .fds-chips span{border-radius:8px;padding:2px 8px}
+.fds-pop .fds-dice{margin-top:8px;border-radius:8px;background:#ecfdf5;color:#065f46;padding:8px}
+.fds-pop .fds-dice b{font-size:inherit}
+.fds-pop .fds-acc{display:flex;gap:8px;margin-top:12px}
+.fds-pop .fds-acc button,.fds-pop .fds-acc a{flex:1;border:0;border-radius:12px;min-height:40px;padding:8px 6px;font:inherit;font-size:calc(14px * var(--letra, 1));font-weight:600;line-height:1.43;text-align:center;background:#e2e8f0;color:#0f172a;cursor:pointer;text-decoration:none;white-space:nowrap}
 .fds-pop .fds-acc .fds-ir{background:#0284c7;color:#fff}
 .fds-pop .fds-acc .fds-rojo{background:#fee2e2;color:#991b1b}
-.fds-pop .leaflet-popup-close-button{top:5px;right:7px;font-size:20px;color:#64748b}
+.fds-pop a.leaflet-popup-close-button{top:4px;right:4px;width:32px;height:32px;font-size:22px;line-height:32px;color:#64748b}
 .fds-pop .leaflet-popup-tip-container{margin-top:-1px}
+.app-ruta .fds-mapa .leaflet-bar{border:0;border-radius:24px;box-shadow:0 4px 6px -1px rgba(0,0,0,.2),0 2px 4px -2px rgba(0,0,0,.2)}
+.app-ruta .fds-mapa .leaflet-bar a{width:48px;height:48px;line-height:48px;font-size:24px;border-bottom-color:#e2e8f0}
+.app-ruta .fds-mapa .leaflet-bar a:first-child{border-radius:24px 24px 0 0}
+.app-ruta .fds-mapa .leaflet-bar a:last-child{border-radius:0 0 24px 24px}
 @keyframes fds-latido{0%{transform:scale(.55);opacity:.75}100%{transform:scale(2.1);opacity:0}}
 .fds-halo{position:absolute;left:50%;width:30px;height:30px;margin-left:-15px;border-radius:50%;animation:fds-latido 1.7s ease-out infinite;pointer-events:none}
 `
@@ -399,38 +416,30 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
     if (seguir) m.setView([yo.lat, yo.lng], Math.max(m.getZoom(), 16), { animate: true })
   }, [yo, seguir])
 
-  const capaBoton = (k, texto, color) => (
-    <button type="button" onClick={() => setCapas((c) => ({ ...c, [k]: !c[k] }))} aria-pressed={capas[k]}
-      className={`rounded-full border px-2 py-0.5 text-[11px] font-extrabold shadow-md active:scale-95 ${capas[k] ? `border-white bg-white ${color}` : 'border-white/70 bg-white/70 text-slate-400 line-through'}`}>
-      {texto}
-    </button>
+  // Cada capa, una pastilla con su cuenta: encendida en su tono (zona para C/D y ZBE, aviso para la DGT), apagada en
+  // neutro y tachada (el estado, no solo por el color).
+  const capaBoton = (k, texto, tono) => (
+    <Pastilla onClick={() => setCapas((c) => ({ ...c, [k]: !c[k] }))} aria-pressed={capas[k]} texto={texto}
+      tono={capas[k] ? tono : 'neutro'} className={capas[k] ? '' : 'line-through'} />
   )
 
   // `isolate`: Leaflet pone sus capas con z-index 400-1000 y, sin un contexto propio, el mapa se pintaba ENCIMA de
-  // las ventanas emergentes de la página.
+  // las ventanas emergentes de la página. `fds-mapa` acota el CSS de arriba a este mapa.
   return (
     <div className="relative isolate">
       <style>{CSS}</style>
-      <div ref={caja} style={{ height: alto }} className="w-full overflow-hidden rounded-xl border border-dark-700" />
+      <div ref={caja} style={{ height: alto }} className="fds-mapa w-full overflow-hidden rounded-xl border border-dark-700" />
       {(zonas.length > 0 || incidencias.length > 0 || zbe.length > 0) && (
-        <div className="absolute right-2.5 top-2.5 z-[1100] flex flex-wrap justify-end gap-1" role="group" aria-label={tx('Capas del mapa')}>
-          {zonas.length > 0 && capaBoton('cd', `C/D ${zonas.length}`, 'text-violet-700')}
-          {incidencias.length > 0 && capaBoton('dgt', `${(fuente || 'DGT').split(' · ')[0].split(' + ')[0]} ${incidencias.length}`, 'text-amber-700')}
-          {zbe.length > 0 && capaBoton('zbe', `${tipoZona} ${zbe.length}`, 'text-violet-700')}
+        <div className="absolute right-3 top-3 z-[1100] flex flex-wrap justify-end gap-2" role="group" aria-label={tx('Capas del mapa')}>
+          {zonas.length > 0 && capaBoton('cd', `C/D ${zonas.length}`, 'zona')}
+          {incidencias.length > 0 && capaBoton('dgt', `${(fuente || 'DGT').split(' · ')[0].split(' + ')[0]} ${incidencias.length}`, 'aviso')}
+          {zbe.length > 0 && capaBoton('zbe', `${tipoZona} ${zbe.length}`, 'zona')}
         </div>
       )}
       {/* Tras mover o ampliar el mapa, un toque lo devuelve a la ruta entera. */}
-      <div className="absolute bottom-7 right-2.5 z-[1100] flex flex-col gap-2">
-        {yo?.lat != null && (
-          <button type="button" onClick={() => setSeguir((v) => !v)} aria-pressed={seguir} aria-label={tx('Seguirme')}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border shadow-lg active:scale-95 ${seguir ? 'border-sky-600 bg-sky-600 text-white' : 'border-dark-700 bg-white text-slate-700'}`}>
-            <LocateFixed size={19} />
-          </button>
-        )}
-        <button type="button" onClick={() => { setSeguir(false); encuadrar(mapa.current, encuadre.current) }} aria-label={tx('Centrar la ruta')}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-dark-700 bg-white text-slate-700 shadow-lg active:scale-95">
-          <Crosshair size={19} />
-        </button>
+      <div className="absolute bottom-7 right-3 z-[1100] flex flex-col gap-2">
+        {yo?.lat != null && <BotonMapa icono={LocateFixed} nombre={tx('Seguirme')} activo={seguir} onClick={() => setSeguir((v) => !v)} />}
+        <BotonMapa icono={Crosshair} nombre={tx('Centrar la ruta')} onClick={() => { setSeguir(false); encuadrar(mapa.current, encuadre.current) }} />
       </div>
     </div>
   )
