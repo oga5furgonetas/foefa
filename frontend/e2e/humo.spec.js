@@ -3294,15 +3294,23 @@ test('Reparto · en México el WhatsApp lleva el prefijo 52, y con + se respeta 
 const UA_ANDROID = 'Mozilla/5.0 (Linux; Android 14; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Mobile Safari/537.36'
 test.describe('App · instalar desde la web en Android', () => {
   test.use({ userAgent: UA_ANDROID })
-  test('ofrece el APK y, si Chrome deja, instalar en un toque (y no sale si ya es app)', async ({ page }) => {
+  /* El aviso «Instala la app» (07-11-2026, diseño compacto, §5.1 b): en Android «Instalar la app» lleva a Google Play, con el
+     aviso de Chrome para instalar en un toque o sin él. REVISOR, hallazgo 1: con el aviso de Chrome, lo normal en Android,
+     lanzaba la instalación de la PWA y no abría la tienda (esa vía sigue en el último paso del alta: `activacion.spec.js`).
+     Sin el arreglo, la segunda parte ve `prompt()` llamado y la tienda abierta una sola vez. */
+  test('el aviso «Instala la app» lleva a Google Play, con o sin el aviso de Chrome, y no lanza la instalación', async ({ page }) => {
     const fallos = vigilar(page)
+    const PLAY = 'https://play.google.com/store/apps/details?id=com.flotadsp.flota'
+    await page.addInitScript(() => { window.__abiertas = []; window.open = (url) => { window.__abiertas.push(String(url)); return null } })
     await entrarRepartidor(page, { status: 'trial', days_left: 6, trial_ends: new Date(Date.now() + 6 * 86400000).toISOString() })
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    // El aviso «Instala la app» (07-11-2026, diseño compacto): sin el aviso de Chrome, «Instalar la app» lleva a la tienda.
     const tarjeta = page.getByRole('status').filter({ hasText: 'Instala la app' })
     await expect(tarjeta).toBeVisible()
     await expect(tarjeta.getByRole('button', { name: 'Instalar la app' })).toBeVisible()
-    // Con el aviso de Chrome: el botón lo lanza.
+    // Sin el aviso de Chrome: la tienda.
+    await tarjeta.getByRole('button', { name: 'Instalar la app' }).click()
+    await expect.poll(() => page.evaluate(() => window.__abiertas)).toEqual([PLAY])
+    // Con el aviso de Chrome: también la tienda, y la instalación de la PWA sin lanzar.
     await page.evaluate(() => {
       const e = new Event('beforeinstallprompt')
       e.prompt = () => { window.__pedido = true }
@@ -3310,8 +3318,9 @@ test.describe('App · instalar desde la web en Android', () => {
       window.dispatchEvent(e)
     })
     await tarjeta.getByRole('button', { name: 'Instalar la app' }).click()
-    await expect.poll(() => page.evaluate(() => window.__pedido)).toBe(true)
-    await expect(page.getByText('Instala la app')).toHaveCount(0)
+    await expect.poll(() => page.evaluate(() => window.__abiertas)).toEqual([PLAY, PLAY])
+    expect(await page.evaluate(() => window.__pedido), 'la instalación de la PWA no se lanza desde el aviso').toBeUndefined()
+    await expect(tarjeta).toBeVisible()
     expect(fallos).toEqual([])
   })
 })

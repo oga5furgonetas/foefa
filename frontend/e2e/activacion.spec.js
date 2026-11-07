@@ -146,23 +146,65 @@ test('Instalar · /instalar no da 404: lleva a la app', async ({ page }) => {
    (aviso de Chrome) y explica los pasos en iPhone, avisando de que la de App Store llegará próximamente. */
 const SIN_PAQUETES = { activo: true, autonomo: true, empresa: '', fecha: '2026-10-05', ia_tickets: false, jornada: {}, aviso_aceptado: true, base: null, ruta: null, pedidos: [] }
 
+const GOOGLE_PLAY = 'https://play.google.com/store/apps/details?id=com.flotadsp.flota'
+/* El aviso de Chrome para instalar la PWA en un toque (`beforeinstallprompt`): `window.__lanzado` si alguien llama a `prompt()`. */
+const avisoDeChrome = (page) => page.evaluate(() => {
+  const e = new Event('beforeinstallprompt')
+  e.prompt = () => { window.__lanzado = true }
+  e.userChoice = Promise.resolve({ outcome: 'accepted' })
+  window.dispatchEvent(e)
+})
+/* Y `window.open` anotado (sin abrir nada): lo que se abriría, con su destino y sus rasgos. */
+const anotarVentanas = (page) => page.addInitScript(() => {
+  window.__abierto = []
+  window.open = (url, destino, rasgos) => { window.__abierto.push([String(url), destino, rasgos]); return null }
+})
+
 test.describe('Instalar · Android', () => {
   test.use({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36' })
-  test('con el aviso de Chrome, «Instalar la app» lanza la instalación', async ({ page, context }) => {
+  /* REVISOR (07-11-2026, hallazgo 1): en Android, «Instalar la app» del aviso lleva a Google Play (§5.1 b: «Instalar» lleva a la
+     tienda como hoy), también cuando Chrome ofrece instalarla en un toque, que es lo normal en Android. Antes, con el aviso de
+     Chrome, lanzaba la instalación de la PWA y no abría la tienda: sin el arreglo, esta prueba ve `prompt()` llamado y
+     `window.open` sin llamar. */
+  test('«Instalar la app» del aviso lleva a Google Play, también con el aviso de Chrome, y no lanza la instalación', async ({ page, context }) => {
     await preparar(page, context)
     await page.addInitScript(() => localStorage.removeItem('fds_instalar_cerrado'))
+    await anotarVentanas(page)
     await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: SIN_PAQUETES }))
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('Instala la app')).toBeVisible()
-    await page.evaluate(() => {
-      const e = new Event('beforeinstallprompt')
-      e.prompt = () => { window.__lanzado = true }
-      e.userChoice = Promise.resolve({ outcome: 'accepted' })
-      window.dispatchEvent(e)
-    })
-    await page.getByRole('button', { name: 'Instalar la app' }).click()
+    const aviso = page.getByRole('status').filter({ hasText: 'Instala la app' })
+    await expect(aviso).toBeVisible()
+    await avisoDeChrome(page)
+    await aviso.getByRole('button', { name: 'Instalar la app' }).click()
+    await expect.poll(() => page.evaluate(() => window.__abierto)).toEqual([[GOOGLE_PLAY, '_blank', 'noopener']])
+    expect(await page.evaluate(() => window.__lanzado), 'no se lanza la instalación de la PWA').toBeFalsy()
+    await expect(page.getByRole('dialog'), 'ni se abre una hoja').toHaveCount(0)
+  })
+
+  // Y sin el aviso de Chrome, lo mismo: a la tienda.
+  test('sin el aviso de Chrome, «Instalar la app» del aviso también lleva a Google Play', async ({ page, context }) => {
+    await preparar(page, context)
+    await page.addInitScript(() => localStorage.removeItem('fds_instalar_cerrado'))
+    await anotarVentanas(page)
+    await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: SIN_PAQUETES }))
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('status').filter({ hasText: 'Instala la app' }).getByRole('button', { name: 'Instalar la app' }).click()
+    await expect.poll(() => page.evaluate(() => window.__abierto)).toEqual([[GOOGLE_PLAY, '_blank', 'noopener']])
+  })
+
+  /* La instalación en un toque con el aviso de Chrome sigue donde se ofrecen todas las vías (`Opciones`): en el último paso del
+     alta. Es lo que cubría la prueba de «Instalar la app» del aviso, que ahora va a la tienda. */
+  test('en el último paso del alta, con el aviso de Chrome, «Instalar la app» lanza la instalación en un toque', async ({ page, context }) => {
+    await preparar(page, context)
+    await page.addInitScript(() => { localStorage.setItem('fds_recien_alta', '1') })
+    await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: SIN_PAQUETES }))
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    const paso = page.getByRole('dialog', { name: 'Último paso: instala la app' })
+    await expect(paso).toBeVisible()
+    await avisoDeChrome(page)
+    await paso.getByRole('button', { name: 'Instalar la app' }).click()
     await expect.poll(() => page.evaluate(() => window.__lanzado)).toBe(true)
-    await expect(page.getByText('Instala la app')).toHaveCount(0)
+    await expect(paso.getByText('Instalada. Ábrela desde el icono de FDS.')).toBeVisible()
   })
 })
 
