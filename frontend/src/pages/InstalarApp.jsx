@@ -1,3 +1,4 @@
+/* diseño compacto */
 import { useEffect, useState } from 'react'
 import { Download, Share, X, Smartphone, Loader2, ExternalLink, CheckCircle2, Copy } from 'lucide-react'
 import QRCode from 'qrcode'
@@ -7,7 +8,9 @@ import {
 import { tx, useIdioma } from '../lib/idioma'
 import { crearPaseMovil } from '../panel/api'
 import { medirAccion } from '../lib/analitica'
-import GooglePlayBadge from '../components/GooglePlayBadge'
+import GooglePlayBadge, { GOOGLE_PLAY_URL } from '../components/GooglePlayBadge'
+import Aviso from './driver/piezas/Aviso'
+import Hoja from './driver/piezas/Hoja'
 
 /* La app nativa con paquete propio (`com.flotadsp.flota.web`, app-android/): la misma que la de Play, para quien
    no pasa por Google Play. La firma el CI (app-release.yml) y la cose el despliegue de la web en /descargas. */
@@ -44,18 +47,18 @@ export function useInstalar() {
   return { puede, iphone, android, interno, apk, ocupado, fallo, abrirFuera, enlace }
 }
 
-const boton = 'flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta disabled:opacity-60'
-const secundario = 'flex w-full items-center justify-center gap-2 rounded-xl border border-dark-700 py-2.5 text-[14px] font-semibold text-dark-100'
+const boton = 'flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 px-4 py-2 text-boton text-brand-tinta disabled:opacity-60'
+const secundario = 'flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-ruta-borde px-4 py-2 text-boton text-dark-50'
 
 function PasosIphone() {
   return (
-    <ol className="space-y-1.5 text-[13px] text-dark-200">
+    <ol className="space-y-2 text-texto text-dark-50">
       <li className="flex items-center gap-2">1. {tx('Abre esta página en Safari.')}</li>
-      <li className="flex items-center gap-2">2. {tx('Pulsa')} <Share size={15} className="text-sky-300" /> <b>{tx('Compartir')}</b> {tx('(abajo).')}</li>
+      <li className="flex items-center gap-2">2. {tx('Pulsa')} <Share size={16} className="text-ruta-marca" aria-hidden="true" /> <b>{tx('Compartir')}</b> {tx('(abajo).')}</li>
       <li>3. {tx('Elige «Añadir a pantalla de inicio».')}</li>
-      <li className="pt-1 text-[12px] text-dark-400">{tx('En iPhone no se descarga de la App Store: se instala así, desde Safari, y funciona como una app.')}</li>
-      <li className="text-[12px] text-dark-400">{tx('Al abrirla desde el icono, entra una vez con tu correo y tu contraseña.')}</li>
-      <li className="pt-1"><a href="/iphone" className="text-[13px] font-semibold text-brand-300">{tx('¿iPhone? Así se instala y se usa')} →</a></li>
+      <li className="pt-1 text-sec text-dark-400">{tx('En iPhone no se descarga de la App Store: se instala así, desde Safari, y funciona como una app.')}</li>
+      <li className="text-sec text-dark-400">{tx('Al abrirla desde el icono, entra una vez con tu correo y tu contraseña.')}</li>
+      <li className="pt-1"><a href="/iphone" className="text-boton text-ruta-marca">{tx('¿iPhone? Así se instala y se usa')} →</a></li>
     </ol>
   )
 }
@@ -64,9 +67,9 @@ function DescargarApk({ apk, principal }) {
   return (
     <>
       <a href={apk} download onClick={() => medirAccion('instalar_apk')} className={principal ? boton : secundario}>
-        <Download size={17} /> {tx('Descargar la app para Android')}
+        <Download size={20} aria-hidden="true" /> {tx('Descargar la app para Android')}
       </a>
-      <p className="text-[12px] leading-snug text-dark-400">{tx('Al instalarla, el móvil puede pedirte permitir apps de esta fuente: es la app de FDS, firmada por nosotros.')}</p>
+      <p className="text-sec text-dark-400">{tx('Al instalarla, el móvil puede pedirte permitir apps de esta fuente: es la app de FDS, firmada por nosotros.')}</p>
     </>
   )
 }
@@ -79,7 +82,7 @@ export function NoSeAbrio({ iphone, enlace }) {
     try { await navigator.clipboard.writeText(enlace); setCopiado(true) } catch { setCopiado(false) }
   }
   return (
-    <div data-testid="no-se-abrio" className="space-y-2 rounded-xl border border-amber-400/50 bg-amber-500/10 p-3 text-[13px] leading-snug text-amber-100">
+    <div data-testid="no-se-abrio" className="space-y-2 rounded-xl bg-ruta-aviso p-3 text-texto text-ruta-aviso-texto">
       <p className="font-semibold">
         {iphone
           ? tx('¿No se ha abierto? Pulsa ··· (arriba) y «Abrir en el navegador».')
@@ -87,10 +90,9 @@ export function NoSeAbrio({ iphone, enlace }) {
       </p>
       {enlace && (<>
         <p>{tx('O copia este enlace, abre {nav} y pégalo arriba: entras ya con tu cuenta (vale 10 minutos).', { nav })}</p>
-        <input readOnly value={enlace} aria-label={tx('Enlace para entrar')} onFocus={(e) => e.target.select()}
-          className="w-full rounded-lg border border-amber-400/40 bg-dark-950 px-2.5 py-2 text-[12px] text-dark-100" />
+        <input readOnly value={enlace} aria-label={tx('Enlace para entrar')} onFocus={(e) => e.target.select()} className="campo" />
         <button type="button" onClick={copiar} className={boton}>
-          <Copy size={16} /> {copiado ? tx('Copiado: ábrelo en {nav} y pégalo arriba', { nav }) : tx('Copiar el enlace')}
+          <Copy size={20} aria-hidden="true" /> {copiado ? tx('Copiado: ábrelo en {nav} y pégalo arriba', { nav }) : tx('Copiar el enlace')}
         </button>
       </>)}
     </div>
@@ -104,17 +106,17 @@ function Opciones({ ins, onInstalada }) {
   const { puede, iphone, android, interno, apk, ocupado, fallo, abrirFuera, enlace } = ins
   if (interno && (android || iphone)) {
     return (
-      <div className="space-y-2.5">
-        <p className="text-[13px] leading-snug text-dark-200">
+      <div className="space-y-3">
+        <p className="text-texto text-dark-50">
           {interno === 'app'
             ? tx('Estás en el navegador de otra app: desde aquí el móvil no deja instalar nada.')
             : tx('Estás en el navegador de {app}: desde aquí el móvil no deja instalar nada.', { app: interno })}
         </p>
         <button onClick={abrirFuera} disabled={ocupado} className={boton}>
-          {ocupado ? <Loader2 size={17} className="animate-spin" /> : <ExternalLink size={17} />}
+          {ocupado ? <Loader2 size={20} className="animate-spin" aria-hidden="true" /> : <ExternalLink size={20} aria-hidden="true" />}
           {iphone ? tx('Abrir en Safari') : tx('Abrir en Chrome')}
         </button>
-        <p className="text-[12px] leading-snug text-dark-400">{tx('Entras ya con tu cuenta, sin escribir nada.')}</p>
+        <p className="text-sec text-dark-400">{tx('Entras ya con tu cuenta, sin escribir nada.')}</p>
         {/* 17-10-2026: en el iPhone, el navegador de Facebook no deja saltar a Safari y el aviso, en letra
             pequeña, no se veía (Wanger pulsó «Abrir en Safari» 4 veces). Ahora se ve, y con el enlace de entrada
             para copiarlo y pegarlo en el navegador: entra ya con su cuenta (vale 10 minutos, una vez). */}
@@ -130,11 +132,11 @@ function Opciones({ ins, onInstalada }) {
   if (iphone) return <PasosIphone />
   if (android) {
     return (
-      <div className="space-y-2.5">
+      <div className="space-y-3">
         <GooglePlayBadge onClick={() => medirAccion('instalar_google_play')} />
         {puede && (
           <button onClick={async () => { medirAccion('instalar_pwa'); if (await instalar() === 'accepted') onInstalada() }} className={boton}>
-            <Download size={17} /> {tx('Instalar la app')}
+            <Download size={20} aria-hidden="true" /> {tx('Instalar la app')}
           </button>
         )}
         <DescargarApk apk={apk} principal={false} />
@@ -144,35 +146,86 @@ function Opciones({ ins, onInstalada }) {
   return null
 }
 
-/* La tarjeta «Instala FDS en tu móvil», en la app de ruta abierta desde el
-   navegador. No sale si ya es app (instalada o la de Play) ni si la cerró. */
-export default function InstalarApp() {
+/* Si toca ofrecer instalar la app ahora: móvil (Android o iPhone), fuera de la app y sin haberla cerrado o instalado. */
+function verInstalarAhora() {
+  try { if (localStorage.getItem('fds_instalar_cerrado') === '1' || localStorage.getItem('fds_instalada') === '1') return false } catch { /* nada */ }
+  return !yaEsApp() && (esIphone() || esAndroid())
+}
+/* Para quien elige el aviso de «Hoy» (RutaApp, 07-11-2026, diseño compacto): se vuelve a mirar cuando el aviso se cierra o
+   la app queda instalada (evento `fds-instalar`). */
+export function useVerInstalar() {
+  const [ver, setVer] = useState(verInstalarAhora)
+  useEffect(() => {
+    const mirar = () => setVer(verInstalarAhora())
+    window.addEventListener('fds-instalar', mirar)
+    return () => window.removeEventListener('fds-instalar', mirar)
+  }, [])
+  return ver
+}
+
+/* La tarjeta «Instala FDS en tu móvil», en la app de ruta abierta desde el navegador. No sale si ya es app
+   (instalada o la de Play) ni si la cerró. Con `compacto` (07-11-2026, §5.1 b) es un Aviso de una línea, «Instala la
+   app», con su botón: «Instalar la app» en un toque si Chrome lo deja, «Instalar» (la tienda) en Android con Play, «Abrir
+   en Chrome/Safari» desde el navegador de otra app, y «Cómo instalarla» (la hoja con los pasos) en el iPhone; ✕ «No
+   mostrar más». Lo largo va en su hoja. */
+export default function InstalarApp({ compacto = false }) {
   useIdioma()
   const ins = useInstalar()
-  const [oculta, setOculta] = useState(() => {
-    try { return localStorage.getItem('fds_instalar_cerrado') === '1' || localStorage.getItem('fds_instalada') === '1' } catch { return false }
-  })
+  const [oculta, setOculta] = useState(() => !verInstalarAhora())
   const [abierta, setAbierta] = useState(false)
+  const [hoja, setHoja] = useState(false)
   if (oculta || yaEsApp() || !(ins.iphone || ins.android)) return null
   function cerrar() {
     try { localStorage.setItem('fds_instalar_cerrado', '1') } catch { /* nada */ }
     setOculta(true)
+    window.dispatchEvent(new Event('fds-instalar'))
+  }
+  function instalada() {
+    setOculta(true)
+    window.dispatchEvent(new Event('fds-instalar'))
+  }
+  if (compacto) {
+    const interno = ins.interno && (ins.android || ins.iphone)
+    let accion = tx('Cómo instalarla')
+    let onAccion = () => setHoja(true)
+    if (!interno && ins.android && ins.puede) {
+      accion = tx('Instalar la app')
+      onAccion = async () => { medirAccion('instalar_pwa'); if (await instalar() === 'accepted') instalada() }
+    } else if (!interno && ins.android) {
+      // Android con Play: «Instalar» lleva a la tienda, como hoy el distintivo de Google Play.
+      accion = tx('Instalar la app')
+      onAccion = () => { medirAccion('instalar_google_play'); window.open(GOOGLE_PLAY_URL, '_blank', 'noopener') }
+    } else if (interno) {
+      accion = ins.iphone ? tx('Abrir en Safari') : tx('Abrir en Chrome')
+      onAccion = () => { setHoja(true); ins.abrirFuera() }
+    }
+    return (
+      <>
+        <Aviso tono="neutro" icono={Smartphone} texto={tx('Instala la app')} accion={accion} onAccion={onAccion} onCerrar={cerrar} nombreCerrar={tx('No mostrar más')} />
+        {hoja && (
+          <Hoja titulo={tx('Instala la app')} onClose={() => setHoja(false)}>
+            <p className="pb-3 pt-2 text-texto text-dark-400">{tx('Con su icono, a pantalla completa y sin buscar la web cada día.')}</p>
+            <Opciones ins={ins} onInstalada={() => { setHoja(false); instalada() }} />
+          </Hoja>
+        )}
+      </>
+    )
   }
   return (
-    <section className="mx-auto mb-4 max-w-md rounded-2xl border border-brand-400/40 bg-gradient-to-r from-brand-500/[.14] to-dark-900 p-3.5" aria-label={tx('Instalar la app')}>
+    <section className="mx-auto mb-4 max-w-md rounded-xl bg-dark-900 p-3" aria-label={tx('Instalar la app')}>
       <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-brand-tinta"><Smartphone size={20} /></span>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-brand-tinta"><Smartphone size={20} aria-hidden="true" /></span>
         <div className="min-w-0 flex-1">
-          <p className="text-[14.5px] font-bold text-dark-50">{tx('Instala FDS en tu móvil')}</p>
-          <p className="text-[12.5px] leading-snug text-dark-300">{tx('Con su icono, a pantalla completa y sin buscar la web cada día.')}</p>
+          <p className="text-nombre text-dark-50">{tx('Instala la app')}</p>
+          <p className="text-sec text-dark-400">{tx('Con su icono, a pantalla completa y sin buscar la web cada día.')}</p>
         </div>
-        <button onClick={cerrar} aria-label={tx('No mostrar más')} className="rounded p-1 text-dark-500"><X size={16} /></button>
+        <button onClick={cerrar} aria-label={tx('No mostrar más')} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-dark-400"><X size={24} aria-hidden="true" /></button>
       </div>
       <div className="mt-3">
         {/* En iPhone (Safari) los pasos ocupan: se enseñan al pedirlos. En Android, directo. */}
         {abierta || ins.android || ins.interno
-          ? <Opciones ins={ins} onInstalada={() => setOculta(true)} />
-          : <button onClick={() => setAbierta(true)} className={boton}><Download size={17} /> {tx('Cómo instalarla')}</button>}
+          ? <Opciones ins={ins} onInstalada={instalada} />
+          : <button onClick={() => setAbierta(true)} className={boton}><Download size={20} aria-hidden="true" /> {tx('Cómo instalarla')}</button>}
       </div>
     </section>
   )
@@ -194,25 +247,25 @@ export function PasoInstalar({ onListo }) {
       .then(setQr).catch(() => setQr('no'))
   }, [movil])
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-dark-950/[.97] px-4 py-8 backdrop-blur" role="dialog" aria-modal="true" aria-label={tx('Último paso: instala la app')}>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-dark-950 px-4 py-8" role="dialog" aria-modal="true" aria-label={tx('Último paso: instala la app')}>
       <div className="mx-auto max-w-md">
-        <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 text-brand-tinta"><Smartphone size={28} /></span>
-        <p className="mt-5 text-[12px] font-bold uppercase tracking-[.14em] text-brand-300">{tx('Cuenta creada')}</p>
-        <h1 className="mt-1 text-[26px] font-extrabold leading-tight text-dark-50">{tx('Último paso: instala la app')}</h1>
-        <p className="mt-2 text-[14px] leading-snug text-dark-300">{tx('Con su icono en el móvil, a pantalla completa y sin buscar la web: cada mañana la abres en un toque.')}</p>
+        <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 text-brand-tinta"><Smartphone size={28} aria-hidden="true" /></span>
+        <p className="mt-5 text-etiqueta text-ruta-marca">{tx('Cuenta creada')}</p>
+        <h1 className="mt-1 text-cifra text-dark-50">{tx('Último paso: instala la app')}</h1>
+        <p className="mt-2 text-texto text-dark-400">{tx('Con su icono en el móvil, a pantalla completa y sin buscar la web: cada mañana la abres en un toque.')}</p>
         <div className="mt-6">
           {hecho ? (
-            <p className="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3 py-3 text-[14px] font-semibold text-emerald-200">
-              <CheckCircle2 size={18} /> {tx('Instalada. Ábrela desde el icono de FDS.')}
+            <p className="flex items-center gap-2 rounded-xl bg-ruta-ok/10 px-3 py-3 text-boton text-dark-50">
+              <CheckCircle2 size={20} className="text-ruta-ok-texto" aria-hidden="true" /> {tx('Instalada. Ábrela desde el icono de FDS.')}
             </p>
           ) : movil ? (
             <Opciones ins={ins} onInstalada={() => setHecho(true)} />
           ) : (
-            <div className="flex items-center gap-4 rounded-2xl border border-dark-800 bg-dark-900 p-4">
+            <div className="flex items-center gap-4 rounded-xl bg-dark-900 p-4">
               {qr && qr !== 'no'
                 ? <img src={qr} alt={tx('Código QR para abrir tu cuenta en el móvil')} width={140} height={140} className="shrink-0 rounded-lg bg-white" />
-                : <span className="flex h-[140px] w-[140px] shrink-0 items-center justify-center rounded-lg bg-dark-800">{qr ? '—' : <Loader2 size={20} className="animate-spin text-dark-400" />}</span>}
-              <p className="text-[13.5px] leading-snug text-dark-200">
+                : <span className="flex h-[140px] w-[140px] shrink-0 items-center justify-center rounded-lg bg-dark-800">{qr ? '—' : <Loader2 size={20} className="animate-spin text-dark-400" aria-hidden="true" />}</span>}
+              <p className="text-texto text-dark-50">
                 {qr === 'no'
                   ? tx('Abre {web} en el móvil y entra con tu correo y tu contraseña.', { web: window.location.host })
                   : tx('Apunta con la cámara del móvil: entras en tu cuenta sin escribir nada y desde ahí la instalas. Vale 10 minutos.')}
@@ -220,7 +273,7 @@ export function PasoInstalar({ onListo }) {
             </div>
           )}
         </div>
-        <button onClick={onListo} className="mt-6 w-full py-2 text-center text-[13.5px] font-semibold text-dark-400 underline underline-offset-4">
+        <button onClick={onListo} className="mt-6 min-h-12 w-full py-2 text-center text-boton text-dark-400 underline underline-offset-4">
           {hecho ? tx('Seguir') : tx('Ahora no, seguir en la web')}
         </button>
       </div>

@@ -16,8 +16,12 @@ import { servicioPlay, comprasPlay } from '../lib/playBilling'
 import { enviarPendiente, olvidarPendiente } from '../lib/metaPixel'
 import { isAuthed, esSuplantacion, volverASuper, getAdmin, apuntarInicio } from '../panel/auth'
 import OpinionRuta from './OpinionRuta'
-import AvisoManana from './AvisoManana'
-import InstalarApp, { PasoInstalar } from './InstalarApp'
+import AvisoManana, { useVerAvisoManana } from './AvisoManana'
+import InstalarApp, { PasoInstalar, useVerInstalar } from './InstalarApp'
+import { Gift } from 'lucide-react'
+import Aviso from './driver/piezas/Aviso'
+import LineaEstado from './driver/piezas/LineaEstado'
+import LetraMax from './driver/piezas/LetraMax'
 import { recienAlta, olvidarRecienAlta, yaEsApp } from '../lib/instalar'
 import { useToast } from '../lib/toast'
 import { lista } from '../lib/lista'
@@ -187,6 +191,10 @@ export default function RutaApp() {
   // Recién creada la cuenta: antes de la ruta, instalar la app (se puede saltar).
   const [instalarPrimero, setInstalarPrimero] = useState(() => recienAlta() && !yaEsApp() && !esSuplantacion())
   useEffect(() => { if (yaEsApp()) olvidarRecienAlta() }, [])
+  // Lo de la cuenta que se ofrece en «Hoy» (07-11-2026, diseño compacto, §5.1 b): si toca instalar la app o el aviso de la
+  // mañana, para elegir UN aviso y pasárselo a MiRuta (avisoApp).
+  const verInstalar = useVerInstalar()
+  const verManana = useVerAvisoManana()
 
   // TIRAR PARA ACTUALIZAR (17-10-2026), como en cualquier app: en «Hoy», desde arriba del todo, tirar hacia
   // abajo recarga la ruta. No en el mapa (allí arrastrar es moverlo), ni con una ventana abierta, ni en un campo.
@@ -265,8 +273,32 @@ export default function RutaApp() {
     )
   }
 
+  /* UN SOLO AVISO DE LA CUENTA en «Hoy» (07-11-2026, diseño compacto, §5.1 b), en este orden: el regalo de saldo
+     (17-10-2026, Dani: «para que vea que es real», una vez por regalo) › los días de prueba que quedan › el plan gratis
+     (10-10-2026: sin pagar no hay muro; se reparte con un tope de paradas al día) › instalar la app › el aviso de la
+     mañana. Va a MiRuta, que lo pinta en su hueco si no hay otro aviso de la ruta que mande antes. */
+  const avisoApp = tab !== 'hoy' ? null
+    : saldoRegalo ? (
+      <Aviso testid="aviso-regalo" tono="ok" icono={Gift} texto={tx('+{euros} en tu cartera', { euros: eurosRef(saldoRegalo.cent, locale()) })}
+        accion={tx('Verlo')} onAccion={() => { verRegalo(); setTab('cuenta') }} onCerrar={verRegalo} />
+    ) : billing?.status === 'trial' && !billing.promo?.activa && !billing.bloqueo && !billing.falta_tarjeta && billing.days_left != null && billing.days_left <= 3 ? (
+      <Aviso tono="aviso" icono={Clock} texto={billing.days_left === 1 ? tx('Queda 1 día de prueba · Ver mi plan') : tx('Quedan {n} días de prueba · Ver mi plan', { n: billing.days_left })}
+        accion={tx('Verlo')} onAccion={() => setTab('cuenta')} />
+    ) : !bloqueado && billing?.gratis?.activo ? (
+      <Aviso tono="neutro" icono={Package} texto={tx('Gratis: {n} paradas al día', { n: billing.gratis.tope })} accion={tx('Quitar el tope')} onAccion={() => setTab('cuenta')} />
+    ) : verInstalar ? <InstalarApp compacto />
+      : verManana && !esSuplantacion() ? <AvisoManana compacto toast={toast} />
+        : null
+  // «Invita y gana», al final de la lista (23-10-2026: encima del escáner distraía; quien ya reparte lo ve al bajar).
+  const pieApp = tab === 'hoy' && !esSuplantacion() && !bonoPendiente && (billing?.pais || 'es') !== 'cn' ? (
+    <LineaEstado icono={Euro} accion={tx('Invitar')} onAccion={invitar}
+      texto={<button type="button" onClick={() => setTab('cuenta')} className="min-h-12 text-left">
+        {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(porInvitado, locale()) })}{promoHasta ? ` ${tx('Promo hasta el {fecha}', { fecha: fechaRefPromo(locale(), promoHasta) })}.` : ''} <span className="font-semibold underline">{tx('Mi cartera')}</span>
+      </button>} />
+  ) : null
+
   return (
-    <main className="app-ruta flex min-h-screen flex-col bg-dark-950 text-dark-100">
+    <main className="app-ruta flex min-h-[100dvh] flex-col bg-dark-950 text-dark-100">
       {instalarPrimero && <PasoInstalar onListo={() => { olvidarRecienAlta(); setInstalarPrimero(false) }} />}
       {(tiron > 0 || recargando) && (
         <div aria-hidden="true" data-testid="tiron" className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center"
@@ -278,81 +310,38 @@ export default function RutaApp() {
           </span>
         </div>
       )}
-      {/* «Entrar como» desde la plataforma: la misma franja que en el panel, que aquí faltaba. */}
+      {/* «Entrar como» desde la plataforma (07-11-2026: una LineaEstado, como en el panel la franja). */}
       {esSuplantacion() && (
-        <div className="flex items-center justify-between gap-3 bg-amber-500/15 px-4 py-2 text-[13px] text-amber-200">
-          <span className="min-w-0">{tx('Estás viendo la cuenta de {nombre} como plataforma: su tarjeta, su plan y su contraseña solo los cambia el propio repartidor.', { nombre: getAdmin()?.name || '' })}</span>
-          <button onClick={volverASuper} className="shrink-0 rounded-md bg-amber-500/30 px-3 py-1 text-[12px] font-semibold">{tx('Volver a mi cuenta')}</button>
+        <div className="mx-auto w-full max-w-md px-4">
+          <LineaEstado punto="aviso" texto={tx('Viendo a {nombre}', { nombre: getAdmin()?.name || '' })} accion={tx('Volver a mi cuenta')} onAccion={volverASuper} />
         </div>
       )}
-      {billing?.status === 'trial' && !billing.promo?.activa && !billing.bloqueo && !billing.falta_tarjeta && billing.days_left != null && billing.days_left <= 3 && tab !== 'cuenta' && (
-        <button onClick={() => setTab('cuenta')}
-          className="flex w-full items-center justify-center gap-1.5 bg-amber-500/15 px-4 py-2 text-[13px] font-semibold text-amber-200">
-          {billing.days_left === 1 ? tx('Queda 1 día de prueba · Ver mi plan') : tx('Quedan {n} días de prueba · Ver mi plan', { n: billing.days_left })}
-        </button>
-      )}
-      {/* Cabecera de la app (23-10-2026): el logo y el nombre de la app de reparto, en todas las pestañas. */}
-      <header className="mx-auto flex w-full max-w-md items-center gap-2.5 px-4 pt-4">
-        <img src="/favicon.svg" alt="" width="30" height="30" className="rounded-lg" />
-        <b className="text-[15px] text-dark-50">{MARCA.app}</b>
-      </header>
-      {/* Al cambiar de pestaña, el contenido entra con un fundido corto, como en una app. */}
-      <div key={tab} className="ruta-entra flex-1 px-4 pb-24 pt-3">
-        {/* PLAN GRATIS (10-10-2026): sin pagar ya no hay muro; se reparte con un tope de paradas al día. */}
-        {tab === 'hoy' && !bloqueado && billing?.gratis?.activo && (
-          <div className="mx-auto mb-3 flex max-w-md items-center justify-between gap-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 px-3.5 py-2.5">
-            <p className="min-w-0 text-[13px] leading-snug text-sky-100">
-              {tx('Plan gratis: hasta {n} paradas nuevas al día.', { n: billing.gratis.tope })}
-            </p>
-            <button onClick={() => setTab('cuenta')} className="shrink-0 rounded-xl bg-brand-500 px-3 py-1.5 text-[12.5px] font-bold text-brand-tinta">
-              {tx('Quitar el tope')}
-            </button>
-          </div>
-        )}
-        {tab === 'hoy' && saldoRegalo && (
-          <div data-testid="aviso-regalo" className="mx-auto mb-3 flex max-w-md items-center gap-3 rounded-2xl border border-emerald-400/40 bg-emerald-500/[.12] px-3.5 py-3">
-            <span aria-hidden="true" className="text-[24px] leading-none">🎁</span>
-            <p className="min-w-0 flex-1 text-[14px] font-semibold leading-snug text-emerald-100">
-              {tx('Te hemos regalado {euros}: ya están en tu cartera.', { euros: eurosRef(saldoRegalo.cent, locale()) })}
-            </p>
-            <button onClick={() => { verRegalo(); setTab('cuenta') }} className="shrink-0 rounded-xl bg-emerald-700 px-3 py-1.5 text-[13px] font-bold text-white">{tx('Verlo')}</button>
-            <button onClick={verRegalo} aria-label={tx('Cerrar')} className="shrink-0 p-1 text-emerald-200/80"><X size={17} /></button>
-          </div>
-        )}
-        {tab === 'hoy' && <InstalarApp />}
-        {tab === 'hoy' && !esSuplantacion() && <AvisoManana toast={toast} />}
+      {/* Al cambiar de pestaña, el contenido entra con un fundido corto, como en una app. Abajo, lo justo para las
+          pestañas (64) y la zona segura, y 16 más. Sin el logo de la cabecera (07-11-2026): cada pestaña lleva la suya. */}
+      <div key={tab} className="ruta-entra flex-1 px-4 pb-[calc(64px+env(safe-area-inset-bottom)+16px)]">
         {(tab === 'hoy' || tab === 'ajustes') && bloqueado
           ? <Suspense fallback={<Cargando />}><Muro billing={billing} toast={toast} recargar={recargar} irACuenta={() => setTab('cuenta')} /></Suspense>
           : <>
-            {/* La opinión, al TERMINAR la ruta (25-10-2026): arriba de «Hoy» salía al ir a cargar la furgoneta. */}
-            {tab === 'hoy' && <MiRuta embebido onBack={() => {}} alTerminar={<OpinionRuta />} referido={referido} />}
+            {/* La opinión, al TERMINAR la ruta (25-10-2026): arriba de «Hoy» salía al ir a cargar la furgoneta. La
+                bienvenida espera a que se cierre «Último paso: instala la app» (esperarBienvenida). */}
+            {tab === 'hoy' && <MiRuta embebido pantallaCompleta onBack={() => {}} alTerminar={<OpinionRuta />} referido={referido} avisoApp={avisoApp} pieApp={pieApp} esperarBienvenida={instalarPrimero} />}
             {tab === 'ajustes' && <div className="mx-auto max-w-md"><Suspense fallback={<Cargando />}><Ajustes conductores={[]} toast={toast} autonomo /></Suspense></div>}
           </>}
-        {/* «Invita y gana», DEBAJO de la ruta (23-10-2026): encima del escáner distraía a quien aún no ha metido
-            su primer paquete; quien ya reparte lo ve al bajar, que es cuando lo comparte. */}
-        {tab === 'hoy' && !esSuplantacion() && !bonoPendiente && (billing?.pais || 'es') !== 'cn' && (
-          <div className="mx-auto mb-3 flex max-w-md items-center justify-between gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/[.08] px-3.5 py-2.5">
-            <button onClick={() => setTab('cuenta')} className="min-w-0 text-left text-[13px] leading-snug text-emerald-100">
-              💶 {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(porInvitado, locale()) })}{promoHasta && <span className="ml-1 rounded-md bg-emerald-400/20 px-1.5 py-0.5 text-[11px] font-bold text-emerald-100">{tx('Promo hasta el {fecha}', { fecha: fechaRefPromo(locale(), promoHasta) })}</span>} <span className="font-semibold underline">{tx('Mi cartera')}</span>
-              <span className="mt-0.5 block text-[11px] font-normal text-emerald-200/80">{tx('Se valida cuando complete 20 entregas reales en 2 días, no por registrarse.')}</span>
-            </button>
-            <button onClick={invitar} className="shrink-0 rounded-xl bg-emerald-700 px-3 py-1.5 text-[12.5px] font-bold text-white">{tx('Invitar')}</button>
-          </div>
-        )}
         {tab === 'historial' && <Historial />}
         {tab === 'cuenta' && <Suspense fallback={<Cargando />}><Cuenta billing={billing} recargar={recargar} toast={toast} resaltarRegalo={regaloNuevo} merc={merc} /></Suspense>}
       </div>
+      {/* Las pestañas (07-11-2026, §4): 64 más la zona segura; la activa, en una píldora de 32×56 con el icono de 24. */}
       <nav className="ruta-pestanas fixed inset-x-0 bottom-0 z-40 border-t border-dark-800 bg-dark-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label={tx('Secciones')}>
-        <div className="mx-auto grid max-w-md grid-cols-4">
+        <div className="mx-auto grid h-16 max-w-md grid-cols-4">
           {PESTANAS.map(([k, t, I]) => (
             <button key={k} onClick={() => setTab(k)}
-              className={`flex flex-col items-center gap-1 pb-2 pt-2 text-[11px] font-semibold transition-colors ${tab === k ? 'text-brand-200' : 'text-dark-500'}`}
+              className={`flex flex-col items-center justify-center gap-1 py-1 text-etiqueta transition-colors ${tab === k ? 'text-ruta-marca' : 'text-dark-400'}`}
               aria-current={tab === k ? 'page' : undefined}>
               {/* La pestaña activa, en una píldora: se ve de un vistazo dónde estás. */}
-              <span className={`flex h-8 w-14 items-center justify-center rounded-full transition-all ${tab === k ? 'bg-brand-500/20' : ''}`}>
-                <I size={20} strokeWidth={tab === k ? 2.4 : 2} />
+              <span className={`flex h-8 w-14 items-center justify-center rounded-full transition-all ${tab === k ? 'bg-ruta-marca-tinte' : ''}`}>
+                <I size={24} strokeWidth={tab === k ? 2.4 : 2} aria-hidden="true" />
               </span>
-              {tx(t)}
+              <LetraMax>{tx(t)}</LetraMax>
             </button>
           ))}
         </div>

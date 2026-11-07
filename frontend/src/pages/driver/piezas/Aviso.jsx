@@ -23,8 +23,9 @@ export default function Aviso({
 }) {
   const t = tono in TONOS ? tono : 'neutro'
   const lista = (acciones || (accion ? [{ texto: accion, onClick: onAccion }] : [])).filter(Boolean)
+  // `href` en una acción (opcional, 07-11-2026, W2): la acción es un enlace («Crear mi cuenta» de la ruta de prueba).
   const botones = lista.map((a) => (
-    <Boton key={a.texto} variante="texto" tono={ACCION[t]} texto={a.texto} nombre={a.nombre} onClick={a.onClick} testid={a.testid} className="shrink-0 font-semibold" />
+    <Boton key={a.texto} variante="texto" tono={ACCION[t]} texto={a.texto} nombre={a.nombre} onClick={a.onClick} href={a.href} testid={a.testid} className="shrink-0 font-semibold" />
   ))
   const dos = lista.length > 1
   return (

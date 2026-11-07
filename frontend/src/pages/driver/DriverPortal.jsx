@@ -340,7 +340,9 @@ export default function DriverPortal() {
   if (vista === 'tienda') return <Tienda onBack={() => setVista('inicio')} />
   if (vista === 'cartera') return <PantallaCartera onBack={() => setVista('inicio')} />
   if (vista === 'mercadillo') return <Mercadillo onBack={() => setVista('inicio')} />
-  if (vista === 'ruta') return <MiRuta onBack={() => setVista('inicio')} />
+  // «Mi ruta» dentro de main.app-ruta (07-11-2026, diseño compacto): le llegan el tema, la zona de toque de 48 y «Letra más
+  // grande», y va con la cabecera fija y el mapa a pantalla completa (pantallaCompleta).
+  if (vista === 'ruta') return <main className="app-ruta min-h-[100dvh] bg-dark-950"><MiRuta onBack={() => setVista('inicio')} pantallaCompleta /></main>
   if (result) {
     return <InspectionDone result={result} onNew={() => { setResult(null); setVista('inicio') }} onLogout={logout} />
   }
