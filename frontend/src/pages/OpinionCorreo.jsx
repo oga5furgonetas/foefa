@@ -74,7 +74,7 @@ export default function OpinionCorreo() {
             {!usa && motivo === 'no_supe' && (
               <p className="mt-3 text-[14px] leading-snug text-dark-300">
                 {tx('Es muy fácil: abre la app, pulsa este botón y haz una foto a cada etiqueta:')}{' '}
-                <b className="text-dark-100">«{tx('Cargar paquetes: uno tras otro')}»</b>
+                <b className="text-dark-100">«{tx('Cargar paquetes')}»</b>
               </p>
             )}
             <a href="/ruta" className="mt-5 inline-flex w-full items-center justify-center rounded-2xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta">

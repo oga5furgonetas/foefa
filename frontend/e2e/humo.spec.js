@@ -3998,7 +3998,7 @@ test.describe('Opinión de los repartidores', () => {
     await expect(page.getByRole('heading', { name: '¿Qué te frenó?' })).toBeVisible()
     await expect(page.getByRole('radio', { name: 'No supe cómo meter los paquetes' })).toHaveAttribute('aria-checked', 'true')
     await page.getByRole('button', { name: 'Enviar', exact: true }).click()
-    await expect(page.getByText('«Cargar paquetes: uno tras otro»')).toBeVisible()
+    await expect(page.getByText('«Cargar paquetes»', { exact: true })).toBeVisible()   // 08-11-2026: el botón se llama «Cargar paquetes»
     await expect(page.getByRole('link', { name: 'Abrir la app' })).toHaveAttribute('href', '/ruta')
     expect(r.enviado).toEqual({ o: 'o1', t: 'firma', texto: '', motivo: 'no_supe' })
     expect(fallos).toEqual([])
