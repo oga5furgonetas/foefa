@@ -142,7 +142,7 @@ export default function HojaParada({
         {!hrefSms && hrefWhatsapp && <Chip icono={MessageCircle} texto="WhatsApp" href={hrefWhatsapp} target="_blank" rel="noreferrer" onClick={onWhatsapp} />}
         {conPuerta && <Chip icono={Eye} texto={tx('Ver la puerta')} href={enlacePuerta(p, fachada)} target="_blank" rel="noreferrer" />}
         {!hecha && onHueco && (p.hueco
-          ? <Chip icono={Package} texto={`📦 ${tx(p.hueco)}`} nombre={tx('En la furgoneta: {sitio}', { sitio: tx(p.hueco) })} onClick={() => onHueco(p)} />
+          ? <Chip icono={Package} texto={tx(p.hueco)} nombre={tx('En la furgoneta: {sitio}', { sitio: tx(p.hueco) })} onClick={() => onHueco(p)} />
           : <Chip icono={Package} texto={tx('Hueco')} onClick={() => onHueco(p)} />)}
         {!hecha && onSituar && <ChipSituar p={p} onSituar={onSituar} />}
       </FilaChips>

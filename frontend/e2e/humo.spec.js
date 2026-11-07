@@ -2350,7 +2350,11 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
   const hojaParada = page.getByRole('dialog', { name: 'Farmacia Sol' })
   await hojaParada.getByRole('button', { name: 'Hueco', exact: true }).click()
   await page.getByRole('button', { name: 'Detrás · izq' }).click()
-  await expect(hojaParada.getByRole('button', { name: 'En la furgoneta: Detrás · izq' })).toBeVisible()
+  const chipHueco = hojaParada.getByRole('button', { name: 'En la furgoneta: Detrás · izq' })
+  await expect(chipHueco).toBeVisible()
+  // El chip lleva el icono del paquete y el sitio, sin un 📦 escrito además (§0: esos símbolos son los iconos; revisor, hallazgo 7).
+  await expect(chipHueco).toHaveText('Detrás · izq')
+  await expect(chipHueco.locator('svg')).toHaveCount(1)
   await hojaParada.getByRole('button', { name: 'Cerrar' }).click()
   expect(editados).toEqual([{ hueco: 'Detrás · izq' }])
 
