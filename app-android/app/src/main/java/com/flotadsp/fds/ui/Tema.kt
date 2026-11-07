@@ -79,7 +79,7 @@ internal object Paleta {
     val enMarcaTinteNoche = Color(0xFFB3F3EE)    // 7,5:1
     val marcaSuaveNoche = Color(0xFF1C3533)
     val enMarcaSuaveNoche = Color(0xFFCCE8E5)
-    val inversoPrimarioNoche = Color(0xFF00807A)
+    val inversoPrimarioNoche = Color(0xFF00807A)   // 3,9:1 sobre la superficie inversa: no vale para texto (el snackbar usa inverseOnSurface, 07-11-2026)
     // De noche: ok, peligro, aviso y zona.
     val okTextoNoche = Color(0xFF4ADE80)         // 10,5:1
     val okSuaveNoche = Color(0xFF6FD69B)         // tertiary

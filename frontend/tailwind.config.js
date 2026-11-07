@@ -51,7 +51,8 @@ export default {
            para papel. `marca` es el acento de TEXTO (el cian del logo da 2,2:1 sobre blanco; el relleno de marca
            sigue siendo `bg-brand-500 text-brand-tinta`); `ok` y `peligro` son rellenos (con blanco encima) y
            `*-texto`, su versión para leer; `aviso` es un tinte con su texto; `marca-tinte`, el tinte de marca de las
-           píldoras y los chips; `borde`, el borde de control (3,4:1; el `dk-700` da 1,5:1 de día). */
+           píldoras y los chips; `borde`, el borde de control (3,4:1; el `dk-700` da 1,5:1 de día); `enfasis`, el borde
+           de énfasis de §3.5 (el campo al escribir: #0E7C77 de día, #14E7D8 de noche; 07-11-2026). */
         ruta: {
           marca: 'rgb(var(--r-marca) / <alpha-value>)',
           'marca-tinte': 'rgb(var(--r-marca-tinte) / <alpha-value>)',
@@ -63,6 +64,7 @@ export default {
           aviso: 'rgb(var(--r-aviso) / <alpha-value>)',
           'aviso-texto': 'rgb(var(--r-aviso-texto) / <alpha-value>)',
           borde: 'rgb(var(--r-borde) / <alpha-value>)',
+          enfasis: 'rgb(var(--r-enfasis) / <alpha-value>)',
         },
       },
       /* LA LETRA DE LA APP DE REPARTO (diseño compacto, 06-11-2026, §3.1): once tamaños y ninguno más. Cada uno con
