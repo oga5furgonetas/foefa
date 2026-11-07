@@ -983,6 +983,81 @@ test.describe('situar la parada', () => {
     expect(s.fuera).toEqual([])
     expect(fallos).toEqual([])
   })
+
+  /* LA FICHA COMPACTA (07-11-2026, diseño compacto, §5.9). A 360 se ve sin desplazar lo principal (la dirección, el cliente, el
+     teléfono y el botón de abajo, que va fijo); lo demás está tras «Más datos», cerrado al crear. Y lo que se guarda es lo de siempre
+     aunque los controles sean otros: «Bultos − 1 +» da un número, «Urgente» es un interruptor y «Entrega | Recogida» un segmentado. */
+  test('la ficha compacta: lo principal y el botón a la vista a 360, «Más datos» cerrado, y lo de dentro se guarda como siempre', async ({ page }) => {
+    const fallos = vigilar(page)
+    const s = await preparar(page, [], { ubicar: conPortal })
+    await page.setViewportSize({ width: 360, height: 780 })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'A mano', exact: true }).click()
+    const ficha = page.getByRole('dialog', { name: 'Nueva parada' })
+    for (const loPrincipal of [ficha.getByPlaceholder('Dirección completa'), ficha.getByPlaceholder('Cliente', { exact: true }),
+      ficha.getByPlaceholder('Teléfono', { exact: true }), ficha.getByRole('button', { name: 'Añadir a mi ruta' })]) {
+      await expect(loPrincipal).toBeInViewport({ ratio: 1 })
+    }
+    await expect(ficha.getByRole('button', { name: 'Añadir a mi ruta' })).toBeDisabled()          // sin dirección, no se añade
+    const mas = ficha.getByRole('button', { name: 'Más datos' })
+    await expect(mas).toHaveAttribute('aria-expanded', 'false')
+    await expect(ficha.getByPlaceholder('Qué lleva')).toHaveCount(0)
+    await expect(ficha.getByRole('switch', { name: 'Urgente' })).toHaveCount(0)
+
+    await ficha.getByPlaceholder('Dirección completa').fill('Praza de María Pita 1, A Coruña')
+    await ficha.getByPlaceholder('Cliente', { exact: true }).fill('Concello')
+    await ficha.getByPlaceholder('Teléfono', { exact: true }).fill('600111222')
+    await mas.click()
+    await expect(mas).toHaveAttribute('aria-expanded', 'true')
+    await ficha.getByPlaceholder('Qué lleva').fill('Medicinas')
+    // Los atajos del horario: «9–14», «16–20» y «Hasta 14:00» (lo que guardan es lo de siempre: «16-20»).
+    const atajos = ficha.getByTestId('atajos-horario')
+    await expect(atajos.getByRole('button')).toHaveText(['9–14', '16–20', 'Hasta 14:00'])
+    await atajos.getByRole('button', { name: '16–20' }).click()
+    await expect(ficha.getByPlaceholder('Horario del cliente (ej. de 10 a 12)')).toHaveValue('16-20')
+    await expect(atajos.getByRole('button', { name: '16–20' })).toHaveAttribute('aria-pressed', 'true')
+    await ficha.getByRole('button', { name: 'Detrás · izq' }).click()
+    const bultos = ficha.getByRole('group', { name: 'Bultos' })
+    await expect(ficha.getByRole('button', { name: 'Uno menos' })).toBeDisabled()                 // con 1 no baja más
+    await ficha.getByRole('button', { name: 'Uno más' }).click()
+    await ficha.getByRole('button', { name: 'Uno más' }).click()
+    await expect(bultos).toContainText('3')
+    await ficha.getByRole('switch', { name: 'Urgente' }).check()
+    await ficha.getByRole('button', { name: 'Recogida' }).click()
+    await ficha.getByPlaceholder('A cobrar (€)').fill('12,50')
+    await ficha.getByRole('button', { name: 'Añadir a mi ruta' }).click()
+    await expect.poll(() => s.creados.length).toBe(1)
+    expect(s.creados[0]).toMatchObject({ direccion: 'Praza de María Pita 1, A Coruña', cliente: 'Concello', telefono: '600111222', contenido: 'Medicinas',
+      horario: '16-20', hueco: 'Detrás · izq', bultos: 3, prioridad: true, tipo: 'recogida', cobrar: '12,50' })
+    expect(s.fuera).toEqual([])
+    expect(fallos).toEqual([])
+  })
+
+  test('editar una parada con datos: «Más datos» sale abierto con lo guardado y vuelve tal cual', async ({ page }) => {
+    const fallos = vigilar(page)
+    const s = await preparar(page, [concello({ geo: 'ok', lat: PORTAL.lat, lng: PORTAL.lng, telefono: '600111222', contenido: 'Medicinas', bultos: 2, prioridad: true,
+      cobrar: 5, tipo: 'recogida', ventana_desde: '10:00', ventana_hasta: '12:00', hueco: 'Detrás · izq' }), hospital()], { ubicar: conPortal })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await page.locator('#parada-p1').getByRole('button', { name: 'Más opciones' }).click()
+    await page.getByRole('menuitem', { name: 'Editar parada: Concello' }).click()
+    const ficha = page.getByRole('dialog', { name: 'Editar parada' })
+    await expect(ficha.getByRole('button', { name: 'Más datos' })).toHaveAttribute('aria-expanded', 'true')
+    await expect(ficha.getByText('Foto etiqueta')).toHaveCount(0)                                 // al editar no hay foto de la etiqueta
+    await expect(ficha.getByPlaceholder('Qué lleva')).toHaveValue('Medicinas')
+    await expect(ficha.getByPlaceholder('Horario del cliente (ej. de 10 a 12)')).toHaveValue('de 10:00 a 12:00')
+    await expect(ficha.getByRole('button', { name: 'Detrás · izq' })).toHaveAttribute('aria-pressed', 'true')
+    await expect(ficha.getByRole('group', { name: 'Bultos' })).toContainText('2')
+    await expect(ficha.getByRole('switch', { name: 'Urgente' })).toBeChecked()
+    await expect(ficha.getByRole('button', { name: 'Recogida' })).toHaveAttribute('aria-pressed', 'true')
+    await expect(ficha.getByPlaceholder('A cobrar (€)')).toHaveValue('5')
+    await ficha.getByRole('button', { name: 'Guardar cambios' }).click()
+    await expect.poll(() => s.editados.length).toBe(1)
+    expect(s.editados[0].id).toBe('p1')
+    expect(s.editados[0].cuerpo).toMatchObject({ cliente: 'Concello', telefono: '600111222', contenido: 'Medicinas', bultos: 2, prioridad: true, tipo: 'recogida',
+      cobrar: '5', hueco: 'Detrás · izq', horario: 'de 10:00 a 12:00' })
+    expect(s.fuera).toEqual([])
+    expect(fallos).toEqual([])
+  })
 })
 
 /* EL ZOOM CON LOS DEDOS NO OLVIDA LA SUGERENCIA (03-11-2026, el revisor; como la app nativa: Situar.alPararse). Tras
