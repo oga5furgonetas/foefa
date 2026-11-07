@@ -47,13 +47,13 @@ test.describe('la memoria de la calle', () => {
 
     // Sin memoria: el botón; la hoja trae el portal que dio el cliente.
     await page.getByRole('button', { name: 'Guardar para la próxima' }).click()
-    const hoja = page.getByRole('dialog', { name: 'Para la próxima vez en esta puerta' })
+    const hoja = page.getByRole('dialog', { name: 'Memoria de la puerta' })   // la hoja compacta (07-11-2026): «Guardar» / «Borrar» y los chips cortos
     await expect(hoja).toContainText('Rúa Real 22, A Coruña')
     await expect(hoja.getByLabel('Código del portal')).toHaveValue('4321')
     await hoja.getByLabel('Código del portal').fill('1234B')
-    await hoja.getByRole('button', { name: 'En portería o recepción' }).click()
+    await hoja.getByRole('button', { name: 'Portería', exact: true }).click()
     await hoja.getByLabel('Cómo se entra').fill('Entrada por el garaje')
-    await hoja.getByRole('button', { name: 'Guardar para la próxima' }).click()
+    await hoja.getByRole('button', { name: 'Guardar', exact: true }).click()
     await expect(hoja).toHaveCount(0)
     expect(guardado).toEqual([{ portal: '1234B', dejar: 'porteria', acceso: 'Entrada por el garaje' }])
     await expect(page.getByText('Guardado para la próxima vez en esta puerta.')).toBeVisible()
@@ -67,7 +67,7 @@ test.describe('la memoria de la calle', () => {
     // Se abre para corregir, con lo guardado; «Borrar lo guardado» manda todo vacío y vuelve el botón.
     await memoria.click()
     await expect(hoja.getByLabel('Cómo se entra')).toHaveValue('Entrada por el garaje')
-    await hoja.getByRole('button', { name: 'Borrar lo guardado' }).click()
+    await hoja.getByRole('button', { name: 'Borrar', exact: true }).click()
     await expect(hoja).toHaveCount(0)
     expect(guardado.at(-1)).toEqual({})
     await expect(page.getByRole('button', { name: 'Guardar para la próxima' })).toBeVisible()
