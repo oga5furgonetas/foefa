@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Cookie } from 'lucide-react'
-import { Link } from 'react-router-dom'
-import { hayPixel, consentimiento, guardarConsentimiento, cargarPixel } from '../lib/metaPixel'
+import { Link, useLocation } from 'react-router-dom'
+import { hayPixel, consentimiento, guardarConsentimiento, cargarPixel, AVISO_COOKIES, avisarCuenta, reintentarRetirada } from '../lib/metaPixel'
 import { tx, useIdioma } from '../lib/idioma'
 import { medirAccion } from '../lib/analitica'
 import { yaEsApp } from '../lib/instalar'
@@ -14,12 +14,16 @@ import { yaEsApp } from '../lib/instalar'
    · Con píxeles (Meta, TikTok): consentimiento de verdad, con «Solo necesarias» y «Aceptar» iguales (guía de la
      AEPD) y nada de medición hasta que se acepta. Es una hoja pegada abajo, de dos líneas, no una ventana en medio:
      ocupa lo mínimo y aun así hay que contestar (como barrita que no estorbaba, casi nadie la contestaba: 3 de
-     ~3.200 visitas en 4 días, 10-10-2026). */
+     ~3.200 visitas en 4 días, 10-10-2026).
+   · 02-11-2026 (revisión del servidor): con ese mismo permiso nuestro servidor también avisa a Meta del alta (y de la
+     primera entrada y la primera ruta), así que el aviso lo dice; lo elegido llega a la cuenta si hay sesión
+     (lib/metaPixel.js, avisarCuenta), y «Cambiar mis cookies» lo vuelve a abrir para cambiar de opinión. */
 export default function CookieBanner() {
   // En el idioma del móvil (o el elegido): lo ve quien llega de un anuncio en cualquier país.
   useIdioma()
   const [show, setShow] = useState(false)
   const conPixel = hayPixel()
+  const { pathname } = useLocation()
   useEffect(() => {
     if (!conPixel) return
     /* EN EL PORTAL DEL TALLER, NO: no guarda nada y quien lo abre es un mecánico con un enlace de WhatsApp. */
@@ -29,10 +33,23 @@ export default function CookieBanner() {
     if (!consentimiento()) setShow(true)
     else cargarPixel()
   }, [conPixel])
+  /* «CAMBIAR MIS COOKIES» (02-11-2026): el aviso se vuelve a abrir desde la política de cookies o el pie de la portada
+     (lib/metaPixel.js, abrirAvisoCookies). Donde no se pregunta (sin píxeles, en la app instalada) no hay qué cambiar. */
+  useEffect(() => {
+    if (!conPixel || yaEsApp()) return undefined
+    const abrir = () => setShow(true)
+    window.addEventListener(AVISO_COOKIES, abrir)
+    return () => window.removeEventListener(AVISO_COOKIES, abrir)
+  }, [conPixel])
+  // Una retirada del permiso que no llegó a la cuenta (sin sesión o sin red), en cuanto la hay: al cambiar de pantalla,
+  // como después de entrar.
+  useEffect(() => { reintentarRetirada() }, [pathname])
   function decidir(anuncios) {
     guardarConsentimiento(anuncios)
     // Cuántos aceptan: el píxel solo ve a esos, y es lo que le llega a Meta y TikTok para aprender.
     medirAccion(anuncios ? 'cookies_si' : 'cookies_no')
+    // Y a la cuenta, con la sesión abierta: con este permiso también manda a Meta nuestro servidor.
+    avisarCuenta(anuncios)
     setShow(false)
   }
   /* QUE NO TAPE NADA: mientras está a la vista, la página reserva abajo su altura. */
@@ -54,7 +71,10 @@ export default function CookieBanner() {
           <Cookie size={18} className="shrink-0 text-amber-400" aria-hidden="true" />
           <p className="min-w-0 flex-1 basis-[16rem] text-[13px] leading-snug text-dark-300">
             {tx('Cookies: solo las necesarias y, si aceptas, los píxeles de Meta y TikTok para saber qué anuncios nos traen visitas y altas.')}
-            {' '}<Link to="/cookies" className="text-sky-400 hover:underline">{tx('Más información')}</Link>
+            <span className="mt-0.5 block text-[12px] text-dark-400">
+              {tx('Si aceptas, nuestro servidor también avisa a Meta de tu alta y de tu primera entrada y ruta, con tu correo cifrado.')}
+              {' '}<Link to="/cookies" className="text-sky-400 hover:underline">{tx('Más información')}</Link>
+            </span>
           </p>
           <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:shrink-0">
             <button onClick={() => decidir(false)} className="rounded-xl border border-dark-500 bg-dark-800 px-3 py-2.5 text-[14px] font-bold text-dark-50">{tx('Solo necesarias')}</button>

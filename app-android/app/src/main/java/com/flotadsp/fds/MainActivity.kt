@@ -243,12 +243,22 @@ private fun Principal(abrir: String?, alAbierto: () -> Unit, compartido: Compart
             return
         }
         is Capa.Ficha -> {
-            FichaParada(pais = pais, cerca = cerca, inicial = c.inicial, editar = c.editar, alCerrar = { guardada ->
+            // EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): guardada sin punto en el mapa, se dice; el móvil la intenta
+            // solo en segundo plano (RutaVM) y, si tampoco, se sitúa al pulsar «Navegar».
+            fun cerrada(guardada: Boolean, sinSituar: Boolean) {
                 if (guardada) ruta.refrescarSinRuido()
                 // Desde el escáner, el aviso lo da el propio escáner (y suma la añadida); si no, abajo en «Hoy».
-                if (guardada && !c.desdeEscaner) ruta.avisar(if (c.editar != null) tx("Cambios guardados.") else tx("Añadida a tu ruta."))
-                capa = if (c.desdeEscaner) Capa.Escaner(VueltaDeRevisar(guardada)) else null
-            })
+                if (guardada && !c.desdeEscaner) ruta.avisar(when {
+                    sinSituar && c.editar != null -> tx("Cambios guardados, sin situar: la sitúo al navegar.")
+                    sinSituar -> tx("Añadida, sin situar: la sitúo al navegar.")
+                    c.editar != null -> tx("Cambios guardados.")
+                    else -> tx("Añadida a tu ruta.")
+                })
+                capa = if (c.desdeEscaner) Capa.Escaner(VueltaDeRevisar(guardada, sinSituar)) else null
+            }
+            FichaParada(pais = pais, cerca = cerca, inicial = c.inicial, editar = c.editar,
+                alCerrar = { guardada -> cerrada(guardada, sinSituar = false) },
+                alGuardada = { p -> cerrada(true, sinSituar = p != null && p.pendiente && !p.ubicada) })
             return
         }
         is Capa.Carga -> {

@@ -1,11 +1,12 @@
 import LegalLayout from '../LegalLayout'
-import { COMPANY, PROCESSORS } from '../config'
+import { COMPANY, PROCESSORS, MAP_SERVICES, LEGAL_NOTES } from '../config'
 
 /* The Data Processing Agreement in English (30-10-2026): the same content as legal/Encargo.jsx, which is the version
-   that applies. */
+   that applies. 03-11-2026: §4.5 y §6 como en Encargo.jsx (subencargados con contrato, servicios de mapas sin contrato,
+   Telegram y los avisos del navegador, con las frases de LEGAL_NOTES.en). */
 export default function ProcessingEn() {
   return (
-    <LegalLayout title="Data Processing Agreement" lastUpdate="2026-10-03">
+    <LegalLayout title="Data Processing Agreement" lastUpdate="2026-11-03">
       <p>This agreement forms part of the <a href="/terminos">Terms and Conditions</a> and is accepted with them when the account is created. It governs the processing of personal data that {COMPANY.brand} carries out <strong>on behalf of the customer</strong>, in accordance with article 28 of Regulation (EU) 2016/679 (GDPR) and Spanish Organic Law 3/2018 (LOPDGDD).</p>
 
       <h2>1. Parties and roles</h2>
@@ -30,7 +31,7 @@ export default function ProcessingEn() {
         <li><strong>Not to access</strong> the data of end customers or the location of drivers. When support enters an account to help, that data is shown masked.</li>
         <li>To ensure that whoever works with the data has committed to confidentiality.</li>
         <li>To apply the security measures of article 32 GDPR: encryption in transit, role-based and per-company access control (separate databases), hashed passwords, encrypted backups and audit logs.</li>
-        <li>To use only the <strong>sub-processors</strong> listed below, under a contract imposing the same obligations on them. Any change will be notified 15 days in advance so that the customer can object.</li>
+        <li>To use only the <strong>sub-processors</strong> listed below, under a contract imposing the same obligations on them, and, to locate addresses, calculate journeys and draw the map, only the services in the second list (without a contract, under their terms of use). Any change to either list will be notified 15 days in advance so that the customer can object.</li>
         <li>To help the customer respond to data subjects’ rights (access, rectification, erasure, objection, restriction and portability) and with impact assessments if it needs them.</li>
         <li>To notify the customer <strong>without undue delay, and within 48 hours at most</strong>, of any personal data breach it becomes aware of.</li>
         <li>When the service ends, to <strong>return</strong> the data (export) or <strong>delete</strong> it, at the customer’s choice, except where there is a legal obligation to keep it.</li>
@@ -41,16 +42,25 @@ export default function ProcessingEn() {
       <ul>
         <li>To have a legal basis for the data it enters and to <strong>inform</strong> the data subjects: its customers, that it manages deliveries with this tool; its drivers, about photo inspections and location during the working day (art. 90 LOPDGDD).</li>
         <li>To choose appropriate retention periods. In deliveries, the personal data of orders is deleted automatically after the number of days the customer configures (30 by default) and location tracks after 30 days.</li>
-        <li>To decide whether to enable features that share data with third parties (for example, reading receipts with AI).</li>
+        <li>To decide whether to enable features that share data with third parties (for example, reading receipts with AI or Telegram notices with its own bot).</li>
       </ul>
 
       <h2>6. Authorised sub-processors</h2>
+      <p>Those that process the data on our behalf, under contract:</p>
       <ul>
         {PROCESSORS.map((p) => (
-          <li key={p.name}><strong>{p.name}</strong> — {p.purposeEn || p.purpose} <span className="text-dark-500">({p.countryEn || p.country})</span></li>
+          <li key={p.name}><strong>{p.nameEn || p.name}</strong> — {p.purposeEn || p.purpose} <span className="text-dark-500">({p.countryEn || p.country})</span></li>
         ))}
       </ul>
-      <p>Transfers outside the European Economic Area rely on the EU-US Data Privacy Framework, adequacy decisions or Standard Contractual Clauses.</p>
+      <p><strong>Map and address-search services.</strong> {LEGAL_NOTES.en.mapServices}</p>
+      <ul>
+        {MAP_SERVICES.map((p) => (
+          <li key={p.name}><strong>{p.nameEn || p.name}</strong> — {p.purposeEn || p.purpose} <span className="text-dark-500">({p.countryEn || p.country})</span></li>
+        ))}
+      </ul>
+      <p><strong>Telegram notices.</strong> {LEGAL_NOTES.en.telegram}</p>
+      <p><strong>Browser notifications.</strong> {LEGAL_NOTES.en.browserPush}</p>
+      <p>{LEGAL_NOTES.en.transfers}</p>
 
       <h2>7. Contact</h2>
       <p>For any question about this agreement: {COMPANY.privacyEmail

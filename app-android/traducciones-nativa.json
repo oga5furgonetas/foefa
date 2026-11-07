@@ -818,13 +818,6 @@
     "Specchietti",
     "Spiegel"
   ],
-  "Esta parada no está situada en el mapa: se abre en Google Maps.": [
-    "This stop is not placed on the map: it opens in Google Maps.",
-    "Esta paragem não está situada no mapa: abre-se no Google Maps.",
-    "Cet arrêt n’est pas situé sur la carte : il s’ouvre dans Google Maps.",
-    "Questa fermata non è situata sulla mappa: si apre in Google Maps.",
-    "Diese Haltestelle ist nicht auf der Karte verortet: sie wird in Google Maps geöffnet."
-  ],
   "Esta red no deja llegar al servidor (¿una wifi que pide registrarse?).": [
     "This network does not reach the server (a Wi-Fi that asks you to sign in?).",
     "Esta rede não deixa chegar ao servidor (um wi-fi que pede registo?).",
@@ -2968,13 +2961,6 @@
     "{n} esce dal tuo giro di oggi.",
     "{n} wird aus der heutigen Route entfernt."
   ],
-  "{n} sin ubicar: edítalas para corregir la dirección": [
-    "{n} not located: edit them to fix the address",
-    "{n} sem localização: edita-as para corrigir a morada",
-    "{n} non localisés : modifiez-les pour corriger l’adresse",
-    "{n} non localizzate: modificale per correggere l’indirizzo",
-    "{n} nicht verortet: bearbeite sie, um die Adresse zu korrigieren"
-  ],
   "© OpenStreetMap": [
     "© OpenStreetMap",
     "© OpenStreetMap",
@@ -3051,5 +3037,285 @@
     "Remettre dans « à livrer » ?",
     "Rimettere in «da consegnare»?",
     "Zurück zu „zuzustellen“?"
+  ],
+  "Gana {x} por cada compañero que reparta con FDS": [
+    "Earn {x} for every colleague who delivers with FDS",
+    "Ganha {x} por cada colega que entregue com a FDS",
+    "Gagne {x} pour chaque collègue qui livre avec FDS",
+    "Guadagna {x} per ogni collega che consegna con FDS",
+    "Verdiene {x} für jeden Kollegen, der mit FDS zustellt"
+  ],
+  "Invita a un compañero a repartir con FDS": [
+    "Invite a colleague to deliver with FDS",
+    "Convida um colega a entregar com a FDS",
+    "Invite un collègue à livrer avec FDS",
+    "Invita un collega a consegnare con FDS",
+    "Lade einen Kollegen ein, mit FDS zuzustellen"
+  ],
+  "Lo cobras en tu cartera cuando haga {n} entregas en {d} días distintos. Mándale tu enlace: se registra y empieza hoy.": [
+    "It goes to your wallet once they make {n} deliveries on {d} different days. Send them your link: they sign up and start today.",
+    "Recebes na tua carteira quando fizer {n} entregas em {d} dias diferentes. Envia-lhe o teu link: regista-se e começa hoje.",
+    "Tu le reçois dans ton portefeuille quand il fait {n} livraisons sur {d} jours différents. Envoie-lui ton lien : il s’inscrit et commence aujourd’hui.",
+    "Lo ricevi nel tuo portafoglio quando fa {n} consegne in {d} giorni diversi. Mandagli il tuo link: si registra e inizia oggi.",
+    "Es landet in deiner Geldbörse, sobald er {n} Zustellungen an {d} verschiedenen Tagen macht. Schick ihm deinen Link: Er registriert sich und legt heute los."
+  ],
+  "Invitar por WhatsApp": [
+    "Invite via WhatsApp",
+    "Convidar por WhatsApp",
+    "Inviter par WhatsApp",
+    "Invita su WhatsApp",
+    "Per WhatsApp einladen"
+  ],
+  "1 sin ubicar: toca para situarla en el mapa": [
+    "1 not located: tap to place it on the map",
+    "1 sem localização: toca para a situar no mapa",
+    "1 non localisé : touchez pour le placer sur la carte",
+    "1 non localizzata: tocca per metterla sulla mappa",
+    "1 nicht verortet: Tippe, um ihn auf der Karte zu setzen"
+  ],
+  "{n} sin ubicar: toca para situarlas en el mapa": [
+    "{n} not located: tap to place them on the map",
+    "{n} sem localização: toca para as situar no mapa",
+    "{n} non localisés : touchez pour les placer sur la carte",
+    "{n} non localizzate: tocca per metterle sulla mappa",
+    "{n} nicht verortet: Tippe, um sie auf der Karte zu setzen"
+  ],
+  "Abrir en {app}": [
+    "Open in {app}",
+    "Abrir no {app}",
+    "Ouvrir dans {app}",
+    "Apri in {app}",
+    "In {app} öffnen"
+  ],
+  "Aquí: {d}": [
+    "Here: {d}",
+    "Aqui: {d}",
+    "Ici : {d}",
+    "Qui: {d}",
+    "Hier: {d}"
+  ],
+  "Añadida, sin situar: la sitúo al navegar.": [
+    "Added, not on the map yet: I’ll place it when you navigate.",
+    "Adicionada, sem localização: localizo-a quando navegares.",
+    "Ajouté, pas encore sur la carte : je le placerai quand vous naviguerez.",
+    "Aggiunta, non ancora sulla mappa: la localizzo quando navighi.",
+    "Hinzugefügt, noch nicht auf der Karte: Ich verorte den Stopp, wenn du navigierst."
+  ],
+  "Buscando la dirección…": [
+    "Looking up the address…",
+    "A procurar a morada…",
+    "Recherche de l’adresse…",
+    "Cerco l’indirizzo…",
+    "Adresse wird gesucht…"
+  ],
+  "Calle encontrada, sin el portal": [
+    "Street found, but not the house number",
+    "Rua encontrada, sem o número da porta",
+    "Rue trouvée, sans le numéro",
+    "Via trovata, senza il numero civico",
+    "Straße gefunden, ohne Hausnummer"
+  ],
+  "Otra calle": [
+    "Another street",
+    "Outra rua",
+    "Autre rue",
+    "Altra via",
+    "Andere Straße"
+  ],
+  "Cambios guardados, sin situar: la sitúo al navegar.": [
+    "Changes saved, not on the map yet: I’ll place it when you navigate.",
+    "Alterações guardadas, sem localização: localizo-a quando navegares.",
+    "Modifications enregistrées, pas encore sur la carte : je le placerai quand vous naviguerez.",
+    "Modifiche salvate, non ancora sulla mappa: la localizzo quando navighi.",
+    "Änderungen gespeichert, noch nicht auf der Karte: Ich verorte den Stopp, wenn du navigierst."
+  ],
+  "Comprobando la dirección…": [
+    "Checking the address…",
+    "A verificar a morada…",
+    "Vérification de l’adresse…",
+    "Controllo l’indirizzo…",
+    "Adresse wird geprüft…"
+  ],
+  "En el mapa": [
+    "On the map",
+    "No mapa",
+    "Sur la carte",
+    "Sulla mappa",
+    "Auf der Karte"
+  ],
+  "Es aquí": [
+    "It’s here",
+    "É aqui",
+    "C’est ici",
+    "È qui",
+    "Hier ist es"
+  ],
+  "Mi ubicación": [
+    "My location",
+    "A minha localização",
+    "Ma position",
+    "La mia posizione",
+    "Mein Standort"
+  ],
+  "Mueve el mapa hasta la puerta": [
+    "Move the map to the door",
+    "Move o mapa até à porta",
+    "Déplacez la carte jusqu’à la porte",
+    "Sposta la mappa fino alla porta",
+    "Schieb die Karte bis zur Tür"
+  ],
+  "No encuentro esa dirección: mueve el mapa hasta la puerta.": [
+    "I can’t find that address: move the map to the door.",
+    "Não encontro essa morada: move o mapa até à porta.",
+    "Je ne trouve pas cette adresse : déplacez la carte jusqu’à la porte.",
+    "Non trovo questo indirizzo: sposta la mappa fino alla porta.",
+    "Ich finde diese Adresse nicht: Schieb die Karte bis zur Tür."
+  ],
+  "No la encuentro: elige una sugerencia o sitúala en el mapa": [
+    "I can’t find it: pick a suggestion or place it on the map",
+    "Não a encontro: escolhe uma sugestão ou situa-a no mapa",
+    "Introuvable : choisissez une suggestion ou placez-la sur la carte",
+    "Non lo trovo: scegli un suggerimento o mettilo sulla mappa",
+    "Nicht gefunden: Wähle einen Vorschlag oder setze sie auf die Karte"
+  ],
+  "No se ha podido guardar el punto en el servidor: se abre en {app}.": [
+    "The point couldn’t be saved on the server: opening {app}.",
+    "Não foi possível guardar o ponto no servidor: abre-se no {app}.",
+    "Impossible d’enregistrer le point sur le serveur : ouverture dans {app}.",
+    "Impossibile salvare il punto sul server: si apre in {app}.",
+    "Der Punkt konnte nicht auf dem Server gespeichert werden: {app} wird geöffnet."
+  ],
+  "No se ha podido leer la dirección de la etiqueta: escríbela, o pulsa «Leer la etiqueta con una foto».": [
+    "The address could not be read from the label: type it, or tap “Read the label from a photo”.",
+    "Não foi possível ler a morada da etiqueta: escreve-a, ou toca em «Ler a etiqueta com uma foto».",
+    "L’adresse n’a pas pu être lue sur l’étiquette : saisissez-la, ou appuyez sur « Lire l’étiquette avec une photo ».",
+    "Non è stato possibile leggere l’indirizzo dall’etichetta: scrivilo, o tocca «Leggi l’etichetta da una foto».",
+    "Die Adresse konnte nicht vom Etikett gelesen werden: Gib sie ein oder tippe auf „Etikett per Foto lesen“."
+  ],
+  "Sin conexión: el punto queda guardado en el móvil y se envía al volver la red.": [
+    "No connection: the point is saved on the phone and will be sent when the network is back.",
+    "Sem ligação: o ponto fica guardado no telemóvel e envia-se quando voltar a rede.",
+    "Pas de connexion : le point est enregistré sur le téléphone et sera envoyé au retour du réseau.",
+    "Nessuna connessione: il punto resta salvato sul telefono e si invia quando torna la rete.",
+    "Keine Verbindung: Der Punkt bleibt auf dem Handy gespeichert und wird gesendet, sobald das Netz zurück ist."
+  ],
+  "Sin conexión: no puedo buscar la dirección. Si estás en la puerta, pulsa «Mi ubicación» y «Es aquí».": [
+    "No connection: I can’t look up the address. If you’re at the door, tap “My location” and “It’s here”.",
+    "Sem ligação: não consigo procurar a morada. Se estás à porta, toca em «A minha localização» e «É aqui».",
+    "Pas de connexion : impossible de chercher l’adresse. Si vous êtes devant la porte, appuyez sur « Ma position » puis « C’est ici ».",
+    "Nessuna connessione: non posso cercare l’indirizzo. Se sei alla porta, tocca «La mia posizione» e «È qui».",
+    "Keine Verbindung: Ich kann die Adresse nicht suchen. Wenn du an der Tür bist, tippe auf „Mein Standort“ und „Hier ist es“."
+  ],
+  "Sin conexión: no puedo comprobarla ahora.": [
+    "No connection: I can’t check it right now.",
+    "Sem ligação: não consigo verificá-la agora.",
+    "Pas de connexion : impossible de la vérifier pour l’instant.",
+    "Nessuna connessione: non posso controllarlo ora.",
+    "Keine Verbindung: Ich kann sie gerade nicht prüfen."
+  ],
+  "Sin el portal": [
+    "No house number",
+    "Sem o número da porta",
+    "Sans le numéro",
+    "Senza numero civico",
+    "Ohne Hausnummer"
+  ],
+  "Sin situar en el mapa": [
+    "Not on the map",
+    "Sem localização no mapa",
+    "Pas sur la carte",
+    "Non sulla mappa",
+    "Nicht auf der Karte"
+  ],
+  "Situar": [
+    "Place it",
+    "Situar",
+    "Placer",
+    "Posiziona",
+    "Verorten"
+  ],
+  "Situar en el mapa": [
+    "Place on the map",
+    "Situar no mapa",
+    "Placer sur la carte",
+    "Metti sulla mappa",
+    "Auf der Karte setzen"
+  ],
+  "Situar la parada": [
+    "Place the stop",
+    "Situar a paragem",
+    "Placer l’arrêt",
+    "Posiziona la fermata",
+    "Stopp verorten"
+  ],
+  "Acerca el mapa hasta ver la puerta": [
+    "Zoom in until you can see the door",
+    "Aproxima o mapa até veres a porta",
+    "Zoomez jusqu’à voir la porte",
+    "Avvicina la mappa fino a vedere la porta",
+    "Zoome hinein, bis du die Tür siehst"
+  ],
+  "¿Es alguna de estas?": [
+    "Is it one of these?",
+    "É alguma destas?",
+    "Est-ce l’une de celles-ci ?",
+    "È uno di questi?",
+    "Ist es eine davon?"
+  ],
+  "Acabas de entrar: no hace falta tu contraseña actual.": [
+    "You’ve just signed in: you don’t need your current password.",
+    "Acabaste de entrar: não precisas da tua palavra-passe atual.",
+    "Vous venez de vous connecter : votre mot de passe actuel n’est pas nécessaire.",
+    "Hai appena effettuato l’accesso: non serve la tua password attuale.",
+    "Du hast dich gerade angemeldet: Dein aktuelles Passwort ist nicht nötig."
+  ],
+  "Te hemos mandado un código a {c}. Mira también el spam.": [
+    "We’ve sent a code to {c}. Check your spam folder too.",
+    "Enviámos um código para {c}. Vê também o spam.",
+    "Nous avons envoyé un code à {c}. Regardez aussi dans les spams.",
+    "Ti abbiamo inviato un codice a {c}. Controlla anche lo spam.",
+    "Wir haben einen Code an {c} geschickt. Sieh auch im Spam nach."
+  ],
+  "¿No la sabes? Te mando un código a {c}": [
+    "Don’t know it? I’ll send a code to {c}",
+    "Não a sabes? Envio-te um código para {c}",
+    "Vous ne le connaissez pas ? Je vous envoie un code à {c}",
+    "Non la sai? Ti mando un codice a {c}",
+    "Du weißt es nicht? Ich schicke dir einen Code an {c}"
+  ],
+  "Escribe el código de 6 cifras del correo.": [
+    "Enter the 6-digit code from the email.",
+    "Escreve o código de 6 dígitos do e-mail.",
+    "Saisissez le code à 6 chiffres reçu par e-mail.",
+    "Scrivi il codice di 6 cifre dell’e-mail.",
+    "Gib den 6-stelligen Code aus der E-Mail ein."
+  ],
+  "¿Sin acceso a tu correo? Sal de la cuenta y vuelve a entrar: nada más entrar podrás cambiarla sin la actual. O pide a la oficina una contraseña temporal.": [
+    "No access to your email? Sign out and sign in again: right after signing in you can change it without the current one. Or ask the office for a temporary password.",
+    "Sem acesso ao teu e-mail? Sai da conta e volta a entrar: logo a seguir podes mudá-la sem a atual. Ou pede ao escritório uma palavra-passe temporária.",
+    "Pas d’accès à votre e-mail ? Déconnectez-vous et reconnectez-vous : juste après, vous pourrez le changer sans l’actuel. Ou demandez au bureau un mot de passe temporaire.",
+    "Non hai accesso alla tua e-mail? Esci e rientra: appena entrato potrai cambiarla senza quella attuale. Oppure chiedi all’ufficio una password temporanea.",
+    "Kein Zugriff auf deine E-Mail? Melde dich ab und wieder an: Direkt danach kannst du es ohne das aktuelle ändern. Oder bitte das Büro um ein vorübergehendes Passwort."
+  ],
+  "Contraseña guardada.": [
+    "Password saved.",
+    "Palavra-passe guardada.",
+    "Mot de passe enregistré.",
+    "Password salvata.",
+    "Passwort gespeichert."
+  ],
+  "Contraseña cambiada. La próxima vez entra con la nueva.": [
+    "Password changed. Next time, sign in with the new one.",
+    "Palavra-passe alterada. Da próxima vez, entra com a nova.",
+    "Mot de passe modifié. La prochaine fois, connectez-vous avec le nouveau.",
+    "Password cambiata. La prossima volta entra con quella nuova.",
+    "Passwort geändert. Melde dich nächstes Mal mit dem neuen an."
+  ],
+  "Ya tenías tu contraseña puesta: sigue entrando con ella. La que has escrito no se ha guardado.": [
+    "You already had your password: keep signing in with it. The one you just typed hasn't been saved.",
+    "Já tinhas a tua palavra-passe: continua a entrar com ela. A que escreveste não foi guardada.",
+    "Vous aviez déjà votre mot de passe : continuez à vous connecter avec. Celui que vous venez de saisir n'a pas été enregistré.",
+    "Avevi già la tua password: continua a entrare con quella. Quella che hai scritto non è stata salvata.",
+    "Du hattest dein Passwort schon: Melde dich weiter damit an. Das eben eingegebene wurde nicht gespeichert."
   ]
 }

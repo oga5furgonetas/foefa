@@ -1,7 +1,7 @@
 import LegalLayout, { legalEnIngles } from './LegalLayout'
 import SecurityEn from './en/SecurityEn'
 import { useIdioma } from '../lib/idioma'
-import { COMPANY, PROCESSORS } from './config'
+import { COMPANY, PROCESSORS, MAP_SERVICES, LEGAL_NOTES } from './config'
 
 /* Trust center. REGLA DE ORO: aquí solo se afirma lo que es verdad HOY y se
    puede demostrar (código, infra o CI). Nada aspiracional: cada línea de esta
@@ -11,7 +11,7 @@ export default function Seguridad() {
   // Fuera de España (30-10-2026): la traducción de cortesía al inglés; el español es la versión que vale.
   if (legalEnIngles()) return <SecurityEn />
   return (
-    <LegalLayout title="Seguridad">
+    <LegalLayout title="Seguridad" lastUpdate="2026-11-03">
       <p>
         En {COMPANY.brand} gestionamos datos operativos de flotas: vehículos, conductores,
         fotografías de inspección y documentación. Esta página explica, sin humo, cómo los
@@ -35,7 +35,9 @@ export default function Seguridad() {
 
       <h2>3. Infraestructura</h2>
       <ul>
-        <li>Backend alojado en la Unión Europea (región de París). Base de datos en MongoDB Atlas (UE).</li>
+        {/* 03-11-2026: la base ya no está en MongoDB Atlas. Desde el 23-10-2026 es flota-mongo, en Fly y junto al
+            servidor (flota-backend): primary_region "cdg" en backend/fly.toml y en infra/mongo/fly.toml. */}
+        <li>El servidor (la API) y la base de datos están en Fly.io, en la Unión Europea (región de París).</li>
         <li>Frontend servido por la red global de Cloudflare, con cabeceras de seguridad (CSP) y lista blanca de orígenes (CORS).</li>
         <li>Limitación de peticiones (rate limiting) en los endpoints públicos para frenar abusos.</li>
         <li>Los pagos los procesa Stripe (y Google Play dentro de la app de Play): <strong>nunca vemos ni almacenamos tarjetas</strong>. Sus notificaciones se verifican con firma criptográfica y se rechazan si no están firmadas.</li>
@@ -55,12 +57,24 @@ export default function Seguridad() {
       </ul>
 
       <h2>6. Encargados del tratamiento</h2>
-      <p>Proveedores que tratan datos en nuestro nombre, todos con garantías RGPD:</p>
+      {/* 03-11-2026 (el revisor): decía «todos con garantías RGPD» de una lista con Telegram y con servicios a los que se
+          pregunta sin contrato. Ahora cada grupo con su frase (LEGAL_NOTES en legal/config.js, la misma en Privacidad y
+          en el Encargo). */}
+      <p>Proveedores que tratan datos por encargo nuestro, con contrato:</p>
       <ul>
         {PROCESSORS.map((p) => (
           <li key={p.name}><strong>{p.name}</strong> — {p.purpose} ({p.country}).</li>
         ))}
       </ul>
+      <p><strong>Servicios de mapas y de búsqueda de direcciones.</strong> {LEGAL_NOTES.es.mapServices}</p>
+      <ul>
+        {MAP_SERVICES.map((p) => (
+          <li key={p.name}><strong>{p.name}</strong> — {p.purpose} ({p.country}).</li>
+        ))}
+      </ul>
+      <p><strong>Avisos por Telegram.</strong> {LEGAL_NOTES.es.telegram}</p>
+      <p><strong>Avisos en el navegador.</strong> {LEGAL_NOTES.es.browserPush}</p>
+      <p>{LEGAL_NOTES.es.transfers}</p>
       <p>El detalle completo está en la <a href="/privacidad">Política de Privacidad</a>.</p>
 
       <h2>7. Comunicación de vulnerabilidades</h2>

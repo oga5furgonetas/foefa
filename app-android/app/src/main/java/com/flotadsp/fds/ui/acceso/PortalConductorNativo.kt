@@ -1,5 +1,6 @@
 package com.flotadsp.fds.ui.acceso
 
+import android.widget.Toast
 import com.flotadsp.fds.ui.tx
 import android.Manifest
 import android.os.Build
@@ -77,6 +78,9 @@ import com.flotadsp.fds.ui.parada.FichaParada
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import kotlinx.serialization.json.booleanOrNull
 
 /** Entrada nativa del portal de conductor de empresa. Cada acción usa el token de esa ficha. */
 @Composable
@@ -114,7 +118,7 @@ fun PortalConductorNativo(alCerrar: () -> Unit, abrir: String? = null, alAbierto
     if (obligatoria) {
         CambiarClaveConductor(obligatoria = true, alVolver = {}, alGuardada = {
             pantalla = "inicio"  // 02-11-2026 (Dani): directo dentro; el correo de recuperación sigue en Cuenta
-        })
+        }, alSalir = salir)
         return
     }
 
@@ -321,17 +325,27 @@ private fun RutaConductorNativa(vm: RutaVM, alVolver: () -> Unit) {
             alCerrar = { cambios -> capa = null; if (cambios) vm.refrescarSinRuido() },
             alRevisar = { lectura -> capa = CapaRutaConductor.Ficha(inicial = lectura, desdeEscaner = true) },
         )
-        is CapaRutaConductor.Ficha -> FichaParada(
-            pais = pais,
-            cerca = cerca,
-            inicial = actual.inicial,
-            editar = actual.editar,
-            alCerrar = { guardada ->
+        is CapaRutaConductor.Ficha -> {
+            // Guardada sin punto en el mapa (02-11-2026): se dice, y el móvil la intenta solo (RutaVM).
+            fun cerrada(guardada: Boolean, sinSituar: Boolean) {
                 if (guardada) vm.refrescarSinRuido()
-                if (guardada && !actual.desdeEscaner) vm.avisar(if (actual.editar != null) tx("Cambios guardados.") else tx("Añadida a tu ruta."))
-                capa = if (actual.desdeEscaner) CapaRutaConductor.Escaner(VueltaDeRevisar(guardada)) else null
-            },
-        )
+                if (guardada && !actual.desdeEscaner) vm.avisar(when {
+                    sinSituar && actual.editar != null -> tx("Cambios guardados, sin situar: la sitúo al navegar.")
+                    sinSituar -> tx("Añadida, sin situar: la sitúo al navegar.")
+                    actual.editar != null -> tx("Cambios guardados.")
+                    else -> tx("Añadida a tu ruta.")
+                })
+                capa = if (actual.desdeEscaner) CapaRutaConductor.Escaner(VueltaDeRevisar(guardada, sinSituar)) else null
+            }
+            FichaParada(
+                pais = pais,
+                cerca = cerca,
+                inicial = actual.inicial,
+                editar = actual.editar,
+                alCerrar = { guardada -> cerrada(guardada, sinSituar = false) },
+                alGuardada = { p -> cerrada(true, sinSituar = p != null && p.pendiente && !p.ubicada) },
+            )
+        }
         null -> HoyPantalla(
             vm = vm,
             navegarCon = navegar,
@@ -416,15 +430,51 @@ private fun TelefonoConductorNativo(alVolver: () -> Unit, alGuardado: () -> Unit
 }
 
 @Composable
-private fun CambiarClaveConductor(obligatoria: Boolean, alVolver: () -> Unit, alGuardada: () -> Unit) {
-    val app = LocalContext.current.applicationContext as FdsApp
+private fun CambiarClaveConductor(obligatoria: Boolean, alVolver: () -> Unit, alGuardada: () -> Unit, alSalir: (() -> Unit)? = null) {
+    val ctx = LocalContext.current
+    val app = ctx.applicationContext as FdsApp
     val scope = rememberCoroutineScope()
     var nueva by rememberSaveable { mutableStateOf("") }
     var repetir by rememberSaveable { mutableStateOf("") }
     var actual by rememberSaveable { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var guardando by remember { mutableStateOf(false) }
+    // SIN SABER LA ACTUAL (02-11-2026, María: «no les deja cambiar la contraseña en la app… creo que inician desde
+    // Google»): quien entró con la contraseña que le rellena Google, o con el código del correo, no sabe la actual, y
+    // esta pantalla se la pedía sin otra salida. Nada más entrar (15 min) el servidor la cambia sin ella; si no, con un
+    // código a su correo. La ficha dice cuál vale ahora (clave_sin_actual) y adónde iría el código (codigo_a).
+    var sinActual by remember { mutableStateOf(false) }
+    var codigoA by remember { mutableStateOf<String?>(null) }
+    var conCodigo by rememberSaveable { mutableStateOf(false) }
+    var codigo by rememberSaveable { mutableStateOf("") }
+    var enviadoA by rememberSaveable { mutableStateOf<String?>(null) }
+    var pidiendo by remember { mutableStateOf(false) }
     val nombre = app.cuenta.nombre.collectAsState().value
+    LaunchedEffect(Unit) {
+        runCatching { app.repo.fichaConductor() }.getOrNull()?.let { f ->
+            // LA MARCA VIEJA (03-11-2026, José Arturo, OGA5: «no pueden pedir para trabajar mañana… les da problemas con
+            // la contraseña»): la que guardó este móvil el día que entró con la temporal se quita en cuanto la ficha dice
+            // que ya no hace falta; si no, se quedaba aquí y el servidor le rechazaba el cambio una y otra vez.
+            if (obligatoria) {
+                if (f["configurar_cuenta"]?.jsonPrimitive?.booleanOrNull == false) { app.cuenta.marcarCuentaConfigurada(); alGuardada() }
+                return@let
+            }
+            sinActual = f["clave_sin_actual"]?.jsonPrimitive?.booleanOrNull == true
+            codigoA = f["codigo_a"]?.jsonPrimitive?.contentOrNull
+        }
+    }
+    val pedirCodigo: () -> Unit = {
+        pidiendo = true; error = null
+        scope.launch {
+            try {
+                val r = app.repo.pedirCodigoClave()
+                enviadoA = r["enviado_a"]?.jsonPrimitive?.contentOrNull ?: codigoA
+                conCodigo = true; codigo = ""
+            } catch (e: ErrorApi) { error = e.message }
+            finally { pidiendo = false }
+        }
+    }
+    val sinLaActual = obligatoria || sinActual
     Scaffold(topBar = { TopAppBar(
         title = { Text(if (obligatoria) tx("Elige tu contraseña") else tx("Cambiar contraseña")) },
         navigationIcon = if (obligatoria) ({}) else ({ IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) } }),
@@ -432,7 +482,24 @@ private fun CambiarClaveConductor(obligatoria: Boolean, alVolver: () -> Unit, al
         Column(Modifier.fillMaxSize().padding(inset).padding(24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text(if (obligatoria) tx("Hola, {n}. Este acceso temporal solo sirve para entrar una vez.", "n" to nombre.substringBefore(' ').ifBlank { tx("conductor") }) else tx("La contraseña nueva debe tener al menos 6 caracteres."),
                 style = MaterialTheme.typography.bodyLarge)
-            if (!obligatoria) CampoClave(actual, { actual = it; error = null }, tx("Contraseña actual")) {}
+            when {
+                obligatoria -> {}
+                sinActual -> Text(tx("Acabas de entrar: no hace falta tu contraseña actual."), color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodyMedium)
+                conCodigo -> {
+                    Text(tx("Te hemos mandado un código a {c}. Mira también el spam.", "c" to (enviadoA ?: codigoA ?: "")),
+                        style = MaterialTheme.typography.bodyMedium)
+                    OutlinedTextField(codigo, { codigo = it.filter(Char::isDigit).take(6); error = null }, label = { Text(tx("Código de 6 cifras")) },
+                        singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+                    TextButton(onClick = pedirCodigo, enabled = !pidiendo) { Text(tx("Reenviar código")) }
+                }
+                else -> {
+                    CampoClave(actual, { actual = it; error = null }, tx("Contraseña actual")) {}
+                    codigoA?.let { c ->
+                        TextButton(onClick = pedirCodigo, enabled = !pidiendo) { Text(tx("¿No la sabes? Te mando un código a {c}", "c" to c)) }
+                    }
+                }
+            }
             CampoClave(nueva, { nueva = it; error = null }, (if (obligatoria) tx("Tu contraseña") else tx("Nueva contraseña")) + " " + tx("(6 caracteres o más)")) {}
             CampoClave(repetir, { repetir = it; error = null }, tx("Repite la contraseña")) {}
             // Por qué el botón sigue apagado. Sin esto, con tres letras escritas se quedaba gris sin decir nada y
@@ -440,7 +507,8 @@ private fun CambiarClaveConductor(obligatoria: Boolean, alVolver: () -> Unit, al
             val pista = when {
                 nueva.isNotEmpty() && nueva.length < 6 -> tx("Faltan {n}: la contraseña tiene que tener 6 caracteres o más.", "n" to 6 - nueva.length)
                 nueva.length >= 6 && repetir.isNotEmpty() && !nueva.startsWith(repetir) -> tx("Las dos contraseñas no coinciden.")
-                !obligatoria && nueva.length >= 6 && nueva == repetir && actual.isBlank() -> tx("Escribe también tu contraseña actual.")
+                conCodigo && !sinLaActual && nueva.length >= 6 && nueva == repetir && codigo.length < 6 -> tx("Escribe el código de 6 cifras del correo.")
+                !sinLaActual && !conCodigo && nueva.length >= 6 && nueva == repetir && actual.isBlank() -> tx("Escribe también tu contraseña actual.")
                 else -> null
             }
             pista?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium) }
@@ -450,20 +518,40 @@ private fun CambiarClaveConductor(obligatoria: Boolean, alVolver: () -> Unit, al
                     guardando = true
                     scope.launch {
                         try {
-                            app.repo.cambiarClaveConductor(actual, nueva)
+                            app.repo.cambiarClaveConductor(if (conCodigo) "" else actual, nueva, if (conCodigo && !sinLaActual) codigo else "")
                             if (obligatoria) app.cuenta.marcarCuentaConfigurada()
-                            nueva = ""; repetir = ""; actual = ""
+                            nueva = ""; repetir = ""; actual = ""; codigo = ""
+                            // Antes volvía a «Mi cuenta» sin decir nada y parecía que no se había guardado (02-11-2026).
+                            Toast.makeText(ctx, if (obligatoria) tx("Contraseña guardada.") else tx("Contraseña cambiada. La próxima vez entra con la nueva."),
+                                Toast.LENGTH_LONG).show()
                             alGuardada()
-                        } catch (e: ErrorApi) { error = e.message }
+                        } catch (e: ErrorApi) {
+                            // Y si al guardarla el servidor dice que ya la tiene (la eligió en otro móvil, o la temporal era de
+                            // antes de la suya), se entra, diciéndole que la que ha escrito no se ha guardado.
+                            val yaLaTiene = obligatoria && e.estado == 400 &&
+                                runCatching { app.repo.fichaConductor()["configurar_cuenta"]?.jsonPrimitive?.booleanOrNull }.getOrNull() == false
+                            if (yaLaTiene) {
+                                app.cuenta.marcarCuentaConfigurada()
+                                Toast.makeText(ctx, tx("Ya tenías tu contraseña puesta: sigue entrando con ella. La que has escrito no se ha guardado."),
+                                    Toast.LENGTH_LONG).show()
+                                alGuardada()
+                            } else error = e.message
+                        }
                         finally { guardando = false }
                     }
                 },
-                enabled = !guardando && nueva.length >= 6 && nueva == repetir && (obligatoria || actual.isNotBlank()),
+                enabled = !guardando && nueva.length >= 6 && nueva == repetir &&
+                    (sinLaActual || (conCodigo && codigo.length == 6) || actual.isNotBlank()),
                 modifier = Modifier.fillMaxWidth().height(54.dp),
             ) {
                 if (guardando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 else Text(if (obligatoria) tx("Guardar y continuar") else tx("Guardar contraseña"))
             }
+            if (!sinLaActual) Text(tx("¿Sin acceso a tu correo? Sal de la cuenta y vuelve a entrar: nada más entrar podrás cambiarla sin la actual. O pide a la oficina una contraseña temporal."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // SIEMPRE CON SALIDA (03-11-2026): la de elegirla no tenía ni «Volver» ni «Cerrar sesión», y si guardar
+            // fallaba por lo que fuera, el conductor no salía de aquí.
+            if (obligatoria && alSalir != null) TextButton(onClick = alSalir, modifier = Modifier.fillMaxWidth()) { Text(tx("Cerrar sesión")) }
         }
     }
 }

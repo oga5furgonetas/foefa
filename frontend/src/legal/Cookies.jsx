@@ -2,14 +2,18 @@ import LegalLayout, { legalEnIngles } from './LegalLayout'
 import CookiesEn from './en/CookiesEn'
 import { useIdioma } from '../lib/idioma'
 import { COMPANY } from './config'
-import { hayPixel } from '../lib/metaPixel'
+import { hayPixel, abrirAvisoCookies } from '../lib/metaPixel'
 
+/* 02-11-2026 (revisiones del servidor y de la app): con el permiso de los píxeles nuestro servidor también avisa a Meta
+   (API de conversiones, backend/meta_capi.py) con el correo cifrado, y aquí se decía «sin tu correo ni tus datos de
+   reparto»: ahora se dice qué sale desde el navegador y qué desde el servidor. Y cambiar de opinión ya no es borrar el
+   almacenamiento del navegador: «Cambiar mis cookies» vuelve a abrir el aviso y la retirada llega a la cuenta. */
 export default function Cookies() {
   useIdioma()
   // Fuera de España (30-10-2026): la traducción de cortesía al inglés; el español es la versión que vale.
   if (legalEnIngles()) return <CookiesEn />
   return (
-    <LegalLayout title="Política de Cookies">
+    <LegalLayout title="Política de Cookies" lastUpdate="2026-11-02">
       <h2>1. ¿Qué son las cookies?</h2>
       <p>Las cookies (y tecnologías similares como el <em>localStorage</em>) son pequeños archivos que un sitio web guarda en tu dispositivo para que funcione correctamente o para recordar información entre visitas.</p>
 
@@ -25,18 +29,25 @@ export default function Cookies() {
           <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>panel_tab</code>, <code>panel_center</code></td><td>Recordar tu pestaña y centro activo</td><td>Hasta limpiar el navegador</td><td>Preferencia</td></tr>
           <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>flota_plan</code></td><td>Recordar el plan elegido durante el registro</td><td>Sesión</td><td>Necesaria</td></tr>
           <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>cookie_consent</code></td><td>Recordar que has visto este aviso{hayPixel() ? ' y lo que elegiste' : ''}</td><td>12 meses</td><td>Necesaria</td></tr>
-          {hayPixel() && <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>_fbp</code> (Meta)</td><td>Medir los anuncios de Facebook e Instagram: visitas, altas, pruebas y suscripciones</td><td>3 meses</td><td>Marketing (solo si aceptas)</td></tr>}
+          {hayPixel() && <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>_fbp</code>, <code>_fbc</code> (Meta)</td><td>Medir los anuncios de Facebook e Instagram: visitas, altas, pruebas y suscripciones (con el alta, también desde nuestro servidor)</td><td>3 meses</td><td>Marketing (solo si aceptas)</td></tr>}
           {hayPixel() && <tr><td className="py-1.5"><code>_ttp</code>, <code>_tt_enable_cookie</code>, <code>ttcsid</code> (TikTok)</td><td>Medir los anuncios de TikTok: visitas, altas, pruebas y suscripciones</td><td>Hasta 13 meses</td><td>Marketing (solo si aceptas)</td></tr>}
         </tbody>
       </table>
 
       <h2>3. Cookies de terceros</h2>
       <p>Durante el proceso de pago serás redirigido a <strong>Stripe</strong>, que puede establecer sus propias cookies necesarias para procesar el pago. Consulta su política en <a href="https://stripe.com/es/privacy" target="_blank" rel="noreferrer">stripe.com/es/privacy</a>.</p>
-      {hayPixel() && <p>Si aceptas la medición de anuncios, <strong>Meta Platforms Ireland</strong> y <strong>TikTok Technology Limited</strong> (Irlanda) reciben a través de sus píxeles la página visitada y los eventos (alta, prueba, suscripción, regalo), sin tu correo ni tus datos de reparto. Consulta sus políticas en <a href="https://www.facebook.com/privacy/policy" target="_blank" rel="noreferrer">facebook.com/privacy/policy</a> y <a href="https://www.tiktok.com/legal/page/eea/privacy-policy/es" target="_blank" rel="noreferrer">tiktok.com/legal</a>.</p>}
+      {hayPixel() && <>
+        <p>Si aceptas la medición de anuncios, <strong>desde tu navegador</strong>, <strong>Meta Platforms Ireland</strong> y <strong>TikTok Technology Limited</strong> (Irlanda) reciben a través de sus píxeles la página visitada y los eventos (alta, prueba, suscripción, regalo).</p>
+        <p>Con ese mismo permiso, si te das de alta para repartir por tu cuenta, <strong>desde nuestro servidor</strong> (la API de conversiones de Meta) comunicamos a <strong>Meta</strong> tu alta, la primera vez que entras en la app y tu primera ruta, durante los 30 días siguientes al alta. Con cada uno van tu correo cifrado (SHA-256), tu dirección IP, tu navegador, un identificador cifrado de tu cuenta y las cookies <code>_fbp</code> y <code>_fbc</code>. Nunca tu nombre ni tu teléfono, ni las direcciones o los clientes de tus entregas: de tu reparto, solo que has hecho la primera ruta. A TikTok no le mandamos nada desde el servidor.</p>
+        <p>Consulta sus políticas en <a href="https://www.facebook.com/privacy/policy" target="_blank" rel="noreferrer">facebook.com/privacy/policy</a> y <a href="https://www.tiktok.com/legal/page/eea/privacy-policy/es" target="_blank" rel="noreferrer">tiktok.com/legal</a>.</p>
+      </>}
 
       <h2>4. Gestión y consentimiento</h2>
       {hayPixel()
-        ? <p>Los píxeles de Meta y TikTok solo se cargan si pulsas «Aceptar» en el aviso; «Solo necesarias» es igual de fácil y no carga nada. Puedes cambiar de opinión borrando el almacenamiento del navegador (volverá a salir el aviso; también cerrará tu sesión).</p>
+        ? <>
+          <p>Los píxeles de Meta y TikTok solo se cargan, y nuestro servidor solo le comunica algo a Meta, si pulsas «Aceptar» en el aviso; «Solo necesarias» es igual de fácil y no carga ni comunica nada.</p>
+          <p>Puedes cambiar de opinión cuando quieras: <button type="button" onClick={abrirAvisoCookies} className="font-semibold text-sky-400 hover:underline">Cambiar mis cookies</button>. Si retiras el permiso, los píxeles dejan de medir, borramos sus cookies de este navegador y lo apuntamos en tu cuenta (al momento si tienes la sesión abierta; si no, la próxima vez que entres desde este navegador): desde entonces nuestro servidor no le comunica nada más a Meta.</p>
+        </>
         : <p>Como solo usamos almacenamiento estrictamente necesario, no requerimos consentimiento previo según la guía de la AEPD; aun así, te mostramos un aviso informativo al entrar. Puedes borrar el almacenamiento desde la configuración de tu navegador en cualquier momento (esto cerrará tu sesión).</p>}
 
       <h2>5. Cambios</h2>

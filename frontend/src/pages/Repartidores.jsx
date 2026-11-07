@@ -3,7 +3,7 @@ import { Loader2, Route, Navigation, MessageCircle, Camera, Check, ArrowRight, M
 import { MARCA } from '../marca'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, locale } from '../lib/idioma'
 import { medirAccion, varianteAB } from '../lib/analitica'
-import { evento, eventoUnaVez } from '../lib/metaPixel'
+import { evento, eventoUnaVez, hayPixel, abrirAvisoCookies } from '../lib/metaPixel'
 import { useInvitacion } from '../lib/referido'
 import AltaRapida from './AltaRapida'
 import { PARADAS_GRATIS, promoGratis, fechaPromo, eurosRef, refCentActual, refPromoActiva, fechaRefPromo, BONO_CENT } from '../lib/precios'
@@ -275,6 +275,8 @@ export default function Repartidores() {
           {/* LSSI art. 10: quién está detrás, a un clic desde la página que se comparte (10-10-2026:
               un grupo de Telegram borró el enlace porque desde aquí no se llegaba al aviso legal). */}
           {MARCA.nombre} · <a href="/aviso-legal" className="hover:underline">{tx('Aviso legal')}</a> · <a href="/privacidad" className="hover:underline">{tx('Privacidad')}</a> · <a href="/terminos" className="hover:underline">{tx('Términos')}</a> · <a href="/cookies" className="hover:underline">{tx('Cookies')}</a> · <a href={idioma() === 'pt' ? '/guia-rota-de-entregas' : '/guia-ruta-de-reparto'} className="hover:underline">{tx('Guía: cómo ordenar la ruta')}</a>
+          {/* Cambiar de opinión sobre los píxeles, a un toque (02-11-2026): vuelve a abrir el aviso de cookies. */}
+          {hayPixel() && <> · <button type="button" onClick={abrirAvisoCookies} className="hover:underline">{tx('Cambiar mis cookies')}</button></>}
         </p>
       </div>
     </div>

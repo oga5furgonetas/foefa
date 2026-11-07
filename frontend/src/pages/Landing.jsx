@@ -10,7 +10,7 @@ import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, locale } from '../lib/id
 import { API_BASE } from '../lib/apiBase'
 import { saveSession } from '../panel/auth'
 import { medirAccion } from '../lib/analitica'
-import { evento } from '../lib/metaPixel'
+import { evento, hayPixel, abrirAvisoCookies } from '../lib/metaPixel'
 import { abrirDemoReparto } from '../lib/demoReparto'
 import { paisDelMovil, precioRepartidor, importeEn } from '../lib/region'
 import { PARADAS_GRATIS, promoGratis, fechaPromo, eurosRef, refCentActual, refPromoActiva, fechaRefPromo, BONO_CENT } from '../lib/precios'
@@ -545,6 +545,10 @@ export default function Landing() {
               {[['/privacidad', tx('Privacidad')], ['/terminos', tx('Términos')], ['/cookies', tx('Cookies')], ['/aviso-legal', tx('Aviso legal')], ['/security', tx('Seguridad')]].map(([h, k]) => (
                 <li key={h}><a href={h} className="text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)]">{k}</a></li>
               ))}
+              {/* Cambiar de opinión sobre los píxeles, a un toque (02-11-2026): vuelve a abrir el aviso de cookies. */}
+              {hayPixel() && (
+                <li><button type="button" onClick={abrirAvisoCookies} className="text-left text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)]">{tx('Cambiar mis cookies')}</button></li>
+              )}
             </ul>
           </nav>
         </div>

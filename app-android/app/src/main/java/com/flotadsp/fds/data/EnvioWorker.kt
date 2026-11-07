@@ -20,7 +20,8 @@ class EnvioWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx,
         repo.cuenta.cargar()
         return try {
             repo.vaciarCola()
-            if (repo.pendientes.value.any { it.quien == repo.cuenta.quien() }) Result.retry() else Result.success()
+            // Con los puntos situados sin red también (02-11-2026): hasta que salgan, se sigue intentando.
+            if (repo.pendientes.value.any { it.quien == repo.cuenta.quien() } || repo.hayPuntosPendientes()) Result.retry() else Result.success()
         } catch (_: Exception) {
             Result.retry()
         }

@@ -1,11 +1,14 @@
 import LegalLayout from '../LegalLayout'
-import { COMPANY, PROCESSORS } from '../config'
+import { COMPANY, PROCESSORS, MAP_SERVICES, LEGAL_NOTES } from '../config'
+import { hayPixel } from '../../lib/metaPixel'
 
 /* The Privacy Policy in English (30-10-2026, outside Spain): the same content as legal/Privacidad.jsx, which is the
-   version that applies. Keep both in step. */
+   version that applies. Keep both in step. 02-11-2026: Meta como destinatario (lo que manda nuestro servidor).
+   03-11-2026: el §5 como en Privacidad.jsx (encargados con contrato, servicios de mapas sin contrato, Telegram y los
+   avisos del navegador, con las frases de LEGAL_NOTES.en). */
 export default function PrivacyEn() {
   return (
-    <LegalLayout title="Privacy Policy">
+    <LegalLayout title="Privacy Policy" lastUpdate="2026-11-03">
       <p>At {COMPANY.brand} we process personal data in accordance with Regulation (EU) 2016/679 (GDPR) and the applicable national legislation. This policy explains what data we collect, what we use it for, who we share it with and how you can exercise your rights.</p>
 
       <h2>1. Data controller</h2>
@@ -40,6 +43,7 @@ export default function PrivacyEn() {
         <li><strong>Marketplace:</strong> publishing your listings, delivering your messages and notifying you, in performance of its terms (art. 6.1.b); reviewing listings and handling reports, on the basis of legitimate interest and legal obligation (Regulation (EU) 2022/2065, the Digital Services Act; art. 6.1.c and f). Messages are reviewed only if someone reports them.</li>
         <li><strong>FDS news for applicants:</strong> optional consent, separate from the application and revocable at any time. Not ticking it does not affect the application.</li>
         <li><strong>Improving the AI model (anonymised / aggregated):</strong> legitimate interest; images are never published and people are never identified.</li>
+        {hayPixel() && <li><strong>Measuring ads</strong> (which ads bring us visits, sign-ups and couriers), only if you accept it in the cookie notice: your consent (art. 6.1.a GDPR), which you can withdraw at any time with “Change my cookies” in the <a href="/cookies">Cookie Policy</a>, without affecting what came before. What is shared and with whom, in section 5.</li>}
       </ul>
 
       <h2>4. Retention</h2>
@@ -52,14 +56,23 @@ export default function PrivacyEn() {
         <li>Job application data: up to 12 months. The choice about news is kept with the application for that period or until consent is withdrawn and deletion is requested where applicable.</li>
       </ul>
 
-      <h2>5. Processors (who we share data with)</h2>
-      <p>To provide the service we rely on providers that act as processors under contract:</p>
+      <h2>5. Who we share data with</h2>
+      <p><strong>Processors.</strong> To provide the service we rely on these providers, which process the data on our behalf and under contract:</p>
       <ul>
         {PROCESSORS.map((p) => (
-          <li key={p.name}><strong>{p.name}</strong> — {p.purposeEn || p.purpose} <span className="text-dark-500">({p.countryEn || p.country})</span></li>
+          <li key={p.name}><strong>{p.nameEn || p.name}</strong> — {p.purposeEn || p.purpose} <span className="text-dark-500">({p.countryEn || p.country})</span></li>
         ))}
       </ul>
-      <p>Where international transfers take place, they rely on the EU-US Data Privacy Framework or Standard Contractual Clauses.</p>
+      <p><strong>Map and address-search services.</strong> {LEGAL_NOTES.en.mapServices}</p>
+      <ul>
+        {MAP_SERVICES.map((p) => (
+          <li key={p.name}><strong>{p.nameEn || p.name}</strong> — {p.purposeEn || p.purpose} <span className="text-dark-500">({p.countryEn || p.country})</span></li>
+        ))}
+      </ul>
+      <p><strong>Telegram notices.</strong> {LEGAL_NOTES.en.telegram}</p>
+      <p><strong>Browser notifications.</strong> {LEGAL_NOTES.en.browserPush}</p>
+      {hayPixel() && <p><strong>Meta, also as a recipient.</strong> Only if you accept ad measurement in the cookie notice, <strong>Meta Platforms Ireland Ltd.</strong> (Ireland; with transfers to the USA under the EU-US Data Privacy Framework) receives: from your browser, through its pixel, the page visited and the events (sign-up, trial, subscription, gift); and from our server, if you sign up to deliver on your own, your sign-up, the first time you open the app and your first route, during the 30 days after you sign up, with your hashed email (SHA-256), your IP address, your browser, a hashed identifier of your account and the pixel cookies. Never your name or your phone, nor the addresses or the customers of your deliveries. <strong>Purpose:</strong> measuring which ads bring us sign-ups and couriers. <strong>Legal basis:</strong> your consent in the cookie notice (art. 6.1.a GDPR). <strong>You can withdraw it</strong> at any time with “Change my cookies” in the <a href="/cookies">Cookie Policy</a>: from then on nothing more is shared with it. Meta also processes that data under its own <a href="https://www.facebook.com/privacy/policy" target="_blank" rel="noreferrer">privacy policy</a>.</p>}
+      <p>{LEGAL_NOTES.en.transfers}</p>
 
       <h2>6. Your rights</h2>
       <p>You can exercise at any time your rights of <strong>access, rectification, erasure, objection, restriction and portability</strong>, and withdraw your consent, by writing to <a href={`mailto:${COMPANY.privacyEmail}`}>{COMPANY.privacyEmail}</a>. If you consider that we have not handled your request properly, you can lodge a complaint with the <a href="https://www.aepd.es" target="_blank" rel="noreferrer">Spanish Data Protection Agency (AEPD)</a> or with the supervisory authority of your country.</p>

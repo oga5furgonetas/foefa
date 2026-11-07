@@ -39,9 +39,9 @@ test.describe('el cliente avisado, la propina y la valoración', () => {
     await caja.getByRole('button', { name: 'Copiar el número' }).click()
     await expect(caja.getByRole('button', { name: 'Copiado' })).toBeVisible()
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('612345678')
-    // Se puede cambiar.
+    // Se puede cambiar. La petición se espera (03-11-2026): sin esperar, 1 de cada 80 con carga aún no había llegado.
     await caja.getByRole('radio', { name: '4 estrellas' }).click()
-    expect(valoraciones.at(-1)).toEqual({ estrellas: 4 })
+    await expect.poll(() => valoraciones.at(-1)).toEqual({ estrellas: 4 })
   })
 
   test('con la ruta ordenada, «Avisar a todos por WhatsApp» va uno a uno y recuerda a quién', async ({ page, context }) => {

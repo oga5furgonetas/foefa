@@ -3,11 +3,13 @@ import fiabilidad
 import piezas
 import seguimiento
 import reparto
+import geocodificador
 import trafico
 import whatsapp
 import analitica
 import activacion
 import ciclo_correos
+import meta_capi
 import campana_candidatos
 import mercadillo
 import demo_comercial as _demo_com
@@ -274,6 +276,9 @@ _current_db_name = contextvars.ContextVar("current_db_name", default=_DEFAULT_DB
 _region_actual = contextvars.ContextVar("region_actual", default=("es", "Europe/Madrid"))
 # La ciudad de ejemplo de quien prueba la demo de reparto sin cuenta (ver _DEMO_REP_CIUDADES).
 _demo_ciudad = contextvars.ContextVar("demo_ciudad", default="")
+# La organización de la petición del reparto (02-11-2026), para lo que depende de la cuenta y no de quien la hace: si
+# las direcciones de sus paradas pueden ir a CartoCiudad (_rep_cc_permitido). La fija get_current_user, como la región.
+_rep_org_actual = contextvars.ContextVar("rep_org_actual", default="")
 
 global_db = client[_GLOBAL_DB_NAME]  # organizaciones, usuarios, suscripciones (compartida)
 
@@ -748,6 +753,12 @@ class RegisterRequest(BaseModel):
     acepta_transferencia: Optional[bool] = None
     ref: Optional[str] = None            # código de quien le invitó (programa «invita a un compañero»)
     idioma: Optional[str] = None         # el de la app al darse de alta: en ese idioma le llegan los correos
+    # Medición de anuncios (02-11-2026). `anuncios`: el permiso de píxeles del aviso de cookies de la web (la app
+    # nativa no lo manda: False); sin él no se le cuenta nada a Meta. `fbp`/`fbc`: las cookies _fbp y _fbc del píxel,
+    # que la web lee y manda porque la API va en otro dominio y no llegan solas; sin ellas Meta apenas casa el clic.
+    anuncios: Optional[bool] = None
+    fbp: Optional[str] = None
+    fbc: Optional[str] = None
 
 
 # Límites y features por plan
@@ -882,6 +893,9 @@ class TokenResponse(BaseModel):
     admin_role: Optional[str] = None  # "center_manager" | "dispatcher" | None
     app_destino: Optional[str] = None  # reparto | empresa | conductor (solo acceso unificado Android)
     email: Optional[str] = None
+    # El alta de quien reparte solo devuelve el event_id del «CompleteRegistration» que el servidor mandó a Meta
+    # (02-11-2026): la web se lo pasa al píxel como eventID y Meta no cuenta el alta dos veces.
+    meta_event_id: Optional[str] = None
 
 
 # =========================
@@ -1060,6 +1074,7 @@ async def get_current_user(
         if not _demo_reparto and not any(request.url.path.endswith(p) for p in _demo_ok):
             raise HTTPException(status_code=403, detail="Modo demo: solo lectura. Crea tu cuenta gratis para editar.")
     if "/api/reparto/" in request.url.path and payload.get("org_id"):
+        _rep_org_actual.set(str(payload.get("org_id")))
         rg = payload.get("rg") if payload.get("demo") else None
         if isinstance(rg, list) and len(rg) == 3 and _zona_valida(rg[1]):
             _region_actual.set((str(rg[0]), rg[1]))
@@ -3462,11 +3477,8 @@ def _fallback_analysis(reason: str = "Gemini no disponible") -> InspectionAnalys
     if any(s in rl for s in ("billing", "permission", "api_key", "api key", "401", "403",
                              "depleted", "prepay")):
         try:
-            asyncio.get_running_loop().create_task(_notify_error_once(
-                "backend",
-                "Análisis IA caído: Gemini rechaza las llamadas (créditos agotados, billing o permisos)",
-                reason[:400],
-            ))
+            _caido = "Análisis IA caído: Gemini rechaza las llamadas (créditos agotados, billing o permisos)"
+            asyncio.get_running_loop().create_task(_notify_error_once("backend", _caido, reason[:400], aviso=_caido))
         except RuntimeError:
             pass  # sin event loop (contexto síncrono): queda en el log
     return InspectionAnalysis(
@@ -4912,18 +4924,25 @@ def _rl_key_ip(request: Request) -> str:
     return (fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "?"))
 
 
-async def _rl_fail(key: str, context: str):
-    """Registra un fallo; si alcanza el límite, avisa por Telegram una vez."""
+async def _rl_fail(key: str, context: str, tipo: str = "una cuenta"):
+    """Registra un fallo; si alcanza el límite, avisa por Telegram una vez.
+
+    SIN DATOS DE NADIE (03-11-2026). Entrar no lleva empresa: el aviso va al bot de la base de la petición, que suele
+    ser la de por defecto (la del dueño) sea de quien sea la cuenta, y Telegram no es un encargado nuestro con contrato.
+    Por eso a Telegram solo va el tipo de acceso (`tipo`: «una cuenta de administrador», «un conductor», «la app», «la
+    tienda», «el pase al móvil»); la cuenta y la IP (`context`) van al registro del servidor."""
     now = datetime.now(timezone.utc).timestamp()
     _login_fails[key].append(now)
     if len(_login_fails[key]) >= _LOGIN_MAX_FAILS and now - _login_alerted.get(key, 0) > 1800:
         _login_alerted[key] = now
+        logger.warning(f"Alerta de seguridad: {_LOGIN_MAX_FAILS} intentos fallidos de entrar ({tipo}): {context}")
         try:
             config = await db.telegram_config.find_one({}, {"_id": 0})
             if config and config.get("enabled") and config.get("bot_token"):
                 text = (f"🛡️ <b>ALERTA DE SEGURIDAD</b>\n\n"
-                        f"Bloqueados 5 intentos de login fallidos seguidos.\n"
-                        f"🔑 Objetivo: {context}\n"
+                        f"{_LOGIN_MAX_FAILS} intentos fallidos seguidos de entrar.\n"
+                        f"🔑 Acceso: {tipo}\n"
+                        f"Qué cuenta y desde qué IP está en el registro del servidor.\n"
                         f"Si no has sido tú, alguien está probando contraseñas.")
                 async with _aiohttp.ClientSession() as session:
                     for chat_id in config.get("chat_ids", []):
@@ -5073,6 +5092,13 @@ async def register_dsp(data: RegisterRequest, request: Request):
     if (sector_alta == "autonomo" and (not data.desde_app or _play_listo())
             and os.environ.get("PRUEBA_CON_TARJETA", "0").strip() == "1"):
         org["prueba_con_tarjeta"] = True
+    # MEDICIÓN DE ANUNCIOS (02-11-2026): a Meta solo va lo de quien aceptó los píxeles en el aviso de cookies de la
+    # web, lo mismo que se le exige al píxel; con ese permiso se guardan también sus cookies del píxel (_fbp, _fbc).
+    org["meta_ok"] = bool(data.anuncios)
+    if org["meta_ok"]:
+        for campo, valor in (("meta_fbp", data.fbp), ("meta_fbc", data.fbc)):
+            if _meta_cookie(valor):
+                org[campo] = valor
     await global_db.organizations.insert_one(dict(org))
     user_id = str(uuid.uuid4())
     await global_db.admin_users.insert_one({
@@ -5083,6 +5109,23 @@ async def register_dsp(data: RegisterRequest, request: Request):
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
     logger.info("Nueva empresa registrada: %s (org=%s)", username, org_id)
+    # MEDICIÓN DE ANUNCIOS (02-11-2026): «CompleteRegistration» a Meta por la API de conversiones, solo del alta de
+    # quien reparte solo (es lo que compran los anuncios) y con su permiso (`meta_ok`). El event_id es estable
+    # (reg-<id de usuario>) y vuelve en la respuesta (`meta_event_id`) para que la web se lo pase al píxel y Meta no lo
+    # cuente dos veces; None si no se mandó (sin permiso, sin META_* o, desde la app, sin META_APP_EVENTS).
+    meta_event_id = None
+    desde_la_app = _meta_origen(request, bool(data.desde_app)) == "app"
+    if sector_alta == "autonomo":
+        if org["meta_ok"] and _meta_enviar(
+                "CompleteRegistration", f"reg-{user_id}", correo=org.get("email"), id_externo=org_id,
+                action_source="app" if desde_la_app else "website", url=f"{_PORTAL_BASE_FRONT}/registro",
+                ip=ip, agente=_meta_agente(request), version_app=_meta_version_app(request),
+                fbp=org.get("meta_fbp"), fbc=org.get("meta_fbc")) is not None:
+            meta_event_id = f"reg-{user_id}"
+        # Desde la app nativa, darse de alta ya es entrar en ella: «app_login» ahora (la marca del embudo) y no al
+        # renovar la sesión, que dura un mes y no se renueva hasta pasados 5 días.
+        if desde_la_app:
+            await _meta_app_login(org, {"id": user_id, "email": org.get("email")}, request, desde_app=True)
     # Crear índices en la BD recién creada del DSP
     try:
         await _ensure_tenant_indexes(org["db_name"])
@@ -5153,7 +5196,7 @@ async def register_dsp(data: RegisterRequest, request: Request):
                          horas=SESION_APP_HORAS if _org_de_autonomo(org) else None)
     return TokenResponse(access_token=token, role="admin", name=org_name, id=user_id,
                          account_type="dsp", hidden_modules=org_hidden_modules(org), slug=slug,
-                         centers=org.get("centers"))
+                         centers=org.get("centers"), meta_event_id=meta_event_id)
 
 
 def _org_billing(org):
@@ -6656,15 +6699,11 @@ async def capture_lead(data: dict = Body(...), request: Request = None):
     # el 15-08-2026 -los dos preguntando por un puesto de trabajo- y el aviso no
     # salio de la base de datos. Un buzon que nadie abre es peor que no tenerlo:
     # promete algo que no se cumple.
+    # SIN DATOS DE NADIE (03-11-2026): el aviso va por Telegram, que no es un encargado nuestro con contrato ni está en
+    # el DPF. Dice solo que hay un mensaje; quién escribe y qué dice se leen en la Bandeja del panel (inbox_messages,
+    # guardado arriba como siempre). Antes llevaba el nombre, el correo, la empresa y el mensaje.
     try:
-        lineas = [
-            f"Nuevo mensaje en {_DOMINIO_FRONT}",
-            f"De: {name or '(sin nombre)'} <{email}>",
-            f"Empresa: {company or '-'}",
-            "",
-            (plan or "(sin mensaje)")[:600],
-        ]
-        await _telegram_aviso(chr(10).join(lineas))
+        await _telegram_aviso(f"📩 Nuevo mensaje en {_DOMINIO_FRONT}: léelo en la Bandeja del panel.")
     except Exception as e:
         # Que falle el aviso no puede tumbar la recogida del mensaje: lo
         # importante es no perderlo. Pero se deja en el log para poder verlo.
@@ -7063,15 +7102,15 @@ async def admin_login(data: LoginRequest, request: Request):
 
     user = await _admin_por_usuario(data.username, {"_id": 0})
     if not user or user.get("disabled") or not verify_password(data.password, user["hashed_password"]):
-        await _rl_fail(rl_user, f"admin '{data.username}' (IP {_rl_key_ip(request)})")
-        await _rl_fail(rl_ip, f"admin '{data.username}' (IP {_rl_key_ip(request)})")
+        await _rl_fail(rl_user, f"admin '{data.username}' (IP {_rl_key_ip(request)})", "una cuenta de administrador")
+        await _rl_fail(rl_ip, f"admin '{data.username}' (IP {_rl_key_ip(request)})", "una cuenta de administrador")
         await asyncio.sleep(0.8)  # frena ataques automatizados
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
 
     _rl_ok(rl_user)
     _rl_ok(rl_ip)
     logger.info(f"Admin login: {data.username} (org={user.get('org_id')})")
-    return await _sesion_de_admin(user)
+    return await _sesion_de_admin(user, request)
 
 
 @auth_router.post("/app-login")
@@ -7094,13 +7133,13 @@ async def app_login(data: AppLoginRequest, request: Request):
         _rl_check(rl_user)
         _rl_check(rl_ip)
         if admin.get("disabled") or not verify_password(data.password, admin.get("hashed_password") or ""):
-            await _rl_fail(rl_user, f"app login '{identifier}' (IP {_rl_key_ip(request)})")
-            await _rl_fail(rl_ip, f"app login '{identifier}' (IP {_rl_key_ip(request)})")
+            await _rl_fail(rl_user, f"app login '{identifier}' (IP {_rl_key_ip(request)})", "la app")
+            await _rl_fail(rl_ip, f"app login '{identifier}' (IP {_rl_key_ip(request)})", "la app")
             await asyncio.sleep(0.8)
             raise HTTPException(status_code=401, detail="Correo/usuario o contraseña incorrectos")
         _rl_ok(rl_user)
         _rl_ok(rl_ip)
-        sesion = await _sesion_de_admin(admin)
+        sesion = await _sesion_de_admin(admin, request)
         org = await get_org(admin.get("org_id"))
         salida = sesion.model_dump()
         salida["app_destino"] = "reparto" if _org_de_autonomo(org) else "empresa"
@@ -7120,6 +7159,166 @@ async def app_login(data: AppLoginRequest, request: Request):
     return salida
 
 
+# ── MEDICIÓN DE ANUNCIOS: LA API DE CONVERSIONES DE META (02-11-2026) ───────
+# El píxel de la web mide registros y nada más: no ve si esa persona llegó a entrar en la app ni a repartir, y
+# así Meta aprende a traer registros baratos que no reparten (23-10: 32 registros, 0 rutas). El servidor le manda
+# tres eventos (backend/meta_capi.py): «CompleteRegistration» al alta de quien reparte solo (el mismo event_id que
+# el píxel, que vuelve en la respuesta como `meta_event_id`, para que no cuente dos veces), «app_login» la primera
+# vez que entra y «primera_ruta» (25 €) la primera vez que cierra un día con una entrega real. Una vez por cuenta
+# (marcas meta_app_login_en / meta_primera_ruta_en en su organización, que valen también como embudo aunque Meta no
+# esté configurado: GET /admin/primer-dia), siempre en segundo plano y sin romper nada; sin META_PIXEL_ID y
+# META_CAPI_TOKEN no se manda nada.
+# Revisión del 02-11-2026: a Meta solo va lo de quien aceptó los píxeles al darse de alta en la web (`meta_ok`; la
+# app nativa no lo pide) y de cuentas de 30 días o menos (al desplegar, las viejas no son «primeras rutas» de los
+# anuncios de hoy); nada con origen «app» sin META_APP_EVENTS=1, que se pone cuando la ficha de «Seguridad de los
+# datos» de Play declare que el correo se comparte con fines publicitarios y el dataset esté enlazado a la app.
+_META_PRIMERA_RUTA_EUR = 25
+_META_DIAS_CUENTA = 30
+# Las tareas de envío en marcha: el bucle de asyncio solo guarda referencias débiles, y una tarea que no guarda
+# nadie la puede recoger el recolector a medias (un evento perdido sin que nadie se entere).
+_META_TAREAS: set = set()
+
+
+def _meta_cabecera_app(request) -> str:
+    try:
+        return (request.headers.get("x-fds-app") or request.headers.get("X-FDS-App") or "").strip() if request is not None else ""
+    except Exception:                                            # noqa: BLE001
+        return ""
+
+
+def _meta_origen(request, desde_app: bool = False) -> str:
+    """«app» si la llamada viene de la app nativa (cabecera X-FDS-App) o el alta lo dice; si no, «website»."""
+    return "app" if (desde_app or _meta_cabecera_app(request)) else "website"
+
+
+def _meta_version_app(request) -> str:
+    """«2.4.3» de la cabecera `X-FDS-App: android-2.4.3`; "" si no la hay."""
+    cab = _meta_cabecera_app(request)
+    return cab.split("-", 1)[1] if "-" in cab else ""
+
+
+def _meta_agente(request) -> str:
+    try:
+        return str(request.headers.get("user-agent") or "")[:300] if request is not None else ""
+    except Exception:                                            # noqa: BLE001
+        return ""
+
+
+def _meta_ip(request) -> str:
+    try:
+        return _rl_key_ip(request) if request is not None else ""
+    except Exception:                                            # noqa: BLE001
+        return ""
+
+
+def _meta_cookie(valor) -> bool:
+    """¿Tiene pinta de cookie _fbp/_fbc del píxel? «fb.…» y 200 caracteres como mucho; lo demás no se guarda."""
+    return isinstance(valor, str) and valor.startswith("fb.") and len(valor) <= 200
+
+
+def _meta_reciente(org: Optional[dict]) -> bool:
+    """La cuenta se creó hace 30 días o menos: solo esas se le cuentan a Meta."""
+    creada = _fecha_utc((org or {}).get("created_at"))
+    return bool(creada) and datetime.now(timezone.utc) - creada <= timedelta(days=_META_DIAS_CUENTA)
+
+
+def _meta_enviar(nombre: str, event_id: str, **datos):
+    """Manda un evento a Meta en segundo plano: ni espera ni puede romper la petición. Devuelve la tarea, o None si
+    no se manda: sin META_* o, con origen «app», sin META_APP_EVENTS=1 (ver arriba)."""
+    if not meta_capi.configurado():
+        return None
+    if datos.get("action_source") == "app" and (os.environ.get("META_APP_EVENTS") or "").strip() != "1":
+        return None
+    try:
+        t = asyncio.create_task(meta_capi.enviar_evento(nombre, event_id, **datos))
+    except RuntimeError:                                         # sin bucle corriendo (no pasa en el servidor)
+        return None
+    _META_TAREAS.add(t)
+    t.add_done_callback(_META_TAREAS.discard)
+    return t
+
+
+async def _meta_app_login(org: Optional[dict], user: dict, request=None, desde_app: bool = False) -> bool:
+    """«app_login» la PRIMERA vez que entra quien reparte solo: al abrir la ruta del día (web o app), al darse de alta
+    desde la app (`desde_app`) o al entrar (login de la web, acceso de Android, pase del correo o renovación). Una vez
+    por cuenta. La marca se pone siempre, vaya o no algo a Meta (sin permiso, cuenta de hace más de 30 días o sin
+    META_*): es el «entró» del embudo."""
+    try:
+        if not org or org.get("demo") or not _org_de_autonomo(org) or user.get("demo") or user.get("imp"):
+            return False
+        ahora = datetime.now(timezone.utc).isoformat()
+        r = await global_db.organizations.update_one(
+            {"id": org["id"], "meta_app_login_en": {"$exists": False}}, {"$set": {"meta_app_login_en": ahora}})
+        if not getattr(r, "modified_count", 0):
+            return False
+        if not org.get("meta_ok") or not _meta_reciente(org):
+            return True
+        _meta_enviar("app_login", f"login-{org['id']}", correo=org.get("email") or user.get("email"), id_externo=org["id"],
+                     action_source=_meta_origen(request, desde_app), url=f"{_PORTAL_BASE_FRONT}/ruta",
+                     ip=_meta_ip(request), agente=_meta_agente(request), version_app=_meta_version_app(request),
+                     fbp=org.get("meta_fbp"), fbc=org.get("meta_fbc"))
+        return True
+    except Exception as e:                                       # noqa: BLE001
+        logger.debug("meta app_login: %s", e)
+        return False
+
+
+async def _meta_primera_ruta(org: Optional[dict], conductor_id: str, fecha: Optional[str] = None, request=None) -> bool:
+    """«primera_ruta» (valor 25 €) la primera vez que quien reparte solo cierra un día con al menos una entrega de
+    verdad (las de ejemplo no); con `fecha`, solo cuentan las de ese día. Una vez por cuenta. Es el único evento
+    que mide repartidores y no registros: por él se juzga cada anuncio. La marca se pone siempre; a Meta solo va
+    con permiso y de cuentas de 30 días o menos (02-11-2026)."""
+    try:
+        if (not org or org.get("demo") or not _org_de_autonomo(org) or org.get("meta_primera_ruta_en")
+                or not conductor_id):
+            return False
+        q = {"conductor_id": conductor_id, "estado": "entregado", "ejemplo": {"$ne": True}}
+        if fecha:
+            q["fecha"] = fecha
+        if not await db.reparto_pedidos.find_one(q, {"_id": 0, "id": 1}):
+            return False
+        ahora = datetime.now(timezone.utc).isoformat()
+        r = await global_db.organizations.update_one(
+            {"id": org["id"], "meta_primera_ruta_en": {"$exists": False}}, {"$set": {"meta_primera_ruta_en": ahora}})
+        if not getattr(r, "modified_count", 0):
+            return False
+        if not org.get("meta_ok") or not _meta_reciente(org):
+            return True
+        _meta_enviar("primera_ruta", f"ruta-{org['id']}", correo=org.get("email"), id_externo=org["id"],
+                     valor=_META_PRIMERA_RUTA_EUR, moneda="EUR", action_source=_meta_origen(request),
+                     url=f"{_PORTAL_BASE_FRONT}/ruta", ip=_meta_ip(request), agente=_meta_agente(request),
+                     version_app=_meta_version_app(request), fbp=org.get("meta_fbp"), fbc=org.get("meta_fbc"))
+        return True
+    except Exception as e:                                       # noqa: BLE001
+        logger.debug("meta primera_ruta: %s", e)
+        return False
+
+
+# RETIRAR EL PERMISO DE LOS ANUNCIOS (02-11-2026, revisión S2). `meta_ok` solo se escribía al darse de alta: quien luego
+# elegía «Solo necesarias» en el aviso de cookies (o lo cambiaba) seguía mandando a Meta, desde el servidor, su primera
+# entrada y su primera ruta. La web llama aquí, con la sesión abierta, cada vez que se elige en el aviso.
+@api_router.post("/cuenta/anuncios")
+async def cuenta_anuncios(data: dict = Body(...), user: dict = Depends(require_any_auth)):
+    """El permiso para medir los anuncios (Meta) de la cuenta de la sesión: la de quien reparte por su cuenta o la de
+    cualquier usuario de esa organización. `anuncios`: true lo da; cualquier otra cosa lo quita (lo seguro con un
+    permiso), y al quitarlo se borran también sus cookies del píxel (meta_fbp, meta_fbc), que sin permiso no sirven
+    para nada. Se apunta cuándo (meta_ok_en): hay que poder demostrar el permiso. Devuelve {ok, anuncios}."""
+    data = _dict_cuerpo(data)
+    if user.get("demo") or user.get("imp"):
+        raise HTTPException(403, "El permiso de los anuncios solo lo cambia la propia cuenta")
+    org_id = str(user.get("org_id") or "")
+    if not org_id:
+        raise HTTPException(400, "Esta sesión no es de ninguna cuenta")
+    _rl_public_action(f"cuenta-anuncios:{user.get('sub')}", max_count=30, window_s=60,
+                      detail="Demasiados cambios seguidos: espera un minuto")
+    anuncios = data.get("anuncios") is True
+    cambio = {"$set": {"meta_ok": anuncios, "meta_ok_en": datetime.now(timezone.utc).isoformat()}}
+    if not anuncios:
+        cambio["$unset"] = {"meta_fbp": "", "meta_fbc": ""}
+    await global_db.organizations.update_one({"id": org_id}, cambio)
+    return {"ok": True, "anuncios": anuncios}
+
+
 SESION_APP_HORAS = 24 * 30
 
 
@@ -7128,9 +7327,13 @@ def _org_de_autonomo(org: Optional[dict]) -> bool:
     return bool(org) and ((org.get("plan") or "").lower() == "autonomo" or (org.get("sector") or "").lower() == "autonomo")
 
 
-async def _sesion_de_admin(user: dict) -> TokenResponse:
-    """La sesión de un admin ya comprobado: la usan el login y el paso al móvil."""
+async def _sesion_de_admin(user: dict, request: Optional[Request] = None) -> TokenResponse:
+    """La sesión de un admin ya comprobado: la usan el login, el acceso de Android, el pase del correo y la
+    renovación. `request` (02-11-2026): para saber si entra desde la app nativa (Meta)."""
     org = await get_org(user.get("org_id"))
+    # «app_login» a Meta la primera vez que entra quien reparte solo (02-11-2026): ni espera ni rompe el login.
+    if _org_de_autonomo(org) and not user.get("super_admin"):
+        await _meta_app_login(org, user, request)
     db_name = _tenant_db_name(org)
     account_type = (org or {}).get("account_type", "owner")
     app_destino = "reparto" if _org_de_autonomo(org) else "empresa"
@@ -7191,7 +7394,7 @@ async def renovar_sesion(user: dict = Depends(get_current_user), request: Reques
         raise HTTPException(401, "Tu sesión ha caducado: entra otra vez")
     if not _org_de_autonomo(await get_org(adm.get("org_id"))):
         raise HTTPException(403, "Esta sesión no se renueva: entra otra vez con tu correo")
-    return await _sesion_de_admin(adm)
+    return await _sesion_de_admin(adm, request)
 
 
 @auth_router.post("/borrar-cuenta")
@@ -8198,8 +8401,8 @@ async def driver_login(data: DriverLoginRequest, request: Request):
     if not valid_accounts:
         valid_accounts, ya_tiene_la_suya = await _entrar_con_la_inicial(correo, data.password, candidates)
     if len(valid_accounts) != 1:
-        await _rl_fail(rl_key, f"conductor '{data.email}' (IP {_rl_key_ip(request)})")
-        await _rl_fail(rl_ip, f"conductor '{data.email}' (IP {_rl_key_ip(request)})")
+        await _rl_fail(rl_key, f"conductor '{data.email}' (IP {_rl_key_ip(request)})", "un conductor")
+        await _rl_fail(rl_ip, f"conductor '{data.email}' (IP {_rl_key_ip(request)})", "un conductor")
         await asyncio.sleep(0.8)
         if ya_tiene_la_suya:
             raise HTTPException(status_code=401, detail=_MSG_INICIAL_YA_CAMBIADA)
@@ -8441,10 +8644,10 @@ async def canjear_pase_movil(data: dict, request: Request):
             {"huella": huella, "usado": False}, {"$set": {"usado": True}})).modified_count == 1
     user = await global_db.admin_users.find_one({"id": doc["admin_id"]}, {"_id": 0}) if valido else None
     if not user or user.get("disabled"):
-        await _rl_fail(rl_ip, f"pase al móvil no válido (IP {_rl_key_ip(request)})")
+        await _rl_fail(rl_ip, f"pase al móvil no válido (IP {_rl_key_ip(request)})", "el pase al móvil")
         raise HTTPException(status_code=401, detail="El enlace ha caducado. Entra con tu correo y tu contraseña.")
     _rl_ok(rl_ip)
-    return await _sesion_de_admin(user)
+    return await _sesion_de_admin(user, request)
 
 
 def _is_center_manager(user: dict) -> bool:
@@ -15923,7 +16126,9 @@ async def _telegram_aviso(texto: str) -> bool:
     except Exception as e:
         logger.warning(f"Telegram aviso (config): {e}")
         return False
-    if config:
+    # Solo la de la base por defecto (03-11-2026): es la que usa el vigilante para «la base no contesta». Con la de la
+    # empresa de la petición (un aviso de su panel), ese aviso nuestro acababa en el grupo de Telegram de esa empresa.
+    if config and _current_db_name.get() == _DEFAULT_DB_NAME:
         _TG_CACHE.clear()
         _TG_CACHE.update(config)
     return await _telegram_enviar(config, texto)
@@ -16088,7 +16293,10 @@ async def enviar_resumen_diario(dia: Optional[str] = None, solo_id: Optional[str
                 if rw.get("ok"):
                     wasap.append(d.get("nombre") or tel)
 
-        salida.append({**{k: r[k] for k in ("center", "fecha", "entrega", "checklist", "golpes")},
+        # «inspecciones» y no «entrega» (06-11-2026): la entrega era de Amazon y se quitó el 25-09, pero esto la
+        # seguía pidiendo: el bucle de las 21:00 moría cada noche con KeyError después del primer centro («Bucle de
+        # aviso resumen_diario: 'entrega'» en el registro del 03-11) y los demás centros se quedaban sin resumen.
+        salida.append({**{k: r[k] for k in ("center", "fecha", "inspecciones", "checklist", "golpes")},
                        "incidencias": r["incidencias"], "danos": r["danos"],
                        "turnos": [{k: t[k] for k in ("turno", "hechas", "total")} for t in r["turnos"]],
                        "destinatarios": [d["nombre"] for d in quienes],
@@ -16288,11 +16496,17 @@ async def revisar_facturacion() -> list:
                              "pagadas": pagadas, "en_flota": en_flota,
                              "diferencia": en_flota - pagadas})
     if desfases:
-        lineas = ["💶 <b>Furgonetas facturadas vs. reales</b>"]
+        # SIN DATOS DE NADIE (03-11-2026): Telegram no es un encargado nuestro, y el nombre de una cuenta puede ser el
+        # de una persona (quien reparte por su cuenta). A Telegram, cuántas; cuáles, en el registro del servidor y en
+        # Negocio («Revisar furgonetas facturadas», que llama a POST /billing/revisar).
         for d in sorted(desfases, key=lambda x: -abs(x["diferencia"])):
-            signo = "+" if d["diferencia"] > 0 else ""
-            lineas.append(f"• {d['dsp']}: paga {d['pagadas']} · tiene {d['en_flota']} "
-                          f"({signo}{d['diferencia']})")
+            logger.warning("Furgonetas facturadas: %s paga %s y tiene %s (%+d)",
+                           d["dsp"], d["pagadas"], d["en_flota"], d["diferencia"])
+        mas = sum(1 for d in desfases if d["diferencia"] > 0)
+        lineas = ["💶 <b>Furgonetas facturadas vs. reales</b>",
+                  f"{len(desfases)} cuenta(s) con desfase: {mas} con más furgonetas de las pagadas y "
+                  f"{len(desfases) - mas} con menos.",
+                  "Cuáles, en Negocio («Revisar furgonetas facturadas») y en el registro del servidor."]
         await _telegram_aviso("\n".join(lineas))
     return desfases
 
@@ -18563,17 +18777,45 @@ def _backend_alerts_on() -> bool:
     return os.environ.get("BACKEND_ERROR_ALERTS", "0").lower() in ("1", "true", "yes")
 
 
-async def _notify_error_once(kind: str, message: str, extra: str = ""):
-    """Log + Telegram con dedupe. kind: 'frontend' | 'backend'."""
+def _aviso_error_navegador(message: str, url: str, stack: str = "") -> str:
+    """Lo que dice Telegram de un error del navegador (03-11-2026): el tipo de error de JavaScript («TypeError», del
+    mensaje o de la pila) y la pantalla (el primer trozo de la ruta: «/panel»). Ni el mensaje (un JSON.parse lleva el
+    principio del texto, que puede ser un nombre), ni la URL entera (con su ?…, que puede llevar un token o un correo),
+    ni la pila, ni el navegador."""
+    tipo = "Un error"
+    patron = r"\s*(?:Uncaught\s+)?(?:\(in promise\)\s+)?([A-Z][A-Za-z]*(?:Error|Exception))\b"
+    for texto in (message, stack):
+        m = re.match(patron, str(texto or ""))
+        if m:
+            tipo = m.group(1)
+            break
+    ruta = str(url or "")
+    if "://" in ruta:
+        ruta = ruta.split("://", 1)[1]
+        ruta = ruta[ruta.find("/"):] if "/" in ruta else "/"
+    ruta = ruta.split("?", 1)[0].split("#", 1)[0]
+    primero = next((t for t in ruta.split("/") if t), "")
+    pantalla = primero if re.fullmatch(r"[a-z][a-z-]{0,30}", primero) else ""
+    return f"{tipo} en /{pantalla}"
+
+
+async def _notify_error_once(kind: str, message: str, extra: str = "", aviso: str = ""):
+    """Log + Telegram con dedupe. kind: 'frontend' | 'backend'.
+
+    SIN DATOS DE NADIE (03-11-2026). Va al bot de la base de la petición (la empresa del token o, sin él, la del dueño):
+    no se puede asegurar de quién es, y Telegram no es un encargado nuestro. A Telegram solo va `aviso` (el tipo de
+    error y dónde, sin identificadores; sin él, «Un error sin controlar») y una referencia; `message` y `extra` (el
+    mensaje, la URL, la pila, el navegador: pueden llevar un correo o un nombre, como un E11000 con el correo repetido)
+    van solo al registro del servidor, con esa misma referencia delante."""
     import hashlib as _hl
-    logger.error(f"[{kind}] {message} {extra}"[:2000])
+    key = _hl.sha256(f"{kind}:{message[:300]}".encode()).hexdigest()
+    logger.error(f"[{kind}] ref {key[:8]} · {message} {extra}"[:2000])
     # Ruido conocido (cualquier origen): queda en el log, no molesta por Telegram.
     if any(p in (message or "").lower() for p in _ERR_NOISE_PATTERNS):
         return
     # Errores de backend: silenciados por defecto (solo log). Reactivables por env.
     if kind == "backend" and not _backend_alerts_on():
         return
-    key = _hl.sha256(f"{kind}:{message[:300]}".encode()).hexdigest()
     now_ts = datetime.now(timezone.utc).timestamp()
     window = _ERR_ALERT_WINDOW_FRONT_S if kind == "frontend" else _ERR_ALERT_WINDOW_S
     if now_ts - _err_alerted.get(key, 0) < window:
@@ -18587,7 +18829,8 @@ async def _notify_error_once(kind: str, message: str, extra: str = ""):
     emoji = "🖥️" if kind == "frontend" else "🔥"
     await send_telegram_alert(
         f"{emoji} Error en {'el panel/portal' if kind == 'frontend' else 'el backend'}",
-        f"{message[:500]}\n{extra[:400]}".strip(),
+        f"{(aviso or 'Un error sin controlar')[:200]}\n"
+        f"Ref. {key[:8]}: el detalle está en el registro del servidor.",
         severity="critico",
     )
 
@@ -18713,7 +18956,8 @@ async def report_client_error(data: dict, request: Request):
     except Exception as e:
         logger.warning("No se pudo guardar el error de cliente: %s", e)
 
-    await _notify_error_once("frontend", message, f"URL: {url}\nStack: {stack[:300]}\nUA: {ua}")
+    await _notify_error_once("frontend", message, f"URL: {url}\nStack: {stack[:300]}\nUA: {ua}",
+                             aviso=_aviso_error_navegador(message, url, stack))
     return {"success": True}
 
 
@@ -18735,8 +18979,11 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     import traceback as _tb
     trace = "".join(_tb.format_exception(type(exc), exc, exc.__traceback__))[-1500:]
     try:
+        # A Telegram, la ruta como se declara («/api/reparto/mis-pedidos/{pid}/editar»), sin los identificadores.
+        plantilla = getattr(request.scope.get("route"), "path", "") or "?"
         await _notify_error_once("backend", f"{type(exc).__name__}: {exc}",
-                                 f"{request.method} {request.url.path}\n{trace[-600:]}")
+                                 f"{request.method} {request.url.path}\n{trace[-600:]}",
+                                 aviso=f"{type(exc).__name__} en {request.method} {plantilla}")
     except Exception:
         logger.error(f"Error notificando excepción: {exc}")
     # Con la cabecera CORS: este 500 sale por fuera del middleware de CORS y,
@@ -23051,7 +23298,324 @@ async def _bucle_campana_bono25():
         except Exception as e:                                   # noqa: BLE001
             logger.error("Campaña bono25: %s", e)
             await _latido("campana_bono25", error=str(e)[:200], cada_min=15)
+        # El primer día de quien se acaba de registrar (02-11-2026): al mismo ritmo y aparte, para que un fallo de
+        # uno no pare al otro; el aviso al móvil no necesita proveedor de correo.
+        try:
+            hecho = await _primer_dia_vuelta()
+            if hecho["avisos"] or hecho["correos"]:
+                logger.info("primer día: %s avisos, %s correos", hecho["avisos"], hecho["correos"])
+            await _latido("primer_dia", cada_min=15, error=None, **hecho)
+        except Exception as e:                                   # noqa: BLE001
+            logger.error("Primer día: %s", e)
+            await _latido("primer_dia", error=str(e)[:200], cada_min=15)
         await asyncio.sleep(15 * 60)
+
+
+# ── EL PRIMER DÍA DE QUIEN SE ACABA DE REGISTRAR (02-11-2026) ────────────────
+# Dani: «consigue que todo el mundo utilice la app y complete su primer día». Medido el 23-10: 32 registros, 0 días
+# de reparto. A quien reparte solo, se registró hace menos de 48 h y no tiene ninguna parada suya (las de ejemplo no):
+#   (a) de 30 a 90 min tras el alta, un aviso al móvil (bandeja + web push + FCM): escanea tu primer paquete.
+#   (b) de 20 a 40 h tras el alta, de 9 a 21 de su hora, un correo corto en su idioma: gratis hasta el 31-12 y 25 € por
+#       la primera ruta de verdad, con el enlace a /ruta (con pase: entra sin contraseña) y su enlace de invitación.
+#       Hasta las 40 h (02-11-2026): con 28, quien se daba de alta de 1 a 5 de la madrugada no tenía ninguna hora de
+#       día en la ventana y no lo recibía nunca; 20 h de ventana siempre pisan la franja de 9 a 21.
+# Cada uno UNA vez (marcas primer_dia_aviso_en / primer_dia_correo_en en la organización, puestas ANTES de mandar y
+# quitadas si el correo no salió); nada para empresas, demos ni cuentas canceladas. Pasa cada 15 min, en el bucle
+# de la campaña del bono. Ojo: el ciclo de correos tiene su «primer_dia» (de 7 a 9 de su mañana, de 8 a 72 h):
+# este correo es otro, el de la oferta, y no espera 18 h de aquel.
+PRIMER_DIA_AVISO = (timedelta(minutes=30), timedelta(minutes=90))
+PRIMER_DIA_CORREO = (timedelta(hours=20), timedelta(hours=40))
+PRIMER_DIA_VENTANA = timedelta(hours=48)
+_PRIMER_DIA_AVISO_TEXTOS = {
+    "es": ("Tu primera ruta con {marca}", "Escanea tu primer paquete y {marca} te ordena la ruta sola."),
+    "pt": ("A tua primeira rota com {marca}", "Digitaliza o teu primeiro volume e o {marca} ordena a rota sozinho."),
+    "br": ("Sua primeira rota com {marca}", "Escaneie seu primeiro pacote e o {marca} organiza a rota sozinho."),
+    "en": ("Your first route with {marca}", "Scan your first parcel and {marca} sorts the route for you."),
+    "fr": ("Votre première tournée avec {marca}", "Scannez votre premier colis et {marca} ordonne la tournée tout seul."),
+    "it": ("Il tuo primo giro con {marca}", "Scansiona il tuo primo pacco e {marca} ordina il giro da solo."),
+    "de": ("Deine erste Tour mit {marca}", "Scanne dein erstes Paket und {marca} ordnet die Tour von selbst."),
+}
+# El correo: asunto base + lo que haya («gratis hasta el …», «25 € por …»); el cuerpo con sus frases opcionales.
+_PRIMER_DIA_CORREO_TEXTOS = {
+    "es": {
+        "asunto": "Tu primera ruta con {marca}", "promo": "gratis hasta el {promo}",
+        "bono": "{bono} por tu primera ruta de verdad", "y": " y ",
+        "cuerpo": ("Hola {nombre}:\n\n"
+                   "Ayer creaste tu cuenta en {marca} y todavía no has cargado ninguna parada. Hoy es buen día para "
+                   "la primera:\n\n"
+                   "1. Abre {ruta}\n"
+                   "2. Foto a la etiqueta de cada paquete (o pega tu lista de paradas).\n"
+                   "3. «Montar ruta y empezar»: la app te ordena la ruta y te guía con voz hasta cada puerta.\n\n"
+                   "{promo_frase}{bono_frase}{invita_frase}{ayuda_corta}"),
+        "promo_frase": "Es gratis y sin límite hasta el {promo}; no hace falta tarjeta.\n\n",
+        "bono_frase": "Tu primera ruta de verdad ({objetivo} entregas en {dias} días) te da {bono} en tu cartera.\n\n",
+        "invita_frase": ("¿Conoces a otro repartidor? Pásale tu enlace: cuando haga su primera ruta de verdad, "
+                         "tú ganas {ref}:\n{invita}\n\n"),
+        "boton": "Cargar mi primera ruta",
+    },
+    "pt": {
+        "asunto": "A tua primeira rota com {marca}", "promo": "grátis até {promo}",
+        "bono": "{bono} pela tua primeira rota a sério", "y": " e ",
+        "cuerpo": ("Olá {nombre}:\n\n"
+                   "Ontem criaste a tua conta no {marca} e ainda não carregaste nenhuma paragem. Hoje é um bom dia "
+                   "para a primeira:\n\n"
+                   "1. Abre {ruta}\n"
+                   "2. Uma foto à etiqueta de cada volume (ou cola a tua lista de paragens).\n"
+                   "3. «Montar rota e começar»: a app ordena a rota e guia-te por voz até cada porta.\n\n"
+                   "{promo_frase}{bono_frase}{invita_frase}{ayuda_corta}"),
+        "promo_frase": "É grátis e sem limite até {promo}; não é preciso cartão.\n\n",
+        "bono_frase": "A tua primeira rota a sério ({objetivo} entregas em {dias} dias) dá-te {bono} na tua carteira.\n\n",
+        "invita_frase": ("Conheces outro estafeta? Passa-lhe o teu link: quando fizer a primeira rota a sério, "
+                         "ganhas {ref}:\n{invita}\n\n"),
+        "boton": "Carregar a minha primeira rota",
+    },
+    "br": {
+        "asunto": "Sua primeira rota com {marca}", "promo": "grátis até {promo}",
+        "bono": "{bono} pela sua primeira rota de verdade", "y": " e ",
+        "cuerpo": ("Olá {nombre}:\n\n"
+                   "Ontem você criou sua conta no {marca} e ainda não carregou nenhuma parada. Hoje é um bom dia "
+                   "para a primeira:\n\n"
+                   "1. Abra {ruta}\n"
+                   "2. Uma foto da etiqueta de cada pacote (ou cole sua lista de paradas).\n"
+                   "3. «Montar rota e começar»: o app organiza a rota e guia você por voz até cada porta.\n\n"
+                   "{promo_frase}{bono_frase}{invita_frase}{ayuda_corta}"),
+        "promo_frase": "É grátis e sem limite até {promo}; não precisa de cartão.\n\n",
+        "bono_frase": "Sua primeira rota de verdade ({objetivo} entregas em {dias} dias) dá {bono} na sua carteira.\n\n",
+        "invita_frase": ("Conhece outro entregador? Passe seu link: quando ele fizer a primeira rota de verdade, "
+                         "você ganha {ref}:\n{invita}\n\n"),
+        "boton": "Carregar minha primeira rota",
+    },
+    "en": {
+        "asunto": "Your first route with {marca}", "promo": "free until {promo}",
+        "bono": "{bono} for your first real route", "y": " and ",
+        "cuerpo": ("Hi {nombre},\n\n"
+                   "You created your {marca} account yesterday and haven't loaded a single stop yet. Today is a good "
+                   "day for the first one:\n\n"
+                   "1. Open {ruta}\n"
+                   "2. Snap each parcel label (or paste your list of stops).\n"
+                   "3. \"Build route and go\": the app sorts your route and guides you by voice to every door.\n\n"
+                   "{promo_frase}{bono_frase}{invita_frase}{ayuda_corta}"),
+        "promo_frase": "It's free with no limit until {promo}; no card needed.\n\n",
+        "bono_frase": "Your first real route ({objetivo} deliveries in {dias} days) earns you {bono} in your wallet.\n\n",
+        "invita_frase": ("Know another courier? Share your link: when they do their first real route, "
+                         "you earn {ref}:\n{invita}\n\n"),
+        "boton": "Load my first route",
+    },
+    "fr": {
+        "asunto": "Votre première tournée avec {marca}", "promo": "gratuit jusqu'au {promo}",
+        "bono": "{bono} pour votre première vraie tournée", "y": " et ",
+        "cuerpo": ("Bonjour {nombre},\n\n"
+                   "Vous avez créé votre compte {marca} hier et vous n'avez encore chargé aucun arrêt. Aujourd'hui "
+                   "est un bon jour pour le premier :\n\n"
+                   "1. Ouvrez {ruta}\n"
+                   "2. Une photo de l'étiquette de chaque colis (ou collez votre liste d'arrêts).\n"
+                   "3. « Monter la tournée et partir » : l'appli ordonne la tournée et vous guide à la voix jusqu'à "
+                   "chaque porte.\n\n"
+                   "{promo_frase}{bono_frase}{invita_frase}{ayuda_corta}"),
+        "promo_frase": "C'est gratuit et sans limite jusqu'au {promo} ; aucune carte nécessaire.\n\n",
+        "bono_frase": ("Votre première vraie tournée ({objetivo} livraisons en {dias} jours) vous rapporte {bono} "
+                       "dans votre cagnotte.\n\n"),
+        "invita_frase": ("Vous connaissez un autre livreur ? Passez-lui votre lien : quand il fera sa première vraie "
+                         "tournée, vous gagnez {ref} :\n{invita}\n\n"),
+        "boton": "Charger ma première tournée",
+    },
+    "it": {
+        "asunto": "Il tuo primo giro con {marca}", "promo": "gratis fino al {promo}",
+        "bono": "{bono} per il tuo primo giro vero", "y": " e ",
+        "cuerpo": ("Ciao {nombre},\n\n"
+                   "Ieri hai creato il tuo account {marca} e non hai ancora caricato nessuna fermata. Oggi è un buon "
+                   "giorno per la prima:\n\n"
+                   "1. Apri {ruta}\n"
+                   "2. Una foto all'etichetta di ogni pacco (o incolla la tua lista di fermate).\n"
+                   "3. «Monta il giro e parti»: l'app ordina il giro e ti guida con la voce fino a ogni porta.\n\n"
+                   "{promo_frase}{bono_frase}{invita_frase}{ayuda_corta}"),
+        "promo_frase": "È gratis e senza limiti fino al {promo}; non serve la carta.\n\n",
+        "bono_frase": "Il tuo primo giro vero ({objetivo} consegne in {dias} giorni) ti dà {bono} nel tuo portafoglio.\n\n",
+        "invita_frase": ("Conosci un altro corriere? Passagli il tuo link: quando farà il suo primo giro vero, "
+                         "tu guadagni {ref}:\n{invita}\n\n"),
+        "boton": "Carica il mio primo giro",
+    },
+    "de": {
+        "asunto": "Deine erste Tour mit {marca}", "promo": "kostenlos bis zum {promo}",
+        "bono": "{bono} für deine erste echte Tour", "y": " und ",
+        "cuerpo": ("Hallo {nombre},\n\n"
+                   "Gestern hast du dein {marca}-Konto erstellt und noch keinen Stopp geladen. Heute ist ein guter "
+                   "Tag für den ersten:\n\n"
+                   "1. Öffne {ruta}\n"
+                   "2. Ein Foto vom Etikett jedes Pakets (oder füge deine Stoppliste ein).\n"
+                   "3. „Tour erstellen und los“: Die App ordnet die Tour und führt dich per Sprache bis an jede Tür.\n\n"
+                   "{promo_frase}{bono_frase}{invita_frase}{ayuda_corta}"),
+        "promo_frase": "Kostenlos und ohne Limit bis zum {promo}; keine Karte nötig.\n\n",
+        "bono_frase": "Deine erste echte Tour ({objetivo} Zustellungen in {dias} Tagen) bringt dir {bono} in deine Geldbörse.\n\n",
+        "invita_frase": ("Kennst du einen anderen Kurier? Gib ihm deinen Link: Wenn er seine erste echte Tour fährt, "
+                         "bekommst du {ref}:\n{invita}\n\n"),
+        "boton": "Meine erste Tour laden",
+    },
+}
+
+
+async def _primer_dia_aviso(org: dict, ahora: datetime) -> bool:
+    """(a) El aviso al móvil, a la(s) persona(s) de esa cuenta y por todos los caminos. Se marca ANTES de mandar."""
+    try:
+        marca = "primer_dia_aviso_en"
+        r = await global_db.organizations.update_one(
+            {"id": org["id"], marca: {"$exists": False}}, {"$set": {marca: ahora.isoformat()}})
+        if not getattr(r, "modified_count", 0):
+            return False
+        usuarios = [u["id"] for u in await global_db.admin_users.find(
+            {"org_id": org["id"], "disabled": {"$ne": True}}, {"_id": 0, "id": 1}).to_list(20) if u.get("id")]
+        if not usuarios:
+            return False
+        idioma = ciclo_correos.idioma_de(org)
+        titulo, cuerpo = _PRIMER_DIA_AVISO_TEXTOS.get(idioma) or _PRIMER_DIA_AVISO_TEXTOS["es"]
+        marca_app = _email_remitente()[0]
+        n = await _avisar_usuarios(usuarios, titulo.format(marca=marca_app), cuerpo.format(marca=marca_app),
+                                   url="/ruta?utm_source=push&utm_content=primer_dia",
+                                   coleccion=client[_tenant_db_name(org)].avisos_movil)
+        return n > 0
+    except Exception as e:                                       # noqa: BLE001
+        logger.warning("primer día, aviso (%s): %s", org.get("id"), e)
+        return False
+
+
+async def _primer_dia_correo(org: dict, ahora: datetime) -> bool:
+    """(b) El correo de la oferta. Se marca ANTES de mandar y se desmarca si no salió (se reintenta en la tanda
+    siguiente mientras siga en su ventana). La misma persona con dos cuentas (pasó el 05-10) recibe uno."""
+    marcada = enviado = False
+    try:
+        if not org.get("email") or org.get("correos_baja"):
+            return False
+        if await global_db[_CORREOS_COL].find_one(
+                {"para": org["email"], "por": "primer_dia:correo", "ok": True, "org_id": {"$ne": org["id"]}},
+                {"_id": 0, "id": 1}):
+            return False
+        marca = "primer_dia_correo_en"
+        r = await global_db.organizations.update_one(
+            {"id": org["id"], marca: {"$exists": False}}, {"$set": {marca: ahora.isoformat()}})
+        if not getattr(r, "modified_count", 0):
+            return False
+        marcada = True
+        idioma = ciclo_correos.idioma_de(org)
+        t = _PRIMER_DIA_CORREO_TEXTOS.get(idioma) or _PRIMER_DIA_CORREO_TEXTOS["es"]
+        tc = ciclo_correos._T.get(idioma) or ciclo_correos._T["es"]
+        marca_correo = _email_remitente()[0]          # la marca que ve el repartidor («FDS <contacto@…>»)
+        utm = "utm_source=correo&utm_medium=email&utm_campaign=primer_dia"
+        pase = await _pase_de_correo(org)             # entra sin contraseña (el correo se abre en otro navegador)
+        ruta = f"{_PORTAL_BASE_FRONT}/pase?ir=ruta&{utm}#p={pase}" if pase else f"{_PORTAL_BASE_FRONT}/ruta?{utm}"
+        invita = ""
+        if _ref_disponible(org):
+            codigo = await _mi_codigo_ref(org)
+            invita = f"{_PORTAL_BASE_FRONT}/invita?ref={codigo}&utm_source=referido&utm_medium=correo&utm_campaign=primer_dia"
+        promo = ciclo_correos._dia_mes(REP_GRATIS_HASTA, idioma) if _rep_promo_activa() else ""
+        b = _bono_resumen(org, ahora)
+        bono = ciclo_correos._euros(b["cent"] / 100, idioma) if b and not b["pagado"] else ""
+        partes = [p for p in (t["promo"].format(promo=promo) if promo else "",
+                              t["bono"].format(bono=bono) if bono else "") if p]
+        asunto = t["asunto"].format(marca=marca_correo) + (": " + t["y"].join(partes) if partes else "")
+        responder = await _ciclo_responder_a()
+        nombre = (str(org.get("name") or "").strip().split(" ")[0] or "").strip()[:40]
+        cuerpo = t["cuerpo"].format(
+            nombre=nombre, marca=marca_correo, ruta=ruta,
+            promo_frase=t["promo_frase"].format(promo=promo) if promo else "",
+            bono_frase=t["bono_frase"].format(bono=bono, objetivo=b["objetivo"], dias=b["dias_objetivo"]) if bono else "",
+            invita_frase=(t["invita_frase"].format(invita=invita, ref=ciclo_correos._euros(_ref_importe(org) / 100, idioma))
+                          if invita else ""),
+            ayuda_corta=tc["ayuda_corta"] if responder else tc["ayuda_corta_sin"])
+        if idioma == "es" and str(org.get("pais") or "").lower() in ciclo_correos._LATAM:
+            asunto, cuerpo = ciclo_correos._a_latam(asunto), ciclo_correos._a_latam(cuerpo)
+        if not nombre:
+            cuerpo = cuerpo.replace(" :\n", ":\n").replace(" ,\n", ",\n")
+        baja = _baja_url(org["id"])
+        firma = tc["firma"].format(marca=marca_correo)
+        pie = tc["baja"].format(baja=baja)
+        texto = f"{cuerpo}\n\n{firma}\n\n--\n{pie}"
+        html = ciclo_correos._html_de(cuerpo, firma, t["boton"], ruta, pie)
+        ok = await _enviar_email(
+            org["email"], asunto, html, responder_a=responder, texto=texto,
+            cabeceras={"List-Unsubscribe": f"<{baja}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"})
+        enviado = bool(ok)
+        await global_db[_CORREOS_COL].insert_one({
+            "id": str(uuid.uuid4()), "para": org["email"], "copia": [], "asunto": asunto,
+            # La copia no guarda el pase: quien lea los correos enviados no puede entrar en la cuenta.
+            "cuerpo": texto.replace(pase, "…") if pase else texto, "responder_a": responder,
+            "por": "primer_dia:correo", "org_id": org["id"], "at": ahora.isoformat(), "ok": bool(ok)})
+        if not ok:
+            await global_db.organizations.update_one({"id": org["id"]}, {"$unset": {marca: ""}})
+        return bool(ok)
+    except Exception as e:                                       # noqa: BLE001
+        logger.error("primer día, correo (%s): %s", org.get("id"), e)
+        # Algo falló entre la marca y el envío (el pase, el código de invitación, Mongo…) (02-11-2026): con la marca
+        # puesta no lo recibiría nunca; se quita para reintentarlo. Si el correo ya salió, se queda: no se repite.
+        if marcada and not enviado:
+            try:
+                await global_db.organizations.update_one({"id": org["id"]}, {"$unset": {"primer_dia_correo_en": ""}})
+            except Exception as e2:                              # noqa: BLE001
+                logger.warning("primer día, correo (%s): no se pudo desmarcar: %s", org.get("id"), e2)
+        return False
+
+
+async def _primer_dia_vuelta(ahora: Optional[datetime] = None) -> dict:
+    """Una tanda: a quien le toque AHORA, el aviso (a) o el correo (b). {candidatas, avisos, correos}."""
+    ahora = ahora or datetime.now(timezone.utc)
+    desde = (ahora - PRIMER_DIA_VENTANA).isoformat()
+    orgs = await global_db.organizations.find(
+        {"$or": [{"sector": "autonomo"}, {"plan": "autonomo"}], "created_at": {"$gte": desde},
+         "demo": {"$ne": True}, "account_type": {"$ne": "owner"}}, {"_id": 0}).to_list(5000)
+    hecho = {"candidatas": 0, "avisos": 0, "correos": 0}
+    con_correo = bool(_email_proveedores())
+    for org in orgs:
+        try:
+            alta = _fecha_utc(org.get("created_at"))
+            if not alta or str(org.get("status") or "").lower() in ciclo_correos.BONO25_FUERA:
+                continue
+            edad = ahora - alta
+            toca_aviso = PRIMER_DIA_AVISO[0] <= edad <= PRIMER_DIA_AVISO[1] and not org.get("primer_dia_aviso_en")
+            toca_correo = (PRIMER_DIA_CORREO[0] <= edad <= PRIMER_DIA_CORREO[1] and not org.get("primer_dia_correo_en")
+                           and con_correo and bool(org.get("email")) and not org.get("correos_baja")
+                           and ciclo_correos.en_su_dia(org, ahora))
+            if not (toca_aviso or toca_correo):
+                continue
+            hecho["candidatas"] += 1
+            # Con alguna parada suya ya no hay que empujar (las de ejemplo no cuentan).
+            if await client[_tenant_db_name(org)].reparto_pedidos.find_one({"ejemplo": {"$ne": True}}, {"_id": 0, "id": 1}):
+                continue
+            if toca_aviso and await _primer_dia_aviso(org, ahora):
+                hecho["avisos"] += 1
+            if toca_correo and await _primer_dia_correo(org, ahora):
+                hecho["correos"] += 1
+        except Exception as e:                                   # noqa: BLE001
+            logger.warning("primer día (%s): %s", org.get("id"), e)
+    return hecho
+
+
+@api_router.get("/admin/primer-dia")
+async def admin_primer_dia(dias: int = 30, _: dict = Depends(require_superadmin)):
+    """El embudo de quien se registra para repartir solo en los últimos `dias` días (30): registrados, con
+    «app_login» (entró en la app), con alguna parada suya, con «primera_ruta» (cerró un día con una entrega real),
+    con el bono cobrado (20 entregas en 2 días) y cuántos avisos del primer día salieron. Sin coste: lo gastado en
+    anuncios no está en el servidor (se mira en Meta)."""
+    dias = max(1, min(int(dias or 30), 365))
+    ahora = datetime.now(timezone.utc)
+    desde = (ahora - timedelta(days=dias)).isoformat()
+    orgs = await global_db.organizations.find(
+        {"$or": [{"sector": "autonomo"}, {"plan": "autonomo"}], "created_at": {"$gte": desde},
+         "demo": {"$ne": True}, "account_type": {"$ne": "owner"}},
+        {"_id": 0, "id": 1, "db_name": 1, "account_type": 1, "created_at": 1, "meta_app_login_en": 1,
+         "meta_primera_ruta_en": 1, "bono_pagado": 1, "primer_dia_aviso_en": 1, "primer_dia_correo_en": 1}).to_list(20000)
+    con_parada = 0
+    for org in orgs:
+        try:
+            if await client[_tenant_db_name(org)].reparto_pedidos.find_one({"ejemplo": {"$ne": True}}, {"_id": 0, "id": 1}):
+                con_parada += 1
+        except Exception as e:                                   # noqa: BLE001
+            logger.debug("embudo del primer día (%s): %s", org.get("id"), e)
+
+    def cuantos(campo):
+        return sum(1 for o in orgs if o.get(campo))
+    return {"dias": dias, "desde": desde[:10], "registrados": len(orgs), "con_app_login": cuantos("meta_app_login_en"),
+            "con_parada": con_parada, "con_primera_ruta": cuantos("meta_primera_ruta_en"), "con_bono": cuantos("bono_pagado"),
+            "avisos_movil": cuantos("primer_dia_aviso_en"), "correos": cuantos("primer_dia_correo_en"),
+            "meta_capi": meta_capi.configurado(), "coste": None}
 
 
 # ── EMPLEO: OFERTAS Y CANDIDATOS ─────────────────────────────────────────────
@@ -29592,15 +30156,30 @@ async def _odo_leer_foto(img_bytes: bytes, intentos: int = 2):
     loop = asyncio.get_running_loop()
 
     async def _una():
-        async with _gemini_sem:
-            resp = await asyncio.wait_for(
-                loop.run_in_executor(
-                    _executor,
-                    lambda: client.models.generate_content(
-                        model=_modelo_ia(),
-                        contents=contents, config=gen_config)),
-                timeout=45.0)
-        return json.loads(_strip_markdown_json(resp.text or ""))
+        # LOS MODELOS DE RESPALDO TAMBIÉN AQUÍ (03-11-2026): el lector de km solo probaba el principal, y con el nivel
+        # gratuito (20 fotos al día por modelo) a media tarde ya decía «no está disponible» a todos los conductores.
+        # Como el análisis de daños: con el cupo agotado (o retirado) se pasa al siguiente, que tiene el suyo, y el que
+        # agotó el día queda vetado (_mark_daily_exhausted) para no gastar llamadas en él.
+        ultimo = None
+        for modelo in [m for m in dict.fromkeys([_modelo_ia()] + _MODELOS_RESPALDO) if not _is_daily_exhausted(m)]:
+            try:
+                async with _gemini_sem:
+                    resp = await asyncio.wait_for(
+                        loop.run_in_executor(
+                            _executor,
+                            lambda m=modelo: client.models.generate_content(
+                                model=m, contents=contents, config=gen_config)),
+                        timeout=45.0)
+                return json.loads(_strip_markdown_json(resp.text or ""))
+            except Exception as e:
+                txt = str(e)
+                cupo = "429" in txt or "RESOURCE_EXHAUSTED" in txt
+                if cupo and _is_perday_429(txt):
+                    _mark_daily_exhausted(modelo)
+                if not (cupo or "404" in txt or "NOT_FOUND" in txt):
+                    raise
+                ultimo = e
+        raise RuntimeError(f"Gemini sin ningún modelo disponible (UNAVAILABLE): {ultimo}")
 
     lecturas, servicio_caido = [], False
     for _ in range(max(1, intentos)):
@@ -39517,7 +40096,7 @@ async def founder_slots():
 @api_router.post("/founder/reserve")
 async def founder_reserve(data: FounderReserve, request: Request):
     """Público: reserva una plaza fundador sin pago. El owner cierra la venta
-    en persona (Telegram avisa al momento con los datos de contacto)."""
+    en persona (Telegram avisa al momento; los datos de contacto, en Negocio)."""
     _rl_public_action(f"founder:{_rl_key_ip(request)}", max_count=3, window_s=3600,
                       detail="Demasiadas reservas desde esta conexión")
     name = data.name.strip()[:80]
@@ -39534,9 +40113,11 @@ async def founder_reserve(data: FounderReserve, request: Request):
         "phone": data.phone.strip()[:40], "fleet_size": data.fleet_size.strip()[:40],
         "status": "pending", "created_at": datetime.now(timezone.utc).isoformat(),
     })
+    # SIN DATOS DE NADIE (03-11-2026): Telegram no es un encargado nuestro. El aviso dice que hay una reserva; el
+    # nombre, el correo, el teléfono y la flota se ven en Negocio, en el panel (GET /admin/founder-reservations).
     await send_telegram_alert(
         "💰 RESERVA FUNDADOR — llámale hoy",
-        f"👤 {name}\n📧 {email}\n📞 {data.phone or '—'}\n🚐 Flota: {data.fleet_size or '—'}\n"
+        "Hay una reserva nueva de plaza fundador: sus datos de contacto están en Negocio, en el panel.\n"
         f"Plazas restantes: {FOUNDER_TOTAL_SLOTS - used - 1}/{FOUNDER_TOTAL_SLOTS}",
         severity="critico",
     )
@@ -44517,7 +45098,7 @@ async def tienda_entrar(body: dict = Body(...), request: Request = None):
     await _set_tenant_by_slug(_texto_cuerpo(body.get("slug"), 60))
     c = await db[_TCOL_CLIENTES].find_one({"email": correo, "activo": {"$ne": False}})
     if not c or not verify_password(str(body.get("password") or ""), c["hashed_password"]):
-        await _rl_fail(rl, "tienda '%s' (IP %s)" % (correo, _rl_key_ip(request)))
+        await _rl_fail(rl, "tienda '%s' (IP %s)" % (correo, _rl_key_ip(request)), "la tienda")
         # La misma espera que en los otros logins: sin ella, el tiempo de
         # respuesta dice si el correo existe.
         await asyncio.sleep(0.8)
@@ -52129,9 +52710,26 @@ async def deber_horas_importar(file: UploadFile = File(...), center: str = Form(
 # ve por dónde va cada uno. La lógica pura está en `reparto.py`, con lo legal
 # explicado arriba del todo: aquí solo se guarda y se reparte.
 
-_REP_GEO_LOCK = asyncio.Lock()
-_REP_GEO_ULTIMA = [0.0]
 _REP_LIMPIEZA: dict = {}
+# LA RED DEL GEOCODIFICADOR (02-11-2026): una para todo el servidor (geocodificador.RedHttp: la caché de
+# respuestas, un semáforo por servicio, Nominatim a 1 por segundo para todos y el corta-circuitos), y lo ya
+# buscado, una hora en memoria (_rep_ubicar_detalle). De dónde puede salir un punto que pone la persona.
+_REP_GEO_RED = None
+_REP_GEO_HECHOS: dict = {}
+_REP_GEO_HECHOS_MAX, _REP_GEO_HECHOS_TTL = 1000, 3600.0
+_REP_GEO_ORIGENES = ("mapa", "movil", "sugerencia")
+# CARTOCIUDAD Y EL CONTRATO CON LAS EMPRESAS (02-11-2026, revisión S3). La cadena pregunta primero a CartoCiudad (el
+# callejero oficial del IGN/CNIG) con la calle, el número, el CP y el pueblo de cada parada, y CartoCiudad no estaba en
+# la lista de subencargados. El Encargo con las empresas (Encargo.jsx §4 y §6) obliga a avisarles con 15 días antes de
+# recurrir a uno nuevo: para ellas, CartoCiudad solo desde CARTOCIUDAD_EMPRESAS_DESDE; antes de ese día su cadena no le
+# pregunta nada. Quien reparte por su cuenta no tiene ese Encargo (la lista pública de encargados lo nombra desde el
+# 02-11-2026): para él, siempre. YA PARA TODAS (03-11-2026): Dani, sobre si había empresas de fuera, «Solo las mías».
+# Todas las cuentas de empresa son suyas y no hay a quién avisar: por defecto, desde el 02-11-2026 (el día de la lista
+# pública), o sea, ya. La variable se queda para una empresa de fuera en el futuro: se la avisa y se pone en
+# CARTOCIUDAD_EMPRESAS_DESDE el día en que se cumplen los 15 días.
+_CC_EMPRESAS_DESDE = "2026-11-02"
+_REP_CC_CACHE: dict = {}
+_CC_FECHA_MALA: set = set()
 
 
 def _rep_ia_permitida() -> bool:
@@ -52172,148 +52770,217 @@ _REP_CAMPOS_EDITABLES = ("codigo", "cliente", "telefono", "direccion", "cp", "lo
                          "contenido", "notas", "zona")
 
 
-async def _rep_ubicar(direccion, cp="", localidad="", base=None) -> Optional[tuple]:
-    """Dirección -> (lat, lng) con Nominatim, una petición por segundo como
-    pide su norma de uso. Solo sale la DIRECCIÓN, nunca el nombre ni el
-    teléfono del cliente. Si no se encuentra, el pedido se queda sin punto y
-    va al final de la ruta: no se inventa un sitio."""
-    # Sin piso ni puerta (30-10-2026): «Rúa Real 2, 1º B» se busca como «Rúa Real 2» (reparto.direccion_para_buscar).
-    d = reparto.direccion_para_buscar(direccion) or str(direccion or "").strip()
-    extra = [x for x in (str(cp or "").strip(), str(localidad or "").strip())
-             if x and reparto.norm(x) not in reparto.norm(d)]
-    consulta = ", ".join([d] + extra)
-    if len(consulta) < 5:
-        return None
+async def _rep_ubicar(direccion, cp="", localidad="", base=None, cerca=None) -> Optional[tuple]:
+    """Dirección -> dónde cae, con su precisión (02-11-2026): (lat, lng) es el portal; (lat, lng, "aprox"), la calle
+    sin ese portal; (lat, lng, "zona"), solo la zona (el centro del CP o del pueblo), que NUNCA se guarda en lat/lng
+    (_rep_geo_campos), y (lat, lng, "zona", "incompleta") si salió de una búsqueda incompleta (un servicio caído o un
+    paso sin tiempo: antes de ordenar se vuelve a buscar); None, nada: el pedido se queda sin punto y no se inventa un
+    sitio. La cadena (CartoCiudad, Photon, Nominatim, la calle y la zona) está en geocodificador.py, con lo que midió el
+    laboratorio."""
+    r = await _rep_ubicar_detalle(direccion, cp, localidad, base, cerca)
+    if r["precision"] == "portal":
+        return r["lat"], r["lng"]
+    if r["precision"] == "calle":
+        return r["lat"], r["lng"], "aprox"
+    if r["precision"] == "zona":
+        return (r["lat"], r["lng"], "zona") + (("incompleta",) if r.get("incompleta") else ())
+    return None
+
+
+def _cc_empresas_desde() -> str:
+    """El día (AAAA-MM-DD) desde el que las direcciones de las empresas van también a CartoCiudad:
+    CARTOCIUDAD_EMPRESAS_DESDE o _CC_EMPRESAS_DESDE (el 02-11-2026: ya, ver arriba). Una fecha mal escrita no adelanta
+    nada: «nunca» (""), con un aviso."""
+    v = (os.environ.get("CARTOCIUDAD_EMPRESAS_DESDE") or "").strip() or _CC_EMPRESAS_DESDE
+    try:
+        return datetime.strptime(v, "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        if v not in _CC_FECHA_MALA:
+            _CC_FECHA_MALA.add(v)
+            logger.warning("CARTOCIUDAD_EMPRESAS_DESDE no es una fecha AAAA-MM-DD: las empresas siguen sin CartoCiudad")
+        return ""
+
+
+def _cc_permitido(org: Optional[dict], hoy: Optional[str] = None) -> bool:
+    """¿Pueden ir a CartoCiudad las direcciones de las paradas de esta cuenta? Las de quien reparte por su cuenta, sí;
+    las de una empresa (o de una cuenta que no se sabe cuál es), solo desde _cc_empresas_desde(), en la hora de Madrid."""
+    if _org_de_autonomo(org):
+        return True
+    desde = _cc_empresas_desde()
+    return bool(desde) and (hoy or _hoy_madrid()) >= desde
+
+
+async def _rep_cc_permitido() -> bool:
+    """_cc_permitido de la cuenta de la petición (_rep_org_actual), con lo que hace falta de ella un minuto en memoria:
+    la cola de lo pegado busca cientos de direcciones seguidas. Sin cuenta conocida, como una empresa."""
+    org_id = _rep_org_actual.get()
+    if not org_id:
+        return _cc_permitido(None)
+    hit = _REP_CC_CACHE.get(org_id)
+    if hit and time.time() - hit[0] < 60:
+        return _cc_permitido(hit[1])
+    try:
+        org = await get_org(org_id)
+    except Exception as e:                                   # noqa: BLE001
+        logger.warning(f"reparto: no se pudo leer la cuenta para CartoCiudad: {type(e).__name__}")
+        return _cc_permitido(None)
+    cuenta = {k: (org or {}).get(k) for k in ("plan", "sector")}
+    if len(_REP_CC_CACHE) > 2000:
+        _REP_CC_CACHE.clear()
+    _REP_CC_CACHE[org_id] = (time.time(), cuenta)
+    return _cc_permitido(cuenta)
+
+
+def _rep_geo_red():
+    """La red del geocodificador, una para todo el servidor: la caché, los semáforos, el ritmo de Nominatim (1 por
+    segundo para todos, su norma) y el corta-circuitos valen para todas las empresas a la vez."""
+    global _REP_GEO_RED
+    if _REP_GEO_RED is None:
+        _REP_GEO_RED = geocodificador.RedHttp(f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})", registro=logger)
+    return _REP_GEO_RED
+
+
+async def _rep_ubicar_detalle(direccion, cp="", localidad="", base=None, cerca=None) -> dict:
+    """La búsqueda con todo (02-11-2026): {lat, lng, precision («portal», «calle», «zona» o None), fuente, direccion
+    (el texto de lo encontrado), candidatos (como mucho 6, el mejor primero), fuentes}. La usan _rep_ubicar y POST
+    /reparto/ubicar. A los servicios solo les llega la DIRECCIÓN, nunca el nombre ni el teléfono del cliente, y no se
+    apunta en el registro (es un dato personal). A CartoCiudad, solo si la cuenta puede (_rep_cc_permitido; `cc` dice
+    si se le preguntó). Lo ya buscado (la misma dirección, CP, pueblo, país y con o sin CartoCiudad) se guarda una hora
+    en memoria, salvo si la búsqueda quedó incompleta (`incompleta`: un servicio no contestó o un paso no cupo en el
+    tope): la próxima vez puede salir mejor."""
+    salida = {"lat": None, "lng": None, "precision": None, "fuente": "", "direccion": "", "candidatos": [], "fuentes": [],
+              "incompleta": False, "cc": False}
+    d = str(direccion or "").strip()[:300]
+    cp, localidad = str(cp or "").strip()[:12], str(localidad or "").strip()[:80]
     pais = _region_actual.get()[0]
-    # En China OpenStreetMap tiene pocas direcciones: con clave de Amap
-    # (AMAP_KEY, la da una cuenta de desarrollador de Amap) se busca allí
-    # primero; si no hay clave o no lo encuentra, se sigue con Nominatim.
+    cc = pais == "es" and await _rep_cc_permitido()
+    salida["cc"] = cc
+    # Lo que de verdad se busca, leído como lo lee la cadena (02-11-2026): sin piso, «Nº» ni provincia. Para el largo
+    # mínimo y para Amap. Antes era reparto.direccion_para_buscar, que se comía «An der Alster 12» hasta «An» (dos
+    # letras) y la dirección volvía sin buscar.
+    try:
+        consulta = geocodificador.consulta_texto(geocodificador.leer_etiqueta(d, cp, localidad, pais), pais)
+    except Exception as e:                                   # noqa: BLE001
+        logger.warning(f"reparto: no se pudo leer una dirección: {type(e).__name__}")
+        consulta = ""
+    if len(consulta) < 5:
+        return salida
+    # En China OpenStreetMap tiene pocas direcciones: con clave de Amap (AMAP_KEY) se busca allí primero.
     if pais == "cn" and os.environ.get("AMAP_KEY", "").strip():
         pt = await _rep_ubicar_amap(consulta)
         if pt:
-            return pt
-    params = {"q": consulta, "format": "json", "limit": 1, "countrycodes": pais, "addressdetails": 1}
-    if base:
-        # Se prefiere lo cercano al almacén: «Rúa Real 5» hay en cien pueblos.
-        la, lo = base
-        params["viewbox"] = f"{lo - 0.6},{la + 0.6},{lo + 0.6},{la - 0.6}"
-    import httpx as _httpx
-    async with _REP_GEO_LOCK:
-        espera = 1.1 - (time.time() - _REP_GEO_ULTIMA[0])
-        if espera > 0:
-            await asyncio.sleep(espera)
-        try:
-            async with _httpx.AsyncClient(timeout=8, headers={
-                    "User-Agent": f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})",
-                    "Accept-Language": "es"}) as c:
-                r = await _geo_pide(c, "https://nominatim.openstreetmap.org/search",
-                                    params=params, intentos=2)
-                datos = r.json() if r.status_code == 200 else []
-        except Exception as e:                               # noqa: BLE001
-            logger.warning(f"reparto: no se pudo ubicar una dirección: {type(e).__name__}")
-            return None
-        finally:
-            _REP_GEO_ULTIMA[0] = time.time()
+            prec = {"aprox": "calle", "zona": "zona"}.get(pt[2] if len(pt) > 2 else "", "portal")
+            c = {"lat": pt[0], "lng": pt[1], "precision": prec, "direccion": consulta, "fuente": "amap"}
+            return {**salida, **c, "candidatos": [c], "fuentes": ["amap"]}
+    clave = (pais, cc, reparto.clave_direccion(d), reparto.clave_direccion(cp), reparto.clave_direccion(localidad),
+             tuple(round(float(x), 2) for x in base) if base else None,
+             tuple(round(float(x), 2) for x in cerca) if cerca else None)
+    hecho = _REP_GEO_HECHOS.pop(clave, None)
+    if hecho and hecho[0] > time.time():
+        _REP_GEO_HECHOS[clave] = hecho                       # el último usado, al final: sale antes lo viejo
+        return json.loads(hecho[1])
     try:
-        lat, lng = float(datos[0]["lat"]), float(datos[0]["lon"])
-    except (IndexError, KeyError, TypeError, ValueError):
-        # Nominatim es estricto: «Avenida de mahia 2 1b» o una calle en
-        # gallego no las encuentra. Segundo intento con Photon (mismos datos
-        # de OpenStreetMap, tolera faltas); si no hay portal, la calle sola,
-        # marcada como aproximada para que el repartidor lo sepa.
-        return await _rep_ubicar_photon(consulta, pais, base)
-    # Que el resultado sea del país de la cuenta (Nominatim ya filtra; esto es
-    # la red por si un día no lo hace). España, además, con su caja de siempre.
-    cc = ((datos[0].get("address") or {}).get("country_code") or "").lower() if isinstance(datos[0], dict) else ""
-    if cc and cc != pais:
-        return None
-    if pais == "es" and not (27.0 <= lat <= 44.5 and -19.0 <= lng <= 5.0):
-        return None
-    return lat, lng
+        res, traza = await geocodificador.ubicar(_rep_geo_red(), d, cp, localidad, base=base, pais=pais, cerca=cerca,
+                                                 opciones={"cc": cc})
+    except Exception as e:                                   # noqa: BLE001
+        logger.warning(f"reparto: no se pudo ubicar una dirección: {type(e).__name__}")
+        return salida
+    if res:
+        salida.update({k: res.get(k) for k in ("lat", "lng", "precision", "fuente")})
+        salida["direccion"] = res.get("direccion") or ""
+    salida["candidatos"] = traza.get("candidatos") or []
+    salida["fuentes"] = sorted({c.get("fuente") or "" for c in salida["candidatos"]} - {""})
+    # Una búsqueda incompleta no se guarda como si fuera lo definitivo (02-11-2026, revisión S4): con CartoCiudad lento
+    # se saltaba Photon o Nominatim sin contar ningún fallo y la «zona» quedaba una hora aunque Nominatim tuviera el portal.
+    salida["incompleta"] = bool(traza.get("incompleta") or traza.get("fallos"))
+    if not salida["incompleta"]:
+        _REP_GEO_HECHOS[clave] = (time.time() + _REP_GEO_HECHOS_TTL, json.dumps(salida))
+        while len(_REP_GEO_HECHOS) > _REP_GEO_HECHOS_MAX:
+            _REP_GEO_HECHOS.pop(next(iter(_REP_GEO_HECHOS)))
+    return salida
 
 
-def _rep_partes_direccion(consulta: str) -> dict:
-    """«Ruela de Brión 11-D 2G, 15702 santiago» -> calle, portal, cp y lugar
-    (sin piso, puerta ni letras, que los buscadores no entienden)."""
-    texto = " ".join(str(consulta or "").replace(";", ",").split())
-    cp = (re.search(r"\b(\d{5})\b", texto) or [None, ""])[1]
-    m = re.match(r"^\s*([^\d,]+?)\s*,?\s*(\d{1,4})\b", texto)
-    calle = (m.group(1) if m else texto.split(",")[0]).strip(" ,.-")
-    portal = m.group(2) if m else ""
-    lugares = [t.strip() for t in texto.split(",")[1:] if t.strip() and not re.search(r"\d", t)]
-    resto = re.sub(r"\b\d{5}\b", "", texto.split(cp, 1)[1] if cp and cp in texto else "").strip(" ,")
-    if resto and not re.search(r"\d", resto):
-        lugares = [x.strip() for x in resto.split(",") if x.strip()] or lugares
-    return {"calle": calle, "portal": portal, "cp": cp, "lugar": ", ".join(lugares[:2])}
+def _rep_geo_campos(pt) -> dict:
+    """Lo que se guarda en la parada de lo que dio _rep_ubicar (02-11-2026). El portal (geo «ok») o la calle («aprox»)
+    van en lat/lng; la ZONA, aparte, en zona_lat/zona_lng y SIN lat/lng: la app de antes (la 2.4.4) guía a cualquier
+    lat/lng como si fuera la puerta y llevaría al repartidor al centro del código postal. Sin nada, geo «no». La zona
+    de una búsqueda incompleta lleva geo_incompleta (revisión S4): reparto_mi_ordenar la vuelve a buscar."""
+    if not pt:
+        return {"lat": None, "lng": None, "geo": "no", "zona_lat": None, "zona_lng": None, "geo_incompleta": None}
+    if len(pt) > 2 and pt[2] == "zona":
+        return {"lat": None, "lng": None, "geo": "zona", "zona_lat": pt[0], "zona_lng": pt[1],
+                "geo_incompleta": True if len(pt) > 3 and pt[3] == "incompleta" else None}
+    return {"lat": pt[0], "lng": pt[1], "geo": "aprox" if len(pt) > 2 and pt[2] == "aprox" else "ok",
+            "zona_lat": None, "zona_lng": None, "geo_incompleta": None}
 
 
-async def _rep_ubicar_photon(consulta: str, pais: str, base=None) -> Optional[tuple]:
-    """Photon (komoot), mismos datos de OpenStreetMap con búsqueda tolerante.
-    Devuelve (lat, lng) si encuentra el portal, (lat, lng, "aprox") si solo la
-    calle, o None. Siempre del país de la cuenta y, si hay código postal, con
-    ese código: nada de una calle con el mismo nombre en otra ciudad."""
-    d = _rep_partes_direccion(consulta)
-    if len(d["calle"]) < 3:
-        return None
-    import httpx as _httpx
+def _rep_punto_de(lat, lng) -> Optional[tuple]:
+    """Un punto que llega de la app (la sugerencia elegida, el sitio puesto en el mapa, la posición del móvil) si es de
+    verdad: dos números, no el 0,0 y, si hay caja para el país de la cuenta (España, la de siempre), dentro."""
+    return geocodificador.punto_valido(lat, lng, _region_actual.get()[0])
 
-    async def pedir(q):
-        params = {"q": q, "limit": 6}
-        if base:
-            params.update({"lat": base[0], "lon": base[1]})
-        try:
-            async with _REP_GEO_LOCK:
-                espera = 1.1 - (time.time() - _REP_GEO_ULTIMA[0])
-                if espera > 0:
-                    await asyncio.sleep(espera)
-                try:
-                    async with _httpx.AsyncClient(timeout=8, headers={"User-Agent": f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})"}) as c:
-                        r = await c.get("https://photon.komoot.io/api/", params=params)
-                finally:
-                    _REP_GEO_ULTIMA[0] = time.time()
-            return (r.json() or {}).get("features") or [] if r.status_code == 200 else []
-        except Exception as e:                               # noqa: BLE001
-            logger.warning(f"reparto: Photon no respondió: {type(e).__name__}")
-            return []
 
-    vacias = {"de", "da", "do", "del", "la", "el", "los", "las", "os", "as", "a", "o", "rua", "calle", "c",
-              "avenida", "avda", "av", "plaza", "praza", "pza", "camino", "camiño", "travesia", "ruela", "lugar"}
-    clave = [t for t in reparto.norm(d["calle"]).split() if t not in vacias and len(t) > 1]
+def _rep_punto_o_400(data: dict) -> tuple:
+    """El punto de `data` (lat y lng) o un 400 que dice qué le pasa."""
+    pt = _rep_punto_de(data.get("lat"), data.get("lng"))
+    if pt:
+        return pt
+    if geocodificador.punto_valido(data.get("lat"), data.get("lng")):
+        nombre = PAISES_REPARTO.get(_region_actual.get()[0], {}).get("nombre") or "tu país"
+        raise HTTPException(400, f"Ese punto está fuera de {nombre}")
+    raise HTTPException(400, "Ese punto no es válido")
 
-    def misma_calle(pr):
-        nombre = reparto.norm(" ".join(str(pr.get(k) or "") for k in ("street", "name")))
-        return bool(clave) and all(t in nombre for t in clave)
 
-    def valida(f, tipos):
-        pr = f.get("properties") or {}
-        if (pr.get("countrycode") or "").lower() != pais or pr.get("type") not in tipos or not misma_calle(pr):
-            return None
-        if d["cp"] and pr.get("postcode") and pr["postcode"] != d["cp"]:
-            return None
-        if not d["cp"] and d["lugar"]:
-            sitio = reparto.norm(" ".join(str(pr.get(k) or "") for k in ("city", "district", "locality", "county")))
-            if not any(reparto.norm(x) in sitio for x in d["lugar"].split(",") if x.strip()):
-                return None
-        try:
-            lng, lat = (float(x) for x in f["geometry"]["coordinates"][:2])
-        except (KeyError, TypeError, ValueError):
-            return None
-        if pais == "es" and not (27.0 <= lat <= 44.5 and -19.0 <= lng <= 5.0):
-            return None
-        return lat, lng
+def _rep_geo_elegido(data: dict) -> str:
+    """El geo de un punto que puso la persona (03-11-2026): «aprox» si la app dice que es la calle sin el portal
+    ("precision": "calle": una sugerencia de calle, o «Es aquí» en el mapa sin mover la chincheta de ella); con
+    cualquier otro valor o sin él (la chincheta movida, un portal, la app 2.4.4, que no lo manda), «manual»."""
+    return "aprox" if _texto_cuerpo(data.get("precision"), 20).lower() == "calle" else "manual"
 
-    donde = " ".join(x for x in (d["cp"], d["lugar"]) if x)
-    if d["portal"]:
-        for f in await pedir(f"{d['calle']} {d['portal']}, {donde}"):
-            pt = valida(f, ("house",))
-            if pt and str((f.get("properties") or {}).get("housenumber") or "").split()[0:1] == [d["portal"]]:
-                return pt
-    # Sin el portal: la calle (o un punto de esa misma calle) como aproximada.
-    for f in await pedir(f"{d['calle']}, {donde}"):
-        pt = valida(f, ("street", "house"))
-        if pt:
-            return pt[0], pt[1], "aprox"
-    return None
+
+# Lo que llega de una sugerencia: su CP, su población y su punto, y de dónde salió y cuánto vale.
+_REP_DE_LA_SUGERENCIA = ("cp", "localidad", "lat", "lng", "geo_origen", "precision")
+
+
+def _rep_cp_clave(cp) -> str:
+    """Un CP para compararlo (03-11-2026): solo letras y cifras, en mayúsculas («01310-100» y «01310100»)."""
+    return re.sub(r"[^0-9A-Z]+", "", str(cp or "").upper())
+
+
+def _rep_cp_tal_cual(cp, texto) -> bool:
+    """¿Va ese CP escrito tal cual en el texto, entero? (03-11-2026) Entre sus trozos, nada, un espacio, un punto o un
+    guion («01310-100», «SW1A 1AA»), y detrás puede seguir con un guion («98125» en «WA 98125-1234»)."""
+    trozos = re.findall(r"[0-9A-Za-z]+", str(cp or ""))
+    patron = r"(?<![^\W_])" + r"[\s.-]?".join(trozos) + r"(?![^\W_])"
+    return bool(trozos) and bool(re.search(patron, str(texto or ""), re.I))
+
+
+def _rep_sugerencia_ajena(data: dict, direccion: str) -> bool:
+    """LA SUGERENCIA ABANDONADA (03-11-2026, el revisor). La regla de «Situar la parada» manda el CP de la sugerencia
+    elegida (con su población y su punto) solo con la dirección que sale de ella, que lleva ese CP o ninguno. Si la
+    dirección que queda trae escrito OTRO CP, la persona volvió a escribir la suya después de elegir, y el CP, la
+    población y el punto son de otra dirección: «Rúa Brétema Mariñeira 23, 15011 A Coruña» con los de «Rúa Brétema,
+    15179 Oleiros», a 8 km (la ficha nativa conservaba el punto, y la web el CP y el pueblo). Entonces no se usan: se
+    busca lo escrito, como sin elegir nada. Sin CP escrito, o sin CP en el cuerpo, no se puede saber y vale lo que llega.
+    Los CP escritos, con la regla del país de la cuenta (03-11-2026, el verificador): con la de España, en Brasil
+    «01310-100» se leía «01310» y en EE. UU. el número de la casa («12345 Lake City Way NE, Seattle, WA 98125»), y una
+    sugerencia recién elegida se daba por abandonada. Es ajena si hay algún CP escrito y ninguno es el suyo (ni va
+    escrito tal cual, _rep_cp_tal_cual). Donde el número va delante, el de la casa no es un CP escrito (03-11-2026,
+    geocodificador.cps_escritos): «12345 Lake City Way NE, Seattle» con el CP de su sugerencia se daba por abandonada."""
+    cp = _texto_cuerpo(data.get("cp"), 10)
+    if not _rep_cp_clave(cp):
+        return False
+    escritos = {_rep_cp_clave(c) for c in geocodificador.cps_escritos(direccion, _region_actual.get()[0])}
+    return bool(escritos) and _rep_cp_clave(cp) not in escritos and not _rep_cp_tal_cual(cp, direccion)
+
+
+def _rep_cerca(v) -> Optional[tuple]:
+    """La posición del móvil que puede mandar la app (`cerca`: {lat, lng}) para validar una etiqueta sin CP ni pueblo
+    (02-11-2026, lo pidió el laboratorio): redondeada a unos 100 m, no se guarda y no sale del servidor
+    (geocodificador.ubicar no se la manda a ningún servicio)."""
+    v = v if isinstance(v, dict) else {}
+    pt = _rep_punto_de(v.get("lat"), v.get("lng"))
+    return (round(pt[0], 3), round(pt[1], 3)) if pt else None
 
 
 async def _rep_ubicar_amap(consulta: str) -> Optional[tuple]:
@@ -52329,12 +52996,20 @@ async def _rep_ubicar_amap(consulta: str) -> Optional[tuple]:
         if str(d.get("status")) != "1" or not d.get("geocodes"):
             return None
         lng, lat = (float(x) for x in str(d["geocodes"][0].get("location") or "").split(","))
+        nivel = str(d["geocodes"][0].get("level") or "")
     except Exception as e:                                   # noqa: BLE001
         logger.warning(f"reparto: Amap no ubicó una dirección: {type(e).__name__}")
         return None
     if not (18.0 <= lat <= 54.0 and 73.0 <= lng <= 135.5):
         return None
-    return reparto.gcj02_a_wgs84(lat, lng)
+    wlat, wlng = reparto.gcj02_a_wgs84(lat, lng)
+    # La precisión que dice Amap (02-11-2026): la calle es «aprox» y el barrio, el distrito o la ciudad, la zona; el
+    # portal o el sitio concreto (y lo que no dice), el punto.
+    if nivel in ("道路", "道路交叉路口"):
+        return wlat, wlng, "aprox"
+    if nivel in ("村庄", "乡镇", "区县", "市", "省", "国家", "热点商圈", "开发区"):
+        return wlat, wlng, "zona"
+    return wlat, wlng
 
 
 async def _rep_ajustes() -> dict:
@@ -52417,7 +53092,8 @@ async def _rep_limpiar(user: dict):
             {"$set": {"cliente": None, "telefono": None, "direccion": None, "lat": None,
                       "lng": None, "notas": None, "contenido": None, "entrega_foto": None,
                       "entrega_nota": None, "entrega_firma": None, "entrega_recibe": None,
-                      "entrega_ia": None, "vista": None, "anonimizado": True}})
+                      "entrega_ia": None, "vista": None, "zona_lat": None, "zona_lng": None,
+                      "anonimizado": True}})
         lim_rastro = (hoy - timedelta(days=reparto.DIAS_RASTRO)).strftime("%Y-%m-%d")
         await db.reparto_jornadas.delete_many({"fecha": {"$lt": lim_rastro}})
         # LA MEMORIA DE LA CALLE (01-11-2026) caduca al año de la última vez que se tocó.
@@ -52513,22 +53189,138 @@ async def _rep_nombre_conductor(cid: str) -> str:
     return d.get("name") or ""
 
 
-async def _rep_puerta_aprendida(conductor_id: str, direccion: str) -> Optional[tuple]:
+def _rep_leida(direccion, cp="", localidad="") -> dict:
+    """La dirección leída como la lee el geocodificador (03-11-2026), con la regla del país de la cuenta: el número,
+    el CP y la población (los campos o, si no, lo escrito). {} si no se puede leer."""
+    try:
+        return geocodificador.leer_etiqueta(direccion, cp or "", localidad or "", _region_actual.get()[0])
+    except Exception:                                        # noqa: BLE001
+        return {}
+
+
+def _rep_sitio_escrito(leida: dict) -> str:
+    """Sin CP ni pueblo, el sitio escrito que no es un pueblo («La Rioja», «Galicia», «Asturias»: la «provincia» de lo
+    leído), en clave (03-11-2026, la sexta tanda). Se compara por su nombre, como cuando «La Rioja» contaba como
+    pueblo: con todas las provincias ya no lo es, y su puerta no puede pasar a valer para cualquier sitio. El país
+    («España») no dice dónde dentro de él: como sin sitio, como hasta ahora."""
+    leida = leida or {}
+    if _rep_cp_clave(leida.get("cp")) or str(leida.get("loc") or "").strip():
+        return ""
+    k = geocodificador.muni_clave(leida.get("provincia") or "")
+    return "" if k in ("espana", "spain") else k
+
+
+def _rep_dice_donde(leida: dict) -> bool:
+    """¿La dirección leída dice dónde está? (03-11-2026) Un CP o un pueblo, en sus campos o escrito. La provincia con
+    el CP de otro municipio y el país no son un pueblo (geocodificador.es_pueblo). Sin ellos, el sitio escrito que no
+    es un pueblo (_rep_sitio_escrito, la sexta tanda)."""
+    return bool(_rep_cp_clave((leida or {}).get("cp")) or geocodificador.muni_clave((leida or {}).get("loc") or "")
+                or _rep_sitio_escrito(leida))
+
+
+def _rep_nueva_dice_donde(leida: dict) -> bool:
+    """¿La parada NUEVA dice dónde está? (03-11-2026, la sexta tanda, como B2 en las apps) Lo de _rep_dice_donde y,
+    además, el país escrito: escribir un sitio no es no decir nada, y «Calle Real 5, España» no se queda con la puerta
+    de una de otro CP o pueblo. En las de antes, el país no cuenta (_rep_sitio_escrito): como sin sitio."""
+    return _rep_dice_donde(leida) or bool((leida or {}).get("provincia"))
+
+
+def _rep_mismo_sitio(v: dict, n: dict) -> bool:
+    """¿Dos direcciones leídas son del mismo sitio? (03-11-2026) El mismo CP o, si alguna no lo tiene, el mismo
+    municipio (geocodificador.muni_clave). «A Coruña» con el 15179 es la provincia, no la ciudad (es_pueblo): no pasa
+    por el mismo sitio que «A Coruña» sin CP."""
+    cv, cn = _rep_cp_clave(v.get("cp")), _rep_cp_clave(n.get("cp"))
+    if cv and cn:
+        return cv == cn
+    # Sin pueblo ni CP, el sitio escrito que no es un pueblo, por su nombre (_rep_sitio_escrito, la sexta tanda).
+    mv = geocodificador.muni_clave(v.get("loc") or "") or _rep_sitio_escrito(v)
+    mn = geocodificador.muni_clave(n.get("loc") or "") or _rep_sitio_escrito(n)
+    return bool(mv) and mv == mn
+
+
+def _rep_misma_puerta(vieja: dict, nueva: dict, sobra: str) -> bool:
+    """¿La puerta de la parada vieja vale para la nueva, si una dirección empieza por la otra? (03-11-2026, el
+    revisor) Con el mismo número, si lo que sobra es el piso o la puerta («montero rios 12» y «montero rios 12 2o b»),
+    o si las dos tienen CP o pueblo y es el mismo sitio: el mismo CP o, si no, el mismo municipio (_rep_mismo_sitio).
+    Si no, no: «Calle Real 5», sin pueblo y entregada en Oleiros, le ponía su puerta a «Calle Real 5, 15003 A Coruña».
+    Con el piso, si las dos dicen dónde, también el mismo sitio (03-11-2026, la séptima tanda): «Calle Real 5 2º B» de
+    15179 Oleiros le ponía su puerta a la nueva «Calle Real 5» de 15003 A Coruña."""
+    v = _rep_leida(vieja.get("direccion"), vieja.get("cp"), vieja.get("localidad"))
+    if not v or not nueva or v.get("num") != nueva.get("num"):
+        return False                                         # «Calle Real» y «Calle Real 12»: el 12 es el portal
+    if geocodificador.es_piso(sobra):
+        return not (_rep_dice_donde(v) and _rep_nueva_dice_donde(nueva) and not _rep_mismo_sitio(v, nueva))
+    return _rep_mismo_sitio(v, nueva)
+
+
+async def _rep_puerta_aprendida(conductor_id: str, direccion: str, cp: str = "", localidad: str = "") -> Optional[tuple]:
     """LA APP APRENDE LA PUERTA (30-10-2026): dónde entregó este repartidor la última vez en esa misma
     dirección (lo que marcó su móvil al pulsar «Entregado», si era preciso y estaba cerca de lo buscado).
-    Solo lo suyo y de los últimos 180 días; sin eso, se busca la dirección como siempre."""
+    Solo lo suyo y de los últimos 180 días; sin eso, se busca la dirección como siempre. Solo de las paradas que
+    siguen ENTREGADAS (03-11-2026): una que se dio por entregada y después quedó fallida («Dirección incorrecta»)
+    guardaba la puerta de donde se pulsó, que puede ser el punto de otra calle. `cp` y `localidad`, los de la parada
+    nueva (03-11-2026: para saber si una que empieza por la otra, o una escrita igual, es del mismo sitio:
+    _rep_misma_puerta y _rep_mismo_sitio). Con la misma clave, una que no dice dónde vale solo si ninguna dice OTRO
+    sitio que la nueva (03-11-2026, la sexta tanda), tampoco con el piso o el sitio detrás (la séptima)."""
     k = reparto.clave_direccion(direccion)
     if not k or not conductor_id:
         return None
     desde = (datetime.strptime(_dia_negocio(), "%Y-%m-%d") - timedelta(days=180)).strftime("%Y-%m-%d")
+    nueva = None
+    # LA VIEJA SIN SITIO (03-11-2026, la sexta tanda, el revisor): se saltaba la «Calle Real 5» de 15179 Oleiros (01-11)
+    # y la «Calle Real 5» sin sitio del 20-10, que según el historial también será de Oleiros, le ponía su puerta a la
+    # nueva de 15003 A Coruña. La primera así se apunta (sin_sitio) y se sigue mirando: con una de otro sitio, no vale,
+    # y vale la primera del mismo sitio que venga (siguiente), si la hay; si no, se busca lo escrito.
+    otro_sitio, sin_sitio, siguiente = False, None, None
     async for p in db.reparto_pedidos.find(
-            {"conductor_id": conductor_id, "fecha": {"$gte": desde}, "puerta_lat": {"$ne": None}},
-            {"_id": 0, "direccion": 1, "puerta_lat": 1, "puerta_lng": 1}).sort("fecha", -1).limit(2000):
+            {"conductor_id": conductor_id, "fecha": {"$gte": desde}, "estado": "entregado",
+             "puerta_lat": {"$ne": None}},
+            {"_id": 0, "direccion": 1, "cp": 1, "localidad": 1, "puerta_lat": 1, "puerta_lng": 1}).sort("fecha", -1).limit(2000):
         kp = reparto.clave_direccion(p.get("direccion"))
-        # La misma calle y número con o sin la población detrás («montero rios 12» y «montero rios 12 a coruna»).
-        if p.get("puerta_lng") is not None and kp and (kp == k or kp.startswith(k + " ") or k.startswith(kp + " ")):
-            return (p["puerta_lat"], p["puerta_lng"])
-    return None
+        if p.get("puerta_lng") is None or not kp:
+            continue
+        puerta = (p["puerta_lat"], p["puerta_lng"])
+        # La misma dirección escrita de otra manera, la puerta. La misma calle y número con el piso o la población
+        # detrás («montero rios 12» y «montero rios 12 15003 a coruna»), solo si es la misma (_rep_misma_puerta).
+        if kp == k:
+            # Escrita igual y de otro sitio (03-11-2026, el revisor): «Calle Real 5» con el CP y el pueblo aparte, de
+            # 15179 Oleiros, le ponía su puerta a «Calle Real 5» de 15003 A Coruña (y de Madrid a Barcelona). Si las
+            # dos dicen dónde (_rep_dice_donde), tiene que ser el mismo sitio; si la nueva no lo dice, como siempre.
+            nueva = _rep_leida(direccion, cp, localidad) if nueva is None else nueva
+            v = _rep_leida(p.get("direccion"), p.get("cp"), p.get("localidad"))
+            if _rep_nueva_dice_donde(nueva):
+                if not _rep_dice_donde(v):
+                    sin_sitio = sin_sitio or puerta
+                    continue
+                if not _rep_mismo_sitio(v, nueva):
+                    otro_sitio = True
+                    if siguiente:
+                        return siguiente
+                    continue
+        elif kp.startswith(k + " ") or k.startswith(kp + " "):
+            nueva = _rep_leida(direccion, cp, localidad) if nueva is None else nueva
+            if not _rep_misma_puerta(p, nueva, (kp if len(kp) > len(k) else k)[min(len(k), len(kp)) + 1:]):
+                # La de otro sitio con otra clave también cuenta (03-11-2026, la séptima tanda): con «Calle Real 5,
+                # 15179 Oleiros» o «Calle Real 5 2º B» de Oleiros, la «Calle Real 5» sin sitio no vale para A Coruña.
+                v = _rep_leida(p.get("direccion"), p.get("cp"), p.get("localidad"))
+                if _rep_nueva_dice_donde(nueva) and _rep_dice_donde(v) and not _rep_mismo_sitio(v, nueva):
+                    otro_sitio = True
+                    if siguiente:
+                        return siguiente
+                continue
+            # Y la que no dice dónde, con el piso o el sitio detrás, se aparta como la de la misma clave (03-11-2026, el
+            # verificador de la séptima): «Calle Real 5 2º B» sin sitio le daba su puerta a la nueva de 15003 A Coruña
+            # aunque otra del historial fuera de 15179 Oleiros. Vale al final solo si ninguna dice otro sitio.
+            if _rep_nueva_dice_donde(nueva) and not _rep_dice_donde(
+                    _rep_leida(p.get("direccion"), p.get("cp"), p.get("localidad"))):
+                sin_sitio = sin_sitio or puerta
+                continue
+        else:
+            continue
+        if sin_sitio is None or otro_sitio:
+            return puerta
+        siguiente = siguiente or puerta
+    return siguiente if otro_sitio else sin_sitio
 
 
 async def _rep_nuevo(datos: dict, user: dict, origen: str, fecha: str,
@@ -52543,7 +53335,11 @@ async def _rep_nuevo(datos: dict, user: dict, origen: str, fecha: str,
     quedan = None if _cupo_comprobado else await _rep_quedan_gratis(user, fecha)  # plan gratis del repartidor
     if quedan is not None and quedan <= 0:
         raise HTTPException(402, REP_TOPE_MENSAJE)
-    cp = _texto_cuerpo(datos.get("cp"), 10) or reparto.extrae_cp(direccion)
+    # Sin CP aparte, el escrito en la dirección con la regla del país de la cuenta (03-11-2026): con la de España, en
+    # EE. UU. «12345 Lake City Way NE, Seattle, WA 98125» se guardaba con el 12345 (el número de la casa) y se buscaba
+    # con él, y ese CP es de Schenectady, Nueva York.
+    pais = _region_actual.get()[0]
+    cp = _texto_cuerpo(datos.get("cp"), 10) or reparto.extrae_cp(direccion, pais)
     codigo = reparto.normaliza_codigo(_texto_cuerpo(datos.get("codigo"), 120))
     codigos_entrada = datos.get("codigos") if isinstance(datos.get("codigos"), list) else []
     codigos = list(dict.fromkeys(reparto.normaliza_codigo(_texto_cuerpo(x, 120))
@@ -52553,7 +53349,7 @@ async def _rep_nuevo(datos: dict, user: dict, origen: str, fecha: str,
         ya = await db.reparto_pedidos.find_one({"fecha": fecha, "codigo": codigo}, {"_id": 0})
         if ya:
             raise HTTPException(409, "Ese código ya está en los pedidos de ese día")
-    z = reparto.zona_de(direccion, cp, a.get("zonas"))
+    z = reparto.zona_de(direccion, cp, a.get("zonas"), pais)
     try:
         bultos = max(1, min(99, int(float(str(datos.get("bultos") or 1).replace(",", ".")))))
     except ValueError:
@@ -52584,18 +53380,27 @@ async def _rep_nuevo(datos: dict, user: dict, origen: str, fecha: str,
         cid = _texto_cuerpo(datos.get("conductor_id"), 60) or (z.get("conductor_id") or "")
         if cid:
             p["conductor_id"], p["conductor_nombre"] = cid, await _rep_nombre_conductor(cid)
-    pt = reparto._punto(datos)
-    aprendida = await _rep_puerta_aprendida(conductor["id"], direccion) if (conductor and not pt and ubicar) else None
+    # El 0,0 no es un sitio (02-11-2026): una app que lo mande como «sin punto» no deja la parada en el golfo de Guinea.
+    pt = geocodificador.punto_valido(datos.get("lat"), datos.get("lng"))
+    # Con el CP que se guarda (03-11-2026: sin él aparte, el escrito con la regla del país, no el que lea la etiqueta).
+    aprendida = (await _rep_puerta_aprendida(conductor["id"], direccion, cp, p["localidad"])
+                 if (conductor and not pt and ubicar) else None)
     if pt:
-        p["lat"], p["lng"], p["geo"] = pt[0], pt[1], "manual"
+        # «manual», o «aprox» si lo elegido es la calle sin el portal (_rep_geo_elegido, 03-11-2026).
+        p["lat"], p["lng"], p["geo"] = pt[0], pt[1], _rep_geo_elegido(datos)
+        # De dónde salió el punto que puso la persona (la sugerencia elegida, nuestro mapa o su móvil).
+        if _texto_cuerpo(datos.get("geo_origen"), 20) in _REP_GEO_ORIGENES:
+            p["geo_origen"] = _texto_cuerpo(datos.get("geo_origen"), 20)
     elif aprendida:
         p["lat"], p["lng"], p["geo"] = aprendida[0], aprendida[1], "puerta"
     elif ubicar:
-        pt = await _rep_ubicar(direccion, cp, p["localidad"], _rep_base(a))
-        if pt:
-            p["lat"], p["lng"], p["geo"] = pt[0], pt[1], (pt[2] if len(pt) > 2 else "ok")
-        else:
-            p["geo"] = "no"
+        # La posición del móvil, si la manda la app, solo para validar una etiqueta sin CP ni pueblo.
+        cerca = _rep_cerca(datos.get("cerca"))
+        pt = await _rep_ubicar(direccion, cp, p["localidad"], _rep_base(a), **({"cerca": cerca} if cerca else {}))
+        # La zona va aparte y sin lat/lng (_rep_geo_campos); en una parada nueva solo se apunta si la hay (y la marca
+        # de búsqueda incompleta, solo si lo fue).
+        p.update({k: v for k, v in _rep_geo_campos(pt).items()
+                  if v is not None or not (k.startswith("zona_") or k == "geo_incompleta")})
     if _insertar:
         await db.reparto_pedidos.insert_one(dict(p))
     return p
@@ -52615,14 +53420,13 @@ def _rep_pon_ventana(p: dict, datos: dict):
 
 
 async def _rep_ubicar_pendientes(fecha: str):
-    """Ubica en segundo plano lo que entró pegado (uno por segundo)."""
+    """Ubica en segundo plano lo que entró pegado o escaneado en lote, una a una (la cadena ya va al ritmo de cada
+    servicio). Solo si sigue pendiente (02-11-2026): si mientras tanto la persona la situó a mano, se queda la suya."""
     a = await _rep_ajustes()
     base = _rep_base(a)
     async for p in db.reparto_pedidos.find({"fecha": fecha, "geo": "pendiente"}, {"_id": 0}):
         pt = await _rep_ubicar(p.get("direccion"), p.get("cp"), p.get("localidad"), base)
-        await db.reparto_pedidos.update_one(
-            {"id": p["id"]},
-            {"$set": {"lat": pt[0], "lng": pt[1], "geo": pt[2] if len(pt) > 2 else "ok"} if pt else {"geo": "no"}})
+        await db.reparto_pedidos.update_one({"id": p["id"], "geo": "pendiente"}, {"$set": _rep_geo_campos(pt)})
 
 
 _REP_UBICACION_TAREAS = set()
@@ -52852,13 +53656,19 @@ async def _rep_ordenar(fecha: str, conductor_id: str, origen, salida_min: Option
     pend = await db.reparto_pedidos.find(
         {"fecha": fecha, "conductor_id": conductor_id, "estado": {"$in": ["pendiente", "en_ruta"]}},
         {"_id": 0, "id": 1, "lat": 1, "lng": 1, "bultos": 1, "ventana_desde": 1,
-         "ventana_hasta": 1, "prioridad": 1, "hueco_manual": 1}).to_list(1000)
+         "ventana_hasta": 1, "prioridad": 1, "hueco_manual": 1, "geo": 1, "zona_lat": 1, "zona_lng": 1}).to_list(1000)
     hechos = await db.reparto_pedidos.count_documents(
         {"fecha": fecha, "conductor_id": conductor_id, "estado": {"$in": ["entregado", "fallido"]}})
-    ubicadas = [p for p in pend if reparto._punto(p)]
-    sin = [p for p in pend if not reparto._punto(p)]
+
+    # LA ZONA EN LA RUTA (02-11-2026): una parada de la que solo se sabe la zona (el centro de su CP o de su pueblo)
+    # se ordena por ahí en vez de ir al final; sigue sin punto para navegar (la app la sitúa antes de ir).
+    def donde(p):
+        return reparto._punto(p) or (reparto._punto({"lat": p.get("zona_lat"), "lng": p.get("zona_lng")})
+                                     if p.get("geo") == "zona" else None)
+    ubicadas = [p for p in pend if donde(p)]
+    sin = [p for p in pend if not donde(p)]
     base = _rep_base(a)
-    origen = origen or base or (reparto._punto(ubicadas[0]) if ubicadas else None)
+    origen = origen or base or (donde(ubicadas[0]) if ubicadas else None)
     ahora, dia_hoy = _rep_ahora_local()
     salida_cfg = reparto.a_minutos(a.get("hora_salida")) or 9 * 60
     try:
@@ -52868,14 +53678,17 @@ async def _rep_ordenar(fecha: str, conductor_id: str, origen, salida_min: Option
     if salida_min is None:
         salida_min = max(ahora, salida_cfg) if fecha == _dia_negocio() else salida_cfg
     resumen = {"id": f"{fecha}_{conductor_id}", "fecha": fecha, "conductor_id": conductor_id,
-               "salida": reparto.hm(salida_min), "paradas": len(pend), "sin_ubicar": len(sin),
+               "salida": reparto.hm(salida_min), "paradas": len(pend),
+               # Sin punto para navegar (como siempre); de esas, cuántas van en la ruta por su zona.
+               "sin_ubicar": sum(1 for p in pend if not reparto._punto(p)),
+               "en_zona": sum(1 for p in ubicadas if not reparto._punto(p)),
                "trafico": a.get("trafico", True) is not False, "volver": bool(a.get("volver")),
                # Sale a su hora de salida y no «ahora» (de noche): la app lo dice para que las horas se entiendan.
                "programada": bool(programada),
                "calculada_en": datetime.now(timezone.utc).isoformat()}
     orden_ids, llegadas = [], {}
     if ubicadas and origen:
-        puntos = [origen] + [reparto._punto(p) for p in ubicadas]
+        puntos = [origen] + [donde(p) for p in ubicadas]
         volver = False
         if a.get("volver") and base:
             puntos.append(base)
@@ -52971,7 +53784,8 @@ async def reparto_ajustes_put(data: dict = Body(...), user: dict = Depends(requi
     base_dir = _texto_cuerpo(data.get("base_direccion"), 200)
     if base_dir and base_dir != ((a.get("base") or {}).get("direccion") or ""):
         pt = await _rep_ubicar(base_dir)
-        if not pt:
+        # Solo el portal o la calle (02-11-2026): el centro del código postal no es el almacén.
+        if not pt or (len(pt) > 2 and pt[2] == "zona"):
             raise HTTPException(400, "No encuentro la dirección del almacén. Pon calle, número y población.")
         nuevo["base"] = {"direccion": base_dir, "lat": pt[0], "lng": pt[1]}
     elif base_dir:
@@ -53083,7 +53897,7 @@ async def reparto_pegar(data: dict = Body(...), user: dict = Depends(require_adm
     if data.get("hoja"):
         filas = reparto.paradas_de_hoja(texto, _texto_cuerpo(data.get("pais"), 2).lower() or _region_actual.get()[0])
     else:
-        filas = reparto.lee_pegado(texto)
+        filas = reparto.lee_pegado(texto, _region_actual.get()[0])
     if not filas:
         raise HTTPException(400, "No veo ninguna parada en lo compartido" if data.get("hoja") else "No veo ningún pedido con dirección en lo pegado")
     if not data.get("confirmar"):
@@ -53152,10 +53966,24 @@ async def reparto_editar(pid: str, data: dict = Body(...), user: dict = Depends(
             raise HTTPException(400, "Estado no válido")
         cambios["estado"] = e
     if cambios.get("direccion") and cambios["direccion"] != p.get("direccion"):
+        # La dirección nueva con su CP (03-11-2026): el que llega o, si no, el escrito en ella con la regla del país, como
+        # al darla de alta; el de antes, solo si la nueva no trae ninguno y no llegó vacío. Con otro CP, la población de
+        # antes tampoco vale si no llega otra. Se busca con lo que se guarda: antes, con el CP y la población de la de
+        # antes («Rúa Real 5, 15179 Oleiros» con el 15003 y A Coruña), aunque llegaran vacíos.
+        if not cambios.get("cp"):
+            escrito = reparto.extrae_cp(cambios["direccion"], _region_actual.get()[0])
+            if escrito or "cp" in cambios:
+                cambios["cp"] = escrito
+        if "cp" in cambios and "localidad" not in cambios and _rep_cp_clave(cambios["cp"]) != _rep_cp_clave(p.get("cp")):
+            cambios["localidad"] = ""
         a = await _rep_ajustes()
-        pt = await _rep_ubicar(cambios["direccion"], cambios.get("cp") or p.get("cp"),
-                               cambios.get("localidad") or p.get("localidad"), _rep_base(a))
-        cambios.update({"lat": pt[0], "lng": pt[1], "geo": pt[2] if len(pt) > 2 else "ok"} if pt else {"lat": None, "lng": None, "geo": "no"})
+        pt = await _rep_ubicar(cambios["direccion"], cambios.get("cp", p.get("cp")),
+                               cambios.get("localidad", p.get("localidad")), _rep_base(a))
+        cambios.update(_rep_geo_campos(pt))
+        # El punto que puso la persona era el de la dirección de antes (03-11-2026, como en reparto_mi_editar): el
+        # nuevo es del buscador y no se queda con su geo_origen.
+        if p.get("geo_origen"):
+            cambios["geo_origen"] = None
     if cambios:
         await db.reparto_pedidos.update_one({"id": pid}, {"$set": cambios})
     return _rep_sale({**p, **cambios}, user)
@@ -53190,7 +54018,8 @@ async def reparto_repartir(data: dict = Body(...), user: dict = Depends(require_
     zonas = {z["nombre"]: z for z in a.get("zonas") or [] if z.get("conductor_id")}
     n = 0
     async for p in db.reparto_pedidos.find({"fecha": f, "conductor_id": {"$in": ["", None]}}, {"_id": 0}):
-        z = zonas.get(p.get("zona") or "") or reparto.zona_de(p.get("direccion"), p.get("cp"), a.get("zonas"))
+        z = zonas.get(p.get("zona") or "") or reparto.zona_de(p.get("direccion"), p.get("cp"), a.get("zonas"),
+                                                               _region_actual.get()[0])
         if z and z.get("conductor_id"):
             await db.reparto_pedidos.update_one({"id": p["id"]}, {"$set": {
                 "zona": z["nombre"], "conductor_id": z["conductor_id"],
@@ -53502,7 +54331,7 @@ async def reparto_vivo(user: dict = Depends(require_admin)):
 # ── CONDUCTOR ─────────────────────────────────────────────────────────────────
 
 @api_router.get("/reparto/mi-ruta")
-async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
+async def reparto_mi_ruta(user: dict = Depends(require_any_auth), request: Request = None):
     autonomo = await _rep_es_autonomo(user)
     if user.get("role") != "driver" and not autonomo:
         return {"activo": False}
@@ -53562,6 +54391,10 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
     aviso = await db.reparto_avisos.find_one({"driver_id": d["id"]}, {"_id": 0})
     ruta = await db.reparto_rutas.find_one({"id": f"{f}_{d['id']}"}, {"_id": 0})
     org = await get_org(user.get("org_id")) if user.get("org_id") else None
+    # «app_login» donde de verdad se entra (02-11-2026): al abrir la ruta del día, en la web o en la app. Con solo el
+    # login o la renovación llegaba días tarde (el alta ya da la sesión, y la de la app dura un mes). Una vez: la marca.
+    if autonomo and org and not user.get("demo") and not org.get("meta_app_login_en"):
+        await _meta_app_login(org, user, request)
     try:
         await _referido_premiar(org, d["id"])
     except Exception as e:                                   # noqa: BLE001
@@ -53570,7 +54403,7 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
     bono = None
     if autonomo and not user.get("demo"):
         try:
-            bono = await _bono_estado(org, d["id"])
+            bono = await _bono_estado(org, d["id"], request)
         except Exception as e:                               # noqa: BLE001
             logger.warning(f"bono: {type(e).__name__}")
     return {"activo": True, "empresa": (org or {}).get("name") or "", "bono": bono,
@@ -53621,7 +54454,24 @@ async def reparto_mis_direcciones(q: str = "", user: dict = Depends(require_any_
     """LAS DIRECCIONES QUE YA CONOCE (25-10-2026): al escribir una parada, las de SU historial que encajan con lo
     escrito, con su punto exacto y el cliente y el teléfono de la última vez. Es la queja más repetida de Circuit
     («metemos las mismas paradas cada día y no las recuerda»). Solo paradas de este repartidor de los últimos 180
-    días que llegaron a situarse en el mapa; las de ejemplo no."""
+    días; las de ejemplo no.
+
+    SOLO DONDE YA ENTREGÓ, Y CON LA PUERTA (03-11-2026). La web y la app las enseñan como «Ya estuviste aquí · N
+    veces» y, al elegir una, la toman tal cual (dirección, punto, cliente y teléfono), sin marcarla nunca «Otra
+    calle»: su punto tiene que estar comprobado. Por eso:
+      · cuentan solo las paradas ENTREGADAS; las fallidas nunca (una «Dirección incorrecta» es justo la señal de que
+        allí no se encontró);
+      · una dirección solo sale si alguna de sus entregadas aprendió la puerta (puerta_lat/puerta_lng: la posición
+        del móvil al entregar, precisa y a 300 m o menos del punto de la parada, reparto.puerta_valida). El punto es
+        la puerta aprendida más reciente y la precisión, "portal"; las veces, sus entregadas; el cliente, el
+        teléfono y la última vez, los de la entregada más reciente;
+      · sin puerta NO sale: el punto guardado no lo comprobó nadie. Puede ser el de otra calle («Rúa Brétema
+        Mariñeira 23, 15011 A Coruña» guardada con el punto de «Rúa Brétema, 15179 Oleiros», a 8 km: quien la
+        entregó en A Coruña lo hizo lejos de él, y ahí no se aprende la puerta) y, como suya, pasaría a la parada
+        nueva sin ningún aviso. Esa dirección la siguen encontrando el servidor y los buscadores, cuyas sugerencias
+        sí se comparan con lo escrito.
+    Hasta el 03-11-2026 contaban también las fallidas y las entregadas sin puerta, con el punto guardado (y antes,
+    cualquier parada con punto, también las pendientes de hoy)."""
     d = await _rep_conductor(user)
     palabras = [w for w in reparto.clave_direccion(_texto_cuerpo(q, 120)).split() if len(w) >= 2]
     if len("".join(palabras)) < 3:
@@ -53629,25 +54479,26 @@ async def reparto_mis_direcciones(q: str = "", user: dict = Depends(require_any_
     desde = (datetime.strptime(_dia_negocio(), "%Y-%m-%d") - timedelta(days=180)).strftime("%Y-%m-%d")
     vistas: dict = {}
     async for p in db.reparto_pedidos.find(
-            {"conductor_id": d["id"], "fecha": {"$gte": desde}, "ejemplo": {"$ne": True}, "lat": {"$ne": None}},
-            {"_id": 0, "direccion": 1, "cp": 1, "localidad": 1, "lat": 1, "lng": 1, "cliente": 1, "telefono": 1,
-             "fecha": 1, "puerta_lat": 1, "puerta_lng": 1}).sort("fecha", -1).limit(5000):
+            {"conductor_id": d["id"], "fecha": {"$gte": desde}, "ejemplo": {"$ne": True}, "estado": "entregado"},
+            {"_id": 0, "direccion": 1, "cp": 1, "localidad": 1, "cliente": 1, "telefono": 1, "fecha": 1,
+             "puerta_lat": 1, "puerta_lng": 1}).sort("fecha", -1).limit(5000):
         k = reparto.clave_direccion(p.get("direccion"))
         if not k or not all(w in k for w in palabras):
             continue
-        con_puerta = p.get("puerta_lat") is not None and p.get("puerta_lng") is not None
-        if k in vistas:
-            vistas[k]["veces"] += 1
-            # LA PUERTA APRENDIDA (30-10-2026): si una vez anterior guardó la puerta de verdad, ese es el punto.
-            if con_puerta and not vistas[k]["puerta"]:
-                vistas[k].update({"lat": p["puerta_lat"], "lng": p["puerta_lng"], "puerta": True})
-            continue
-        vistas[k] = {"direccion": p.get("direccion") or "", "cp": p.get("cp") or "", "localidad": p.get("localidad") or "",
-                     "lat": p["puerta_lat"] if con_puerta else p.get("lat"), "lng": p["puerta_lng"] if con_puerta else p.get("lng"),
-                     "puerta": con_puerta, "cliente": p.get("cliente") or "",
-                     "telefono": p.get("telefono") or "", "ultima": p.get("fecha") or "", "veces": 1}
-    # Las más repetidas primero; a igualdad, la más reciente (dos pasadas: la ordenación de Python es estable).
-    orden = sorted(vistas.values(), key=lambda x: x["ultima"], reverse=True)
+        # De la más reciente a la más antigua: la primera de cada dirección pone la dirección, el cliente, el
+        # teléfono y la última vez; la primera con la puerta aprendida, el punto.
+        v = vistas.get(k)
+        if v is None:
+            v = vistas[k] = {"direccion": p.get("direccion") or "", "cp": p.get("cp") or "",
+                             "localidad": p.get("localidad") or "", "lat": None, "lng": None, "puerta": False,
+                             "cliente": p.get("cliente") or "", "telefono": p.get("telefono") or "",
+                             "ultima": p.get("fecha") or "", "veces": 0, "precision": "portal"}
+        v["veces"] += 1
+        if not v["puerta"] and p.get("puerta_lat") is not None and p.get("puerta_lng") is not None:
+            v.update({"lat": p["puerta_lat"], "lng": p["puerta_lng"], "puerta": True})
+    # Solo las que tienen la puerta. Las más repetidas primero; a igualdad, la más reciente (dos pasadas: la
+    # ordenación de Python es estable).
+    orden = sorted((v for v in vistas.values() if v["puerta"]), key=lambda x: x["ultima"], reverse=True)
     orden.sort(key=lambda x: -x["veces"])
     return {"direcciones": orden[:4]}
 
@@ -53861,13 +54712,46 @@ async def reparto_ticket(file: UploadFile = File(...), user: dict = Depends(requ
     except Exception as e:                                   # noqa: BLE001
         logger.warning(f"reparto: ticket ilegible por la IA: {type(e).__name__}")
         raise HTTPException(503, "La IA no ha podido leer el ticket ahora. Escribe la dirección a mano.")
-    return reparto.limpia_ticket(leido)
+    return reparto.limpia_ticket(leido, _region_actual.get()[0])
+
+
+@api_router.post("/reparto/ubicar")
+async def reparto_ubicar(data: dict = Body(...), user: dict = Depends(require_any_auth)):
+    """¿DÓNDE CAE ESTA DIRECCIÓN? (02-11-2026). Para la ficha de la parada antes de guardarla y para las sugerencias de
+    «Situar la parada»: la misma cadena que al guardar (geocodificador.py), sin guardar nada. Contesta si se encontró
+    (el portal o la calle: la zona sola no vale para ir), el punto y su precisión («portal», «calle» o «zona»), el
+    texto de lo encontrado, hasta 6 candidatos (el mejor primero) y las fuentes que hay que citar. Solo para quien
+    reparte y como mucho 40 por minuto. `cerca` ({lat, lng}, la posición del móvil) es opcional y solo valida."""
+    await _rep_conductor(user)
+    _rl_public_action(f"rep-ubicar:{user.get('sub')}", max_count=40, window_s=60,
+                      detail="Demasiadas búsquedas seguidas: espera un minuto")
+    data = _dict_cuerpo(data)
+    direccion = _texto_cuerpo(data.get("direccion"), 200)
+    if len(direccion) < 4:
+        raise HTTPException(400, "Falta la dirección de entrega")
+    a = await _rep_ajustes()
+    # Con el CP con el que se guardaría (03-11-2026, _rep_nuevo): el que llega o el escrito, con la regla del país.
+    cp = _texto_cuerpo(data.get("cp"), 10) or reparto.extrae_cp(direccion, _region_actual.get()[0])
+    r = await _rep_ubicar_detalle(direccion, cp, _texto_cuerpo(data.get("localidad"), 80),
+                                  _rep_base(a), _rep_cerca(data.get("cerca")))
+    return {"encontrada": r["precision"] in ("portal", "calle"), "lat": r["lat"], "lng": r["lng"],
+            "precision": r["precision"], "direccion": r["direccion"] or None,
+            "candidatos": [{k: c.get(k) for k in ("lat", "lng", "precision", "direccion")} for c in r["candidatos"][:6]],
+            "atribucion": geocodificador.atribucion(r["fuentes"], _region_actual.get()[0], r.get("cc", True))}
 
 
 @api_router.post("/reparto/mis-pedidos")
 async def reparto_mis_pedidos(data: dict = Body(...), user: dict = Depends(require_any_auth)):
     d = await _rep_conductor(user)
+    data = _dict_cuerpo(data)
     origen = "ticket" if data.get("de_ticket") else ("escaneo" if data.get("codigo") else "conductor")
+    # El punto que manda la app (02-11-2026: la sugerencia elegida o el sitio puesto en el mapa), solo si es de verdad y
+    # del país de la cuenta; si no, se busca la dirección como siempre.
+    if ("lat" in data or "lng" in data) and not _rep_punto_de(data.get("lat"), data.get("lng")):
+        data = {k: v for k, v in data.items() if k not in ("lat", "lng", "geo_origen", "precision")}
+    # El CP, la población y el punto de una sugerencia abandonada (03-11-2026): no van con lo escrito.
+    if _rep_sugerencia_ajena(data, _texto_cuerpo(data.get("direccion"), 200)):
+        data = {k: v for k, v in data.items() if k not in _REP_DE_LA_SUGERENCIA}
     return await _rep_nuevo(data, user, origen, _dia_negocio(), conductor=d)
 
 
@@ -53999,6 +54883,10 @@ async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(
     if e != "entregado":
         cambios.update({"entrega_foto": None, "entrega_nota": cambios.get("entrega_nota"), "entrega_firma": None,
                         "entrega_donde": None, "entrega_recibe": None, "entrega_ia": None})
+        # Ni la puerta (03-11-2026): sin entrega no hay puerta aprendida. Si se reabre, se le cambia la dirección o el
+        # punto y se vuelve a entregar sin una posición precisa, la de antes se quedaba con la dirección nueva.
+        if p.get("puerta_lat") is not None or p.get("puerta_lng") is not None:
+            cambios.update({"puerta_lat": None, "puerta_lng": None, "puerta_precision": None})
     # LA ENTREGA VERIFICADA (01-11-2026): con foto nueva, la IA la mira. Se deja «pendiente» ANTES de lanzarla (si
     # acaba en segundo plano, su veredicto pisa el pendiente y no al revés) y se espera un poco por la respuesta.
     elif foto and _rep_ia_entrega_activa():
@@ -54070,16 +54958,28 @@ async def reparto_mi_ordenar(data: dict = Body(...), user: dict = Depends(requir
     a = await _rep_ajustes()
     origen = reparto._punto(_dict_cuerpo(data)) or _rep_base(a)
     # Antes de ordenar, otro intento con las que no se ubicaron (el buscador
-    # mejora; o se metieron cuando no respondía). Como mucho 10: uno por
-    # segundo, para no dejar al repartidor esperando.
+    # mejora; o se metieron cuando no respondía). Como mucho 10, tres a la vez
+    # y 12 s en total (02-11-2026), para no dejar al repartidor esperando. Las
+    # que ya tienen su zona, solo si salió de una búsqueda incompleta (02-11-2026,
+    # revisión S4: un servicio caído o un paso sin tiempo); si no, saldría lo mismo.
+    # Lo que situó la persona («manual» o «aprox» con geo_origen, 03-11-2026) lleva
+    # lat/lng: ni entra aquí ni se pisa (la escritura exige lat a null).
     sin = await db.reparto_pedidos.find(
-        {"fecha": _dia_negocio(), "conductor_id": d["id"], "estado": {"$in": ["pendiente", "en_ruta"]},
-         "lat": None, "geo": {"$in": ["no", "pendiente"]}}, {"_id": 0}).to_list(10)
-    for p in sin:
-        pt = await _rep_ubicar(p.get("direccion"), p.get("cp"), p.get("localidad"), _rep_base(a))
+        {"fecha": _dia_negocio(), "conductor_id": d["id"], "estado": {"$in": ["pendiente", "en_ruta"]}, "lat": None,
+         "$or": [{"geo": {"$in": ["no", "pendiente"]}}, {"geo": "zona", "geo_incompleta": True}]},
+        {"_id": 0}).to_list(10)
+    a_la_vez = asyncio.Semaphore(3)
+
+    async def otra_vez(p):
+        async with a_la_vez:
+            pt = await _rep_ubicar(p.get("direccion"), p.get("cp"), p.get("localidad"), _rep_base(a))
         if pt:
-            await db.reparto_pedidos.update_one({"id": p["id"]}, {"$set": {
-                "lat": pt[0], "lng": pt[1], "geo": pt[2] if len(pt) > 2 else "ok"}})
+            await db.reparto_pedidos.update_one({"id": p["id"], "lat": None}, {"$set": _rep_geo_campos(pt)})
+    if sin:
+        try:
+            await asyncio.wait_for(asyncio.gather(*(otra_vez(p) for p in sin)), timeout=12)
+        except asyncio.TimeoutError:
+            logger.warning("reparto: el último intento de ubicar antes de ordenar no acabó a tiempo")
     salida, programada = _rep_salida_ahora(a)
     ruta = await _rep_ordenar(_dia_negocio(), d["id"], origen, salida_min=salida, programada=programada)
     return {"ordenados": ruta["paradas"], "ruta": ruta}
@@ -54555,7 +55455,9 @@ async def reparto_mi_navegar(data: dict = Body(...), user: dict = Depends(requir
         raise HTTPException(409, "Esa parada ya está cerrada")
     hasta = reparto._punto(p)
     if not hasta:
-        raise HTTPException(400, "Esta parada no está situada en el mapa: ábrela con Google Maps")
+        # Sitúala, no Google Maps (02-11-2026, revisión S6): las apps abren «Situar la parada»; esto llega solo con la
+        # lista sin refrescar (la oficina cambió la dirección) o con un punto que se guardó sin red y no valió.
+        raise HTTPException(400, "Esta parada no está situada en el mapa: sitúala antes de ir.")
     desde = reparto._punto(_dict_cuerpo(data.get("desde")))
     if not desde:
         raise HTTPException(400, "Hace falta tu ubicación para guiarte")
@@ -54625,6 +55527,11 @@ async def reparto_mi_editar(pid: str, data: dict = Body(...), user: dict = Depen
     if p.get("conductor_id") != d["id"]:
         raise HTTPException(403, "Ese pedido no es tuyo")
     data = _dict_cuerpo(data)
+    # El CP, la población y el punto de una sugerencia abandonada (03-11-2026), con la dirección que queda: la nueva, o
+    # la de siempre si no se cambia. No se guardan: la parada se queda como estaba o se busca lo escrito.
+    queda = _texto_cuerpo(data.get("direccion"), 200) if "direccion" in data else (p.get("direccion") or "")
+    if _rep_sugerencia_ajena(data, queda):
+        data = {k: v for k, v in data.items() if k not in _REP_DE_LA_SUGERENCIA}
     cambios = {}
     if "hueco" in data:
         cambios["hueco"] = _texto_cuerpo(data.get("hueco"), 40)
@@ -54635,7 +55542,9 @@ async def reparto_mi_editar(pid: str, data: dict = Body(...), user: dict = Depen
         cambios["notas"] = _texto_cuerpo(data.get("notas"), 200)
     abierto = p.get("estado") in ("pendiente", "en_ruta")
     campos = {"cliente", "telefono", "direccion", "contenido", "bultos", "horario", "cobrar", "prioridad", "tipo", "cp", "localidad"}
-    if campos & set(data) and not abierto:
+    # Situar la parada (02-11-2026): un punto que llega a null es que no se manda.
+    quiere_punto = data.get("lat") is not None or data.get("lng") is not None
+    if (campos & set(data) or quiere_punto) and not abierto:
         raise HTTPException(409, "Esa parada ya está cerrada: no se puede cambiar")
     if abierto:
         if "cliente" in data:
@@ -54661,23 +55570,32 @@ async def reparto_mi_editar(pid: str, data: dict = Body(...), user: dict = Depen
             tmp = {"notas": cambios.get("notas", p.get("notas") or "")}
             _rep_pon_ventana(tmp, {"horario": data.get("horario")})
             cambios["ventana_desde"], cambios["ventana_hasta"] = tmp["ventana_desde"], tmp["ventana_hasta"]
+        # SITUAR LA PARADA (02-11-2026): el punto que la persona pone en NUESTRO mapa, elige de las sugerencias o toma
+        # de su móvil, con la dirección o sin cambiarla. Queda «manual» (o «aprox» si es la calle sin el portal:
+        # _rep_geo_elegido, 03-11-2026), sin la zona, y se apunta de dónde salió.
+        punto = _rep_punto_o_400(data) if quiere_punto else None
         if "direccion" in data:
             direccion = _texto_cuerpo(data.get("direccion"), 200)
             if len(direccion) < 4:
                 raise HTTPException(400, "Falta la dirección de entrega")
             if direccion != (p.get("direccion") or ""):
-                cp = _texto_cuerpo(data.get("cp"), 10) or reparto.extrae_cp(direccion)
+                # Sin CP aparte, el escrito con la regla del país (03-11-2026, como en _rep_nuevo).
+                cp = _texto_cuerpo(data.get("cp"), 10) or reparto.extrae_cp(direccion, _region_actual.get()[0])
                 loc = _texto_cuerpo(data.get("localidad"), 80)
                 cambios.update({"direccion": direccion, "cp": cp, "localidad": loc})
-                pt = reparto._punto(data)
-                if pt:
-                    cambios.update({"lat": pt[0], "lng": pt[1], "geo": "manual"})
-                else:
-                    pt = await _rep_ubicar(direccion, cp, loc, _rep_base(await _rep_ajustes()))
-                    if pt:
-                        cambios.update({"lat": pt[0], "lng": pt[1], "geo": pt[2] if len(pt) > 2 else "ok"})
-                    else:
-                        cambios.update({"lat": None, "lng": None, "geo": "no"})   # no se inventa un sitio
+                if not punto:
+                    cerca = _rep_cerca(data.get("cerca"))
+                    pt = await _rep_ubicar(direccion, cp, loc, _rep_base(await _rep_ajustes()),
+                                           **({"cerca": cerca} if cerca else {}))
+                    cambios.update(_rep_geo_campos(pt))              # sin nada, «no»: no se inventa un sitio
+                    if p.get("geo_origen"):
+                        cambios["geo_origen"] = None
+        if punto:
+            origen_geo = _texto_cuerpo(data.get("geo_origen"), 20)
+            cambios.update({"lat": punto[0], "lng": punto[1], "geo": _rep_geo_elegido(data), "zona_lat": None,
+                            "zona_lng": None, "geo_origen": origen_geo if origen_geo in _REP_GEO_ORIGENES else None})
+            if p.get("geo_incompleta"):
+                cambios["geo_incompleta"] = None
     if cambios:
         await db.reparto_pedidos.update_one({"id": pid}, {"$set": cambios})
     return {"ok": True, **{k: v for k, v in {**p, **cambios}.items() if k not in ("entrega_foto", "entrega_firma")}}
@@ -54748,7 +55666,7 @@ async def reparto_mis_quitar_ejemplos(user: dict = Depends(require_any_auth)):
 
 
 @api_router.post("/reparto/jornada")
-async def reparto_jornada(data: dict = Body(...), user: dict = Depends(require_any_auth)):
+async def reparto_jornada(data: dict = Body(...), user: dict = Depends(require_any_auth), request: Request = None):
     """Empezar o terminar la jornada de reparto. La ubicación solo se comparte
     entre una cosa y la otra (art. 90 LOPDGDD), y la primera vez hay que haber
     leído y aceptado el aviso de qué se ve, quién y cuánto tiempo."""
@@ -54771,6 +55689,9 @@ async def reparto_jornada(data: dict = Body(...), user: dict = Depends(require_a
         return {"empezada": ahora, "terminada": None}
     if accion == "terminar":
         await db.reparto_jornadas.update_one({"id": jid}, {"$set": {"terminada": ahora}})
+        # «primera_ruta» a Meta (02-11-2026): la primera vez que quien reparte solo cierra un día con una entrega real.
+        if user.get("role") == "admin" and not user.get("demo"):
+            await _meta_primera_ruta(await get_org(user.get("org_id")), d["id"], fecha=f, request=request)
         return {"terminada": ahora}
     raise HTTPException(400, "Acción no válida")
 
@@ -56832,8 +57753,9 @@ def _bono_resumen(org: dict, ahora: Optional[datetime] = None) -> Optional[dict]
             "revisar": bool(o.get("bono_sospechoso"))}
 
 
-async def _bono_estado(org: dict, conductor_id: str) -> Optional[dict]:
-    """Cuánto lleva hacia el bono, y si ya lo ha hecho, se le paga (una vez)."""
+async def _bono_estado(org: dict, conductor_id: str, request=None) -> Optional[dict]:
+    """Cuánto lleva hacia el bono, y si ya lo ha hecho, se le paga (una vez). `request`: la de la ruta del día, para
+    saber si «primera_ruta» viene de la app nativa (02-11-2026)."""
     ahora = datetime.now(timezone.utc)
     estado = _bono_resumen(org, ahora)
     if not estado or estado["pagado"] or not conductor_id:
@@ -56862,6 +57784,9 @@ async def _bono_estado(org: dict, conductor_id: str) -> Optional[dict]:
         "mes": ahora.strftime("%Y-%m"), "ts": ahora.isoformat()})
     await global_db.organizations.update_one(
         {"id": org["id"]}, {"$inc": {"cartera_saldo": _BONO_CENT, "cartera_ganado": _BONO_CENT}})
+    # La primera ruta de verdad también es «primera_ruta» para Meta (02-11-2026), por si nunca pulsó «Terminar». Con
+    # la petición: cobrado desde la app nativa es origen «app» y no sale sin META_APP_EVENTS (antes iba como «website»).
+    await _meta_primera_ruta(org, conductor_id, request=request)
     return {"cent": _BONO_CENT, "pagado": True, "pagado_en": ahora.isoformat(), "nuevo": True}
 
 

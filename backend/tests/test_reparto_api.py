@@ -931,9 +931,10 @@ async def test_mis_direcciones_propone_las_suyas_con_su_punto(base, monkeypatch)
     monkeypatch.setattr(server, "get_org", _org_autonomo)
     await server.reparto_mi_ruta(YO)
     docs = base.db["reparto_pedidos"].docs
+    # Desde el 03-11-2026 solo salen las entregadas, y con la puerta aprendida (x1): ese es el punto.
     docs += [
         {"id": "x1", "conductor_id": "a9", "fecha": "2026-10-01", "direccion": "Rúa Real 5, A Coruña", "lat": 43.37, "lng": -8.39,
-         "cliente": "Bar Pepe", "telefono": "600111222", "estado": "entregado"},
+         "cliente": "Bar Pepe", "telefono": "600111222", "estado": "entregado", "puerta_lat": 43.37004, "puerta_lng": -8.39003},
         {"id": "x2", "conductor_id": "a9", "fecha": "2026-10-02", "direccion": "rua real 5 a coruña", "lat": 43.37, "lng": -8.39,
          "cliente": "Bar Pepe", "telefono": "600111222", "estado": "entregado"},
         {"id": "x3", "conductor_id": "a9", "fecha": "2026-10-02", "direccion": "Rúa Real 50", "lat": None, "lng": None},  # sin situar
@@ -942,7 +943,7 @@ async def test_mis_direcciones_propone_las_suyas_con_su_punto(base, monkeypatch)
         {"id": "x6", "conductor_id": "a9", "fecha": "2025-01-02", "direccion": "Rúa Real 11", "lat": 43.3, "lng": -8.3},  # muy vieja
     ]
     r = (await server.reparto_mis_direcciones("real 5", YO))["direcciones"]
-    assert len(r) == 1 and r[0]["cliente"] == "Bar Pepe" and r[0]["veces"] == 2 and r[0]["lat"] == 43.37
+    assert len(r) == 1 and r[0]["cliente"] == "Bar Pepe" and r[0]["veces"] == 2 and r[0]["lat"] == 43.37004
     assert {x["direccion"] for x in (await server.reparto_mis_direcciones("Real", YO))["direcciones"]} <= {
         "Rúa Real 5, A Coruña", "rua real 5 a coruña"}
     assert (await server.reparto_mis_direcciones("r", YO))["direcciones"] == []

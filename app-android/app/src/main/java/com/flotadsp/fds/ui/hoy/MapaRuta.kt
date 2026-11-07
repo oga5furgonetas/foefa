@@ -132,6 +132,8 @@ fun MapaRuta(
     /** «Ir» en la tarjeta de una parada: la guía de la app o el navegador elegido, lo decide «Hoy» (01-11-2026). */
     alNavegar: (Parada) -> Unit = {},
     alTocar: (Parada) -> Unit, alAparcarEn: (Double, Double) -> Unit = { _, _ -> }, alQuitarFurgo: () -> Unit = {},
+    /** Las que no están en el mapa (02-11-2026): tocar su aviso abre «Situar la parada» con la primera. */
+    alSituar: (Parada) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val ctx = LocalContext.current
@@ -330,8 +332,11 @@ fun MapaRuta(
         // Arriba a la izquierda: lo que hay que saber (sin ubicar, la DGT, la ZBE); un toque lleva allí.
         Column(Modifier.align(Alignment.TopStart).padding(10.dp).widthIn(max = 250.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (ubicadas.size < paradas.size) {
-                Etiqueta(tx("{n} sin ubicar: edítalas para corregir la dirección", "n" to (paradas.size - ubicadas.size)),
-                    MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.onSurface) {}
+                val sin = paradas.size - ubicadas.size
+                Etiqueta(if (sin == 1) tx("1 sin ubicar: toca para situarla en el mapa") else tx("{n} sin ubicar: toca para situarlas en el mapa", "n" to sin),
+                    MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.onSurface) {
+                    paradas.firstOrNull { !it.ubicada }?.let(alSituar)
+                }
             }
             if (incidencias.isNotEmpty()) {
                 Etiqueta("${fuente.substringBefore(" · ").ifBlank { "DGT" }} · ${incidencias.size} ${if (incidencias.size == 1) tx("incidencia cerca") else tx("incidencias cerca")}", Color(0xFFFEF3C7), Color(0xFF92400E)) {

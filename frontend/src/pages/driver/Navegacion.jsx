@@ -391,7 +391,13 @@ function MapaGuia({ linea, yo, rumbo, destino, numero, seguir, onMover }) {
     mapa.current = m
     const vigia = new ResizeObserver(() => m.invalidateSize())
     vigia.observe(caja.current)
-    return () => { vigia.disconnect(); m.remove(); mapa.current = null; capas.current = {} }
+    return () => {
+      vigia.disconnect()
+      // Un zoom animado a medias (250 ms) fallaba con el mapa ya quitado («_leaflet_pos» de Leaflet 1.9): desde el
+      // 02-11-2026 la guía se cierra sola si la siguiente parada no está situada, a veces justo al acercar. Se termina antes.
+      try { if (m._animatingZoom) m._onZoomTransitionEnd() } catch { /* nada */ }
+      m.remove(); mapa.current = null; capas.current = {}
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

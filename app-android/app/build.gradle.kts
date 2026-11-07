@@ -36,8 +36,10 @@ android {
         minSdk = 26
         targetSdk = 36
         // La TWA llegó a code 4 (1.0.3): la nativa empieza en 10.
-        versionCode = 23
-        versionName = "2.4.4"
+        // 2.4.5 (02-11-2026): el primer paquete bien situado: lo que el servidor no encuentra lo busca el móvil y, si
+        // no, se pone en nuestro mapa («Situar la parada»); «Navegar» ya no manda a Google Maps.
+        versionCode = 24
+        versionName = "2.4.5"
         buildConfigField("String", "API_URL", "\"$apiUrl\"")
         buildConfigField("String", "WEB_URL", "\"https://flotadsp.com\"")
         buildConfigField("String", "FCM_APP_ID", "\"$fcmAppId\"")

@@ -1,14 +1,14 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
   Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff, Plus, FileText, Mail, CalendarClock, Lightbulb, History,
-  AlertTriangle, CarFront, Truck, Volume2, ShieldCheck,
+  AlertTriangle, CarFront, Truck, Volume2, ShieldCheck, Copy,
 } from 'lucide-react'
 import {
   repMiRuta, repZonasCarga, repEscanear, repEscanearLote, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
   repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado, repFachada, repGanancias,
-  repTraerPrevias, repMisMarcas, repMisDirecciones, repFormasCodigo, repIncidencias, repZbe,
+  repTraerPrevias, repMisMarcas, repMisDirecciones, repFormasCodigo, repIncidencias, repZbe, getReferidos, repUbicar,
 } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
 import { lista } from '../../lib/lista'
@@ -19,13 +19,14 @@ import { textoParaPegar, csvAPegar } from '../../lib/hojaReparto'
 import { lectorDeCodigos, leerCodigo } from '../../lib/codigos'
 import { datosDeCodigos, esCodigoSimple, formaCodigo } from '../../lib/codigoEtiqueta'
 import { buscarDirecciones } from '../../lib/direcciones'
-import { invitar } from '../../lib/compartir'
+import { deUbicar, juntarSugerencias, alElegir, cambioEsAqui, estadoDeParada, punto as puntoDe } from '../../lib/situar'
+import { invitar, enlaceInvitar } from '../../lib/compartir'
 import { medirAccion } from '../../lib/analitica'
 import { compartirDia } from '../../lib/compartirDia'
 import { fijarPais, importe, simboloMoneda, metodosCobro, paisActual, distancia, unidades, KM_POR_MILLA } from '../../lib/region'
 import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 import { salirDeLaDemoDeReparto, decodeToken } from '../../panel/auth'
-import { eurosRef, fechaRefPromo } from '../../lib/precios'
+import { eurosRef, fechaRefPromo, refCentActual, refPromoActiva, promoGratis, fechaPromo, BONO_CENT } from '../../lib/precios'
 import AntesPuerta from './AntesPuerta'
 import ClienteDice, { textoClienteDice } from './ClienteDice'
 import MemoriaPuerta, { MemoriaHoja } from './MemoriaPuerta'
@@ -88,6 +89,20 @@ const aplicarCola = (r, cola) => {
   return { ...r, pedidos: lista(r.pedidos).map((p) => {
     const x = por.get(p.id)
     return x ? { ...p, estado: x.estado, motivo: x.motivo || '', cerrado_en: x.estado === 'pendiente' ? null : x.hecho_en, sin_enviar: true } : p
+  }) }
+}
+/* UN PUNTO RECIÉN PUESTO GANA (02-11-2026): si llega una carga de la ruta que salió antes de guardar el punto de
+   «Situar la parada», se pinta el punto puesto (durante 2 min) y no la parada sin situar: la guía no vuelve a pedirlo.
+   Con su `geo` («aprox» si era la calle sin el portal) y, si «Es aquí» la cambió (situar.js cambioEsAqui: otra calle,
+   el CP y el pueblo que le faltaban…), su dirección (03-11-2026). */
+const aplicarPuntos = (r, puntos) => {
+  const vivos = Object.entries(puntos || {}).filter(([, x]) => Date.now() - x.t < 120000)
+  if (!r || !vivos.length) return r
+  const por = Object.fromEntries(vivos)
+  return { ...r, pedidos: lista(r.pedidos).map((p) => {
+    const x = por[p.id]
+    if (!x || p.lat != null) return p
+    return { ...p, lat: x.lat, lng: x.lng, geo: x.geo || 'manual', ...(x.direccion ? { direccion: x.direccion, cp: x.cp || '', localidad: x.localidad || '' } : {}) }
   }) }
 }
 const MOTIVOS = ['No había nadie', 'Dirección incorrecta', 'Rechazado', 'Fuera de horario', 'Otro']
@@ -155,6 +170,8 @@ const SIN_ZONAS = []
 const NAVEGADORES = [['app', 'Esta app'], ['google', 'Google Maps'], ['waze', 'Waze']]
 const nombreNavegador = (nav) => ({ google: 'Google Maps', waze: 'Waze' }[nav] || 'Google Maps')
 const Navegacion = lazy(() => import('./Navegacion'))
+// «Situar la parada» (02-11-2026): también lleva Leaflet, así que solo se descarga al abrirla.
+const SituarParada = lazy(() => import('./SituarParada'))
 function navegar(p, nav) {
   if (nav === 'waze') {
     return p.lat != null
@@ -249,11 +266,67 @@ const guarda = (k, v) => { try { localStorage.setItem(k, v) } catch { /* modo pr
 const sinTildes = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 const porOrden = (a, b) => (a.orden ?? 1e9) - (b.orden ?? 1e9)
 
+/* ELEGIR UNA SUGERENCIA EN LA FICHA (de la lista o con «Es aquí» en «Situar la parada»): lo que cambia en el formulario.
+   Su punto y su dirección con el piso escrito («2º B»: los buscadores no lo traen); de su historial, también el cliente y
+   el teléfono, sin pisar lo que ya haya escrito. Una «Sin el portal» (la calle sin la casa) no pisa lo escrito, que
+   lleva el número que hay que buscar en la puerta, y la ficha sigue diciendo «Calle encontrada, sin el portal», no
+   «Sitio encontrado en el mapa» (02-11-2026, prueba en el emulador: «Rúa Real 999, 15003 A Coruña» pasaba a ser «Calle
+   Real, 15003 A Coruña», en verde). `elegida_precision` vive en el formulario: al guardar, una «calle» se manda como
+   "precision": "calle" con el punto (03-11-2026: el servidor la guarda «aprox», no como si fuera la puerta).
+   UNA «OTRA CALLE» (03-11-2026, la regla de la app nativa): es otra calle, así que la dirección pasa a ser la suya,
+   con el piso escrito, y nunca se queda lo escrito con el punto de otra calle («Rúa Brétema Mariñeira 23, 15011 A
+   Coruña» con el punto de «Rúa Brétema, 15179 Oleiros», a 8 km).
+   UNA SOLA REGLA (03-11-2026, el emulador y la revisión): lo decide situar.js alElegir con la dirección de la FICHA
+   (no con lo buscado en «Situar la parada», que se puede haber corregido a «Rúa Brétema, Oleiros»), venga de donde
+   venga la sugerencia, igual desde la lista que con «Es aquí». «Calle Real 85» para «Rúa Real 999» tampoco cambia el
+   999 (es la calle, no la puerta), y una suya va con la precisión que dice el servidor. La dirección que cambia lleva
+   el CP y la población de lo elegido; la que se queda, los suyos si lo elegido no los dice.
+   EL SITIO DE LA FICHA (03-11-2026 de madrugada, la revisión): la regla mira también el CP y la población de la ficha
+   mientras sigan escritos (escritoEn; situar.js mismoSitio: «Rúa Brétema, 15179 Oleiros» no es la calle de «Rúa
+   Brétema 23, 15011 A Coruña»), y `lugar_elegido` dice que el CP y la población son los de lo elegido: al cambiar la
+   dirección se quitan (conDireccionNueva). */
+function conSugerencia(n, sg) {
+  const el = alElegir(n.direccion, sg, escritoEn(n.direccion, n.cp), escritoEn(n.direccion, n.localidad))
+  const igual = el.direccion === String(n.direccion || '').trim()
+  return {
+    direccion: el.direccion, cp: igual ? el.cp || n.cp || '' : el.cp, localidad: igual ? el.localidad || n.localidad || '' : el.localidad,
+    lat: sg.lat, lng: sg.lng, geo_origen: 'sugerencia', elegida_precision: el.precision === 'calle' ? 'calle' : '', lugar_elegido: true,
+    ...(sg.conocida ? { cliente: n.cliente || sg.cliente || '', telefono: n.telefono || sg.telefono || '' } : {}),
+    ...(n.requiere_confirmar_direccion ? { direccion_confirmada: true } : {}),
+  }
+}
+/** El CP o la población de la ficha para la regla, solo mientras sigan escritos en la dirección (como el cpConsulta de
+ *  la app nativa, 03-11-2026): cambiado el pueblo a mano, no se compara con los de antes. */
+const escritoEn = (texto, x) => (x && sinTildes(texto).includes(sinTildes(x)) ? x : '')
+/* AL CAMBIAR LA DIRECCIÓN ESCRITA, TECLEANDO O DICTANDO (03-11-2026 de madrugada, la revisión; igual en la app nativa).
+   Se tocaba «Rúa Real 5, 15179 Oleiros», se corregía a «Rúa Real 5, 15003 A Coruña» y solo se quitaba el punto: el
+   alta llevaba el CP y la población de lo elegido (15179, Oleiros) y el servidor, que usa el CP que le llega antes que
+   el del texto, buscaba la dirección nueva en Oleiros. Ahora se quita todo lo que vino con el punto o la sugerencia,
+   venga de donde venga (la lista, «Situar la parada» con una sugerencia o puesto a mano en el mapa): el punto,
+   geo_origen, la precisión, el CP y la población, y el servidor busca lo escrito. Los que no vinieron con ella (los de
+   la etiqueta o los de la parada) se quedan, salvo que estuvieran escritos y ya no lo estén: cambiado el pueblo a
+   mano, tampoco se busca con los de antes (como el cpConsulta de la app nativa). Lo mismo con la dirección que trae
+   la foto del ticket o una de sus otras lecturas. */
+function conDireccionNueva(n, direccion) {
+  const antes = sinTildes(n.direccion)
+  const ahora = sinTildes(direccion)
+  const queda = (x) => (!x || n.lugar_elegido || (antes.includes(sinTildes(x)) && !ahora.includes(sinTildes(x))) ? '' : x)
+  return { ...n, direccion, lat: null, lng: null, geo_origen: '', elegida_precision: '', lugar_elegido: false,
+    cp: queda(n.cp), localidad: queda(n.localidad) }
+}
+/* LA PRECISIÓN DEL PUNTO ELEGIDO LLEGA AL SERVIDOR (03-11-2026, igual que la app nativa): el punto de una sugerencia
+   que es solo la calle (o el de «Es aquí» sin haber movido la chincheta desde ella) va con "precision": "calle", y el
+   servidor lo guarda «aprox»: al reabrir la parada no enseña «Ver la puerta» en el centro de la calle. Con el portal,
+   o movida la chincheta, no va nada y queda «manual», como hasta ahora. */
+const conPrecision = (precision) => (precision === 'calle' ? { precision: 'calle' } : {})
+
 /* Dictar la dirección: el reconocimiento de voz del propio navegador (Chrome
    en Android lo tiene). Donde no existe, no sale el botón. */
 const Reconocedor = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null
 
-export default function MiRuta({ onBack, embebido = false, alTerminar = null }) {
+/* `referido` (02-11-2026): la respuesta de /referidos que la app del autónomo (RutaApp) ya pide al abrir; si no se pasa
+   (el portal del conductor), se pide aquí solo cuando hace falta. */
+export default function MiRuta({ onBack, embebido = false, alTerminar = null, referido: referidoDado }) {
   useIdioma()
   const [ruta, setRuta] = useState(() => { const c = copiaDeHoy(); return c ? aplicarCola(c.data, leerCola().filter(deMi)) : null })
   // La ruta que se ve es la guardada en el móvil y el servidor no contesta: se dice de cuándo es.
@@ -307,6 +380,12 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
   // resumen. Lo de hoy se cuenta aquí mismo con las paradas, así no hace falta preguntar tras cada entrega.
   const [marcas, setMarcas] = useState(null)
   const [previasNo, setPreviasNo] = useState(false)    // «Ahora no» a las paradas de otros días
+  // LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): el código de «Invita y gana» de esta cuenta, pedido una sola
+  // vez cuando hay una entrega real de hoy; false si no tiene (demo, suplantación o fuera del programa).
+  const [referidoPropio, setReferidoPropio] = useState(null)
+  // «Ahora no» a la tarjeta de invitar: el DÍA de ruta en que se pulsó (02-11-2026). Un sí/no la dejaba callada también
+  // al día siguiente si la app seguía abierta; así vale solo ese día, como la clave `invitar_no_<fecha>`.
+  const [invitarNo, setInvitarNo] = useState('')
   const [, setConsejoVisto] = useState(0)              // sube al pulsar «Entendido»: se vuelve a mirar
   const [escuchando, setEscuchando] = useState(false)
   const reconocedor = useRef(null)
@@ -324,6 +403,24 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
     if (guiando && !guiandoAntes.current) medirAccion('ruta_navegar')
     guiandoAntes.current = guiando
   }, [guiando])
+  /* SITUAR LA PARADA (02-11-2026; Dani: «el primer paquete que escaneo no encuentra la dirección y tiene que ir por
+     Maps; eso es un pedazo de mierda, hazlo bien»). Una parada sin punto ya no abre Google Maps: abre «Situar la
+     parada» (SituarParada), con lo que encuentra el servidor y nuestro mapa. `situando`: {id, luego, parada} para una
+     de la ruta («guia»: al guardar el punto se guía hasta él; «lista»: se queda en la lista) o {ficha: true} desde la
+     ficha de editar o añadir (el punto va al formulario y se guarda con él). */
+  const [situando, setSituando] = useState(null)
+  const [guardandoPunto, setGuardandoPunto] = useState(false)
+  const [errorPunto, setErrorPunto] = useState('')
+  const puntosNuevos = useRef({})                    // {id: {lat, lng, t}}: los recién puestos (aplicarPuntos)
+  /* LA GUÍA NO SE SALTA UNA PARADA SIN SITUAR (02-11-2026): hecha la que se guiaba, va a la siguiente EN ORDEN; si esa
+     no tiene punto, se cierra la guía y se abre «Situar la parada», y al ponerlo sigue guiando. Antes saltaba a la
+     siguiente situada y la otra se quedaba atrás sin que nadie lo dijera. */
+  useEffect(() => {
+    if (!guiando || !ruta) return
+    const abiertas = lista(ruta.pedidos).filter((p) => !['entregado', 'fallido'].includes(p.estado)).sort(porOrden)
+    const s = abiertas.find((p) => p.id === guiando) || abiertas[0]
+    if (s && s.lat == null) { setGuiando(null); setErrorPunto(''); setSituando({ id: s.id, luego: 'guia', parada: s }) }
+  }, [guiando, ruta])
   const [abierta, setAbierta] = useState(null)       // la parada desplegada (además de la siguiente)
   const [deshacer, setDeshacer] = useState(null)     // {p, estado} recién cerrada, para volver atrás
   const [trazado, setTrazado] = useState(null)
@@ -426,7 +523,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
   const cargar = useCallback((silencioso = false) => {
     cargadaEn.current = Date.now()
     // Lo guardado sin cobertura y aún sin enviar se pinta encima de lo que dice el servidor.
-    repMiRuta().then(({ data }) => { fijarPais(data?.pais); guardarCopia(data); setCopiaSinRed(0); setErr(''); setRuta(aplicarCola(data, leerCola().filter(deMi))) })
+    repMiRuta().then(({ data }) => { fijarPais(data?.pais); guardarCopia(data); setCopiaSinRed(0); setErr(''); setRuta(aplicarPuntos(aplicarCola(data, leerCola().filter(deMi)), puntosNuevos.current)) })
       .catch((e) => {
         const c = sinRed(e) ? copiaDeHoy() : null
         if (c) setCopiaSinRed(c.en)
@@ -438,6 +535,19 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
     if (!conMarcas) return
     repMisMarcas().then(({ data }) => setMarcas(data)).catch(() => setMarcas(null))
   }, [conMarcas])
+  /* LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026; Dani: «viralización… lo más barato posible»): el registro por
+     anuncio cuesta 1,34 € y el que trae un compañero, 0 €, y quien acaba de entregar con la app es quien mejor la
+     vende. Con una entrega real de hoy (las de ejemplo no) sale la tarjeta bajo la siguiente parada o, terminado el
+     día, en el resumen. El código es el de /referidos (el mismo que usa Cuenta): la app del autónomo ya lo trae; si
+     no, se pide UNA vez. Sin código (demo, suplantación, país sin programa) no sale: no se promete lo que no se puede
+     pagar. */
+  const referido = referidoDado !== undefined ? referidoDado : referidoPropio
+  const invitarToca = conMarcas && lista(ruta?.pedidos).some((p) => p.estado === 'entregado' && !p.ejemplo)
+    && lee(`invitar_no_${ruta?.fecha}`, '') !== '1'
+  useEffect(() => {
+    if (referidoDado !== undefined || !invitarToca || referidoPropio !== null) return
+    getReferidos().then(({ data }) => setReferidoPropio(data?.codigo ? data : false)).catch(() => setReferidoPropio(false))
+  }, [referidoDado, invitarToca, referidoPropio])
   /* LO QUE QUEDÓ DE OTROS DÍAS (25-10-2026): la ruta es la del día y lo que no se entregó (o se cargó de noche)
      dejaba de verse a las 00:00. Se ofrece traerlo; no se mueve nada sin que lo pida. */
   async function traerPrevias() {
@@ -634,7 +744,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
             ...(n?.direccion ? {} : { requiere_confirmar_direccion: true, direccion_confirmada: false,
               alternativas_direccion: data?.alternativasDireccion || [] }) }
         }
-      return { ...n, ...leido, codigo: n?.codigo || data?.codigo || '', de_ticket: true, direccion: dir || n?.direccion || '',
+      // Si lo leído cambia la dirección, fuera lo que vino con el punto o la sugerencia (conDireccionNueva, 03-11-2026).
+      const base = dir && dir !== n?.direccion && (n?.lat != null || n?.lugar_elegido) ? conDireccionNueva(n, dir) : n
+      return { ...base, ...leido, codigo: n?.codigo || data?.codigo || '', de_ticket: true, direccion: dir || n?.direccion || '',
         requiere_confirmar_direccion: true, direccion_confirmada: false,
         alternativas_direccion: data?.alternativasDireccion || [] }
       })
@@ -752,15 +864,23 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
         await repMiEditar(id, { cliente: campos.cliente, telefono: campos.telefono, direccion: campos.direccion, contenido: campos.contenido,
           bultos: campos.bultos, horario: campos.horario || '', cobrar: campos.cobrar || '', tipo: campos.tipo || 'entrega',
           prioridad: !!campos.prioridad, hueco: campos.hueco || '', notas: campos.notas || '',
-          ...(campos.lat != null ? { lat: campos.lat, lng: campos.lng, cp: campos.cp || '', localidad: campos.localidad || '' } : {}) })
+          ...(campos.lat != null ? { lat: campos.lat, lng: campos.lng, cp: campos.cp || '', localidad: campos.localidad || '',
+            ...(campos.geo_origen ? { geo_origen: campos.geo_origen } : {}), ...conPrecision(campos.elegida_precision) } : {}) })
+        delete puntosNuevos.current[id]   // lo que diga ahora el servidor de su dirección manda
         setNuevo(null); setQuitando(false); cargar(); setAviso(tx('✓ Cambios guardados'))
         return
       }
-      await repNuevoPedido(nuevo)
+      // Con el punto elegido o puesto en el mapa va su origen (02-11-2026); sin punto, no. La precisión de la sugerencia
+      // elegida (conSugerencia) va como "precision": "calle" solo si es la calle sin el portal (03-11-2026). La marca
+      // de lo elegido (`lugar_elegido`) se queda en la ficha.
+      const { elegida_precision: precisionElegida, lugar_elegido: _lugar, ...cuerpo } = nuevo
+      const { data: creada } = await repNuevoPedido(cuerpo.lat != null ? { ...cuerpo, ...conPrecision(precisionElegida) } : { ...cuerpo, geo_origen: undefined })
       medirAccion('ruta_parada_nueva')
       setNuevo(null); setCodigo('')
       cargar()
-      if (carga) { setCarga({ n: carga.n + 1 }); setAviso('') } else setAviso(tx('✓ Añadido a tu ruta'))
+      // Guardada sin sitio en el mapa (02-11-2026): se dice ya, con «Situar», y no al ir a navegar.
+      const sinSitio = !!creada?.id && creada.lat == null && (creada.geo === 'no' || creada.geo === 'zona')
+      if (carga) { setCarga({ n: carga.n + 1 }); setAviso('') } else if (sinSitio) { setAviso(''); setAnadida(creada) } else setAviso(tx('✓ Añadido a tu ruta'))
     } catch (e) { setAviso(txError(e, 'No se pudo guardar')) } finally { setOcupado('') }
   }
 
@@ -773,26 +893,48 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
      una, la parada queda con su punto exacto en el mapa. Si se sigue
      escribiendo, el punto elegido se descarta (la dirección ya no es esa). */
   const [sugs, setSugs] = useState([])
+  /* EL ESTADO DE LA DIRECCIÓN EN LA FICHA (02-11-2026): con lo leído de la etiqueta o mientras se escribe (con una
+     pausa), se pregunta al servidor si la encuentra (POST /reparto/ubicar, que no guarda nada) y la ficha lo dice:
+     «En el mapa», «Calle encontrada, sin el portal» o «No la encuentro: elige una sugerencia o sitúala en el mapa». Lo
+     que encuentra va el primero en las sugerencias. Así se sabe ANTES de guardar, no al ir a navegar. `ubicada`:
+     {texto, buscando} mientras se pregunta, o {texto, ...deUbicar()} con la respuesta; null si no hay qué decir. */
+  const [ubicada, setUbicada] = useState(null)
   const textoDir = nuevo?.direccion || ''
+  // El CP y la población de la parada para la regla, mientras sigan escritos (03-11-2026: situar.js mismoSitio).
+  const cpFicha = escritoEn(textoDir, nuevo?.cp)
+  const locFicha = escritoEn(textoDir, nuevo?.localidad)
   const tienePunto = nuevo?.lat != null
   const hayHoja = !!nuevo
+  // Una parada de la ruta a la que no se le ha tocado la dirección: su estado es el SUYO (guardar el mismo texto no la
+  // vuelve a buscar); si ya está situada, ni se pregunta. Sin punto, se pregunta igual, por las sugerencias.
+  const sinCambiar = !!(nuevo?.id && textoDir === nuevo.direccion_original)
+  const yaSituada = sinCambiar && !!nuevo?.punto_actual
+  const yoRef = useRef(null)                         // la posición, sin repetir la búsqueda cada vez que se mueve
+  yoRef.current = yo
   useEffect(() => {
-    if (!hayHoja || tienePunto || textoDir.trim().length < 4) { setSugs([]); return undefined }
+    if (!hayHoja || tienePunto || textoDir.trim().length < 4) { setSugs([]); setUbicada(null); return undefined }
     const ctl = new AbortController()
+    setUbicada(yaSituada ? null : { texto: textoDir, buscando: true })
     const t = setTimeout(async () => {
       /* LAS QUE YA CONOCE, PRIMERO (25-10-2026): de su propio historial, con su punto, el cliente y el teléfono de
-         la última vez. La queja más repetida de Circuit: «metemos las mismas paradas cada día y no las recuerda». */
-      const [suyas, otras] = await Promise.all([
-        ruta?.prueba ? [] : repMisDirecciones(textoDir).then((r) => lista(r.data?.direcciones).map((x) => ({ ...x, conocida: true }))).catch(() => []),
-        // Sin servicio: se escribe la dirección entera y el servidor la sitúa.
-        buscarDirecciones(textoDir, { cerca: yo || ruta?.base || null, pais: ruta?.pais || '', senal: ctl.signal }).catch(() => []),
+         la última vez. La queja más repetida de Circuit: «metemos las mismas paradas cada día y no las recuerda».
+         Desde el 02-11-2026, antes aún lo que encuentra el servidor. */
+      const [srv, suyas, otras] = await Promise.all([
+        yaSituada ? null : repUbicar(textoDir, { signal: ctl.signal }).then((r) => deUbicar(r.data)).catch(() => null),
+        // `fuente` «suya» (03-11-2026): la regla las toma tal cual, con la precisión que dice el servidor (situar.js alElegir).
+        ruta?.prueba ? [] : repMisDirecciones(textoDir).then((r) => lista(r.data?.direcciones).map((x) => ({ ...x, conocida: true, fuente: 'suya' })))
+          .catch(() => []),
+        // Sin servicio: se escribe la dirección entera y el servidor la sitúa. A Photon va sin el piso (C, 03-11-2026:
+        // buscarDirecciones); lo que se quita, con lo escrito, y al servidor (repUbicar), tal cual.
+        buscarDirecciones(textoDir, { cerca: yoRef.current || ruta?.base || null, pais: ruta?.pais || '', senal: ctl.signal }).catch(() => []),
       ])
       if (ctl.signal.aborted) return
-      const yaEstan = new Set(suyas.map((x) => sinTildes(x.direccion)))
-      setSugs([...suyas, ...otras.filter((x) => !yaEstan.has(sinTildes(x.direccion)))].slice(0, 6))
-    }, 350)
+      setUbicada(srv ? { texto: textoDir, ...srv } : null)
+      // «Otra calle», con lo escrito en la ficha: es la dirección de la parada (03-11-2026), con su CP y su población.
+      setSugs(juntarSugerencias(srv?.candidatos || [], suyas, otras, 6, textoDir, cpFicha, locFicha))
+    }, 400)
     return () => { clearTimeout(t); ctl.abort() }
-  }, [textoDir, tienePunto, hayHoja, yo, ruta?.base, ruta?.pais, ruta?.prueba])
+  }, [textoDir, cpFicha, locFicha, tienePunto, hayHoja, yaSituada, ruta?.base, ruta?.pais, ruta?.prueba])
   async function quitarParada() {
     if (!nuevo?.id) return
     if (!quitando) { setQuitando(true); return }
@@ -846,7 +988,10 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
     setNuevo({ ...VACIO, id: p.id, codigo: '', cliente: p.cliente || '', telefono: p.telefono || '', direccion: p.direccion || '',
       contenido: p.contenido || '', bultos: p.bultos || 1, notas: p.notas || '', tipo: p.tipo || 'entrega', prioridad: !!p.prioridad,
       cobrar: p.cobrar > 0 ? String(p.cobrar).replace('.', ',') : '', hueco: p.hueco || '',
-      horario: p.ventana_desde ? `de ${p.ventana_desde} a ${p.ventana_hasta}` : '' })
+      horario: p.ventana_desde ? `de ${p.ventana_desde} a ${p.ventana_hasta}` : '',
+      // Su punto y su dirección de ahora (02-11-2026): la ficha dice si está en el mapa; la zona, para «Situar».
+      direccion_original: p.direccion || '', punto_actual: p.lat != null ? { lat: p.lat, lng: p.lng, geo: p.geo } : null, geo_actual: p.geo || '',
+      zona_lat: p.zona_lat ?? null, zona_lng: p.zona_lng ?? null })
   }
 
   const dataUrlDe = (blob) => new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = ko; r.readAsDataURL(blob) })
@@ -943,13 +1088,91 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
     setFurgo(f); guarda(FURGO, JSON.stringify(f))
   }
   function quitarFurgo() { setFurgo(null); try { localStorage.removeItem(FURGO) } catch { /* nada */ } }
+  /* IR A UNA PARADA (02-11-2026): con su punto, nuestra guía o la app elegida en «Ir con»; sin punto, «Situar la
+     parada» y, al ponerlo, a guiar. Nunca Google Maps sin que se pulse su enlace. */
+  function abrirSituar(p, luego = 'lista') {
+    if (!p) return
+    medirAccion('ruta_situar')
+    setErrorPunto('')
+    setSituando({ id: p.id, luego, parada: p })
+  }
+  const abrirSituarFicha = () => { medirAccion('ruta_situar'); setErrorPunto(''); setSituando({ ficha: true }) }
+  function irA(p) {
+    if (!p) return
+    if (p.lat == null) { abrirSituar(p, 'guia'); return }
+    if (nav === 'app') setGuiando(p.id)
+    else window.open(navegar(p, nav), '_blank', 'noopener')
+  }
+  // Tras «Es aquí», la app de fuera puede no abrirse (el navegador bloquea la ventana que no sale del mismo toque):
+  // entonces, nuestra guía, que también tiene su botón.
+  function abrirFuera(p) {
+    let w = null
+    try { w = window.open(navegar(p, nav), '_blank') } catch { w = null }
+    if (w) { try { w.opener = null } catch { /* nada */ } } else setGuiando(p.id)
+  }
+  /* «ES AQUÍ» (02-11-2026). Desde la ficha, el punto va al formulario y se guarda con él (con una sugerencia, también
+     su dirección, sin perder el piso). Desde la ruta se guarda ya, sin cambiar la dirección (editar con lat, lng y
+     geo_origen) y, si venía de «Ir», se guía hasta él. Desde el 03-11-2026 va también su precisión («calle»: la de una
+     sugerencia sin el portal bajo la chincheta, conPrecision), y una «Otra calle» cambia la dirección a la suya, con el
+     piso escrito (como conSugerencia): nunca lo escrito con el punto de otra calle.
+     LA MISMA REGLA QUE LA FICHA (03-11-2026, el emulador y la revisión): con la chincheta donde la puso una sugerencia,
+     situar.js alElegir con la dirección GUARDADA de la parada, no con lo buscado en «Situar» ni con la marca de la
+     lista (con la búsqueda corregida a «Rúa Brétema, Oleiros», «Rúa Brétema, 15179 Oleiros» no salía marcada y la
+     parada se quedaba con su dirección y el punto de Oleiros). La precisión sale de ahí, y la dirección, el CP y la
+     población van solo si cambian (situar.js cambioEsAqui, el esAqui de la app nativa: otra calle, el CP o el pueblo
+     añadidos, una suya, lo elegido para una sin número o el mismo portal escrito como lo da la sugerencia). Movido el
+     mapa (o «Mi ubicación»), solo el punto: «manual», sin precisión y sin tocar la dirección. Desde la tanda del
+     03-11-2026 de madrugada, también con el CP y la población guardados (situar.js mismoSitio: la misma calle en otro
+     pueblo es «Otra calle»). */
+  async function ponerPunto({ lat, lng, origen, sugerencia }) {
+    const s = situando
+    if (!s) return
+    if (s.ficha) {
+      setNuevo((n) => (!n ? n : origen === 'sugerencia' && sugerencia ? { ...n, ...conSugerencia(n, { ...sugerencia, lat, lng }) }
+        : { ...n, lat, lng, geo_origen: origen, elegida_precision: '', ...(n.requiere_confirmar_direccion ? { direccion_confirmada: true } : {}) }))
+      setSituando(null)
+      medirAccion(`ruta_situar_${origen}`)
+      return
+    }
+    const p = lista(ruta?.pedidos).find((x) => x.id === s.id) || s.parada
+    if (!p) { setSituando(null); return }
+    const { precision, ...cambio } = cambioEsAqui(p.direccion, origen, sugerencia, p.cp, p.localidad)
+    setGuardandoPunto(true); setErrorPunto('')
+    try {
+      const { data } = await repMiEditar(p.id, { lat, lng, ...(origen ? { geo_origen: origen } : {}), ...conPrecision(precision), ...cambio })
+      const g = puntoDe(data?.lat, data?.lng)
+      setSituando(null)
+      if (!g || Math.abs(g[0] - lat) > 1e-4 || Math.abs(g[1] - lng) > 1e-4) {
+        // Un servidor de antes no guarda el punto sin cambiar la dirección: al menos se va a ese punto, no a la dirección.
+        if (s.luego === 'guia') {
+          window.open(navegar({ ...p, lat, lng }, fuera), '_blank', 'noopener')
+          setAviso(tx('No se ha podido guardar el punto en el servidor: se abre en {app}.', { app: nombreNavegador(fuera) }))
+        } else setAviso(tx('No se ha podido guardar el punto en el servidor.'))
+        return
+      }
+      const geo = data?.geo || (precision === 'calle' ? 'aprox' : 'manual')
+      // Lo que guardó el servidor manda (el CP que saca de la dirección si no iba).
+      const nueva = cambio.direccion ? { ...cambio, ...(data?.direccion ? { direccion: data.direccion, cp: data.cp ?? cambio.cp,
+        localidad: data.localidad ?? cambio.localidad } : {}) } : {}
+      puntosNuevos.current[p.id] = { lat: g[0], lng: g[1], geo, ...nueva, t: Date.now() }
+      setRuta((r) => (r ? { ...r, pedidos: lista(r.pedidos).map((x) => (x.id === p.id
+        ? { ...x, ...nueva, lat: g[0], lng: g[1], geo, zona_lat: null, zona_lng: null } : x)) } : r))
+      medirAccion(`ruta_situar_${origen}`)
+      if (s.luego === 'guia') {
+        if (nav === 'app') setGuiando(p.id)
+        else abrirFuera({ ...p, lat: g[0], lng: g[1] })
+      } else setAviso(tx('✓ Parada situada en el mapa'))
+      cargar(true)
+    } catch (e) {
+      setErrorPunto(sinRed(e) ? tx('Sin conexión: no se ha podido guardar el punto. Prueba otra vez con cobertura.') : txError(e, 'No se pudo guardar el punto'))
+    } finally { setGuardandoPunto(false) }
+  }
   /* EL MAPA QUE RESPONDE (30-10-2026): lo que se toca en las ventanas del mapa. Ir, llamar y abrir una parada;
      dejar la furgoneta donde se mantuvo pulsado; quitarla. */
   function accionMapa(accion, dato) {
     const p = dato?.id ? lista(ruta.pedidos).find((x) => x.id === dato.id) : null
     if (accion === 'navegar' && p) {
-      if (nav === 'app' && p.lat != null) setGuiando(p.id)
-      else window.open(navegar(p, nav === 'app' ? 'google' : nav), '_blank', 'noopener')
+      irA(p)
     } else if (accion === 'abrir' && p) {
       setAbierta(p.id)
       setTimeout(() => document.getElementById(`parada-${p.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150)
@@ -1099,7 +1322,8 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
     r.lang = locale(); r.interimResults = true; r.continuous = false; r.maxAlternatives = 1
     r.onresult = (ev) => {
       oido = Array.from(ev.results).map((x) => x[0]?.transcript || '').join(' ').trim()
-      if (oido) setNuevo((n) => ({ ...n, direccion: oido, lat: null, lng: null }))
+      // Lo dictado cambia la dirección: fuera lo que vino con el punto o la sugerencia (conDireccionNueva, 03-11-2026).
+      if (oido) setNuevo((n) => conDireccionNueva(n, oido))
     }
     r.onerror = (ev) => {
       if (ev.error === 'no-speech') setAviso(tx('No te he oído. Toca el micrófono y di la dirección.'))
@@ -1177,7 +1401,11 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
     : pendientes
   const siguiente = pendientes[0]
   const porId = Object.fromEntries(pendientes.map((p) => [p.id, p]))
-  const objetivo = guiando ? (porId[guiando]?.lat != null ? porId[guiando] : pendientes.find((p) => p.lat != null) || null) : null
+  // La guía va a la elegida y, hecha esa, a la siguiente EN ORDEN (02-11-2026); sin punto, a «Situar la parada».
+  const sigGuia = guiando ? (porId[guiando] || pendientes[0] || null) : null
+  const objetivo = sigGuia?.lat != null ? sigGuia : null
+  // Ninguna en el mapa y alguna que el servidor no encontró (o solo su zona): la cabecera lo dice, con «Situar».
+  const perdida = pendientes.some((p) => p.lat != null) ? null : pendientes.find((p) => p.geo === 'no' || p.geo === 'zona') || null
   const enPuerta = {}
   pendientes.forEach((p) => { const k = clavePuerta(p); if (k) enPuerta[k] = (enPuerta[k] || 0) + 1 })
   // Retraso: solo con hora prevista de HOY y la parada siguiente aún sin hacer.
@@ -1215,6 +1443,13 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
       setTarifa(null); cargar()
     } catch (e) { setAviso(txError(e, 'No se pudo guardar')) } finally { setOcupado('') }
   }
+
+  // La tarjeta de invitar (02-11-2026), si toca hoy: bajo la siguiente parada o, terminado el día, en el resumen.
+  const tarjetaInvitar = invitarToca && invitarNo !== ruta.fecha && referido ? (
+    <TarjetaInvitar r={referido}
+      onCerrar={() => { guarda(`invitar_no_${ruta.fecha}`, '1'); setInvitarNo(ruta.fecha); medirAccion('invitar_entrega_no') }}
+      onCopiado={(ok) => setAviso(ok ? tx('Enlace copiado: pégalo en un WhatsApp o en el grupo de tus compañeros.') : tx('No se pudo copiar'))} />
+  ) : null
 
   return (
     <Marco onBack={onBack} embebido={embebido}>
@@ -1289,10 +1524,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
           fueraHorario={pendientes.filter((p) => p.tarde_min > 0).length}
           onReordenar={retraso > 15 && pendientes.length > 1 && ocupado !== 'ordenar' ? ordenar : null}
           furgo={furgo} yo={yo} onAparcar={ruta.autonomo || embebido ? aparcarAqui : null} onQuitarFurgo={quitarFurgo}
-          onGuiar={nav === 'app' && pendientes.some((p) => p.lat != null) ? () => setGuiando(pendientes.find((p) => p.lat != null).id) : null}
+          onGuiar={nav === 'app' && pendientes.some((p) => p.lat != null) ? () => irA(siguiente) : null}
           onAnadir={enMarcha ? () => { medirAccion('ruta_anadir'); setAnadir(true) } : null}
-          onCorregir={!pendientes.some((p) => p.lat != null) && pendientes.some((p) => p.geo === 'no')
-            ? () => editar(pendientes.find((p) => p.geo === 'no')) : null} />
+          onCorregir={perdida ? () => editar(perdida) : null} onSituar={perdida ? () => abrirSituar(perdida, 'guia') : null} />
       )}
 
       {copiaSinRed > 0 && (
@@ -1386,10 +1620,19 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
         <div role="status" className="mt-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2.5 text-[13px] text-dark-100">
           <p className="font-semibold text-emerald-300">✓ {tx('Añadida a tu ruta')}</p>
           <p className="mt-0.5 truncate">{[anadida.cliente, anadida.direccion].filter(Boolean).join(' · ')}</p>
+          {/* SIN SITIO EN EL MAPA (02-11-2026): se dice al momento, con «Situar», y no al ir a navegar. */}
+          {anadida.lat == null && (anadida.geo === 'no' || anadida.geo === 'zona') && (
+            <p className="mt-1 flex items-center gap-1.5 text-[12.5px] font-semibold text-amber-200"><MapPin size={14} className="shrink-0" /> {tx('No la encuentro en el mapa')}</p>
+          )}
           <div className="mt-2 flex gap-2">
             <button onClick={() => { setAnadida(null); setEscaner(true) }} className="flex-1 rounded-lg bg-brand-500 py-2 text-[13px] font-bold text-brand-tinta">
               {tx('Escanear otro')}
             </button>
+            {anadida.lat == null && (anadida.geo === 'no' || anadida.geo === 'zona') && (
+              <button onClick={() => { abrirSituar(anadida); setAnadida(null) }} className="rounded-lg bg-amber-400 px-3 py-2 text-[13px] font-bold text-[#1a1300]">
+                {tx('Situar')}
+              </button>
+            )}
             <button onClick={() => { editar(anadida); setAnadida(null) }} className="rounded-lg border border-dark-600 px-3 py-2 text-[13px] font-semibold text-dark-100">
               {tx('Corregir')}
             </button>
@@ -1399,7 +1642,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
       )}
 
       {/* FIN DE LA RUTA: el resumen del día, como al cerrar un bloque. */}
-      {total > 0 && pendientes.length === 0 && <><Resumen hechos={hechos} ruta={ruta.ruta} marcas={marcas} />{alTerminar}</>}
+      {total > 0 && pendientes.length === 0 && <><Resumen hechos={hechos} ruta={ruta.ruta} marcas={marcas} invitacion={tarjetaInvitar} />{alTerminar}</>}
 
       {(() => {
         const c = consejoDeHoy(ruta.fecha, { pendientes: pendientes.length, entregados: entregados.length, nav,
@@ -1669,26 +1912,31 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
                       {p.eta && <span className={`shrink-0 text-[12.5px] font-semibold ${p.tarde_min ? 'text-red-300' : 'text-dark-300'}`}>{p.eta}</span>}
                     </span>
                     {p.cliente && <span className="block truncate text-[12.5px] text-dark-400">{p.direccion}</span>}
-                    {(hayEtiquetas || p.hueco) && (
+                    {(hayEtiquetas || p.hueco || p.lat == null) && (
                       <span className="mt-1 flex flex-wrap gap-1 text-[10.5px]">
+                        {p.lat == null && <span className="rounded bg-amber-500/15 px-1.5 font-bold text-amber-300">{p.geo === 'pendiente' ? tx('Buscando en el mapa…') : tx('Sin situar')}</span>}
                         {etiquetas}
                         {p.hueco && <span className="rounded bg-sky-500/15 px-1.5 text-sky-200">{tx(p.hueco)}</span>}
                       </span>
                     )}
                   </span>
                 </button>
-                {nav === 'app' && p.lat != null ? (
+                {p.lat == null ? (
+                  <button onClick={() => abrirSituar(p)} aria-label={`${tx('Situar')}: ${p.cliente || p.direccion}`}
+                    className="flex w-14 shrink-0 flex-col items-center justify-center gap-0.5 border-l border-dark-800 text-[10.5px] font-bold text-amber-300"><MapPin size={16} /> {tx('Situar')}</button>
+                ) : nav === 'app' ? (
                   <button onClick={() => setGuiando(p.id)} aria-label={`${tx('Ir a')} ${p.cliente || p.direccion}`}
                     className="flex w-12 shrink-0 items-center justify-center border-l border-dark-800 text-brand-300"><Navigation size={17} /></button>
                 ) : (
-                  <a href={navegar(p, nav === 'app' ? 'google' : nav)} target="_blank" rel="noreferrer" aria-label={`${tx('Ir a')} ${p.cliente || p.direccion}`}
+                  <a href={navegar(p, nav)} target="_blank" rel="noreferrer" aria-label={`${tx('Ir a')} ${p.cliente || p.direccion}`}
                     className="flex w-12 shrink-0 items-center justify-center border-l border-dark-800 text-dark-300"><Navigation size={17} /></a>
                 )}
               </div>
             )
           }
           return (
-          <div key={p.id} id={`parada-${p.id}`} className={`rounded-2xl border p-3.5 ${esSiguiente ? 'border-brand-400/70 bg-gradient-to-b from-brand-500/[.12] to-dark-900 shadow-lg shadow-black/20' : 'border-dark-600 bg-dark-900'}`}>
+          <Fragment key={p.id}>
+          <div id={`parada-${p.id}`} className={`rounded-2xl border p-3.5 ${esSiguiente ? 'border-brand-400/70 bg-gradient-to-b from-brand-500/[.12] to-dark-900 shadow-lg shadow-black/20' : 'border-dark-600 bg-dark-900'}`}>
             <div className="mb-2 flex items-center justify-between">
               <p className={`text-[11px] font-bold uppercase tracking-wider ${esSiguiente ? 'text-brand-300' : 'text-dark-400'}`}>{esSiguiente ? tx('Siguiente parada') : tx('Parada {n}', { n: p.orden ?? i + 1 })}</p>
               {esSiguiente && (
@@ -1710,12 +1958,23 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
                 {p.contenido && <p className="mt-1 flex items-start gap-1 text-[12.5px] text-dark-400"><Package size={13} className="mt-0.5 shrink-0" /> {p.contenido}</p>}
                 <p className="mt-0.5 text-[11.5px] text-dark-500">
                   {p.bultos > 1 ? tx('{n} bultos', { n: p.bultos }) : tx('1 bulto')}{p.escaneos ? ` · ${p.escaneos > 1 ? tx('{n} escaneados', { n: p.escaneos }) : tx('1 escaneado')}` : ''}
-                  {p.lat == null && ` · ${tx('sin ubicar en el mapa')}`}{p.geo === 'aprox' && ` · ${tx('ubicación aproximada (la calle)')}`}{p.notas && ` · ${p.notas}`}
+                  {p.geo === 'aprox' && ` · ${tx('ubicación aproximada (la calle)')}`}{p.notas && ` · ${p.notas}`}
                 </p>
                 <AntesPuerta a={p.antes} className="mt-1.5" />
                 <ClienteDice d={p.cliente_dice} className="mt-1.5" />
                 <MemoriaPuerta m={p.memoria} onEditar={() => setMemoriaDe(p)} className="mt-1.5" />
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {/* SIN SITUAR (02-11-2026): un toque abre «Situar la parada»; con solo la calle, se puede afinar la puerta. */}
+                  {p.lat == null ? (
+                    <button onClick={() => abrirSituar(p)} data-testid="situar-parada"
+                      className="inline-flex items-center gap-1 rounded-lg bg-amber-500/20 px-2 py-1 text-[12px] font-bold text-amber-200">
+                      <MapPin size={12} /> {p.geo === 'pendiente' ? tx('Buscando en el mapa…') : tx('Sin situar')} · {tx('Situar')}
+                    </button>
+                  ) : p.geo === 'aprox' && (
+                    <button onClick={() => abrirSituar(p)} className="inline-flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1 text-[12px] font-semibold text-dark-200">
+                      <MapPin size={12} /> {tx('Situar en el mapa')}
+                    </button>
+                  )}
                   <button onClick={() => setHuecoDe(p)}
                     className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-semibold ${p.hueco ? 'bg-sky-500/15 text-sky-200' : 'border border-dashed border-dark-700 text-dark-400'}`}>
                     <Package size={12} /> {p.hueco ? tx('En la furgoneta: {sitio}', { sitio: tx(p.hueco) }) : tx('¿Dónde va en la furgoneta?')}
@@ -1731,11 +1990,11 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
               </div>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-1.5">
-              {nav === 'app' && p.lat != null ? (
-                <button onClick={() => setGuiando(p.id)}
+              {p.lat == null || nav === 'app' ? (
+                <button onClick={() => irA(p)}
                   className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> {tx('Ir')}</button>
               ) : (
-                <a href={navegar(p, nav === 'app' ? 'google' : nav)} target="_blank" rel="noreferrer"
+                <a href={navegar(p, nav)} target="_blank" rel="noreferrer"
                   className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> {tx('Ir')}</a>
               )}
               {p.telefono
@@ -1758,6 +2017,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
               </button>
             </div>
           </div>
+          {/* LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): justo debajo de la siguiente parada. */}
+          {esSiguiente && tarjetaInvitar}
+          </Fragment>
           )
         })}
       </div>
@@ -1949,7 +2211,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
         </Hoja>
       )}
 
-      {guiando && (
+      {guiando && (!sigGuia || sigGuia.lat != null) && (
         <Suspense fallback={<div className="fixed inset-0 z-[45] flex items-center justify-center bg-dark-950"><Loader2 className="animate-spin text-dark-400" /></div>}>
           <Navegacion parada={objetivo} numero={objetivo?.orden ?? (objetivo ? pendientes.indexOf(objetivo) + 1 : null)}
             quedan={pendientes.length} onSalir={() => setGuiando(null)}
@@ -1959,6 +2221,26 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
             onLlegar={(p) => { apuntar(p, 'llegada'); pedirPosicionEntrega() }} />
         </Suspense>
       )}
+
+      {/* SITUAR LA PARADA (02-11-2026): la de la ruta, o la de la ficha abierta (su dirección, su punto y la zona que
+          encontró el servidor). Google Maps, solo en su enlace pequeño, y desde la ficha ni eso. */}
+      {situando && (() => {
+        const enFicha = !!situando.ficha
+        const aSituar = enFicha
+          ? { direccion: nuevo?.direccion || '', cp: cpFicha, localidad: locFicha, cliente: nuevo?.cliente || '',
+              lat: nuevo?.lat ?? nuevo?.punto_actual?.lat ?? null,
+              lng: nuevo?.lng ?? nuevo?.punto_actual?.lng ?? null, zona_lat: ubicada?.zona?.[0] ?? nuevo?.zona_lat ?? null,
+              zona_lng: ubicada?.zona?.[1] ?? nuevo?.zona_lng ?? null }
+          : lista(ruta.pedidos).find((x) => x.id === situando.id) || situando.parada
+        if (!aSituar) return null
+        return (
+          <Suspense fallback={<div className="fixed inset-0 z-[60] flex items-center justify-center bg-dark-950"><Loader2 className="animate-spin text-dark-400" /></div>}>
+            <SituarParada parada={aSituar} base={ruta.base} otras={pendientes.filter((x) => x.lat != null && x.id !== aSituar.id)}
+              pais={ruta.pais || ''} historial={!ruta.prueba} enlaceFuera={enFicha ? '' : navegar(aSituar, fuera)} nombreFuera={nombreNavegador(fuera)}
+              guardando={guardandoPunto} error={errorPunto} onCerrar={() => { setSituando(null); setErrorPunto('') }} onElegir={ponerPunto} />
+          </Suspense>
+        )
+      })()}
 
       {deshacer && (
         <div className="fixed inset-x-0 bottom-20 z-[46] flex justify-center px-4" role="status">
@@ -2034,7 +2316,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
               <input ref={dirInput} className={inp} placeholder={escuchando ? tx('Te escucho: di la dirección…') : tx('Dirección completa')} value={nuevo.direccion} autoComplete="street-address"
-                onChange={(e) => setNuevo({ ...nuevo, direccion: e.target.value, lat: null, lng: null,
+                onChange={(e) => setNuevo({ ...conDireccionNueva(nuevo, e.target.value),
                   ...(nuevo.requiere_confirmar_direccion ? { direccion_confirmada: true } : {}) })} />
               <button type="button" onClick={dictar} aria-label={escuchando ? tx('Parar de dictar') : tx('Dictar la dirección')} aria-pressed={escuchando}
                 className={`shrink-0 rounded-xl border px-3 ${escuchando ? 'animate-pulse border-red-400 bg-red-500/15 text-red-300' : 'border-dark-600 text-dark-200'}`}>
@@ -2042,14 +2324,47 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
               </button>
             </div>
             {escuchando && <p className="-mt-1 text-[12px] font-semibold text-red-300">{tx('Te escucho: di la dirección…')}</p>}
+            {/* EL ESTADO DE LA DIRECCIÓN (02-11-2026): antes de guardar se sabe si la parada estará en el mapa y, si no,
+                se elige una sugerencia o se sitúa en nuestro mapa. */}
+            {(() => {
+              // Una sugerencia «Sin el portal» elegida sigue siendo la calle sin la casa (02-11-2026): «Calle encontrada».
+              const st = nuevo.lat != null ? (nuevo.geo_origen === 'mapa' ? 'mano' : nuevo.elegida_precision === 'calle' ? 'calle' : 'elegida')
+                : sinCambiar ? (nuevo.punto_actual ? estadoDeParada(nuevo.punto_actual) : nuevo.geo_actual === 'pendiente' ? 'buscando' : 'no')
+                  : ubicada && ubicada.texto === textoDir ? (ubicada.buscando ? 'buscando' : ubicada.estado) : null
+              if (!st) return null
+              const bien = st === 'elegida' || st === 'mano' || st === 'portal'
+              const texto = st === 'elegida' ? tx('Sitio encontrado en el mapa') : st === 'mano' ? tx('Situada a mano en el mapa')
+                : st === 'portal' ? tx('En el mapa') : st === 'calle' ? tx('Calle encontrada, sin el portal')
+                  : st === 'buscando' ? tx('Buscando la dirección…') : tx('No la encuentro: elige una sugerencia o sitúala en el mapa')
+              return (
+                <div data-testid="estado-direccion" data-estado={st} role="status"
+                  className={`-mt-1 flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-[12.5px] ${bien ? 'bg-emerald-500/10 text-emerald-300'
+                    : st === 'buscando' ? 'text-dark-400' : st === 'calle' ? 'bg-amber-500/10 text-amber-200' : 'bg-amber-500/15 font-semibold text-amber-100'}`}>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    {st === 'buscando' ? <Loader2 size={13} className="shrink-0 animate-spin" /> : bien ? <Check size={13} className="shrink-0" /> : <AlertTriangle size={13} className="shrink-0" />}
+                    <span>{texto}</span>
+                  </span>
+                  {(st === 'calle' || st === 'no') && (
+                    <button type="button" onClick={abrirSituarFicha}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-amber-400 px-2 py-1 text-[12px] font-bold text-[#1a1300]">
+                      <MapPin size={13} /> {tx('Situar en el mapa')}
+                    </button>
+                  )}
+                  {(st === 'elegida' || st === 'mano') && (
+                    <button type="button" onClick={abrirSituarFicha}
+                      className="shrink-0 rounded-lg border border-emerald-500/40 px-2 py-1 text-[12px] font-semibold text-emerald-200">{tx('Cambiar')}</button>
+                  )}
+                </div>
+              )
+            })()}
             {sugs.length > 0 && (
               <ul className="-mt-1 overflow-hidden rounded-xl border border-dark-700 bg-dark-900" aria-label={tx('Direcciones sugeridas')}>
                 {sugs.map((sg) => (
-                  <li key={sg.direccion}>
+                  <li key={`${sg.direccion}|${sg.lat}|${sg.lng}`}>
                     <button type="button" onClick={() => {
-                      // De su historial, también el cliente y el teléfono (sin pisar lo que ya haya escrito).
-                      setNuevo({ ...nuevo, direccion: sg.direccion, cp: sg.cp, localidad: sg.localidad, lat: sg.lat, lng: sg.lng,
-                        ...(sg.conocida ? { cliente: nuevo.cliente || sg.cliente || '', telefono: nuevo.telefono || sg.telefono || '' } : {}) })
+                      // Su punto y su dirección con el piso escrito; de su historial, también el cliente y el teléfono
+                      // (conSugerencia, antes de MiRuta).
+                      setNuevo({ ...nuevo, ...conSugerencia(nuevo, sg) })
                       setSugs([])
                     }}
                       className="flex w-full items-center gap-2 border-b border-dark-800 px-3 py-2.5 text-left text-[14px] text-dark-100 last:border-0 active:bg-dark-800">
@@ -2061,13 +2376,15 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
                             {tx('Ya estuviste aquí')} · {sg.veces === 1 ? tx('1 vez') : tx('{n} veces', { n: sg.veces })}{sg.cliente ? ` · ${sg.cliente}` : ''}
                           </span>
                         )}
+                        {/* OTRA CALLE (03-11-2026, como la app nativa): no es la escrita; va al final y se dice, en rojo. */}
+                        {!sg.conocida && (sg.otraCalle ? <span className="block text-[11.5px] font-semibold text-red-300">{tx('Otra calle')}</span>
+                          : sg.precision === 'calle' && <span className="block text-[11.5px] text-amber-300">{tx('Sin el portal')}</span>)}
                       </span>
                     </button>
                   </li>
                 ))}
               </ul>
             )}
-            {nuevo.lat != null && <p className="-mt-1 flex items-center gap-1 text-[12px] text-emerald-300"><Check size={13} /> {tx('Sitio encontrado en el mapa')}</p>}
             <input className={inp} placeholder={tx('Cliente')} value={nuevo.cliente} onChange={(e) => setNuevo({ ...nuevo, cliente: e.target.value })} />
             <input className={inp} placeholder={tx('Teléfono')} inputMode="tel" value={nuevo.telefono} onChange={(e) => setNuevo({ ...nuevo, telefono: e.target.value })} />
             <input className={inp} placeholder={tx('Qué lleva')} value={nuevo.contenido} onChange={(e) => setNuevo({ ...nuevo, contenido: e.target.value })} />
@@ -2103,8 +2420,8 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
                 <div className="mt-2 flex flex-col gap-1.5">
                   {nuevo.alternativas_direccion.map((a, i) => (
                     <button key={`${a.direccion}-${a.cp}-${i}`} type="button"
-                      onClick={() => setNuevo({ ...nuevo, direccion: [a.direccion, a.cp, a.localidad].filter(Boolean).join(', '),
-                        cp: a.cp || '', localidad: a.localidad || '', lat: null, lng: null, direccion_confirmada: true })}
+                      onClick={() => setNuevo({ ...conDireccionNueva(nuevo, [a.direccion, a.cp, a.localidad].filter(Boolean).join(', ')),
+                        cp: a.cp || '', localidad: a.localidad || '', direccion_confirmada: true })}
                       className="rounded-lg border border-amber-300/40 px-2.5 py-2 text-left text-[13px] font-semibold text-amber-100">
                       { [a.direccion, a.cp, a.localidad].filter(Boolean).join(', ') }
                     </button>
@@ -2471,7 +2788,7 @@ function Marco({ onBack, children, embebido }) {
    adónde guiar; el aviso quedaba abajo, debajo del mapa. Ahora lo dice aquí y lleva a
    corregirla: al escribirla salen sugerencias, y elegir una la sitúa. */
 function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario, onGuiar, onCorregir, dinero, onTarifa, onCompartir, onAnadir, mejor = 0,
-  onReordenar = null, furgo = null, yo = null, onAparcar = null, onQuitarFurgo = null }) {
+  onReordenar = null, furgo = null, yo = null, onAparcar = null, onQuitarFurgo = null, onSituar = null }) {
   const pct = total ? hechos / total : 0
   const R = 26
   const L = 2 * Math.PI * R
@@ -2598,7 +2915,13 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
       )}
       {!onGuiar && onCorregir && (
         <div role="status" className="mt-3.5 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3">
-          <p className="text-[13px] leading-snug text-amber-100">{tx('No encontramos la dirección en el mapa, así que todavía no se puede navegar. Corrígela y elige una de las sugerencias.')}</p>
+          <p className="text-[13px] leading-snug text-amber-100">{tx('No encontramos la dirección en el mapa. Sitúala en el mapa o corrígela, y te llevamos hasta la puerta.')}</p>
+          {/* «Situar la parada» (02-11-2026): ponerla en nuestro mapa y, al guardarla, a guiar. */}
+          {onSituar && (
+            <button onClick={onSituar} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 py-2.5 text-[14px] font-bold text-[#1a1300]">
+              <MapPin size={15} /> {tx('Situar en el mapa')}
+            </button>
+          )}
           <button onClick={onCorregir} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500/25 py-2.5 text-[14px] font-bold text-amber-100">
             <Pencil size={15} /> {tx('Corregir la dirección')}
           </button>
@@ -2691,9 +3014,56 @@ function HuecoRejilla({ valor, onElegir, ocupado = false }) {
   )
 }
 
+/* LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026, Dani: «que empiecen a descargarla masivamente… lo más barato
+   posible»). Nada más entregar la primera real de hoy, una tarjeta discreta: lo que gana por cada compañero que
+   reparta (el importe y las condiciones los dice el servidor), un WhatsApp ya escrito, corto y en su idioma, con su
+   enlace y su código, y «Copiar el enlace» para el grupo de compañeros. «Ahora no» la quita hasta mañana. */
+function textoInvitarCorto(codigo) {
+  const gratis = promoGratis() ? ` ${tx('Es gratis y sin límite hasta el {fecha}.', { fecha: fechaPromo(locale()) })}` : ''
+  // El bono del invitado (lo que le convence a él), mientras dure: el mismo que anuncia compartir.js.
+  const bono = refPromoActiva() ? ` ${tx('Tu primera ruta real te da {euros}.', { euros: eurosRef(BONO_CENT, locale()) })}` : ''
+  return `${tx('Reparto con FDS: me ordena la ruta y me guía hasta cada puerta.')}${gratis}${bono} ${enlaceInvitar(codigo)}`
+}
+function TarjetaInvitar({ r, onCerrar, onCopiado }) {
+  const euros = eurosRef(Number(r.por_invitado) || refCentActual(), locale())
+  const enlace = enlaceInvitar(r.codigo)
+  async function copiar() {
+    medirAccion('invitar_entrega_copiar')
+    try { await navigator.clipboard.writeText(enlace); onCopiado(true) } catch { onCopiado(false) }
+  }
+  return (
+    <section data-testid="invitar-entrega" aria-label={tx('Invitar a un compañero')}
+      className="rounded-2xl border border-emerald-400/30 bg-emerald-500/[.07] px-3.5 py-3">
+      <div className="flex items-start gap-2.5">
+        <Gift size={18} className="mt-0.5 shrink-0 text-emerald-300" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-bold leading-tight text-emerald-100">{tx('Gana {euros} por cada compañero que reparta con FDS', { euros })}</p>
+          <p className="mt-0.5 text-[12px] leading-snug text-emerald-200/80">
+            {tx('Lo cobras cuando haga {n} entregas en {d} días distintos.', { n: r.entregas_cartera ?? 20, d: r.dias_distintos ?? 2 })}
+          </p>
+        </div>
+        <button type="button" onClick={onCerrar} className="shrink-0 py-0.5 text-[12px] font-semibold text-emerald-200/80">{tx('Ahora no')}</button>
+      </div>
+      {/* Los dos botones en una línea; donde no caben (el resumen), el de copiar baja entero a la suya. */}
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
+        <a href={`https://wa.me/?text=${encodeURIComponent(textoInvitarCorto(r.codigo))}`} target="_blank" rel="noreferrer"
+          onClick={() => medirAccion('invitar_entrega_whatsapp')}
+          className="flex min-w-[170px] flex-[3] items-center justify-center gap-1.5 rounded-xl bg-emerald-700 py-2.5 text-[13.5px] font-bold text-white">
+          <MessageCircle size={15} /> {tx('Invitar por WhatsApp')}
+        </a>
+        <button type="button" onClick={copiar}
+          className="flex min-w-[128px] flex-[2] items-center justify-center gap-1.5 rounded-xl border border-emerald-400/50 py-2.5 text-[13px] font-semibold text-emerald-100">
+          <Copy size={14} /> {tx('Copiar el enlace')}
+        </button>
+      </div>
+    </section>
+  )
+}
+
 /* El cierre del día: lo hecho, lo que no y lo cobrado por cada vía. Solo
-   cuenta lo que hay en las paradas; nada inventado. */
-function Resumen({ hechos, ruta, marcas = null }) {
+   cuenta lo que hay en las paradas; nada inventado. `invitacion` (02-11-2026): la tarjeta de invitar del día, en el
+   lugar del botón de siempre. */
+function Resumen({ hechos, ruta, marcas = null, invitacion = null }) {
   const ok = hechos.filter((p) => p.estado === 'entregado')
   const no = hechos.filter((p) => p.estado === 'fallido')
   const cobros = {}
@@ -2726,10 +3096,12 @@ function Resumen({ hechos, ruta, marcas = null }) {
           <p>{tx('Llevas {n} entregas con FDS.', { n: (marcas.total || 0) - (marcas.hoy || 0) + ok.length })}</p>
         </div>
       )}
-      <button onClick={invitar}
-        className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/40 py-2.5 text-[13.5px] font-bold text-emerald-200">
-        <MessageCircle size={15} /> {tx('Invitar a un compañero')}
-      </button>
+      {invitacion ? <div className="mt-3">{invitacion}</div> : (
+        <button onClick={invitar}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/40 py-2.5 text-[13.5px] font-bold text-emerald-200">
+          <MessageCircle size={15} /> {tx('Invitar a un compañero')}
+        </button>
+      )}
       <p className="mt-3 text-[12px] text-dark-400">
         {durMin > 0 && <>{tx('De la primera a la última parada: {t}.', { t: minutosATexto(durMin) })} </>}
         {ruta?.km ? <>{tx('Ruta planificada: {d}.', { d: distancia(ruta.km) })}</> : null}

@@ -88,6 +88,7 @@ export const BR = {
   'Sin conexión con el servidor. Revisa tu red e inténtalo de nuevo.': 'Sem conexão com o servidor. Verifique sua internet e tente de novo.',
   '¡Cuenta creada!': 'Conta criada!',
   'Plan {plan} · {n} días gratis': 'Plano {plan} · {n} dias grátis',
+  'Plan {plan} · gratis hasta {p} paradas al día': 'Plano {plan} · grátis até {p} paradas por dia',
   'Hemos enviado un email de bienvenida a': 'Enviamos um e-mail de boas-vindas para',
   'Ya puedes escanear tus primeros paquetes.': 'Você já pode escanear seus primeiros pacotes.',
   'Empezar mi ruta →': 'Começar minha rota →',
@@ -184,6 +185,10 @@ export const BR = {
   'Usamos almacenamiento necesario para que la web funcione. Si aceptas, también los píxeles de Meta y TikTok para saber qué anuncios nos traen visitas y altas.':
     'Usamos o armazenamento necessário para o site funcionar. Se você aceitar, também os pixels da Meta e do TikTok para saber quais anúncios nos trazem visitas e cadastros.',
   'Solo necesarias': 'Só as necessárias',
+  // Lo que manda el servidor con ese permiso, y cómo cambiarlo (02-11-2026)
+  'Si aceptas, nuestro servidor también avisa a Meta de tu alta y de tu primera entrada y ruta, con tu correo cifrado.':
+    'Se você aceitar, nosso servidor também avisa a Meta do seu cadastro e do seu primeiro acesso e rota, com seu e-mail criptografado.',
+  'Cambiar mis cookies': 'Alterar meus cookies',
   'Usamos solo almacenamiento imprescindible para iniciar sesión y recordar tus preferencias. No usamos cookies de seguimiento ni marketing.':
     'Usamos apenas o armazenamento indispensável para entrar na conta e lembrar suas preferências. Não usamos cookies de rastreamento nem de marketing.',
 

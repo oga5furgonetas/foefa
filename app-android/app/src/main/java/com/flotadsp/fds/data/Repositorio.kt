@@ -47,6 +47,17 @@ data class Pendiente(
 @Serializable
 private data class Copia(val quien: String, val dia: String, val guardadaEn: Long, val ruta: MiRuta)
 
+/** EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): una parada situada sin cobertura (el punto del mapa o el del móvil),
+ *  guardada aquí hasta poder mandarla; mientras, la ruta del móvil ya la ve situada. `precision` (03-11-2026): «calle»
+ *  si es la calle sin el portal (Repositorio.cuerpoPunto). Los que ya esperaban en el móvil no la traen ("") y salen
+ *  como siempre, en geo «manual»; vacía no se escribe, y el fichero queda como antes.
+ *  LA DIRECCIÓN VIAJA CON EL PUNTO (03-11-2026): `direccion`, `cp` y `localidad`, la dirección nueva cuando la
+ *  sugerencia elegida la cambia (otra calle, o el CP y el pueblo que le faltaban: Situar.esAqui). Sin red se aplica ya
+ *  en la ruta del móvil (aplicar) y sale con el punto; lo que ya esperaba sin ellas sale como antes, sin cambiarla. */
+@Serializable
+data class PuntoPendiente(val quien: String, val id: String, val lat: Double, val lng: Double, val origen: String, val nombre: String = "",
+                          val precision: String = "", val direccion: String = "", val cp: String = "", val localidad: String = "")
+
 /* TODO LO DE LA RUTA, CON EL MÓVIL SIN COBERTURA EN CUENTA.
    · La última ruta se guarda en el móvil: la app abre con ella al momento y sin red (`rutaGuardada`).
    · Entregar / no entregar sin red se apunta y se manda solo al volver la red (EnvioWorker), con su hora real.
@@ -55,7 +66,19 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
     private val dir = File(ctx.filesDir, "fds").apply { mkdirs() }
     private val fCopia = File(dir, "ruta.json")
     private val fCola = File(dir, "pendientes.json")
+    private val fPuntos = File(dir, "puntos.json")
     private val candado = Mutex()
+    private val _puntos = MutableStateFlow<List<PuntoPendiente>>(emptyList())
+    /** Cuántas veces se ha cambiado a mano cada parada en esta sesión (editarla o situarla): lo que el móvil sitúa en
+     *  segundo plano no pisa un cambio hecho mientras buscaba (02-11-2026). Editar y situar van de uno en uno
+     *  (`candadoCambios`): comprobar y mandar no se separan. */
+    private val cambiosAMano = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    private val candadoCambios = Mutex()
+    fun cambiosDe(id: String): Int = cambiosAMano[id] ?: 0
+    private fun cambiadaAMano(id: String) { cambiosAMano.merge(id, 1, Int::plus) }
+    /** Una parada nueva (o editada) que el servidor no ha sabido situar: la ruta lo intenta con el móvil (RutaVM). */
+    private val _sinSituar = MutableSharedFlow<Parada>(extraBufferCapacity = 16)
+    val sinSituar: SharedFlow<Parada> = _sinSituar
 
     private val _pendientes = MutableStateFlow<List<Pendiente>>(emptyList())
     val pendientes: StateFlow<List<Pendiente>> = _pendientes
@@ -74,7 +97,7 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
             .map { it.lowercase(Locale.ROOT) }.firstOrNull { it.length == 2 }
     }
 
-    init { _pendientes.value = leerCola() }
+    init { _pendientes.value = leerCola(); _puntos.value = leerPuntos() }
 
     // ── Sesión ──────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -171,22 +194,28 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
         runCatching { api.post("push/fcm-token/quitar") }   // que los avisos no sigan llegando a este móvil (29-10-2026)
         AvisosWorker.parar(ctx)
         cuenta.cerrar()
+        invitacionDe = null
         withContext(Dispatchers.IO) { fCopia.delete() }   // direcciones y teléfonos de clientes: fuera del móvil
     }
 
     suspend fun borrarCuenta(clave: String) {
         api.post("auth/borrar-cuenta", buildJsonObject { put("password", clave) })
         salir()
-        withContext(Dispatchers.IO) { fCola.delete() }
+        withContext(Dispatchers.IO) { fCola.delete(); fPuntos.delete() }
         _pendientes.value = emptyList()
+        _puntos.value = emptyList()
     }
 
-    suspend fun cambiarClaveConductor(actual: String, nueva: String) {
+    suspend fun cambiarClaveConductor(actual: String, nueva: String, codigo: String = "") {
         api.post("auth/change-my-password", buildJsonObject {
             put("current_password", actual)
             put("new_password", nueva)
+            if (codigo.isNotBlank()) put("codigo", codigo)   // el de pedirCodigoClave (02-11-2026)
         })
     }
+
+    /** Un código de 6 cifras a su correo para cambiar la contraseña sin saber la actual (02-11-2026). */
+    suspend fun pedirCodigoClave(): JsonObject = api.post("auth/codigo-clave").jsonObject
 
     suspend fun estadoCorreoRecuperacion(): JsonObject =
         api.get("portal/mi-correo-personal").jsonObject
@@ -281,13 +310,8 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
         return aplicarPendientes(r)
     }
 
-    /** Lo hecho sin red se ve ya hecho, aunque el servidor aún no lo sepa. */
-    private fun aplicarPendientes(r: MiRuta): MiRuta {
-        val mias = _pendientes.value.filter { it.quien == cuenta.quien() }
-        if (mias.isEmpty()) return r
-        val ult = mias.associateBy { it.id }
-        return r.copy(pedidos = r.pedidos.map { p -> ult[p.id]?.let { p.copy(estado = it.estado, cerradoEn = it.hechoEn) } ?: p })
-    }
+    /** Lo hecho sin red se ve ya hecho, aunque el servidor aún no lo sepa (y lo situado sin red, ya situado). */
+    private fun aplicarPendientes(r: MiRuta): MiRuta = aplicar(r, _pendientes.value, _puntos.value, cuenta.quien())
 
     /** Entregado / no entregado. Devuelve la respuesta del servidor (la parada, con lo que dijo la IA de la foto si la
      *  hubo). Sin red (o con el servidor caído) se guarda y se manda solo después: devuelve null en ese caso. Si ya hay
@@ -315,6 +339,7 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
     /** Manda lo guardado sin red, en orden. Devuelve (enviados, rechazados por el servidor); los rechazos quedan
      *  en `tomarRechazos()` para avisar a la persona. */
     suspend fun vaciarCola(): Pair<Int, Int> = candado.withLock {
+        enviarPuntos()
         var enviados = 0
         var rechazados = 0
         val quedan = _pendientes.value.toMutableList()
@@ -357,7 +382,8 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
     suspend fun cargado(id: String, cargado: Boolean): Cargados =
         leer(api.post("reparto/mi-ruta/cargado", buildJsonObject { put("id", id); put("cargado", cargado) }))
 
-    suspend fun nuevaParada(datos: JsonObject): Parada = leer(api.post("reparto/mis-pedidos", datos))
+    suspend fun nuevaParada(datos: JsonObject): Parada =
+        leer<Parada>(api.post("reparto/mis-pedidos", datos)).also { if (it.pendiente && !it.ubicada) _sinSituar.tryEmit(it) }
     /** «COMPARTIR CON FDS» (01-11-2026): el texto de una lista (o lo leído de una foto, captura o PDF: `hoja`) al servidor,
      *  que dice qué paradas ve (sin confirmar) o las crea. */
     suspend fun pegar(texto: String, hoja: Boolean, pais: String, confirmar: Boolean): Pegado =
@@ -365,7 +391,89 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
     /** LA MEMORIA DE LA CALLE (01-11-2026): «Guardar para la próxima» en la puerta de esa parada; todo vacío la borra. */
     suspend fun memoria(id: String, portal: String, dejar: String, acceso: String): JsonObject =
         api.post("reparto/mis-pedidos/$id/memoria", buildJsonObject { put("portal", portal); put("dejar", dejar); put("acceso", acceso) }).jsonObject
-    suspend fun editarParada(id: String, datos: JsonObject) { api.post("reparto/mis-pedidos/$id/editar", datos) }
+    /** Lo que se cambia de una parada desde su ficha; devuelve la parada como queda (null si el servidor no la manda). */
+    suspend fun editarParada(id: String, datos: JsonObject): Parada? {
+        // Un punto de esta parada situado sin red sale ANTES (03-11-2026: ahora puede llevar la dirección nueva): si no,
+        // llegaría después y pisaría lo que se acaba de cambiar en la ficha. Como al navegar.
+        if (_puntos.value.any { it.quien == cuenta.quien() && it.id == id }) candado.withLock { enviarPuntos() }
+        val r = candadoCambios.withLock {
+            cambiadaAMano(id)
+            api.post("reparto/mis-pedidos/$id/editar", datos)
+        }
+        val p = runCatching { JSON.decodeFromJsonElement(Parada.serializer(), r) }.getOrNull()
+        if (p != null && p.pendiente && !p.ubicada) _sinSituar.tryEmit(p)
+        return p
+    }
+
+    /** EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): ¿dónde cae esta dirección? (POST /reparto/ubicar, no guarda nada).
+     *  Un servidor que aún no lo tiene (404) o que no puede ahora: null, y se sigue con el móvil y Photon. Sin red,
+     *  ErrorApi con `sinRed`, para poder decirlo. */
+    suspend fun ubicar(direccion: String, cp: String = "", localidad: String = ""): Ubicado? = try {
+        leer<Ubicado>(api.post("reparto/ubicar", buildJsonObject {
+            put("direccion", direccion.trim())
+            if (cp.isNotBlank()) put("cp", cp.trim())
+            if (localidad.isNotBlank()) put("localidad", localidad.trim())
+        }))
+    } catch (e: ErrorApi) {
+        if (e.sinRed) throw e else null
+    }
+
+    /** Lo que pasó al situar una parada. */
+    sealed interface Situado {
+        /** Guardado en el servidor: la parada como queda. */
+        data class Hecha(val parada: Parada) : Situado
+        /** Sin red (o con el servidor caído): queda en el móvil y sale solo al volver la red. */
+        data object EnElMovil : Situado
+        /** No se guardó: un servidor anterior al 02-11-2026 (no sitúa sin cambiar la dirección), o la parada se cambió
+         *  a mano mientras el móvil la buscaba (`siNoCambia`). */
+        data object NoGuardado : Situado
+    }
+
+    /** Situar una parada SIN cambiar su dirección (POST /reparto/mis-pedidos/{id}/editar con lat, lng y geo_origen
+     *  «mapa», «movil» o «sugerencia»): el servidor la deja en geo «manual» y le quita la zona; con `precision` «calle»
+     *  (03-11-2026: la calle sin el portal, Situar.esAqui), en «aprox». `siNoCambia`: lo que valía cambiosDe(id) al
+     *  empezar a buscar en segundo plano; si alguien la ha cambiado después, no se pisa.
+     *  Con `direccion` (03-11-2026: la sugerencia elegida es de otra calle, o le pone el CP y el pueblo que faltaban),
+     *  también la dirección nueva con su `cp` y su `localidad`: el servidor la guarda con el punto, sin volver a buscarla.
+     *  Sin red, todo junto en la cola. */
+    suspend fun situar(id: String, lat: Double, lng: Double, origen: String, nombre: String = "", siNoCambia: Int? = null,
+                       precision: String = "", direccion: String = "", cp: String = "", localidad: String = ""): Situado =
+        candadoCambios.withLock {
+            if (siNoCambia != null && cambiosDe(id) != siNoCambia) return@withLock Situado.NoGuardado
+            if (siNoCambia == null) cambiadaAMano(id)
+            // Un punto de esta parada aún sin mandar se quita ANTES (con el candado de la cola: si se está vaciando, se
+            // espera): si no, el viejo podría llegar al servidor después de este.
+            candado.withLock { guardarPuntos(_puntos.value.filterNot { it.quien == cuenta.quien() && it.id == id }) }
+            try {
+                val r = api.post("reparto/mis-pedidos/$id/editar", cuerpoPunto(lat, lng, origen, precision, direccion, cp, localidad))
+                val p = runCatching { JSON.decodeFromJsonElement(Parada.serializer(), r) }.getOrNull()
+                return@withLock if (p != null && p.ubicada) Situado.Hecha(p) else Situado.NoGuardado
+            } catch (e: ErrorApi) {
+                if (!e.reintentable) throw e
+            }
+            candado.withLock {
+                guardarPuntos(_puntos.value.filterNot { it.quien == cuenta.quien() && it.id == id } +
+                    PuntoPendiente(cuenta.quien(), id, lat, lng, origen, nombre, precision, direccion.trim(), cp.trim(), localidad.trim()))
+            }
+            EnvioWorker.programar(ctx)
+            Situado.EnElMovil
+        }
+
+    /** ¿Queda algún punto de esta cuenta esperando a salir? (EnvioWorker sigue mientras tanto.) */
+    fun hayPuntosPendientes(): Boolean = _puntos.value.any { it.quien == cuenta.quien() }
+
+    /** Manda los puntos guardados sin red (con el candado puesto). Sin red o con el servidor caído, se para y sigue
+     *  después; lo que el servidor ya no acepta (la parada se cerró o se quitó) se olvida: ya no hay que ir. */
+    private suspend fun enviarPuntos() {
+        for (pt in _puntos.value.filter { it.quien == cuenta.quien() }) {
+            try {
+                api.post("reparto/mis-pedidos/${pt.id}/editar", cuerpoPunto(pt.lat, pt.lng, pt.origen, pt.precision, pt.direccion, pt.cp, pt.localidad))
+            } catch (e: ErrorApi) {
+                if (e.reintentable || e.estado == 401) return
+            }
+            guardarPuntos(_puntos.value - pt)
+        }
+    }
     suspend fun quitarParada(id: String) { api.post("reparto/mis-pedidos/$id/quitar") }
 
     suspend fun ordenar(lat: Double?, lng: Double?): Ordenado = leer(
@@ -380,8 +488,11 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
 
     /** LA GUÍA DENTRO DE LA APP (01-11-2026): el camino y las maniobras hasta UNA parada desde donde está el móvil. La
      *  posición se manda para calcular y el servidor no la guarda. */
-    suspend fun navegar(id: String, lat: Double, lng: Double): Guia = leer(
-        api.post("reparto/mi-ruta/navegar", buildJsonObject { put("id", id); put("desde", buildJsonObject { put("lat", lat); put("lng", lng) }) }))
+    suspend fun navegar(id: String, lat: Double, lng: Double): Guia {
+        // Una parada situada sin red: su punto sale primero, o el servidor no sabría adónde guiar (02-11-2026).
+        if (_puntos.value.any { it.quien == cuenta.quien() && it.id == id }) candado.withLock { enviarPuntos() }
+        return leer(api.post("reparto/mi-ruta/navegar", buildJsonObject { put("id", id); put("desde", buildJsonObject { put("lat", lat); put("lng", lng) }) }))
+    }
 
     /** Lo que dice la DGT cerca de la ruta de hoy (30-10-2026): cortes y obras, y zonas de bajas emisiones. */
     suspend fun incidencias(): Incidencias = leer(api.get("reparto/mi-ruta/incidencias"))
@@ -417,6 +528,20 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
     suspend fun paradasDelDia(fecha: String): List<Parada> =
         leer<PedidosDia>(api.get("reparto/pedidos", mapOf("fecha" to fecha))).pedidos
     suspend fun referidos(): Referidos = leer(api.get("referidos"))
+
+    /** LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): el código de «Invita y gana» (GET /referidos, solo la cuenta
+     *  de quien reparte por su cuenta) y hasta cuándo es gratis el plan (GET /billing/planes), UNA vez por cuenta
+     *  mientras viva el proceso. Sin red (o sin código), null: la tarjeta de Hoy no sale y se vuelve a pedir la
+     *  próxima vez. Al cerrar sesión se olvida. */
+    private var invitacionDe: Pair<String, Invitacion>? = null
+    suspend fun invitacion(): Invitacion? {
+        val quien = cuenta.quien()
+        invitacionDe?.takeIf { it.first == quien }?.let { return it.second }
+        val ref = runCatching { referidos() }.getOrNull()?.takeIf { it.codigo.isNotBlank() } ?: return null
+        val gratisHasta = runCatching { oferta().gratisHasta }.getOrNull()
+        return Invitacion(ref, gratisHasta).also { invitacionDe = quien to it }
+    }
+
     suspend fun ajustes(): Ajustes = api.get("reparto/ajustes").jsonObject
 
     /** PUT /reparto/ajustes sustituye TODOS los ajustes: se manda lo que había con los cambios encima. */
@@ -437,8 +562,51 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
         _pendientes.value = l
     }
 
+    private fun leerPuntos(): List<PuntoPendiente> = runCatching {
+        if (fPuntos.exists()) JSON.decodeFromString(ListSerializer(PuntoPendiente.serializer()), fPuntos.readText()) else emptyList()
+    }.getOrDefault(emptyList())
+
+    private fun guardarPuntos(l: List<PuntoPendiente>) {
+        runCatching { if (l.isEmpty()) fPuntos.delete() else fPuntos.writeText(JSON.encodeToString(ListSerializer(PuntoPendiente.serializer()), l)) }
+        _puntos.value = l
+    }
+
     companion object {
         fun hoy(): String = java.time.LocalDate.now().toString()
+        /** La parada con un punto puesto desde la app: geo «manual» (como la deja el servidor), o «aprox» con `precision`
+         *  «calle» (03-11-2026: la calle sin el portal, como la guarda el servidor), y sin la zona. Con `direccion`
+         *  (03-11-2026: la de otra calle elegida, o con el CP y el pueblo que le faltaban), también la dirección nueva, su
+         *  `cp` y su `localidad`, como las deja el servidor: nunca la dirección vieja con el punto de otra calle. */
+        fun conPunto(p: Parada, lat: Double, lng: Double, origen: String, precision: String = "",
+                     direccion: String = "", cp: String = "", localidad: String = ""): Parada {
+            val q = p.copy(lat = lat, lng = lng, geo = if (precision == "calle") "aprox" else "manual", geoOrigen = origen, zonaLat = null, zonaLng = null)
+            return if (direccion.isBlank()) q else q.copy(direccion = direccion.trim(), cp = cp.trim(), localidad = localidad.trim())
+        }
+        /** Lo que se manda al poner el punto de una parada (al añadirla o editarla desde la ficha, o al situarla): lat, lng,
+         *  de dónde sale (geo_origen; sin origen, nada) y, si es la calle sin el portal, "precision": "calle" (03-11-2026:
+         *  el servidor la guarda «aprox», no «manual»). Otra precisión no se manda: es la puerta, «manual», como hasta
+         *  ahora y como lo que ya esperaba en el móvil (un PuntoPendiente sin precisión). Con `direccion` (03-11-2026), la
+         *  dirección nueva con su "cp" y su "localidad" (vacíos, el servidor saca el CP de la dirección): con lat y lng, el
+         *  servidor la guarda con ese punto sin volver a buscarla. Sin ella, la dirección no se toca. */
+        fun cuerpoPunto(lat: Double, lng: Double, origen: String, precision: String = "",
+                        direccion: String = "", cp: String = "", localidad: String = ""): JsonObject = buildJsonObject {
+            put("lat", lat); put("lng", lng)
+            if (origen.isNotEmpty()) put("geo_origen", origen)
+            if (precision == "calle") put("precision", "calle")
+            if (direccion.isNotBlank()) { put("direccion", direccion.trim()); put("cp", cp.trim()); put("localidad", localidad.trim()) }
+        }
+        /** Lo hecho sin red, encima de la ruta (aplicarPendientes; aparte, para probarlo sin Android): el último estado de
+         *  cada parada y su punto, con la dirección nueva si la trae (03-11-2026). Solo lo de esta cuenta (`quien`). */
+        fun aplicar(r: MiRuta, pendientes: List<Pendiente>, puntos: List<PuntoPendiente>, quien: String): MiRuta {
+            val mias = pendientes.filter { it.quien == quien }
+            val suyos = puntos.filter { it.quien == quien }.associateBy { it.id }
+            if (mias.isEmpty() && suyos.isEmpty()) return r
+            val ult = mias.associateBy { it.id }
+            return r.copy(pedidos = r.pedidos.map { p ->
+                val q = ult[p.id]?.let { p.copy(estado = it.estado, cerradoEn = it.hechoEn) } ?: p
+                suyos[p.id]?.let { conPunto(q, it.lat, it.lng, it.origen, it.precision, it.direccion, it.cp, it.localidad) } ?: q
+            })
+        }
         /** Reintentos de un envío que el servidor contesta mal (5xx) antes de darlo por rechazado y avisar. */
         const val MAX_INTENTOS = 12
     }

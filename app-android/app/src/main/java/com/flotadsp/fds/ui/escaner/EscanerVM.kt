@@ -23,11 +23,13 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
-/** El escáner, de vuelta de la ficha donde se revisó una etiqueta: si se guardó la parada o no. */
-data class VueltaDeRevisar(val guardada: Boolean)
+/** El escáner, de vuelta de la ficha donde se revisó una etiqueta: si se guardó la parada o no, y si quedó sin situar
+ *  en el mapa (02-11-2026). */
+data class VueltaDeRevisar(val guardada: Boolean, val sinSituar: Boolean = false)
 
-/** Lo que pasó con la última etiqueta, para enseñarlo abajo (y sonar o vibrar). */
-data class Resultado(val tipo: String, val texto: String, val n: Long = System.nanoTime())
+/** Lo que pasó con la última etiqueta, para enseñarlo abajo (y sonar o vibrar). `aviso`: entró, pero hay algo que
+ *  mirar (sin situar en el mapa, 02-11-2026): suena como añadida y se pinta en ámbar. */
+data class Resultado(val tipo: String, val texto: String, val n: Long = System.nanoTime(), val aviso: Boolean = false)
 
 data class EstadoEscaner(
     val anadidas: Int = 0,
@@ -108,8 +110,11 @@ class EscanerVM(app: Application) : AndroidViewModel(app) {
                 } else if (l.completa) {
                     val nueva = repo.nuevaParada(cuerpo(l))
                     contados[nueva.id] = System.currentTimeMillis()
-                    _e.value = _e.value.copy(anadidas = _e.value.anadidas + 1, ultimo = Resultado("nueva",
-                        tx("Añadida: {d}", "d" to listOf(l.direccion, l.localidad).filter { it.isNotBlank() }.joinToString(", "))))
+                    val donde = listOf(l.direccion, l.localidad).filter { it.isNotBlank() }.joinToString(", ")
+                    // EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): si el servidor no la sitúa, se dice; el móvil la
+                    // intenta solo en segundo plano (Repositorio.sinSituar → RutaVM) y, si no, se sitúa al navegar.
+                    _e.value = _e.value.copy(anadidas = _e.value.anadidas + 1, ultimo = if (nueva.ubicada) Resultado("nueva", tx("Añadida: {d}", "d" to donde))
+                        else Resultado("nueva", tx("Añadida, sin situar: la sitúo al navegar.") + " · " + donde, aviso = true))
                 } else {
                     // Lo que el código no dice, de la foto de la etiqueta (sin pisar lo que sí venía en el código).
                     val leido = fotograma?.let { runCatching { ocr.process(InputImage.fromBitmap(it, giro)).await().text }.getOrNull() }
@@ -170,13 +175,14 @@ class EscanerVM(app: Application) : AndroidViewModel(app) {
     }
 
     /** De vuelta de la ficha de revisar: lo leído cuenta como «aún delante» (si se canceló con la etiqueta delante,
-     *  no se vuelve a abrir la ficha sola) y, si se guardó, suma una añadida. */
-    fun reanudar(guardada: Boolean) {
+     *  no se vuelve a abrir la ficha sola) y, si se guardó, suma una añadida (y dice si quedó sin situar). */
+    fun reanudar(guardada: Boolean, sinSituar: Boolean = false) {
         val ahora = System.currentTimeMillis()
         vistos.replaceAll { _, _ -> ahora }
         pausado = false
         _e.value = _e.value.copy(revisar = null, trabajando = false)
-        if (guardada) _e.value = _e.value.copy(anadidas = _e.value.anadidas + 1, ultimo = Resultado("nueva", tx("Añadida a tu ruta.")))
+        if (guardada) _e.value = _e.value.copy(anadidas = _e.value.anadidas + 1, ultimo =
+            if (sinSituar) Resultado("nueva", tx("Añadida, sin situar: la sitúo al navegar."), aviso = true) else Resultado("nueva", tx("Añadida a tu ruta.")))
     }
 
     override fun onCleared() { ocr.close() }
