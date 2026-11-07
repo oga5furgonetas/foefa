@@ -53,9 +53,6 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.automirrored.filled.StickyNote2
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -63,8 +60,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -89,6 +84,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -97,6 +93,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -105,13 +102,17 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -324,7 +325,8 @@ enum class TamNumero(val alto: Dp) { FILA(32.dp), GRANDE(40.dp), PAQUETE(80.dp) 
 
 enum class EstadoNumero { SIGUIENTE, PENDIENTE, HECHA, FALLIDA }
 
-/** La píldora con el número de parada: ancho mínimo igual al alto (crece con tres cifras), relleno 6; cifra tabular.
+/** La píldora con el número de parada: ancho mínimo igual al alto (crece con tres cifras), relleno 8 y 12 en el
+ *  paquete encontrado (§3.2 no admite el 6 de §4; los mismos px-2 y px-3 de la web, 07-11-2026); cifra tabular.
  *  Siguiente, relleno de marca; pendiente, tinte de marca; hecha, chip neutro; fallida, tinte de peligro; sin número, «·». */
 @Composable
 fun NumeroParada(n: Int?, tam: TamNumero = TamNumero.FILA, estado: EstadoNumero = EstadoNumero.PENDIENTE, modifier: Modifier = Modifier) {
@@ -341,7 +343,8 @@ fun NumeroParada(n: Int?, tam: TamNumero = TamNumero.FILA, estado: EstadoNumero 
         TamNumero.GRANDE -> MaterialTheme.typography.titleLarge
         TamNumero.PAQUETE -> MaterialTheme.typography.displayMedium
     }.merge(TextoNumero)
-    Box(modifier.heightIn(min = tam.alto).widthIn(min = tam.alto).background(fondo, CircleShape).padding(horizontal = 6.dp),
+    val relleno = if (tam == TamNumero.PAQUETE) Esp.m else Esp.s
+    Box(modifier.heightIn(min = tam.alto).widthIn(min = tam.alto).background(fondo, CircleShape).padding(horizontal = relleno),
         contentAlignment = Alignment.Center) {
         Text(n?.toString() ?: "·", style = estilo, color = letra, maxLines = 1, softWrap = false)
     }
@@ -360,40 +363,47 @@ fun Etiqueta(texto: String, tono: Tono = Tono.NEUTRO, icono: ImageVector? = null
     }
 }
 
-/** Un chip de acción: 32 a la vista y 48 de toque, radio 8, letra `boton`, icono de 16. Neutro va de contorno; marca y
- *  aviso, con relleno. `cargando` pone el círculo en el sitio del icono («Ordenando por tiempo…»). */
+/** Lo de dentro de un chip (07-11-2026): 32 de alto y 12 a los lados (§4; el AssistChip de Material lleva 16), el icono
+ *  de 16 (o el círculo de `cargando`), 8 de hueco y el texto en `boton`, en una línea. */
+@Composable
+private fun CuerpoChip(texto: String, icono: ImageVector?, cargando: Boolean) {
+    Row(Modifier.heightIn(min = Alto.chip).padding(horizontal = Esp.m), verticalAlignment = Alignment.CenterVertically) {
+        if (cargando) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = LocalContentColor.current)
+        else if (icono != null) Icon(icono, contentDescription = null, modifier = Modifier.size(16.dp))
+        if (cargando || icono != null) Spacer(Modifier.width(Esp.s))
+        Text(texto, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Un chip de acción: 32 a la vista y 48 de toque, radio 8, relleno 12, letra `boton`, icono de 16. Neutro va de
+ *  contorno (el borde de control); marca y aviso, con relleno. `cargando` pone el círculo en el sitio del icono
+ *  («Ordenando por tiempo…»). Sobre `Surface`, como el chip de la web (07-11-2026): el AssistChip no baja de 16 de relleno. */
 @Composable
 fun ChipAccion(
     texto: String, onClick: () -> Unit, icono: ImageVector? = null, tono: Tono = Tono.NEUTRO, nombre: String? = null,
     enabled: Boolean = true, cargando: Boolean = false, modifier: Modifier = Modifier,
 ) {
-    val colores = if (tono == Tono.NEUTRO) AssistChipDefaults.assistChipColors() else {
-        val (fondo, letra) = rellenoDe(tono)
-        AssistChipDefaults.assistChipColors(containerColor = fondo, labelColor = letra, leadingIconContentColor = letra)
-    }
-    AssistChip(
-        onClick = onClick, enabled = enabled, shape = MaterialTheme.shapes.small, colors = colores,
-        border = if (tono == Tono.NEUTRO) AssistChipDefaults.assistChipBorder(enabled) else null,
-        label = { Text(texto, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        leadingIcon = if (icono == null && !cargando) null else ({
-            if (cargando) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = LocalContentColor.current)
-            else Icon(icono!!, contentDescription = null, modifier = Modifier.size(16.dp))
-        }),
-        modifier = modifier.nombre(nombre),
-    )
+    val c = MaterialTheme.colorScheme
+    val (fondo, letra) = if (tono == Tono.NEUTRO) Color.Transparent to c.onSurface else rellenoDe(tono)
+    Surface(
+        onClick = onClick, enabled = enabled, shape = MaterialTheme.shapes.small, color = fondo, contentColor = letra,
+        border = if (tono == Tono.NEUTRO) BorderStroke(1.dp, c.outline) else null,
+        modifier = modifier.minimumInteractiveComponentSize().semantics { role = Role.Button }.nombre(nombre)
+            .then(if (enabled) Modifier else Modifier.alpha(0.38f)),
+    ) { CuerpoChip(texto, icono, cargando) }
 }
 
-/** Un chip de opción («¿Dónde?», el método de cobro): el elegido, en relleno de marca. */
+/** Un chip de opción («¿Dónde?», el método de cobro): el elegido, en relleno de marca; los demás, de contorno. Con
+ *  `selected` en su semántica, como el FilterChip de antes. */
 @Composable
 fun ChipOpcion(texto: String, elegido: Boolean, onClick: () -> Unit, icono: ImageVector? = null, modifier: Modifier = Modifier) {
     val c = MaterialTheme.colorScheme
-    FilterChip(
-        selected = elegido, onClick = onClick, shape = MaterialTheme.shapes.small, modifier = modifier,
-        label = { Text(texto, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        leadingIcon = icono?.let { { Icon(it, contentDescription = null, modifier = Modifier.size(16.dp)) } },
-        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = c.primary, selectedLabelColor = c.onPrimary, selectedLeadingIconColor = c.onPrimary),
-        border = FilterChipDefaults.filterChipBorder(enabled = true, selected = elegido),
-    )
+    Surface(
+        onClick = onClick, shape = MaterialTheme.shapes.small,
+        color = if (elegido) c.primary else Color.Transparent, contentColor = if (elegido) c.onPrimary else c.onSurface,
+        border = if (elegido) null else BorderStroke(1.dp, c.outline),
+        modifier = modifier.minimumInteractiveComponentSize().semantics { role = Role.Checkbox; selected = elegido },
+    ) { CuerpoChip(texto, icono, cargando = false) }
 }
 
 /** Una sola línea de chips que se desliza a lo ancho, con hueco de 8: nunca salta de línea (en alemán tampoco). */
@@ -411,6 +421,8 @@ fun FilaDeChips(modifier: Modifier = Modifier, contenido: @Composable RowScope.(
 fun Aviso(
     texto: String, tono: Tono = Tono.NEUTRO, icono: ImageVector? = null, accion: String? = null, alAccion: () -> Unit = {},
     alCerrar: (() -> Unit)? = null, nombreCerrar: String = tx("Cerrar"), accion2: String? = null, alAccion2: () -> Unit = {},
+    /** Líneas como mucho (07-11-2026, N6): la ficha enseña entero lo que dice de la etiqueta leída. */
+    maxLineas: Int = 2,
     modifier: Modifier = Modifier,
 ) {
     val (fondo, letra) = tinteDe(tono)
@@ -421,7 +433,7 @@ fun Aviso(
             Row(Modifier.heightIn(min = Alto.boton).padding(start = Esp.m, end = if (alCerrar == null && (accion == null || dosAcciones)) Esp.m else Esp.xs),
                 verticalAlignment = Alignment.CenterVertically) {
                 if (icono != null) { Icon(icono, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(Esp.s)) }
-                Text(texto, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                Text(texto, style = MaterialTheme.typography.bodyMedium, maxLines = maxLineas, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f).padding(vertical = Esp.s))
                 if (accion != null && !dosAcciones) BotonTexto(accion, alAccion, tono = Tono.NEUTRO)
                 if (alCerrar != null) BotonIcono(Icons.Default.Close, nombreCerrar, alCerrar)
@@ -447,12 +459,28 @@ fun LineaEstado(texto: String, accion: String? = null, alAccion: () -> Unit = {}
 }
 
 /** El aviso pasajero (snackbar): 48 como mínimo, radio 12, superficie inversa, letra `texto` y una acción. Se va solo:
- *  corto 4 s, largo con acción. Va en `SnackbarHost(estado, snackbar = { SnackbarFds(it) })`, o con AvisoFlotante. */
+ *  corto 4 s, largo con acción. Va en `SnackbarHost(estado, snackbar = { SnackbarFds(it) })`, o con AvisoFlotante.
+ *  La acción («Deshacer») va con la letra del aviso, en negrita (`boton`) y subrayada, como en la web (07-11-2026):
+ *  el inversePrimary daba 3,9:1 de noche sobre la superficie inversa. Deja 12 de margen alrededor, como el
+ *  Snackbar(datos) de Material, que los pone por dentro y se perdían al montar la acción a mano. */
 @Composable
 fun SnackbarFds(datos: SnackbarData) {
     val c = MaterialTheme.colorScheme
-    Snackbar(datos, shape = MaterialTheme.shapes.medium, containerColor = c.inverseSurface, contentColor = c.inverseOnSurface,
-        actionColor = c.inversePrimary, dismissActionContentColor = c.inverseOnSurface)
+    val accion = datos.visuals.actionLabel
+    Snackbar(
+        modifier = Modifier.padding(Esp.m), shape = MaterialTheme.shapes.medium, containerColor = c.inverseSurface, contentColor = c.inverseOnSurface,
+        actionContentColor = c.inverseOnSurface, dismissActionContentColor = c.inverseOnSurface,
+        action = accion?.let {
+            {
+                TextButton(onClick = { datos.performAction() }, colors = ButtonDefaults.textButtonColors(contentColor = c.inverseOnSurface)) {
+                    Text(it, style = MaterialTheme.typography.labelLarge.copy(textDecoration = TextDecoration.Underline))
+                }
+            }
+        },
+        dismissAction = if (datos.visuals.withDismissAction) {
+            { IconButton(onClick = { datos.dismiss() }) { Icon(Icons.Default.Close, contentDescription = tx("Cerrar")) } }
+        } else null,
+    ) { Text(datos.visuals.message, style = MaterialTheme.typography.bodyMedium) }
 }
 
 @Composable
@@ -503,12 +531,14 @@ fun Promo(
 
 /* ───────────── Hoja, ayuda y menú ───────────── */
 
-/** Una opción del menú ⋮: lo que borra va en peligro y con su diálogo de siempre, que abre `alPulsar`. */
-class Opcion(val texto: String, val icono: ImageVector? = null, val peligro: Boolean = false, val alPulsar: () -> Unit)
+/** Una opción del menú ⋮: lo que borra va en peligro y con su diálogo de siempre, que abre `alPulsar`. `nombre` es el
+ *  nombre accesible cuando no es el texto (07-11-2026, N2: se ve «Escuchar» y se llama «Escuchar la siguiente parada»). */
+class Opcion(val texto: String, val icono: ImageVector? = null, val peligro: Boolean = false, val nombre: String? = null, val alPulsar: () -> Unit)
 
-/** La hoja de abajo: radio 16 arriba; cabecera de 48 con el título en una línea, el subtítulo opcional, «?» y ⋮ si
- *  hacen falta y la ✕ de 48; el cuerpo se desplaza con 16 a los lados; el pie va FIJO, con separador, relleno 12 y la
- *  zona segura; como mucho el 92 % del alto. Se cierra con atrás, con la ✕ o deslizando. */
+/** La hoja de abajo: radio 16 arriba; cabecera de 48 (con el asa de 32 × 4 dentro, arriba y centrada) con el título en
+ *  una línea, el subtítulo opcional, «?» y ⋮ si hacen falta y la ✕ de 48; el cuerpo se desplaza con 16 a los lados; el
+ *  pie va FIJO, con separador, relleno 12 y la zona segura; como mucho el 92 % del alto. Se cierra con atrás, con la ✕ o
+ *  deslizando. */
 @Composable
 fun Hoja(
     titulo: String, subtitulo: String? = null, alCerrar: () -> Unit, ayuda: String? = null, menu: List<Opcion> = emptyList(),
@@ -518,19 +548,26 @@ fun Hoja(
     ModalBottomSheet(
         onDismissRequest = alCerrar, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-        dragHandle = { BottomSheetDefaults.DragHandle(modifier = Modifier.padding(vertical = Esp.s)) },
+        // Sin el asa de Material (07-11-2026): la suya mide 64 con sus rellenos y, con la cabecera de 48, hacía 112.
+        // §4 pide 48 con el asa dentro, como la Hoja de la web; deslizar la hoja hacia abajo la sigue cerrando.
+        dragHandle = null,
     ) {
         Column(Modifier.heightIn(max = altoMax)) {
-            Row(Modifier.fillMaxWidth().heightIn(min = Alto.boton).padding(start = Esp.l, end = Esp.xs), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(titulo, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (!subtitulo.isNullOrBlank()) {
-                        Text(subtitulo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Box(Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().heightIn(min = Alto.boton).padding(start = Esp.l, end = Esp.xs), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(titulo, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (!subtitulo.isNullOrBlank()) {
+                            Text(subtitulo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
+                    if (ayuda != null) Ayuda(titulo, ayuda)
+                    if (menu.isNotEmpty()) Menu(menu)
+                    BotonIcono(Icons.Default.Close, tx("Cerrar"), alCerrar)
                 }
-                if (ayuda != null) Ayuda(titulo, ayuda)
-                if (menu.isNotEmpty()) Menu(menu)
-                BotonIcono(Icons.Default.Close, tx("Cerrar"), alCerrar)
+                // El asa de 32 × 4, arriba y centrada, dentro de los 48 de la cabecera (como piezas/Hoja.jsx).
+                Box(Modifier.align(Alignment.TopCenter).padding(top = Esp.xs).size(width = 32.dp, height = 4.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant, CircleShape))
             }
             Column(
                 Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = Esp.l)
@@ -563,13 +600,14 @@ fun Ayuda(titulo: String, texto: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** El ⋮: un botón de icono de 48 («Más opciones») con filas de 48, icono de 20 y letra `boton`, de 200 de ancho como mínimo. */
+/** El ⋮: un botón de icono de 48 («Más opciones») con filas de 48, icono de 20 y letra `boton`, de 200 de ancho como mínimo.
+ *  `ancla` (07-11-2026, N2) pinta otra cosa en lugar del ⋮ y recibe `abrir`: el chip «Furgoneta aparcada» de «Hoy». */
 @Composable
-fun Menu(opciones: List<Opcion>, nombre: String = tx("Más opciones"), modifier: Modifier = Modifier) {
+fun Menu(opciones: List<Opcion>, nombre: String = tx("Más opciones"), modifier: Modifier = Modifier, ancla: (@Composable (abrir: () -> Unit) -> Unit)? = null) {
     var abierto by remember { mutableStateOf(false) }
     val c = MaterialTheme.colorScheme
     Box(modifier) {
-        BotonIcono(Icons.Default.MoreVert, nombre, { abierto = true })
+        if (ancla != null) ancla { abierto = true } else BotonIcono(Icons.Default.MoreVert, nombre, { abierto = true })
         DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false }, shape = MaterialTheme.shapes.medium, containerColor = c.surfaceContainerLow) {
             opciones.forEach { o ->
                 DropdownMenuItem(
@@ -577,7 +615,7 @@ fun Menu(opciones: List<Opcion>, nombre: String = tx("Más opciones"), modifier:
                     onClick = { abierto = false; o.alPulsar() },
                     leadingIcon = o.icono?.let { { Icon(it, contentDescription = null, modifier = Modifier.size(20.dp)) } },
                     colors = if (o.peligro) MenuDefaults.itemColors(textColor = c.error, leadingIconColor = c.error) else MenuDefaults.itemColors(),
-                    modifier = Modifier.widthIn(min = 200.dp),
+                    modifier = Modifier.widthIn(min = 200.dp).then(o.nombre?.let { n -> Modifier.semantics { contentDescription = n } } ?: Modifier),
                 )
             }
         }
@@ -615,7 +653,10 @@ fun FilaParada(p: Parada, numero: Int?, enZbe: String = "", alTocar: () -> Unit,
             }
             if (hecha) {
                 val hora = Calle.hora(p.cerradoEn).takeIf { it.isNotBlank() }
-                val que = if (p.estado == "entregado") tx("Entregado") else p.motivo?.takeIf { it.isNotBlank() } ?: tx("No entregado")
+                // En las recogidas, «Recogido» / «No recogido», como la fila de la web (07-11-2026).
+                val recogida = p.tipo == "recogida"
+                val que = if (p.estado == "entregado") (if (recogida) tx("Recogido") else tx("Entregado"))
+                    else (p.motivo?.takeIf { it.isNotBlank() } ?: (if (recogida) tx("No recogido") else tx("No entregado")))
                 val cobrado = p.cobradoImporte?.takeIf { p.estado == "entregado" && it > 0.0 }?.let { Region.importe(it) }
                 Text(listOfNotNull(hora, que, cobrado).joinToString(" · "), style = MaterialTheme.typography.labelMedium.merge(TextoNumero),
                     color = if (p.estado == "entregado") x.entregadoTexto else c.error, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -634,7 +675,7 @@ fun FilaParada(p: Parada, numero: Int?, enZbe: String = "", alTocar: () -> Unit,
 private fun etiquetaDeFila(p: Parada, enZbe: String): Triple<String, Tono, ImageVector?>? = when {
     Situar.sinSituar(p) -> Triple(tx("Sin situar"), Tono.AVISO, Icons.Default.LocationOff)
     p.porCobrar -> Triple(tx("Cobrar") + " " + Region.importe(p.cobrar ?: 0.0), Tono.AVISO, Icons.Default.Payments)
-    p.prioridad -> Triple(tx("Urgente"), Tono.PELIGRO, Icons.Default.PriorityHigh)
+    p.prioridad -> Triple(tx("Urgente"), Tono.AVISO, Icons.Default.PriorityHigh)   // aviso, como la web: peligro es no entregado, tarde o error
     p.tipo == "recogida" -> Triple(tx("Recogida"), Tono.NEUTRO, null)
     p.ventanaDesde != null -> Triple("${p.ventanaDesde}–${p.ventanaHasta.orEmpty()}", Tono.NEUTRO, Icons.Default.Schedule)
     p.geo == "puerta" -> Triple(tx("Puerta conocida"), Tono.OK, null)
@@ -653,26 +694,27 @@ fun formaDeLista(indice: Int, total: Int): Shape {
     return RoundedCornerShape(topStart = arriba, topEnd = arriba, bottomStart = abajo, bottomEnd = abajo)
 }
 
-/** El separador de 1 entre filas, desde el texto (a 56: relleno 12 + número 32 + hueco 12). */
+/** El separador de 1 entre filas, desde el texto (a 56: relleno 12 + número 32 + hueco 12). `desde` lo mueve en las
+ *  listas sin número de parada (07-11-2026, N7: los días del Historial, Cuenta y el portal). */
 @Composable
-fun SeparadorLista(modifier: Modifier = Modifier) {
-    HorizontalDivider(modifier.padding(start = 56.dp), color = MaterialTheme.colorScheme.outlineVariant)
+fun SeparadorLista(modifier: Modifier = Modifier, desde: Dp = 56.dp) {
+    HorizontalDivider(modifier.padding(start = desde), color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 /** Una fila dentro de una lista que va en un `LazyColumn`: la superficie con la forma de su sitio y, si no es la última,
  *  el separador debajo. Sin hueco entre filas. */
 @Composable
-fun FilaDeLista(indice: Int, total: Int, modifier: Modifier = Modifier, contenido: @Composable ColumnScope.() -> Unit) {
+fun FilaDeLista(indice: Int, total: Int, modifier: Modifier = Modifier, separadorDesde: Dp = 56.dp, contenido: @Composable ColumnScope.() -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = formaDeLista(indice, total), modifier = modifier.fillMaxWidth()) {
-        Column { contenido(); if (indice < total - 1) SeparadorLista() }
+        Column { contenido(); if (indice < total - 1) SeparadorLista(desde = separadorDesde) }
     }
 }
 
 /** Una lista entera en una sola superficie (radio 12, sin borde): `total` filas con su separador entre ellas. */
 @Composable
-fun ContenedorLista(total: Int, modifier: Modifier = Modifier, fila: @Composable (Int) -> Unit) {
+fun ContenedorLista(total: Int, modifier: Modifier = Modifier, separadorDesde: Dp = 56.dp, fila: @Composable (Int) -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.medium, modifier = modifier.fillMaxWidth()) {
-        Column { for (i in 0 until total) { fila(i); if (i < total - 1) SeparadorLista() } }
+        Column { for (i in 0 until total) { fila(i); if (i < total - 1) SeparadorLista(desde = separadorDesde) } }
     }
 }
 
@@ -731,7 +773,7 @@ fun FilaDato(icono: ImageVector, texto: String, nombre: String, alTocar: (() -> 
 
 /* ───────────── Campo, segmentado, mapa ───────────── */
 
-/** Un campo de texto de 48: radio 12, borde de control (2 de marca al escribir), icono de 20 a la izquierda, letra
+/** Un campo de texto de 48: radio 12, borde de control (2 de énfasis al escribir), icono de 20 a la izquierda, letra
  *  `campo`, el ejemplo dentro y la ayuda o el error debajo en `sec`. Sin etiqueta flotante: `nombre` es el nombre
  *  accesible de siempre. (El OutlinedTextField de Material no baja de 56.) */
 @Composable
@@ -742,8 +784,9 @@ fun CampoTexto(
 ) {
     val c = MaterialTheme.colorScheme
     val interaccion = remember { MutableInteractionSource() }
+    // El borde de 2 al escribir es el de énfasis de §3.5 (07-11-2026): de noche el cian #14E7D8, no el texto de marca.
     val colores = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = c.secondary, unfocusedBorderColor = c.outline, errorBorderColor = c.error, cursorColor = c.secondary,
+        focusedBorderColor = LocalExtra.current.enfasis, unfocusedBorderColor = c.outline, errorBorderColor = c.error, cursorColor = c.secondary,
         focusedLeadingIconColor = c.secondary, unfocusedLeadingIconColor = c.onSurfaceVariant, errorLeadingIconColor = c.error,
         focusedPlaceholderColor = c.onSurfaceVariant, unfocusedPlaceholderColor = c.onSurfaceVariant,
     )
@@ -776,7 +819,7 @@ fun CampoTexto(
 }
 
 /** El segmentado («Furgoneta | Lista por hueco»): 40 a la vista y 48 de toque, radio 12, letra `boton`, el elegido en
- *  tinte de marca. */
+ *  relleno de marca, como en la web (07-11-2026; antes, el tinte). */
 @Composable
 fun Segmentado(opciones: List<String>, elegida: Int, alElegir: (Int) -> Unit, modifier: Modifier = Modifier) {
     val c = MaterialTheme.colorScheme
@@ -785,7 +828,7 @@ fun Segmentado(opciones: List<String>, elegida: Int, alElegir: (Int) -> Unit, mo
             SegmentedButton(
                 selected = i == elegida, onClick = { alElegir(i) },
                 shape = SegmentedButtonDefaults.itemShape(index = i, count = opciones.size, baseShape = MaterialTheme.shapes.medium),
-                colors = SegmentedButtonDefaults.colors(activeContainerColor = c.primaryContainer, activeContentColor = c.onPrimaryContainer,
+                colors = SegmentedButtonDefaults.colors(activeContainerColor = c.primary, activeContentColor = c.onPrimary,
                     activeBorderColor = c.outline, inactiveBorderColor = c.outline, inactiveContentColor = c.onSurface),
                 icon = {}, label = { Text(t, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             )
@@ -820,18 +863,23 @@ fun ZoomMapa(alAcercar: () -> Unit, alAlejar: () -> Unit, modifier: Modifier = M
 @Composable
 fun Pastilla(
     texto: String, tono: Tono = Tono.NEUTRO, icono: ImageVector? = null, onClick: (() -> Unit)? = null,
-    color: Color? = null, contentColor: Color? = null, modifier: Modifier = Modifier,
+    color: Color? = null, contentColor: Color? = null,
+    /** Líneas como mucho (07-11-2026, N6): las de «Situar» («Sin conexión: …») no caben en una. Con más de una línea
+     *  va con radio 16 y relleno de 8 arriba y abajo: la redonda recortaría las esquinas del texto. */
+    maxLineas: Int = 1,
+    modifier: Modifier = Modifier,
 ) {
     val c = MaterialTheme.colorScheme
     val (fondo, letra) = if (tono == Tono.NEUTRO) c.surfaceContainerLow to c.onSurface else rellenoDe(tono)
+    val forma = if (maxLineas > 1) MaterialTheme.shapes.large else CircleShape
     val contenido: @Composable () -> Unit = {
-        Row(Modifier.heightIn(min = Alto.chip).padding(horizontal = Esp.m), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.heightIn(min = Alto.chip).padding(horizontal = Esp.m, vertical = if (maxLineas > 1) Esp.s else 0.dp), verticalAlignment = Alignment.CenterVertically) {
             if (icono != null) { Icon(icono, contentDescription = null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(Esp.xs)) }
-            Text(texto, style = MaterialTheme.typography.labelMedium.merge(TextoNumero), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(texto, style = MaterialTheme.typography.labelMedium.merge(TextoNumero), maxLines = maxLineas, overflow = TextOverflow.Ellipsis)
         }
     }
-    if (onClick != null) Surface(onClick = onClick, shape = CircleShape, shadowElevation = 3.dp, color = color ?: fondo, contentColor = contentColor ?: letra, modifier = modifier, content = contenido)
-    else Surface(shape = CircleShape, shadowElevation = 3.dp, color = color ?: fondo, contentColor = contentColor ?: letra, modifier = modifier, content = contenido)
+    if (onClick != null) Surface(onClick = onClick, shape = forma, shadowElevation = 3.dp, color = color ?: fondo, contentColor = contentColor ?: letra, modifier = modifier, content = contenido)
+    else Surface(shape = forma, shadowElevation = 3.dp, color = color ?: fondo, contentColor = contentColor ?: letra, modifier = modifier, content = contenido)
 }
 
 /** La atribución del mapa: letra `pie` sobre la superficie al 85 %, radio 6, en una esquina (la pone quien la llama). */

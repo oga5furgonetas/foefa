@@ -58,17 +58,18 @@ html[data-panel-theme='light'] {
    Noche por defecto, como la rampa; los temas día e híbrido (este solo sobre <main>, como la rampa) ponen los medidos
    para papel. Tailwind los sirve como `ruta-*` (tailwind.config.js). Medidos con la fórmula de la WCAG: marca 5,0:1 de
    día y 11,7:1 de noche; ok (relleno) 5,5:1 con blanco; peligro 6,5:1 con blanco y su texto 10,7:1 de noche; aviso
-   6,7:1 / 9,8:1; el tinte de marca 9,9:1 / 7,5:1; el borde de control 3,4:1 / 3,6:1. El selector del híbrido va
-   DELANTE de la coma para que `check-contraste.mjs` no lo tome por la rampa. */
+   6,7:1 / 9,8:1; el tinte de marca 9,9:1 / 7,5:1; el borde de control 3,4:1 / 3,6:1; el borde de énfasis (§3.5, el
+   campo al escribir) #0E7C77 de día y #14E7D8 de noche (07-11-2026). El selector del híbrido va DELANTE de la coma
+   para que `check-contraste.mjs` no lo tome por la rampa. */
 :root {
   --r-marca: 95 227 216;  --r-ok: 4 120 87;  --r-ok-texto: 74 222 128;  --r-peligro: 179 38 30;
   --r-peligro-texto: 242 184 181;  --r-aviso: 58 44 16;  --r-aviso-texto: 255 213 138;  --r-borde: 100 112 127;
-  --r-marca-tinte: 0 80 76;  --r-marca-tinte-texto: 179 243 238;
+  --r-marca-tinte: 0 80 76;  --r-marca-tinte-texto: 179 243 238;  --r-enfasis: 20 231 216;
 }
 html[data-panel-theme='hibrido'] main, html[data-panel-theme='light'] {
   --r-marca: 14 124 119;  --r-ok-texto: 4 120 87;  --r-peligro-texto: 179 38 30;
   --r-aviso: 255 241 214;  --r-aviso-texto: 122 74 0;  --r-borde: 140 139 134;
-  --r-marca-tinte: 211 245 242;  --r-marca-tinte-texto: 0 65 62;
+  --r-marca-tinte: 211 245 242;  --r-marca-tinte-texto: 0 65 62;  --r-enfasis: 14 124 119;
 }
 
 /* Modo día: el mismo lenguaje plano, con la rampa invertida. Aquí también
@@ -337,12 +338,12 @@ html[data-panel-theme='light'] [class*='hover:text-white']:hover { color: rgb(va
            disabled:opacity-45;
   }
   /* EL CAMPO DE LA APP DE REPARTO (diseño compacto, 06-11-2026, §4): 48 de alto, radio 12, borde de control y dos de
-     marca al escribir (el borde más un anillo por dentro, para que nada se mueva), letra «campo» (16: por debajo el
-     iPhone amplía), el ejemplo dentro y sin etiqueta flotante. Lo usa piezas/Campo.jsx. */
+     énfasis al escribir (`ruta-enfasis`, §3.5, 07-11-2026: el borde más un anillo por dentro, para que nada se mueva),
+     letra «campo» (16: por debajo el iPhone amplía), el ejemplo dentro y sin etiqueta flotante. Lo usa piezas/Campo.jsx. */
   .campo {
     @apply min-h-12 w-full rounded-xl border border-ruta-borde bg-dark-900 px-3 text-campo text-dark-50
-           placeholder:text-dark-400 focus:border-ruta-marca focus:outline-none focus:ring-1 focus:ring-inset
-           focus:ring-ruta-marca;
+           placeholder:text-dark-400 focus:border-ruta-enfasis focus:outline-none focus:ring-1 focus:ring-inset
+           focus:ring-ruta-enfasis;
   }
   /* ── LO QUE SE PUEDE PULSAR CON UN DEDO ────────────────────────────────
      Medido el 20-09-2026 barriendo las 28 pantallas del panel a 375 px: no hay

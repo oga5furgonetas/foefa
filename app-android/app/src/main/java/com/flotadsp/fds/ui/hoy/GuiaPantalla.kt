@@ -1,3 +1,4 @@
+// diseño compacto
 package com.flotadsp.fds.ui.hoy
 
 import com.flotadsp.fds.ui.tx
@@ -25,7 +26,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -37,17 +37,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
@@ -58,16 +58,10 @@ import androidx.compose.material.icons.filled.TurnRight
 import androidx.compose.material.icons.filled.TurnSlightLeft
 import androidx.compose.material.icons.filled.TurnSlightRight
 import androidx.compose.material.icons.filled.UTurnLeft
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -89,11 +83,14 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -108,7 +105,19 @@ import com.flotadsp.fds.FdsApp
 import com.flotadsp.fds.data.ErrorApi
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.ui.Acciones
+import com.flotadsp.fds.ui.Atribucion
+import com.flotadsp.fds.ui.AvisoFlotante
+import com.flotadsp.fds.ui.BotonIcono
+import com.flotadsp.fds.ui.BotonMapa
+import com.flotadsp.fds.ui.BotonNormal
+import com.flotadsp.fds.ui.Esp
+import com.flotadsp.fds.ui.EstadoNumero
+import com.flotadsp.fds.ui.FilaCierre
+import com.flotadsp.fds.ui.LetraMax
 import com.flotadsp.fds.ui.LocalExtra
+import com.flotadsp.fds.ui.NumeroParada
+import com.flotadsp.fds.ui.Pastilla
+import com.flotadsp.fds.ui.TamNumero
 import com.flotadsp.fds.ui.TextoNumero
 import com.flotadsp.fds.ui.Voz
 import com.flotadsp.fds.ui.esNoche
@@ -165,9 +174,6 @@ import kotlin.math.roundToInt
 
 /** Una posición del móvil con su rumbo (grados desde el norte), si se sabe, y su velocidad (m/s; 0 si no la da). */
 private data class Posicion(val p: Punto, val rumbo: Double?, val velocidad: Double)
-
-private val VERDE_GUIA = Color(0xFF047857)
-private val AMBAR_GUIA = Color(0xFFB45309)
 
 @Composable
 fun GuiaPantalla(
@@ -354,211 +360,209 @@ private fun Guiando(
     // Sin ubicación todavía (sin permiso o sin GPS) nada mueve el mapa: la parada nueva se encuadra ella.
     LaunchedEffect(parada.id) { if (pos == null) capas.encuadrar(destino) }
 
+    val x = LocalExtra.current
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         AndroidView(factory = { mapa }, modifier = Modifier.fillMaxSize(), update = {
             capas.ruta(lista); capas.puntos(destino, pos); capas.chincheta(pin)
         })
 
-        // ARRIBA: la próxima maniobra, en grande; o lo que falta para poder guiar.
-        Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().padding(12.dp)) {
+        // ARRIBA: la próxima maniobra, en grande; o lo que falta para poder guiar. (07-11-2026, diseño compacto, §5.8:
+        // la banda con radio 16 y relleno 12, el icono de 40, la distancia en `guia`, la instrucción en `nombre` a dos
+        // líneas y «Luego» en `sec`; los tamaños, del tema, y los colores, de Extra.)
+        Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().padding(Esp.m)) {
             when {
                 !permiso -> {
                     Banda(ambar = true) {
-                        Icon(Icons.Default.LocationOff, contentDescription = null, modifier = Modifier.size(30.dp)); Spacer(Modifier.width(12.dp))
-                        Text(tx("Dale permiso de ubicación a la app para que te guíe."), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.LocationOff, contentDescription = null, modifier = Modifier.size(40.dp)); Spacer(Modifier.width(Esp.m))
+                        Text(tx("Dale permiso de ubicación a la app para que te guíe."), style = MaterialTheme.typography.titleMedium)
                     }
-                    Spacer(Modifier.height(8.dp))
-                    FilledTonalButton(onClick = {
+                    Spacer(Modifier.height(Esp.s))
+                    BotonNormal(if (bloqueado) tx("Abrir los permisos") else tx("Reintentar"), {
                         if (bloqueado) ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null)))
                         else pedirPermiso.launch(permisos)
-                    }, modifier = Modifier.height(52.dp)) { Text(if (bloqueado) tx("Abrir los permisos") else tx("Reintentar")) }
+                    })
                 }
                 // Sin ubicación y sin nada que enseñar: la banda entera. Con ruta y una posición de antes (un túnel, un
-                // garaje), la maniobra se queda a la vista y el aviso va pequeño debajo (visto en el emulador, 01-11-2026).
+                // garaje), la maniobra se queda a la vista y el aviso va en una pastilla debajo (visto en el emulador, 01-11-2026).
                 errPos.isNotEmpty() && (pos == null || vista == null) -> Banda(ambar = true) {
-                    Icon(Icons.Default.LocationOff, contentDescription = null, modifier = Modifier.size(30.dp)); Spacer(Modifier.width(12.dp))
-                    Text(errPos, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.LocationOff, contentDescription = null, modifier = Modifier.size(40.dp)); Spacer(Modifier.width(Esp.m))
+                    Text(errPos, style = MaterialTheme.typography.titleMedium)
                 }
                 vista == null && errGuia.isNotEmpty() -> {
                     Banda(ambar = true) {
-                        Icon(Icons.Default.CloudOff, contentDescription = null, modifier = Modifier.size(30.dp)); Spacer(Modifier.width(12.dp))
-                        Text(errGuia, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.CloudOff, contentDescription = null, modifier = Modifier.size(40.dp)); Spacer(Modifier.width(Esp.m))
+                        Text(errGuia, style = MaterialTheme.typography.titleMedium)
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(onClick = { pos?.let { pedir(parada, it.p, recalculo = false) } }, enabled = pos != null && !pidiendo,
-                            modifier = Modifier.height(52.dp)) { Text(tx("Reintentar")) }
-                        FilledTonalButton(onClick = { Acciones.navegar(ctx, parada, navegarFuera) }, modifier = Modifier.height(52.dp)) { Text(nombreFuera(navegarFuera)) }
+                    Spacer(Modifier.height(Esp.s))
+                    Row(horizontalArrangement = Arrangement.spacedBy(Esp.s)) {
+                        BotonNormal(tx("Reintentar"), { pos?.let { pedir(parada, it.p, recalculo = false) } }, enabled = pos != null && !pidiendo)
+                        BotonNormal(nombreFuera(navegarFuera), { Acciones.navegar(ctx, parada, navegarFuera) })
                     }
                 }
                 vista == null -> Banda {
-                    CircularProgressIndicator(Modifier.size(28.dp), color = Color.White, strokeWidth = 3.dp); Spacer(Modifier.width(12.dp))
-                    Text(tx("Calculando la ruta…"), fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    CircularProgressIndicator(Modifier.size(28.dp), color = Color.White, strokeWidth = 3.dp); Spacer(Modifier.width(Esp.m))
+                    Text(tx("Calculando la ruta…"), style = MaterialTheme.typography.titleMedium)
                 }
                 haLlegado -> Banda {
-                    Icon(Icons.Default.Flag, contentDescription = null, modifier = Modifier.size(34.dp)); Spacer(Modifier.width(12.dp))
-                    Text(tx("Has llegado"), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.Flag, contentDescription = null, modifier = Modifier.size(40.dp)); Spacer(Modifier.width(Esp.m))
+                    Text(tx("Has llegado"), style = MaterialTheme.typography.titleLarge)
                 }
                 lista?.fuente == "linea_recta" -> Banda(ambar = true) {
                     val hacia = pos?.let { Navegador.rumbo(it.p, destino) } ?: 0.0
-                    Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(34.dp).rotate(hacia.toFloat())); Spacer(Modifier.width(12.dp))
+                    Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(40.dp).rotate(hacia.toFloat())); Spacer(Modifier.width(Esp.m))
                     Column {
-                        Text(Navegador.textoDistancia(vista.restante), fontSize = 24.sp, fontWeight = FontWeight.Bold, style = TextoNumero)
-                        Text(tx("Sin indicaciones ahora: sigue la flecha hasta la parada"), fontSize = 14.sp)
+                        Text(Navegador.textoDistancia(vista.restante), style = MaterialTheme.typography.displaySmall)
+                        Text(tx("Sigue la flecha"), style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                 }
                 else -> {
                     val paso = vista.paso?.paso
                     Banda {
-                        Icon(iconoDe(paso?.icono), contentDescription = null, modifier = Modifier.size(52.dp)); Spacer(Modifier.width(12.dp))
+                        Icon(iconoDe(paso?.icono), contentDescription = null, modifier = Modifier.size(40.dp)); Spacer(Modifier.width(Esp.m))
                         Column {
-                            Text(Navegador.textoDistancia(vista.falta), fontSize = 32.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold, style = TextoNumero)
-                            Text(if (paso?.icono == "llegada") tx("Llegas a tu parada") else Navegador.textoPaso(paso), fontSize = 17.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold)
+                            Text(Navegador.textoDistancia(vista.falta), style = MaterialTheme.typography.displaySmall)
+                            Text(if (paso?.icono == "llegada") tx("Llegas a tu parada") else Navegador.textoPaso(paso),
+                                style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                     vista.luego?.takeIf { it.paso.icono != "llegada" }?.let { luego ->
-                        Surface(color = Color(0xFF064E3B), contentColor = Color.White, shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),
-                            modifier = Modifier.padding(start = 12.dp)) {
-                            Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(tx("Luego"), fontSize = 13.sp); Spacer(Modifier.width(6.dp))
-                                Icon(iconoDe(luego.paso.icono), contentDescription = null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(4.dp))
-                                Text(Navegador.textoPaso(luego.paso), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        LetraMax(1.3f) {
+                            Surface(color = x.guiaLuego, contentColor = Color.White, shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),
+                                modifier = Modifier.padding(start = Esp.m)) {
+                                Row(Modifier.padding(horizontal = Esp.m, vertical = Esp.xs), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(tx("Luego"), style = MaterialTheme.typography.bodySmall); Spacer(Modifier.width(Esp.xs))
+                                    Icon(iconoDe(luego.paso.icono), contentDescription = null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(Esp.xs))
+                                    Text(Navegador.textoPaso(luego.paso), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
                             }
                         }
                     }
                 }
             }
-            if (pidiendo && vista != null) {
-                Spacer(Modifier.height(8.dp))
-                Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), shape = CircleShape) {
-                    Text(tx("Recalculando…"), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp))
-                }
-            }
-            if (errPos.isNotEmpty() && pos != null && vista != null) {
-                Spacer(Modifier.height(8.dp))
-                Surface(color = Color(0xFF9A3412), contentColor = Color.White, shape = CircleShape) {
-                    Row(Modifier.padding(horizontal = 12.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.LocationOff, contentDescription = null, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(6.dp))
-                        Text(errPos, style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
-            if (errMapa.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Surface(color = Color(0xFF9A3412), contentColor = Color.White, shape = CircleShape) {
-                    Row(Modifier.padding(horizontal = 12.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CloudOff, contentDescription = null, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(6.dp))
-                        Text(errMapa, style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
+            if (pidiendo && vista != null) { Spacer(Modifier.height(Esp.s)); PastillaGuia(tx("Recalculando…")) }
+            if (errPos.isNotEmpty() && pos != null && vista != null) { Spacer(Modifier.height(Esp.s)); PastillaGuia(errPos, Icons.Default.LocationOff, aviso = true) }
+            if (errMapa.isNotEmpty()) { Spacer(Modifier.height(Esp.s)); PastillaGuia(errMapa, Icons.Default.CloudOff, aviso = true) }
         }
 
-        // A la derecha: volver a seguirme cuando se ha movido el mapa.
-        if (!seguir) {
-            Surface(shape = CircleShape, shadowElevation = 3.dp, color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.align(Alignment.CenterEnd).padding(12.dp)) {
-                IconButton(onClick = { seguir = true }, modifier = Modifier.size(52.dp)) { Icon(Icons.Default.MyLocation, contentDescription = tx("Seguirme")) }
-            }
+        // A LA DERECHA, sobre el panel (07-11-2026, diseño compacto): la voz, el mapa de fuera (Google Maps o Waze, por
+        // si quiere tráfico en directo) y, si se ha movido el mapa, «Seguirme». Botones de 48, a 12 por encima del panel;
+        // hasta hoy iban en la fila de cinco del panel.
+        val panelDp = with(LocalDensity.current) { panelAlto.toDp() }
+        Column(Modifier.align(Alignment.BottomEnd).padding(end = Esp.m, bottom = panelDp + Esp.m), verticalArrangement = Arrangement.spacedBy(Esp.s)) {
+            BotonMapa(if (voz) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
+                if (voz) tx("Silenciar la voz") else tx("Activar la voz"), activo = voz,
+                onClick = { ambito.launch { app.cuenta.elegirGuiaVoz(!voz); if (voz) Voz.callar() } })
+            BotonMapa(Icons.Default.Map, nombreFuera(navegarFuera), onClick = { Acciones.navegar(ctx, parada, navegarFuera) })
+            if (!seguir) BotonMapa(Icons.Default.MyLocation, tx("Seguirme"), onClick = { seguir = true })
         }
 
         // De dónde salen los datos del mapa (OpenStreetMap, por OpenFreeMap): pequeño, sobre el panel de abajo.
-        val panelDp = with(LocalDensity.current) { panelAlto.toDp() }
-        Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), shape = RoundedCornerShape(6.dp),
-            modifier = Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = panelDp + 6.dp)) {
-            Text(tx("© OpenStreetMap · OpenMapTiles"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clickable { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.openstreetmap.org/copyright"))) } }
-                    .padding(horizontal = 6.dp, vertical = 2.dp))
-        }
+        Atribucion(tx("© OpenStreetMap · OpenMapTiles"), Modifier.align(Alignment.BottomStart).padding(start = Esp.s, bottom = panelDp + Esp.s)
+            .clickable { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.openstreetmap.org/copyright"))) } })
 
         // Los avisos de Hoy («Entregado · Deshacer», «No se ha podido guardar») también aquí: esta ventana taparía el
-        // SnackbarHost de Hoy y el conductor no podría deshacer ni se enteraría del fallo (01-11-2026, revisión).
-        SnackbarHost(avisos, Modifier.align(Alignment.BottomCenter).padding(bottom = panelDp + 8.dp))
+        // SnackbarHost de Hoy y el conductor no podría deshacer ni se enteraría del fallo (01-11-2026, revisión). A 8 del panel.
+        AvisoFlotante(avisos, Modifier.align(Alignment.BottomCenter).padding(bottom = panelDp + Esp.s))
 
-        // ABAJO: la parada y los botones grandes (se usan conduciendo).
-        Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp), shadowElevation = 10.dp,
+        // ABAJO: el panel (07-11-2026, diseño compacto, §5.8): radio 16 arriba y relleno 12. El número de 40, el nombre en
+        // una línea, «Llamar» de icono y la ✕ «Salir»; «Llegas ≈ 09:34 · 810 m · 2 min»; las notas en una línea (el hueco
+        // y lo que dice el cliente, cada uno con su icono y su frase entera de nombre); antes de llegar, «Ya he llegado» a
+        // lo ancho; y, como hasta hoy, siempre No entregado / Entregado. La frase de la ubicación se queda, en una línea:
+        // ni la ficha de Play ni docs/REVISION_LEGAL.md dicen aún que la guía usa la ubicación (riesgo 16).
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp), shadowElevation = 10.dp,
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { panelAlto = it.height }) {
-            Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp).navigationBarsPadding()) {
-                val x = LocalExtra.current
-                Row(verticalAlignment = Alignment.Top) {
-                    Numero(numero, grande = true)
-                    Spacer(Modifier.width(12.dp))
+            Column(Modifier.padding(Esp.m).navigationBarsPadding()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    NumeroParada(numero, TamNumero.GRANDE, EstadoNumero.SIGUIENTE)
+                    Spacer(Modifier.width(Esp.m))
                     Column(Modifier.weight(1f)) {
                         if (haLlegado) {
                             Text(tx("Parada {n}", "n" to numero) + (if (quedan > 1) " · " + tx("quedan {n}", "n" to quedan) else ""),
-                                style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = x.entregado)
+                                style = MaterialTheme.typography.labelMedium.merge(TextoNumero), color = x.entregadoTexto, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        Text(parada.cliente.ifBlank { tx("Cliente") }, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(parada.direccion, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        vista?.let { v ->
-                            Text(Navegador.textoDistancia(v.restante) + (v.minutos?.let { " · ${max(1, it.roundToInt())} min" } ?: ""),
-                                style = MaterialTheme.typography.bodyMedium.merge(TextoNumero), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(parada.cliente.ifBlank { parada.direccion.ifBlank { tx("Cliente") } }, style = MaterialTheme.typography.titleLarge,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    if (parada.telefono.isNotBlank()) BotonIcono(Icons.Default.Call, tx("Llamar"), { onLlamar(parada) })
+                    BotonIcono(Icons.Default.Close, tx("Salir"), onSalir)
+                }
+                vista?.let { v ->
+                    val minutos = v.minutos?.let { max(1, it.roundToInt()) }
+                    Text(buildAnnotatedString {
+                        if (minutos != null) {
+                            append(tx("Llegas") + " ")
+                            withStyle(SpanStyle(color = x.entregadoTexto)) { append("≈ " + horaMas(minutos)) }
+                            append(" · ")
                         }
-                        parada.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }?.let {
-                            Text(tx("El cliente dice: {t}", "t" to it), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.tertiary, maxLines = 4, overflow = TextOverflow.Ellipsis)
-                        }
+                        append(Navegador.textoDistancia(v.restante))
+                        if (minutos != null) append(" · $minutos min")
+                    }, style = MaterialTheme.typography.bodyMedium.merge(TextoNumero), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = Esp.xs))
+                }
+                val dice = parada.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }
+                if (parada.hueco.isNotBlank() || dice != null) {
+                    Row(Modifier.padding(top = Esp.xs), verticalAlignment = Alignment.CenterVertically) {
                         if (parada.hueco.isNotBlank()) {
-                            Text(tx("Búscalo: {sitio}", "sitio" to tx(parada.hueco)), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            val sitio = tx(parada.hueco)
+                            Row(Modifier.semantics(mergeDescendants = true) { contentDescription = tx("En la furgoneta: {sitio}", "sitio" to sitio) },
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(Esp.xs))
+                                Text(sitio, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                            }
+                            if (dice != null) Text(" · ", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (dice != null) {
+                            Row(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = tx("El cliente dice: {t}", "t" to dice) },
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Forum, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(Esp.xs))
+                                Text(dice, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { onNoEntregar(parada) }, modifier = Modifier.weight(1f).height(56.dp), contentPadding = PaddingValues(horizontal = 8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                        Text(tx("No entregado"), maxLines = 1)
-                    }
-                    Button(onClick = { onEntregar(parada) }, modifier = Modifier.weight(1.2f).height(56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = x.entregado, contentColor = x.enEntregado)) {
-                        Icon(Icons.Default.Check, contentDescription = null); Spacer(Modifier.width(4.dp))
-                        Text(if (parada.tipo == "recogida") tx("Recogido") else tx("Entregado"), maxLines = 1)
-                    }
+                // «YA HE LLEGADO» (01-11-2026, como la web): la puerta de verdad puede estar a 60-80 m del pin (la calle, el
+                // portal), y entonces el GPS nunca daría la llegada; el conductor manda y la guía deja de contar esa parada.
+                if (!haLlegado) {
+                    Spacer(Modifier.height(Esp.m))
+                    BotonNormal(tx("Ya he llegado"), { llegado = parada.id; motor.llegadoAMano(parada.id); onLlegar(parada); Acciones.vibrar(ctx, 60) },
+                        icono = Icons.Default.Flag, modifier = Modifier.fillMaxWidth())
                 }
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (parada.telefono.isNotBlank()) {
-                        FilledTonalButton(onClick = { onLlamar(parada) }, modifier = Modifier.size(52.dp), contentPadding = PaddingValues(0.dp)) {
-                            Icon(Icons.Default.Call, contentDescription = tx("Llamar"))
-                        }
-                    }
-                    // «YA HE LLEGADO» (01-11-2026, como la web): la puerta de verdad puede estar a 60-80 m del pin (la calle, el
-                    // portal), y entonces el GPS nunca daría la llegada; el conductor manda y la guía deja de contar esa parada.
-                    if (!haLlegado) {
-                        FilledTonalButton(onClick = { llegado = parada.id; motor.llegadoAMano(parada.id); onLlegar(parada); Acciones.vibrar(ctx, 60) },
-                            modifier = Modifier.weight(1f).height(52.dp), contentPadding = PaddingValues(horizontal = 10.dp)) {
-                            Icon(Icons.Default.Flag, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
-                            Text(tx("Ya he llegado"), maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
-                        }
-                    } else Spacer(Modifier.weight(1f))
-                    // El mapa de fuera (Google Maps o Waze), por si quiere tráfico en directo.
-                    FilledTonalButton(onClick = { Acciones.navegar(ctx, parada, navegarFuera) }, modifier = Modifier.size(52.dp), contentPadding = PaddingValues(0.dp)) {
-                        Icon(Icons.Default.Map, contentDescription = nombreFuera(navegarFuera))
-                    }
-                    FilledTonalButton(onClick = { ambito.launch { app.cuenta.elegirGuiaVoz(!voz); if (voz) Voz.callar() } },
-                        modifier = Modifier.size(52.dp), contentPadding = PaddingValues(0.dp)) {
-                        Icon(if (voz) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
-                            contentDescription = if (voz) tx("Silenciar la voz") else tx("Activar la voz"))
-                    }
-                    OutlinedButton(onClick = onSalir, modifier = Modifier.size(52.dp), contentPadding = PaddingValues(0.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = tx("Salir"))
-                    }
-                }
+                Spacer(Modifier.height(Esp.m))
+                FilaCierre(recogida = parada.tipo == "recogida", alFallar = { onNoEntregar(parada) }, alEntregar = { onEntregar(parada) })
                 Text(tx("Tu ubicación se usa para guiarte y no se guarda."), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                    textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().padding(top = Esp.s))
             }
         }
     }
 }
 
-/** La banda de arriba: verde (la maniobra) o ámbar (algo que falta o sin indicaciones), con letra blanca. */
+/** La banda de arriba (07-11-2026, diseño compacto): radio 16 y relleno 12, en el verde de la guía (ámbar si falta algo
+ *  o no hay indicaciones) con letra blanca, y el tope de letra de 1,3: se mira conduciendo, grande pero sin desbordar. */
 @Composable
 private fun Banda(ambar: Boolean = false, contenido: @Composable RowScope.() -> Unit) {
-    Surface(color = if (ambar) AMBAR_GUIA else VERDE_GUIA, contentColor = Color.White, shape = RoundedCornerShape(18.dp), shadowElevation = 6.dp,
-        modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, content = contenido)
+    val x = LocalExtra.current
+    LetraMax(1.3f) {
+        Surface(color = if (ambar) x.guiaAviso else x.guia, contentColor = Color.White, shape = MaterialTheme.shapes.large, shadowElevation = 6.dp,
+            modifier = Modifier.fillMaxWidth()) {
+            Row(Modifier.padding(Esp.m), verticalAlignment = Alignment.CenterVertically, content = contenido)
+        }
     }
 }
+
+/** Una pastilla bajo la banda («Recalculando…», sin ubicación, sin mapa): la de aviso, en el naranja de la guía con letra blanca. */
+@Composable
+private fun PastillaGuia(texto: String, icono: ImageVector? = null, aviso: Boolean = false) {
+    val x = LocalExtra.current
+    LetraMax(1.3f) {
+        if (aviso) Pastilla(texto, icono = icono, color = x.guiaPildora, contentColor = Color.White)
+        else Pastilla(texto, icono = icono)
+    }
+}
+
+/** La hora de llegada prevista: la de ahora más los minutos que quedan, como la web («Llegas ≈ 09:34»). */
+private fun horaMas(minutos: Int): String = java.time.LocalTime.now().plusMinutes(minutos.toLong()).let { "%02d:%02d".format(it.hour, it.minute) }
 
 private fun nombreFuera(con: String): String = if (con == "waze") "Waze" else "Google Maps"
 

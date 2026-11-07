@@ -1,3 +1,4 @@
+// diseño compacto
 package com.flotadsp.fds.ui.compartir
 
 import com.flotadsp.fds.ui.tx
@@ -11,7 +12,7 @@ import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,7 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,26 +28,22 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.AndroidViewModel
@@ -55,6 +52,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.flotadsp.fds.FdsApp
 import com.flotadsp.fds.data.ErrorApi
 import com.flotadsp.fds.data.FilaPegada
+import com.flotadsp.fds.ui.Alto
+import com.flotadsp.fds.ui.Ayuda
+import com.flotadsp.fds.ui.BotonPrincipal
+import com.flotadsp.fds.ui.Cabecera
+import com.flotadsp.fds.ui.Esp
+import com.flotadsp.fds.ui.FilaDeLista
+import com.flotadsp.fds.ui.NumeroParada
+import com.flotadsp.fds.ui.TextoNumero
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -115,7 +120,7 @@ class CompartidoVM(app: Application) : AndroidViewModel(app) {
                 val r = repo.pegar(texto, hoja, pais, confirmar = false)
                 _e.value = EstadoCompartido(leyendo = false, filas = r.filas, texto = texto)
             } catch (e: ErrorApi) {
-                _e.value = EstadoCompartido(leyendo = false, error = if (e.sinRed) tx("Sin conexión: para meter paradas nuevas hace falta red.") else e.message ?: tx("No se ha podido"))
+                _e.value = EstadoCompartido(leyendo = false, error = if (e.sinRed) tx("Sin conexión: hace falta red") else e.message ?: tx("No se ha podido"))
             } catch (e: Exception) {                      // un fichero que no se puede abrir, un PDF roto…
                 _e.value = EstadoCompartido(leyendo = false, error = tx("No se ha podido leer lo compartido."))
             }
@@ -131,7 +136,7 @@ class CompartidoVM(app: Application) : AndroidViewModel(app) {
                 val r = repo.pegar(e.texto, hoja, pais, confirmar = true)
                 _e.value = _e.value.copy(anadiendo = false, hecho = r.creados to r.repetidos)
             } catch (ex: ErrorApi) {
-                _e.value = _e.value.copy(anadiendo = false, error = if (ex.sinRed) tx("Sin conexión: para meter paradas nuevas hace falta red.") else ex.message ?: tx("No se ha podido"))
+                _e.value = _e.value.copy(anadiendo = false, error = if (ex.sinRed) tx("Sin conexión: hace falta red") else ex.message ?: tx("No se ha podido"))
             }
         }
     }
@@ -186,6 +191,9 @@ private fun bitmapDe(ctx: Context, uri: Uri): Bitmap? = runCatching {
     if (grados == 0f) leida else Bitmap.createBitmap(leida, 0, 0, leida.width, leida.height, Matrix().apply { postRotate(grados) }, true)
 }.getOrNull()
 
+/** LA PANTALLA DEL DISEÑO COMPACTO (07-11-2026, §5.4): la cabecera de 56 con la flecha (fuera «Cancelar»), «{n} paradas
+ *  en lo compartido» con «Revisa antes de añadir» y la explicación larga en el «?», las filas en una sola lista (número,
+ *  cliente, dirección y lo demás) y el botón de añadir en un pie fijo de 52. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CompartidoPantalla(datos: Compartido, pais: String, alCerrar: (creadas: Int?) -> Unit) {
@@ -196,59 +204,71 @@ fun CompartidoPantalla(datos: Compartido, pais: String, alCerrar: (creadas: Int?
     BackHandler { alCerrar(null) }
     val n = e.filas.size
     val error = e.error
+    val c = MaterialTheme.colorScheme
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(tx("Lo que has compartido")) },
-                navigationIcon = { IconButton(onClick = { alCerrar(null) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Cerrar")) } },
-            )
-        },
+        topBar = { Cabecera(tx("Lo que has compartido"), alVolver = { alCerrar(null) }) },
         bottomBar = {
-            Surface(tonalElevation = 2.dp) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).navigationBarsPadding()) {
-                    Button(onClick = { vm.anadir() }, enabled = n > 0 && !e.anadiendo && !e.leyendo, modifier = Modifier.fillMaxWidth().height(54.dp)) {
-                        if (e.anadiendo) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        else Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (n == 1) tx("Añadir 1 parada") else tx("Añadir {n} paradas", "n" to n))
+            Surface(color = c.surfaceContainerLow) {
+                Column {
+                    HorizontalDivider(color = c.outlineVariant)
+                    Box(Modifier.fillMaxWidth().padding(Esp.m).navigationBarsPadding()) {
+                        BotonPrincipal(if (n == 1) tx("Añadir 1 parada") else tx("Añadir {n} paradas", "n" to n), { vm.anadir() },
+                            icono = Icons.AutoMirrored.Filled.PlaylistAdd, enabled = n > 0 && !e.leyendo, cargando = e.anadiendo,
+                            modifier = Modifier.fillMaxWidth())
                     }
-                    TextButton(onClick = { alCerrar(null) }, modifier = Modifier.fillMaxWidth()) { Text(tx("Cancelar")) }
                 }
             }
         },
         contentWindowInsets = WindowInsets(0),
+        containerColor = c.background,
     ) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize().padding(horizontal = 16.dp)) {
+        Column(Modifier.padding(pad).fillMaxSize().padding(horizontal = Esp.l)) {
             when {
-                e.leyendo -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 24.dp)) {
-                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(12.dp))
-                    Text(tx("Leyendo lo compartido…"))
+                e.leyendo -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = Esp.xl)) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(Esp.m))
+                    Text(tx("Leyendo lo compartido…"), style = MaterialTheme.typography.bodyMedium)
                 }
-                error != null -> Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 24.dp))
+                error != null -> Text(error, style = MaterialTheme.typography.bodyMedium, color = c.error, modifier = Modifier.padding(top = Esp.xl))
                 else -> {
-                    Text(if (n == 1) tx("1 parada en lo compartido") else tx("{n} paradas en lo compartido", "n" to n),
-                        style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
-                    Text(tx("Comprueba lo que ha leído antes de añadirlo; lo que falte lo puedes meter después a mano."),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(8.dp))
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
-                        itemsIndexed(e.filas) { i, f ->
-                            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
-                                Row(Modifier.padding(12.dp)) {
-                                    Text("${i + 1}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.width(28.dp))
-                                    Column {
-                                        if (f.cliente.isNotBlank()) Text(f.cliente, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                                        Text(f.direccion, style = MaterialTheme.typography.bodyMedium)
-                                        val extra = listOfNotNull(f.telefono.takeIf { it.isNotBlank() }, f.codigo.takeIf { it.isNotBlank() }).joinToString(" · ")
-                                        if (extra.isNotBlank()) Text(extra, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                            }
+                    Row(Modifier.fillMaxWidth().padding(vertical = Esp.s), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(if (n == 1) tx("1 parada en lo compartido") else tx("{n} paradas en lo compartido", "n" to n),
+                                style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(tx("Revisa antes de añadir"), style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
                         }
+                        Ayuda(tx("Revisa antes de añadir"), tx("Comprueba lo que ha leído antes de añadirlo; lo que falte lo puedes meter después a mano."))
+                    }
+                    LazyColumn(contentPadding = PaddingValues(bottom = Esp.l)) {
+                        itemsIndexed(e.filas) { i, f -> FilaDeLista(i, n) { FilaCompartida(i + 1, f) } }
                     }
                 }
             }
+        }
+    }
+}
+
+/** Una fila de lo compartido (≈ 60): el número de 32, el cliente en `nombre` (una línea) con la dirección en gris debajo
+ *  (o la dirección sola, en dos líneas) y, en `sec`, el teléfono y el código. */
+@Composable
+private fun FilaCompartida(n: Int, f: FilaPegada) {
+    val c = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}.heightIn(min = Alto.fila).padding(horizontal = Esp.m, vertical = Esp.s),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        NumeroParada(n)
+        Spacer(Modifier.width(Esp.m))
+        Column(Modifier.weight(1f)) {
+            if (f.cliente.isNotBlank()) {
+                Text(f.cliente, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(f.direccion, style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            } else {
+                Text(f.direccion, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            val extra = listOfNotNull(f.telefono.takeIf { it.isNotBlank() }, f.codigo.takeIf { it.isNotBlank() }).joinToString(" · ")
+            if (extra.isNotBlank()) Text(extra, style = MaterialTheme.typography.bodySmall.merge(TextoNumero), color = c.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

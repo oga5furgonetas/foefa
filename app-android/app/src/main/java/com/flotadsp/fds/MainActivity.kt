@@ -271,7 +271,10 @@ private fun Principal(abrir: String?, alAbierto: () -> Unit, compartido: Compart
             }
             FichaParada(pais = pais, cerca = cerca, inicial = c.inicial, editar = c.editar,
                 alCerrar = { guardada -> cerrada(guardada, sinSituar = false) },
-                alGuardada = { p -> cerrada(true, sinSituar = p != null && p.pendiente && !p.ubicada) })
+                alGuardada = { p -> cerrada(true, sinSituar = p != null && p.pendiente && !p.ubicada) },
+                // «Quitar de la ruta» en el ⋮ de «Editar parada» (07-11-2026, §5.9): lo mismo que la hoja de la parada
+                // (ruta.quitar, que avisa y refresca) y se cierra la ficha. Solo al editar: al crear no hay nada que quitar.
+                alQuitar = c.editar?.let { p -> ({ ruta.quitar(p); capa = null }) })
             return
         }
         is Capa.Carga -> {

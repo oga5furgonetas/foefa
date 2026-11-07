@@ -1,3 +1,4 @@
+// diseño compacto
 package com.flotadsp.fds.ui.acceso
 
 import android.widget.Toast
@@ -13,40 +14,32 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Route
-import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -59,7 +52,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.flotadsp.fds.FdsApp
@@ -69,7 +61,19 @@ import com.flotadsp.fds.ui.Notificaciones
 import com.flotadsp.fds.data.ErrorApi
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.etiqueta.Lectura
+import com.flotadsp.fds.ui.Aviso
+import com.flotadsp.fds.ui.BotonIcono
+import com.flotadsp.fds.ui.BotonPrincipal
+import com.flotadsp.fds.ui.BotonTexto
+import com.flotadsp.fds.ui.Cabecera
+import com.flotadsp.fds.ui.ContenedorLista
+import com.flotadsp.fds.ui.Esp
 import com.flotadsp.fds.ui.Region
+import com.flotadsp.fds.ui.Segmentado
+import com.flotadsp.fds.ui.TextoNumero
+import com.flotadsp.fds.ui.Tono
+import com.flotadsp.fds.ui.cuenta.FilaOpcion
+import com.flotadsp.fds.ui.cuenta.Seccion
 import com.flotadsp.fds.ui.escaner.EscanerPantalla
 import com.flotadsp.fds.ui.escaner.VueltaDeRevisar
 import com.flotadsp.fds.ui.hoy.HoyPantalla
@@ -81,6 +85,10 @@ import kotlinx.serialization.json.jsonPrimitive
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import kotlinx.serialization.json.booleanOrNull
+
+/* EL DISEÑO COMPACTO (07-11-2026, §5.11 de la especificación): el portal del conductor solo con el tema y las piezas de
+   ui/Componentes.kt: «Mi ruta» en una tarjeta de 72 sin botón dentro, las demás opciones como filas de una lista con
+   relleno 12 y sin subtítulo, y «Mi ruta» abre «Hoy» con su flecha de volver. */
 
 /** Entrada nativa del portal de conductor de empresa. Cada acción usa el token de esa ficha. */
 @Composable
@@ -166,6 +174,7 @@ fun PortalConductorNativo(alCerrar: () -> Unit, abrir: String? = null, alAbierto
     }
 }
 
+/** El inicio del portal: la cabecera con el saludo, «Mi ruta» en su tarjeta y lo demás como filas de una lista. */
 @Composable
 private fun InicioConductorNativo(
     nombre: String,
@@ -184,117 +193,52 @@ private fun InicioConductorNativo(
     val pendientes = estadoRuta.pendientes.size
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(tx("Hola, {n}", "n" to nombre.substringBefore(' ').ifBlank { tx("conductor") }), fontWeight = FontWeight.SemiBold)
-                        Text(tx("Portal de conductor"), style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                },
-                actions = {
-                    IconButton(onClick = alCerrar) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = tx("Cerrar sesión"))
-                    }
-                },
-            )
+            Cabecera(tx("Hola, {n}", "n" to nombre.substringBefore(' ').ifBlank { tx("conductor") }), subtitulo = tx("Portal de conductor")) {
+                BotonIcono(Icons.AutoMirrored.Filled.Logout, tx("Cerrar sesión"), alCerrar)
+            }
         },
     ) { inset ->
         Column(
-            Modifier.fillMaxSize().padding(inset).verticalScroll(rememberScrollState()).padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            Modifier.fillMaxSize().padding(inset).verticalScroll(rememberScrollState()).padding(Esp.l),
+            verticalArrangement = Arrangement.spacedBy(Esp.m),
         ) {
-            aviso?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
-            // La bandeja de avisos (29-10-2026): turnos aprobados, vacantes para trabajar más, inspección pendiente.
-            Card(onClick = alAvisos, colors = CardDefaults.cardColors(containerColor = if (sinLeer > 0) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surfaceContainerLowest)) {
-                Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Icon(Icons.Default.Notifications, contentDescription = null,
-                        tint = if (sinLeer > 0) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(if (sinLeer == 1) tx("Tienes 1 aviso nuevo") else if (sinLeer > 1) tx("Tienes {n} avisos nuevos", "n" to sinLeer) else tx("Avisos"), fontWeight = FontWeight.SemiBold)
-                        Text(tx("Turnos aprobados, vacantes para trabajar más y lo que te pida la oficina"),
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (sinLeer > 0) Badge { Text("$sinLeer") }
-                }
-            }
+            aviso?.let { Aviso(it, tono = Tono.OK, icono = Icons.Default.CheckCircle) }
             // «Mi ruta» solo en empresas que reparten con la app: lo dice el servidor (`activo` en reparto/mi-ruta),
             // igual que el portal web. En una flota que reparte para Amazon (OGA5, DGA1, DGA2) la ruta va por otro
             // lado y esta tarjeta solo confundía (Dani, 29-10-2026, probando la 2.2.3 en su móvil).
-            if (estadoRuta.ruta?.activo == true) Card(
-                onClick = alRuta,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-            ) {
-                Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Icon(Icons.Default.Route, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text(tx("Mi ruta"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text(
-                        if (pendientes == 0) tx("No tienes entregas pendientes.")
-                        else if (pendientes == 1) tx("1 entrega pendiente") else tx("{n} entregas pendientes", "n" to pendientes),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                    Button(onClick = alRuta, modifier = Modifier.fillMaxWidth()) { Text(tx("Abrir mi ruta")) }
-                }
-            }
-
-            Card(onClick = alAuditoria, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                    Column(Modifier.weight(1f)) {
-                        Text(tx("Auditoría del vehículo"), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                        Text(tx("Fotos, kilómetros y revisión antes de salir"), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer)
-                    }
-                    Text(tx("Abrir"), color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.SemiBold)
-                }
-            }
-
-            AccesoConductorCard(
-                icono = Icons.Default.CalendarMonth,
-                titulo = tx("Mis turnos y días libres"),
-                detalle = tx("Consulta el calendario y solicita un cambio"),
-                alPulsar = alTurnos,
+            if (estadoRuta.ruta?.activo == true) TarjetaMiRuta(pendientes, alRuta)
+            // La bandeja de avisos (29-10-2026): turnos aprobados, vacantes para trabajar más, inspección pendiente.
+            val filas = listOf<@Composable () -> Unit>(
+                { FilaOpcion(Icons.Default.Notifications, if (sinLeer == 1) tx("Tienes 1 aviso nuevo") else if (sinLeer > 1) tx("Tienes {n} avisos nuevos", "n" to sinLeer) else tx("Avisos"), flecha = true, insignia = sinLeer, alTocar = alAvisos) },
+                { FilaOpcion(Icons.Default.CheckCircle, tx("Auditoría del vehículo"), flecha = true, alTocar = alAuditoria) },
+                { FilaOpcion(Icons.Default.CalendarMonth, tx("Mis turnos y días libres"), flecha = true, alTocar = alTurnos) },
+                { FilaOpcion(Icons.Default.CalendarMonth, tx("Trabajar más"), flecha = true, alTocar = alExtras) },
+                { FilaOpcion(Icons.Default.CardGiftcard, tx("Invita y gana"), flecha = true, alTocar = alReferidos) },
+                { FilaOpcion(Icons.Default.Lock, tx("Mi cuenta"), flecha = true, alTocar = alCuenta) },
             )
-
-            AccesoConductorCard(
-                icono = Icons.Default.CalendarMonth,
-                titulo = tx("Trabajar más"),
-                detalle = tx("Vacantes y turnos extra confirmados"),
-                alPulsar = alExtras,
-            )
-
-            AccesoConductorCard(
-                icono = Icons.Default.CardGiftcard,
-                titulo = tx("Invita y gana"),
-                detalle = tx("Comparte tu enlace y consulta tu cartera"),
-                alPulsar = alReferidos,
-            )
-
-            AccesoConductorCard(
-                icono = Icons.Default.Lock,
-                titulo = tx("Mi cuenta"),
-                detalle = tx("Contraseña y correo personal de recuperación"),
-                alPulsar = alCuenta,
-            )
+            ContenedorLista(filas.size, separadorDesde = 48.dp) { filas[it]() }
         }
     }
 }
 
+/** «Mi ruta» (§5.11): una tarjeta de 72 con tinte de marca, sin botón dentro; toda ella abre la ruta. */
 @Composable
-private fun AccesoConductorCard(icono: androidx.compose.ui.graphics.vector.ImageVector, titulo: String,
-                                detalle: String, alPulsar: () -> Unit) {
-    Card(onClick = alPulsar) {
-        Row(Modifier.fillMaxWidth().padding(18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            Icon(icono, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(titulo, fontWeight = FontWeight.SemiBold)
-                Text(detalle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun TarjetaMiRuta(pendientes: Int, alRuta: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Surface(onClick = alRuta, color = c.primaryContainer, contentColor = c.onPrimaryContainer, shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)) {
+        Row(Modifier.padding(Esp.m), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Route, contentDescription = null, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(Esp.m))
+            Column(Modifier.weight(1f)) {
+                Text(tx("Mi ruta"), style = MaterialTheme.typography.titleLarge)
+                Text(
+                    if (pendientes == 0) tx("No tienes entregas pendientes.")
+                    else if (pendientes == 1) tx("1 entrega pendiente") else tx("{n} entregas pendientes", "n" to pendientes),
+                    style = MaterialTheme.typography.bodyMedium.merge(TextoNumero),
+                )
             }
+            Icon(Icons.Default.ChevronRight, contentDescription = null)
         }
     }
 }
@@ -344,14 +288,19 @@ private fun RutaConductorNativa(vm: RutaVM, alVolver: () -> Unit) {
                 editar = actual.editar,
                 alCerrar = { guardada -> cerrada(guardada, sinSituar = false) },
                 alGuardada = { p -> cerrada(true, sinSituar = p != null && p.pendiente && !p.ubicada) },
+                // «Quitar de la ruta» en el ⋮ de «Editar parada» (07-11-2026, §5.9): lo mismo que la hoja de la parada
+                // (vm.quitar) y se cierra la ficha. Solo al editar: al crear no hay nada que quitar.
+                alQuitar = actual.editar?.let { p -> ({ vm.quitar(p); capa = null }) },
             )
         }
+        // «Mi ruta» con la flecha de volver en la cabecera (07-11-2026): HoyPantalla la pinta si le llega alVolver.
         null -> HoyPantalla(
             vm = vm,
             navegarCon = navegar,
             alEscanear = { capa = CapaRutaConductor.Escaner() },
             alAnadir = { capa = CapaRutaConductor.Ficha() },
             alEditar = { parada -> capa = CapaRutaConductor.Ficha(editar = parada) },
+            alVolver = alVolver,
         )
     }
 }
@@ -363,33 +312,27 @@ private fun CuentaConductorNativa(alVolver: () -> Unit, alCambiarClave: () -> Un
     val ambito = rememberCoroutineScope()
     val navegar by app.cuenta.navegar.collectAsState()
     val tema by app.cuenta.tema.collectAsState()
-    Scaffold(topBar = { TopAppBar(
-        title = { Text(tx("Mi cuenta")) },
-        navigationIcon = { IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) } },
-    ) }) { inset ->
-        Column(Modifier.fillMaxSize().padding(inset).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            AccesoConductorCard(Icons.Default.Lock, tx("Cambiar contraseña"), tx("Solo tú conoces tu contraseña"), alCambiarClave)
-            AccesoConductorCard(Icons.Default.MailOutline, tx("Correo personal de recuperación"), tx("Recibe ahí la verificación de tu cuenta"), alCorreo)
-            AccesoConductorCard(Icons.Default.Phone, tx("Teléfono de contacto"), tx("La oficina puede localizarte si hay una incidencia"), alTelefono)
+    Scaffold(topBar = { Cabecera(tx("Mi cuenta"), alVolver = alVolver) }) { inset ->
+        Column(Modifier.fillMaxSize().padding(inset).verticalScroll(rememberScrollState()).padding(Esp.l), verticalArrangement = Arrangement.spacedBy(Esp.m)) {
+            // Aquí cada fila conserva su línea de explicación (§5.11 solo quita el subtítulo del inicio): la del teléfono
+            // dice para qué se pide.
+            val filas = listOf<@Composable () -> Unit>(
+                { FilaOpcion(Icons.Default.Lock, tx("Cambiar contraseña"), detalle = tx("Solo tú conoces tu contraseña"), flecha = true, alTocar = alCambiarClave) },
+                { FilaOpcion(Icons.Default.MailOutline, tx("Correo personal de recuperación"), detalle = tx("Recibe ahí la verificación de tu cuenta"), flecha = true, alTocar = alCorreo) },
+                { FilaOpcion(Icons.Default.Phone, tx("Teléfono de contacto"), detalle = tx("La oficina puede localizarte si hay una incidencia"), flecha = true, alTocar = alTelefono) },
+            )
+            ContenedorLista(filas.size, separadorDesde = 48.dp) { filas[it]() }
             // Los mismos ajustes que tiene la cuenta de reparto (29-10-2026): el conductor de empresa con «Mi ruta»
             // también navega, y el tema es del móvil, no de la cuenta.
-            Spacer(Modifier.height(8.dp))
-            Text(tx("Navegar con"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                listOf("app" to tx("Esta app"), "google" to "Google Maps", "waze" to "Waze").forEachIndexed { i, (k, t) ->
-                    SegmentedButton(selected = navegar == k, onClick = { ambito.launch { app.cuenta.elegirNavegador(k) } },
-                        shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(t, maxLines = 1) }
-                }
+            Seccion(tx("Navegar con")) {
+                val navegadores = listOf("app" to tx("Esta app"), "google" to "Google Maps", "waze" to "Waze")
+                Segmentado(navegadores.map { it.second }, navegadores.indexOfFirst { it.first == navegar }, alElegir = { i -> ambito.launch { app.cuenta.elegirNavegador(navegadores[i].first) } })
             }
-            Text(tx("Aspecto"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                listOf("sistema" to "Automático", "claro" to "Claro", "oscuro" to "Oscuro").forEachIndexed { i, (k, t) ->
-                    SegmentedButton(selected = tema == k, onClick = { ambito.launch { app.cuenta.elegirTema(k) } },
-                        shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(t) }
-                }
+            Seccion(tx("Aspecto")) {
+                val temas = listOf("sistema" to tx("Automático"), "claro" to tx("Claro"), "oscuro" to tx("Oscuro"))
+                Segmentado(temas.map { it.second }, temas.indexOfFirst { it.first == tema }, alElegir = { i -> ambito.launch { app.cuenta.elegirTema(temas[i].first) } })
             }
-            Spacer(Modifier.height(16.dp))
-            TextButton(onClick = alCerrar, modifier = Modifier.fillMaxWidth()) { Text(tx("Cerrar sesión")) }
+            BotonTexto(tx("Cerrar sesión"), alCerrar, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -407,24 +350,20 @@ private fun TelefonoConductorNativo(alVolver: () -> Unit, alGuardado: () -> Unit
             telefono = (f["telefono"] ?: f["phone"])?.jsonPrimitive?.contentOrNull.orEmpty()
         }
     }
-    Scaffold(topBar = { TopAppBar(
-        title = { Text(tx("Teléfono de contacto")) },
-        navigationIcon = { IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) } },
-    ) }) { inset ->
-        Column(Modifier.fillMaxSize().padding(inset).padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Scaffold(topBar = { Cabecera(tx("Teléfono de contacto"), alVolver = alVolver) }) { inset ->
+        Column(Modifier.fillMaxSize().padding(inset).padding(Esp.l), verticalArrangement = Arrangement.spacedBy(Esp.m)) {
             Text(tx("Añade o actualiza el número para que la oficina pueda llamarte si hay una incidencia. Solo se guarda en tu ficha."))
-            OutlinedTextField(telefono, { telefono = it.filter { c -> c.isDigit() || c == '+' || c == ' ' }.take(18); error = null }, label = { Text(tx("Teléfono")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(telefono, { telefono = it.filter { c -> c.isDigit() || c == '+' || c == ' ' }.take(18); error = null }, label = { Text(tx("Teléfono")) }, singleLine = true,
+                shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth())
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            Button(onClick = {
+            BotonPrincipal(tx("Guardar teléfono"), onClick = {
                 guardando = true; error = null
                 scope.launch {
                     try { app.repo.guardarTelefonoConductor(telefono); alGuardado() }
                     catch (e: ErrorApi) { error = e.message }
                     finally { guardando = false }
                 }
-            }, enabled = !guardando && telefono.count(Char::isDigit) in 9..15, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                if (guardando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text(tx("Guardar teléfono"))
-            }
+            }, enabled = telefono.count(Char::isDigit) in 9..15, cargando = guardando, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -475,22 +414,22 @@ private fun CambiarClaveConductor(obligatoria: Boolean, alVolver: () -> Unit, al
         }
     }
     val sinLaActual = obligatoria || sinActual
-    Scaffold(topBar = { TopAppBar(
-        title = { Text(if (obligatoria) tx("Elige tu contraseña") else tx("Cambiar contraseña")) },
-        navigationIcon = if (obligatoria) ({}) else ({ IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) } }),
-    ) }) { inset ->
-        Column(Modifier.fillMaxSize().padding(inset).padding(24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Scaffold(topBar = {
+        Cabecera(if (obligatoria) tx("Elige tu contraseña") else tx("Cambiar contraseña"), alVolver = if (obligatoria) null else alVolver)
+    }) { inset ->
+        Column(Modifier.fillMaxSize().padding(inset).padding(Esp.l).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(Esp.m)) {
             Text(if (obligatoria) tx("Hola, {n}. Este acceso temporal solo sirve para entrar una vez.", "n" to nombre.substringBefore(' ').ifBlank { tx("conductor") }) else tx("La contraseña nueva debe tener al menos 6 caracteres."),
                 style = MaterialTheme.typography.bodyLarge)
             when {
                 obligatoria -> {}
-                sinActual -> Text(tx("Acabas de entrar: no hace falta tu contraseña actual."), color = MaterialTheme.colorScheme.primary,
+                // En el color de texto de la marca (07-11-2026): el cian sobre el papel no se leía.
+                sinActual -> Text(tx("Acabas de entrar: no hace falta tu contraseña actual."), color = MaterialTheme.colorScheme.secondary,
                     style = MaterialTheme.typography.bodyMedium)
                 conCodigo -> {
                     Text(tx("Te hemos mandado un código a {c}. Mira también el spam.", "c" to (enviadoA ?: codigoA ?: "")),
                         style = MaterialTheme.typography.bodyMedium)
                     OutlinedTextField(codigo, { codigo = it.filter(Char::isDigit).take(6); error = null }, label = { Text(tx("Código de 6 cifras")) },
-                        singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+                        singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth())
                     TextButton(onClick = pedirCodigo, enabled = !pidiendo) { Text(tx("Reenviar código")) }
                 }
                 else -> {
@@ -513,7 +452,8 @@ private fun CambiarClaveConductor(obligatoria: Boolean, alVolver: () -> Unit, al
             }
             pista?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium) }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            Button(
+            BotonPrincipal(
+                if (obligatoria) tx("Guardar y continuar") else tx("Guardar contraseña"),
                 onClick = {
                     guardando = true
                     scope.launch {
@@ -540,13 +480,11 @@ private fun CambiarClaveConductor(obligatoria: Boolean, alVolver: () -> Unit, al
                         finally { guardando = false }
                     }
                 },
-                enabled = !guardando && nueva.length >= 6 && nueva == repetir &&
+                enabled = nueva.length >= 6 && nueva == repetir &&
                     (sinLaActual || (conCodigo && codigo.length == 6) || actual.isNotBlank()),
-                modifier = Modifier.fillMaxWidth().height(54.dp),
-            ) {
-                if (guardando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                else Text(if (obligatoria) tx("Guardar y continuar") else tx("Guardar contraseña"))
-            }
+                cargando = guardando,
+                modifier = Modifier.fillMaxWidth(),
+            )
             if (!sinLaActual) Text(tx("¿Sin acceso a tu correo? Sal de la cuenta y vuelve a entrar: nada más entrar podrás cambiarla sin la actual. O pide a la oficina una contraseña temporal."),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             // SIEMPRE CON SALIDA (03-11-2026): la de elegirla no tenía ni «Volver» ni «Cerrar sesión», y si guardar
@@ -584,20 +522,18 @@ private fun CorreoRecuperacionConductor(alVolver: () -> Unit) {
             cargando = false
         }
     }
-    Scaffold(topBar = { TopAppBar(
-        title = { Text(tx("Correo de recuperación")) },
-        navigationIcon = { IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) } },
-    ) }) { inset ->
-        Column(Modifier.fillMaxSize().padding(inset).padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Scaffold(topBar = { Cabecera(tx("Correo de recuperación"), alVolver = alVolver) }) { inset ->
+        Column(Modifier.fillMaxSize().padding(inset).padding(Esp.l), verticalArrangement = Arrangement.spacedBy(Esp.m)) {
             Text(tx("Añade tu correo personal. El acceso seguirá usando el correo de empresa; este correo sirve para recuperar la cuenta."),
                 style = MaterialTheme.typography.bodyLarge)
             if (cargando) CircularProgressIndicator()
             else {
                 OutlinedTextField(correo, { correo = it; error = null }, label = { Text(tx("Tu correo personal")) }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth())
-                mensaje?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+                    shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth())
+                // En el color de texto de la marca (07-11-2026): el cian sobre el papel no se leía.
+                mensaje?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                Button(onClick = {
+                BotonPrincipal(tx("Enviar verificación"), onClick = {
                     enviando = true; error = null
                     scope.launch {
                         try {
@@ -614,10 +550,7 @@ private fun CorreoRecuperacionConductor(alVolver: () -> Unit) {
                         } catch (e: ErrorApi) { error = e.message }
                         finally { enviando = false }
                     }
-                }, enabled = !enviando && correo.contains('@'), modifier = Modifier.fillMaxWidth().height(54.dp)) {
-                    if (enviando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    else Text(tx("Enviar verificación"))
-                }
+                }, enabled = correo.contains('@'), cargando = enviando, modifier = Modifier.fillMaxWidth())
                 TextButton(onClick = alVolver, modifier = Modifier.fillMaxWidth()) { Text(tx("Lo haré más tarde")) }
             }
         }
