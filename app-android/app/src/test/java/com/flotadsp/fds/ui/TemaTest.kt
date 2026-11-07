@@ -43,6 +43,8 @@ class TemaTest {
         Pareja("neutro, secundario sobre papel", p.papel, p.secundario),
         Pareja("neutro, chip", p.chip, p.secundario),
         Pareja("inverso (el aviso flotante)", p.inverso, p.enInverso),
+        // La acción del aviso flotante («Deshacer») va en la letra del aviso, no en inversePrimary (07-11-2026).
+        Pareja("superficie inversa / acción", p.inverso, p.enInverso),
         Pareja("borde de control sobre blanco", p.blanco, p.borde, 3.0),
         Pareja("borde de control sobre papel", p.papel, p.borde, 3.0),
         Pareja("borde de énfasis sobre blanco", p.blanco, p.marcaTexto, 3.0),
@@ -70,6 +72,8 @@ class TemaTest {
         Pareja("neutro, secundario sobre la superficie", p.superficieNoche, p.secundarioNoche),
         Pareja("neutro, chip", p.chipNoche, p.secundarioNoche),
         Pareja("inverso (el aviso flotante)", p.textoNoche, p.superficieMediaNoche),
+        // De noche el inversePrimary (#00807A) daba 3,9:1 sobre la superficie inversa: la acción va en inverseOnSurface.
+        Pareja("superficie inversa / acción", p.textoNoche, p.superficieMediaNoche),
         Pareja("borde de control sobre el fondo", p.fondoNoche, p.bordeNoche, 3.0),
         Pareja("borde de control sobre la superficie", p.superficieNoche, p.bordeNoche, 3.0),
         Pareja("borde de énfasis sobre la superficie", p.superficieNoche, p.cianClaro, 3.0),
