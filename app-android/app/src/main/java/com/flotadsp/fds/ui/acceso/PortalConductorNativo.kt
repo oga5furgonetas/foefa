@@ -288,6 +288,9 @@ private fun RutaConductorNativa(vm: RutaVM, alVolver: () -> Unit) {
                 editar = actual.editar,
                 alCerrar = { guardada -> cerrada(guardada, sinSituar = false) },
                 alGuardada = { p -> cerrada(true, sinSituar = p != null && p.pendiente && !p.ubicada) },
+                // «Quitar de la ruta» en el ⋮ de «Editar parada» (07-11-2026, §5.9): lo mismo que la hoja de la parada
+                // (vm.quitar) y se cierra la ficha. Solo al editar: al crear no hay nada que quitar.
+                alQuitar = actual.editar?.let { p -> ({ vm.quitar(p); capa = null }) },
             )
         }
         // «Mi ruta» con la flecha de volver en la cabecera (07-11-2026): HoyPantalla la pinta si le llega alVolver.
