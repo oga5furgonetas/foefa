@@ -32,7 +32,7 @@ import NumeroParada from './NumeroParada'
 export function etiquetasDe(p, { juntas = 1, zbe = '' } = {}) {
   const e = []
   if (p.cobrar > 0) e.push({ texto: tx('Cobrar {euros}', { euros: importe(p.cobrar) }), tono: 'aviso', icono: Banknote })
-  if (p.ventana_desde) e.push({ texto: `${p.ventana_desde}–${p.ventana_hasta || ''}`, tono: 'neutro', icono: Clock })
+  if (p.ventana_desde) e.push({ texto: `${p.ventana_desde}–${p.ventana_hasta || ''}`, tono: 'neutro', icono: Clock, titulo: tx('Horario: de {a} a {b}', { a: p.ventana_desde, b: p.ventana_hasta || '' }) })
   if (p.prioridad) e.push({ texto: tx('Urgente'), tono: 'aviso', icono: AlertTriangle })
   if (p.tipo === 'recogida') e.push({ texto: tx('Recogida'), tono: 'neutro', icono: Package })
   if (p.geo === 'puerta') e.push({ texto: tx('Puerta conocida'), tono: 'ok', icono: Check })
@@ -147,7 +147,6 @@ export default function HojaParada({
         </div>
       )}
       {bultos && <FilaDato icono={Package} texto={dato(tx('Lleva: {x}', { x: bultos }), bultos)} />}
-      {p.ventana_desde && <FilaDato icono={Clock} texto={dato(tx('Horario: de {a} a {b}', { a: p.ventana_desde, b: p.ventana_hasta || '' }), `${p.ventana_desde}–${p.ventana_hasta || ''}`)} />}
       {p.lat == null && !onSituar && <FilaDato icono={MapPin} texto={tx('Sin situar')} />}
       <NotasPuerta p={p} onMemoria={onMemoria ? () => onMemoria(p) : undefined} className="mt-2" />
       {/* LA ENTREGA VERIFICADA (01-11-2026): lo que dijo la IA de la foto; con aviso, se puede repetir. */}

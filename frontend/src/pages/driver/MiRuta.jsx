@@ -1423,10 +1423,8 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
   // EL CLIENTE AVISADO (01-11-2026): las pendientes con móvil, y cuántas se avisaron hoy.
   const conTelefono = pendientes.filter((p) => movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo))
   const avisadosHoy = conTelefono.filter((p) => avisados.includes(p.id)).length
-  /* LA RUTA EN MARCHA, EN LA APP DE QUIEN REPARTE SOLO (17-10-2026): lo que se usa cien veces al día es la siguiente
-     parada y su «Entregado», y quedaba a media pantalla debajo del bloque de añadir. Con paradas, añadir va en el
-     botón «+» y el bono en una línea. El portal del conductor de empresa sigue como estaba. */
-  const enMarcha = embebido && pendientes.length > 0 && !reordenar
+  /* LA RUTA EN MARCHA (17-10-2026): lo que se usa cien veces al día es la siguiente parada y su «Entregado». Con paradas,
+     añadir va en el botón «+» de la cabecera (en la app, el portal y el panel) y el bono en una línea. */
   const q = sinTildes(filtro.trim())
   const visibles = q
     ? pendientes.filter((p) => sinTildes([p.cliente, p.direccion, p.telefono, p.codigo, p.contenido, p.notas].join(' ')).includes(q))
@@ -1436,8 +1434,6 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
   // La guía va a la elegida y, hecha esa, a la siguiente EN ORDEN (02-11-2026); sin punto, a «Situar la parada».
   const sigGuia = guiando ? (porId[guiando] || pendientes[0] || null) : null
   const objetivo = sigGuia?.lat != null ? sigGuia : null
-  // Ninguna en el mapa y alguna que el servidor no encontró (o solo su zona): la cabecera lo dice, con «Situar».
-  const perdida = pendientes.some((p) => p.lat != null) ? null : pendientes.find((p) => p.geo === 'no' || p.geo === 'zona') || null
   const enPuerta = {}
   pendientes.forEach((p) => { const k = clavePuerta(p); if (k) enPuerta[k] = (enPuerta[k] || 0) + 1 })
   // Retraso: solo con hora prevista de HOY y la parada siguiente aún sin hacer.
@@ -1618,9 +1614,8 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
           <p className="mb-3 text-sec text-dark-400">{ruta.autonomo ? tx('Escanea los paquetes o pega la lista') : tx('Escanea los bultos según los cargas y se irán poniendo aquí.')}</p>
           {bloqueAnadir}
           {ruta.autonomo && (
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-2">
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4">
               <Boton variante="texto" icono={Play} texto={tx('Ver un ejemplo')} onClick={cargarEjemplo} disabled={ocupado === 'ejemplo'} cargando={ocupado === 'ejemplo'} />
-              <span className="text-dark-400" aria-hidden="true">·</span>
               <Boton variante="texto" icono={HelpCircle} texto={tx('¿Cómo funciona?')} onClick={() => setTour(0)} />
             </div>
           )}
@@ -1752,9 +1747,11 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
           a intentarlo» y «Entregado»; «Corregir: no se entregó» y «Repetir la foto», en la hoja de la parada. */}
       {hechos.length > 0 && !soloMapa && (
         <details className="group" open={fallidas > 0}>
-          <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 text-etiqueta text-dark-400 [&::-webkit-details-marker]:hidden">
-            <ChevronDown size={18} className="shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" />
-            <span>{tx('Hechas hoy')} · {hechos.length}{fallidas > 0 && <span className="text-ruta-peligro-texto"> · {tx('{n} sin entregar', { n: fallidas })}</span>}</span>
+          {/* El texto va suelto en el summary (no en un span): así «Hechas hoy · 1» es el propio summary, el que lleva la zona de
+              toque de 48 en el móvil, y tocarlo no lo intercepta nadie. */}
+          <summary className="min-h-12 cursor-pointer list-none py-4 text-etiqueta text-dark-400 [&::-webkit-details-marker]:hidden">
+            <ChevronDown size={18} className="mr-2 inline-block align-middle transition-transform group-open:rotate-180" aria-hidden="true" />
+            {tx('Hechas hoy')} · {hechos.length}{fallidas > 0 && <span className="text-ruta-peligro-texto"> · {tx('{n} sin entregar', { n: fallidas })}</span>}
           </summary>
           <ContenedorLista>
             {hechos.map((p, i) => (
@@ -2456,10 +2453,12 @@ function Bono({ b, total, soloEjemplo }) {
   const pista = b.revisar ? tx('Lo estamos revisando. Te avisamos por correo.')
     : soloEjemplo ? tx('Las paradas de ejemplo no cuentan: quítalas y mete las tuyas.')
       : total === 0 ? tx('Empieza con los paquetes de hoy: foto a la etiqueta de cada uno, aquí abajo.') : ''
+  // Los días («1 de 2 días») bajan a la línea de la pista en cuanto hay avance: junto a «{a}/{b}» cortaban el texto a 360.
+  const dosLineas = [hechas > 0 || dias > 0 ? tx('{a} de {b} días', { a: dias, b: diasObjetivo }) : '', pista].filter(Boolean).join(' · ')
   return (
     <>
       <Promo tono="aviso" icono={Gift} testid="bono" texto={tx('{euros} por tu primera ruta real', { euros })}
-        cifra={`${hechas}/${objetivo} · ${tx('{a} de {b} días', { a: dias, b: diasObjetivo })}`} progreso={hechas / objetivo} pista={pista}
+        cifra={`${hechas}/${objetivo}`} progreso={hechas / objetivo} pista={dosLineas}
         onTocar={() => setVer(true)} />
       {ver && (
         <Hoja titulo={tx('{euros} por tu primera ruta real', { euros })} onClose={() => setVer(false)}>

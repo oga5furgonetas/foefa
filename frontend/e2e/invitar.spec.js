@@ -120,7 +120,7 @@ test.describe('la invitación tras la primera entrega', () => {
     ruta.pedidos = [parada(1, 'entregado', { ejemplo: true }), parada(2, 'pendiente', { ejemplo: true })]
     await page.reload({ waitUntil: 'domcontentloaded' })
     await expect(page.locator('#parada-p2')).toBeVisible()
-    await expect(page.getByText('Paradas de ejemplo')).toBeVisible()
+    await expect(page.getByText('Paradas de ejemplo', { exact: true })).toBeVisible()
     await expect(page.getByTestId('invitar-entrega')).toHaveCount(0)
     // La ruta de prueba sin cuenta: tampoco (no tiene código que dar).
     ruta.pedidos = [parada(1, 'entregado'), parada(2, 'pendiente')]
@@ -205,7 +205,7 @@ test.describe('el primer día', () => {
     expect(veces.ejemploCuerpo.lat).toBeCloseTo(43.3623, 3)
     await expect(page.getByText(/Son paradas de ejemplo, a tu alrededor/)).toBeVisible()
     await expect(page.getByText('Cliente de ejemplo 1')).toBeVisible()
-    await expect(page.getByText('Paradas de ejemplo')).toBeVisible()
+    await expect(page.getByText('Paradas de ejemplo', { exact: true })).toBeVisible()
     expect(fallos).toEqual([])
   })
 })

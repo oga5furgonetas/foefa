@@ -41,7 +41,9 @@ export default function ResumenDia({
   className = '',
 }) {
   const ordenada = !!rr?.fin
-  const reordenar = retraso > 15 && pendientes > 1 && !!onOrdenar
+  // «Ordenar ruta» solo con algo que ordenar: con todo hecho no sale (apagado no dice nada).
+  const puedeOrdenar = !!onOrdenar && pendientes > 0
+  const reordenar = retraso > 15 && pendientes > 1 && puedeOrdenar
   const pct = total ? Math.round((hechos / total) * 100) : 0
   const linea2 = pendientes > 0 && rr?.fin
     ? `${rr.programada && rr.salida ? `${tx('Sales a las {h}', { h: rr.salida })} · ` : ''}${tx('Acabas ≈')} ${rr.fin}${rr.km ? ` · ${distancia(rr.km)}` : ''}`
@@ -59,11 +61,11 @@ export default function ResumenDia({
         className="mt-2 h-1 overflow-hidden rounded bg-dark-800">
         <div className="h-full rounded bg-brand-500" style={{ width: `${pct}%` }} />
       </div>
-      {(onOrdenar || cargar || avisar || dinero || sinTarifa || cobrado > 0 || onAparcar || furgo || record) && (
+      {(puedeOrdenar || cargar || avisar || dinero || sinTarifa || cobrado > 0 || (onAparcar && pendientes > 0) || furgo || record) && (
         <FilaChips className="mt-1">
-          {onOrdenar && (reordenar
+          {puedeOrdenar && (reordenar
             ? <Chip tono="aviso" icono={Route} texto={tx('Reordenar')} nombre={tx('Reordenar desde aquí')} testid="reordenar" onClick={onOrdenar} cargando={ordenando} disabled={ordenando} />
-            : <Chip tono={!ordenada && pendientes >= 2 ? 'marca' : 'neutro'} icono={Route} texto={tx('Ordenar ruta')} onClick={onOrdenar} cargando={ordenando} disabled={ordenando || !pendientes} />)}
+            : <Chip tono={!ordenada && pendientes >= 2 ? 'marca' : 'neutro'} icono={Route} texto={tx('Ordenar ruta')} onClick={onOrdenar} cargando={ordenando} disabled={ordenando} />)}
           {cargar && <Chip icono={Truck} texto={`${tx('Cargar')} ${cargar.a}/${cargar.b}`} nombre={tx('Cargar la furgoneta')} onClick={cargar.onClick} />}
           {avisar && <Chip icono={MessageCircle} texto={`${tx('Avisar')} ${avisar.a}/${avisar.b}`} nombre={tx('Avisar a todos por WhatsApp')} onClick={avisar.onClick} />}
           {dinero && <Chip icono={Banknote} texto={dinero.texto} nombre={tx('Mi dinero hoy')} onClick={dinero.onClick} />}

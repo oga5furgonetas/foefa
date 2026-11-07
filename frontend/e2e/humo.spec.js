@@ -2935,9 +2935,11 @@ test.describe('App del repartidor en el móvil', () => {
           antes: { fecha: '2026-10-12', estado: 'fallido', donde: '', nota: 'timbre roto', motivo: 'No había nadie' } },
       ] } }))
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByTestId('antes').first()).toHaveText('La última vez (10 oct): En portería o recepción · «conserje Manolo»')
-    await page.getByText('Bar Pepe').first().click()                      // se despliega la segunda
-    await expect(page.getByText('La última vez (12 oct) no se pudo: No había nadie · «timbre roto»')).toBeVisible()
+    // En la tarjeta, el dato con su icono y sin el prefijo a la vista; la frase entera va en su nombre accesible (07-11-2026).
+    await expect(page.getByTestId('antes').first()).toContainText('La última vez (10 oct): En portería o recepción · «conserje Manolo»')
+    await expect(page.getByTestId('antes').first()).toContainText('10 oct: En portería o recepción · «conserje Manolo»')
+    await page.getByRole('button', { name: /Ver la parada 2: Bar Pepe/ }).click()          // la segunda abre su hoja
+    await expect(page.getByRole('dialog', { name: 'Bar Pepe' }).getByText('La última vez (12 oct) no se pudo: No había nadie · «timbre roto»')).toBeVisible()
     expect(fallos).toEqual([])
   })
 

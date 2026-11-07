@@ -292,8 +292,8 @@ export default function RutaApp() {
   // «Invita y gana», al final de la lista (23-10-2026: encima del escáner distraía; quien ya reparte lo ve al bajar).
   const pieApp = tab === 'hoy' && !esSuplantacion() && !bonoPendiente && (billing?.pais || 'es') !== 'cn' ? (
     <LineaEstado icono={Euro} accion={tx('Invitar')} onAccion={invitar}
-      texto={<button type="button" onClick={() => setTab('cuenta')} className="min-h-12 text-left">
-        {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(porInvitado, locale()) })}{promoHasta ? ` ${tx('Promo hasta el {fecha}', { fecha: fechaRefPromo(locale(), promoHasta) })}.` : ''} <span className="font-semibold underline">{tx('Mi cartera')}</span>
+      texto={<button type="button" onClick={() => setTab('cuenta')} className="flex min-h-12 w-full items-center text-left">
+        <span className="truncate">{tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(porInvitado, locale()) })}{promoHasta ? ` ${tx('Promo hasta el {fecha}', { fecha: fechaRefPromo(locale(), promoHasta) })}.` : ''} <span className="font-semibold underline">{tx('Mi cartera')}</span></span>
       </button>} />
   ) : null
 

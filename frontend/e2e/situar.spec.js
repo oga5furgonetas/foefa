@@ -311,13 +311,14 @@ test.describe('situar la parada', () => {
     expect(fallos).toEqual([])
   })
 
-  test('si ninguna está en el mapa, la cabecera ofrece situarla y, al ponerla, guía', async ({ page }) => {
+  test('si ninguna está en el mapa, la tarjeta ofrece situarla y, al ponerla con «Ir», guía', async ({ page }) => {
     const fallos = vigilar(page)
     const s = await preparar(page, [concello({ geo: 'no', zona_lat: null, zona_lng: null })], { ubicar: conPortal })
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    // Sin punto (07-11-2026, diseño compacto): el chip «Sin situar · Situar» de la tarjeta.
+    // Sin punto (07-11-2026, diseño compacto): el chip «Sin situar · Situar» de la tarjeta y, para guiar, «Ir» (el bloque ámbar
+    // «No encontramos la dirección…» ya no existe: el chip abre «Situar» y se queda en la lista; «Ir» sitúa y guía).
     await expect(page.getByTestId('situar-parada')).toHaveText('Sin situar · Situar')
-    await page.getByTestId('situar-parada').click()
+    await page.getByRole('region', { name: 'Siguiente parada' }).getByRole('button', { name: 'Ir', exact: true }).click()
     const situar = page.getByRole('dialog', { name: 'Situar la parada' })
     await situar.getByRole('button', { name: PORTAL.direccion }).click()
     await situar.getByRole('button', { name: 'Es aquí' }).click()
@@ -397,7 +398,8 @@ test.describe('situar la parada', () => {
 
     // Una parada ya en el mapa (la primera, situada a mano): al editarla, su estado, sin preguntar otra vez.
     const preguntas = s.ubicar.length
-    await page.locator('#parada-n1').getByRole('button', { name: /Editar parada/ }).click()
+    await page.locator('#parada-n1').getByRole('button', { name: 'Más opciones' }).click()      // «Editar», en el ⋮ de la tarjeta (07-11-2026)
+    await page.getByRole('menuitem', { name: /Editar parada/ }).click()
     const editar = page.getByRole('dialog', { name: 'Editar parada' })
     await expect(editar.getByTestId('estado-direccion')).toHaveAttribute('data-estado', 'portal')
     await expect(editar.getByTestId('estado-direccion')).toHaveText(/En el mapa/)

@@ -23,6 +23,24 @@ import NumeroParada from './NumeroParada'
 // Las etiquetas, el chip de situar y «Ver la puerta» viven en HojaParada (la hoja los enseña enteros); aquí, los mismos.
 import { ChipSituar, enlacePuerta, etiquetasDe, useFachada } from './HojaParada'
 
+/* Cuántas etiquetas caben en UNA línea de la tarjeta (tres como mucho, y sitio para «+N» si quedan más). La anchura se
+   estima por los caracteres (12 px en negrita, ≈ 6 px cada uno, más el relleno y el icono) contra lo que queda libre en un
+   móvil de 360 de ancho: no se mide, así que es lo mismo en cada pintado; el `overflow-hidden` de la línea es la red. */
+const LIBRE = 296
+const anchoDe = (e) => 20 + (e.icono ? 18 : 0) + String(e.texto).length * 6
+function queCaben(etiquetas, libre) {
+  const caben = []
+  let usado = 0
+  for (let i = 0; i < etiquetas.length && caben.length < 3; i += 1) {
+    const w = anchoDe(etiquetas[i]) + (caben.length ? 8 : 0)
+    const quedan = etiquetas.length - (i + 1)
+    if (caben.length && usado + w + (quedan > 0 ? 44 : 0) > libre) break
+    caben.push(etiquetas[i])
+    usado += w
+  }
+  return caben
+}
+
 export default function TarjetaSiguiente({
   p, numero, juntas = 1, zbe = '', onAbrir, onIr, hrefIr, onLlamar, hrefWhatsapp, onWhatsapp, hrefSms, onSituar,
   onEscuchar, onHueco, onMemoria, onEditar, onFallar, onEntregar, ocupado = false, className = '',
@@ -32,10 +50,12 @@ export default function TarjetaSiguiente({
   const nombre = p.cliente || p.direccion
   const tarde = p.tarde_min > 0
   const etiquetas = etiquetasDe(p, { juntas, zbe })
-  const visibles = etiquetas.slice(0, 3)
+  const conChip = !!onSituar && (p.lat == null || p.geo === 'aprox')
+  const visibles = queCaben(etiquetas, conChip ? LIBRE - 150 : LIBRE)
   const demas = etiquetas.length - visibles.length
   const conPuerta = p.lat != null && p.geo !== 'aprox'
   const fachada = useFachada(p, conPuerta)
+  const textoIr = <span className="max-[300px]:sr-only">{tx('Ir')}</span>
   const menu = [
     onEscuchar && { texto: tx('Escuchar'), nombre: tx('Escuchar la siguiente parada'), icono: Volume2, onClick: onEscuchar },
     conPuerta && { texto: tx('Ver la puerta'), icono: Eye, onClick: () => window.open(enlacePuerta(p, fachada), '_blank', 'noopener') },
@@ -49,30 +69,36 @@ export default function TarjetaSiguiente({
         className="flex w-full items-start gap-3 text-left">
         <NumeroParada n={n} tam="siguiente" estado="siguiente" />
         <span className="min-w-0 flex-1">
-          <span className="flex items-baseline justify-between gap-2">
+          <span className="flex items-center justify-between gap-2">
             <span className="truncate text-titulo text-dark-50">{nombre}</span>
-            {p.eta && (
-              <span className={`shrink-0 text-boton tabular-nums ${tarde ? 'text-ruta-peligro-texto' : 'text-dark-400'}`}>
-                {p.eta}{tarde ? ` +${p.tarde_min}` : ''}
-              </span>
-            )}
+            <span className="flex shrink-0 items-center gap-1">
+              {p.eta && (
+                <span className={`text-boton tabular-nums ${tarde ? 'text-ruta-peligro-texto' : 'text-dark-400'}`}>
+                  {p.eta}{tarde ? ` +${p.tarde_min}` : ''}
+                </span>
+              )}
+              <ChevronRight size={20} className="text-dark-400" aria-hidden="true" />
+            </span>
           </span>
-          {p.cliente && <span className="line-clamp-2 text-texto text-dark-400">{p.direccion}</span>}
+          {p.cliente && <span className="line-clamp-2 block text-texto text-dark-400">{p.direccion}</span>}
         </span>
-        <ChevronRight size={20} className="mt-2 shrink-0 text-dark-400" aria-hidden="true" />
       </button>
-      {(visibles.length > 0 || p.lat == null || p.geo === 'aprox') && (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          {visibles.map((e) => <Etiqueta key={e.texto} texto={e.texto} tono={e.tono} icono={e.icono} titulo={e.titulo} />)}
-          {demas > 0 && <Etiqueta texto={`+${demas}`} />}
-          {onSituar && <ChipSituar p={p} onSituar={onSituar} testid="situar-parada" />}
+      {/* UNA línea de etiquetas: las que caben (tres como mucho) y «+N»; con el chip de situar, a su lado. Las demás, en la hoja. */}
+      {(visibles.length > 0 || conChip) && (
+        <div className="mt-2 flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+            {visibles.map((e) => <Etiqueta key={e.texto} texto={e.texto} tono={e.tono} icono={e.icono} titulo={e.titulo} />)}
+            {demas > 0 && <Etiqueta texto={`+${demas}`} />}
+          </div>
+          {conChip && <ChipSituar p={p} onSituar={onSituar} testid="situar-parada" />}
         </div>
       )}
       <NotasPuerta p={p} maxLineas={2} onMemoria={onMemoria ? () => onMemoria(p) : undefined} className="mt-2" />
       <div className="mt-3 flex items-center gap-2">
+        {/* Con las cuatro acciones a 280 de ancho «Ir» se queda en 52: el texto pasa a solo-lector y queda el icono. */}
         {hrefIr
-          ? <Boton variante="normal" icono={Navigation} texto={tx('Ir')} href={hrefIr} target="_blank" rel="noreferrer" className="min-w-0 flex-1" />
-          : <Boton variante="normal" icono={Navigation} texto={tx('Ir')} onClick={() => onIr?.(p)} className="min-w-0 flex-1" />}
+          ? <Boton variante="normal" icono={Navigation} texto={textoIr} href={hrefIr} target="_blank" rel="noreferrer" className="min-w-0 flex-1" />
+          : <Boton variante="normal" icono={Navigation} texto={textoIr} onClick={() => onIr?.(p)} className="min-w-0 flex-1" />}
         {p.telefono && <Boton variante="icono" icono={Phone} tono="neutro" relleno nombre={tx('Llamar')} href={`tel:${p.telefono}`} onClick={onLlamar} />}
         {hrefSms && <Boton variante="icono" icono={MessageCircle} tono="ok" relleno nombre={tx('SMS')} href={hrefSms} />}
         {!hrefSms && hrefWhatsapp && <Boton variante="icono" icono={MessageCircle} tono="ok" relleno nombre="WhatsApp" href={hrefWhatsapp} target="_blank" rel="noreferrer" onClick={onWhatsapp} />}
