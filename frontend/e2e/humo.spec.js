@@ -1613,7 +1613,7 @@ test('Reparto · prueba de entrega con nota y la oficina ve la foto', async ({ p
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Entregado', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Prueba de entrega' })).toBeVisible()
-  await page.getByPlaceholder(/Nota \(opcional\)/).fill('En el buzón')
+  await page.getByPlaceholder('Nota', { exact: true }).fill('En el buzón')   // «Nota» a secas (diseño compacto, 07-11-2026)
   await page.getByRole('button', { name: 'Entregar sin foto' }).click()
   await expect.poll(() => enviados.length).toBe(1)
   expect(enviados[0]).toMatchObject({ estado: 'entregado', nota: 'En el buzón' })
@@ -2052,9 +2052,9 @@ test('Reparto · entregar con «dónde lo dejas», firma, y el buscador de paque
 
   // Entregar: al vecino, quién lo recoge y firma con el dedo.
   await primera.getByRole('button', { name: 'Entregado', exact: true }).click()
-  await page.getByRole('button', { name: 'Al vecino' }).click()
-  await page.getByPlaceholder('¿Quién lo recoge? (opcional)').fill('Marta (2ºB)')
-  await page.getByRole('button', { name: 'Que firme en la pantalla' }).click()
+  await page.getByRole('button', { name: 'Vecino', exact: true }).click()   // el chip corto de «¿Dónde?» (diseño compacto, 07-11-2026)
+  await page.getByPlaceholder('¿Quién lo recoge?').fill('Marta (2ºB)')
+  await page.getByRole('button', { name: 'Firma', exact: true }).click()   // la firma, como chip al lado de «¿Quién lo recoge?»
   const lienzo = page.getByLabel('Firma aquí con el dedo').first()
   await expect(page.getByRole('button', { name: 'Listo' })).toBeDisabled()
   const caja = await lienzo.boundingBox()
@@ -2064,7 +2064,7 @@ test('Reparto · entregar con «dónde lo dejas», firma, y el buscador de paque
   await page.mouse.move(caja.x + 220, caja.y + 30, { steps: 8 })
   await page.mouse.up()
   await page.getByRole('button', { name: 'Listo' }).click()
-  await expect(page.getByRole('button', { name: 'Firmado · repetir' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Firmado', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Entregar sin foto' }).click()
   await expect.poll(() => estados.length).toBe(1)
   expect(estados[0]).toMatchObject({ estado: 'entregado', donde: 'vecino', recibe: 'Marta (2ºB)' })

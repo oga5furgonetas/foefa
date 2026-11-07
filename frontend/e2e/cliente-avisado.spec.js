@@ -74,7 +74,7 @@ test.describe('el cliente avisado, la propina y la valoración', () => {
     await boton.click()
     const hoja = page.getByRole('dialog', { name: 'Avisar a todos por WhatsApp' })
     await expect(hoja.getByRole('link', { name: 'WhatsApp' })).toHaveCount(2)
-    await expect(hoja).toContainText('1. Bea Castro')
+    await expect(hoja.locator('li').first()).toHaveText(/^1\s*Bea Castro/)   // el número, como pieza aparte (diseño compacto, 07-11-2026)
     await expect(hoja).not.toContainText('Bar Pepe')
     const enlace = hoja.getByRole('link', { name: 'WhatsApp' }).first()
     const href = await enlace.getAttribute('href')

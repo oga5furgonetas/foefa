@@ -55,6 +55,12 @@ import ResumenDia from './piezas/ResumenDia'
 import AvisoHueco from './piezas/AvisoHueco'
 import TarjetaSiguiente from './piezas/TarjetaSiguiente'
 import HojaParada from './piezas/HojaParada'
+// W3, las hojas (07-11-2026): sus piezas en líneas propias; Boton, Campo, Chip, ContenedorLista y Etiqueta ya las importa W2.
+import Aviso from './piezas/Aviso'
+import { ChipOpcion } from './piezas/Chip'
+import FilaChips from './piezas/FilaChips'
+import NumeroParada from './piezas/NumeroParada'
+import { DONDE_CORTO } from '../../lib/dejar'   // W3: «¿Dónde?» corto en los chips de «Prueba de entrega» (07-11-2026)
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
    Lo que hace el repartidor al cargar: escanea el código de la caja. Si el
@@ -347,7 +353,9 @@ const Reconocedor = typeof window !== 'undefined' ? (window.SpeechRecognition ||
 /* `avisoApp`, `pantallaCompleta` y `pieApp` (07-11-2026, diseño compacto): el aviso de la cuenta que elige RutaApp (uno, en el
    hueco de aviso de «Hoy»), si la cabecera va fija y el mapa a pantalla completa (la app y el portal; el panel, no) y la
    línea final de la app («Invita y gana»), que se pinta al final de la lista si no hay promo de invitar a la vista. */
-export default function MiRuta({ onBack, embebido = false, alTerminar = null, referido: referidoDado, avisoApp = null, pantallaCompleta = false, pieApp = null }) {
+export default function MiRuta({ onBack, embebido = false, alTerminar = null, referido: referidoDado, avisoApp = null, pantallaCompleta = false, pieApp = null,
+  esperarBienvenida = false,   // W3 (07-11-2026): la bienvenida espera a que se cierre «Último paso: instala la app» (lo pasa RutaApp)
+}) {
   useIdioma()
   const [ruta, setRuta] = useState(() => { const c = copiaDeHoy(); return c ? aplicarCola(c.data, leerCola().filter(deMi)) : null })
   // La ruta que se ve es la guardada en el móvil y el servidor no contesta: se dice de cuándo es.
@@ -995,9 +1003,10 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
   const TOUR = 'fds_tour_ruta'
   useEffect(() => {
     if (!embebido || !ruta?.autonomo || lista(ruta.pedidos).length) return     // solo en la app de quien reparte solo
+    if (esperarBienvenida) return     // «Último paso: instala la app» sigue abierto (07-11-2026): la bienvenida sale al cerrarse, no encima
     try { if (localStorage.getItem(TOUR)) return; localStorage.setItem(TOUR, '1') } catch { return }
     setBienvenida('inicio'); medirAccion('bienvenida_vista')
-  }, [embebido, ruta?.autonomo, ruta?.pedidos])
+  }, [embebido, ruta?.autonomo, ruta?.pedidos, esperarBienvenida])
   // El aviso de la mañana, a la hora a la que carga (18-10-2026): ya pedido en este móvil, no se vuelve a ofrecer.
   let avisoPedido = false
   try { avisoPedido = localStorage.getItem('fds_aviso_manana') === 'si' } catch { avisoPedido = false }
@@ -1860,16 +1869,19 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
         </Hoja>
       )}
 
+      {/* ¿DÓNDE VA EN LA FURGONETA? (diseño compacto, 07-11-2026, §5.3): el cliente de subtítulo, la rejilla y «Quitar» como
+          botón de texto. Fuera «Al llegar sabrás dónde buscarlo.». */}
       {huecoDe && (
-        <Hoja titulo={tx('¿Dónde va en la furgoneta?')} onClose={() => setHuecoDe(null)}>
-          <p className="mb-3 text-[13px] text-dark-400">{huecoDe.cliente || huecoDe.direccion}. {tx('Al llegar sabrás dónde buscarlo.')}</p>
-          <HuecoRejilla valor={huecoDe.hueco} ocupado={ocupado === `hueco-${huecoDe.id}`} onElegir={(h) => ponerHueco(huecoDe, h)} />
+        <Hoja titulo={tx('¿Dónde va en la furgoneta?')} subtitulo={huecoDe.cliente || huecoDe.direccion} onClose={() => setHuecoDe(null)}>
+          <HuecoRejilla className="mt-2" valor={huecoDe.hueco} ocupado={ocupado === `hueco-${huecoDe.id}`} onElegir={(h) => ponerHueco(huecoDe, h)} />
           {huecoDe.hueco && (
-            <button onClick={() => ponerHueco(huecoDe, '')} className="mt-3 w-full rounded-xl border border-dark-600 py-2.5 text-[13.5px] text-dark-200">{tx('Quitar')}</button>
+            <Boton variante="texto" texto={tx('Quitar')} onClick={() => ponerHueco(huecoDe, '')} className="mt-2 w-full" />
           )}
         </Hoja>
       )}
 
+      {/* EL RECORRIDO DE LA PRIMERA VEZ (diseño compacto, 07-11-2026, §5.1 h): el título de cada paso a 18 y su línea; la
+          principal («Siguiente», o «Ver un ejemplo» al final sin paradas) en el pie fijo. Los pasos y lo que hacen, igual. */}
       {tour >= 0 && (() => {
         const PASOS = [
           [ScanLine, tx('1. Mete tus paquetes'), tx('Escanea el código o haz una foto a la etiqueta: la dirección y el teléfono entran solos. También puedes escribirla o pegar una lista.')],
@@ -1879,59 +1891,72 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
         const [Icono, titulo, texto] = PASOS[tour]
         const ultimo = tour === PASOS.length - 1
         return (
-          <Hoja titulo={tx('Así funciona')} onClose={() => setTour(-1)}>
-            <div className="flex items-start gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-500/15 text-brand-300"><Icono size={22} /></span>
-              <div>
-                <p className="text-[17px] font-bold text-dark-50">{titulo}</p>
-                <p className="mt-1 text-[14px] leading-snug text-dark-300">{texto}</p>
+          <Hoja titulo={tx('Así funciona')} onClose={() => setTour(-1)}
+            pie={!ultimo ? (
+              <Boton variante="principal" texto={tx('Siguiente')} onClick={() => setTour(tour + 1)} className="w-full" />
+            ) : (
+              <div className="flex flex-col gap-2">
+                {pendientes.length === 0 && (
+                  <Boton variante="principal" icono={Play} texto={tx('Ver un ejemplo')} cargando={ocupado === 'ejemplo'}
+                    onClick={() => { setTour(-1); medirAccion('tour_ejemplo'); cargarEjemplo() }} className="w-full" />
+                )}
+                <Boton variante="normal" tono="neutro" contorno texto={tx('Empezar con mis paquetes')} onClick={() => setTour(-1)} className="w-full" />
+              </div>
+            )}>
+            <div className="mt-2 flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ruta-marca-tinte text-ruta-marca-tinte-texto"><Icono size={20} aria-hidden="true" /></span>
+              <div className="min-w-0">
+                <p className="text-titulo text-dark-50">{titulo}</p>
+                <p className="mt-1 text-texto text-dark-400">{texto}</p>
               </div>
             </div>
-            <div className="mt-4 flex items-center justify-center gap-1.5" aria-hidden="true">
-              {PASOS.map((_, i) => <span key={i} className={`h-1.5 rounded-full ${i === tour ? 'w-6 bg-brand-400' : 'w-1.5 bg-dark-600'}`} />)}
+            <div className="mt-3 flex items-center justify-center gap-1" aria-hidden="true">
+              {PASOS.map((_, i) => <span key={i} className={`h-1 rounded-full ${i === tour ? 'w-6 bg-brand-500' : 'w-1 bg-dark-700'}`} />)}
             </div>
-            {!ultimo ? (
-              <button onClick={() => setTour(tour + 1)} className="mt-4 w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta">{tx('Siguiente')}</button>
-            ) : (
-              <>
-                {pendientes.length === 0 && (
-                  <button onClick={() => { setTour(-1); medirAccion('tour_ejemplo'); cargarEjemplo() }} disabled={ocupado === 'ejemplo'}
-                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta">
-                    <Play size={16} /> {tx('Verlo en acción con 3 paradas de ejemplo')}
-                  </button>
-                )}
-                <button onClick={() => setTour(-1)} className="mt-2 w-full rounded-xl border border-dark-700 py-2.5 text-[14px] font-semibold text-dark-200">{tx('Empezar con mis paquetes')}</button>
-              </>
-            )}
           </Hoja>
         )
       })()}
+      {/* «MI DINERO HOY» (diseño compacto, 07-11-2026, §5.1 j): arriba lo que decía la caja de la cabecera (limpio en grande;
+          lo ganado, la gasolina y por hora; en peligro, lo que no se cobra por no entregar); debajo, la tarifa de siempre con
+          su párrafo en el «?», el diésel y el Bizum como ayuda de su campo, y «Guardar» en el pie. Lo que se guarda, igual. */}
       {tarifa && (
-        <Hoja titulo={tx('Mi dinero hoy')} onClose={() => setTarifa(null)}>
-          <p className="mb-3 text-[13px] text-dark-400">{tx('Pon cómo te pagan y la app te dice cuánto llevas ganado hoy, la gasolina y lo que te queda limpio.')}</p>
-          {[['parada', tx('Te pagan por cada entrega ({moneda})', { moneda: simboloMoneda() }), simboloMoneda() === '€' ? '1,10' : '0'],
-            ['dia', tx('Fijo por día, si te pagan así ({moneda})', { moneda: simboloMoneda() }), '0'],
-            ['km', tx(unidades() === 'mi' ? 'Gasolina por milla ({moneda})' : 'Gasolina por km ({moneda})', { moneda: simboloMoneda() }), simboloMoneda() === '€' ? '0,12' : '0']].map(([k, t, ej]) => (
-            <label key={k} className="mb-2.5 block">
-              <span className="mb-1 block text-[13px] font-semibold text-dark-200">{t}</span>
-              <input className={inp} inputMode="decimal" value={tarifa[k]} placeholder={ej}
-                onChange={(e) => setTarifa({ ...tarifa, [k]: e.target.value.replace(/[^0-9.,]/g, '') })} />
-            </label>
+        <Hoja titulo={tx('Mi dinero hoy')} onClose={() => setTarifa(null)}
+          ayuda={{ texto: tx('Pon cómo te pagan y la app te dice cuánto llevas ganado hoy, la gasolina y lo que te queda limpio.') }}
+          pie={<Boton variante="principal" texto={tx('Guardar')} onClick={guardarTarifa} cargando={ocupado === 'tarifa'} disabled={!aCent(tarifa.parada) && !aCent(tarifa.dia)} className="w-full" />}>
+          {dinero && (
+            <div className="mt-2 rounded-xl bg-ruta-ok/10 px-3 py-2">
+              <p className="text-sec text-dark-400">{tx('Limpio')}</p>
+              <p className="text-cifra text-ruta-ok-texto">{euros(dinero.neto)}</p>
+              <p className="text-sec text-dark-400">
+                {tx('Llevas {a} · gasolina ≈ {b}', { a: euros(dinero.bruto), b: euros(dinero.gasolina) })}
+                {dinero.porHora != null ? ` · ${tx('{c}/hora', { c: euros(dinero.porHora) })}` : ''}
+              </p>
+              {dinero.fallidas > 0 && (
+                <p className="text-sec text-ruta-peligro-texto">
+                  {dinero.fallidas === 1 ? tx('1 sin entregar = {euros} sin cobrar', { euros: euros(dinero.perdido) }) : tx('{n} sin entregar = {euros} sin cobrar', { n: dinero.fallidas, euros: euros(dinero.perdido) })}
+                </p>
+              )}
+            </div>
+          )}
+          {[['parada', tx('Te pagan por cada entrega ({moneda})', { moneda: simboloMoneda() }), simboloMoneda() === '€' ? '1,10' : '0', ''],
+            ['dia', tx('Fijo por día, si te pagan así ({moneda})', { moneda: simboloMoneda() }), '0', ''],
+            ['km', tx(unidades() === 'mi' ? 'Gasolina por milla ({moneda})' : 'Gasolina por km ({moneda})', { moneda: simboloMoneda() }), simboloMoneda() === '€' ? '0,12' : '0',
+              simboloMoneda() === '€' ? tx('Una furgoneta diésel gasta unos 0,10–0,15 € por km. Solo lo ves tú.') : tx(unidades() === 'mi' ? 'Pon lo que gasta tu vehículo por milla. Solo lo ves tú.' : 'Pon lo que gasta tu vehículo por km. Solo lo ves tú.')]].map(([k, t, ej, ayudaCampo]) => (
+            <div key={k} className="mt-3">
+              <p className="mb-1 text-boton text-dark-50">{t}</p>
+              <Campo valor={tarifa[k]} ejemplo={ej} nombre={t} ayuda={ayudaCampo || undefined} inputMode="decimal"
+                onChange={(v) => setTarifa({ ...tarifa, [k]: v.replace(/[^0-9.,]/g, '') })} />
+            </div>
           ))}
-          <p className="mb-3 text-[12px] text-dark-500">{simboloMoneda() === '€' ? tx('Una furgoneta diésel gasta unos 0,10–0,15 € por km. Solo lo ves tú.') : tx(unidades() === 'mi' ? 'Pon lo que gasta tu vehículo por milla. Solo lo ves tú.' : 'Pon lo que gasta tu vehículo por km. Solo lo ves tú.')}</p>
           {/* LA PROPINA (01-11-2026): el Bizum del repartidor, que el cliente ve en su enlace cuando ya tiene el paquete. */}
           {paisActual() === 'es' && (
-            <label className="mb-3 block">
-              <span className="mb-1 block text-[13px] font-semibold text-dark-200">{tx('Tu móvil de Bizum, para la propina (opcional)')}</span>
-              <input className={inp} inputMode="tel" value={tarifa.bizum || ''} placeholder="612 345 678" autoComplete="off"
-                onChange={(e) => setTarifa({ ...tarifa, bizum: e.target.value.replace(/[^0-9+ ]/g, '') })} />
-              <span className="mt-1 block text-[12px] text-dark-500">{tx('Cuando el cliente ya tiene el paquete, su enlace le dice «¿Le invitas a un café?» con tu Bizum. Lo que te manden es un ingreso tuyo.')}</span>
-            </label>
+            <div className="mt-3">
+              <p className="mb-1 text-boton text-dark-50">{tx('Tu móvil de Bizum, para la propina (opcional)')}</p>
+              <Campo valor={tarifa.bizum || ''} ejemplo="612 345 678" nombre={tx('Tu móvil de Bizum, para la propina (opcional)')} inputMode="tel" autoComplete="off"
+                ayuda={tx('Cuando el cliente ya tiene el paquete, su enlace le dice «¿Le invitas a un café?» con tu Bizum. Lo que te manden es un ingreso tuyo.')}
+                onChange={(v) => setTarifa({ ...tarifa, bizum: v.replace(/[^0-9+ ]/g, '') })} />
+            </div>
           )}
-          <button onClick={guardarTarifa} disabled={ocupado === 'tarifa' || (!aCent(tarifa.parada) && !aCent(tarifa.dia))}
-            className="w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta disabled:opacity-40">
-            {ocupado === 'tarifa' ? tx('Guardando…') : tx('Guardar')}
-          </button>
         </Hoja>
       )}
       {pegar && (
@@ -2199,100 +2224,98 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
         </Hoja>
       )}
 
+      {/* LAS HOJAS DE ENTREGAR (diseño compacto, 07-11-2026, §5.3): todas sobre la Hoja común, con el título en una línea,
+          la principal en el pie fijo y lo largo detrás del «?». Los pasos y lo que se manda al servidor no cambian. */}
+      {/* COBRAR: «Cobrar {x}» con «¿Cómo ha pagado?» de subtítulo, los métodos en una rejilla de 3 de 48 (marcan el pago y
+          abren la prueba, como siempre) y «No ha pagado» como botón de texto (su nombre sigue siendo el de antes). */}
       {cobro && (
-        <Hoja titulo={`${tx('Cobrar')} ${euros(cobro.cobrar)}`} onClose={() => setCobro(null)}>
-          <p className="mb-3 text-[13px] text-dark-400">{tx('¿Cómo ha pagado?')}</p>
-          <div className="grid grid-cols-3 gap-2">
+        <Hoja titulo={tx('Cobrar {euros}', { euros: euros(cobro.cobrar) })} subtitulo={tx('¿Cómo ha pagado?')} onClose={() => setCobro(null)}>
+          <div className="mt-2 grid grid-cols-3 gap-2">
             {metodosCobro().map(([k, t]) => (
-              <button key={k} onClick={() => marcar(cobro, 'entregado', '', { metodo: k })}
-                className="rounded-xl bg-emerald-700 py-3.5 text-[15px] font-bold text-white">{tx(t)}</button>
+              <Boton key={k} variante="normal" tono="ok" texto={tx(t)} onClick={() => marcar(cobro, 'entregado', '', { metodo: k })} />
             ))}
           </div>
-          <button onClick={() => marcar(cobro, 'fallido', 'No ha pagado')}
-            className="mt-3 w-full rounded-xl border border-red-500/30 py-3 text-[14px] text-red-300">{tx('No ha pagado: no lo entrego')}</button>
+          <Boton variante="texto" tono="peligro" texto={tx('No ha pagado')} nombre={tx('No ha pagado: no lo entrego')}
+            onClick={() => marcar(cobro, 'fallido', 'No ha pagado')} className="mt-3 w-full" />
         </Hoja>
       )}
 
+      {/* PRUEBA DE ENTREGA: «¿Dónde?» con los chips cortos (no en las recogidas), «¿Quién lo recoge?» con el chip «Firma» al
+          lado («Firmado» cuando ya está; tocarlo vuelve a firmar), «Nota» y la línea de la foto; en el pie, «Foto y entregar»
+          y «Entregar sin foto». El párrafo de siempre, en el «?». */}
       {prueba && (
-        <Hoja titulo={tx('Prueba de entrega')} onClose={() => setPrueba(null)}>
-          {prueba.p.tipo !== 'recogida' && (
-            <div className="mb-3">
-              <p className="mb-1.5 text-[13px] text-dark-300">{tx('¿Dónde lo dejas?')}</p>
-              <div className="flex flex-wrap gap-1.5">
-                {DONDE.map(([k, t]) => (
-                  <button key={k} type="button" aria-pressed={entrega.donde === k}
-                    onClick={() => setEntrega({ ...entrega, donde: entrega.donde === k ? '' : k })}
-                    className={`rounded-full px-3 py-1.5 text-[13px] font-semibold ${entrega.donde === k ? 'bg-brand-500 text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}>{tx(t)}</button>
-                ))}
-              </div>
-              {CON_QUIEN.includes(entrega.donde) && (
-                <div className="mt-2 space-y-2">
-                  <input className={inp} placeholder={tx('¿Quién lo recoge? (opcional)')} value={entrega.recibe} autoComplete="off"
-                    onChange={(e) => setEntrega({ ...entrega, recibe: e.target.value })} />
-                  {entrega.firmando
-                    ? <Firma onListo={(firma) => setEntrega({ ...entrega, firma, firmando: false })} onCancelar={() => setEntrega({ ...entrega, firmando: false })} />
-                    : (
-                      <button type="button" onClick={() => setEntrega({ ...entrega, firmando: true })}
-                        className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-[14px] font-semibold ${entrega.firma ? 'bg-emerald-500/15 text-emerald-200' : 'border border-dark-600 text-dark-100'}`}>
-                        {entrega.firma ? <Check size={16} /> : <PenLine size={16} />} {entrega.firma ? tx('Firmado · repetir') : tx('Que firme en la pantalla')}
-                      </button>
-                    )}
-                </div>
-              )}
+        <Hoja titulo={tx('Prueba de entrega')} onClose={() => setPrueba(null)}
+          ayuda={{ texto: `${tx('Una foto del paquete donde lo dejas (en el portal, con el vecino…) evita discusiones después.')} ${tx('Sin personas en la foto.')} ${tx('Es opcional.')}` }}
+          pie={(
+            <div className="grid grid-cols-2 gap-2">
+              <Boton variante="principal" icono={Camera} texto={tx('Foto y entregar')} cargando={ocupado === 'foto'} disabled={!!ocupado} onClick={abrirFoto} />
+              <Boton variante="principal" contorno tono="neutro" texto={tx('Entregar sin foto')} disabled={!!ocupado}
+                onClick={() => marcar(prueba.p, 'entregado', '', prueba.pago || { sin_cobro: true }, datosEntrega())} />
             </div>
+          )}>
+          {/* La cámara: el input va escondido y lo abre «Foto y entregar» (abrirFoto). Pequeña a propósito: 640 px y calidad
+              0,6 son ~40-70 KB, de sobra para ver dónde quedó, y cabe en el pedido sin fotos sueltas por ahí. */}
+          <input type="file" accept="image/*" capture="environment" className="hidden" disabled={!!ocupado}
+            onChange={async (e) => {
+              const f = e.target.files?.[0]; e.target.value = ''
+              if (!f) return
+              setOcupado('foto')
+              try {
+                const blob = await compressImage(f, 640, 0.6)
+                const foto = await dataUrlDe(blob)
+                await marcar(prueba.p, 'entregado', '', prueba.pago || { sin_cobro: true }, { foto, ...datosEntrega() })
+              } catch { setAviso(tx('No se pudo guardar la foto')); setOcupado('') }
+            }} />
+          {prueba.p.tipo !== 'recogida' && (
+            <>
+              <p className="mt-2 text-boton text-dark-50">{tx('¿Dónde?')}</p>
+              <FilaChips>
+                {DONDE_CORTO.map(([k, t]) => (
+                  <ChipOpcion key={k} texto={tx(t)} seleccionado={entrega.donde === k}
+                    onClick={() => setEntrega({ ...entrega, donde: entrega.donde === k ? '' : k })} />
+                ))}
+              </FilaChips>
+              {CON_QUIEN.includes(entrega.donde) && (entrega.firmando
+                ? <Firma className="mt-2" onListo={(firma) => setEntrega({ ...entrega, firma, firmando: false })} onCancelar={() => setEntrega({ ...entrega, firmando: false })} />
+                : (
+                  <div className="mt-2 flex items-center gap-2">
+                    <Campo className="min-w-0 flex-1" valor={entrega.recibe} ejemplo={tx('¿Quién lo recoge?')} autoComplete="off"
+                      onChange={(v) => setEntrega({ ...entrega, recibe: v })} />
+                    <Chip icono={entrega.firma ? Check : PenLine} texto={entrega.firma ? tx('Firmado') : tx('Firma')} seleccionado={!!entrega.firma}
+                      onClick={() => setEntrega({ ...entrega, firmando: true })} />
+                  </div>
+                ))}
+            </>
           )}
-          <p className="mb-3 text-[13px] text-dark-400">
-            {tx('Una foto del paquete donde lo dejas (en el portal, con el vecino…) evita discusiones después.')}
-            <b className="text-dark-200"> {tx('Sin personas en la foto.')}</b> {tx('Es opcional.')}
-          </p>
-          <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta">
-            {ocupado === 'foto' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
-            {ocupado === 'foto' ? tx('Guardando…') : tx('Hacer foto y entregar')}
-            <input type="file" accept="image/*" capture="environment" className="hidden" disabled={!!ocupado}
-              onChange={async (e) => {
-                const f = e.target.files?.[0]; e.target.value = ''
-                if (!f) return
-                setOcupado('foto')
-                try {
-                  // Pequeña a propósito: 640 px y calidad 0,6 son ~40-70 KB, de sobra
-                  // para ver dónde quedó, y cabe en el pedido sin fotos sueltas por ahí.
-                  const blob = await compressImage(f, 640, 0.6)
-                  const foto = await dataUrlDe(blob)
-                  await marcar(prueba.p, 'entregado', '', prueba.pago || { sin_cobro: true }, { foto, ...datosEntrega() })
-                } catch { setAviso(tx('No se pudo guardar la foto')); setOcupado('') }
-              }} />
-          </label>
-          <input className={`${inp} mt-2`} placeholder={tx('Nota (opcional): «al vecino del 2º», «en el buzón»…')} value={notaEntrega}
-            onChange={(e) => setNotaEntrega(e.target.value)} />
-          <button onClick={() => marcar(prueba.p, 'entregado', '', prueba.pago || { sin_cobro: true }, datosEntrega())}
-            disabled={!!ocupado}
-            className="mt-3 w-full rounded-xl border border-dark-600 py-3 text-[14px] font-semibold text-dark-100">
-            {tx('Entregar sin foto')}
-          </button>
+          <Campo className="mt-3" valor={notaEntrega} ejemplo={tx('Nota')} onChange={setNotaEntrega} />
+          <p className="mt-2 text-sec text-dark-400">{tx('Foto del paquete, sin personas.')}</p>
         </Hoja>
       )}
 
+      {/* AVISAR A TODOS POR WHATSAPP: «Su hora y su enlace, uno a uno» de subtítulo (la frase larga, en el «?»); filas de 56
+          con el número, el nombre y «≈ 09:58 · 613 403 123»; a la derecha, el WhatsApp de icono o «✓ Avisado». */}
       {avisarTodos && (
-        <Hoja titulo={tx('Avisar a todos por WhatsApp')} onClose={() => setAvisarTodos(false)}>
-          <p className="mb-3 text-[13px] text-dark-400">{tx('Un WhatsApp a cada cliente con su hora aproximada y su enlace para seguirte. Se abre uno a uno: envía y vuelve.')}</p>
-          <div className="flex flex-col gap-2">
+        <Hoja titulo={tx('Avisar a todos por WhatsApp')} subtitulo={tx('Su hora y su enlace, uno a uno')} onClose={() => setAvisarTodos(false)}
+          ayuda={{ texto: tx('Un WhatsApp a cada cliente con su hora aproximada y su enlace para seguirte. Se abre uno a uno: envía y vuelve.') }}>
+          <ContenedorLista className="mt-2">
             {conTelefono.map((p) => {
               const hecho = avisados.includes(p.id)
               return (
-                <div key={p.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${hecho ? 'border-emerald-500/30 bg-emerald-500/[.06]' : 'border-dark-700'}`}>
+                <li key={p.id} className="flex min-h-14 items-center gap-3 py-2 pl-3 pr-1">
+                  <NumeroParada n={p.orden} tam="fila" estado={hecho ? 'hecha' : 'pendiente'} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13.5px] font-semibold text-dark-100">{p.orden ? `${p.orden}. ` : ''}{p.cliente || p.direccion}</span>
-                    <span className="block text-[12px] text-dark-400">{p.eta ? `≈ ${p.eta} · ` : ''}{p.telefono}</span>
+                    <span className="block truncate text-nombre text-dark-50">{p.cliente || p.direccion}</span>
+                    <span className="block truncate text-sec text-dark-400">{p.eta ? `≈ ${p.eta} · ` : ''}{p.telefono}</span>
                   </span>
                   {hecho
-                    ? <span className="flex items-center gap-1 text-[12.5px] font-semibold text-emerald-300"><Check size={14} /> {tx('Avisado')}</span>
-                    : <a href={`https://wa.me/${movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo)}?text=${encodeURIComponent(mensaje(p, ruta.empresa))}`} target="_blank" rel="noreferrer"
-                        onClick={() => { marcarAvisado(p.id); apuntar(p, 'whatsapp') }}
-                        className="flex items-center gap-1 rounded-lg border border-emerald-600/50 px-2.5 py-1.5 text-[12.5px] font-semibold text-emerald-300"><MessageCircle size={14} /> WhatsApp</a>}
-                </div>
+                    ? <Etiqueta tono="ok" icono={Check} texto={tx('Avisado')} className="mr-2" />
+                    : <Boton variante="icono" relleno tono="ok" icono={MessageCircle} nombre="WhatsApp" target="_blank" rel="noreferrer"
+                        href={`https://wa.me/${movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo)}?text=${encodeURIComponent(mensaje(p, ruta.empresa))}`}
+                        onClick={() => { marcarAvisado(p.id); apuntar(p, 'whatsapp') }} />}
+                </li>
               )
             })}
-          </div>
+          </ContenedorLista>
         </Hoja>
       )}
 
@@ -2308,93 +2331,94 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
       )}
 
       {/* LA ENTREGA VERIFICADA (01-11-2026): la IA ha mirado la foto y pide revisarla. Repetirla manda la nueva con la
-          parada ya entregada (el servidor la vuelve a mirar); «Está bien así» la deja. Nunca bloquea. */}
+          parada ya entregada (el servidor la vuelve a mirar); «Está bien así» la deja. Nunca bloquea. Diseño compacto
+          (07-11-2026): el aviso de la IA tal cual y «Es tu prueba de entrega. ¿La repites?»; «Repetir la foto» en el pie. */}
       {revisar && (
-        <Hoja titulo={tx('Mira la foto de entrega')} onClose={() => setRevisar(null)}>
-          <p className="flex items-start gap-2 text-[14px] leading-snug text-amber-200"><AlertTriangle size={16} className="mt-0.5 shrink-0" /> <span>{textoAvisoIa(revisar.ia)}</span></p>
-          <p className="mt-2 text-[12.5px] text-dark-400">{tx('La foto es tu prueba si alguien dice que no le ha llegado. Puedes repetirla ahora o dejarla así.')}</p>
-          <label className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta">
-            {ocupado === 'foto' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
-            {ocupado === 'foto' ? tx('Guardando…') : tx('Repetir la foto')}
-            <input type="file" accept="image/*" capture="environment" className="hidden" disabled={!!ocupado}
-              onChange={async (e) => {
-                const f = e.target.files?.[0]; e.target.value = ''
-                if (!f) return
-                const p = revisar.p
-                setOcupado('foto')
-                try {
-                  const foto = await dataUrlDe(await compressImage(f, 640, 0.6))
-                  setRevisar(null)
-                  await marcar(p, 'entregado', '', p.cobrar > 0 ? { metodo: p.cobrado_metodo || 'pagado' } : { sin_cobro: true }, { foto })
-                } catch { setAviso(tx('No se pudo guardar la foto')); setOcupado('') }
-              }} />
-          </label>
-          <button onClick={() => setRevisar(null)} className="mt-3 w-full rounded-xl border border-dark-600 py-3 text-[14px] font-semibold text-dark-100">
-            {tx('Está bien así')}
-          </button>
+        <Hoja titulo={tx('Mira la foto de entrega')} onClose={() => setRevisar(null)}
+          ayuda={{ texto: tx('La foto es tu prueba si alguien dice que no le ha llegado. Puedes repetirla ahora o dejarla así.') }}
+          pie={(
+            <div className="flex flex-col gap-2">
+              <Boton variante="principal" icono={Camera} texto={tx('Repetir la foto')} cargando={ocupado === 'foto'} disabled={!!ocupado} onClick={abrirFoto} className="w-full" />
+              <Boton variante="normal" tono="neutro" contorno texto={tx('Está bien así')} onClick={() => setRevisar(null)} className="w-full" />
+            </div>
+          )}>
+          <input type="file" accept="image/*" capture="environment" className="hidden" disabled={!!ocupado}
+            onChange={async (e) => {
+              const f = e.target.files?.[0]; e.target.value = ''
+              if (!f) return
+              const p = revisar.p
+              setOcupado('foto')
+              try {
+                const foto = await dataUrlDe(await compressImage(f, 640, 0.6))
+                setRevisar(null)
+                await marcar(p, 'entregado', '', p.cobrar > 0 ? { metodo: p.cobrado_metodo || 'pagado' } : { sin_cobro: true }, { foto })
+              } catch { setAviso(tx('No se pudo guardar la foto')); setOcupado('') }
+            }} />
+          <Aviso tono="aviso" icono={AlertTriangle} texto={textoAvisoIa(revisar.ia)} className="mt-2" />
+          <p className="mt-3 text-texto text-dark-50">{tx('Es tu prueba de entrega. ¿La repites?')}</p>
         </Hoja>
       )}
 
+      {/* NO ENTREGADO: los cinco motivos en una rejilla de 2 × 48; un toque lo marca, como siempre. */}
       {fallo && (
         <Hoja titulo={fallo.tipo === 'recogida' ? tx('¿Por qué no se ha recogido?') : tx('¿Por qué no se ha entregado?')} onClose={() => setFallo(null)}>
-          <div className="flex flex-col gap-2">
+          <div className="mt-2 grid grid-cols-2 gap-2">
             {MOTIVOS.map((m) => (
-              <button key={m} onClick={() => marcar(fallo, 'fallido', m)}
-                className="rounded-xl border border-dark-700 bg-dark-900 py-3 text-[14px] text-dark-100">{tx(m)}</button>
+              <Boton key={m} variante="normal" tono="neutro" contorno texto={tx(m)} onClick={() => marcar(fallo, 'fallido', m)} />
             ))}
           </div>
         </Hoja>
       )}
 
+      {/* EL AVISO DE LA JORNADA (art. 90 LOPDGDD): se queda entero; solo pasa a la Hoja, con el botón en el pie. */}
       {verAviso && (
-        <Hoja titulo={tx('Antes de empezar: tu ubicación')} onClose={() => setVerAviso(false)}>
-          <div className="space-y-2 text-[13.5px] leading-relaxed text-dark-300">
-            <p className="flex gap-2"><MapPin size={16} className="mt-0.5 shrink-0 text-brand-300" />
+        <Hoja titulo={tx('Antes de empezar: tu ubicación')} onClose={() => setVerAviso(false)}
+          pie={<Boton variante="principal" texto={tx('Entendido, empezar jornada')} onClick={() => jornada('empezar', true)} disabled={ocupado === 'jornada'} className="w-full" />}>
+          <div className="mt-2 space-y-2 text-texto text-dark-50">
+            <p className="flex gap-2"><MapPin size={18} className="mt-0.5 shrink-0 text-ruta-marca" aria-hidden="true" />
               {tx('Mientras tengas la jornada empezada, la oficina de tu empresa verá en el mapa por dónde vas, para organizar el reparto y avisar a los clientes.')}</p>
             <p>{tx('Solo se comparte desde que pulses «Empezar jornada» hasta que pulses «Terminar». Fuera de la jornada no se guarda nada.')}</p>
             <p>{tx('Solo se guarda tu última posición mientras la jornada está empezada, y se borra a los 30 días; el recorrido no se guarda. Lo ve solo tu empresa, que es la responsable de estos datos; puedes pedirle acceso o explicaciones cuando quieras.')}</p>
           </div>
-          <button onClick={() => jornada('empezar', true)} disabled={ocupado === 'jornada'}
-            className="mt-4 w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta">
-            {tx('Entendido, empezar jornada')}
-          </button>
         </Hoja>
       )}
+      {/* LA BIENVENIDA (diseño compacto, 07-11-2026, §5.1 h): la misma pregunta y los mismos caminos, con el título a 18 y
+          los botones en el pie; espera a que se cierre «Último paso: instala la app» (esperarBienvenida). */}
       {bienvenida && (
-        <Hoja titulo={tx('Te damos la bienvenida a FDS')} onClose={() => setBienvenida(null)}>
+        <Hoja titulo={tx('Te damos la bienvenida a FDS')} onClose={() => setBienvenida(null)}
+          pie={bienvenida === 'inicio' ? (
+            <div className="flex flex-col gap-2">
+              <Boton variante="principal" icono={Package} texto={tx('Sí, cargarlas ahora')} onClick={() => { setBienvenida('como'); medirAccion('bienvenida_cargar') }} className="w-full" />
+              <Boton variante="normal" tono="neutro" contorno texto={tx('Todavía no')} onClick={() => { setBienvenida('luego'); medirAccion('bienvenida_luego') }} className="w-full" />
+            </div>
+          ) : bienvenida === 'luego' ? (
+            <div className="flex flex-col gap-2">
+              <Boton variante="normal" tono="neutro" contorno icono={Play} texto={tx('Mientras, verlo en acción con 3 paradas de ejemplo')} cargando={ocupado === 'ejemplo'}
+                onClick={() => { setBienvenida(null); medirAccion('tour_ejemplo'); cargarEjemplo() }} className="w-full" />
+              <Boton variante="texto" texto={tx('Ver cómo funciona en 3 pasos')} onClick={() => { setBienvenida(null); setTour(0) }} className="w-full" />
+            </div>
+          ) : null}>
           {bienvenida === 'inicio' ? (<>
-            <p className="text-[20px] font-extrabold leading-tight text-dark-50">{tx('¿Tienes ya tus paradas de hoy?')}</p>
-            <p className="mt-1.5 text-[14px] leading-snug text-dark-300">{tx('En los paquetes, en una hoja o en una lista: la app las lee y ordena la ruta sola.')}</p>
+            <p className="mt-2 text-titulo text-dark-50">{tx('¿Tienes ya tus paradas de hoy?')}</p>
+            <p className="mt-1 text-texto text-dark-400">{tx('En los paquetes, en una hoja o en una lista: la app las lee y ordena la ruta sola.')}</p>
             {ruta.bono && !ruta.bono.pagado && (
-              <p className="mt-2 text-[13.5px] font-semibold text-amber-200">🎁 {tx('Tu primera ruta real te da {euros}.', { euros: eurosRef(ruta.bono.cent, locale()) })}</p>
+              <p className="mt-2 text-boton text-ruta-aviso-texto">🎁 {tx('Tu primera ruta real te da {euros}.', { euros: eurosRef(ruta.bono.cent, locale()) })}</p>
             )}
-            <button onClick={() => { setBienvenida('como'); medirAccion('bienvenida_cargar') }}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[16px] font-bold text-brand-tinta">
-              <Package size={19} /> {tx('Sí, cargarlas ahora')}
-            </button>
-            <button onClick={() => { setBienvenida('luego'); medirAccion('bienvenida_luego') }}
-              className="mt-2 w-full rounded-xl border border-dark-700 py-3 text-[14.5px] font-semibold text-dark-100">{tx('Todavía no')}</button>
           </>) : bienvenida === 'como' ? (<>
-            <p className="text-[20px] font-extrabold leading-tight text-dark-50">{tx('¿Cómo te llegan las paradas?')}</p>
-            <p className="mt-1.5 text-[14px] leading-snug text-dark-300">{tx('Elige una y te abro justo esa herramienta.')}</p>
-            <FormasDeCargar className="mt-4" puedePegar={!!ruta.puede_pegar} onElegir={(f) => { setBienvenida(null); abrirForma(f) }} />
+            <p className="mt-2 text-titulo text-dark-50">{tx('¿Cómo te llegan las paradas?')}</p>
+            <p className="mt-1 text-texto text-dark-400">{tx('Elige una y te abro justo esa herramienta.')}</p>
+            <FormasDeCargar className="mt-3" puedePegar={!!ruta.puede_pegar} onElegir={(f) => { setBienvenida(null); abrirForma(f) }} />
           </>) : (<>
-            <p className="text-[16px] font-bold leading-snug text-dark-50">{tx('Sin problema. Cuando cargues la furgoneta, abre la app y haz una foto a cada etiqueta.')}</p>
+            <p className="mt-2 text-nombre text-dark-50">{tx('Sin problema. Cuando cargues la furgoneta, abre la app y haz una foto a cada etiqueta.')}</p>
             {/* Que sepa que le llega y lo busque (24-10-2026): el correo de la mañana entra sin contraseña aunque lo abra en otro navegador. */}
-            <p className="mt-1.5 flex items-start gap-1.5 text-[13.5px] leading-snug text-dark-300">
-              <Mail size={15} className="mt-0.5 shrink-0 text-brand-300" /> {tx('Por la mañana te llega un correo con un botón para entrar directo a tu ruta, sin contraseña.')}
+            <p className="mt-2 flex items-start gap-2 text-texto text-dark-400">
+              <Mail size={18} className="mt-0.5 shrink-0 text-ruta-marca" aria-hidden="true" /> {tx('Por la mañana te llega un correo con un botón para entrar directo a tu ruta, sin contraseña.')}
             </p>
             {!avisoPedido && (
-              <div className="mt-4">
+              <div className="mt-3">
                 <PedirAviso horaInicial={ruta.aviso_hora} onHecho={(r, hora) => { setBienvenida(null); setAviso(mensajeAviso(r, hora)) }} />
               </div>
             )}
-            <button onClick={() => { setBienvenida(null); medirAccion('tour_ejemplo'); cargarEjemplo() }} disabled={ocupado === 'ejemplo'}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dark-700 py-3 text-[14px] font-semibold text-dark-100">
-              <Play size={16} /> {tx('Mientras, verlo en acción con 3 paradas de ejemplo')}
-            </button>
-            <button onClick={() => { setBienvenida(null); setTour(0) }}
-              className="mt-3 w-full text-[13px] font-semibold text-brand-300 underline underline-offset-2">{tx('Ver cómo funciona en 3 pasos')}</button>
           </>)}
         </Hoja>
       )}
@@ -2404,27 +2428,20 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
 
 /* LAS FORMAS DE RECIBIR LAS PARADAS (23-10-2026): la pregunta de la primera vez y el hueco vacío de la ruta
    enseñan las mismas cuatro, cada una con su herramienta (abrirForma). Sin «pegar» (no es el admin de la
-   cuenta) solo quedan las etiquetas y a mano. */
+   cuenta) solo quedan las etiquetas y a mano. Diseño compacto (07-11-2026, §5.1 h): solo el título de cada una, en
+   botones de 48 (la primera, en tinte de marca); las cuatro explicaciones se van. */
 const FORMAS = [
-  ['etiquetas', Camera, 'Etiquetas en los paquetes', 'Foto o escáner a cada etiqueta: dirección y teléfono entran solos.'],
-  ['hoja', FileText, 'Una hoja de reparto en papel', 'Hazle una foto: se leen todas las paradas de golpe.'],
-  ['lista', ClipboardPaste, 'Una lista en WhatsApp, Excel o correo', 'Cópiala y pégala: una parada por línea.'],
-  ['mano', PenLine, 'Me las dicen de una en una', 'Escríbelas a mano o díctalas por voz.'],
+  ['etiquetas', Camera, 'Etiquetas en los paquetes'],
+  ['hoja', FileText, 'Una hoja de reparto en papel'],
+  ['lista', ClipboardPaste, 'Una lista en WhatsApp, Excel o correo'],
+  ['mano', PenLine, 'Me las dicen de una en una'],
 ]
-function FormasDeCargar({ onElegir, puedePegar, compacto = false, className = '' }) {
+function FormasDeCargar({ onElegir, puedePegar, className = '' }) {
   const formas = FORMAS.filter(([f]) => puedePegar || (f !== 'hoja' && f !== 'lista'))
   return (
     <div className={`flex flex-col gap-2 ${className}`}>
-      {formas.map(([f, Icono, titulo, detalle], i) => (
-        <button key={f} type="button" onClick={() => onElegir(f)}
-          className={`flex w-full items-center gap-3 rounded-xl border px-3 text-left ${compacto ? 'py-2.5' : 'py-3'} ${
-            i === 0 ? 'border-brand-400/60 bg-brand-500/10' : 'border-dark-700 bg-dark-900/40'}`}>
-          <Icono size={compacto ? 18 : 22} className={`shrink-0 ${i === 0 ? 'text-brand-300' : 'text-dark-300'}`} />
-          <span className="min-w-0">
-            <span className={`block font-bold leading-tight text-dark-50 ${compacto ? 'text-[14px]' : 'text-[15px]'}`}>{tx(titulo)}</span>
-            {!compacto && <span className="mt-0.5 block text-[12.5px] leading-snug text-dark-400">{tx(detalle)}</span>}
-          </span>
-        </button>
+      {formas.map(([f, Icono, titulo], i) => (
+        <Boton key={f} variante="normal" tono={i === 0 ? 'marca' : 'neutro'} contorno={i !== 0} icono={Icono} texto={tx(titulo)} onClick={() => onElegir(f)} className="w-full" />
       ))}
     </div>
   )
@@ -2517,16 +2534,20 @@ function Marco({ onBack, children, embebido, pantallaCompleta = false, fecha = '
   )
 }
 
+/* Abre la cámara de la hoja en la que está el botón (diseño compacto, 07-11-2026): «Foto y entregar» y «Repetir la foto»
+   son piezas (Boton) en el pie, y el input de la foto va escondido en el cuerpo de la misma hoja. */
+const abrirFoto = (e) => e.currentTarget.closest('[role="dialog"]')?.querySelector('input[type="file"]')?.click()
+
 /* LA FIRMA CON EL DEDO (10-10-2026). Fondo blanco y trazo negro, como en
-   papel; sale un PNG pequeño (480×160) que se guarda en el pedido. */
-function Firma({ onListo, onCancelar }) {
+   papel; sale un PNG pequeño (480×160) que se guarda en el pedido. Diseño compacto (07-11-2026): los botones, a 48. */
+function Firma({ onListo, onCancelar, className = '' }) {
   const lienzo = useRef(null)
   const trazo = useRef(null)
   const [vacia, setVacia] = useState(true)
   const limpiar = () => {
     const ctx = lienzo.current.getContext('2d')
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 480, 160)
-    ctx.strokeStyle = '#111'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+    ctx.fillStyle = 'rgb(255, 255, 255)'; ctx.fillRect(0, 0, 480, 160)
+    ctx.strokeStyle = 'rgb(17, 17, 17)'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
     setVacia(true)
   }
   useEffect(limpiar, [])
@@ -2545,35 +2566,35 @@ function Firma({ onListo, onCancelar }) {
   }
   const soltar = () => { trazo.current = null }
   return (
-    <div>
+    <div className={className}>
       <canvas ref={lienzo} width={480} height={160} aria-label={tx('Firma aquí con el dedo')}
         onPointerDown={empezar} onPointerMove={mover} onPointerUp={soltar} onPointerLeave={soltar}
         className="block aspect-[3/1] w-full touch-none rounded-xl bg-white" />
-      <p className="mt-1 text-center text-[11.5px] text-dark-500">{tx('Firma aquí con el dedo')}</p>
-      <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-        <button type="button" onClick={onCancelar} className="rounded-xl border border-dark-700 py-2 text-[13px] text-dark-300">{tx('Cancelar')}</button>
-        <button type="button" onClick={limpiar} className="rounded-xl border border-dark-700 py-2 text-[13px] text-dark-200">{tx('Borrar')}</button>
-        <button type="button" disabled={vacia} onClick={() => onListo(lienzo.current.toDataURL('image/png'))}
-          className="rounded-xl bg-emerald-700 py-2 text-[13px] font-bold text-white disabled:opacity-40">{tx('Listo')}</button>
+      <p className="mt-1 text-center text-sec text-dark-400">{tx('Firma aquí con el dedo')}</p>
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        <Boton variante="normal" tono="neutro" contorno texto={tx('Cancelar')} onClick={onCancelar} />
+        <Boton variante="normal" tono="neutro" contorno texto={tx('Borrar')} onClick={limpiar} />
+        <Boton variante="normal" tono="ok" texto={tx('Listo')} disabled={vacia} onClick={() => onListo(lienzo.current.toDataURL('image/png'))} />
       </div>
     </div>
   )
 }
 
-/* La furgoneta vista desde arriba, la cabina delante: seis zonas. */
-function HuecoRejilla({ valor, onElegir, ocupado = false }) {
+/* La furgoneta vista desde arriba, la cabina delante: seis zonas. Diseño compacto (07-11-2026, §5.3): celdas de 48 con
+   radio 8, «Cabina» y «Puertas» en «sec» y la elegida en relleno de marca (fuera el azul cielo). */
+function HuecoRejilla({ valor, onElegir, ocupado = false, className = '' }) {
   return (
-    <div className="rounded-2xl border border-dark-700 p-2" role="group" aria-label={tx('Zona de la furgoneta')}>
-      <p className="mb-1 text-center text-[10.5px] uppercase tracking-wider text-dark-500">{tx('Cabina')}</p>
-      <div className="grid grid-cols-2 gap-1.5">
+    <div className={`rounded-xl border border-dark-800 p-2 ${className}`} role="group" aria-label={tx('Zona de la furgoneta')}>
+      <p className="mb-1 text-center text-sec text-dark-400">{tx('Cabina')}</p>
+      <div className="grid grid-cols-2 gap-2">
         {HUECOS.map((h) => (
           <button key={h} type="button" onClick={() => onElegir(h)} disabled={ocupado} aria-pressed={valor === h}
-            className={`rounded-lg py-2.5 text-[13px] font-semibold disabled:opacity-50 ${valor === h ? 'bg-sky-500 text-white' : 'border border-dark-700 bg-dark-900 text-dark-200'}`}>
+            className={`min-h-12 rounded-lg px-2 text-boton disabled:opacity-50 ${valor === h ? 'bg-brand-500 text-brand-tinta' : 'border border-ruta-borde bg-dark-900 text-dark-50'}`}>
             {tx(h)}
           </button>
         ))}
       </div>
-      <p className="mt-1 text-center text-[10.5px] uppercase tracking-wider text-dark-500">{tx('Puertas')}</p>
+      <p className="mt-1 text-center text-sec text-dark-400">{tx('Puertas')}</p>
     </div>
   )
 }
