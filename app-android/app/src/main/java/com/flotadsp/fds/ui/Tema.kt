@@ -163,7 +163,7 @@ data class Extra(
     val zona: Color, val enZona: Color,
     val guia: Color, val guiaAviso: Color, val guiaLuego: Color, val guiaPildora: Color,
     val escaner: Color, val escanerOk: Color, val escanerAviso: Color, val escanerError: Color,
-    /** El borde de 2 de la tarjeta de la siguiente: el cian da 2,2:1 sobre blanco de día. */
+    /** El borde de 2 de la tarjeta de la siguiente y del campo al escribir: el cian da 2,2:1 sobre blanco de día. */
     val enfasis: Color,
 )
 

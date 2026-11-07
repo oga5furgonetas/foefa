@@ -325,9 +325,9 @@ enum class TamNumero(val alto: Dp) { FILA(32.dp), GRANDE(40.dp), PAQUETE(80.dp) 
 
 enum class EstadoNumero { SIGUIENTE, PENDIENTE, HECHA, FALLIDA }
 
-/** La píldora con el número de parada: ancho mínimo igual al alto (crece con tres cifras), relleno 8 (§3.2 no admite el
- *  6; como la web, 07-11-2026); cifra tabular. Siguiente, relleno de marca; pendiente, tinte de marca; hecha, chip
- *  neutro; fallida, tinte de peligro; sin número, «·». */
+/** La píldora con el número de parada: ancho mínimo igual al alto (crece con tres cifras), relleno 8 y 12 en el
+ *  paquete encontrado (§3.2 no admite el 6 de §4; los mismos px-2 y px-3 de la web, 07-11-2026); cifra tabular.
+ *  Siguiente, relleno de marca; pendiente, tinte de marca; hecha, chip neutro; fallida, tinte de peligro; sin número, «·». */
 @Composable
 fun NumeroParada(n: Int?, tam: TamNumero = TamNumero.FILA, estado: EstadoNumero = EstadoNumero.PENDIENTE, modifier: Modifier = Modifier) {
     val c = MaterialTheme.colorScheme
@@ -343,7 +343,8 @@ fun NumeroParada(n: Int?, tam: TamNumero = TamNumero.FILA, estado: EstadoNumero 
         TamNumero.GRANDE -> MaterialTheme.typography.titleLarge
         TamNumero.PAQUETE -> MaterialTheme.typography.displayMedium
     }.merge(TextoNumero)
-    Box(modifier.heightIn(min = tam.alto).widthIn(min = tam.alto).background(fondo, CircleShape).padding(horizontal = Esp.s),
+    val relleno = if (tam == TamNumero.PAQUETE) Esp.m else Esp.s
+    Box(modifier.heightIn(min = tam.alto).widthIn(min = tam.alto).background(fondo, CircleShape).padding(horizontal = relleno),
         contentAlignment = Alignment.Center) {
         Text(n?.toString() ?: "·", style = estilo, color = letra, maxLines = 1, softWrap = false)
     }
@@ -458,13 +459,14 @@ fun LineaEstado(texto: String, accion: String? = null, alAccion: () -> Unit = {}
 /** El aviso pasajero (snackbar): 48 como mínimo, radio 12, superficie inversa, letra `texto` y una acción. Se va solo:
  *  corto 4 s, largo con acción. Va en `SnackbarHost(estado, snackbar = { SnackbarFds(it) })`, o con AvisoFlotante.
  *  La acción («Deshacer») va con la letra del aviso, en negrita (`boton`) y subrayada, como en la web (07-11-2026):
- *  el inversePrimary daba 3,9:1 de noche sobre la superficie inversa. */
+ *  el inversePrimary daba 3,9:1 de noche sobre la superficie inversa. Deja 12 de margen alrededor, como el
+ *  Snackbar(datos) de Material, que los pone por dentro y se perdían al montar la acción a mano. */
 @Composable
 fun SnackbarFds(datos: SnackbarData) {
     val c = MaterialTheme.colorScheme
     val accion = datos.visuals.actionLabel
     Snackbar(
-        shape = MaterialTheme.shapes.medium, containerColor = c.inverseSurface, contentColor = c.inverseOnSurface,
+        modifier = Modifier.padding(Esp.m), shape = MaterialTheme.shapes.medium, containerColor = c.inverseSurface, contentColor = c.inverseOnSurface,
         actionContentColor = c.inverseOnSurface, dismissActionContentColor = c.inverseOnSurface,
         action = accion?.let {
             {
@@ -766,7 +768,7 @@ fun FilaDato(icono: ImageVector, texto: String, nombre: String, alTocar: (() -> 
 
 /* ───────────── Campo, segmentado, mapa ───────────── */
 
-/** Un campo de texto de 48: radio 12, borde de control (2 de marca al escribir), icono de 20 a la izquierda, letra
+/** Un campo de texto de 48: radio 12, borde de control (2 de énfasis al escribir), icono de 20 a la izquierda, letra
  *  `campo`, el ejemplo dentro y la ayuda o el error debajo en `sec`. Sin etiqueta flotante: `nombre` es el nombre
  *  accesible de siempre. (El OutlinedTextField de Material no baja de 56.) */
 @Composable

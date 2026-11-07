@@ -4,11 +4,11 @@
    en peligro si llega tarde) y, debajo, la dirección («texto» gris, una línea) con UNA etiqueta como mucho (gana: sin
    situar > cobrar > urgente > recogida > horario > «N en esta puerta» > puerta conocida > ZBE > hueco > ejemplo). Hecha:
    el número de hecha y «11:02 · Entregado · 24,50 €» (ok) o «11:02 · {motivo}» (peligro) en «etiqueta» tabular, como la
-   nativa (07-11-2026), con la etiqueta de la IA si la
-   hay («Verificada por IA» / «Revisar la foto»); `extra` deja debajo lo que la web conserva en la fila («Volver a
-   intentarlo» / «Entregado» en las fallidas). Toda la fila es un botón («Ver la parada {n}: …») que abre la hoja de la
-   parada; a la derecha, solo en la web, el botón de icono de siempre («Ir a {cliente}» / «Situar: {cliente}»), si se le
-   pasa `onIr`, `hrefIr` u `onSituar`. Sin estado propio: vale para rutas de 300 paradas. */
+   nativa (07-11-2026), con la etiqueta de la IA si la hay («Verificada por IA» / «Revisar la foto»); `extra` deja
+   debajo lo que la web conserva en la fila («Volver a intentarlo» / «Entregado» en las fallidas). Toda la fila es un
+   botón («Ver la parada {n}: …») que abre la hoja de la parada; a la derecha, solo en la web, el botón de icono de
+   siempre («Ir a {cliente}» / «Situar: {cliente}»), si se le pasa `onIr`, `hrefIr` u `onSituar`. Sin estado propio:
+   vale para rutas de 300 paradas. */
 import { AlertTriangle, Banknote, Check, Clock, MapPin, MapPinOff, Navigation, Package, ShieldCheck } from 'lucide-react'
 import { tx, locale } from '../../../lib/idioma'
 import { importe } from '../../../lib/region'
