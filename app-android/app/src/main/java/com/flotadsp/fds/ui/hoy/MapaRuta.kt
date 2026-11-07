@@ -455,7 +455,7 @@ private fun estadoDe(p: Parada, siguiente: Boolean): EstadoNumero = when {
 private fun etiquetasDe(p: Parada, enZbe: String): List<Triple<String, Tono, ImageVector?>> = listOfNotNull(
     if (p.porCobrar) Triple(tx("Cobrar") + " " + Region.importe(p.cobrar ?: 0.0), Tono.AVISO, Icons.Default.Payments) else null,
     p.ventanaDesde?.let { Triple("$it–${p.ventanaHasta.orEmpty()}", Tono.NEUTRO, Icons.Default.Schedule) },
-    if (p.prioridad) Triple(tx("Urgente"), Tono.PELIGRO, Icons.Default.PriorityHigh) else null,
+    if (p.prioridad) Triple(tx("Urgente"), Tono.AVISO, Icons.Default.PriorityHigh) else null,
     if (p.tipo == "recogida") Triple(tx("Recogida"), Tono.NEUTRO, null) else null,
     if (p.geo == "puerta") Triple(tx("Puerta conocida"), Tono.OK, null) else null,
     if (enZbe.isNotBlank()) Triple(enZbe, Tono.ZONA, null) else null,
@@ -488,7 +488,9 @@ private fun TarjetaParada(p: Parada, enZbe: String, alNavegar: () -> Unit) {
     if (!p.pendiente) {
         val cuando = Calle.hora(p.cerradoEn).takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""
         val motivo = p.motivo?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""
-        Text(if (p.estado == "fallido") tx("No entregado") + cuando + motivo else tx("Entregado") + cuando,
+        val recogida = p.tipo == "recogida"   // «Recogido» / «No recogido» en las recogidas, como su fila (07-11-2026)
+        Text(if (p.estado == "fallido") (if (recogida) tx("No recogido") else tx("No entregado")) + cuando + motivo
+            else (if (recogida) tx("Recogido") else tx("Entregado")) + cuando,
             style = MaterialTheme.typography.bodyMedium.merge(TextoNumero), color = if (p.estado == "fallido") c.error else x.entregadoTexto,
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = Esp.xs))
     } else {

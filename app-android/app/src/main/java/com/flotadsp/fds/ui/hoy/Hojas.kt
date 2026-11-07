@@ -352,7 +352,8 @@ fun ParadaHoja(
                     // Cerrada: «11:02 · Entregado · 24,50 €» en verde o «11:02 · No entregado» en peligro, como en su fila.
                     val hora = Calle.hora(p.cerradoEn).takeIf { it.isNotBlank() }
                     val cobrado = p.cobradoImporte?.takeIf { p.estado == "entregado" && it > 0.0 }?.let { Region.importe(it) }
-                    Text(listOfNotNull(hora, if (p.estado == "entregado") tx("Entregado") else tx("No entregado"), cobrado).joinToString(" · "),
+                    Text(listOfNotNull(hora, if (p.estado == "entregado") (if (p.tipo == "recogida") tx("Recogido") else tx("Entregado"))
+                        else (if (p.tipo == "recogida") tx("No recogido") else tx("No entregado")), cobrado).joinToString(" · "),
                         style = MaterialTheme.typography.labelMedium.merge(TextoNumero), color = if (p.estado == "entregado") x.entregadoTexto else c.error,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -415,7 +416,7 @@ private fun EtiquetasHoja(p: Parada, enZbe: String) {
         if (p.porCobrar) Etiqueta(tx("Cobrar") + " " + Region.importe(p.cobrar ?: 0.0), Tono.AVISO, Icons.Default.Payments)
         if (p.ventanaDesde != null) Etiqueta("${p.ventanaDesde}–${p.ventanaHasta.orEmpty()}", Tono.NEUTRO, Icons.Default.Schedule,
             modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = tx("Horario: de {a} a {b}", "a" to p.ventanaDesde, "b" to p.ventanaHasta) })
-        if (p.prioridad) Etiqueta(tx("Urgente"), Tono.PELIGRO, Icons.Default.PriorityHigh)
+        if (p.prioridad) Etiqueta(tx("Urgente"), Tono.AVISO, Icons.Default.PriorityHigh)
         if (p.tipo == "recogida") Etiqueta(tx("Recogida"))
         if (puerta) Etiqueta(tx("Puerta conocida"), Tono.OK)
         if (sinPortal) Etiqueta(tx("Sin el portal"))

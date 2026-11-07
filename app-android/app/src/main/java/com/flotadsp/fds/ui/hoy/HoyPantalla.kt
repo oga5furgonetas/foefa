@@ -479,13 +479,15 @@ fun HoyPantalla(
             alRepetirFoto = { abierta = null; vm.pedirRevisar(p) },
             alMemoria = { abierta = null; memoriaDe = p },
             alSituar = { abierta = null; situar(p) },
+            enZbe = e.zbe?.paradas?.get(p.id)?.tipo.orEmpty(),
         )
     }
     entregando?.let { p ->
         EntregaHoja(p = p, alCerrar = { entregando = null }, alConfirmar = { cuerpo -> entregando = null; vm.entregar(p, cuerpo) })
     }
     fallando?.let { p ->
-        NoEntregadoHoja(alCerrar = { fallando = null }, alConfirmar = { motivo, nota -> fallando = null; vm.noEntregado(p, motivo, nota) })
+        NoEntregadoHoja(alCerrar = { fallando = null }, alConfirmar = { motivo, nota -> fallando = null; vm.noEntregado(p, motivo, nota) },
+            recogida = p.tipo == "recogida")
     }
     if (avisando) {
         AvisarHoja(paradas = e.pendientes.filter { it.telefono.isNotBlank() }, avisados = avisados,
@@ -663,7 +665,7 @@ private fun ResumenDia(
 private fun etiquetasDe(p: Parada, enZbe: String): List<Triple<String, Tono, ImageVector?>> = listOfNotNull(
     if (p.porCobrar) Triple(tx("Cobrar") + " " + Region.importe(p.cobrar ?: 0.0), Tono.AVISO, Icons.Default.Payments) else null,
     if (p.ventanaDesde != null) Triple("${p.ventanaDesde}–${p.ventanaHasta.orEmpty()}", Tono.NEUTRO, Icons.Default.Schedule) else null,
-    if (p.prioridad) Triple(tx("Urgente"), Tono.PELIGRO, Icons.Default.PriorityHigh) else null,
+    if (p.prioridad) Triple(tx("Urgente"), Tono.AVISO, Icons.Default.PriorityHigh) else null,
     if (p.tipo == "recogida") Triple(tx("Recogida"), Tono.NEUTRO, null) else null,
     if (p.geo == "puerta" && p.pendiente) Triple(tx("Puerta conocida"), Tono.OK, null) else null,
     if (enZbe.isNotBlank() && p.pendiente) Triple(enZbe, Tono.ZONA, null) else null,
