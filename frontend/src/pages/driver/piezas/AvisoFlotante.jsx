@@ -15,10 +15,13 @@
    - `apilado`: lo que se suma encima de la base (el «Deshacer» de debajo, 60), aparte, para que el pie de la hoja no los junte. */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
-/* Lo que mide el pie fijo de la hoja que esté abierta (la última del documento, que es la de encima); 0 sin hoja o sin pie. */
+/* Lo que mide el pie fijo de las hojas abiertas, el más alto: una hoja dentro de otra («¿Quitar esta parada?» sobre la de la parada)
+   deja su pie ANTES que el de la de debajo en el documento, así que «el último» no es el de encima; se libra el mayor. 0 sin hoja
+   o sin pie. */
 function altoPieHoja() {
-  const pies = document.querySelectorAll('[data-hoja-pie]')
-  return pies.length ? Math.ceil(pies[pies.length - 1].getBoundingClientRect().height) : 0
+  let alto = 0
+  for (const pie of document.querySelectorAll('[data-hoja-pie]')) alto = Math.max(alto, Math.ceil(pie.getBoundingClientRect().height))
+  return alto
 }
 
 export default function AvisoFlotante({ texto, detalle, accion, onAccion, onCerrar, abajo = 64, apilado = 0, zonaSegura = true, duracion, className = '', testid, children }) {
