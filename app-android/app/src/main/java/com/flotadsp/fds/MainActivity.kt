@@ -22,6 +22,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Alignment
@@ -311,7 +312,9 @@ private fun Principal(abrir: String?, alAbierto: () -> Unit, compartido: Compart
         },
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
     ) { pad ->
-        Box(Modifier.padding(pad)) {
+        // F3, 08-11-2026: lo que ya aparta la barra de pestañas (con la zona segura de abajo) se da por consumido: si no, el
+        // Scaffold de cada pestaña vuelve a sumar los 24 dp de la barra del sistema y la lista se corta 24 dp antes de la barra.
+        Box(Modifier.padding(pad).consumeWindowInsets(pad)) {
             when (pestana) {
                 "historial" -> HistorialPantalla()
                 "ajustes" -> AjustesPantalla(alGuardar = { ruta.refrescarSinRuido() })
