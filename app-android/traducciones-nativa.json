@@ -587,12 +587,12 @@
     "Il cliente dice: {t}",
     "Der Kunde sagt: {t}"
   ],
-  "El código no trae la dirección y no se ha podido leer de la etiqueta. Escríbela, o pulsa «Leer la etiqueta con una foto» con la etiqueta entera en la foto.": [
-    "The code has no address and it could not be read from the label. Type it, or tap “Read the label from a photo” with the whole label in the picture.",
-    "O código não traz a morada e não foi possível lê-la na etiqueta. Escreve-a, ou toca em «Ler a etiqueta com uma foto» com a etiqueta inteira na foto.",
-    "Le code ne contient pas l’adresse et elle n’a pas pu être lue sur l’étiquette. Saisissez-la, ou appuyez sur « Lire l’étiquette avec une photo » avec l’étiquette entière sur la photo.",
-    "Il codice non contiene l’indirizzo e non è stato possibile leggerlo dall’etichetta. Scrivilo, o tocca «Leggi l’etichetta con una foto» con l’etichetta intera nella foto.",
-    "Der Code enthält keine Adresse und sie konnte nicht vom Etikett gelesen werden. Gib sie ein oder tippe auf „Etikett per Foto lesen“, mit dem ganzen Etikett im Bild."
+  "El código no trae la dirección y no se ha podido leer de la etiqueta. Escríbela, o pulsa «Foto etiqueta» con la etiqueta entera en la foto.": [
+    "The code has no address and it could not be read from the label. Type it, or tap “Label photo” with the whole label in the picture.",
+    "O código não traz a morada e não foi possível lê-la na etiqueta. Escreve-a, ou toca em «Foto da etiqueta» com a etiqueta inteira na foto.",
+    "Le code ne contient pas l’adresse et elle n’a pas pu être lue sur l’étiquette. Saisissez-la, ou appuyez sur « Photo étiquette » avec l’étiquette entière sur la photo.",
+    "Il codice non contiene l’indirizzo e non è stato possibile leggerlo dall’etichetta. Scrivilo, o tocca «Foto etichetta» con l’etichetta intera nella foto.",
+    "Der Code enthält keine Adresse und sie konnte nicht vom Etikett gelesen werden. Gib sie ein oder tippe auf „Etikettfoto“, mit dem ganzen Etikett im Bild."
   ],
   "El lector no ha contestado: escribe los kilómetros que marca el cuadro. La oficina los revisa.": [
     "The reader did not answer: type the kilometres shown on the dashboard. The office will check them.",
@@ -3185,12 +3185,12 @@
     "Impossibile salvare il punto sul server: si apre in {app}.",
     "Der Punkt konnte nicht auf dem Server gespeichert werden: {app} wird geöffnet."
   ],
-  "No se ha podido leer la dirección de la etiqueta: escríbela, o pulsa «Leer la etiqueta con una foto».": [
-    "The address could not be read from the label: type it, or tap “Read the label from a photo”.",
-    "Não foi possível ler a morada da etiqueta: escreve-a, ou toca em «Ler a etiqueta com uma foto».",
-    "L’adresse n’a pas pu être lue sur l’étiquette : saisissez-la, ou appuyez sur « Lire l’étiquette avec une photo ».",
-    "Non è stato possibile leggere l’indirizzo dall’etichetta: scrivilo, o tocca «Leggi l’etichetta da una foto».",
-    "Die Adresse konnte nicht vom Etikett gelesen werden: Gib sie ein oder tippe auf „Etikett per Foto lesen“."
+  "No se ha podido leer la dirección de la etiqueta: escríbela, o pulsa «Foto etiqueta».": [
+    "The address could not be read from the label: type it, or tap “Label photo”.",
+    "Não foi possível ler a morada da etiqueta: escreve-a, ou toca em «Foto da etiqueta».",
+    "L’adresse n’a pas pu être lue sur l’étiquette : saisissez-la, ou appuyez sur « Photo étiquette ».",
+    "Non è stato possibile leggere l’indirizzo dall’etichetta: scrivilo, o tocca «Foto etichetta».",
+    "Die Adresse konnte nicht vom Etikett gelesen werden: Gib sie ein oder tippe auf „Etikettfoto“."
   ],
   "Sin conexión: el punto queda guardado en el móvil y se envía al volver la red.": [
     "No connection: the point is saved on the phone and will be sent when the network is back.",

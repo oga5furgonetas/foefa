@@ -199,10 +199,10 @@ fun FichaParada(
             inicial == null || editar != null -> null
             // Del escáner sin nada legible (la barra sola y la letra fuera del encuadre): decirlo, no «revisa lo leído».
             inicial.direccion.isBlank() && inicial.cliente.isBlank() && inicial.telefono.isBlank() ->
-                tx("El código no trae la dirección y no se ha podido leer de la etiqueta. Escríbela, o pulsa «Leer la etiqueta con una foto» con la etiqueta entera en la foto.")
+                tx("El código no trae la dirección y no se ha podido leer de la etiqueta. Escríbela, o pulsa «Foto etiqueta» con la etiqueta entera en la foto.")
             // El nombre o el teléfono sí, la dirección no (02-11-2026): decirlo claro, no «revisa lo leído».
             inicial.direccion.isBlank() ->
-                tx("No se ha podido leer la dirección de la etiqueta: escríbela, o pulsa «Leer la etiqueta con una foto».")
+                tx("No se ha podido leer la dirección de la etiqueta: escríbela, o pulsa «Foto etiqueta».")
             else -> tx("Revisa lo leído de la etiqueta antes de guardar.")
         })
     }
