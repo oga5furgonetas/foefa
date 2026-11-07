@@ -5,12 +5,13 @@ import {
   MapPin, Phone, Camera, Clock, RotateCcw, FileSpreadsheet, X,
 } from 'lucide-react'
 import MiRuta from './driver/MiRuta'
-import { Cabecera, Hoja, ContenedorLista, Boton, LetraMax } from './driver/piezas'
+import { Cabecera, Hoja, ContenedorLista, Boton } from './driver/piezas'
 import {
   getRepartoPedidos, getRepartoEstadisticas, getOrgBilling, canjearRegalo, misRegalos, playVerificar, editarRepartoPedido, fotoEntrega,
   getRepartoAjustes, getRepartoEntregasMes,
 } from '../panel/api'
 import { enAppPlay } from '../lib/enApp'
+import { MARCA } from '../marca'
 import { medirAccion } from '../lib/analitica'
 import { servicioPlay, comprasPlay } from '../lib/playBilling'
 import { enviarPendiente, olvidarPendiente } from '../lib/metaPixel'
@@ -266,7 +267,7 @@ export default function RutaApp() {
   }
 
   return (
-    <main className="app-ruta flex min-h-[100dvh] flex-col bg-dark-950 text-dark-100">
+    <main className="app-ruta flex min-h-screen flex-col bg-dark-950 text-dark-100">
       {instalarPrimero && <PasoInstalar onListo={() => { olvidarRecienAlta(); setInstalarPrimero(false) }} />}
       {(tiron > 0 || recargando) && (
         <div aria-hidden="true" data-testid="tiron" className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center"
@@ -291,10 +292,13 @@ export default function RutaApp() {
           {billing.days_left === 1 ? tx('Queda 1 día de prueba · Ver mi plan') : tx('Quedan {n} días de prueba · Ver mi plan', { n: billing.days_left })}
         </button>
       )}
-      {/* Sin el logo arriba (diseño compacto, 07-11-2026, §5.1 a): cada pestaña pone su título con la misma Cabecera.
-          Al cambiar de pestaña, el contenido entra con un fundido corto, como en una app. Abajo, lo justo para la barra
-          de pestañas (64), la zona segura y 16 más. */}
-      <div key={tab} className="ruta-entra flex-1 px-4 pb-[calc(64px+env(safe-area-inset-bottom)+16px)]">
+      {/* Cabecera de la app (23-10-2026): el logo y el nombre de la app de reparto, en todas las pestañas. */}
+      <header className="mx-auto flex w-full max-w-md items-center gap-2.5 px-4 pt-4">
+        <img src="/favicon.svg" alt="" width="30" height="30" className="rounded-lg" />
+        <b className="text-[15px] text-dark-50">{MARCA.app}</b>
+      </header>
+      {/* Al cambiar de pestaña, el contenido entra con un fundido corto, como en una app. */}
+      <div key={tab} className="ruta-entra flex-1 px-4 pb-24 pt-3">
         {/* PLAN GRATIS (10-10-2026): sin pagar ya no hay muro; se reparte con un tope de paradas al día. */}
         {tab === 'hoy' && !bloqueado && billing?.gratis?.activo && (
           <div className="mx-auto mb-3 flex max-w-md items-center justify-between gap-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 px-3.5 py-2.5">
@@ -326,35 +330,30 @@ export default function RutaApp() {
             {tab === 'ajustes' && <div className="mx-auto max-w-md"><Suspense fallback={<Cargando />}><Ajustes conductores={[]} toast={toast} autonomo /></Suspense></div>}
           </>}
         {/* «Invita y gana», DEBAJO de la ruta (23-10-2026): encima del escáner distraía a quien aún no ha metido
-            su primer paquete; quien ya reparte lo ve al bajar, que es cuando lo comparte. Desde el diseño compacto
-            (07-11-2026, §5.1 e) es una línea de 48 al final de la lista: el texto lleva a la cartera (Cuenta, donde
-            están las condiciones) e «Invitar» invita, como antes. */}
+            su primer paquete; quien ya reparte lo ve al bajar, que es cuando lo comparte. */}
         {tab === 'hoy' && !esSuplantacion() && !bonoPendiente && (billing?.pais || 'es') !== 'cn' && (
-          <div className="mx-auto mt-3 flex min-h-12 max-w-md items-center gap-2 rounded-xl bg-dark-900 pl-3 pr-1">
-            <Euro size={20} className="shrink-0 text-ruta-ok-texto" aria-hidden="true" />
-            <button type="button" onClick={() => setTab('cuenta')} className="min-w-0 flex-1 py-2 text-left text-texto text-dark-50">
-              {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(porInvitado, locale()) })}
-              {promoHasta && <span className="block text-sec text-dark-400">{tx('Promo hasta el {fecha}', { fecha: fechaRefPromo(locale(), promoHasta) })}</span>}
+          <div className="mx-auto mb-3 flex max-w-md items-center justify-between gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/[.08] px-3.5 py-2.5">
+            <button onClick={() => setTab('cuenta')} className="min-w-0 text-left text-[13px] leading-snug text-emerald-100">
+              💶 {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(porInvitado, locale()) })}{promoHasta && <span className="ml-1 rounded-md bg-emerald-400/20 px-1.5 py-0.5 text-[11px] font-bold text-emerald-100">{tx('Promo hasta el {fecha}', { fecha: fechaRefPromo(locale(), promoHasta) })}</span>} <span className="font-semibold underline">{tx('Mi cartera')}</span>
+              <span className="mt-0.5 block text-[11px] font-normal text-emerald-200/80">{tx('Se valida cuando complete 20 entregas reales en 2 días, no por registrarse.')}</span>
             </button>
-            <Boton variante="texto" tono="marca" texto={tx('Invitar')} onClick={invitar} className="shrink-0" />
+            <button onClick={invitar} className="shrink-0 rounded-xl bg-emerald-700 px-3 py-1.5 text-[12.5px] font-bold text-white">{tx('Invitar')}</button>
           </div>
         )}
         {tab === 'historial' && <Historial />}
         {tab === 'cuenta' && <Suspense fallback={<Cargando />}><Cuenta billing={billing} recargar={recargar} toast={toast} resaltarRegalo={regaloNuevo} merc={merc} /></Suspense>}
       </div>
-      {/* La barra de pestañas (diseño compacto, 07-11-2026, §3.3): 64 más la zona segura, icono de 24 en una píldora de
-          32×56 y la etiqueta en «etiqueta» con el tope de letra (§3.8), para que con «Letra más grande» no crezca. */}
       <nav className="ruta-pestanas fixed inset-x-0 bottom-0 z-40 border-t border-dark-800 bg-dark-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label={tx('Secciones')}>
         <div className="mx-auto grid max-w-md grid-cols-4">
           {PESTANAS.map(([k, t, I]) => (
             <button key={k} onClick={() => setTab(k)}
-              className={`flex min-h-16 flex-col items-center justify-center gap-1 transition-colors ${tab === k ? 'text-ruta-marca' : 'text-dark-400'}`}
+              className={`flex flex-col items-center gap-1 pb-2 pt-2 text-[11px] font-semibold transition-colors ${tab === k ? 'text-brand-200' : 'text-dark-500'}`}
               aria-current={tab === k ? 'page' : undefined}>
               {/* La pestaña activa, en una píldora: se ve de un vistazo dónde estás. */}
-              <span className={`flex h-8 w-14 items-center justify-center rounded-full transition-all ${tab === k ? 'bg-ruta-marca-tinte text-ruta-marca-tinte-texto' : ''}`}>
-                <I size={24} strokeWidth={tab === k ? 2.4 : 2} aria-hidden="true" />
+              <span className={`flex h-8 w-14 items-center justify-center rounded-full transition-all ${tab === k ? 'bg-brand-500/20' : ''}`}>
+                <I size={20} strokeWidth={tab === k ? 2.4 : 2} />
               </span>
-              <LetraMax className="text-etiqueta">{tx(t)}</LetraMax>
+              {tx(t)}
             </button>
           ))}
         </div>
@@ -456,10 +455,11 @@ function ResumenSemana({ porDia, ajustes }) {
       </div>
       <p className="mt-1 text-cifra text-dark-50 tabular-nums">{tx('{n} entregas', { n: semana })}</p>
       {conTarifa && <p className="text-boton text-ruta-ok-texto tabular-nums">{tx('Ganado ≈ {euros}', { euros: importe(ganado) })}</p>}
-      <div className="mt-3 grid grid-cols-7 items-end gap-1" style={{ height: 96 }} role="img"
+      {/* Alto mínimo, no fijo (§1.3, regla 12): con «Letra más grande» las cifras y la inicial del día ocupan más. */}
+      <div className="mt-3 grid grid-cols-7 items-end gap-1" style={{ minHeight: 96 }} role="img"
         aria-label={ultimos.map((d) => `${dia(d.fecha)} ${d.entregados || 0}`).join(', ')}>
         {ultimos.map((d) => (
-          <div key={d.fecha} className="flex h-full flex-col items-center justify-end gap-1">
+          <div key={d.fecha} className="flex flex-col items-center justify-end gap-1">
             <span className="text-sec text-dark-400 tabular-nums">{d.entregados || ''}</span>
             <span className="w-full rounded-t bg-brand-500" style={{ height: `${Math.round(((d.entregados || 0) / tope) * 64)}px`, minHeight: d.entregados ? 4 : 2, opacity: d.entregados ? 1 : 0.25 }} />
             <span className="text-sec font-semibold text-dark-400">{dia(d.fecha)}</span>
