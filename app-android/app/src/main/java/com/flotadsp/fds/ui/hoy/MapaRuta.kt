@@ -475,7 +475,7 @@ private fun encuadra(m: MapView, puntos: List<GeoPoint>, animar: Boolean) {
 }
 
 /** La tarjeta de una parada (07-11-2026, diseño compacto): una línea de detalle, las etiquetas en una fila que se
- *  desliza, las notas de la puerta en una línea cada una, y «Ir» (48, el resto) con «Llamar» de icono si hay teléfono.
+ *  desliza, las notas de la puerta en dos líneas (lo que dice el cliente, primero), y «Ir» (48, el resto) con «Llamar» de icono si hay teléfono.
  *  Hecha: «Entregado · 11:02» en verde (o «No entregado · 11:02 · motivo» en peligro) y sin botones. */
 @Composable
 private fun TarjetaParada(p: Parada, enZbe: String, alNavegar: () -> Unit) {
@@ -500,7 +500,8 @@ private fun TarjetaParada(p: Parada, enZbe: String, alNavegar: () -> Unit) {
         val etiquetas = etiquetasDe(p, enZbe)
         if (etiquetas.isNotEmpty()) FilaDeChips(Modifier.padding(top = Esp.s)) { etiquetas.forEach { (t, tono, i) -> Etiqueta(t, tono, i) } }
     }
-    NotasPuerta(p, maxLines = 1, modifier = Modifier.padding(top = Esp.s))
+    // RN, 08-11-2026: dos líneas como en «Hoy», con lo que dice el cliente primero: en una se cortaba el portal («Portal: 452…»).
+    NotasPuerta(p, maxLines = 2, modifier = Modifier.padding(top = Esp.s))
     if (p.pendiente) {
         Row(Modifier.padding(top = Esp.m), horizontalArrangement = Arrangement.spacedBy(Esp.s), verticalAlignment = Alignment.CenterVertically) {
             BotonNormal(tx("Ir"), alNavegar, icono = Icons.Default.Navigation, modifier = Modifier.weight(1f))

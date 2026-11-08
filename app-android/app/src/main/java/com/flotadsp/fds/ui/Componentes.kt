@@ -89,6 +89,7 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -765,13 +766,14 @@ fun ContenedorLista(total: Int, modifier: Modifier = Modifier, separadorDesde: D
     }
 }
 
-/** Un dato de la puerta: el icono, lo que se ve y la frase entera (con su prefijo) como nombre accesible. */
-class Nota(val icono: ImageVector, val texto: String, val nombre: String)
+/** Un dato de la puerta: el icono, lo que se ve y la frase entera (con su prefijo) como nombre accesible. `prioritaria`:
+ *  lo que dice el cliente (RN, 08-11-2026), que en la tarjeta va antes que lo demás y puede tomar dos líneas. */
+class Nota(val icono: ImageVector, val texto: String, val nombre: String, val prioritaria: Boolean = false)
 
 /** Los datos de la puerta en su orden: lo que dice el cliente, la memoria, las notas y la última vez. Sin prefijo a la
  *  vista («El cliente dice:», «La última vez (12/10):»): la frase entera queda en el nombre accesible. */
 fun notasDe(p: Parada): List<Nota> = listOfNotNull(
-    p.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }?.let { Nota(Icons.Default.Forum, it, tx("El cliente dice: {t}", "t" to it)) },
+    p.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }?.let { Nota(Icons.Default.Forum, it, tx("El cliente dice: {t}", "t" to it), prioritaria = true) },
     p.memoria?.let { textoMemoria(it) }?.takeIf { it.isNotBlank() }?.let { Nota(Icons.Default.Key, it, tx("Memoria de la puerta: {t}", "t" to it)) },
     p.notas.takeIf { it.isNotBlank() }?.let { Nota(Icons.AutoMirrored.Filled.StickyNote2, it, tx("Notas: {x}", "x" to it)) },
     p.antes?.takeIf { p.pendiente }?.let { textoAntes(it) }?.let { Nota(Icons.Default.History, sinPrefijo(it), it) },
@@ -781,26 +783,44 @@ fun notasDe(p: Parada): List<Nota> = listOfNotNull(
 internal fun sinPrefijo(frase: String): String =
     Regex("""\)\s*:\s*""").find(frase)?.let { frase.substring(it.range.last + 1) }?.takeIf { it.isNotBlank() } ?: frase
 
-/** Los datos que enseña la caja: en la tarjeta (`maxLines` finito), los `maxLines` primeros; en la hoja (`Int.MAX_VALUE`), todos. */
-internal fun notasVisibles(notas: List<Nota>, maxLines: Int): List<Nota> = if (maxLines == Int.MAX_VALUE) notas else notas.take(maxLines)
+/** Las líneas que lleva cada dato que enseña la caja, en su orden; los que no caben no salen (RN, 08-11-2026). En la hoja
+ *  (`Int.MAX_VALUE`), todos y sin tope. En la tarjeta, `maxLines` líneas EN TOTAL: lo que dice el cliente (el primero) tiene
+ *  prioridad y puede tomar hasta dos, para que se lea entero con su portal; lo demás, una línea cada dato y solo si queda
+ *  sitio. `usadaPrimera` son las líneas que el primero ocupa de verdad: con una sola, el dato siguiente va en la otra; sin
+ *  medirlo aún se dan por ocupadas todas. */
+internal fun lineasDeNotas(notas: List<Nota>, maxLines: Int, usadaPrimera: Int = Int.MAX_VALUE): List<Int> {
+    if (notas.isEmpty()) return emptyList()
+    if (maxLines == Int.MAX_VALUE) return notas.map { Int.MAX_VALUE }
+    val presupuesto = maxLines.coerceAtLeast(1)
+    val tope = if (notas[0].prioritaria) minOf(2, presupuesto) else 1
+    val ocupa = usadaPrimera.coerceIn(1, tope)
+    return listOf(tope) + List(minOf(presupuesto - ocupa, notas.size - 1)) { 1 }
+}
 
 /** La caja de notas de la puerta (tinte neutro, radio 8): cada dato con su icono de 16 y `texto`. En la tarjeta
- *  (`maxLines` finito), como en la web: los `maxLines` primeros datos, cada uno en UNA línea con «…», y 4 de relleno
- *  arriba y abajo; en la hoja (`Int.MAX_VALUE`), entera y con 8. F3, 08-11-2026: antes cada dato podía ocupar dos líneas y la
- *  tarjeta de «Hoy» medía 310 dp con las notas de 10-hoy (§5.1 d: 284 como mucho); así, 281. No pinta nada si no hay nada. */
+ *  (`maxLines` finito), como en la web: dos líneas EN TOTAL con 4 de relleno arriba y abajo (lineasDeNotas): lo que dice el
+ *  cliente va primero y, si lo necesita, ocupa las dos (RN, 08-11-2026: con una línea cada dato se cortaba a mitad del
+ *  número, «Portal: 452…»); si le basta una, el dato siguiente va en la otra. En la hoja (`Int.MAX_VALUE`), todos enteros y con 8.
+ *  F3, 08-11-2026: la tarjeta de «Hoy» mide 282 dp con las notas de 10-hoy (§5.1 d: 284 como mucho). No pinta nada si no hay nada. */
 @Composable
 fun NotasPuerta(p: Parada, maxLines: Int = 2, modifier: Modifier = Modifier) {
     val notas = notasDe(p)
     if (notas.isEmpty()) return
     val c = MaterialTheme.colorScheme
     val resumen = maxLines != Int.MAX_VALUE
+    // Las líneas que ocupa de verdad lo que dice el cliente. Hasta medirlas se dan por ocupadas todas (sale solo el primero) y,
+    // si caben en una, el dato siguiente entra en cuanto se mide; vuelve a empezar si cambia la parada o lo que dice.
+    var usadaPrimera by remember(notas[0].texto, maxLines) { mutableIntStateOf(Int.MAX_VALUE) }
     Surface(color = c.surfaceVariant, contentColor = c.onSurface, shape = MaterialTheme.shapes.small, modifier = modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = Esp.s, vertical = if (resumen) Esp.xs else Esp.s), verticalArrangement = Arrangement.spacedBy(Esp.xs)) {
-            notasVisibles(notas, maxLines).forEach { n ->
+            lineasDeNotas(notas, maxLines, usadaPrimera).forEachIndexed { i, lineas ->
+                val n = notas[i]
+                val mide = resumen && i == 0 && n.prioritaria
                 Row(Modifier.semantics(mergeDescendants = true) { contentDescription = n.nombre }, verticalAlignment = Alignment.Top) {
                     Icon(n.icono, contentDescription = null, tint = c.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp).size(16.dp))
                     Spacer(Modifier.width(Esp.s))
-                    Text(n.texto, style = MaterialTheme.typography.bodyMedium, maxLines = if (resumen) 1 else Int.MAX_VALUE, overflow = TextOverflow.Ellipsis)
+                    Text(n.texto, style = MaterialTheme.typography.bodyMedium, maxLines = lineas, overflow = TextOverflow.Ellipsis,
+                        onTextLayout = { r -> if (mide) usadaPrimera = r.lineCount })
                 }
             }
         }

@@ -505,29 +505,10 @@ private fun Guiando(
                     }, style = MaterialTheme.typography.bodyMedium.merge(TextoNumero), color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                val dice = parada.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }
-                if (parada.hueco.isNotBlank() || dice != null) {
-                    Row(Modifier.padding(top = Esp.xs), verticalAlignment = Alignment.CenterVertically) {
-                        if (parada.hueco.isNotBlank()) {
-                            val sitio = tx(parada.hueco)
-                            Row(Modifier.semantics(mergeDescendants = true) { contentDescription = tx("En la furgoneta: {sitio}", "sitio" to sitio) },
-                                verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(Esp.xs))
-                                Text(sitio, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
-                            }
-                            if (dice != null) Text(" · ", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        if (dice != null) {
-                            Row(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = tx("El cliente dice: {t}", "t" to dice) },
-                                verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Forum, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(Esp.xs))
-                                Text(dice, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                    }
-                }
+                // RN, 08-11-2026: lo que dice el cliente se lee entero, con su portal, hasta en dos líneas (NotasGuia).
+                NotasGuia(sitio = parada.hueco.takeIf { it.isNotBlank() }?.let { tx(it) },
+                    dice = parada.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() },
+                    importante = parada.clienteDice?.let { largoSinNotaClienteDice(it) } ?: 0, modifier = Modifier.padding(top = Esp.xs))
                 // «YA HE LLEGADO» (01-11-2026, como la web): la puerta de verdad puede estar a 60-80 m del pin (la calle, el
                 // portal), y entonces el GPS nunca daría la llegada; el conductor manda y la guía deja de contar esa parada.
                 if (!haLlegado) {
@@ -564,6 +545,65 @@ private fun PastillaGuia(texto: String, icono: ImageVector? = null, aviso: Boole
     LetraMax(1.3f) {
         if (aviso) Pastilla(texto, icono = icono, color = x.guiaPildora, contentColor = Color.White)
         else Pastilla(texto, icono = icono)
+    }
+}
+
+/** LAS NOTAS DE LA GUÍA (RN, 08-11-2026): el hueco de la furgoneta («📦 Detrás · izq») y lo que dice el cliente («💬 No estará ·
+ *  En portería o recepción · Portal: 4521»). Lo del cliente tiene prioridad: se lee entero, con su portal, hasta en dos líneas
+ *  (en una se cortaba en «Por…», sin llegar al número, y es lo que hace falta al llegar). Con las dos cosas, el hueco va
+ *  delante y el cliente a su lado, en sus dos líneas; si con el hueco al lado se cortara lo que no puede faltar (`importante`
+ *  caracteres: hasta el portal; lo que escribe a mano el cliente sí puede cortarse), el hueco pasa a su línea y el cliente va
+ *  debajo, a todo el ancho. Cada una lleva su frase entera de nombre accesible. Con dos líneas el panel mide una línea más. */
+@Composable
+private fun NotasGuia(sitio: String?, dice: String?, importante: Int, modifier: Modifier = Modifier) {
+    // Se pone cuando el cliente, con el hueco al lado, no cabe en sus dos líneas; ya no se deshace (sin vueltas de un modo a otro).
+    var apilado by remember(sitio, dice) { mutableStateOf(false) }
+    when {
+        sitio != null && dice != null && apilado -> Column(modifier) {
+            HuecoGuia(sitio)
+            DiceGuia(dice, Modifier.fillMaxWidth())
+        }
+        sitio != null && dice != null -> Row(modifier, verticalAlignment = Alignment.Top) {
+            HuecoGuia(sitio)
+            Text(" · ", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            DiceGuia(dice, Modifier.weight(1f), importante = importante, alCortarse = { apilado = true })
+        }
+        sitio != null -> HuecoGuia(sitio, modifier)
+        dice != null -> DiceGuia(dice, modifier.fillMaxWidth())
+    }
+}
+
+/** El icono de 16 de una nota de la guía, a la altura de la mitad de su primera línea: la línea crece con la letra y el icono
+ *  la sigue (con la letra a 1,0, 2 dp de margen). */
+@Composable
+private fun IconoNota(icono: ImageVector) {
+    val arriba = with(LocalDensity.current) { maxOf((MaterialTheme.typography.bodyMedium.lineHeight.toDp() - 16.dp) / 2, 0.dp) }
+    Icon(icono, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = arriba).size(16.dp))
+}
+
+/** «📦 Detrás · izq»: dónde va el paquete en la furgoneta, en una línea. */
+@Composable
+private fun HuecoGuia(sitio: String, modifier: Modifier = Modifier) {
+    Row(modifier.semantics(mergeDescendants = true) { contentDescription = tx("En la furgoneta: {sitio}", "sitio" to sitio) },
+        verticalAlignment = Alignment.Top) {
+        IconoNota(Icons.Default.Inventory2)
+        Spacer(Modifier.width(Esp.xs))
+        Text(sitio, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+    }
+}
+
+/** «💬 No estará · En portería o recepción · Portal: 4521»: lo que dice el cliente, hasta en dos líneas con «…». `alCortarse`
+ *  avisa de que lo que se ve termina antes de los `importante` primeros caracteres (para darle todo el ancho). */
+@Composable
+private fun DiceGuia(dice: String, modifier: Modifier = Modifier, importante: Int = 0, alCortarse: (() -> Unit)? = null) {
+    Row(modifier.semantics(mergeDescendants = true) { contentDescription = tx("El cliente dice: {t}", "t" to dice) },
+        verticalAlignment = Alignment.Top) {
+        IconoNota(Icons.Default.Forum)
+        Spacer(Modifier.width(Esp.xs))
+        Text(dice, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            onTextLayout = { r ->
+                if (alCortarse != null && r.hasVisualOverflow && r.getLineEnd(r.lineCount - 1, visibleEnd = true) < importante) alCortarse()
+            })
     }
 }
 

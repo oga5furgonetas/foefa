@@ -148,6 +148,10 @@ fun textoClienteDice(c: ClienteDice): String {
     return partes.joinToString(" · ")
 }
 
+/** Cuántos caracteres de `textoClienteDice(c)` no pueden faltar (RN, 08-11-2026): si estará, dónde dejarlo, la franja y el
+ *  portal. Lo que sigue es lo que el cliente escribe a mano («…»), que si no cabe puede cortarse. */
+fun largoSinNotaClienteDice(c: ClienteDice): Int = textoClienteDice(c.copy(nota = "")).length
+
 /** «La última vez (12/10): en portería», o por qué no se pudo. */
 fun textoAntes(a: Antes): String {
     val f = a.fecha.takeIf { it.length == 10 }?.let { "${it.substring(8, 10)}/${it.substring(5, 7)}" } ?: a.fecha
