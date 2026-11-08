@@ -340,8 +340,8 @@ enum class TamNumero(val alto: Dp) { FILA(32.dp), GRANDE(40.dp), PAQUETE(80.dp) 
 
 enum class EstadoNumero { SIGUIENTE, PENDIENTE, HECHA, FALLIDA }
 
-/** La píldora con el número de parada: ancho mínimo igual al alto (crece con tres cifras), relleno 8 y 12 en el
- *  paquete encontrado (§3.2 no admite el 6 de §4; los mismos px-2 y px-3 de la web, 07-11-2026); cifra tabular.
+/** La píldora con el número de parada: ancho mínimo igual al alto (crece con tres cifras), relleno 4 y 12 en el
+ *  paquete encontrado (§4 pide 6, que §3.2 no admite: 4 deja caber dos cifras, 08-11-2026); cifra tabular.
  *  Siguiente, relleno de marca; pendiente, tinte de marca; hecha, chip neutro; fallida, tinte de peligro; sin número, «·». */
 @Composable
 fun NumeroParada(n: Int?, tam: TamNumero = TamNumero.FILA, estado: EstadoNumero = EstadoNumero.PENDIENTE, modifier: Modifier = Modifier) {
@@ -358,7 +358,10 @@ fun NumeroParada(n: Int?, tam: TamNumero = TamNumero.FILA, estado: EstadoNumero 
         TamNumero.GRANDE -> MaterialTheme.typography.titleLarge
         TamNumero.PAQUETE -> MaterialTheme.typography.displayMedium
     }.merge(TextoNumero)
-    val relleno = if (tam == TamNumero.PAQUETE) Esp.m else Esp.s
+    // F3, 08-11-2026: relleno 4 (no 8) en la fila y la siguiente: con 8, dos cifras ya ensanchaban la píldora (16 sp en
+    // negrita, 19 + 16 = 35 dp > 32) y el texto de las filas 10 a 16 quedaba 3 dp (8 con la letra a 1,3) más a la derecha que
+    // el de las filas 2 a 9; con 4 caben dos cifras en 32 y crece con tres, como pide §4.
+    val relleno = if (tam == TamNumero.PAQUETE) Esp.m else Esp.xs
     Box(modifier.heightIn(min = tam.alto).widthIn(min = tam.alto).background(fondo, CircleShape).padding(horizontal = relleno),
         contentAlignment = Alignment.Center) {
         Text(n?.toString() ?: "·", style = estilo, color = letra, maxLines = 1, softWrap = false)
