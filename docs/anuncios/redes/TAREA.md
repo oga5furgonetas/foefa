@@ -39,7 +39,9 @@
    tres semanas vista) y el Registro de REDES.md para no duplicar. Lo mejor es dejar programados los 7 días
    siguientes en cada ronda, no una pieza por ronda: cada ronda rellena los huecos de la semana que viene.
    - **7:51** → LinkedIn si es martes (texto del apartado 8 de REDES.md, enlace a /planes con utm). YouTube si es
-     jueves o domingo: un Short con un vídeo de `docs/videos/` (`shorts-es*.mp4`, `tiktok-es*.mp4`) y la
+     jueves o domingo: un Short. Los de `docs/videos/` ya salieron todos; desde el 08-11 se hacen con un carrusel
+     ya publicado en TikTok/Instagram: `bash docs/anuncios/redes/short.sh <letra>` → `frontend/public/redes/short-<letra>.mp4`
+     (URL raw de GitHub del commit; Metricool la acepta). Antes eran vídeos de `docs/videos/` (`shorts-es*.mp4`, `tiktok-es*.mp4`) y la
      descripción de `docs/anuncios/tiktok/DESCRIPCION.txt` o del calendario, con «flotadsp.com/repartidores» y utm
      de youtube. Si la herramienta deja leer y responder comentarios de nuestras publicaciones, contéstalos con las
      plantillas del apartado 7 (nunca el mismo texto dos veces; nunca discutir).

@@ -203,10 +203,10 @@ web ya las sirve; si no, `https://raw.githubusercontent.com/oga5furgonetas/foefa
 | Día | TikTok (18:00) | Instagram (12:00) | Otros |
 |---|---|---|---|
 | X 11-11 | Carrusel D «Cómo cargar la furgoneta» | Carrusel E «Mensajes para el cliente» | LinkedIn «¿Quién le dio el golpe?» (ya programado) |
-| J 12-11 | Carrusel E | Carrusel F «Antes de firmar con una agencia» | YouTube: solo con vídeo nuevo |
+| J 12-11 | Carrusel E | Carrusel F «Antes de firmar con una agencia» | YouTube: Short `short-G.mp4` «el pico» 19:00 (programado el 08-11) |
 | V 13-11 | Carrusel F | Reel `tiktok-es-cobro.mp4` (en Instagram salió el 04-11: texto nuevo sobre el cierre del día) | — |
 | S 14-11 | Pieza nueva «Black Friday y Navidad: el pico» | La misma | — |
-| D 15-11 | Carrusel H «Lo que no puede faltar en la furgoneta» (programado el 07-11) | El mismo (programado) | YouTube: solo con vídeo nuevo |
+| D 15-11 | Carrusel H «Lo que no puede faltar en la furgoneta» (programado el 07-11) | El mismo (programado) | YouTube: Short `short-D.mp4` «cargar la furgoneta» 19:00 (programado el 08-11) |
 | L 16-11 | Carrusel I «Errores del primer mes» (programado el 07-11) | El mismo (programado) | — |
 | M 17-11 | Carrusel J «Cuida la espalda repartiendo» (programado el 07-11) | El mismo (programado) | — |
 | X 18-11 | Invita y gana (`invita-9x16.jpg`, texto nuevo) | Carrusel C «¿Cuánto gana de verdad?» (salió el 08-11) o pieza nueva | LinkedIn: «ITV, seguro y renting sin sustos» (abajo; programado el 07-11) |
@@ -228,7 +228,8 @@ web ya las sirve; si no, `https://raw.githubusercontent.com/oga5furgonetas/foefa
 > https://flotadsp.com/planes?utm_source=linkedin&utm_medium=organico&utm_campaign=empresas&utm_content=cuadrante
 > #gestiondeflotas #recursoshumanos #logistica #transporte
 
-**Lo que falta para estas semanas:** vídeos nuevos (YouTube no recibe nada nuevo desde el 09-11) y las tres piezas nuevas
+**Lo que falta para estas semanas:** YouTube: desde el 08-11 los Shorts salen de los carruseles con
+`bash docs/anuncios/redes/short.sh <letra>` (uno por jueves y domingo; ya hechos G y D) y las tres piezas nuevas
 de la lista de `redes/TEXTO.md`. Una pieza por ronda como mucho.
 
 ## 9. Medición (semanal, lunes)
@@ -310,3 +311,4 @@ Lo que la tarea NO hace y por qué:
 | 07-11 07:5x | (nube) | Metricool | Ronda única por las diez que no se hicieron (avisos del 04-11 al 07-11 en cola: el trabajador de la sesión se reinició). Calendario revisado: TikTok e Instagram cubiertos todos los días hasta el S 14-11, LinkedIn 11-11, YouTube 09-11. Pieza nueva: carrusel H «Lo que no puede faltar en la furgoneta» (commit f345a3e). Programado con enlaces raw: D 15-11 Instagram H 12:00 (419726229) y TikTok H 18:00 (419726278); LinkedIn X 18-11 «ITV, seguro y renting» 11:00 (419726295). Semana cubierta hasta el D 15-11. | Faltan vídeos nuevos para YouTube; siguiente pieza «Errores del primer mes» |
 | 07-11 12:5x | (nube) | Metricool | Ronda 2 del sábado. Sin duplicados (nada nuevo de la sesión del PC). Pieza nueva: carrusel I «Errores del primer mes repartiendo» (commit 4cea3dc; la prueba de entrega con foto está en la app de ruta). Programado: L 16-11 Instagram I 12:00 (419879358) y TikTok I 18:00 (419879415). Semana cubierta hasta el L 16-11. | Faltan vídeos nuevos para YouTube; quedan dos ideas en TEXTO.md |
 | 07-11 19:5x | (nube) | Metricool | Ronda 3 del sábado. Revisión de lo publicado: 05 a 07-11 bien salvo TikTok 06-11 «funciones» (ERROR: PNG no admitido). El TikTok del L 09-11 «Invita y gana» también iba en PNG: cambiado a `invita-9x16.jpg` (ahora 420175034). Pieza nueva: carrusel J «Cuida la espalda repartiendo» (commit 67766d4, con las 9x16 en JPEG). Programado: M 17-11 Instagram J 12:00 (420175105) y TikTok J 18:00 (420175174); J 19-11 TikTok «funciones» en JPEG 18:00 (420175212). Semana cubierta hasta el M 17-11. Paso nuevo en TAREA.md: revisar los ERROR de los 3 días anteriores. | Faltan vídeos nuevos para YouTube |
+| 08-11 07:5x | (nube) | Metricool | Ronda 1 del domingo. Lo del 07-11 publicado bien (TikTok e Instagram). TikTok e Instagram cubiertos hasta el M 17-11. YouTube, que no tenía nada nuevo desde el 09-11: Shorts hechos con los carruseles (`docs/anuncios/redes/short.sh`, ffmpeg, pista en silencio; commit 3e7e02f) y programados: J 12-11 `short-G.mp4` «el pico» 19:00 (420522157) y D 15-11 `short-D.mp4` «cargar la furgoneta» 19:00 (420522179). | Siguientes Shorts: H, I, J, E, F (uno por jueves y domingo) |
