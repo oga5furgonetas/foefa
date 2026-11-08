@@ -311,4 +311,6 @@ export const A = {
   "Queda 1 día de prueba": ["1 trial day left", "Falta 1 dia de teste", "Il reste 1 jour d’essai", "Manca 1 giorno di prova", "Noch 1 Testtag"],
   "Ver mi plan": ["See my plan", "Ver o meu plano", "Voir mon offre", "Vedi il mio piano", "Mein Tarif"],
   "Empieza con los paquetes de hoy: foto a la etiqueta de cada uno.": ["Start with today’s parcels: snap each label.", "Começa com os volumes de hoje: uma foto à etiqueta de cada um.", "Commencez avec les colis du jour : photographiez chaque étiquette.", "Inizia con i pacchi di oggi: una foto all’etichetta di ognuno.", "Fang mit den Paketen von heute an: fotografiere jedes Etikett."],
+  // RW (08-11-2026): el botón del aviso «Instala la app» dice solo «Instalar» (antes repetía «Instalar la app»).
+  "Instalar": ["Install", "Instalar", "Installer", "Installa", "Installieren"],
 }

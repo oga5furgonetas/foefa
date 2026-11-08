@@ -38,7 +38,10 @@ import icono from './piezas/icono'
    son BotonMapa en una columna a la derecha, 12 por encima del panel (se mide con ResizeObserver: antes iban a media
    pantalla y la hoja de llegada los tapaba en los móviles de 800 o menos); y el panel de abajo con el número de 40, el
    nombre, «Llamar» y la ✕ de icono, «Llegas ≈ …», las notas en una línea y «Ya he llegado» a lo ancho (al llegar, la
-   FilaCierre). Lo que hace cada botón y lo que se manda al servidor, igual que antes. Los dibujos del mapa (la ruta, la
+   FilaCierre). Lo que dice el cliente, aparte y primero, hasta en dos líneas (RW, 08-11-2026): con los datos de 10-hoy a
+   360×780 el panel mide 242 antes de llegar y 220 al llegar (con la línea única de antes, 198 y 176); antes de llegar pasa
+   de los 225 de §7.4 por las dos líneas del cliente, y se deja: leer el portal vale más. Lo que hace cada botón y lo que se manda al
+   servidor, igual que antes. Los dibujos del mapa (la ruta, la
    flecha, la chincheta) no cambian: por eso MapaGuia lleva colores hex y `check-tokens-ruta.mjs` le salta esa regla
    (DIBUJOS_DEL_MAPA). */
 
@@ -288,17 +291,18 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
   }
   const flecha = guia?.fuente === 'linea_recta' && pos && parada ? rumboEntre(pos.p, [parada.lat, parada.lng]) : null
 
-  // Las notas de la parada en una línea («Cobrar 24,50 € · 📦 Detrás · izq · 💬 No estará…»): el dato con su icono, y lo
-  // que iba delante («Búscalo:», «El cliente dice:») solo para el lector de pantalla. Lo que se cobra va primero, que la
-  // línea se corta por el final.
+  // Las notas de la parada. LO QUE DICE EL CLIENTE VA APARTE Y PRIMERO (RW, 08-11-2026): el portal y el timbre son lo que hace
+  // falta en la puerta y, al final de una línea cortada con «…» («Cobrar 24,50 € · Detrás · izq · 2 bultos · Medi…»), no se
+  // llegaba a leer. Va en su fila, con su icono, hasta en dos líneas. Debajo, lo demás en una línea: lo que se cobra primero
+  // (la línea se corta por el final) y la nota de la parada antes que lo que lleva. El dato con su icono, y lo que iba
+  // delante («Búscalo:», «El cliente dice:») solo para el lector de pantalla.
   const dice = parada ? textoClienteDice(parada.cliente_dice) : ''
   const antes = parada ? textoAntes(parada.antes) : ''
   const notas = !parada ? [] : [
     parada.cobrar > 0 && { icono: Banknote, texto: `${tx('Cobrar')} ${importe(parada.cobrar)}` },
     parada.hueco && { icono: Package, prefijo: tx('Búscalo: {sitio}', { sitio: '' }), texto: tx(parada.hueco) },
     parada.bultos > 1 && { texto: tx('{n} bultos', { n: parada.bultos }) },
-    (parada.notas || parada.contenido) && { icono: StickyNote, texto: [parada.contenido, parada.notas].filter(Boolean).join(' · ') },
-    dice && { icono: MessageSquareText, prefijo: `${tx('El cliente dice')}: `, texto: dice },
+    (parada.notas || parada.contenido) && { icono: StickyNote, texto: [parada.notas, parada.contenido].filter(Boolean).join(' · ') },
     antes && { icono: History, texto: antes },
   ].filter(Boolean)
   const instruccion = 'line-clamp-2 text-nombre'
@@ -394,6 +398,12 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
               <p className="mt-1 text-texto tabular-nums text-dark-200">
                 {minRest != null && <>{tx('Llegas')} <b className="text-ruta-ok-texto">≈ {horaMas(minRest)}</b> · </>}{textoDistancia(restante)}
                 {minRest != null && <> · {Math.max(1, Math.round(minRest))} min</>}
+              </p>
+            )}
+            {dice && (
+              <p data-testid="guia-dice" title={dice} className="mt-1 flex items-start gap-1 text-texto text-dark-50">
+                {icono(MessageSquareText, 16, 'mt-0.5 shrink-0 text-ruta-ok-texto')}
+                <span className="min-w-0 line-clamp-2"><span className="sr-only">{tx('El cliente dice')}: </span>{dice}</span>
               </p>
             )}
             {notas.length > 0 && (

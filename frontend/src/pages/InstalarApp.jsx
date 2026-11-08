@@ -165,9 +165,9 @@ export function useVerInstalar() {
 
 /* La tarjeta «Instala FDS en tu móvil», en la app de ruta abierta desde el navegador. No sale si ya es app
    (instalada o la de Play) ni si la cerró. Con `compacto` (07-11-2026, §5.1 b) es un Aviso de una línea, «Instala la
-   app», con su botón: «Instalar la app» (la tienda de Google Play, en Android con Play, haya o no aviso de Chrome para
-   instalarla en un toque), «Abrir en Chrome/Safari» desde el navegador de otra app, y «Cómo instalarla» (la hoja con los
-   pasos) en el iPhone; ✕ «No mostrar más». Lo largo va en su hoja. */
+   app», con su botón: «Instalar» (nombre accesible «Instalar la app»: la tienda de Google Play, en Android con Play, haya
+   o no aviso de Chrome para instalarla en un toque), «Abrir en Chrome/Safari» desde el navegador de otra app, y «Cómo
+   instalarla» (la hoja con los pasos) en el iPhone; ✕ «No mostrar más». Lo largo va en su hoja. */
 export default function InstalarApp({ compacto = false }) {
   useIdioma()
   const ins = useInstalar()
@@ -187,13 +187,17 @@ export default function InstalarApp({ compacto = false }) {
   if (compacto) {
     const interno = ins.interno && (ins.android || ins.iphone)
     let accion = tx('Cómo instalarla')
+    let nombreAccion
     let onAccion = () => setHoja(true)
     if (!interno && ins.android) {
       // Android con Play: «Instalar» lleva a la tienda, como hoy el distintivo de Google Play (§5.1 b), con o sin aviso de
       // Chrome para instalarla en un toque. Antes, con el aviso de Chrome (lo normal en Android) instalaba la PWA y no abría
       // Google Play (revisor, 07-11-2026, hallazgo 1). La instalación en un toque y el APK siguen en `Opciones`, la del
       // último paso del alta (`PasoInstalar`); desde este aviso, en Android no se llega a ellas.
-      accion = tx('Instalar la app')
+      // RW (08-11-2026): el aviso ya dice «Instala la app»; el botón, solo «Instalar» (se veía «Instala la app» e «Instalar la
+      // app» en el mismo aviso). Su nombre accesible sigue siendo «Instalar la app»: el texto visible va dentro del nombre.
+      accion = tx('Instalar')
+      nombreAccion = tx('Instalar la app')
       onAccion = () => { medirAccion('instalar_google_play'); window.open(GOOGLE_PLAY_URL, '_blank', 'noopener') }
     } else if (interno) {
       accion = ins.iphone ? tx('Abrir en Safari') : tx('Abrir en Chrome')
@@ -201,7 +205,8 @@ export default function InstalarApp({ compacto = false }) {
     }
     return (
       <>
-        <Aviso tono="neutro" icono={Smartphone} texto={tx('Instala la app')} accion={accion} onAccion={onAccion} onCerrar={cerrar} nombreCerrar={tx('No mostrar más')} />
+        <Aviso tono="neutro" icono={Smartphone} texto={tx('Instala la app')} acciones={[{ texto: accion, nombre: nombreAccion, onClick: onAccion }]}
+          onCerrar={cerrar} nombreCerrar={tx('No mostrar más')} />
         {hoja && (
           <Hoja titulo={tx('Instala la app')} onClose={() => setHoja(false)}>
             <p className="pb-3 pt-2 text-texto text-dark-400">{tx('Con su icono, a pantalla completa y sin buscar la web cada día.')}</p>
