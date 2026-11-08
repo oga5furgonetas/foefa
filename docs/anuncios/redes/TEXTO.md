@@ -119,6 +119,17 @@ Modo foto (7) · Instagram · página de Facebook. TikTok con los `.jpg`. `utm_c
 Hashtags: #repartidor #repartidores #paqueteria #mensajeria #reparto #furgoneta #salud #espalda
 Comentario fijado: «¿Qué te duele más al acabar la semana: espalda, rodillas o pies? 👇»
 
+## Carrusel K · Invierno: cinco cosas antes de arrancar (`K-1-portada` … `K-7-cierre`, 08-11)
+Modo foto (7) · Instagram · página de Facebook. TikTok e Instagram con los `.jpg` (desde el 08-11, también Instagram:
+el carrusel C en PNG dio «Fatal» y en JPEG salió). `utm_content=carrusel_invierno`.
+
+> Llega el invierno 🌧️🌙 Cinco cosas antes de arrancar la furgoneta: dos minutos que te ahorran un susto.
+> ¿Y la ruta? Con voz hasta cada puerta: los ojos en la carretera, no en la pantalla. Gratis hasta el 31 de diciembre,
+> enlace en el perfil.
+
+Hashtags: #repartidor #repartidores #furgoneta #invierno #seguridadvial #reparto #paqueteria #mensajeria
+Comentario fijado: «¿Qué es lo primero que miras tú antes de arrancar? 👇»
+
 ## Tarjetas 16:9 para X (van con el post del calendario de `REDES.md`)
 | Fichero | Post | Enlace |
 |---|---|---|

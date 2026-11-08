@@ -295,10 +295,24 @@ const J = [
   ['J-7-cierre', cierre('¿Y las vueltas de más? <span style="color:var(--marca)">Fuera</span>', 'Ruta ordenada por tiempo con una foto a la etiqueta.')],
 ]
 
+/* ── K. Invierno: cinco cosas antes de arrancar (08-11) ──────────────────────────────────── */
+const INVIERNO = [
+  ['🪟', 'Cristales sin vaho', 'Antes de arrancar, no después. Con vaho no ves al peatón que cruza entre coches.'],
+  ['💡', 'Luces, todas', 'Cortas, intermitentes y freno, con la furgoneta parada. En invierno buena parte de la ruta es de noche.'],
+  ['🛞', 'Mira las ruedas', 'Con lluvia, el dibujo lo es todo. Una vez a la semana, no cuando toque la ITV.'],
+  ['📏', 'Más distancia', 'Con el suelo mojado frenas más tarde de lo que crees: deja el doble de hueco.'],
+  ['🦺', 'Chaleco antes de bajar', 'Si paras en carretera, póntelo dentro de la cabina, antes de abrir la puerta.'],
+]
+const K = [
+  ['K-1-portada', portada(fondoFurgoneta, 'Llega el invierno', 'Cinco cosas antes de <span class="resalta">arrancar</span>', 'Dos minutos que te ahorran un susto')],
+  ...INVIERNO.map((p, i) => [`K-${i + 2}`, punto(p, i, 'Guárdalo para mañana')]),
+  ['K-7-cierre', cierre('¿Y la ruta? <span style="color:var(--marca)">Con voz</span>', 'Navegación con voz hasta cada puerta: los ojos en la carretera.')],
+]
+
 // SOLO=E,F genera solo las piezas que empiezan así (las ya publicadas no se tocan). Cada carrusel sale también en
 // JPEG (TikTok no admite PNG en los posts de fotos: «use image/jpeg», 31-10-2026).
 const SOLO = (process.env.SOLO || '').split(',').map((x) => x.trim()).filter(Boolean)
-const PIEZAS = [...A, ...B, ...C, ...D, ...E, ...F, ...G, ...H, ...I, ...J, ...X.map(([n, h]) => [n, h, 1600, 900]), ...X2.map(([n, h]) => [n, h, 1600, 900])]
+const PIEZAS = [...A, ...B, ...C, ...D, ...E, ...F, ...G, ...H, ...I, ...J, ...K, ...X.map(([n, h]) => [n, h, 1600, 900]), ...X2.map(([n, h]) => [n, h, 1600, 900])]
   .filter(([n]) => !SOLO.length || SOLO.some((p) => n.startsWith(p)))
 // PW_CHROMIUM: ruta a un Chromium ya instalado si la versión de Playwright no trae el suyo (p. ej. /opt/pw-browsers/chromium).
 const nav = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {})
