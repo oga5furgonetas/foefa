@@ -2134,6 +2134,18 @@ próxima versión de la app (no compilado aquí: no hay SDK de Android en la nub
      2.4.1 sigue WAITING_FOR_REVIEW (Apple, desde el 03-11); mientras no la resuelva no se puede mandar otra versión
      (`scripts/app_store_connect.py apps|builds|version|enviar` funciona con la clave del PC, sin la web; la web de App
      Store Connect pide iniciar sesión y eso solo lo hace Dani).
+   · APPLE, 08-11 (13:30): Dani preguntó por qué la 2.4.1 llevaba cinco días «esperando revisión» (el envío 22b9c401 es del
+     03-11 a las 14:06; el primero, del 30-10, quedó «Eliminado») y no hay mensaje alguno de Apple en App Store Connect. No
+     está atascada por nuestra parte: contacto, cuenta de prueba, notas y vídeo están puestos. Dani inició sesión en el
+     Chrome del PC (la sesión de Apple caducó antes; yo no escribo contraseñas ni códigos) y con esa sesión se envió el
+     formulario «request an expedited app review» (developer.apple.com/contact/app-store/?topic=expedite; solo pide el nombre
+     de la app y la plataforma; confirmación: «We'll expedite review for FDS: ruta de reparto»; si la rechazan, el reenvío
+     vuelve a la cola rápida sin pedirlo otra vez). A las 21:00 seguía WAITING_FOR_REVIEW (vigilada con
+     `fds-emu/vigilar_apple.py`, cada 5 min). Cuando la apruebe, SE PUBLICA SOLA (con el diseño viejo, build 16): después
+     hay que mandar la del diseño nuevo, que necesita otra versión (el build 17 es 2.4.1 y no vale: subir `APP_VERSION` en
+     `app-ios.yml` a la 2.4.6 o superior, lanzar el build y `app_store_connect.py version/adjuntar/enviar`).
+   · El resumen del día de las 21:00 del 08-11 ya NO muere: `Aviso resumen_diario: disparando (hora 21)` sin «Bucle de
+     aviso» en el registro (primera noche tras el arreglo del 06-11). Sigue el ruido de Resend 422 a juanperez@example.com.
    · PENDIENTE a decidir con Dani (las fotos lo enseñan): direcciones de la lista cortadas con «…» (propuesta: dos líneas);
      3 filas enteras en la primera pantalla de un móvil de 360×780 (hoy 2; la alternativa B sube el anuncio de «Gana 10 €»
      bajo las 3 primeras filas); los chips «Mi dinero hoy» y «Aparcada aquí» de «Hoy» quedan fuera de pantalla en la
