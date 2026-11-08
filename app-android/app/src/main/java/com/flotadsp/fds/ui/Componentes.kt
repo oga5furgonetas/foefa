@@ -204,13 +204,15 @@ fun Cabecera(
 ) {
     TopAppBar(
         title = {
+            // F3, 08-11-2026: el título va primero (sin peso) y el subtítulo se queda con lo que sobra: con la letra a 2,0 el
+            // subtítulo tomaba todo y «Hola, Ana» salía «Ho…» y «Mi ruta», «…» (con la flecha y tres iconos a 360 dp).
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(titulo, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.alignByBaseline().weight(1f, fill = false))
+                    modifier = Modifier.alignByBaseline())
                 if (!subtitulo.isNullOrBlank()) {
                     Spacer(Modifier.width(Esp.s))
                     Text(subtitulo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.alignByBaseline())
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.alignByBaseline().weight(1f, fill = false))
                 }
             }
         },
