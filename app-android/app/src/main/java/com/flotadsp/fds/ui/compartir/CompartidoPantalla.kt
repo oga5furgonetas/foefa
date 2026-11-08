@@ -249,7 +249,9 @@ fun CompartidoPantalla(datos: Compartido, pais: String, alCerrar: (creadas: Int?
 }
 
 /** Una fila de lo compartido (≈ 60): el número de 32, el cliente en `nombre` (una línea) con la dirección en gris debajo
- *  (o la dirección sola, en dos líneas) y, en `sec`, el teléfono y el código. */
+ *  (o la dirección sola) y, en `sec`, el teléfono y el código. RN, 08-11-2026: la dirección y el teléfono con el código se leen
+ *  ENTEROS, sin tope de líneas: esta es la pantalla donde se revisa lo que ha leído la app antes de añadirlo, y con la letra
+ *  a 1,3 a 360 dp se cortaba con «…» en medio del código postal y del teléfono (la fila crece lo que haga falta). */
 @Composable
 private fun FilaCompartida(n: Int, f: FilaPegada) {
     val c = MaterialTheme.colorScheme
@@ -262,13 +264,12 @@ private fun FilaCompartida(n: Int, f: FilaPegada) {
         Column(Modifier.weight(1f)) {
             if (f.cliente.isNotBlank()) {
                 Text(f.cliente, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(f.direccion, style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(f.direccion, style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant)
             } else {
-                Text(f.direccion, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(f.direccion, style = MaterialTheme.typography.titleMedium)
             }
             val extra = listOfNotNull(f.telefono.takeIf { it.isNotBlank() }, f.codigo.takeIf { it.isNotBlank() }).joinToString(" · ")
-            if (extra.isNotBlank()) Text(extra, style = MaterialTheme.typography.bodySmall.merge(TextoNumero), color = c.onSurfaceVariant,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (extra.isNotBlank()) Text(extra, style = MaterialTheme.typography.bodySmall.merge(TextoNumero), color = c.onSurfaceVariant)
         }
     }
 }
