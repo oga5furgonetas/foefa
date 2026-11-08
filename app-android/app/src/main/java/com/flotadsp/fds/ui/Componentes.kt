@@ -186,7 +186,10 @@ private fun Modifier.nombre(n: String?): Modifier = if (n == null) this else sem
 /** El texto de un botón (§3.8): dos líneas como mucho y, si aun así no cabe, la letra baja hasta 12 antes que cortarse. */
 @Composable
 private fun TextoBoton(texto: String, estilo: TextStyle) {
-    Text(texto, style = estilo, maxLines = 2, textAlign = TextAlign.Center, overflow = TextOverflow.Ellipsis,
+    // F3, 08-11-2026: una sola palabra, en una sola línea (y la letra baja hasta que cabe): con dos líneas, «Entregado» a
+    // 360 dp con la letra a 2,0 se partía por dentro («Entrega» y «do»), porque autoSize da por bueno el tamaño más grande
+    // en el que el texto «cabe» en dos líneas aunque haya que cortar la palabra.
+    Text(texto, style = estilo, maxLines = if (texto.trim().contains(' ')) 2 else 1, textAlign = TextAlign.Center, overflow = TextOverflow.Ellipsis,
         autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = estilo.fontSize))
 }
 
