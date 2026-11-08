@@ -9,7 +9,8 @@ import Campo from './driver/piezas/Campo'
 /* ¿QUÉ TAL TE VA? (05-10-2026): a quien se registró y ya ha hecho entregas de
    verdad se le pregunta UNA vez qué le falta. Lo decide el servidor (`pedir`):
    cuenta de más de 20 h y 2 entregas reales. «Ahora no» no vuelve a preguntar.
-   Compacta desde el 07-11-2026 (§5.1 i): el título, las estrellas y el campo al tocar una estrella. */
+   Compacta desde el 07-11-2026 (§5.1 i): el título, las estrellas y el campo al tocar una estrella.
+   A todo el ancho de la columna (08-11-2026): con `mx-auto` solo, un flex en columna la encogía a lo que mide su contenido. */
 export default function OpinionRuta() {
   useIdioma()
   const [ver, setVer] = useState(false)
@@ -38,7 +39,7 @@ export default function OpinionRuta() {
     } catch { setErr(tx('No se ha podido enviar. Inténtalo otra vez.')) } finally { setOcupado(false) }
   }
   return (
-    <section className="mx-auto max-w-md rounded-xl bg-dark-900 p-3" aria-label={tx('¿Qué tal te va la app?')}>
+    <section className="mx-auto w-full max-w-md rounded-xl bg-dark-900 p-3" aria-label={tx('¿Qué tal te va la app?')}>
       {hecho ? <p role="status" className="text-center text-nombre text-ruta-marca">{tx('¡Gracias! Lo leo yo personalmente.')}</p> : (
         <>
           <div className="flex items-center justify-between gap-2">

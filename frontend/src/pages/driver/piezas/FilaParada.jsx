@@ -8,7 +8,9 @@
    debajo lo que la web conserva en la fila («Volver a intentarlo» / «Entregado» en las fallidas). Toda la fila es un
    botón («Ver la parada {n}: …») que abre la hoja de la parada; a la derecha, solo en la web, el botón de icono de
    siempre («Ir a {cliente}» / «Situar: {cliente}»), si se le pasa `onIr`, `hrefIr` u `onSituar`. Sin estado propio:
-   vale para rutas de 300 paradas. */
+   vale para rutas de 300 paradas.
+   08-11-2026: en las hechas, si «hora · Entregado · importe» y la etiqueta de la IA no caben juntos, la etiqueta baja a su línea
+   (a 360 el importe salía cortado: «· 1…»). */
 import { AlertTriangle, Banknote, Check, Clock, MapPin, MapPinOff, Navigation, Package, ShieldCheck } from 'lucide-react'
 import { tx, locale } from '../../../lib/idioma'
 import { importe } from '../../../lib/region'
@@ -88,11 +90,11 @@ export default function FilaParada({ p, numero, juntas = 1, zbe = '', onTocar, o
                 </span>
               )}
             </span>
-            <span className="flex items-center justify-between gap-2">
+            <span className={`flex items-center justify-between gap-x-2 ${hecha ? 'flex-wrap' : ''}`}>
               {hecha
                 ? <span className={`truncate text-etiqueta tabular-nums ${estado.ok ? 'text-ruta-ok-texto' : 'text-ruta-peligro-texto'}`}>{estado.texto}</span>
                 : <span className="truncate text-texto text-dark-400">{p.cliente ? p.direccion : ''}</span>}
-              {etiqueta && <Etiqueta texto={etiqueta.texto} tono={etiqueta.tono} icono={etiqueta.icono} />}
+              {etiqueta && <Etiqueta texto={etiqueta.texto} tono={etiqueta.tono} icono={etiqueta.icono} className={hecha ? 'ml-auto' : ''} />}
             </span>
           </span>
         </button>
