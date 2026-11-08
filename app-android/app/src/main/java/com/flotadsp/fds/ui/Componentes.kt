@@ -13,6 +13,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -325,16 +326,36 @@ fun coloresCampo() = OutlinedTextFieldDefaults.colors(
  *  En las recogidas, «No recogido» / «Recogido». El texto pasa a dos líneas antes de cortarse. */
 @Composable
 fun FilaCierre(recogida: Boolean = false, alFallar: () -> Unit, alEntregar: () -> Unit, enabled: Boolean = true, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Esp.s)) {
-        OutlinedButton(
-            onClick = alFallar, enabled = enabled, shape = MaterialTheme.shapes.medium,
-            contentPadding = PaddingValues(horizontal = Esp.s, vertical = Esp.s),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-            modifier = Modifier.weight(1f).heightIn(min = Alto.principal),
-        ) { TextoBoton(if (recogida) tx("No recogido") else tx("No entregado"), MaterialTheme.typography.titleMedium) }
-        BotonPrincipal(if (recogida) tx("Recogido") else tx("Entregado"), alEntregar, icono = Icons.Default.Check, tono = Tono.OK,
-            enabled = enabled, modifier = Modifier.weight(1.2f))
+    val escala = LocalDensity.current.fontScale
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        // F3, 08-11-2026: con la letra muy grande en una pantalla estrecha «Entregado» no cabe en su botón (1,2 de 2,2 del ancho)
+        // ni con la letra al mínimo de 12 (a 360 dp con 2,0 salía «Entrega» y «do», o «Entreg…»): entonces, uno debajo del otro, a
+        // todo el ancho, como la web a 280. Ancho de la palabra a 12 sp ≈ 62 dp × la escala; el hueco del botón, lo que queda.
+        val apilar = escala * 62f > (maxWidth.value - Esp.s.value) * (1.2f / 2.2f) - 60f
+        val fallar: @Composable (Modifier) -> Unit = { m ->
+            OutlinedButton(
+                onClick = alFallar, enabled = enabled, shape = MaterialTheme.shapes.medium,
+                contentPadding = PaddingValues(horizontal = Esp.s, vertical = Esp.s),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                modifier = m.heightIn(min = Alto.principal),
+            ) { TextoBoton(if (recogida) tx("No recogido") else tx("No entregado"), MaterialTheme.typography.titleMedium) }
+        }
+        val entregar: @Composable (Modifier) -> Unit = { m ->
+            BotonPrincipal(if (recogida) tx("Recogido") else tx("Entregado"), alEntregar, icono = Icons.Default.Check, tono = Tono.OK,
+                enabled = enabled, modifier = m)
+        }
+        if (apilar) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Esp.s)) {
+                fallar(Modifier.fillMaxWidth())
+                entregar(Modifier.fillMaxWidth())
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Esp.s)) {
+                fallar(Modifier.weight(1f))
+                entregar(Modifier.weight(1.2f))
+            }
+        }
     }
 }
 
