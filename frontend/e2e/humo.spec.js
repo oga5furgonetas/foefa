@@ -3816,7 +3816,9 @@ test('Ruta · la primera vez pregunta cómo le llegan las paradas y abre esa her
 /* LA TARJETA DE LA SIGUIENTE, A SU MEDIDA (07-11-2026, revisor, hallazgo 5; §5.1 d y §7.4): de 216 a 284. Con cobrar, horario y dos
    notas (como la captura 10-hoy) medía 292: la fila de acciones iba a 12 de las notas (ahora 8) y las notas llevaban 8 de relleno
    arriba y abajo (ahora 4): 280. A 360×780 «Entregado» queda entero y por encima de las pestañas, sin desplazar. Lo de las 3 filas
-   a la vista (§5.1) no sale con una tarjeta con notas: se decide con Dani, y aquí solo se mide lo que SÍ se cumple. */
+   a la vista (§5.1) no sale con una tarjeta con notas: se decide con Dani, y aquí solo se mide lo que SÍ se cumple.
+   RW (08-11-2026): lo que dice el cliente puede ocupar las dos líneas de la tarjeta y entonces la memoria se queda en la hoja; aquí es
+   corto («No estará · En el buzón», una línea) para seguir midiendo la tarjeta con DOS notas. El caso largo, en compacto-revision.spec.js. */
 test('Ruta · la tarjeta de la siguiente, con cobrar, horario y dos notas, mide 284 como mucho a 360×780 y «Entregado» queda sobre las pestañas', async ({ page }) => {
   const fallos = vigilar(page)
   await page.setViewportSize({ width: 360, height: 780 })
@@ -3826,7 +3828,7 @@ test('Ruta · la tarjeta de la siguiente, con cobrar, horario y dos notas, mide 
     pedidos: [
       { id: 'p1', cliente: 'Farmacia Sol', direccion: 'Rúa Sinfónica de Galicia 8', estado: 'pendiente', orden: 1, eta: '09:41', lat: 43.37, lng: -8.40, geo: 'puerta',
         telefono: '613403123', cobrar: 24.5, ventana_desde: '09:30', ventana_hasta: '11:00',
-        cliente_dice: { estare: 'no', dejar: 'porteria', portal: '4521', nota: '', cuando: '2026-11-03T08:00:00Z' },
+        cliente_dice: { estare: 'no', dejar: 'buzon', portal: '', nota: '', cuando: '2026-11-03T08:00:00Z' },
         memoria: { portal: '1234', dejar: 'porteria', acceso: 'Garaje' } },
       { id: 'p2', cliente: 'Marta G.', direccion: 'Rúa Juan Flórez 46', estado: 'pendiente', orden: 2, eta: '09:47', lat: 43.36, lng: -8.41 }] } }))
   await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: null } }))

@@ -38,7 +38,9 @@ import icono from './piezas/icono'
    son BotonMapa en una columna a la derecha, 12 por encima del panel (se mide con ResizeObserver: antes iban a media
    pantalla y la hoja de llegada los tapaba en los móviles de 800 o menos); y el panel de abajo con el número de 40, el
    nombre, «Llamar» y la ✕ de icono, «Llegas ≈ …», las notas en una línea y «Ya he llegado» a lo ancho (al llegar, la
-   FilaCierre). Lo que hace cada botón y lo que se manda al servidor, igual que antes. Los dibujos del mapa (la ruta, la
+   FilaCierre). Lo que hace cada botón y lo que se manda al servidor, igual que antes. Lo que dice el cliente va aparte y
+   primero, hasta en dos líneas (RW, 08-11-2026): a 360×780 el panel mide 242 antes de llegar (198 con la línea única de
+   antes: pasa de los 225 de §7.4, y se deja, que leer el portal vale más) y 220 al llegar. Los dibujos del mapa (la ruta, la
    flecha, la chincheta) no cambian: por eso MapaGuia lleva colores hex y `check-tokens-ruta.mjs` le salta esa regla
    (DIBUJOS_DEL_MAPA). */
 
@@ -288,17 +290,18 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
   }
   const flecha = guia?.fuente === 'linea_recta' && pos && parada ? rumboEntre(pos.p, [parada.lat, parada.lng]) : null
 
-  // Las notas de la parada en una línea («Cobrar 24,50 € · 📦 Detrás · izq · 💬 No estará…»): el dato con su icono, y lo
-  // que iba delante («Búscalo:», «El cliente dice:») solo para el lector de pantalla. Lo que se cobra va primero, que la
-  // línea se corta por el final.
+  // Las notas de la parada (RW, 08-11-2026). Lo que dice el cliente va APARTE y PRIMERO, hasta en dos líneas: el portal y el
+  // timbre se necesitan en la puerta y, al final de una sola línea cortada con «…», no se llegaban a leer. Debajo, lo demás
+  // en una línea (se corta por el final): lo que se cobra, la nota de la parada (el timbre), dónde va en la furgoneta, los
+  // bultos y lo que lleva. El prefijo («Búscalo:», «El cliente dice:») va solo para el lector de pantalla.
   const dice = parada ? textoClienteDice(parada.cliente_dice) : ''
   const antes = parada ? textoAntes(parada.antes) : ''
   const notas = !parada ? [] : [
     parada.cobrar > 0 && { icono: Banknote, texto: `${tx('Cobrar')} ${importe(parada.cobrar)}` },
+    parada.notas && { icono: StickyNote, texto: parada.notas },
     parada.hueco && { icono: Package, prefijo: tx('Búscalo: {sitio}', { sitio: '' }), texto: tx(parada.hueco) },
     parada.bultos > 1 && { texto: tx('{n} bultos', { n: parada.bultos }) },
-    (parada.notas || parada.contenido) && { icono: StickyNote, texto: [parada.contenido, parada.notas].filter(Boolean).join(' · ') },
-    dice && { icono: MessageSquareText, prefijo: `${tx('El cliente dice')}: `, texto: dice },
+    parada.contenido && { texto: parada.contenido },
     antes && { icono: History, texto: antes },
   ].filter(Boolean)
   const instruccion = 'line-clamp-2 text-nombre'
@@ -396,10 +399,16 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
                 {minRest != null && <> · {Math.max(1, Math.round(minRest))} min</>}
               </p>
             )}
+            {dice && (
+              <p data-testid="guia-dice" title={dice} className="mt-1 flex items-start gap-1 text-texto text-dark-50">
+                {icono(MessageSquareText, 16, 'mt-0.5 shrink-0 text-ruta-ok-texto')}
+                <span className="min-w-0 line-clamp-2"><span className="sr-only">{tx('El cliente dice')}: </span>{dice}</span>
+              </p>
+            )}
             {notas.length > 0 && (
               <p data-testid="guia-notas" className="mt-1 truncate text-texto text-dark-200" title={notas.map((n) => `${n.prefijo || ''}${n.texto}`).join(' · ')}>
                 {notas.map((n, i) => (
-                  <span key={n.texto}>
+                  <span key={`${i}-${n.texto}`}>
                     {i > 0 && ' · '}
                     {icono(n.icono, 14, 'mr-1 inline-block align-text-bottom')}
                     {n.prefijo && <span className="sr-only">{n.prefijo}</span>}

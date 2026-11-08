@@ -5,7 +5,8 @@
      la hora a la derecha («boton» tabular; «+{n}» en peligro si llega tarde) · «›». La dirección en «texto», dos líneas
      como mucho. Una línea de etiquetas (tres como mucho y «+N»; `etiquetasDe`, que también usa la hoja) y, sin sitio, el
      chip «Sin situar · Situar» (`situar-parada`; «Buscando en el mapa…» mientras busca) o, con solo la calle, «Situar en
-     el mapa»: abren «Situar la parada» como hoy (`onSituar`). Luego NotasPuerta, dos líneas.
+     el mapa»: abren «Situar la parada» como hoy (`onSituar`). Luego NotasPuerta, dos líneas (lo que dice el cliente va
+     primero y puede ocupar las dos, para que el portal no se corte; si no las necesita, el siguiente dato va en la segunda).
    - Fila de 48: «▶ Ir» (tonal marca, ocupa el resto; `onIr` o `hrefIr`, la misma acción de siempre) + «Llamar» y
      «WhatsApp» de icono solo con teléfono (`hrefWhatsapp` solo con móvil; `hrefSms` en China) + «⋮»: «Escuchar» (nombre
      «Escuchar la siguiente parada»), «Ver la puerta» (situada y no aproximada; Street View con el rumbo que calcula el
