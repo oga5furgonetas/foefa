@@ -1,6 +1,9 @@
 package com.flotadsp.fds.ui.acceso
 
 import com.flotadsp.fds.ui.tx
+import com.flotadsp.fds.ui.LocalExtra
+import com.flotadsp.fds.ui.coloresCampo
+import com.flotadsp.fds.ui.coloresBotonTexto
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +17,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -130,7 +134,7 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
         navigationIcon = { IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) } },
     ) }) { inset ->
         Column(Modifier.fillMaxSize().padding(inset).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            aviso?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+            aviso?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -157,7 +161,7 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
                                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                                 Text("${d.dayOfMonth}", fontWeight = if (d == hoy) FontWeight.Bold else FontWeight.Normal)
-                                                if (estado.isNotBlank()) Text("•", color = when (estado) { "aprobado" -> Color(0xFF168444); "rechazado" -> MaterialTheme.colorScheme.error; else -> MaterialTheme.colorScheme.tertiary }, style = MaterialTheme.typography.labelSmall)
+                                                if (estado.isNotBlank()) Text("•", color = when (estado) { "aprobado" -> LocalExtra.current.entregadoTexto; "rechazado" -> MaterialTheme.colorScheme.error; else -> MaterialTheme.colorScheme.tertiary }, style = MaterialTheme.typography.labelSmall)
                                             }
                                         }
                                     }
@@ -186,7 +190,7 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
                 Text(textoTurno)
                 when (status) {
                     "pendiente" -> Text(tx("Solicitud pendiente de respuesta."), color = MaterialTheme.colorScheme.tertiary)
-                    "aprobado" -> Text(tx("Solicitud aprobada."), color = MaterialTheme.colorScheme.primary)
+                    "aprobado" -> Text(tx("Solicitud aprobada."), color = MaterialTheme.colorScheme.secondary)
                     "rechazado" -> Text(tx("Solicitud rechazada."), color = MaterialTheme.colorScheme.error)
                 }
                 bloqueoSel?.let { Text(tx("No puedes solicitar este día: {m}", "m" to campoSeguro(it, "motivo").ifBlank { tx("bloqueado por la oficina") }), color = MaterialTheme.colorScheme.error) }
@@ -199,8 +203,8 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
                             FilterChip(selected = motivo == id, onClick = { motivo = id }, label = { Text(label) })
                         }
                     }
-                    OutlinedTextField(nota, { if (it.length <= 300) nota = it }, label = { Text(tx("Explica brevemente el motivo (obligatorio)")) }, minLines = 2, modifier = Modifier.fillMaxWidth())
-                    Button(onClick = { confirmar = seleccion }, enabled = !enviando && nota.trim().length >= 4, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                    OutlinedTextField(nota, { if (it.length <= 300) nota = it }, label = { Text(tx("Explica brevemente el motivo (obligatorio)")) }, minLines = 2, modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
+                    Button(onClick = { confirmar = seleccion }, enabled = !enviando && nota.trim().length >= 4, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) {
                         if (enviando) CircularProgressIndicator(Modifier.height(20.dp)) else Text(tx("Solicitar día libre"))
                     }
                 } else if (fechaSel >= hoy && status.isBlank() && (esLibre || suspensionSel || bloqueoSel != null)) {
@@ -223,8 +227,8 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
                 } catch (e: ErrorApi) { error = e.message }
                 finally { enviando = false }
             }
-        }) { Text(tx("Enviar")) } },
-        dismissButton = { TextButton(onClick = { confirmar = null }) { Text(tx("Revisar")) } },
+        }, colors = coloresBotonTexto()) { Text(tx("Enviar")) } },
+        dismissButton = { TextButton(onClick = { confirmar = null }, colors = coloresBotonTexto()) { Text(tx("Revisar")) } },
     ) }
 }
 

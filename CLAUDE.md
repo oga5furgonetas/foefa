@@ -58,6 +58,23 @@ visible nombra otra plataforma o la marca escrita a mano. El logo es
 `node scripts/generar-iconos.mjs`. Los enlaces (portal, taller, empleo) salen
 del dominio donde se sirve la app (`origen()`), nunca escritos.
 
+## El diseño compacto de la app de reparto
+
+Desde el 08-11-2026 las pantallas de reparto (web y nativa) se montan con unos tokens y unas piezas comunes, no con
+clases, colores ni alturas a mano:
+
+- **Web:** los tokens están en `frontend/tailwind.config.js` (la letra `text-pie|sec|etiqueta|texto|boton|nombre|campo|
+  titulo|cifra|guia|paquete` y los colores `ruta-*`) y en `frontend/src/index.css` (`--letra`, la «Letra más grande», y
+  `--r-*`, los colores con significado); las piezas, en `frontend/src/pages/driver/piezas/` (Cabecera, Boton, Aviso, Hoja,
+  FilaParada, Chip…).
+- **Nativa:** `fds/ui/Tema.kt` (letra, formas, `Paleta` y `Extra`) y `fds/ui/Componentes.kt` (`Esp`, `Alto` y las piezas).
+- **La regla:** una pantalla nueva de reparto se monta con las piezas. Ni `text-[13px]`, ni `#hex`, ni `fontSize =`, ni
+  `Color(0x…)`, ni alturas fijas con texto dentro. `check-tokens-ruta.mjs` y `check-tokens-nativa.mjs` lo vigilan en TODAS
+  las pantallas; las del portal que el diseño no rediseñó están en la lista `EXCEPCIONES` de cada checker, con su tope.
+- **Los textos van por `tx()`:** el español es la clave. Lo que dicen las dos apps, con sus 5 idiomas (en, pt, fr, it, de),
+  va al final de `frontend/src/lib/textosRutaA.js`; lo que solo dice la nativa, en `app-android/traducciones-nativa.json`.
+  `ui/Traducciones.kt` es generado (`node scripts/nativa-idioma.mjs`): no se edita.
+
 ## Arrancar en local
 
 ```
@@ -83,13 +100,16 @@ admin). Opcionales: `GEMINI_API_KEY`, R2 (`R2_*`), correo (`RESEND_API_KEY`,
 node scripts/check-existe.mjs && node scripts/check-huerfanos.mjs && node scripts/check-marca.mjs
 node scripts/check-i18n.mjs && node scripts/check-permisos.mjs && node scripts/check-modulos.mjs
 node scripts/check-promo.mjs
+node scripts/check-tokens-ruta.mjs && node scripts/check-tokens-nativa.mjs     # el diseño compacto de reparto
+node scripts/check-textos-ruta.mjs && node scripts/nativa-idioma.mjs --comprobar   # sus traducciones, web y nativa
 cd frontend && npx eslint src && npx vite build
 python -m pytest backend/tests -q --ignore=backend/tests/test_api.py   # test_api necesita Mongo
 cd frontend && npx playwright test humo --project=escritorio         # todas las pantallas, API simulada
 ```
 
 `scripts/i18n-muertas.mjs` lista (y con `--borrar` quita) traducciones que ya
-no usa nadie. `tools/imports_sin_usar.py` quita imports que ESLint marca.
+no usa nadie (las del panel; las de la app de reparto, `textosRuta*.js`, las lista `check-textos-ruta.mjs` como «sin uso»,
+que no pide ni la web, ni la nativa ni el servidor, y se quitan a mano). `tools/imports_sin_usar.py` quita imports que ESLint marca.
 
 ## Nombres heredados que se quedan a propósito
 

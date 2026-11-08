@@ -1,13 +1,19 @@
+/* diseño compacto */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { Check, History, Loader2, LocateFixed, MapPin, Search, WifiOff, X } from 'lucide-react'
+import { Check, Loader2, LocateFixed, Map as IconoMapa, Search, WifiOff, X } from 'lucide-react'
 import { repMisDirecciones, repUbicar } from '../../services/api'
 import { buscarDirecciones } from '../../lib/direcciones'
 import { lista } from '../../lib/lista'
 import { tx, useIdioma } from '../../lib/idioma'
 import { useAtras } from '../../lib/atras'
 import { alElegir, centroInicial, deLaBuscada, deUbicar, juntarSugerencias, metros, punto } from '../../lib/situar'
+import Boton from './piezas/Boton'
+import BotonMapa from './piezas/BotonMapa'
+import Campo from './piezas/Campo'
+import FilaSugerencia from './piezas/FilaSugerencia'
+import Pastilla from './piezas/Pastilla'
 
 /* ── SITUAR LA PARADA (02-11-2026) ───────────────────────────────────────────
    Dani, probando la app con una cuenta nueva: «el primer paquete que escaneo no encuentra la dirección y tiene que ir
@@ -19,6 +25,12 @@ import { alElegir, centroInicial, deLaBuscada, deUbicar, juntarSugerencias, metr
    Abajo, «Es aquí», que devuelve el punto a quien abrió esto: la ruta lo guarda y guía hasta él; la ficha lo pone en
    el formulario. Google Maps, solo si se pulsa su enlace pequeño. Es la misma pantalla que la de la app nativa
    (ui/hoy/SituarPantalla.kt). */
+/* EL DISEÑO COMPACTO (07-11-2026, §5.10, W6): solo lo visual; los textos y la lógica son los de antes (seis tandas y 57 pruebas).
+   Arriba, una fila de 56 con la ✕ y el buscador (ya no hay cabecera de dos líneas: «Situar la parada» es el nombre de la
+   pantalla y el cliente baja al panel); sobre el mapa, una píldora cada vez (la de «sin red» o «no la encuentro» sustituye a
+   «Mueve el mapa hasta la puerta») y las sugerencias en filas de 48, cinco como mucho; «Mi ubicación» de 48 abajo a la derecha,
+   encima del panel; y el panel con «Aquí: …», el cliente, 🗺 («Abrir en Google Maps», el enlace de antes) y «✓ Es aquí» de 52.
+   La zona segura de arriba y de abajo, para el iPhone. */
 
 const ESPANA = { punto: [40.4168, -3.7038], zoom: 5 }
 const MUNDO = { punto: [30, 0], zoom: 2 }
@@ -202,7 +214,7 @@ export default function SituarParada({ parada, base = null, otras = [], pais = '
     if (!m || !yo) return
     if (capaYo.current) { capaYo.current.setLatLng(yo); return }
     const icono = L.divIcon({ className: '', iconSize: [18, 18], iconAnchor: [9, 9],
-      html: '<div style="width:18px;height:18px;border-radius:9px;background:#2563eb;border:3px solid #fff;box-shadow:0 0 0 6px rgba(37,99,235,.25)"></div>' })
+      html: '<div style="width:18px;height:18px;border-radius:9px;background:rgb(37,99,235);border:3px solid white;box-shadow:0 0 0 6px rgba(37,99,235,.25)"></div>' })
     capaYo.current = L.marker(yo, { icon: icono, interactive: false, keyboard: false }).addTo(m)
   }, [yo])
 
@@ -273,24 +285,22 @@ export default function SituarParada({ parada, base = null, otras = [], pais = '
   // Ninguna de la calle BUSCADA (o ninguna) es que no la encuentra, como en la app nativa (Situar.deLaBuscada): «Otra
   // calle» ya se marca con la dirección de la parada, y lo buscado aquí se puede haber cambiado (03-11-2026).
   const noEncuentro = buscado && !buscando && !sinRed && !sugs.some((s) => deLaBuscada(texto.trim(), s)) && texto.trim().length >= 4
+  const conLista = verLista && sugs.length > 0
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-dark-950" role="dialog" aria-modal="true" aria-label={tx('Situar la parada')}>
-      {/* ARRIBA: qué parada es y su dirección, que se puede corregir para buscar. */}
-      <div className="shrink-0 border-b border-dark-800 bg-dark-900 px-3 pb-3 pt-2 shadow-lg">
-        <div className="flex items-center gap-1.5">
-          <button type="button" onClick={onCerrar} aria-label={tx('Cerrar')} className="rounded-full p-2 text-dark-300"><X size={20} /></button>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-[17px] font-bold leading-tight text-dark-50">{tx('Situar la parada')}</h2>
-            {parada?.cliente && <p className="truncate text-[12.5px] text-dark-400">{parada.cliente}</p>}
+      {/* ARRIBA (diseño compacto, 07-11-2026, §5.10): una fila de 56 con la ✕ de 48 y el buscador de 48, con ⟳ mientras busca. La
+          dirección se puede corregir para buscar. «Situar la parada» es el nombre de la pantalla (la cabecera de dos líneas se
+          fue: el cliente baja al panel) y la zona segura de arriba, para el iPhone, va en el relleno. */}
+      <div className="shrink-0 border-b border-dark-800 bg-dark-900 pt-[env(safe-area-inset-top)]">
+        <div className="flex min-h-14 items-center gap-1 pl-1 pr-4">
+          <Boton variante="icono" tono="neutro" icono={X} nombre={tx('Cerrar')} onClick={onCerrar} />
+          <div className="relative min-w-0 flex-1">
+            <Campo valor={texto} icono={Search} ejemplo={tx('Calle, número y población')} nombre={tx('Dirección')} autoComplete="off" enterKeyHint="search"
+              onChange={(v) => { setTexto(v); setTocado(true); setVerLista(true) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+              style={{ paddingRight: buscando ? 44 : undefined, textOverflow: 'ellipsis' }} />
+            {buscando && <Loader2 size={20} aria-label={tx('Buscando la dirección…')} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-dark-400" />}
           </div>
-        </div>
-        <div className="relative mt-2">
-          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-dark-500" />
-          <input value={texto} aria-label={tx('Dirección')} placeholder={tx('Calle, número y población')} autoComplete="off" enterKeyHint="search"
-            onChange={(e) => { setTexto(e.target.value); setTocado(true); setVerLista(true) }}
-            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
-            className="w-full rounded-xl border border-dark-700 bg-dark-950 py-2.5 pl-9 pr-9 text-[15px] text-dark-50 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none" />
-          {buscando && <Loader2 size={16} aria-label={tx('Buscando la dirección…')} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-dark-400" />}
         </div>
       </div>
 
@@ -299,91 +309,77 @@ export default function SituarParada({ parada, base = null, otras = [], pais = '
         <div ref={caja} data-testid="situar-mapa" className="absolute inset-0 isolate" />
         <Chincheta />
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col items-center gap-2 p-3">
-          {verLista && sugs.length > 0 ? (
-            <div className="pointer-events-auto w-full max-w-md overflow-hidden rounded-2xl border border-dark-700 bg-dark-900/[.97] shadow-2xl">
-              <div className="flex items-center justify-between border-b border-dark-800 py-0.5 pl-3.5 pr-1">
-                <p className="text-[12.5px] font-semibold text-dark-300">{tx('¿Es alguna de estas?')}</p>
-                <button type="button" onClick={() => setVerLista(false)} aria-label={tx('Cerrar')} className="rounded-full p-2 text-dark-400"><X size={16} /></button>
+          {conLista && (
+            <div className="pointer-events-auto w-full max-w-md overflow-hidden rounded-xl bg-dark-900 shadow-md">
+              <div className="flex min-h-12 items-center gap-1 pl-3 pr-1">
+                <p className="min-w-0 flex-1 text-etiqueta text-dark-400">{tx('¿Es alguna de estas?')}</p>
+                <Boton variante="icono" tono="neutro" icono={X} nombre={tx('Cerrar')} onClick={() => setVerLista(false)} />
               </div>
-              <ul className="max-h-[38vh] overflow-y-auto" aria-label={tx('Direcciones sugeridas')}>
-                {sugs.map((s) => (
-                  <li key={`${s.direccion}|${s.lat}|${s.lng}`}>
-                    <button type="button" onClick={() => elegir(s)}
-                      className="flex w-full items-center gap-2.5 border-b border-dark-800 px-3.5 py-2.5 text-left last:border-0 active:bg-dark-800">
-                      {s.conocida ? <History size={16} className="shrink-0 text-emerald-300" /> : <MapPin size={16} className="shrink-0 text-brand-300" />}
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[14px] leading-snug text-dark-50">{s.direccion}</span>
-                        {s.conocida ? (
-                          <span className="block text-[11.5px] text-emerald-300">{tx('Ya estuviste aquí')} · {s.veces === 1 ? tx('1 vez') : tx('{n} veces', { n: s.veces })}</span>
-                        ) : s.otraCalle ? (
-                          // No es la escrita (03-11-2026, como la app nativa): va al final y se dice, en rojo.
-                          <span className="block text-[11.5px] font-semibold text-red-300">{tx('Otra calle')}</span>
-                        ) : s.precision === 'calle' ? <span className="block text-[11.5px] text-amber-300">{tx('Sin el portal')}</span> : null}
-                      </span>
-                    </button>
-                  </li>
+              {/* Cinco como mucho, en filas de 48 con «texto» (FilaSugerencia, la misma de la ficha). */}
+              <ul className="max-h-[38dvh] divide-y divide-dark-800 overflow-y-auto border-t border-dark-800" aria-label={tx('Direcciones sugeridas')}>
+                {sugs.slice(0, 5).map((s) => (
+                  <FilaSugerencia key={`${s.direccion}|${s.lat}|${s.lng}`} s={s} onElegir={elegir} conCliente={false} />
                 ))}
               </ul>
-              {atribucion && <p className="border-t border-dark-800 px-3.5 py-1.5 text-[10.5px] leading-snug text-dark-500">{atribucion}</p>}
+              {atribucion && <p className="border-t border-dark-800 px-3 py-2 text-pie text-dark-400">{atribucion}</p>}
             </div>
-          ) : (
-            <Pildora>{tx('Mueve el mapa hasta la puerta')}</Pildora>
           )}
-          {sinRed && <Pildora aviso><WifiOff size={15} className="shrink-0" /> {tx('Sin conexión: no puedo buscar la dirección. Si estás en la puerta, pulsa «Mi ubicación» y «Es aquí».')}</Pildora>}
-          {noEncuentro && <Pildora>{tx('No encuentro esa dirección: mueve el mapa hasta la puerta.')}</Pildora>}
-          {avisoYo && <Pildora aviso>{avisoYo}</Pildora>}
+          {/* Una píldora cada vez: «sin red» y «no la encuentro» sustituyen a «Mueve el mapa hasta la puerta». */}
+          <div className="flex w-full max-w-md flex-col items-center gap-2">
+            {sinRed ? (
+              <Pastilla role="status" tono="aviso" icono={WifiOff} lineas={3} texto={tx('Sin conexión: no puedo buscar la dirección. Si estás en la puerta, pulsa «Mi ubicación» y «Es aquí».')} />
+            ) : noEncuentro ? (
+              <Pastilla role="status" lineas={2} texto={tx('No encuentro esa dirección: mueve el mapa hasta la puerta.')} />
+            ) : !conLista && <Pastilla role="status" texto={tx('Mueve el mapa hasta la puerta')} />}
+            {avisoYo && <Pastilla role="status" tono="aviso" lineas={2} texto={avisoYo} />}
+          </div>
         </div>
-        <button type="button" onClick={() => irAMiPosicion('boton')} aria-label={tx('Mi ubicación')}
-          className="absolute bottom-3 right-3 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-dark-700 bg-dark-900/95 text-sky-300 shadow-lg">
-          {buscandoYo ? <Loader2 size={20} className="animate-spin" /> : <LocateFixed size={20} />}
-        </button>
+        {/* «Mi ubicación» (48), abajo a la derecha y encima del panel; mientras busca el móvil, un círculo que gira. */}
+        <BotonMapa className="absolute bottom-3 right-3 z-10" nombre={tx('Mi ubicación')} onClick={() => irAMiPosicion('boton')}
+          icono={buscandoYo ? <Loader2 size={24} aria-hidden="true" className="animate-spin" /> : LocateFixed} />
       </div>
 
-      {/* ABAJO: lo que se va a guardar y el botón grande. */}
-      <div className="shrink-0 rounded-t-3xl border-t border-dark-700 bg-dark-950 px-4 pb-5 pt-3.5 shadow-2xl">
-        <p data-testid="situar-aqui" className="line-clamp-2 text-[15px] font-semibold leading-snug text-dark-50">
+      {/* ABAJO, el panel: lo que se va a guardar («Aquí: …», en dos líneas como mucho), el cliente con la dirección de la parada
+          (en «sec»), 🗺 y «✓ Es aquí» (52). La zona segura de abajo, para el iPhone, va en el relleno. */}
+      <div className="shrink-0 rounded-t-2xl border-t border-dark-800 bg-dark-900 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+        <p data-testid="situar-aqui" className="line-clamp-2 text-nombre text-dark-50">
           {elegida ? tx('Aquí: {d}', { d: elegida.direccion }) : (parada?.direccion || tx('Mueve el mapa hasta la puerta'))}
         </p>
-        {elegida && parada?.direccion && (
-          <p className="mt-0.5 truncate text-[12.5px] text-dark-400">
-            {elegida.otraCalle && <span className="font-semibold text-red-300">{tx('Otra calle')} · </span>}{parada.direccion}
+        {(parada?.cliente || (elegida && parada?.direccion)) && (
+          <p className="mt-1 truncate text-sec text-dark-400">
+            {parada?.cliente && <span>{parada.cliente}</span>}
+            {parada?.cliente && elegida && parada?.direccion && <span> · </span>}
+            {elegida && parada?.direccion && (
+              <span>{elegida.otraCalle && <span className="font-semibold text-ruta-peligro-texto">{tx('Otra calle')} · </span>}{parada.direccion}</span>
+            )}
           </p>
         )}
-        {!puede && <p className="mt-0.5 text-[12.5px] font-semibold text-amber-200">{tx('Acerca el mapa hasta ver la puerta')}</p>}
-        {error && <p role="alert" className="mt-1.5 text-[13px] font-semibold text-red-300">{error}</p>}
-        <button type="button" onClick={esAqui} disabled={!puede || guardando}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-3.5 text-[16px] font-bold text-brand-tinta active:scale-[.99] disabled:opacity-40">
-          {guardando ? <Loader2 size={18} className="animate-spin" /> : <Check size={19} />} {tx('Es aquí')}
-        </button>
-        {enlaceFuera && (
-          // Se cierra después de seguir el enlace: quitarlo de la página en el mismo toque podría dejarlo sin abrir.
-          <a href={enlaceFuera} target="_blank" rel="noreferrer" onClick={() => setTimeout(onCerrar, 0)}
-            className="mx-auto mt-2.5 block w-fit text-center text-[12.5px] font-semibold text-dark-400 underline underline-offset-2">
-            {tx('Abrir en {app}', { app: nombreFuera })}
-          </a>
-        )}
+        {!puede && <p className="mt-1 text-sec font-semibold text-ruta-aviso-texto">{tx('Acerca el mapa hasta ver la puerta')}</p>}
+        {error && <p role="alert" className="mt-1 text-texto font-semibold text-ruta-peligro-texto">{error}</p>}
+        <div className="mt-3 flex items-center gap-2">
+          {enlaceFuera && (
+            // «Abrir en Google Maps» (o Waze), de icono: el mismo nombre y el mismo enlace que el texto suelto de antes. Se cierra
+            // después de seguir el enlace: quitarlo de la página en el mismo toque podría dejarlo sin abrir.
+            <Boton variante="icono" tono="neutro" relleno icono={IconoMapa} nombre={tx('Abrir en {app}', { app: nombreFuera })}
+              href={enlaceFuera} target="_blank" rel="noreferrer" onClick={() => setTimeout(onCerrar, 0)} />
+          )}
+          <Boton variante="principal" icono={Check} texto={tx('Es aquí')} cargando={guardando} disabled={!puede || guardando} onClick={esAqui} className="min-w-0 flex-1" />
+        </div>
       </div>
     </div>
   )
 }
 
-/* La chincheta fija: su punta es el centro exacto del mapa (y la sombra, el punto que se guarda). */
+/* La chincheta fija: su punta es el centro exacto del mapa (y la sombra, el punto que se guarda). Los colores son clases
+   (el relleno de marca y el trazo blanco), no hex a mano; el dibujo, el de siempre. */
 function Chincheta() {
   return (
     <div className="pointer-events-none absolute left-1/2 top-1/2 z-10" aria-hidden="true" data-testid="chincheta">
-      <span className="absolute -left-[5px] -top-[5px] block h-2.5 w-2.5 rounded-full bg-black/50" />
-      <svg width="44" height="56" viewBox="0 0 44 56" className="absolute drop-shadow-lg" style={{ left: -22, top: -55 }}>
-        <path d="M22 54C22 54 4 34 4 21a18 18 0 0 1 36 0c0 13-18 33-18 33z" fill="#0FC2BC" stroke="#fff" strokeWidth="3" strokeLinejoin="round" />
-        <circle cx="22" cy="21" r="6.5" fill="#fff" />
+      <span className="absolute -left-1 -top-1 block h-2 w-2 rounded-full bg-black/50" />
+      <svg width="44" height="56" viewBox="0 0 44 56" className="absolute drop-shadow-md" style={{ left: -22, top: -55 }}>
+        <path d="M22 54C22 54 4 34 4 21a18 18 0 0 1 36 0c0 13-18 33-18 33z" className="fill-brand-500 stroke-white" strokeWidth="3" strokeLinejoin="round" />
+        <circle cx="22" cy="21" r="6.5" className="fill-white" />
       </svg>
     </div>
-  )
-}
-
-function Pildora({ children, aviso = false }) {
-  return (
-    <p role="status" className={`flex max-w-md items-center gap-2 rounded-2xl px-3.5 py-2 text-[13px] font-semibold leading-snug shadow-lg ${aviso ? 'bg-amber-700 text-white' : 'bg-dark-900/95 text-dark-100'}`}>
-      {children}
-    </p>
   )
 }

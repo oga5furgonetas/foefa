@@ -1,17 +1,21 @@
+// diseño compacto
 package com.flotadsp.fds.ui.parada
 
 import com.flotadsp.fds.ui.tx
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -21,33 +25,32 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.StickyNote2
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.LocationOff
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DocumentScanner
-import androidx.compose.material.icons.filled.LocationOff
-import androidx.compose.material.icons.filled.Map
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,9 +64,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.flotadsp.fds.FdsApp
@@ -72,8 +79,23 @@ import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.etiqueta.Lectura
 import com.flotadsp.fds.etiqueta.LectorEtiqueta
 import com.flotadsp.fds.data.Ubicado
+import com.flotadsp.fds.ui.Alto
+import com.flotadsp.fds.ui.Aviso
+import com.flotadsp.fds.ui.BotonIcono
+import com.flotadsp.fds.ui.BotonNormal
+import com.flotadsp.fds.ui.BotonPrincipal
+import com.flotadsp.fds.ui.BotonTexto
+import com.flotadsp.fds.ui.Cabecera
+import com.flotadsp.fds.ui.CampoTexto
+import com.flotadsp.fds.ui.ChipOpcion
+import com.flotadsp.fds.ui.Esp
+import com.flotadsp.fds.ui.FilaDeChips
 import com.flotadsp.fds.ui.LocalExtra
+import com.flotadsp.fds.ui.Menu
+import com.flotadsp.fds.ui.Opcion
+import com.flotadsp.fds.ui.Segmentado
 import com.flotadsp.fds.ui.TextoNumero
+import com.flotadsp.fds.ui.Tono
 import com.flotadsp.fds.ui.Region
 import com.flotadsp.fds.ui.hoy.Calle
 import com.flotadsp.fds.ui.hoy.GeoMovil
@@ -105,8 +127,9 @@ import java.io.File
 import java.util.Locale
 
 /* Los atajos del horario (30-10-2026): «Cierra a las 14:00» es lo que un repartidor con diez años de oficio hacía a
-   mano (primero los comercios, luego la ruta). Y los seis huecos de la furgoneta, como en la web. */
-private val ATAJOS_HORARIO = listOf(tx("Mañana (9-14)") to "9-14", tx("Tarde (16-20)") to "16-20", tx("Cierra a las 14:00") to "8-14")
+   mano (primero los comercios, luego la ruta). Y los seis huecos de la furgoneta, como en la web. Los rótulos, cortos
+   desde el diseño compacto (07-11-2026, §5.9): «9–14», «16–20» y «Hasta 14:00»; lo que guardan, igual. */
+private val ATAJOS_HORARIO = listOf("9–14" to "9-14", "16–20" to "16-20", tx("Hasta 14:00") to "8-14")
 private val HUECOS = listOf(tx("Delante · izq"), tx("Delante · der"), tx("Medio · izq"), tx("Medio · der"), tx("Detrás · izq"), tx("Detrás · der"))
 
 /** Una dirección sugerida: de las suyas (ya estuvo allí), del servidor, del móvil o del buscador de OpenStreetMap.
@@ -135,6 +158,9 @@ fun FichaParada(
     alCerrar: (guardada: Boolean) -> Unit,
     /** Guardada: la parada como la devuelve el servidor (para decir si quedó sin situar). De serie, cerrar. */
     alGuardada: (Parada?) -> Unit = { alCerrar(true) },
+    /** «Quitar de la ruta» en el ⋮ de «Editar parada» (07-11-2026, §5.9): quien llama quita la parada y cierra la
+     *  ficha. null (de serie) = sin el ⋮, como hasta ahora. */
+    alQuitar: (() -> Unit)? = null,
 ) {
     val ctx = LocalContext.current
     val repo = (ctx.applicationContext as FdsApp).repo
@@ -173,10 +199,10 @@ fun FichaParada(
             inicial == null || editar != null -> null
             // Del escáner sin nada legible (la barra sola y la letra fuera del encuadre): decirlo, no «revisa lo leído».
             inicial.direccion.isBlank() && inicial.cliente.isBlank() && inicial.telefono.isBlank() ->
-                tx("El código no trae la dirección y no se ha podido leer de la etiqueta. Escríbela, o pulsa «Leer la etiqueta con una foto» con la etiqueta entera en la foto.")
+                tx("El código no trae la dirección y no se ha podido leer de la etiqueta. Escríbela, o pulsa «Foto etiqueta» con la etiqueta entera en la foto.")
             // El nombre o el teléfono sí, la dirección no (02-11-2026): decirlo claro, no «revisa lo leído».
             inicial.direccion.isBlank() ->
-                tx("No se ha podido leer la dirección de la etiqueta: escríbela, o pulsa «Leer la etiqueta con una foto».")
+                tx("No se ha podido leer la dirección de la etiqueta: escríbela, o pulsa «Foto etiqueta».")
             else -> tx("Revisa lo leído de la etiqueta antes de guardar.")
         })
     }
@@ -317,142 +343,165 @@ fun FichaParada(
         )
     }
 
+    var quitar by remember { mutableStateOf(false) }
+    // «Más datos» (07-11-2026, §5.9): cerrado salvo que algo de dentro ya tenga datos.
+    var masDatos by remember { mutableStateOf(contenido.isNotBlank() || horario.isNotBlank() || hueco.isNotBlank() || bultos != 1 || urgente || tipo != "entrega" || cobrar.isNotBlank()) }
+    val c = MaterialTheme.colorScheme
+    val titulo = when { editar != null -> tx("Editar parada"); inicial != null -> tx("Revisa la parada"); else -> tx("Nueva parada") }
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(when { editar != null -> tx("Editar parada"); inicial != null -> tx("Revisa la parada"); else -> tx("Nueva parada") }) },
-                navigationIcon = { IconButton(onClick = { alCerrar(false) }) { Icon(Icons.Default.Close, contentDescription = tx("Cerrar")) } },
-            )
+            Cabecera(titulo, alVolver = { alCerrar(false) }, cerrar = true, acciones = {
+                if (editar != null && alQuitar != null) Menu(listOf(Opcion(tx("Quitar de la ruta"), Icons.Default.Delete, peligro = true) { quitar = true }))
+            })
         },
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = c.background,
     ) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-            if (editar == null) {
-                OutlinedButton(onClick = hacerFoto, enabled = !leyendo, modifier = Modifier.fillMaxWidth().height(50.dp)) {
-                    if (leyendo) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.Default.DocumentScanner, contentDescription = null)
-                    Spacer(Modifier.width(8.dp)); Text(if (leyendo) tx("Leyendo la etiqueta…") else tx("Leer la etiqueta con una foto"))
-                }
-                Spacer(Modifier.height(12.dp))
-            }
-            aviso?.let {
-                Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) {
-                    Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp))
-                }
-                Spacer(Modifier.height(12.dp))
-            }
-            OutlinedTextField(
-                value = direccion, onValueChange = {
-                    direccion = it; tocada = true
-                    // AL CAMBIAR EL TEXTO (escribir o dictar), FUERA EL PUNTO, VENGA DE DONDE VENGA (03-11-2026, la
-                    // revisión): el de la lista, el de «Situar la parada» con una sugerencia y el puesto a mano en el mapa,
-                    // con el CP, la población, el origen y la precisión que vinieron con él (van en `punto`). Antes el de
-                    // «Situar» se quedaba: «Rúa Brétema Mariñeira 23» reescrita se guardaba con el punto de Oleiros,
-                    // «sugerencia», «calle», 15179 y Oleiros. Al guardar, el servidor busca lo escrito.
-                    elegida = false; punto = null; estadoDir = ""
-                },
-                label = { Text(tx("Dirección")) }, placeholder = { Text(tx("Calle, número y población")) },
-                leadingIcon = { Icon(Icons.Default.Place, contentDescription = null) },
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                modifier = Modifier.fillMaxWidth().focusRequester(foco),
-            )
-            EstadoDireccion(estadoDir, alSituar = { situarAbierto = true })
-            // Lo leído de una etiqueta que el servidor ya encuentra no abre la lista: solo si no la encuentra o si se escribe.
-            if (sugerencias.isNotEmpty() && (tocada || estadoDir != "portal")) {
-                Surface(color = MaterialTheme.colorScheme.surfaceContainerLowest, shape = MaterialTheme.shapes.small, tonalElevation = 2.dp,
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        // EL DISEÑO COMPACTO (07-11-2026, §5.9): el pie va fijo y sube con el teclado; solo se desplaza lo de arriba, así
+        // que el botón de guardar está siempre a la vista (antes quedaba unos 1.300 dp más abajo).
+        Column(Modifier.padding(pad).fillMaxSize().imePadding()) {
+            Column(
+                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Esp.l).padding(top = Esp.xs, bottom = Esp.l),
+                verticalArrangement = Arrangement.spacedBy(Esp.m),
+            ) {
+                if (editar == null) {
                     Column {
-                        sugerencias.forEach { s ->
-                            Surface(onClick = {
-                                // Lo que da un buscador no trae el piso: el de lo escrito se conserva (02-11-2026). Y si no
-                                // trae el portal escrito («Sin el portal», u otro número), se toman sus coordenadas pero lo
-                                // escrito no se pisa: sigue con su número y queda «Calle encontrada, sin el portal». Una de
-                                // otra calle pone su dirección (03-11-2026): nunca lo escrito con el punto de otra calle,
-                                // venga de donde venga (también del servidor), y una suya, tal cual con su precisión.
-                                val el = Situar.alElegir(direccion, s, cpConsulta, locConsulta)
-                                direccion = el.direccion
-                                punto = s.copy(direccion = el.direccion, cp = el.cp, localidad = el.localidad, precision = el.precision); elegida = true; sugerencias = emptyList()
-                                estadoDir = if (s.lat == null) "" else el.precision
-                                if (cliente.isBlank()) cliente = s.cliente
-                                if (telefono.isBlank()) telefono = s.telefono
-                            }, color = MaterialTheme.colorScheme.surfaceContainerLowest) {
-                                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(if (s.veces > 0) Icons.Default.History else Icons.Default.Place, contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(s.direccion, style = MaterialTheme.typography.bodyLarge)
-                                        if (s.veces > 0) {
-                                            Text(tx("Ya estuviste aquí") + " · ${s.veces} ${if (s.veces == 1) tx("vez") else tx("veces")}${s.cliente.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""}",
-                                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-                                        } else if (s.otraCalle) {
-                                            // OTRA CALLE (02-11-2026): no es la escrita (Situar.ordenar); va al final y se dice.
-                                            Text(tx("Otra calle"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                                        } else if (s.precision == "calle") {
-                                            Text(tx("Sin el portal"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
+                        BotonNormal(if (leyendo) tx("Leyendo…") else tx("Foto etiqueta"), hacerFoto, icono = Icons.Default.PhotoCamera, tono = Tono.NEUTRO,
+                            enabled = !leyendo, modifier = Modifier.fillMaxWidth())
+                        Text(tx("Se lee en el móvil"), style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant,
+                            modifier = Modifier.padding(start = Esp.m, top = Esp.xs))
+                    }
+                }
+                aviso?.let { Aviso(it, icono = Icons.Default.Info, maxLineas = 6) }
+                Column(verticalArrangement = Arrangement.spacedBy(Esp.xs)) {
+                    CampoTexto(
+                        valor = direccion, alCambiar = {
+                            direccion = it; tocada = true
+                            // AL CAMBIAR EL TEXTO (escribir o dictar), FUERA EL PUNTO, VENGA DE DONDE VENGA (03-11-2026, la
+                            // revisión): el de la lista, el de «Situar la parada» con una sugerencia y el puesto a mano en el mapa,
+                            // con el CP, la población, el origen y la precisión que vinieron con él (van en `punto`). Antes el de
+                            // «Situar» se quedaba: «Rúa Brétema Mariñeira 23» reescrita se guardaba con el punto de Oleiros,
+                            // «sugerencia», «calle», 15179 y Oleiros. Al guardar, el servidor busca lo escrito.
+                            elegida = false; punto = null; estadoDir = ""
+                        },
+                        icono = Icons.Default.Place, ejemplo = tx("Dirección completa"), nombre = tx("Dirección"),
+                        teclado = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        modifier = Modifier.fillMaxWidth().focusRequester(foco),
+                    )
+                    EstadoDireccion(estadoDir, alSituar = { situarAbierto = true })
+                    // Lo leído de una etiqueta que el servidor ya encuentra no abre la lista: solo si no la encuentra o si se escribe.
+                    if (sugerencias.isNotEmpty() && (tocada || estadoDir != "portal")) {
+                        Surface(color = c.surfaceContainerHigh, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
+                            Column {
+                                // Cinco como mucho (07-11-2026, §5.9); Situar.ordenar ya las trae en su orden.
+                                sugerencias.take(5).forEachIndexed { i, s ->
+                                    if (i > 0) HorizontalDivider(color = c.outlineVariant)
+                                    FilaSugerencia(s, alElegir = {
+                                        // Lo que da un buscador no trae el piso: el de lo escrito se conserva (02-11-2026). Y si no
+                                        // trae el portal escrito («Sin el portal», u otro número), se toman sus coordenadas pero lo
+                                        // escrito no se pisa: sigue con su número y queda «Calle encontrada, sin el portal». Una de
+                                        // otra calle pone su dirección (03-11-2026): nunca lo escrito con el punto de otra calle,
+                                        // venga de donde venga (también del servidor), y una suya, tal cual con su precisión.
+                                        val el = Situar.alElegir(direccion, s, cpConsulta, locConsulta)
+                                        direccion = el.direccion
+                                        punto = s.copy(direccion = el.direccion, cp = el.cp, localidad = el.localidad, precision = el.precision); elegida = true; sugerencias = emptyList()
+                                        estadoDir = if (s.lat == null) "" else el.precision
+                                        if (cliente.isBlank()) cliente = s.cliente
+                                        if (telefono.isBlank()) telefono = s.telefono
+                                    })
+                                }
+                                // De dónde salen (CartoCiudad es CC BY 4.0: hay que decirlo donde se enseña).
+                                ubicado?.atribucion?.takeIf { it.isNotBlank() && sugerencias.any { s -> s.fuente == "servidor" } }?.let {
+                                    Text(it, style = MaterialTheme.typography.labelSmall, color = c.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = Esp.m, vertical = 6.dp))
                                 }
                             }
                         }
-                        // De dónde salen (CartoCiudad es CC BY 4.0: hay que decirlo donde se enseña).
-                        ubicado?.atribucion?.takeIf { it.isNotBlank() && sugerencias.any { s -> s.fuente == "servidor" } }?.let {
-                            Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                    }
+                }
+                // «Cliente» y «Teléfono», en dos columnas desde 360 dp; en un móvil más estrecho, uno debajo del otro. F3 (08-11-2026):
+                // también uno debajo del otro con la letra a 1,3 o más: a 360 dp con 1,3 cada campo medía 160 dp y recortaba lo escrito
+                // («Farmacia S», «+34 611 40»).
+                val ancho = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
+                val letraGrande = LocalDensity.current.fontScale >= 1.3f
+                val campoCliente: @Composable (Modifier) -> Unit = { m ->
+                    CampoTexto(cliente, { cliente = it }, icono = Icons.Default.Person, ejemplo = tx("Cliente"),
+                        teclado = KeyboardOptions(capitalization = KeyboardCapitalization.Words), modifier = m)
+                }
+                val campoTelefono: @Composable (Modifier) -> Unit = { m ->
+                    CampoTexto(telefono, { telefono = it }, icono = Icons.Default.Call, ejemplo = tx("Teléfono"),
+                        teclado = KeyboardOptions(keyboardType = KeyboardType.Phone), modifier = m)
+                }
+                if (ancho >= 360.dp && !letraGrande) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Esp.s)) { campoCliente(Modifier.weight(1f)); campoTelefono(Modifier.weight(1f)) }
+                } else {
+                    campoCliente(Modifier.fillMaxWidth()); campoTelefono(Modifier.fillMaxWidth())
+                }
+                CampoTexto(notas, { notas = it }, icono = Icons.AutoMirrored.Filled.StickyNote2, ejemplo = tx("Notas (portal, piso…)"), unaLinea = false, modifier = Modifier.fillMaxWidth())
+                // «Más datos» (48): qué lleva, el horario, el hueco, los bultos, urgente, entrega o recogida y el cobro.
+                Column {
+                    Row(
+                        Modifier.fillMaxWidth().clickable(role = Role.Button) { masDatos = !masDatos }.heightIn(min = Alto.boton),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(tx("Más datos"), style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                        Icon(if (masDatos) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null, tint = c.onSurfaceVariant)
+                    }
+                    if (masDatos) {
+                        Column(verticalArrangement = Arrangement.spacedBy(Esp.m)) {
+                            CampoTexto(contenido, { contenido = it }, icono = Icons.Default.Inventory2, ejemplo = tx("Qué lleva"), nombre = tx("Qué lleva (opcional)"), modifier = Modifier.fillMaxWidth())
+                            // El horario del cliente: la ruta lo respeta y avisa si se llega tarde. Con atajos: un toque en vez de escribirlo.
+                            Column(verticalArrangement = Arrangement.spacedBy(Esp.s)) {
+                                CampoTexto(horario, { horario = it }, icono = Icons.Default.Schedule, ejemplo = tx("Horario"), nombre = tx("Horario del cliente (ej. de 10 a 12)"), modifier = Modifier.fillMaxWidth())
+                                FilaDeChips { ATAJOS_HORARIO.forEach { (t, h) -> ChipOpcion(t, elegido = horario == h, onClick = { horario = if (horario == h) "" else h }) } }
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(Esp.s)) {
+                                Text(tx("¿Dónde va en la furgoneta?"), style = MaterialTheme.typography.labelMedium, color = c.onSurfaceVariant)
+                                RejillaHuecos(hueco, alElegir = { hueco = if (hueco == it) "" else it })
+                            }
+                            // Los bultos y «Urgente», en una fila de 48 (con la letra grande, en dos).
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(Esp.l), verticalArrangement = Arrangement.spacedBy(Esp.s)) {
+                                Row(Modifier.heightIn(min = Alto.boton), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(tx("Bultos"), style = MaterialTheme.typography.bodyMedium)
+                                    Spacer(Modifier.width(Esp.s))
+                                    BotonIcono(Icons.Default.Remove, tx("Uno menos"), { if (bultos > 1) bultos -= 1 }, relleno = true)
+                                    Text("$bultos", style = MaterialTheme.typography.titleMedium.merge(TextoNumero), modifier = Modifier.padding(horizontal = Esp.m))
+                                    BotonIcono(Icons.Default.Add, tx("Uno más"), { if (bultos < 99) bultos += 1 }, relleno = true)
+                                }
+                                Row(Modifier.heightIn(min = Alto.boton).toggleable(urgente, role = Role.Switch) { urgente = it }, verticalAlignment = Alignment.CenterVertically) {
+                                    Text(tx("Urgente"), style = MaterialTheme.typography.bodyMedium)
+                                    Spacer(Modifier.width(Esp.s))
+                                    Switch(checked = urgente, onCheckedChange = null)
+                                }
+                            }
+                            // «Entrega | Recogida» y «A cobrar», en otra.
+                            Row(horizontalArrangement = Arrangement.spacedBy(Esp.s), verticalAlignment = Alignment.CenterVertically) {
+                                val tipos = listOf("entrega", "recogida")
+                                Segmentado(listOf(tx("Entrega"), tx("Recogida")), elegida = tipos.indexOf(tipo).coerceAtLeast(0), alElegir = { tipo = tipos[it] }, modifier = Modifier.weight(1f))
+                                CampoTexto(cobrar, { cobrar = it }, icono = Icons.Default.Payments, ejemplo = tx("A cobrar ({moneda})", "moneda" to Region.simbolo),
+                                    nombre = tx("A cobrar ({moneda}, opcional)", "moneda" to Region.simbolo),
+                                    teclado = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
+                            }
                         }
                     }
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            OutlinedTextField(cliente, { cliente = it }, label = { Text(tx("Cliente")) }, singleLine = true,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words), modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(10.dp))
-            OutlinedTextField(telefono, { telefono = it }, label = { Text(tx("Teléfono")) }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(10.dp))
-            OutlinedTextField(notas, { notas = it }, label = { Text(tx("Notas (portal, piso…)")) }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(10.dp))
-            OutlinedTextField(contenido, { contenido = it }, label = { Text(tx("Qué lleva (opcional)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(10.dp))
-            // El horario del cliente: la ruta lo respeta y avisa si se llega tarde. Con atajos: un toque en vez de escribirlo.
-            OutlinedTextField(horario, { horario = it }, label = { Text(tx("Horario del cliente (ej. de 10 a 12)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ATAJOS_HORARIO.forEach { (t, h) -> FilterChip(selected = horario == h, onClick = { horario = if (horario == h) "" else h }, label = { Text(t) }) }
+            // El pie fijo: el error, si lo hay, y «Añadir a mi ruta» / «Guardar cambios» (52).
+            HorizontalDivider(color = c.outlineVariant)
+            Column(Modifier.fillMaxWidth().padding(Esp.m)) {
+                error?.let { Text(it, color = c.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = Esp.s)) }
+                BotonPrincipal(if (editar != null) tx("Guardar cambios") else tx("Añadir a mi ruta"), ::guardar, cargando = guardando, modifier = Modifier.fillMaxWidth())
             }
-            Spacer(Modifier.height(10.dp))
-            Text(tx("¿Dónde va en la furgoneta? (opcional)"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                HUECOS.forEach { h -> FilterChip(selected = hueco == h, onClick = { hueco = if (hueco == h) "" else h }, label = { Text(h) }) }
-            }
-            Spacer(Modifier.height(14.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(tx("Bultos"), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                FilledTonalIconButton(onClick = { if (bultos > 1) bultos -= 1 }) { Icon(Icons.Default.Remove, contentDescription = tx("Uno menos")) }
-                Text("$bultos", style = MaterialTheme.typography.titleLarge.merge(TextoNumero), modifier = Modifier.padding(horizontal = 14.dp))
-                FilledTonalIconButton(onClick = { if (bultos < 99) bultos += 1 }) { Icon(Icons.Default.Add, contentDescription = tx("Uno más")) }
-            }
-            Spacer(Modifier.height(10.dp))
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                listOf("entrega" to tx("Entrega"), "recogida" to tx("Recogida")).forEachIndexed { i, (k, t) ->
-                    SegmentedButton(selected = tipo == k, onClick = { tipo = k }, shape = SegmentedButtonDefaults.itemShape(i, 2)) { Text(t) }
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            OutlinedTextField(cobrar, { cobrar = it }, label = { Text(tx("A cobrar ({moneda}, opcional)", "moneda" to Region.simbolo)) }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(6.dp))
-            Row(Modifier.fillMaxWidth().toggleable(urgente, role = Role.Switch) { urgente = it }.padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Text(tx("Urgente"), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                Switch(checked = urgente, onCheckedChange = null)
-            }
-            error?.let { Spacer(Modifier.height(8.dp)); Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = ::guardar, enabled = !guardando, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                if (guardando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                else Text(if (editar != null) tx("Guardar cambios") else tx("Añadir a mi ruta"))
-            }
-            Spacer(Modifier.height(24.dp))
         }
+    }
+    if (quitar && editar != null) {
+        AlertDialog(
+            onDismissRequest = { quitar = false },
+            title = { Text(tx("¿Quitar esta parada?"), style = MaterialTheme.typography.titleLarge) },
+            text = { Text(tx("{n} sale de tu ruta de hoy.", "n" to editar.cliente.ifBlank { editar.direccion }), style = MaterialTheme.typography.bodyMedium) },
+            confirmButton = { BotonTexto(tx("Quitar"), { quitar = false; alQuitar?.invoke() }, tono = Tono.PELIGRO) },
+            dismissButton = { BotonTexto(tx("Cancelar"), { quitar = false }, tono = Tono.NEUTRO) },
+            shape = MaterialTheme.shapes.large,
+        )
     }
 }
 
@@ -462,25 +511,81 @@ private fun fotoEtiqueta(ctx: Context): Uri {
 }
 
 /** EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): lo que dice el servidor de la dirección, debajo de ella, y el botón
- *  para ponerla a mano en el mapa. */
+ *  para ponerla a mano en el mapa. En una línea con «…» (07-11-2026, §5.9; el texto entero queda para el lector de
+ *  pantalla) y «Situar» a la derecha, que sigue llamándose «Situar en el mapa». Sus textos no cambian. */
 @Composable
 private fun EstadoDireccion(estado: String, alSituar: () -> Unit) {
+    val c = MaterialTheme.colorScheme
     val x = LocalExtra.current
-    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         val (icono, color, texto) = when (estado) {
-            "buscando" -> Triple(null, MaterialTheme.colorScheme.onSurfaceVariant, tx("Comprobando la dirección…"))
-            "portal" -> Triple(Icons.Default.CheckCircle, x.entregado, tx("En el mapa"))
-            "calle" -> Triple(Icons.Default.Place, MaterialTheme.colorScheme.tertiary, tx("Calle encontrada, sin el portal"))
-            "no" -> Triple(Icons.Default.LocationOff, MaterialTheme.colorScheme.error, tx("No la encuentro: elige una sugerencia o sitúala en el mapa"))
-            "sinred" -> Triple(Icons.Default.LocationOff, MaterialTheme.colorScheme.onSurfaceVariant, tx("Sin conexión: no puedo comprobarla ahora."))
-            else -> Triple(null, MaterialTheme.colorScheme.onSurfaceVariant, "")
+            "buscando" -> Triple(null, c.onSurfaceVariant, tx("Comprobando la dirección…"))
+            "portal" -> Triple(Icons.Default.CheckCircle, x.entregadoTexto, tx("En el mapa"))
+            "calle" -> Triple(Icons.Default.Place, c.tertiary, tx("Calle encontrada, sin el portal"))
+            "no" -> Triple(Icons.Default.LocationOff, c.error, tx("No la encuentro: elige una sugerencia o sitúala en el mapa"))
+            "sinred" -> Triple(Icons.Default.LocationOff, c.onSurfaceVariant, tx("Sin conexión: no puedo comprobarla ahora."))
+            else -> Triple(null, c.onSurfaceVariant, "")
         }
-        if (estado == "buscando") CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+        if (estado == "buscando") CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
         else if (icono != null) Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
-        if (texto.isNotEmpty()) Spacer(Modifier.width(6.dp))
-        Text(texto, style = MaterialTheme.typography.bodyMedium, color = color, modifier = Modifier.weight(1f))
-        TextButton(onClick = alSituar) {
-            Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Situar en el mapa"))
+        if (texto.isNotEmpty()) Spacer(Modifier.width(Esp.s))
+        Text(texto, style = MaterialTheme.typography.bodyMedium, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        BotonTexto(tx("Situar"), alSituar, nombre = tx("Situar en el mapa"))
+    }
+}
+
+/** Una sugerencia de dirección, en la ficha y en «Situar» (07-11-2026, §5.9 y §5.10): fila de 48 como mínimo con el
+ *  icono de 18 (↺ si ya estuvo allí), la dirección en `texto` y debajo, en `sec`, «Ya estuviste aquí · 4 veces» (con el
+ *  cliente si `conCliente`), «Otra calle» (en peligro) o «Sin el portal». */
+@Composable
+internal fun FilaSugerencia(s: Sugerencia, alElegir: () -> Unit, conCliente: Boolean = true, modifier: Modifier = Modifier) {
+    val c = MaterialTheme.colorScheme
+    val detalle = when {
+        s.veces > 0 -> tx("Ya estuviste aquí") + " · ${s.veces} ${if (s.veces == 1) tx("vez") else tx("veces")}" +
+            (s.cliente.takeIf { conCliente && it.isNotBlank() }?.let { " · $it" } ?: "")
+        s.otraCalle -> tx("Otra calle")            // no es la escrita (02-11-2026, Situar.ordenar): va al final y se dice
+        s.precision == "calle" -> tx("Sin el portal")
+        else -> ""
+    }
+    Row(
+        modifier.fillMaxWidth().clickable(onClick = alElegir).heightIn(min = Alto.boton).padding(horizontal = Esp.m, vertical = Esp.s),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(if (s.veces > 0) Icons.Default.History else Icons.Default.Place, contentDescription = null, tint = c.onSurfaceVariant, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(Esp.m))
+        Column(Modifier.weight(1f)) {
+            Text(s.direccion, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (detalle.isNotEmpty()) {
+                Text(detalle, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = when { s.veces > 0 -> c.secondary; s.otraCalle -> c.error; else -> c.onSurfaceVariant })
+            }
+        }
+    }
+}
+
+/** «¿Dónde va en la furgoneta?» (07-11-2026, §5.9): los seis huecos en celdas de 48 (dos columnas, tres filas), radio 8
+ *  y el borde de control; la elegida, en tinte de marca con el borde de énfasis. Volver a tocarla la quita. */
+@Composable
+private fun RejillaHuecos(elegido: String, alElegir: (String) -> Unit) {
+    val c = MaterialTheme.colorScheme
+    val x = LocalExtra.current
+    Column(verticalArrangement = Arrangement.spacedBy(Esp.s)) {
+        HUECOS.chunked(2).forEach { fila ->
+            Row(horizontalArrangement = Arrangement.spacedBy(Esp.s)) {
+                fila.forEach { h ->
+                    val sel = h == elegido
+                    Surface(
+                        selected = sel, onClick = { alElegir(h) }, shape = MaterialTheme.shapes.small,
+                        color = if (sel) c.primaryContainer else c.surfaceContainerLow, contentColor = if (sel) c.onPrimaryContainer else c.onSurface,
+                        border = BorderStroke(if (sel) 2.dp else 1.dp, if (sel) x.enfasis else c.outline),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Box(Modifier.fillMaxWidth().heightIn(min = Alto.boton).padding(horizontal = Esp.s), contentAlignment = Alignment.Center) {
+                            Text(h, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                        }
+                    }
+                }
+            }
         }
     }
 }

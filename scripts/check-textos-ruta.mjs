@@ -2,10 +2,10 @@
 // - cada tx('…') literal de las pantallas tiene entrada,
 // - cada entrada trae los 5 idiomas (en, pt, fr, it, de), sin huecos,
 // - las variables {x} de cada traducción son las mismas que las del español,
-// - no sobran entradas que ya no usa nadie.
+// - no sobran entradas que ya no usa nadie: ni la web, ni la app nativa (Traducciones.kt) ni el servidor.
 // Los textos que llegan a tx() desde una lista (motivos, huecos, pestañas…)
 // se sacan de esas listas por su nombre.
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -32,12 +32,19 @@ const FICHEROS = [
   'pages/Invita.jsx',
   // «Situar la parada» (02-11-2026): la parada que no está en el mapa se pone en el nuestro, no en Google Maps.
   'pages/driver/SituarParada.jsx',
+  // «¿Dónde?» corto (06-11-2026, diseño compacto): la etiqueta corta de los chips de «Prueba de entrega» y de la memoria.
+  'lib/dejar.js',
 ]
+// Las piezas de la app de reparto (06-11-2026, diseño compacto): todo pages/driver/piezas/, sin nombrarlas una a una; si
+// no, sus textos no se comprueban y las claves que se mudan a ellas se dan por muertas.
+for (const f of readdirSync(join(raiz, 'pages/driver/piezas')).sort()) if (/\.jsx?$/.test(f)) FICHEROS.push(`pages/driver/piezas/${f}`)
 // Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
 // y los métodos de cobro de lib/region.js (metodosCobro), que se pintan con tx(t).
 const DE_DATOS = ['Repartidor', 'Bizum', 'Transferencia']
 // Listas cuyos textos se traducen al pintarlos.
-const LISTAS = ['MOTIVOS', 'DONDE', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO', 'VENTAJAS', 'FORMAS', 'DEJAR', 'ATAJOS_HORARIO',
+const LISTAS = ['MOTIVOS', 'DONDE', 'DONDE_CORTO', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO', 'VENTAJAS', 'FORMAS', 'DEJAR', 'ATAJOS_HORARIO',
+  // Dónde se dejó, en las frases de «La última vez» y de la memoria de la puerta (08-11-2026): tx(SITIO[donde]).
+  'SITIO', 'SITIOS',
   // La portada (/): lo que hace la app, la IA y lo de la empresa.
   'PASOS_PORTADA', 'FUNCIONES_RUTA', 'PREGUNTAS_PORTADA', 'IA_PORTADA', 'MODULOS_EMPRESA',
   // La guía de iPhone (/iphone).
@@ -97,9 +104,41 @@ for (const [k, br] of Object.entries(BR)) {
   else if (vars(br) !== vars(k)) fallos.push(`textosBrasil: variables distintas: «${k}» → «${br}»`)
   if (/(^|[^\p{L}])(telemóvel|palavra-passe|paragem|paragens|morada|ecrã|registo)([^\p{L}]|$)/iu.test(br)) fallos.push(`textosBrasil: palabra de Portugal: «${br}»`)
 }
-const sobran = Object.keys(dic).filter((k) => !usadas.has(k))
 
-if (sobran.length) console.log(`Aviso: ${sobran.length} traducciones sin uso:\n  ` + sobran.join('\n  '))
+// Lo que pide alguien que este recorrido no ve (08-11-2026). Una traducción no está «sin uso» si:
+//  - la pide la app nativa: está en la primera columna de Traducciones.kt (generado por nativa-idioma.mjs desde sus tx());
+//  - su texto está escrito entre comillas en otro fichero de la web, de las funciones de Pages o del servidor: una tabla
+//    que se pinta con tx(x), un mensaje de la API que la web traduce o una pantalla que no está en FICHEROS.
+// Así «sin uso» es lo que de verdad no pide nadie; borrar de más dejaba un texto sin traducir en un idioma.
+const raizRepo = join(raiz, '..', '..')
+const pideLaNativa = new Set()
+try {
+  const kt = readFileSync(join(raizRepo, 'app-android', 'app', 'src', 'main', 'java', 'com', 'flotadsp', 'fds', 'ui', 'Traducciones.kt'), 'utf8')
+  for (const bloque of kt.matchAll(/"""([\s\S]*?)"""/g)) {
+    for (const fila of bloque[1].split('\n')) {
+      const c = fila.split('\t')
+      if (c.length === 6) pideLaNativa.add(c[0].replace(/⏎/g, '\n').replace(/\$\{'\$'\}/g, '$'))
+    }
+  }
+} catch { /* sin la nativa (otra copia del repo): solo cuenta la web */ }
+const DICCIONARIOS = new Set(['textosRuta.js', 'textosRutaA.js', 'textosRutaB.js', 'textosRutaC.js', 'textosBrasil.js'])
+function fuentes(dir, ext, out = []) {
+  for (const n of readdirSync(dir)) {
+    const p = join(dir, n)
+    if (n === 'node_modules' || n === 'tests' || n === '__pycache__') continue
+    if (statSync(p).isDirectory()) fuentes(p, ext, out)
+    else if (ext.test(n) && !DICCIONARIOS.has(n)) out.push(p)
+  }
+  return out
+}
+const codigo = [
+  ...fuentes(raiz, /\.jsx?$/), ...fuentes(join(raizRepo, 'frontend', 'functions'), /\.js$/),
+  ...readdirSync(join(raizRepo, 'backend')).filter((n) => n.endsWith('.py')).map((n) => join(raizRepo, 'backend', n)),
+].map((f) => readFileSync(f, 'utf8')).join('\n')
+const entreComillas = (k) => ["'", '"', '`'].some((q) => codigo.includes(q + k.replace(/\\/g, '\\\\').split(q).join('\\' + q).replace(/\n/g, '\\n') + q))
+const sobran = Object.keys(dic).filter((k) => !usadas.has(k) && !pideLaNativa.has(k) && !entreComillas(k))
+
+if (sobran.length) console.log(`Aviso: ${sobran.length} traducciones sin uso (ni la web, ni la nativa, ni el servidor):\n  ` + sobran.join('\n  '))
 if (fallos.length) {
   console.error(fallos.join('\n'))
   process.exit(1)

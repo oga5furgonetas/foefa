@@ -48,7 +48,6 @@ export const BR = {
   'Haz una foto a la etiqueta o escanea el paquete: la app ordena las paradas por tiempo y te lleva con voz hasta cada puerta.':
     'Tire uma foto da etiqueta ou escaneie o pacote: o app organiza as paradas por tempo e te leva por voz até cada porta.',
   'Gana {euros} por cada compañero que la use.': 'Ganhe {euros} por cada colega que usar o app.',
-  'Se valida cuando complete 20 entregas reales en 2 días, no por registrarse.': 'Só vale quando completar 20 entregas reais em 2 dias, não só por se cadastrar.',
   'Promo hasta el {fecha}': 'Promoção até {fecha}',
   'Promoción hasta el {fecha}: {euros} por cada compañero que se registre con tu enlace.': 'Promoção até {fecha}: {euros} por cada colega que se cadastrar com o seu link.',
   'Pásale tu enlace. Cuando se registre y haga {n} entregas en {d} días distintos (en su primer mes), ganas {euros}. Lo cobras por PayPal.': 'Mande o seu link. Quando ele se cadastrar e fizer {n} entregas em {d} dias diferentes (no primeiro mês), você ganha {euros}. Você recebe por PayPal.',
@@ -76,7 +75,6 @@ export const BR = {
   'Ya tengo cuenta': 'Já tenho conta',
   'Soy de una empresa': 'Sou de uma empresa',
   'Repartidor': 'Entregador',
-  'Repartir yo mismo': 'Entregar por conta própria',
 
   // Alta
   'Dinos tu nombre.': 'Diga o seu nome.',
@@ -123,13 +121,7 @@ export const BR = {
   'Plan gratis: hasta {n} paradas nuevas al día.': 'Plano grátis: até {n} paradas novas por dia.',
   'Mi cartera': 'Minha carteira',
   'Foto etiqueta': 'Foto da etiqueta',
-  'o escribe el código': 'ou digite o código',
   'Buscar': 'Buscar',
-  'Cargar paquetes: uno tras otro': 'Carregar pacotes: um atrás do outro',
-  '{n} por entregar': '{n} para entregar',
-  'Escanea cada paquete o hazle una foto a la etiqueta: la dirección y el teléfono entran solos. Luego «Ordenar ruta».':
-    'Escaneie cada pacote ou tire uma foto da etiqueta: o endereço e o telefone entram sozinhos. Depois, «Ordenar rota».',
-  'Verlo en acción con 3 paradas de ejemplo': 'Ver funcionando com 3 paradas de exemplo',
   'Invitar a un compañero': 'Convidar um colega',
   '1. Mete tus paquetes': '1. Coloque seus pacotes',
   'Escanea el código o haz una foto a la etiqueta: la dirección y el teléfono entran solos. También puedes escribirla o pegar una lista.':
@@ -138,8 +130,6 @@ export const BR = {
   'Pulsa «Ordenar ruta»: la app pone las paradas en el orden que menos tardas, con el tráfico de cada hora y la hora de llegada a cada una.':
     'Toque em «Ordenar rota»: o app coloca as paradas na ordem mais rápida, com o trânsito de cada hora e o horário de chegada em cada uma.',
   '3. Navega y entrega': '3. Navegue e entregue',
-  'Pulsa «Empezar a navegar»: te lleva con voz a cada puerta. Al llegar, «Entregado» con foto o firma, y pasa a la siguiente.':
-    'Toque em «Começar a navegar»: o app te leva por voz até cada porta. Ao chegar, «Entregue» com foto ou assinatura, e vai para a próxima.',
   'Siguiente': 'Próximo',
 
   // Instalar la app (el paso justo después del alta)
@@ -165,7 +155,6 @@ export const BR = {
   '¿No se ha abierto? Pulsa ··· (arriba) y «Abrir en el navegador».': 'Não abriu? Toque em ··· (em cima) e «Abrir no navegador».',
   '¿No se ha abierto? Pulsa ⋮ (arriba) y «Abrir en Chrome» o «Abrir en el navegador».': 'Não abriu? Toque em ⋮ (em cima) e «Abrir no Chrome» ou «Abrir no navegador».',
   'Instalar la app': 'Instalar o app',
-  'Instala FDS en tu móvil': 'Instale o FDS no seu celular',
   'Con su icono, a pantalla completa y sin buscar la web cada día.': 'Com ícone próprio, em tela cheia e sem procurar o site todo dia.',
   'No mostrar más': 'Não mostrar mais',
   'Cómo instalarla': 'Como instalar',
@@ -182,19 +171,14 @@ export const BR = {
   'Ahora no, seguir en la web': 'Agora não, continuar na web',
 
   // Aviso de cookies (lo primero que se ve)
-  'Usamos almacenamiento necesario para que la web funcione. Si aceptas, también los píxeles de Meta y TikTok para saber qué anuncios nos traen visitas y altas.':
-    'Usamos o armazenamento necessário para o site funcionar. Se você aceitar, também os pixels da Meta e do TikTok para saber quais anúncios nos trazem visitas e cadastros.',
   'Solo necesarias': 'Só as necessárias',
   // Lo que manda el servidor con ese permiso, y cómo cambiarlo (02-11-2026)
   'Si aceptas, nuestro servidor también avisa a Meta de tu alta y de tu primera entrada y ruta, con tu correo cifrado.':
     'Se você aceitar, nosso servidor também avisa a Meta do seu cadastro e do seu primeiro acesso e rota, com seu e-mail criptografado.',
   'Cambiar mis cookies': 'Alterar meus cookies',
-  'Usamos solo almacenamiento imprescindible para iniciar sesión y recordar tus preferencias. No usamos cookies de seguimiento ni marketing.':
-    'Usamos apenas o armazenamento indispensável para entrar na conta e lembrar suas preferências. Não usamos cookies de rastreamento nem de marketing.',
 
   // Aviso de la mañana
   'Aviso por la mañana': 'Aviso de manhã',
-  '¿Te aviso por la mañana para cargar tu ruta?': 'Quer um aviso de manhã para carregar sua rota?',
   'No, gracias': 'Não, obrigado',
   'El móvil no ha dado permiso para avisos. Puedes activarlo en los ajustes del navegador.': 'O celular não deu permissão para avisos. Você pode ativar nas configurações do navegador.',
   'No se han podido activar los avisos en este móvil.': 'Não foi possível ativar os avisos neste celular.',
@@ -205,16 +189,12 @@ export const BR = {
   'Haz {n} entregas con la app en {d} días distintos y son tuyos. Hasta el {fecha}.': 'Faça {n} entregas com o app em {d} dias diferentes e eles são seus. Até {fecha}.',
   '¡Has ganado {euros}!': 'Você ganhou {euros}!',
   'Ya están en tu cartera. Invita a un compañero y gana {euros} más.': 'Já estão na sua carteira. Convide um colega e ganhe mais {euros}.',
-  'Entregas para el bono': 'Entregas para o bônus',
   'Lo estamos revisando. Te avisamos por correo.': 'Estamos verificando. Avisamos você por e-mail.',
   'Las paradas de ejemplo no cuentan: quítalas y mete las tuyas.': 'As paradas de exemplo não contam: tire-as e coloque as suas.',
-  'Empieza con los paquetes de hoy: foto a la etiqueta de cada uno, aquí abajo.': 'Comece com os pacotes de hoje: uma foto da etiqueta de cada um, aqui embaixo.',
   'Bono de bienvenida: {euros} ganados con tu primera ruta.': 'Bônus de boas-vindas: {euros} ganhos com sua primeira rota.',
   'Bono de bienvenida: {euros} cuando hagas tus primeras {n} entregas (en {d} días). Hasta el {fecha}.': 'Bônus de boas-vindas: {euros} quando você fizer suas primeiras {n} entregas (em {d} dias). Até {fecha}.',
   // Sin cobertura (17-10-2026)
   'Sin cobertura: guardado en el móvil. Se envía solo cuando vuelva la conexión.': 'Sem sinal: salvo no celular. É enviado sozinho quando a conexão voltar.',
-  '1 cambio guardado en el móvil, sin enviar. Se envía solo al volver la conexión.': '1 alteração salva no celular, ainda não enviada. Ela é enviada sozinha quando a conexão voltar.',
-  '{n} cambios guardados en el móvil, sin enviar. Se envían solos al volver la conexión.': '{n} alterações salvas no celular, ainda não enviadas. Elas são enviadas sozinhas quando a conexão voltar.',
   'Ya hay conexión: enviado lo que estaba guardado.': 'A conexão voltou: o que estava salvo foi enviado.',
   'Ya hay conexión: enviados {n} cambios que estaban guardados.': 'A conexão voltou: {n} alterações salvas foram enviadas.',
   'Un cambio guardado sin cobertura no se pudo enviar': 'Uma alteração salva sem sinal não pôde ser enviada',
@@ -227,13 +207,9 @@ export const BR = {
   '¿Cómo te llegan las paradas?': 'Como você recebe as paradas?',
   'Elige una y te abro justo esa herramienta.': 'Escolha uma e eu abro essa ferramenta.',
   'Etiquetas en los paquetes': 'Etiquetas nos pacotes',
-  'Foto o escáner a cada etiqueta: dirección y teléfono entran solos.': 'Foto ou escaneie cada etiqueta: endereço e telefone entram sozinhos.',
   'Una hoja de reparto en papel': 'Uma folha de entregas em papel',
-  'Hazle una foto: se leen todas las paradas de golpe.': 'Tire uma foto: todas as paradas são lidas de uma vez.',
   'Una lista en WhatsApp, Excel o correo': 'Uma lista no WhatsApp, Excel ou e-mail',
-  'Cópiala y pégala: una parada por línea.': 'Copie e cole: uma parada por linha.',
   'Me las dicen de una en una': 'Me passam uma por uma',
-  'Escríbelas a mano o díctalas por voz.': 'Digite ou dite por voz.',
   'Carga tus paradas de hoy': 'Carregue as paradas de hoje',
   'Sin problema. Cuando cargues la furgoneta, abre la app y haz una foto a cada etiqueta.': 'Sem problema. Quando carregar a van, abra o app e tire uma foto de cada etiqueta.',
   'Mientras, verlo en acción con 3 paradas de ejemplo': 'Enquanto isso, ver funcionando com 3 paradas de exemplo',
@@ -256,7 +232,6 @@ export const BR = {
   'Me encanta': 'Adorei',
   'Ya nos contestaste. Si quieres añadir algo, escríbelo aquí.': 'Você já respondeu. Se quiser acrescentar algo, escreva aqui.',
   'Mándanos una idea': 'Mande uma ideia',
-  'Te hemos regalado {euros}: ya están en tu cartera.': 'Demos {euros} de presente: já estão na sua carteira.',
   'Regalo: {euros} ya en tu saldo, para que veas que es de verdad.': 'Presente: {euros} já no seu saldo, para você ver que é de verdade.',
   '¿Algo que no va o que echas en falta? Lo leo yo y te contesto por correo.': 'Algo não funciona ou está faltando? Eu leio e te respondo por e-mail.',
   'Escribe tu idea o lo que no te funciona': 'Escreva sua ideia ou o que não funciona',
@@ -278,4 +253,9 @@ export const BR = {
   "Avísame a las {hora}": "Me avise às {hora}",
   "De lunes a sábado, solo los días que aún no hayas metido paquetes.": "De segunda a sábado, só nos dias em que você ainda não colocou pacotes.",
   "Te aviso a las {hora}.": "Te aviso às {hora}.",
+  // Fusión final (07-11-2026): el paso 3 del recorrido nombra «Ir», no «Empezar a navegar».
+  'Pulsa «Ir»: te lleva con voz a cada puerta. Al llegar, «Entregado» con foto o firma, y pasa a la siguiente.':
+    'Toque em «Ir»: o app te leva por voz até cada porta. Ao chegar, «Entregue» com foto ou assinatura, e vai para a próxima.',
+  // Revisor, hallazgo 8 (07-11-2026): la pista del bono de la ruta vacía, sin «aquí abajo».
+  'Empieza con los paquetes de hoy: foto a la etiqueta de cada uno.': 'Comece com os pacotes de hoje: uma foto da etiqueta de cada um.',
 }

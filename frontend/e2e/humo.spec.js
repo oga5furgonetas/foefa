@@ -1398,7 +1398,10 @@ test.describe('Reparto', () => {
     await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: /Mi ruta/ }).click()
     await expect(page.getByText('Marta Ríos')).toBeVisible()
-    await expect(page.getByText('3 cajas y agua')).toBeVisible()
+    // Lo que lleva, en la hoja de la parada (07-11-2026, diseño compacto).
+    await page.getByRole('button', { name: /Ver la parada \d+: Marta Ríos/ }).click()
+    await expect(page.getByRole('dialog', { name: 'Marta Ríos' })).toContainText('3 cajas y agua')
+    await page.getByRole('dialog', { name: 'Marta Ríos' }).getByRole('button', { name: 'Cerrar' }).click()
     await page.getByRole('button', { name: /Empezar jornada/ }).click()
     await expect(page.getByText('Antes de empezar: tu ubicación')).toBeVisible()
     expect(fallos).toEqual([])
@@ -1425,7 +1428,7 @@ test('Reparto · el ticket se lee en el móvil sin mandarlo a nadie', async ({ p
     jornada: { empezada: null, terminada: null }, aviso_aceptado: true } }))
   await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: /Mi ruta/ }).click()
-  await page.getByRole('button', { name: /Añadir un pedido sin código/ }).click()
+  await page.getByRole('button', { name: 'A mano', exact: true }).click()   // «Añadir un pedido sin código» es «A mano» (07-11-2026, diseño compacto)
   await page.getByRole('dialog').locator('input[type=file]').setInputFiles('e2e/fixtures/ticket.png')
   await expect(page.getByPlaceholder('Dirección completa')).toHaveValue(/Juana de Vega 14/, { timeout: 60000 })
   await expect(page.getByPlaceholder('Dirección completa')).toHaveValue(/15004/)
@@ -1486,7 +1489,7 @@ test('Reparto · el autónomo mete un paquete con foto y le salen llamar y Whats
   await page.getByRole('button', { name: 'Añadir a mi ruta' }).click()
   await expect(page.getByRole('link', { name: /Llamar/ })).toHaveAttribute('href', 'tel:600 11 22 33')
   await expect(page.getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', /wa\.me\/34600112233/)
-  await expect(page.getByText('≈ 10:42')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Siguiente parada' }).getByText('10:42')).toBeVisible()
 })
 
 /* CADA EMPRESA, SU PANEL (03-10-2026): un súper no ve la portada de flota ni
@@ -1610,7 +1613,7 @@ test('Reparto · prueba de entrega con nota y la oficina ve la foto', async ({ p
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Entregado', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Prueba de entrega' })).toBeVisible()
-  await page.getByPlaceholder(/Nota \(opcional\)/).fill('En el buzón')
+  await page.getByPlaceholder('Nota', { exact: true }).fill('En el buzón')   // «Nota» a secas (diseño compacto, 07-11-2026)
   await page.getByRole('button', { name: 'Entregar sin foto' }).click()
   await expect.poll(() => enviados.length).toBe(1)
   expect(enviados[0]).toMatchObject({ estado: 'entregado', nota: 'En el buzón' })
@@ -1908,7 +1911,7 @@ test('Cuenta del repartidor · ve con qué entra, cambia correo y contraseña; �
   // «Entrar como» desde la plataforma: franja con «Volver a mi cuenta» y nada que pueda fallar.
   await page.addInitScript(() => localStorage.setItem('flota_token_super', 'token-de-la-plataforma'))
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.getByText(/Estás viendo la cuenta de Admin Test como plataforma/)).toBeVisible()
+  await expect(page.getByText('Viendo a Admin Test')).toBeVisible()   // «Viendo a {nombre}» (07-11-2026, diseño compacto)
   await expect(page.getByRole('button', { name: 'Volver a mi cuenta' })).toBeVisible()
   await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
   await expect(page.getByRole('region', { name: 'Tu acceso' })).toBeVisible()
@@ -1918,7 +1921,7 @@ test('Cuenta del repartidor · ve con qué entra, cambia correo y contraseña; �
 
 /* SUSCRIBIRSE CON STRIPE desde el aviso de prueba: el servidor crea la sesión
    y el navegador va a su URL; al volver con ?pago=ok se espera al webhook. */
-test('Suscripción · el botón de pagar va a Stripe y la vuelta espera la activación', async ({ page }) => {
+test('Suscripción · el botón de pagar va a Stripe y la vuelta espera la activación', async ({ page, baseURL }) => {
   await entrarComoAdmin(page)
   await simularApi(page, 'vacio')
   await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { status: 'trial', required: false, days_left: 5, plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'] } }))
@@ -1926,7 +1929,8 @@ test('Suscripción · el botón de pagar va a Stripe y la vuelta espera la activ
   const pedidos = []
   await page.route(/\/api\/billing\/stripe\/suscripcion/, async (r) => {
     pedidos.push(r.request().postDataJSON())
-    await r.fulfill({ json: { url: 'http://localhost:4173/ruta?pago=ok', id: 'cs_test' } })
+    // La vuelta, sobre baseURL (06-11-2026): la prueba corre en otros puertos además del 4173 y a mano fallaba.
+    await r.fulfill({ json: { url: `${baseURL}/ruta?pago=ok`, id: 'cs_test' } })
   })
   // Quien reparte solo entra al panel y se le lleva a su app; se suscribe desde «Cuenta».
   await page.goto('/panel/reparto', { waitUntil: 'domcontentloaded' })
@@ -2040,15 +2044,17 @@ test('Reparto · entregar con «dónde lo dejas», firma, y el buscador de paque
     activo: true, empresa: 'Súper', fecha: '2026-10-04', ia_tickets: false, jornada: {}, aviso_aceptado: true,
     base: null, ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
-  const primera = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
-  // Ver la puerta: desde la calle y mirando a la casa (rumbo que da el servidor).
-  await expect(primera.getByRole('link', { name: 'Ver la puerta' })).toHaveAttribute('href', /map_action=pano&viewpoint=43\.3697,-8\.4&heading=12/)
+  const primera = page.getByRole('region', { name: 'Siguiente parada' })
+  // Ver la puerta (en la hoja de la parada, 07-11-2026): desde la calle y mirando a la casa (rumbo que da el servidor).
+  await primera.getByRole('button', { name: /Ver la parada 1: Bar Pepe/ }).click()
+  await expect(page.getByRole('dialog', { name: 'Bar Pepe' }).getByRole('link', { name: 'Ver la puerta' })).toHaveAttribute('href', /map_action=pano&viewpoint=43\.3697,-8\.4&heading=12/)
+  await page.getByRole('dialog', { name: 'Bar Pepe' }).getByRole('button', { name: 'Cerrar' }).click()
 
   // Entregar: al vecino, quién lo recoge y firma con el dedo.
   await primera.getByRole('button', { name: 'Entregado', exact: true }).click()
-  await page.getByRole('button', { name: 'Al vecino' }).click()
-  await page.getByPlaceholder('¿Quién lo recoge? (opcional)').fill('Marta (2ºB)')
-  await page.getByRole('button', { name: 'Que firme en la pantalla' }).click()
+  await page.getByRole('button', { name: 'Vecino', exact: true }).click()   // el chip corto de «¿Dónde?» (diseño compacto, 07-11-2026)
+  await page.getByPlaceholder('¿Quién lo recoge?').fill('Marta (2ºB)')
+  await page.getByRole('button', { name: 'Firma', exact: true }).click()   // la firma, como chip al lado de «¿Quién lo recoge?»
   const lienzo = page.getByLabel('Firma aquí con el dedo').first()
   await expect(page.getByRole('button', { name: 'Listo' })).toBeDisabled()
   const caja = await lienzo.boundingBox()
@@ -2058,15 +2064,15 @@ test('Reparto · entregar con «dónde lo dejas», firma, y el buscador de paque
   await page.mouse.move(caja.x + 220, caja.y + 30, { steps: 8 })
   await page.mouse.up()
   await page.getByRole('button', { name: 'Listo' }).click()
-  await expect(page.getByRole('button', { name: 'Firmado · repetir' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Firmado', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Entregar sin foto' }).click()
   await expect.poll(() => estados.length).toBe(1)
   expect(estados[0]).toMatchObject({ estado: 'entregado', donde: 'vecino', recibe: 'Marta (2ºB)' })
   expect(estados[0].firma).toMatch(/^data:image\/png;base64,/)
 
   // El buscador de paquetes: escribir el código de uno que ya está en la ruta dice su parada en grande.
-  await page.getByRole('button', { name: /Más formas de añadir/ }).click()
-  await page.getByPlaceholder('o escribe el código').fill('XYZ')
+  await page.getByRole('button', { name: 'Añadir paradas' }).click()
+  await page.getByRole('dialog', { name: 'Añadir paradas' }).getByPlaceholder('Código').fill('XYZ')
   await page.getByRole('button', { name: 'Buscar', exact: true }).click()
   const hoja = page.getByRole('dialog', { name: 'Este paquete va en la parada' })
   await expect(hoja.getByText('Farmacia Sol')).toBeVisible()
@@ -2108,8 +2114,8 @@ test('Reparto · lo de otros días se trae a hoy, de noche dice a qué hora sale
   await expect(page.getByText('Sales a las 09:00 ·')).toBeVisible()
   await expect(page.getByTestId('record')).toHaveText('🏆 ¡Récord de entregas!')
   const previas = page.getByTestId('previas')
-  await expect(previas).toContainText('Tienes 3 paradas sin entregar de días anteriores.')
-  await previas.getByRole('button', { name: 'Pasarlas a hoy' }).click()
+  await expect(previas).toContainText('3 paradas de otros días')
+  await previas.getByRole('button', { name: 'Traer a hoy' }).click()
   await expect.poll(() => traidas).toBe(1)
   await expect(page.getByText('3 paradas pasadas a hoy. Pulsa «Ordenar ruta» para ponerlas en su sitio.')).toBeVisible()
   expect(fallos).toEqual([])
@@ -2123,13 +2129,13 @@ test('Reparto · «Ahora no» a lo de otros días no mueve nada; con pocas entre
   await page.route(/\/api\/reparto\/mi-ruta\/traer-previas/, (r) => { traidas += 1; return r.fulfill({ json: { traidas: 1 } }) })
   await page.route(/\/api\/reparto\/mis-marcas/, (r) => r.fulfill({ json: { total: 50, hoy: 3, dias: 4, semana: 2, mejor: 30, mejor_fecha: '2026-10-01', record_hoy: false } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByTestId('previas')).toContainText('Tienes 1 parada sin entregar de otro día.')
+  await expect(page.getByTestId('previas')).toContainText('1 parada de otro día')
   await page.getByTestId('previas').getByRole('button', { name: 'Ahora no' }).click()
   await expect(page.getByTestId('previas')).toHaveCount(0)
   expect(traidas).toBe(0)
   await expect(page.getByText('Sales a las')).toHaveCount(0)            // de día sale «ahora»: no se dice
   await expect(page.getByTestId('record')).toHaveCount(0)
-  await expect(page.getByText('Tu récord: 30')).toBeVisible()
+  await expect(page.getByText('Tu récord')).toHaveCount(0)                // «Tu récord» ya no sale en «Hoy» (07-11-2026): queda en el resumen final
 })
 
 test('Reparto · un consejo cuando viene a cuento: «Ordenar ahora» ordena y no vuelve a salir', async ({ page }) => {
@@ -2145,7 +2151,7 @@ test('Reparto · un consejo cuando viene a cuento: «Ordenar ahora» ordena y no
   await expect.poll(() => ordenadas).toBe(1)
   await expect(page.getByTestId('consejo')).toHaveCount(0)
   await page.reload()
-  await expect(page.getByText('3 por entregar')).toBeVisible()
+  await expect(page.getByText('Por entregar · 2')).toBeVisible()
   await expect(page.getByTestId('consejo')).toHaveCount(0)               // «Entendido» es para siempre
   expect(fallos).toEqual([])
 })
@@ -2161,7 +2167,7 @@ test('Reparto · al escribir una dirección, primero las que ya conoce, y rellen
     { geometry: { coordinates: [-8.4, 43.36] }, properties: { street: 'Rúa Real', housenumber: '50', postcode: '15003', city: 'A Coruña', countrycode: 'ES' } }] } }))
   await page.route(/\/api\/reparto\/mis-marcas/, (r) => r.fulfill({ json: { total: 0, hoy: 0, dias: 0, semana: 0, mejor: 0, mejor_fecha: null, record_hoy: false } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: /Añadir un pedido sin código/ }).click()
+  await page.getByRole('button', { name: 'A mano', exact: true }).click()
   await page.getByRole('dialog').getByPlaceholder('Dirección completa').fill('real 5')
   const sugeridas = page.getByRole('dialog').getByRole('list', { name: 'Direcciones sugeridas' })
   await expect(sugeridas.getByText('Ya estuviste aquí · 3 veces · Bar Pepe')).toBeVisible()
@@ -2190,7 +2196,7 @@ test('Reparto · sin dictado en el navegador, el micro lleva al del teclado; un 
   await page.route(/\/api\/reparto\/escanear/, (r) => r.fulfill({ json: { encontrado: false, codigo: 'GLS123' } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
   // Solo la calle (sin CP ni población): se abre la hoja para completarla. Con todo, entraría sola (25-10-2026).
-  await page.getByPlaceholder('o escribe el código').fill('GLS123|Rúa Real 5|Marta|612345678')
+  await page.getByPlaceholder('Código').fill('GLS123|Rúa Real 5|Marta|612345678')
   await page.getByRole('button', { name: 'Buscar', exact: true }).click()
   const hoja = page.getByRole('dialog')
   await expect(hoja.getByPlaceholder('Dirección completa')).toHaveValue(/Rúa Real 5/)
@@ -2213,6 +2219,45 @@ test('Reparto · un no entregado se puede volver a intentar o dar por entregado 
   await page.getByRole('button', { name: 'Volver a intentarlo' }).click()
   await expect.poll(() => estados.length).toBe(1)
   expect(estados[0]).toMatchObject({ estado: 'pendiente', motivo: '' })
+  expect(fallos).toEqual([])
+})
+
+/* A 280 DE ANCHO (un móvil de 360 al 130 % de zoom) «Volver a intentarlo» y «Entregado» de una fallida caben (07-11-2026, revisor,
+   hallazgo 3). Iban en dos columnas `1fr` y `1.2fr` sin `minmax(0, …)` y sin apilarse: «Entregado» salía por la derecha, cortado
+   («En…»), en la fila de «Hechas hoy» y, con «Letra más grande», en la hoja de la fallida. Ahora, como el cierre de la tarjeta
+   (FilaCierre), las columnas se encogen y con 300 o menos van una debajo de otra. */
+test('Reparto · a 280 de ancho, «Volver a intentarlo» y «Entregado» de una fallida caben en su fila y en su hoja, también con letra grande', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.setViewportSize({ width: 280, height: 640 })
+  await rutaDeAna(page, [
+    { id: 'p1', cliente: 'Bar Pepe', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 1, lat: 43.37, lng: -8.40 },
+    { id: 'p2', cliente: 'Farmacia Sol', direccion: 'Avda Montero Ríos 12', estado: 'fallido', motivo: 'No había nadie', bultos: 1, orden: 2 },
+  ])
+  // Dentro de la pantalla (280) y, con 300 o menos, una debajo de otra.
+  const caben = async (ambito, donde) => {
+    const reintentar = await ambito.getByRole('button', { name: 'Volver a intentarlo' }).boundingBox()
+    const entregado = await ambito.getByRole('button', { name: 'Entregado', exact: true }).boundingBox()
+    for (const [nombre, caja] of [['Volver a intentarlo', reintentar], ['Entregado', entregado]]) {
+      expect(caja.x, `«${nombre}» por la izquierda ${donde}`).toBeGreaterThanOrEqual(-0.5)
+      expect(caja.x + caja.width, `«${nombre}» por la derecha ${donde}`).toBeLessThanOrEqual(280.5)
+    }
+    expect(reintentar.y + reintentar.height, `una debajo de otra ${donde}`).toBeLessThanOrEqual(entregado.y + 1)
+  }
+  for (const letra of ['normal', 'grande']) {
+    await page.addInitScript((l) => { try { if (l === 'grande') localStorage.setItem('fds_letra', 'grande'); else localStorage.removeItem('fds_letra') } catch { /* nada */ } }, letra)
+    await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+    // La fila de «Hechas hoy» (abierta por haber una fallida).
+    await expect(page.getByText('1 sin entregar')).toBeVisible()
+    await caben(page.locator('#parada-p2'), `en la fila (letra ${letra})`)
+    // Y su hoja.
+    await page.getByRole('button', { name: /Ver la parada 1: Farmacia Sol/ }).click()
+    const hoja = page.getByRole('dialog', { name: 'Farmacia Sol' })
+    await expect(hoja).toBeVisible()
+    await caben(hoja, `en la hoja (letra ${letra})`)
+    const hojaCaja = await hoja.locator(':scope > div').first().boundingBox()
+    expect(hojaCaja.x + hojaCaja.width, `la hoja no se ensancha (letra ${letra})`).toBeLessThanOrEqual(280.5)
+    await hoja.getByRole('button', { name: 'Cerrar' }).click()
+  }
   expect(fallos).toEqual([])
 })
 
@@ -2283,10 +2328,10 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
   // Progreso y siguiente parada.
   const cab = page.getByLabel('Progreso del día')
   await expect(cab.getByText('Quedan 2 paradas')).toBeVisible()
-  await expect(cab.getByText('de 3')).toBeVisible()
+  await expect(cab.getByRole('progressbar', { name: '1 de 3 hechas' })).toBeVisible()
   await expect(cab.getByText('Cobrado 12,00 €')).toBeVisible()
-  await expect(page.getByText('Siguiente parada')).toBeVisible()
-  const primera = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
+  const primera = page.getByRole('region', { name: 'Siguiente parada' })
+  await expect(primera).toBeVisible()
   await expect(primera.getByText('Bar Pepe')).toBeVisible()
 
   // Waze en vez de Google Maps, y se recuerda.
@@ -2301,9 +2346,16 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
   // Las demás van plegadas: se despliega al tocarla.
   await expect(page.getByRole('link', { name: 'Ir a Farmacia Sol' })).toBeVisible()
   await page.getByRole('button', { name: /Ver la parada 2: Farmacia Sol/ }).click()
-  await page.locator('div.rounded-2xl', { hasText: 'Parada 2' }).getByRole('button', { name: /Dónde va en la furgoneta/ }).click()
+  // La fila abre su hoja (07-11-2026, diseño compacto); el hueco, desde su chip, y queda puesto en el chip.
+  const hojaParada = page.getByRole('dialog', { name: 'Farmacia Sol' })
+  await hojaParada.getByRole('button', { name: 'Hueco', exact: true }).click()
   await page.getByRole('button', { name: 'Detrás · izq' }).click()
-  await expect(page.getByText('En la furgoneta: Detrás · izq')).toBeVisible()
+  const chipHueco = hojaParada.getByRole('button', { name: 'En la furgoneta: Detrás · izq' })
+  await expect(chipHueco).toBeVisible()
+  // El chip lleva el icono del paquete y el sitio, sin un 📦 escrito además (§0: esos símbolos son los iconos; revisor, hallazgo 7).
+  await expect(chipHueco).toHaveText('Detrás · izq')
+  await expect(chipHueco.locator('svg')).toHaveCount(1)
+  await hojaParada.getByRole('button', { name: 'Cerrar' }).click()
   expect(editados).toEqual([{ hueco: 'Detrás · izq' }])
 
   // Orden a mano: Farmacia primero.
@@ -2312,16 +2364,15 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
   await page.getByRole('button', { name: 'Guardar este orden' }).click()
   await expect(page.getByText('Orden guardado. Con este orden acabas ≈ 11:00')).toBeVisible()
   expect(ordenes).toEqual([['p2', 'p1']])
-  await expect(page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' }).getByText('Farmacia Sol')).toBeVisible()
+  await expect(primera.getByText('Farmacia Sol')).toBeVisible()
 
-  // Mapa con el recorrido por las calles y las próximas paradas en Google Maps.
-  await page.getByRole('button', { name: 'Mapa' }).click()
+  // Mapa con el recorrido por las calles (la píldora) y las próximas paradas en Google Maps.
+  await page.getByRole('button', { name: 'Ver el mapa' }).click()
   await expect(page.locator('.leaflet-container')).toBeVisible()
-  await expect(page.getByText('Por las calles:')).toBeVisible()
-  await expect(page.getByText('3,1 km')).toBeVisible()
+  await expect(page.getByText('3,1 km · 9 min')).toBeVisible()
   await expect(page.getByRole('link', { name: 'Las próximas 2 paradas en Google Maps' }))
     .toHaveAttribute('href', /destination=43\.37,-8\.4&waypoints=43\.36%2C-8\.41/)
-  await page.getByRole('button', { name: 'Lista' }).click()
+  await page.getByRole('button', { name: 'Ver la lista' }).click()
 
   // Entregar enseña «Deshacer», y deshacer la devuelve a pendiente.
   const estados = []
@@ -2343,9 +2394,8 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
   await page.reload({ waitUntil: 'domcontentloaded' })
   const resumen = page.getByLabel('Resumen del día')
   await expect(resumen.getByText('Ruta terminada')).toBeVisible()
-  await expect(resumen.getByText('Bizum')).toBeVisible()
   await expect(resumen.getByText('12,00 €').first()).toBeVisible()
-  await expect(resumen.getByText('Ruta planificada: 9,5 km.')).toBeVisible()
+  await expect(resumen.getByText('9,5 km')).toBeVisible()
   expect(fallos).toEqual([])
 })
 
@@ -2367,16 +2417,41 @@ test('Reparto · si ninguna parada está en el mapa, dice por qué no se navega 
   await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
     activo: true, empresa: 'Yo', fecha: '2026-10-06', ia_tickets: false, jornada: {}, aviso_aceptado: true, base: null, ruta: null, pedidos } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText(/No encontramos la dirección en el mapa/)).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Empezar a navegar' })).toHaveCount(0)
-  await page.getByRole('button', { name: 'Corregir la dirección' }).click()
+  // Sin punto (07-11-2026, diseño compacto): el chip «Sin situar · Situar» en la tarjeta y «Editar» en su ⋮.
+  const tarjeta = page.getByRole('region', { name: 'Siguiente parada' })
+  await expect(tarjeta.getByTestId('situar-parada')).toHaveText('Sin situar · Situar')
+  await tarjeta.getByRole('button', { name: 'Más opciones' }).click()
+  await page.getByRole('menuitem', { name: /Editar parada: Cliente/ }).click()
   await expect(page.locator('input[value="Rua inventada 99"]')).toBeVisible()          // abre su ficha para corregirla
   // Mientras se está buscando no se da por perdida.
   pedidos = [{ ...pedidos[0], geo: 'pendiente' }]
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByText(/Queda 1 parada/)).toBeVisible()
-  await expect(page.getByText(/No encontramos la dirección en el mapa/)).toHaveCount(0)
+  await expect(page.getByTestId('situar-parada')).toHaveText('Buscando en el mapa… · Situar')
 })
+
+/* LA GUÍA COMPACTA (07-11-2026, W5, §5.8): los botones sobre el mapa van en una columna a la derecha, 12 por encima del panel (antes, a
+   media pantalla, y la hoja de llegada los tapaba en los móviles de 800 o menos); el panel de abajo mide de 165 a 225; y todo lo que
+   se toca dentro de la guía mide 48 como poco. */
+async function expectGuiaCompacta(nav) {
+  // Los botones siguen al panel con un ResizeObserver: se espera a que asienten, 12 por encima de él.
+  await expect.poll(async () => {
+    const [panel, columna] = await Promise.all([nav.getByTestId('guia-panel').boundingBox(), nav.getByTestId('guia-botones').boundingBox()])
+    return Math.abs(columna.y + columna.height + 12 - panel.y)
+  }).toBeLessThanOrEqual(1)
+  const panel = await nav.getByTestId('guia-panel').boundingBox()
+  const columna = await nav.getByTestId('guia-botones').boundingBox()
+  const dialogo = await nav.boundingBox()
+  expect(panel.height).toBeGreaterThanOrEqual(165)
+  expect(panel.height).toBeLessThanOrEqual(225)
+  expect(Math.abs(dialogo.x + dialogo.width - 12 - (columna.x + columna.width))).toBeLessThanOrEqual(1)   // y a 12 del borde derecho
+  for (const b of await nav.locator('button, a[href]').all()) {
+    const caja = await b.boundingBox()
+    const nombre = (await b.getAttribute('aria-label')) || (await b.innerText())
+    expect(caja.width, `ancho de «${nombre}»`).toBeGreaterThanOrEqual(47.9)    // 48, menos el redondeo del móvil
+    expect(caja.height, `alto de «${nombre}»`).toBeGreaterThanOrEqual(47.9)
+  }
+}
 
 test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la siguiente', async ({ page, context }) => {
   const fallos = vigilar(page)
@@ -2421,7 +2496,7 @@ test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la s
     activo: true, empresa: 'Súper', fecha: '2026-10-04', ia_tickets: false, jornada: {}, aviso_aceptado: true,
     base: null, ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Empezar a navegar' }).click()
+  await page.getByRole('region', { name: 'Siguiente parada' }).getByRole('button', { name: 'Ir', exact: true }).click()
 
   const nav = page.getByRole('dialog', { name: 'Navegación' })
   await expect(nav.getByTestId('guia-texto')).toHaveText('Gira a la derecha por Praza de Pontevedra')
@@ -2429,6 +2504,11 @@ test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la s
   await expect(nav.getByText('Bar Pepe')).toBeVisible()
   await expect(nav.getByText(/Llegas ≈ \d\d:\d\d/)).toBeVisible()
   await expect(nav.locator('.leaflet-container')).toBeVisible()
+  // Antes de llegar: la voz y el mapa de fuera sobre el mapa, y «Ya he llegado» en el panel.
+  await expectGuiaCompacta(nav)
+  await expect(nav.getByTestId('guia-botones').getByRole('button', { name: 'Activar la voz' })).toBeVisible()
+  await expect(nav.getByTestId('guia-botones').getByRole('link', { name: 'Google Maps' })).toBeVisible()
+  await expect(nav.getByTestId('guia-panel').getByRole('button', { name: 'Ya he llegado' })).toBeVisible()
 
   // Gira y avanza: la siguiente maniobra.
   await context.setGeolocation({ latitude: 43.3677, longitude: -8.4070 })
@@ -2439,9 +2519,24 @@ test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la s
   // En la puerta: has llegado, dónde está el paquete, y entregar.
   await context.setGeolocation({ latitude: 43.37038, longitude: -8.40032 })
   await expect(nav.getByText('Has llegado')).toBeVisible()
-  await expect(nav.getByText('Búscalo: Detrás · izq')).toBeVisible()
+  // «Búscalo: {sitio}» pasa a «📦 {sitio}»: a la vista, el icono y el dato; la frase de antes, solo para el lector de pantalla.
+  await expect(nav.getByTestId('guia-notas').getByText('Detrás · izq')).toBeVisible()
+  await expect(nav.getByTestId('guia-notas').locator('.sr-only')).toHaveText('Búscalo:')
+  // Al llegar, «No entregado» y «Entregado» (52), y el mapa de fuera ya no está.
+  await expectGuiaCompacta(nav)
+  await expect(nav.getByTestId('guia-botones').getByRole('link', { name: 'Google Maps' })).toHaveCount(0)
   await nav.getByRole('button', { name: 'Entregado', exact: true }).click()
   await page.getByRole('button', { name: 'Entregar sin foto' }).click()
+
+  // «Deshacer» (fusión final, 07-11-2026, §1.2 injerto 8): el aviso flotante se pone 8 por encima del panel de la guía y no tapa sus botones.
+  const avisoDeshacer = page.getByRole('status').filter({ has: page.getByRole('button', { name: 'Deshacer' }) })
+  await expect(avisoDeshacer).toBeVisible()
+  const huecoSobrePanel = async () => {
+    const [aviso, panel] = await Promise.all([avisoDeshacer.boundingBox(), nav.getByTestId('guia-panel').boundingBox()])
+    return panel.y - (aviso.y + aviso.height)
+  }
+  await expect.poll(huecoSobrePanel, { message: '«Deshacer» por encima del panel de la guía' }).toBeGreaterThanOrEqual(7)   // 8, menos el redondeo
+  expect(await huecoSobrePanel()).toBeLessThanOrEqual(10)
 
   // Y sola, a la siguiente.
   await expect(nav.getByText('Farmacia Sol')).toBeVisible()
@@ -2452,12 +2547,73 @@ test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la s
   expect(fallos).toEqual([])
 })
 
+/* LA ZONA SEGURA DE ABAJO, UNA SOLA VEZ (07-11-2026, revisor, hallazgo 11). El panel de la guía ya lleva la zona segura en su relleno
+   (`pb-[max(12px,env(safe-area-inset-bottom))]`) y `Navegacion` pasa a «Deshacer» lo que mide; el aviso sumaba la zona otra vez: en
+   un iPhone (34 px) quedaba a unos 42 del panel en vez de 8 (§5.8). Chromium simula la zona segura por el protocolo
+   (`Emulation.setSafeAreaInsetsOverride`): sin el arreglo, el hueco medía 42. */
+test('Reparto · con la zona segura de un iPhone, «Deshacer» queda a 8 del panel de la guía (la zona no se cuenta dos veces)', async ({ page, context, browserName }) => {
+  test.skip(browserName !== 'chromium', 'la zona segura se simula por el protocolo de Chromium')
+  const fallos = vigilar(page)
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await page.addInitScript((t) => {
+    localStorage.setItem('flota_driver_token', t)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA' }))
+    localStorage.setItem('cookie_consent', '1')
+    localStorage.setItem('guia_voz', '0')
+  }, token)
+  await context.grantPermissions(['geolocation'])
+  await context.setGeolocation({ latitude: 43.3665, longitude: -8.4065 })
+  await simularApi(page, 'vacio')
+  const pedidos = [
+    { id: 'p1', cliente: 'Bar Pepe', direccion: 'Rúa Galera 10', estado: 'pendiente', bultos: 1, orden: 1, lat: 43.3704, lng: -8.4003 },
+    { id: 'p2', cliente: 'Farmacia Sol', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 2, lat: 43.3690, lng: -8.4010 },
+  ]
+  await page.route(/\/api\/reparto\/mi-ruta\/navegar/, (r) => r.fulfill({ json: { fuente: 'carreteras', metros: 999, minutos: 4.1,
+    linea: [[43.3665, -8.4065], [43.3704, -8.4003]],
+    pasos: [{ texto: 'Sal por Túnel Praza de Lugo', icono: 'recto', punto: [43.3665, -8.4065], metros: 999 }, { texto: 'Has llegado', icono: 'llegada', punto: [43.3704, -8.4003], metros: 0 }] } }))
+  await page.route(/\/api\/reparto\/pedidos\/p1\/estado/, (r) => r.fulfill({ json: {} }))
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, empresa: 'Súper', fecha: '2026-10-04', ia_tickets: false, jornada: {}, aviso_aceptado: true,
+    base: null, ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos } }))
+  const cdp = await context.newCDPSession(page)
+  await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 0, bottom: 34, left: 0, right: 0 } })
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  // La zona segura llega de verdad a la página (si no, la prueba no mide nada).
+  expect(await page.evaluate(() => {
+    const d = document.createElement('div')
+    d.style.paddingBottom = 'env(safe-area-inset-bottom, 0px)'
+    document.body.appendChild(d)
+    const v = getComputedStyle(d).paddingBottom
+    d.remove()
+    return v
+  }), 'la zona segura de abajo, simulada').toBe('34px')
+  await page.getByRole('region', { name: 'Siguiente parada' }).getByRole('button', { name: 'Ir', exact: true }).click()
+  const nav = page.getByRole('dialog', { name: 'Navegación' })
+  await expect(nav.getByTestId('guia-texto')).toBeVisible()
+  await nav.getByRole('button', { name: 'Ya he llegado' }).click()
+  await nav.getByRole('button', { name: 'Entregado', exact: true }).click()
+  await page.getByRole('button', { name: 'Entregar sin foto' }).click()
+  const avisoDeshacer = page.getByRole('status').filter({ has: page.getByRole('button', { name: 'Deshacer' }) })
+  await expect(avisoDeshacer).toBeVisible()
+  const huecoSobrePanel = async () => {
+    const [aviso, panel] = await Promise.all([avisoDeshacer.boundingBox(), nav.getByTestId('guia-panel').boundingBox()])
+    return panel.y - (aviso.y + aviso.height)
+  }
+  await expect.poll(huecoSobrePanel, { message: '«Deshacer» a 8 del panel de la guía, con la zona segura de un iPhone' }).toBeGreaterThanOrEqual(7)   // 8, menos el redondeo
+  expect(await huecoSobrePanel()).toBeLessThanOrEqual(10)
+  expect(fallos).toEqual([])
+})
+
 /* AVISO DE LA MAÑANA (11-10-2026): se ofrece una vez y suscribe el móvil a los avisos. Desde el 18-10 la hora
    la elige él (la de cargar la furgoneta) y se guarda en el servidor. */
 test('Ruta · aviso de la mañana: elige la hora, se activa y no se vuelve a preguntar', async ({ page }) => {
   const fallos = vigilar(page)
   await entrarRepartidor(page, { status: 'trial', days_left: 6, promo: { activa: true, hasta: '2026-12-31' } })
   await page.addInitScript(() => {
+    // Un solo aviso a la vez en «Hoy» (07-11-2026): «Instala la app» va antes que el de la mañana, así que en un Android se
+    // da por cerrado para ver el de la mañana.
+    try { localStorage.setItem('fds_instalar_cerrado', '1') } catch { /* nada */ }
     // Un navegador con avisos: permiso que se concede y una suscripción de mentira.
     window.Notification = { permission: 'default', requestPermission: async () => 'granted' }
     window.PushManager = function () {}
@@ -2471,10 +2627,13 @@ test('Ruta · aviso de la mañana: elige la hora, se activa y no se vuelve a pre
   await page.route(/\/api\/reparto\/aviso-manana$/, async (r) => { horas.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true, hora: '07:30' } }) })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   const tarjeta = page.getByRole('region', { name: 'Aviso por la mañana' })
-  await expect(tarjeta.getByText('¿Te aviso por la mañana para cargar tu ruta?')).toBeVisible()
-  await expect(tarjeta.getByRole('radio', { name: '8:00' })).toHaveAttribute('aria-checked', 'true')     // sin elegir, las 8
-  await tarjeta.getByRole('radio', { name: '7:30' }).click()
-  await tarjeta.getByRole('button', { name: 'Avísame a las 7:30' }).click()
+  await expect(tarjeta.getByText('¿Te aviso por la mañana?')).toBeVisible()
+  // El aviso de una línea abre su hoja con la hora (07-11-2026, diseño compacto).
+  await tarjeta.getByRole('button', { name: 'Avísame a las 8:00' }).click()
+  const hoja = page.getByRole('dialog', { name: 'Aviso por la mañana' })
+  await expect(hoja.getByRole('radio', { name: '8:00' })).toHaveAttribute('aria-checked', 'true')     // sin elegir, las 8
+  await hoja.getByRole('radio', { name: '7:30' }).click()
+  await hoja.getByRole('button', { name: 'Avísame a las 7:30' }).click()
   await expect.poll(() => suscritas.length).toBe(1)
   expect(suscritas[0].subscription.endpoint).toBe('https://push.example/e1')
   await expect.poll(() => horas).toEqual([{ hora: '07:30' }])
@@ -2553,7 +2712,7 @@ test('Reparto · manos libres: «he llegado» y «entregado» por voz, sin foto 
     activo: true, autonomo: true, fecha: '2026-10-11', jornada: {}, aviso_aceptado: true, base: null,
     ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Empezar a navegar' }).click()
+  await page.getByRole('region', { name: 'Siguiente parada' }).getByRole('button', { name: 'Ir', exact: true }).click()
   const nav = page.getByRole('dialog', { name: 'Navegación' })
   await expect(nav.getByText('Bar Pepe')).toBeVisible()
 
@@ -2574,6 +2733,14 @@ test('Reparto · manos libres: «he llegado» y «entregado» por voz, sin foto 
   await expect(nav.getByText('Farmacia Sol')).toBeVisible()                              // y sola, a la siguiente
   // Se queda activado para la próxima vez.
   expect(await page.evaluate(() => localStorage.getItem('guia_manos'))).toBe('1')
+  // La explicación larga sale solo la primera vez (se recuerda en el navegador): al volver a abrir la guía, la píldora «Escuchando».
+  expect(await page.evaluate(() => localStorage.getItem('guia_manos_ayuda'))).toBe('1')
+  await nav.getByRole('button', { name: 'Salir de la navegación' }).click()
+  await expect(nav).toHaveCount(0)
+  await page.getByRole('button', { name: /^(Empezar a navegar|Ir)$/ }).first().click()   // «Ir» desde que «Hoy» es el compacto (y la fila también tiene su «Ir»)
+  await expect(nav.getByText('Farmacia Sol')).toBeVisible()
+  await expect(nav.getByText('Escuchando')).toBeVisible()
+  await expect(nav.getByText(/Di «entregado», «no entregado»/)).toHaveCount(0)
   expect(fallos).toEqual([])
 })
 
@@ -2599,7 +2766,7 @@ test('Cobro · plan gratis: sin pagar se sigue repartiendo con tope y «Quitar e
   await entrarRepartidor(page, { status: 'trial', days_left: 0, required: true, trial_ends: new Date(Date.now() - 86400000).toISOString(),
     bloqueo: '', gratis: { activo: true, tope: 15, usadas: 4 } })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('Plan gratis: hasta 15 paradas nuevas al día.')).toBeVisible()
+  await expect(page.getByText('Gratis: 15 paradas al día')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Tu prueba ha terminado' })).toHaveCount(0)          // sin muro
   await page.getByRole('button', { name: 'Quitar el tope' }).click()
   await expect(page.getByText('Plan gratis', { exact: true })).toBeVisible()
@@ -2735,12 +2902,53 @@ test('Cobro · con la promoción: «Gratis sin límite», sin aviso de prueba ni
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('button', { name: 'Hoy', exact: true })).toBeVisible()
   await expect(page.getByText(/Queda 1 día de prueba/)).toHaveCount(0)
-  await expect(page.getByText('Plan gratis: hasta 15 paradas nuevas al día.')).toHaveCount(0)
+  await expect(page.getByText('Gratis: 15 paradas al día')).toHaveCount(0)
   await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
   await expect(page.getByText('Gratis sin límite', { exact: true })).toBeVisible()
   await expect(page.getByText(/Hasta el 31\/12\/2026 no tienes tope de paradas ni pagas nada|Hasta el .* no tienes tope de paradas ni pagas nada/)).toBeVisible()
   await expect(page.getByRole('button', { name: /Pagar con tarjeta|Suscribirme/ })).toHaveCount(0)
   expect(fallos).toEqual([])
+})
+
+/* LOS DÍAS DE PRUEBA QUE QUEDAN (07-11-2026, revisor, hallazgo 6; §6.2): el aviso dice «Quedan {n} días de prueba» y su acción es
+   «Ver mi plan», cada una una vez y a su sitio. Antes el texto ya llevaba «· Ver mi plan» y la acción era «Verlo»: «Ver mi plan»
+   salía dos veces y el texto saltaba de línea a 360 («Quedan 2 días de prueba · Ver mi / plan   Verlo»). */
+test('Cobro · a punto de acabar la prueba: «Quedan 2 días de prueba» con la acción «Ver mi plan» (una vez), y «Queda 1 día de prueba»', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.setViewportSize({ width: 360, height: 780 })
+  await entrarRepartidor(page, { status: 'trial', days_left: 2, required: false, trial_ends: new Date(Date.now() + 2 * 86400000).toISOString() })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  const aviso = page.getByRole('status').filter({ hasText: 'Quedan 2 días de prueba' })
+  const texto = aviso.getByText('Quedan 2 días de prueba', { exact: true })
+  await expect(texto).toBeVisible()
+  await expect(aviso.getByRole('button', { name: 'Ver mi plan', exact: true })).toBeVisible()
+  await expect(page.getByText('Ver mi plan'), '«Ver mi plan» una sola vez').toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Verlo', exact: true }), 'sin «Verlo» en este aviso').toHaveCount(0)
+  expect((await texto.boundingBox()).height, 'el texto cabe en una línea').toBeLessThanOrEqual(21)          // «texto»: 14/20
+  await aviso.getByRole('button', { name: 'Ver mi plan', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Cuenta', exact: true })).toHaveAttribute('aria-current', 'page')
+  // Con un día, en singular.
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { ...BILLING_BASE, status: 'trial', days_left: 1, required: false } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Hoy', exact: true }).click()
+  await expect(page.getByRole('status').getByText('Queda 1 día de prueba', { exact: true })).toBeVisible()
+  await expect(page.getByText('Ver mi plan')).toHaveCount(1)
+  expect(fallos).toEqual([])
+})
+
+test.describe('Cobro · a punto de acabar la prueba, en alemán', () => {
+  test.use({ locale: 'de-DE' })
+  test('«Noch 2 Testtage» con la acción «Mein Tarif», y «Noch 1 Testtag»', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 780 })
+    await entrarRepartidor(page, { status: 'trial', days_left: 2, required: false, trial_ends: new Date(Date.now() + 2 * 86400000).toISOString() })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    const aviso = page.getByRole('status').filter({ hasText: 'Noch 2 Testtage' })
+    await expect(aviso.getByRole('button', { name: 'Mein Tarif', exact: true })).toBeVisible()
+    await expect(page.getByText('Quedan 2 días de prueba')).toHaveCount(0)                           // la clave está traducida, no cae al español
+    await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { ...BILLING_BASE, status: 'trial', days_left: 1, required: false } }))
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('status').getByText('Noch 1 Testtag', { exact: true })).toBeVisible()
+  })
 })
 
 /* LA CARTERA «INVITA Y GANA» (10-10-2026): saldo, invitar y pedir el pago por Bizum. */
@@ -2804,9 +3012,14 @@ test('Bono · la tarjeta de la primera ruta: progreso, ejemplos que no cuentan y
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   const tarjeta = page.getByTestId('bono')
   await expect(tarjeta.getByText('10 € por tu primera ruta real')).toBeVisible()
-  await expect(tarjeta.getByText('Haz 20 entregas con la app en 2 días distintos y son tuyos. Hasta el 31 de diciembre.')).toBeVisible()
-  await expect(tarjeta.getByText('0 de 20 entregas')).toBeVisible()
-  await expect(tarjeta.getByText(/foto a la etiqueta de cada uno, aquí abajo/)).toBeVisible()
+  await expect(tarjeta).toContainText('0/20')
+  // Las condiciones, al tocar la promo (07-11-2026, diseño compacto).
+  await tarjeta.getByRole('button', { name: /10 € por tu primera ruta real/ }).click()
+  await expect(page.getByRole('dialog').getByText('Haz 20 entregas con la app en 2 días distintos y son tuyos. Hasta el 31 de diciembre.')).toBeVisible()
+  await page.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click()
+  // La pista de la ruta vacía, sin «aquí abajo»: la promo va debajo de los botones de cargar, no encima (revisor, hallazgo 8).
+  await expect(tarjeta.getByText('Empieza con los paquetes de hoy: foto a la etiqueta de cada uno.')).toBeVisible()
+  await expect(tarjeta).not.toContainText('aquí abajo')
   // Con la tarjeta a la vista, el aviso de «invitar» de arriba no se repite.
   await expect(page.getByText(/Gana 10 € por cada compañero que la use/)).toHaveCount(0)
   // Solo paradas de ejemplo: no cuentan, y se dice.
@@ -2817,9 +3030,9 @@ test('Bono · la tarjeta de la primera ruta: progreso, ejemplos que no cuentan y
   pedidos = []
   bono = { ...bono, entregas: 12, dias: 1 }
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(tarjeta.getByText('12 de 20 entregas')).toBeVisible()
+  await expect(tarjeta.getByText('12/20')).toBeVisible()
   await expect(tarjeta.getByText('1 de 2 días')).toBeVisible()
-  await expect(tarjeta.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '12')
+  await expect(tarjeta.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '60')
   // Ganado: se celebra y lleva a la cartera, que lo dice.
   // eslint-disable-next-line require-atomic-updates -- no es una carrera: el bono nuevo no sale del de antes
   bono = { cent: 1000, pagado: true, pagado_en: new Date().toISOString(), nuevo: true }
@@ -2842,7 +3055,7 @@ test.describe('App del repartidor en el móvil', () => {
     let veces = 0
     await page.route(/\/api\/reparto\/mi-ruta$/, (r) => { veces += 1; r.fulfill({ json: { activo: true, autonomo: true, fecha: '2026-10-17', pedidos: [], jornada: {}, aviso_aceptado: true } }) })
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('button', { name: 'Escanear' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Escanear', exact: true })).toBeVisible()
     await expect.poll(() => veces).toBeGreaterThan(0)
     const antes = veces
     const tirar = (desde, hasta, selector = 'body') => page.evaluate(([y0, y1, sel]) => {
@@ -2886,7 +3099,7 @@ test.describe('App del repartidor en el móvil', () => {
     }
     await entregar()                                                      // Farmacia Sol, sin red
     await expect(page.getByText('Sin cobertura: guardado en el móvil. Se envía solo cuando vuelva la conexión.')).toBeVisible()
-    await expect(page.getByTestId('sin-enviar')).toContainText('1 cambio guardado en el móvil')
+    await expect(page.getByTestId('sin-enviar')).toContainText('1 sin enviar')   // «1 sin enviar» + «Enviar ahora» (07-11-2026)
     await expect(page.getByText('Bar Pepe').first()).toBeVisible()        // la siguiente ya es Bar Pepe
     // Deshacer algo que no ha salido del móvil: se olvida, sin mandar nada.
     await page.getByRole('button', { name: 'Deshacer' }).click()
@@ -2923,9 +3136,11 @@ test.describe('App del repartidor en el móvil', () => {
           antes: { fecha: '2026-10-12', estado: 'fallido', donde: '', nota: 'timbre roto', motivo: 'No había nadie' } },
       ] } }))
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByTestId('antes').first()).toHaveText('La última vez (10 oct): En portería o recepción · «conserje Manolo»')
-    await page.getByText('Bar Pepe').first().click()                      // se despliega la segunda
-    await expect(page.getByText('La última vez (12 oct) no se pudo: No había nadie · «timbre roto»')).toBeVisible()
+    // En la tarjeta, el dato con su icono y sin el prefijo a la vista; la frase entera va en su nombre accesible (07-11-2026).
+    await expect(page.getByTestId('antes').first()).toContainText('La última vez (10 oct): En portería o recepción · «conserje Manolo»')
+    await expect(page.getByTestId('antes').first()).toContainText('10 oct: En portería o recepción · «conserje Manolo»')
+    await page.getByRole('button', { name: /Ver la parada 2: Bar Pepe/ }).click()          // la segunda abre su hoja
+    await expect(page.getByRole('dialog', { name: 'Bar Pepe' }).getByText('La última vez (12 oct) no se pudo: No había nadie · «timbre roto»')).toBeVisible()
     expect(fallos).toEqual([])
   })
 
@@ -3214,7 +3429,7 @@ test('Reparto · en México el WhatsApp lleva el prefijo 52, y con + se respeta 
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('link', { name: /WhatsApp/ }).first()).toHaveAttribute('href', /wa\.me\/525512345678\?/)
   await page.getByRole('button', { name: /Ver la parada 2/ }).click()
-  await expect(page.locator('div.rounded-2xl', { hasText: 'Parada 2' }).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', /wa\.me\/13055550100\?/)
+  await expect(page.getByRole('dialog', { name: 'Café Condesa' }).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', /wa\.me\/13055550100\?/)
   expect(fallos).toEqual([])
 })
 
@@ -3223,24 +3438,33 @@ test('Reparto · en México el WhatsApp lleva el prefijo 52, y con + se respeta 
 const UA_ANDROID = 'Mozilla/5.0 (Linux; Android 14; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Mobile Safari/537.36'
 test.describe('App · instalar desde la web en Android', () => {
   test.use({ userAgent: UA_ANDROID })
-  test('ofrece el APK y, si Chrome deja, instalar en un toque (y no sale si ya es app)', async ({ page }) => {
+  /* El aviso «Instala la app» (07-11-2026, diseño compacto, §5.1 b): en Android «Instalar la app» lleva a Google Play, con el
+     aviso de Chrome para instalar en un toque o sin él. REVISOR, hallazgo 1: con el aviso de Chrome, lo normal en Android,
+     lanzaba la instalación de la PWA y no abría la tienda (esa vía sigue en el último paso del alta: `activacion.spec.js`).
+     Sin el arreglo, la segunda parte ve `prompt()` llamado y la tienda abierta una sola vez. */
+  test('el aviso «Instala la app» lleva a Google Play, con o sin el aviso de Chrome, y no lanza la instalación', async ({ page }) => {
     const fallos = vigilar(page)
+    const PLAY = 'https://play.google.com/store/apps/details?id=com.flotadsp.flota'
+    await page.addInitScript(() => { window.__abiertas = []; window.open = (url) => { window.__abiertas.push(String(url)); return null } })
     await entrarRepartidor(page, { status: 'trial', days_left: 6, trial_ends: new Date(Date.now() + 6 * 86400000).toISOString() })
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    const tarjeta = page.getByLabel('Instalar la app')
+    const tarjeta = page.getByRole('status').filter({ hasText: 'Instala la app' })
     await expect(tarjeta).toBeVisible()
-    // Sin aviso de Chrome: el APK.
-    await expect(tarjeta.getByRole('link', { name: 'Descargar la app para Android' })).toHaveAttribute('href', '/descargas/FDS.apk')
-    // Con el aviso de Chrome: el botón lo lanza.
+    await expect(tarjeta.getByRole('button', { name: 'Instalar la app' })).toBeVisible()
+    // Sin el aviso de Chrome: la tienda.
+    await tarjeta.getByRole('button', { name: 'Instalar la app' }).click()
+    await expect.poll(() => page.evaluate(() => window.__abiertas)).toEqual([PLAY])
+    // Con el aviso de Chrome: también la tienda, y la instalación de la PWA sin lanzar.
     await page.evaluate(() => {
       const e = new Event('beforeinstallprompt')
       e.prompt = () => { window.__pedido = true }
       e.userChoice = Promise.resolve({ outcome: 'accepted' })
       window.dispatchEvent(e)
     })
-    await page.getByLabel('Instalar la app').getByRole('button', { name: 'Instalar la app' }).click()
-    await expect.poll(() => page.evaluate(() => window.__pedido)).toBe(true)
-    await expect(page.getByLabel('Instalar la app')).toHaveCount(0)
+    await tarjeta.getByRole('button', { name: 'Instalar la app' }).click()
+    await expect.poll(() => page.evaluate(() => window.__abiertas)).toEqual([PLAY, PLAY])
+    expect(await page.evaluate(() => window.__pedido), 'la instalación de la PWA no se lanza desde el aviso').toBeUndefined()
+    await expect(tarjeta).toBeVisible()
     expect(fallos).toEqual([])
   })
 })
@@ -3251,8 +3475,8 @@ test.describe('App · dentro de la app (Play o el APK) no se ofrece instalar', (
     await entrarRepartidor(page, { status: 'trial', days_left: 6 }, { enApp: true })
     await page.addInitScript(() => localStorage.setItem('fds_recien_alta', '1'))
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('button', { name: 'Ruta', exact: false }).first()).toBeVisible()
-    await expect(page.getByLabel('Instalar la app')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Hoy', exact: true })).toBeVisible()
+    await expect(page.getByText('Instala la app')).toHaveCount(0)
     await expect(page.getByRole('dialog', { name: 'Último paso: instala la app' })).toHaveCount(0)
   })
 })
@@ -3325,7 +3549,7 @@ test('Anuncio · quien llega del anuncio ve la app y la prueba con paradas antes
   await expect(video).toHaveAttribute('playsinline', '')
   await page.getByRole('button', { name: /Probarla ahora/ }).first().click()
   await expect(page).toHaveURL(/\/conductor\?vista=ruta/)
-  await expect(page.getByText('Ruta de prueba con paradas de ejemplo. Se borra mañana.')).toBeVisible()
+  await expect(page.getByText('Ruta de prueba · se borra mañana')).toBeVisible()   // «Ruta de prueba · se borra mañana» (07-11-2026, diseño compacto)
   await expect(page.getByText('Cliente 1 (prueba)')).toBeVisible()
   expect(fallos).toEqual([])
 })
@@ -3406,9 +3630,9 @@ test('Ruta · Mi dinero hoy: poner la tarifa y ver lo ganado', async ({ page }) 
   await expect.poll(() => guardado.length).toBe(1)
   expect(guardado[0]).toEqual({ pago_parada: 110, pago_dia: 0, coste_km: 12, bizum: '' })   // el Bizum de la propina (01-11-2026), vacío
   // 2 entregas × 1,10 € = 2,20 €; gasolina de lo hecho: 20 km × 2/2 × 0,12 € = 2,40 €.
+  // El chip «Mi dinero hoy» (07-11-2026, diseño compacto) enseña lo limpio: 2,20 − 2,40 = −0,20 €; el desglose, en su hoja (W3).
   const tarjeta = page.getByRole('button', { name: 'Mi dinero hoy' })
-  await expect(tarjeta).toContainText('2,20')
-  await expect(tarjeta).toContainText('2,40')
+  await expect(tarjeta).toContainText('0,20')
   expect(fallos).toEqual([])
 })
 
@@ -3578,15 +3802,51 @@ test('Ruta · la primera vez pregunta cómo le llegan las paradas y abre esa her
   await pasos.getByRole('button', { name: 'Cerrar' }).click()
   // Sin paradas, el hueco vacío es la acción misma: las formas de cargar, y la hoja en papel va a la foto de la hoja.
   await expect(page.getByText('Carga tus paradas de hoy')).toBeVisible()
-  await page.getByRole('button', { name: /Una hoja de reparto en papel/ }).click()
+  await page.getByRole('button', { name: 'Lista u hoja' }).click()
   await expect(page.getByRole('dialog', { name: 'Pegar una lista de direcciones' })).toBeVisible()
-  await expect(page.getByText('Pulsa «Foto de la hoja» y se leen todas las paradas de golpe.')).toBeVisible()
   await page.evaluate(() => localStorage.removeItem('fds_tour_ruta'))
   await page.reload({ waitUntil: 'domcontentloaded' })
   await hoja.getByRole('button', { name: 'Todavía no' }).click()
   await hoja.getByRole('button', { name: 'Mientras, verlo en acción con 3 paradas de ejemplo' }).click()
   await expect.poll(() => ejemplo).toBe(1)
   await expect(hoja).toHaveCount(0)
+  expect(fallos).toEqual([])
+})
+
+/* LA TARJETA DE LA SIGUIENTE, A SU MEDIDA (07-11-2026, revisor, hallazgo 5; §5.1 d y §7.4): de 216 a 284. Con cobrar, horario y dos
+   notas (como la captura 10-hoy) medía 292: la fila de acciones iba a 12 de las notas (ahora 8) y las notas llevaban 8 de relleno
+   arriba y abajo (ahora 4): 280. A 360×780 «Entregado» queda entero y por encima de las pestañas, sin desplazar. Lo de las 3 filas
+   a la vista (§5.1) no sale con una tarjeta con notas: se decide con Dani, y aquí solo se mide lo que SÍ se cumple.
+   RW (08-11-2026): lo que dice el cliente puede ocupar las dos líneas de la tarjeta y entonces la memoria se queda en la hoja; aquí es
+   corto («No estará · En el buzón», una línea) para seguir midiendo la tarjeta con DOS notas. El caso largo, en compacto-revision.spec.js. */
+test('Ruta · la tarjeta de la siguiente, con cobrar, horario y dos notas, mide 284 como mucho a 360×780 y «Entregado» queda sobre las pestañas', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.setViewportSize({ width: 360, height: 780 })
+  await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: { activo: true, autonomo: true, fecha: '2026-11-03', jornada: {}, aviso_aceptado: true,
+    ruta: { fin: '11:13', minutos: 100, km: 14, trafico: true },
+    pedidos: [
+      { id: 'p1', cliente: 'Farmacia Sol', direccion: 'Rúa Sinfónica de Galicia 8', estado: 'pendiente', orden: 1, eta: '09:41', lat: 43.37, lng: -8.40, geo: 'puerta',
+        telefono: '613403123', cobrar: 24.5, ventana_desde: '09:30', ventana_hasta: '11:00',
+        cliente_dice: { estare: 'no', dejar: 'buzon', portal: '', nota: '', cuando: '2026-11-03T08:00:00Z' },
+        memoria: { portal: '1234', dejar: 'porteria', acceso: 'Garaje' } },
+      { id: 'p2', cliente: 'Marta G.', direccion: 'Rúa Juan Flórez 46', estado: 'pendiente', orden: 2, eta: '09:47', lat: 43.36, lng: -8.41 }] } }))
+  await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: null } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  const tarjeta = page.getByRole('region', { name: 'Siguiente parada' })
+  await expect(tarjeta.getByTestId('cliente-dice')).toBeVisible()
+  await expect(tarjeta.getByTestId('memoria')).toBeVisible()                                          // las dos notas de la tarjeta
+  await expect(tarjeta.getByText('Cobrar 24,50 €')).toBeVisible()
+  const caja = await tarjeta.boundingBox()
+  expect(caja.height, 'la tarjeta mide 216-284 (§5.1 d)').toBeLessThanOrEqual(284)
+  expect(caja.height).toBeGreaterThanOrEqual(216)
+  const entregado = await tarjeta.getByRole('button', { name: 'Entregado', exact: true }).boundingBox()
+  const pestanas = await page.getByRole('navigation', { name: 'Secciones' }).boundingBox()
+  expect(entregado.y + entregado.height, '«Entregado» por encima de las pestañas, sin desplazar').toBeLessThanOrEqual(pestanas.y)
+  // Las notas de la hoja de la parada se quedan con sus 8 de relleno (el ajuste es solo de la tarjeta).
+  await tarjeta.getByRole('button', { name: /Ver la parada 1: Farmacia Sol/ }).click()
+  const notasHoja = page.getByRole('dialog', { name: 'Farmacia Sol' }).getByTestId('cliente-dice').locator('..')
+  expect(await notasHoja.evaluate((el) => getComputedStyle(el).paddingTop)).toBe('8px')
   expect(fallos).toEqual([])
 })
 
@@ -3601,15 +3861,15 @@ test('Ruta · con la ruta en marcha, añadir va en el «+» y el navegador se el
       { id: 'p2', cliente: 'Bar Pepe', direccion: 'Rúa Nova 2', estado: 'pendiente', orden: 2, lat: 43.36, lng: -8.41 }] } }))
   await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: null } }))
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('Siguiente parada')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Siguiente parada' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Escanear', exact: true })).toHaveCount(0)      // no estorba arriba
   await expect(page.getByTestId('bono')).toContainText('3/20')
   await expect(page.getByLabel('Navegador')).toHaveCount(0)                                       // ni «Ir con» en la lista
   await page.getByRole('button', { name: 'Añadir paradas' }).click()
   const hoja = page.getByRole('dialog', { name: 'Añadir paradas' })
   await expect(hoja.getByRole('button', { name: 'Escanear', exact: true })).toBeVisible()
-  await expect(hoja.getByPlaceholder('o escribe el código')).toBeVisible()
-  await hoja.getByRole('button', { name: /Añadir un pedido sin código/ }).click()
+  await expect(hoja.getByPlaceholder('Código')).toBeVisible()
+  await hoja.getByRole('button', { name: 'A mano', exact: true }).click()
   await expect(hoja).toHaveCount(0)                                                               // se cierra al elegir
   await page.keyboard.press('Escape')
   // Con qué navegar, en Ajustes; se recuerda y «Ir» abre Waze.
@@ -3617,8 +3877,64 @@ test('Ruta · con la ruta en marcha, añadir va en el «+» y el navegador se el
   await page.getByRole('button', { name: 'Ajustes', exact: true }).click()
   await page.getByLabel('Navegador').selectOption('waze')
   await page.getByRole('button', { name: 'Hoy', exact: true }).click()
-  const primera = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
+  const primera = page.getByRole('region', { name: 'Siguiente parada' })
   await expect(primera.getByRole('link', { name: 'Ir' })).toHaveAttribute('href', 'https://waze.com/ul?ll=43.37,-8.4&navigate=yes')
+  expect(fallos).toEqual([])
+})
+
+/* LOS AVISOS SE VEN ENCIMA DE LAS HOJAS (07-11-2026, revisor, hallazgo 4). El aviso flotante tenía el mismo z-index que las hojas
+   (50) y se pinta antes que ellas, así que una hoja abierta lo cubría: si el servidor rechazaba «Añadir a mi ruta» (el tope de
+   paradas del plan gratis, un 403), el repartidor tocaba el botón y no veía nada. Ahora el aviso queda encima de la hoja y, con
+   una hoja con pie fijo abierta, por encima de ese pie: no tapa su botón principal. Lo que hay en el centro del aviso (elementFromPoint)
+   es el propio aviso. */
+const avisoEncima = (aviso) => aviso.evaluate((el) => {
+  const b = el.getBoundingClientRect()
+  const h = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)
+  return !!h && el.contains(h)
+})
+test('Ruta · el error de «Añadir a mi ruta» (el tope del plan gratis) se ve encima de la ficha y no tapa su botón', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: { activo: true, autonomo: true, fecha: '2026-10-17', jornada: {}, aviso_aceptado: true,
+    pedidos: [{ id: 'p1', cliente: 'Farmacia Sol', direccion: 'Rúa Real 5', estado: 'pendiente', orden: 1, lat: 43.37, lng: -8.40 }] } }))
+  await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: null } }))
+  await page.route(/\/api\/reparto\/mis-pedidos$/, (r) => r.fulfill({ status: 403, json: { detail: 'Has llegado al tope de paradas del plan gratis.' } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Añadir paradas' }).click()
+  await page.getByRole('dialog', { name: 'Añadir paradas' }).getByRole('button', { name: 'A mano', exact: true }).click()
+  const ficha = page.getByRole('dialog', { name: 'Nueva parada' })
+  await ficha.getByRole('textbox', { name: 'Dirección completa' }).fill('Rúa Real 5, A Coruña')
+  const guardar = ficha.getByRole('button', { name: 'Añadir a mi ruta' })
+  await expect(guardar).toBeEnabled()
+  await guardar.click()
+  const aviso = page.getByRole('status').filter({ hasText: 'Has llegado al tope de paradas del plan gratis.' })
+  await expect(aviso).toBeVisible()
+  expect(await avisoEncima(aviso), 'el aviso queda tapado por la ficha').toBe(true)
+  const [caja, boton] = await Promise.all([aviso.boundingBox(), guardar.boundingBox()])
+  expect(caja.y + caja.height, 'el aviso tapa «Añadir a mi ruta»').toBeLessThanOrEqual(boton.y)
+  await expect(ficha).toBeVisible()                                                        // la ficha sigue abierta, para corregir
+  expect(fallos).toEqual([])
+})
+
+/* Y en el portal del conductor, que no lleva barra de pestañas: el aviso caía a 8 del borde, justo encima del pie de la hoja
+   («Entregar sin foto» y «Foto y entregar»). Un error al guardar la entrega con la prueba abierta se ve, encima del pie. */
+test('Portal · el error al guardar la entrega se ve encima de la prueba de entrega y no tapa sus botones', async ({ page }) => {
+  const fallos = vigilar(page)
+  await rutaDeAna(page, [{ id: 'p1', cliente: 'Bar Pepe', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 1, lat: 43.37, lng: -8.40 }])
+  await page.route(/\/api\/reparto\/pedidos\/p1\/estado/, (r) => r.fulfill({ status: 500, json: { detail: 'No se pudo guardar la entrega: prueba otra vez.' } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('region', { name: 'Siguiente parada' }).getByRole('button', { name: 'Entregado', exact: true }).click()
+  const prueba = page.getByRole('dialog', { name: 'Prueba de entrega' })
+  await expect(prueba).toBeVisible()
+  const sinFoto = prueba.getByRole('button', { name: 'Entregar sin foto' })
+  await sinFoto.click()
+  const aviso = page.getByRole('status').filter({ hasText: 'No se pudo guardar la entrega: prueba otra vez.' })
+  await expect(aviso).toBeVisible()
+  expect(await avisoEncima(aviso), 'el aviso queda tapado por la prueba de entrega').toBe(true)
+  const pie = await prueba.locator('[data-hoja-pie]').boundingBox()
+  const caja = await aviso.boundingBox()
+  expect(caja.y + caja.height, 'el aviso tapa el pie de la prueba de entrega').toBeLessThanOrEqual(pie.y)
+  await expect(prueba).toBeVisible()                                                       // la hoja sigue abierta, para repetirlo
   expect(fallos).toEqual([])
 })
 
@@ -3684,7 +4000,7 @@ test.describe('Opinión de los repartidores', () => {
     await expect(page.getByRole('heading', { name: '¿Qué te frenó?' })).toBeVisible()
     await expect(page.getByRole('radio', { name: 'No supe cómo meter los paquetes' })).toHaveAttribute('aria-checked', 'true')
     await page.getByRole('button', { name: 'Enviar', exact: true }).click()
-    await expect(page.getByText('«Cargar paquetes: uno tras otro»')).toBeVisible()
+    await expect(page.getByText('«Cargar paquetes»', { exact: true })).toBeVisible()   // 08-11-2026: el botón se llama «Cargar paquetes»
     await expect(page.getByRole('link', { name: 'Abrir la app' })).toHaveAttribute('href', '/ruta')
     expect(r.enviado).toEqual({ o: 'o1', t: 'firma', texto: '', motivo: 'no_supe' })
     expect(fallos).toEqual([])
@@ -3750,7 +4066,7 @@ test('Regalo · 10 € en la cartera: aviso en Hoy una vez, línea en la cartera
   } }))
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   const aviso = page.getByTestId('aviso-regalo')
-  await expect(aviso).toContainText('Te hemos regalado 10 €: ya están en tu cartera.')
+  await expect(aviso).toContainText('+10 € en tu cartera')
   await aviso.getByRole('button', { name: 'Verlo' }).click()
   const cartera = page.getByRole('region', { name: 'Tu cartera' })
   await expect(cartera.getByTestId('cartera-regalo')).toContainText('Regalo: 10 € ya en tu saldo')

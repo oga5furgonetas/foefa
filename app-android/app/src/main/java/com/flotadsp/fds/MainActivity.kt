@@ -1,3 +1,4 @@
+// diseño compacto
 package com.flotadsp.fds
 
 import com.flotadsp.fds.ui.tx
@@ -21,6 +22,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Alignment
@@ -31,12 +33,13 @@ import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.ShortNavigationBar
+import androidx.compose.material3.ShortNavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -46,6 +49,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.core.content.IntentCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
@@ -53,6 +58,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.data.Sesion
 import com.flotadsp.fds.etiqueta.Lectura
+import com.flotadsp.fds.ui.LetraMax
 import com.flotadsp.fds.ui.Region
 import com.flotadsp.fds.ui.TemaFds
 import com.flotadsp.fds.ui.acceso.Acceso
@@ -78,6 +84,8 @@ class MainActivity : ComponentActivity() {
     // «COMPARTIR CON FDS» (01-11-2026): lo que llegó por «Compartir» (texto o ficheros), hasta que la pantalla lo lee.
     private var compartido by mutableStateOf<Compartido?>(null)
     private lateinit var actualizacion: Actualizacion
+    // EL DISEÑO COMPACTO (06-11-2026): con las pestañas a la vista, el aviso de actualización va por encima de ellas.
+    private var pestanasALaVista by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val app = application as FdsApp
@@ -107,8 +115,9 @@ class MainActivity : ComponentActivity() {
                         Raiz(app, ref, empresaSlug, sesionPortal, abrirAviso, alAvisoAbierto = { abrirAviso = null },
                             compartido = compartido, alCompartidoVisto = { compartido = null },
                             alAbrirPortal = { if (it.app_destino == "empresa") sesionPortal = it },
-                            alCerrarEmpresa = { empresaSlug = null; sesionPortal = null })
-                        AvisoActualizacion(actualizacion, Modifier.align(Alignment.BottomCenter))
+                            alCerrarEmpresa = { empresaSlug = null; sesionPortal = null },
+                            alPestanas = { pestanasALaVista = it })
+                        AvisoActualizacion(actualizacion, Modifier.align(Alignment.BottomCenter).padding(bottom = if (pestanasALaVista) ALTO_PESTANAS else 0.dp))
                         DialogoActualizacion(actualizacion)
                     }
                 }
@@ -161,7 +170,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, sesionPortal: Sesion?, abrirAviso: String?,
                  alAvisoAbierto: () -> Unit, compartido: Compartido?, alCompartidoVisto: () -> Unit,
-                 alAbrirPortal: (Sesion) -> Unit, alCerrarEmpresa: () -> Unit) {
+                 alAbrirPortal: (Sesion) -> Unit, alCerrarEmpresa: () -> Unit, alPestanas: (Boolean) -> Unit = {}) {
     if (empresaSlug != null) {
         key(empresaSlug) {
             com.flotadsp.fds.ui.acceso.PortalEmpresa(empresaSlug.ifBlank { null }, alCerrarEmpresa)
@@ -189,9 +198,12 @@ private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, sesionPortal: 
                 alCerrar = { app.ambito.launch { app.repo.salir() } },
                 abrir = abrirAviso, alAbierto = alAvisoAbierto,
             )
-        } else if (dentro) Principal(abrirAviso, alAvisoAbierto, compartido, alCompartidoVisto) else Acceso(ref, alAbrirPortal, aviso = if (caducada) tx("Tu sesión ha caducado: entra otra vez.") else null)
+        } else if (dentro) Principal(abrirAviso, alAvisoAbierto, compartido, alCompartidoVisto, alPestanas) else Acceso(ref, alAbrirPortal, aviso = if (caducada) tx("Tu sesión ha caducado: entra otra vez.") else null)
     }
 }
+
+/** La barra de pestañas mide 64 (ShortNavigationBar); la zona segura la pone ella misma. */
+private val ALTO_PESTANAS = 64.dp
 
 /** Lo que tapa las pestañas: el escáner o la ficha de una parada. */
 private sealed interface Capa {
@@ -205,7 +217,9 @@ private sealed interface Capa {
 }
 
 @Composable
-private fun Principal(abrir: String?, alAbierto: () -> Unit, compartido: Compartido?, alCompartidoVisto: () -> Unit) {
+private fun Principal(abrir: String?, alAbierto: () -> Unit, compartido: Compartido?, alCompartidoVisto: () -> Unit,
+                      /** Si las pestañas están a la vista (true) o las tapa una capa (false). */
+                      alPestanas: (Boolean) -> Unit = {}) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val app = ctx.applicationContext as FdsApp
     val ruta: RutaVM = viewModel()
@@ -258,7 +272,10 @@ private fun Principal(abrir: String?, alAbierto: () -> Unit, compartido: Compart
             }
             FichaParada(pais = pais, cerca = cerca, inicial = c.inicial, editar = c.editar,
                 alCerrar = { guardada -> cerrada(guardada, sinSituar = false) },
-                alGuardada = { p -> cerrada(true, sinSituar = p != null && p.pendiente && !p.ubicada) })
+                alGuardada = { p -> cerrada(true, sinSituar = p != null && p.pendiente && !p.ubicada) },
+                // «Quitar de la ruta» en el ⋮ de «Editar parada» (07-11-2026, §5.9): lo mismo que la hoja de la parada
+                // (ruta.quitar, que avisa y refresca) y se cierra la ficha. Solo al editar: al crear no hay nada que quitar.
+                alQuitar = c.editar?.let { p -> ({ ruta.quitar(p); capa = null }) })
             return
         }
         is Capa.Carga -> {
@@ -280,18 +297,24 @@ private fun Principal(abrir: String?, alAbierto: () -> Unit, compartido: Compart
 
     Scaffold(
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+            // EL DISEÑO COMPACTO (06-11-2026, §5.11): la barra corta de Material (64 + la zona segura), con la etiqueta en
+            // una línea y la letra topada a 1,3; mientras está a la vista, el aviso de actualización sube por encima.
+            DisposableEffect(Unit) { alPestanas(true); onDispose { alPestanas(false) } }
+            ShortNavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
                 listOf(
                     Triple("hoy", tx("Hoy"), Icons.Default.Route), Triple("historial", tx("Historial"), Icons.Default.History),
                     Triple("ajustes", tx("Ajustes"), Icons.Default.Settings), Triple("cuenta", tx("Cuenta"), Icons.Default.Person),
                 ).forEach { (k, t, i) ->
-                    NavigationBarItem(selected = pestana == k, onClick = { pestana = k }, icon = { Icon(i, contentDescription = null) }, label = { Text(t) })
+                    ShortNavigationBarItem(selected = pestana == k, onClick = { pestana = k }, icon = { Icon(i, contentDescription = null) },
+                        label = { LetraMax(1.3f) { Text(t, maxLines = 1, overflow = TextOverflow.Ellipsis) } })
                 }
             }
         },
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
     ) { pad ->
-        Box(Modifier.padding(pad)) {
+        // F3, 08-11-2026: lo que ya aparta la barra de pestañas (con la zona segura de abajo) se da por consumido: si no, el
+        // Scaffold de cada pestaña vuelve a sumar los 24 dp de la barra del sistema y la lista se corta 24 dp antes de la barra.
+        Box(Modifier.padding(pad).consumeWindowInsets(pad)) {
             when (pestana) {
                 "historial" -> HistorialPantalla()
                 "ajustes" -> AjustesPantalla(alGuardar = { ruta.refrescarSinRuido() })

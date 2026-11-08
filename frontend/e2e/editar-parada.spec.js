@@ -43,20 +43,21 @@ test('Ruta · editar una parada y quitarla con doble toque', async ({ page }) =>
     base: null, ruta: { fin: '10:30', minutos: 30, km: 2, trafico: true }, pedidos } }))
 
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  const sig = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
+  const sig = page.getByRole('region', { name: 'Siguiente parada' })
   await expect(sig.getByText('Farmacia Sol')).toBeVisible()
 
   // Con paradas cargadas (17-10-2026), añadir va en el botón «+»: la hoja trae escanear, el código y lo demás.
-  await expect(page.getByPlaceholder('o escribe el código')).toHaveCount(0)
+  await expect(page.getByPlaceholder('Código')).toHaveCount(0)
   await page.getByRole('button', { name: 'Añadir paradas' }).click()
   await expect(page.getByRole('dialog', { name: 'Añadir paradas' }).getByRole('button', { name: 'Escanear', exact: true })).toBeVisible()
-  await expect(page.getByPlaceholder('o escribe el código')).toBeVisible()
+  await expect(page.getByPlaceholder('Código')).toBeVisible()
   await page.getByRole('dialog', { name: 'Añadir paradas' }).getByRole('button', { name: 'Cerrar' }).click()
 
-  // Editar: se abre la hoja con los datos de la parada y sin la foto del ticket.
-  await sig.getByRole('button', { name: /Editar parada: Farmacia Sol/ }).click()
+  // Editar: se abre la hoja con los datos de la parada y sin la foto de la etiqueta («Foto del ticket» es «Foto etiqueta», 07-11-2026).
+  await sig.getByRole('button', { name: 'Más opciones' }).click()
+  await page.getByRole('menuitem', { name: /Editar parada: Farmacia Sol/ }).click()
   await expect(page.getByRole('heading', { name: 'Editar parada' })).toBeVisible()
-  await expect(page.getByText('Foto del ticket')).toHaveCount(0)
+  await expect(page.getByText('Foto etiqueta')).toHaveCount(0)
   await page.getByPlaceholder('Dirección completa').fill('Montero Ríos 12')
   await page.getByRole('button', { name: /Avenida Montero Ríos 12, 15001 A Coruña/ }).click()
   await expect(page.getByText('Sitio encontrado en el mapa')).toBeVisible()
@@ -67,11 +68,21 @@ test('Ruta · editar una parada y quitarla con doble toque', async ({ page }) =>
   expect(editados[0]).toMatchObject({ direccion: 'Avenida Montero Ríos 12, 15001 A Coruña', lat: 43.369, lng: -8.405, cliente: 'Farmacia Sol 2', telefono: '600000001' })
   await expect(page.getByText('Farmacia Sol 2')).toBeVisible()
 
-  // Quitar: el primer toque pide confirmar, el segundo la quita.
-  await page.getByRole('button', { name: /Editar parada: Farmacia Sol 2/ }).click()
-  await page.getByRole('button', { name: 'Quitar esta parada' }).click()
+  // Quitar (07-11-2026, diseño compacto): «Quitar de la ruta» está en el ⋮ de la ficha y pide confirmar en un diálogo («¿Quitar esta
+  // parada?», con «Cancelar»); el botón del diálogo la quita. Sigue siendo en dos toques: el segundo confirma.
+  await sig.getByRole('button', { name: 'Más opciones' }).click()
+  await page.getByRole('menuitem', { name: /Editar parada: Farmacia Sol 2/ }).click()
+  const ficha = page.getByRole('dialog', { name: 'Editar parada' })
+  await ficha.getByRole('button', { name: 'Más opciones' }).click()
+  await page.getByRole('menuitem', { name: 'Quitar de la ruta' }).click()
+  const confirmar = page.getByRole('dialog', { name: '¿Quitar esta parada?' })
+  await expect(confirmar).toContainText('Farmacia Sol 2 sale de tu ruta de hoy.')
+  await confirmar.getByRole('button', { name: 'Cancelar' }).click()
+  await expect(confirmar).toHaveCount(0)
   expect(quitados).toEqual([])
-  await page.getByRole('button', { name: '¿Seguro? Toca otra vez para quitarla' }).click()
+  await ficha.getByRole('button', { name: 'Más opciones' }).click()
+  await page.getByRole('menuitem', { name: 'Quitar de la ruta' }).click()
+  await page.getByRole('dialog', { name: '¿Quitar esta parada?' }).getByRole('button', { name: 'Quitar de la ruta' }).click()
   await expect(page.getByText('Parada quitada de tu ruta')).toBeVisible()
   expect(quitados).toEqual(['p1'])
   await expect(page.getByText('Farmacia Sol 2')).toHaveCount(0)
