@@ -66,6 +66,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -446,9 +447,18 @@ private fun DatosHoja(p: Parada, alRepetirFoto: () -> Unit) {
     if (telefono == null && codigo == null && lleva.isBlank() && notasDe(p).isEmpty() && ia == null && estrellas == null && motivo == null) return
     Spacer(Modifier.height(Esp.s))
     if (telefono != null || codigo != null) {
-        Row(Modifier.fillMaxWidth()) {
-            if (telefono != null) FilaDato(Icons.Default.Call, telefono, tx("Teléfono: {x}", "x" to telefono), modifier = Modifier.weight(1f))
-            if (codigo != null) FilaDato(Icons.Default.Receipt, codigo, tx("Código: {x}", "x" to codigo), modifier = Modifier.weight(1f))
+        // F3, 08-11-2026: con la letra a 1,3 o más, uno debajo del otro: de dos en dos, a 360 dp el teléfono se partía por
+        // dentro («+34 613 403 / 123») y con la letra a 2,0 también el código («ZX8100000 / 3»).
+        if (LocalDensity.current.fontScale >= 1.3f) {
+            Column(Modifier.fillMaxWidth()) {
+                if (telefono != null) FilaDato(Icons.Default.Call, telefono, tx("Teléfono: {x}", "x" to telefono))
+                if (codigo != null) FilaDato(Icons.Default.Receipt, codigo, tx("Código: {x}", "x" to codigo))
+            }
+        } else {
+            Row(Modifier.fillMaxWidth()) {
+                if (telefono != null) FilaDato(Icons.Default.Call, telefono, tx("Teléfono: {x}", "x" to telefono), modifier = Modifier.weight(1f))
+                if (codigo != null) FilaDato(Icons.Default.Receipt, codigo, tx("Código: {x}", "x" to codigo), modifier = Modifier.weight(1f))
+            }
         }
     }
     if (lleva.isNotBlank()) FilaDato(Icons.Default.Inventory2, lleva, tx("Lleva: {x}", "x" to lleva))
