@@ -418,8 +418,11 @@ fun FichaParada(
                         }
                     }
                 }
-                // «Cliente» y «Teléfono», en dos columnas desde 360 dp; en un móvil más estrecho, uno debajo del otro.
+                // «Cliente» y «Teléfono», en dos columnas desde 360 dp; en un móvil más estrecho, uno debajo del otro. F3 (08-11-2026):
+                // también uno debajo del otro con la letra a 1,3 o más: a 360 dp con 1,3 cada campo medía 160 dp y recortaba lo escrito
+                // («Farmacia S», «+34 611 40»).
                 val ancho = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
+                val letraGrande = LocalDensity.current.fontScale >= 1.3f
                 val campoCliente: @Composable (Modifier) -> Unit = { m ->
                     CampoTexto(cliente, { cliente = it }, icono = Icons.Default.Person, ejemplo = tx("Cliente"),
                         teclado = KeyboardOptions(capitalization = KeyboardCapitalization.Words), modifier = m)
@@ -428,7 +431,7 @@ fun FichaParada(
                     CampoTexto(telefono, { telefono = it }, icono = Icons.Default.Call, ejemplo = tx("Teléfono"),
                         teclado = KeyboardOptions(keyboardType = KeyboardType.Phone), modifier = m)
                 }
-                if (ancho >= 360.dp) {
+                if (ancho >= 360.dp && !letraGrande) {
                     Row(horizontalArrangement = Arrangement.spacedBy(Esp.s)) { campoCliente(Modifier.weight(1f)); campoTelefono(Modifier.weight(1f)) }
                 } else {
                     campoCliente(Modifier.fillMaxWidth()); campoTelefono(Modifier.fillMaxWidth())
