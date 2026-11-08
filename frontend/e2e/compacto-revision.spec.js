@@ -7,6 +7,7 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
    - la tarjeta «¿Qué tal te va la app?» más estrecha que el resto de la columna (un `mx-auto` en un flex en columna);
    - «Guardar este orden» (el pie de «A mano») detrás de la barra de pestañas hasta llegar al final de la lista;
    - «Por entregar · 15» del portal del conductor, de 10 px de ancho y en 4 líneas bajo la lupa, a 390-412 de ancho.
+   - el importe cobrado de una fila de «Hechas hoy» («· 1…» a 360, con la etiqueta «Verificada por IA» al lado).
    (El doble ✓ de «Añadida a tu ruta» se mira en escanear-etiqueta.spec.js.) */
 test.use({ locale: 'es-ES', timezoneId: 'Europe/Madrid', viewport: { width: 390, height: 844 } })
 
@@ -102,4 +103,18 @@ test('Compacto · portal del conductor: «Por entregar · N» cabe en su línea 
     // La lupa y «A mano» siguen a la vista y en su fila.
     await expect(page.getByRole('button', { name: 'Buscar en la ruta' }).or(page.getByRole('button', { name: 'A mano' })).first()).toBeVisible()
   }
+})
+
+test('Compacto · «Hechas hoy»: el importe cobrado no se corta a 360 de ancho, ni con la etiqueta de la IA al lado', async ({ page, context }) => {
+  await preparar(page, context)
+  await page.setViewportSize({ width: 360, height: 740 })
+  const kiosko = { ...hecha(1), cliente: 'Kiosko Luz', cobrado_importe: 12, cobrado_metodo: 'tarjeta', entrega_ia: { nivel: 'verificada' } }
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: ruta([kiosko, pendiente(2), pendiente(3)]) }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.locator('details').filter({ hasText: 'Hechas hoy' }).evaluate((d) => { d.open = true })
+  const estado = page.getByText(/Entregado · 12,00\s€/)   // el importe lleva un espacio fino sin salto antes del €
+  await expect(estado).toBeVisible()
+  const sobra = await estado.evaluate((el) => el.scrollWidth - el.clientWidth)
+  expect(sobra, 'el texto «hora · Entregado · 12,00 €» sale cortado con «…»').toBeLessThanOrEqual(1)
+  await expect(page.getByText('Verificada por IA')).toBeVisible()
 })
