@@ -18,7 +18,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -900,38 +899,6 @@ private fun MiDineroHoja(d: DineroHoy, alCerrar: () -> Unit) {
             )
         }
         Spacer(Modifier.height(Esp.s))
-    }
-}
-
-/** EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): una parada sin punto en el mapa lo dice claro, con «Situar». En «Hoy»
- *  ya lo hace el chip de la tarjeta; la hoja de la parada (Hojas.kt) sigue usándolo hasta que pase a la Hoja común. */
-@Composable
-internal fun AvisoSinSituar(alSituar: () -> Unit) {
-    Aviso(tx("Sin situar en el mapa"), tono = Tono.AVISO, icono = Icons.Default.LocationOff, accion = tx("Situar"), alAccion = alSituar)
-}
-
-/** El número de parada de antes, sobre la pieza NumeroParada (07-11-2026): lo usa la guía hasta que pase a la pieza. */
-@Composable
-internal fun Numero(n: Int?, grande: Boolean = false, hecho: Boolean = false) {
-    NumeroParada(n, if (grande) TamNumero.GRANDE else TamNumero.FILA, if (hecho) EstadoNumero.HECHA else EstadoNumero.SIGUIENTE)
-}
-
-/** Las etiquetas de una parada (todas, con `Etiqueta`), como las usan la hoja de la parada y la tarjeta del mapa hasta
- *  que pasen a las piezas: sin la hora (ya va al lado del nombre) y, sin sitio, «Sin situar · Situar» con `alSituar`. */
-@Composable
-fun Etiquetas(
-    p: Parada, enZbe: String = "",
-    /** Sin situar (02-11-2026): con esto, el chip es «Sin situar · Situar» y abre «Situar la parada». */
-    alSituar: (() -> Unit)? = null,
-    /** El aviso de sin situar ya va aparte (AvisoSinSituar): sin chip. */
-    avisoAparte: Boolean = false,
-) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(Esp.s), verticalArrangement = Arrangement.spacedBy(Esp.xs)) {
-        etiquetasDe(p, enZbe).forEach { (t, tono, i) -> Etiqueta(t, tono, i) }
-        if (Situar.sinSituar(p) && !avisoAparte) {
-            if (alSituar != null) ChipAccion(tx("Sin situar") + " · " + tx("Situar"), alSituar, icono = Icons.Default.LocationOff, tono = Tono.AVISO)
-            else Etiqueta(tx("Sin situar"), Tono.AVISO, Icons.Default.LocationOff)
-        }
     }
 }
 

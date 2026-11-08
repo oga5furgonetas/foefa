@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -116,7 +117,7 @@ fun ExtrasConductorNativos(alVolver: () -> Unit) {
                                 if (refuerzo.isNotBlank()) TextButton(onClick = { confirmar = refuerzo to "retirar" }, enabled = ocupado == null, colors = coloresBotonTexto(MaterialTheme.colorScheme.onSurfaceVariant)) { Text(tx("Retirar solicitud")) }
                             } else if (estado.isBlank()) {
                                 OutlinedTextField(notas[fecha].orEmpty(), { value -> if (value.length <= 200) notas = notas + (fecha to value) }, label = { Text(tx("Nota para la oficina (opcional)")) }, modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
-                                Button(onClick = { confirmar = fecha to "pedir" }, enabled = ocupado == null, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text(tx("Solicitar turno extra")) }
+                                Button(onClick = { confirmar = fecha to "pedir" }, enabled = ocupado == null, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(tx("Solicitar turno extra")) }
                             }
                         }
                     }

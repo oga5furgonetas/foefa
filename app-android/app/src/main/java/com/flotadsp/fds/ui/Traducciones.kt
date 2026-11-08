@@ -1,6 +1,6 @@
 package com.flotadsp.fds.ui
 
-/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 832 textos de la app nativa con sus
+/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 831 textos de la app nativa con sus
    traducciones (en, pt, fr, it, de), sacadas de la web (frontend/src/lib/textosRuta*.js) y de
    app-android/traducciones-nativa.json. Una fila por línea, columnas con TAB; ⏎ es un salto de línea. En bloques
    porque una constante de Kotlin no puede pasar de 64 KB. */
@@ -593,7 +593,6 @@ Sin paradas todavía	No stops yet	Ainda sem paragens	Pas encore d’arrêts	Anco
 Sin permiso de cámara no se puede hacer la foto. Actívalo en Ajustes › Aplicaciones › FDS › Permisos.	Without camera permission the photo cannot be taken. Turn it on in Settings › Apps › FDS › Permissions.	Sem permissão de câmara não é possível tirar a foto. Ativa-a em Definições › Aplicações › FDS › Permissões.	Sans l’autorisation appareil photo, impossible de prendre la photo. Activez-la dans Paramètres › Applications › FDS › Autorisations.	Senza il permesso della fotocamera non si può scattare la foto. Attivalo in Impostazioni › App › FDS › Autorizzazioni.	Ohne Kameraberechtigung kann kein Foto gemacht werden. Aktiviere sie unter Einstellungen › Apps › FDS › Berechtigungen.
 Sin resultados	No results	Sem resultados	Aucun résultat	Nessun risultato	Keine Treffer
 Sin situar	Not on the map	Sem localização	Non localisé	Non localizzata	Nicht auf der Karte
-Sin situar en el mapa	Not on the map	Sem localização no mapa	Pas sur la carte	Non sulla mappa	Nicht auf der Karte
 Sin tarjeta. Gratis hasta {p} paradas al día; sin tope, el plan Repartidor.	No card. Free up to {p} stops a day; unlimited with the Courier plan.	Sem cartão. Grátis até {p} paragens por dia; sem limite, o plano Estafeta.	Sans carte. Gratuit jusqu’à {p} arrêts par jour ; illimité avec le plan Livreur.	Senza carta. Gratis fino a {p} fermate al giorno; senza limiti con il piano Corriere.	Ohne Karte. Kostenlos bis {p} Stopps am Tag; unbegrenzt mit dem Fahrer-Plan.
 Sin tarjeta. Gratis y sin límite hasta el {fecha}; después, gratis hasta {p} paradas al día.	No card. Free and unlimited until {fecha}; after that, free up to {p} stops a day.	Sem cartão. Grátis e sem limite até {fecha}; depois, grátis até {p} paragens por dia.	Sans carte. Gratuit et illimité jusqu’au {fecha} ; ensuite, gratuit jusqu’à {p} arrêts par jour.	Senza carta. Gratis e senza limiti fino al {fecha}; poi gratis fino a {p} fermate al giorno.	Ohne Karte. Kostenlos und unbegrenzt bis {fecha}; danach kostenlos bis {p} Stopps am Tag.
 Situar	Place it	Situar	Placer	Posiziona	Verorten
@@ -602,9 +601,9 @@ Situar la parada	Place the stop	Situar a paragem	Placer l’arrêt	Posiziona la 
 Solicita un turno extra en los días que la empresa necesita refuerzo. La oficina confirma cada solicitud.	Request an extra shift on the days the company needs reinforcement. The office confirms each request.	Pede um turno extra nos dias em que a empresa precisa de reforço. O escritório confirma cada pedido.	Demandez un créneau supplémentaire les jours où l’entreprise a besoin de renfort. Le bureau confirme chaque demande.	Richiedi un turno extra nei giorni in cui l’azienda ha bisogno di rinforzi. L’ufficio conferma ogni richiesta.	Beantrage eine Zusatzschicht an Tagen, an denen die Firma Verstärkung braucht. Das Büro bestätigt jede Anfrage.
 Solicitar día libre	Request a day off	Pedir dia livre	Demander un jour de repos	Richiedi giorno libero	Freien Tag beantragen
 Solicitar pago	Request payout	Pedir pagamento	Demander le paiement	Richiedi pagamento	Auszahlung anfordern
+Solicitar retirada	Request withdrawal	Pedir levantamento	Demander un retrait	Richiedi prelievo	Auszahlung beantragen
 """,
-        """Solicitar retirada	Request withdrawal	Pedir levantamento	Demander un retrait	Richiedi prelievo	Auszahlung beantragen
-Solicitar turno	Request shift	Pedir turno	Demander le service	Richiedi turno	Schicht beantragen
+        """Solicitar turno	Request shift	Pedir turno	Demander le service	Richiedi turno	Schicht beantragen
 Solicitar turno extra	Request extra shift	Pedir turno extra	Demander un créneau supplémentaire	Richiedi turno extra	Zusatzschicht beantragen
 Solicitar un cambio	Request a change	Pedir uma alteração	Demander un changement	Richiedi un cambio	Änderung beantragen
 Solicitud aprobada.	Request approved.	Pedido aprovado.	Demande approuvée.	Richiesta approvata.	Anfrage genehmigt.
@@ -846,7 +845,7 @@ ya estaban	were already there	já estavam	étaient déjà là	c’erano già	war
 
     /** { español -> [en, pt, fr, it, de] } */
     val MAPA: Map<String, Array<String>> by lazy {
-        val m = HashMap<String, Array<String>>(1664)
+        val m = HashMap<String, Array<String>>(1662)
         for (b in BLOQUES) for (l in b.lineSequence()) {
             if (l.isBlank()) continue
             val c = l.split('\t')

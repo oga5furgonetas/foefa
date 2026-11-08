@@ -39,8 +39,8 @@ import icono from './piezas/icono'
    pantalla y la hoja de llegada los tapaba en los móviles de 800 o menos); y el panel de abajo con el número de 40, el
    nombre, «Llamar» y la ✕ de icono, «Llegas ≈ …», las notas en una línea y «Ya he llegado» a lo ancho (al llegar, la
    FilaCierre). Lo que hace cada botón y lo que se manda al servidor, igual que antes. Los dibujos del mapa (la ruta, la
-   flecha, la chincheta) no cambian: por eso MapaGuia lleva colores hex y este fichero no lleva la marca de
-   `check-tokens-ruta.mjs`. */
+   flecha, la chincheta) no cambian: por eso MapaGuia lleva colores hex y `check-tokens-ruta.mjs` le salta esa regla
+   (DIBUJOS_DEL_MAPA). */
 
 const ICONOS = {
   derecha: CornerUpRight, izquierda: CornerUpLeft, 'ligera-derecha': ArrowUpRight, 'ligera-izquierda': ArrowUpLeft,

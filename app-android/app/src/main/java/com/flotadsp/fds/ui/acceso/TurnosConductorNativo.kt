@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -203,7 +204,7 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
                         }
                     }
                     OutlinedTextField(nota, { if (it.length <= 300) nota = it }, label = { Text(tx("Explica brevemente el motivo (obligatorio)")) }, minLines = 2, modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
-                    Button(onClick = { confirmar = seleccion }, enabled = !enviando && nota.trim().length >= 4, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                    Button(onClick = { confirmar = seleccion }, enabled = !enviando && nota.trim().length >= 4, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) {
                         if (enviando) CircularProgressIndicator(Modifier.height(20.dp)) else Text(tx("Solicitar día libre"))
                     }
                 } else if (fechaSel >= hoy && status.isBlank() && (esLibre || suspensionSel || bloqueoSel != null)) {

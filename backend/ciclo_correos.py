@@ -235,10 +235,10 @@ _T = {
             "Tu primera ruta, en 3 pasos:\n"
             "1. Abre la app: {ruta}\n"
             "   En el móvil, «Instalar la app» te la deja en la pantalla de inicio.\n"
-            "2. Pulsa «Cargar paquetes: uno tras otro» y haz una foto a la etiqueta de cada paquete. "
+            "2. Pulsa «Cargar paquetes» y haz una foto a la etiqueta de cada paquete. "
             "La dirección entra sola; si alguna no se lee, la escribes.\n"
             "3. Pulsa «Montar ruta y empezar»: te ordena las paradas y te lleva a cada puerta.\n\n"
-            "¿Sin paquetes a mano? Dentro de la app, «Verlo en acción con 3 paradas de ejemplo».\n\n"
+            "¿Sin paquetes a mano? Dentro de la app, «Ver un ejemplo» te lo enseña con 3 paradas.\n\n"
             "{ayuda}"),
         "primer_dia": (
             "¿Te ayudo con tu primera ruta?",
@@ -246,9 +246,9 @@ _T = {
             "{cuando} creaste tu cuenta en {marca} y todavía no has cargado ninguna parada. "
             "Si te quedaste a medias, lo más rápido es:\n\n"
             "1. Abre {ruta}\n"
-            "2. «Cargar paquetes: uno tras otro» y una foto a cada etiqueta.\n"
+            "2. «Cargar paquetes» y una foto a cada etiqueta.\n"
             "3. «Montar ruta y empezar».\n\n"
-            "¿Hoy no tienes paquetes? En la app, «Verlo en acción con 3 paradas de ejemplo».\n\n"
+            "¿Hoy no tienes paquetes? En la app, «Ver un ejemplo» te lo enseña con 3 paradas.\n\n"
             "{plazo}\n\n"
             "{ayuda_corta}"),
         "casi_fin": (
@@ -265,7 +265,7 @@ _T = {
             "Hace unos días creaste tu cuenta en {marca} y todavía no has metido ningún paquete. "
             "Cuando tengas la ruta delante, es así de rápido:\n\n"
             "1. Abre {ruta}\n"
-            "2. «Cargar paquetes: uno tras otro» y una foto a cada etiqueta: la dirección entra sola.\n"
+            "2. «Cargar paquetes» y una foto a cada etiqueta: la dirección entra sola.\n"
             "3. «Montar ruta y empezar»: te ordena las paradas por tiempo y te guía con voz.\n\n"
             "Y dos cosas que te ahorran tiempo: «Manos libres» (en Android dices \"entregado\" y sigues "
             "conduciendo) y «Mi dinero hoy» (cuánto llevas ganado y lo que se va en gasolina).\n\n"
@@ -290,7 +290,7 @@ _T = {
             "{progreso}"
             "Lo cobras por {cobro}. Cuando tengas los paquetes delante:\n"
             "1. Abre {ruta}\n"
-            "2. «Cargar paquetes: uno tras otro» y una foto a cada etiqueta: la dirección entra sola.\n"
+            "2. «Cargar paquetes» y una foto a cada etiqueta: la dirección entra sola.\n"
             "3. «Montar ruta y empezar»: te ordena las paradas y te guía con voz.\n\n"
             "Tu enlace para invitar: {invita}\n\n"
             "{ayuda_corta}"),
@@ -301,7 +301,7 @@ _T = {
             "vale {bono_euros}. Es nuestra forma de darte las gracias por probarla con tu reparto de verdad.\n\n"
             "Cómo se gana:\n"
             "1. Abre la app ({ruta}) o descárgala en Google Play: {play}\n"
-            "2. «Cargar paquetes: uno tras otro» y una foto a cada etiqueta (o escanea su código): la dirección "
+            "2. «Cargar paquetes» y una foto a cada etiqueta (o escanea su código): la dirección "
             "entra sola.\n"
             "3. «Montar ruta y empezar»: te ordena las paradas y te guía con voz hasta cada puerta.\n\n"
             "Con 20 entregas de verdad en 2 días distintos, los {bono_euros} van a tu cartera y los cobras por "
@@ -352,10 +352,10 @@ _T = {
             "A tua primeira rota, em 3 passos:\n"
             "1. Abre a app: {ruta}\n"
             "   No telemóvel, «Instalar a app» deixa-a no ecrã inicial.\n"
-            "2. Carrega em «Carregar volumes: um após outro» e tira uma foto à etiqueta de cada volume. "
+            "2. Carrega em «Carregar volumes» e tira uma foto à etiqueta de cada volume. "
             "A morada entra sozinha; se alguma não se ler, escreves.\n"
             "3. Carrega em «Montar rota e começar»: ordena as paragens e leva-te a cada porta.\n\n"
-            "Sem volumes à mão? Dentro da app, «Ver em ação com 3 paragens de exemplo».\n\n"
+            "Sem volumes à mão? Dentro da app, «Ver um exemplo» mostra-te tudo com 3 paragens.\n\n"
             "{ayuda}"),
         "primer_dia": (
             "Ajudo-te com a tua primeira rota?",
@@ -363,9 +363,9 @@ _T = {
             "{cuando} criaste a tua conta na {marca} e ainda não carregaste nenhuma paragem. "
             "Se ficaste a meio, o mais rápido é:\n\n"
             "1. Abre {ruta}\n"
-            "2. «Carregar volumes: um após outro» e uma foto a cada etiqueta.\n"
+            "2. «Carregar volumes» e uma foto a cada etiqueta.\n"
             "3. «Montar rota e começar».\n\n"
-            "Hoje não tens volumes? Na app, «Ver em ação com 3 paragens de exemplo».\n\n"
+            "Hoje não tens volumes? Na app, «Ver um exemplo» mostra-te tudo com 3 paragens.\n\n"
             "{plazo}\n\n"
             "{ayuda_corta}"),
         "casi_fin": (
@@ -382,7 +382,7 @@ _T = {
             "Há uns dias criaste a tua conta na {marca} e ainda não carregaste nenhum volume. "
             "Quando tiveres a rota à frente, é assim de rápido:\n\n"
             "1. Abre {ruta}\n"
-            "2. «Carregar volumes: um após outro» e uma foto a cada etiqueta: a morada entra sozinha.\n"
+            "2. «Carregar volumes» e uma foto a cada etiqueta: a morada entra sozinha.\n"
             "3. «Montar rota e começar»: ordena as paragens por tempo e guia-te por voz.\n\n"
             "E duas coisas que te poupam tempo: «Mãos livres» (no Android dizes \"entregue\" e continuas a "
             "conduzir) e «O meu dinheiro hoje» (quanto já ganhaste e o que vai em combustível).\n\n"
@@ -409,7 +409,7 @@ _T = {
             "{progreso}"
             "Recebes por {cobro}. Quando tiveres os volumes à frente:\n"
             "1. Abre {ruta}\n"
-            "2. «Carregar volumes: um após outro» e uma foto a cada etiqueta: a morada entra sozinha.\n"
+            "2. «Carregar volumes» e uma foto a cada etiqueta: a morada entra sozinha.\n"
             "3. «Montar rota e começar»: ordena as paragens e guia-te por voz.\n\n"
             "O teu link para convidar: {invita}\n\n"
             "{ayuda_corta}"),
@@ -420,7 +420,7 @@ _T = {
             "vale {bono_euros}. É a nossa forma de agradecer que a experimentes com a tua distribuição a sério.\n\n"
             "Como se ganha:\n"
             "1. Abre a app ({ruta}) ou descarrega-a no Google Play: {play}\n"
-            "2. «Carregar volumes: um após outro» e uma foto a cada etiqueta (ou lê o seu código): a morada "
+            "2. «Carregar volumes» e uma foto a cada etiqueta (ou lê o seu código): a morada "
             "entra sozinha.\n"
             "3. «Montar rota e começar»: ordena as paragens e guia-te por voz até cada porta.\n\n"
             "Com 20 entregas a sério em 2 dias diferentes, os {bono_euros} vão para a tua carteira e recebes por "
@@ -468,10 +468,10 @@ _T = {
             "Your first route in 3 steps:\n"
             "1. Open the app: {ruta}\n"
             "   On your phone, «Install the app» puts it on your home screen.\n"
-            "2. Tap «Load parcels: one after another» and take a photo of each parcel's label. "
+            "2. Tap «Load parcels» and take a photo of each parcel's label. "
             "The address goes in by itself; if one can't be read, type it.\n"
             "3. Tap «Build route and start»: it orders your stops and takes you to each door.\n\n"
-            "No parcels at hand? Inside the app, «See it in action with 3 sample stops».\n\n"
+            "No parcels at hand? Inside the app, «See an example» shows it with 3 stops.\n\n"
             "{ayuda}"),
         "primer_dia": (
             "Can I help with your first route?",
@@ -479,9 +479,9 @@ _T = {
             "You created your {marca} account {cuando} and haven't loaded any stops yet. "
             "If you got stuck, the quickest way is:\n\n"
             "1. Open {ruta}\n"
-            "2. «Load parcels: one after another» and a photo of each label.\n"
+            "2. «Load parcels» and a photo of each label.\n"
             "3. «Build route and start».\n\n"
-            "No parcels today? In the app, «See it in action with 3 sample stops».\n\n"
+            "No parcels today? In the app, «See an example» shows it with 3 stops.\n\n"
             "{plazo}\n\n"
             "{ayuda_corta}"),
         "casi_fin": (
@@ -498,7 +498,7 @@ _T = {
             "A few days ago you created your {marca} account and you haven't loaded any parcels yet. "
             "When you have your route in front of you, it's this quick:\n\n"
             "1. Open {ruta}\n"
-            "2. «Load parcels: one after another» and snap each label: the address goes in by itself.\n"
+            "2. «Load parcels» and snap each label: the address goes in by itself.\n"
             "3. «Build route and start»: it sorts your stops by time and guides you by voice.\n\n"
             "And two things that save you time: «Hands-free» (on Android you say \"delivered\" and keep "
             "driving) and «My money today» (how much you've earned and what goes on fuel).\n\n"
@@ -525,7 +525,7 @@ _T = {
             "{progreso}"
             "You get paid by {cobro}. When you have your parcels in front of you:\n"
             "1. Open {ruta}\n"
-            "2. «Load parcels: one after another» and snap each label: the address goes in by itself.\n"
+            "2. «Load parcels» and snap each label: the address goes in by itself.\n"
             "3. «Build route and start»: it orders your stops and guides you by voice.\n\n"
             "Your invite link: {invita}\n\n"
             "{ayuda_corta}"),
@@ -536,7 +536,7 @@ _T = {
             "worth {bono_euros}. It's our way of saying thanks for trying it on your real deliveries.\n\n"
             "How to earn it:\n"
             "1. Open the app ({ruta}) or get it on Google Play: {play}\n"
-            "2. «Load parcels: one after another» and snap each label (or scan its code): the address goes in "
+            "2. «Load parcels» and snap each label (or scan its code): the address goes in "
             "by itself.\n"
             "3. «Build route and start»: it orders your stops and guides you by voice to every door.\n\n"
             "With 20 real deliveries on 2 different days, the {bono_euros} go to your wallet and you get paid by "
@@ -583,10 +583,10 @@ _T = {
             "Votre première tournée en 3 étapes :\n"
             "1. Ouvrez l’app : {ruta}\n"
             "   Sur le téléphone, «Installer l’app» la met sur votre écran d’accueil.\n"
-            "2. Touchez «Charger les colis : l’un après l’autre» et prenez en photo l’étiquette de chaque colis. "
+            "2. Touchez «Charger les colis» et prenez en photo l’étiquette de chaque colis. "
             "L’adresse s’inscrit toute seule ; si l’une d’elles ne se lit pas, tapez-la.\n"
             "3. Touchez «Créer la tournée et commencer» : l’app ordonne vos arrêts et vous mène à chaque porte.\n\n"
-            "Pas de colis sous la main ? Dans l’app, «Le voir en action avec 3 arrêts d’exemple».\n\n"
+            "Pas de colis sous la main ? Dans l’app, «Voir un exemple» le montre avec 3 arrêts.\n\n"
             "{ayuda}"),
         "primer_dia": (
             "Un coup de main pour votre première tournée ?",
@@ -594,9 +594,9 @@ _T = {
             "Vous avez créé votre compte {marca} {cuando} et vous n’avez encore chargé aucun arrêt. "
             "Si vous êtes resté bloqué, le plus rapide :\n\n"
             "1. Ouvrez {ruta}\n"
-            "2. «Charger les colis : l’un après l’autre» et une photo de chaque étiquette.\n"
+            "2. «Charger les colis» et une photo de chaque étiquette.\n"
             "3. «Créer la tournée et commencer».\n\n"
-            "Pas de colis aujourd’hui ? Dans l’app, «Le voir en action avec 3 arrêts d’exemple».\n\n"
+            "Pas de colis aujourd’hui ? Dans l’app, «Voir un exemple» le montre avec 3 arrêts.\n\n"
             "{plazo}\n\n"
             "{ayuda_corta}"),
         "casi_fin": (
@@ -613,7 +613,7 @@ _T = {
             "Il y a quelques jours vous avez créé votre compte {marca} et vous n’avez encore chargé aucun colis. "
             "Quand vous aurez la tournée devant vous, c’est aussi rapide que ça :\n\n"
             "1. Ouvrez {ruta}\n"
-            "2. «Charger les colis : l’un après l’autre» et une photo de chaque étiquette : l’adresse s’inscrit toute seule.\n"
+            "2. «Charger les colis» et une photo de chaque étiquette : l’adresse s’inscrit toute seule.\n"
             "3. «Créer la tournée et commencer» : l’app ordonne vos arrêts par temps de trajet et vous guide à la voix.\n\n"
             "Et deux choses qui font gagner du temps : «Mains libres» (sur Android, vous dites \"livré\" et vous "
             "continuez à rouler) et «Mon argent aujourd’hui» (ce que vous avez gagné et ce qui part en carburant).\n\n"
@@ -640,7 +640,7 @@ _T = {
             "{progreso}"
             "Vous êtes payé par {cobro}. Quand vous aurez les colis devant vous :\n"
             "1. Ouvrez {ruta}\n"
-            "2. «Charger les colis : l’un après l’autre» et une photo de chaque étiquette : l’adresse s’inscrit toute seule.\n"
+            "2. «Charger les colis» et une photo de chaque étiquette : l’adresse s’inscrit toute seule.\n"
             "3. «Créer la tournée et commencer» : l’app ordonne vos arrêts et vous guide à la voix.\n\n"
             "Votre lien pour inviter : {invita}\n\n"
             "{ayuda_corta}"),
@@ -652,7 +652,7 @@ _T = {
             "livraisons.\n\n"
             "Comment la gagner :\n"
             "1. Ouvrez l’app ({ruta}) ou téléchargez-la sur Google Play : {play}\n"
-            "2. «Charger les colis : l’un après l’autre» et une photo de chaque étiquette (ou scannez son code) : "
+            "2. «Charger les colis» et une photo de chaque étiquette (ou scannez son code) : "
             "l’adresse s’inscrit toute seule.\n"
             "3. «Créer la tournée et commencer» : l’app ordonne vos arrêts et vous guide à la voix jusqu’à chaque porte.\n\n"
             "Avec 20 vraies livraisons sur 2 jours différents, les {bono_euros} vont dans votre portefeuille et vous êtes "
@@ -700,10 +700,10 @@ _T = {
             "Il tuo primo percorso in 3 passi:\n"
             "1. Apri l’app: {ruta}\n"
             "   Sul telefono, «Installa l’app» la mette nella schermata iniziale.\n"
-            "2. Tocca «Carica i pacchi: uno dopo l’altro» e fai una foto all’etichetta di ogni pacco. "
+            "2. Tocca «Carica pacchi» e fai una foto all’etichetta di ogni pacco. "
             "L’indirizzo entra da solo; se uno non si legge, lo scrivi.\n"
             "3. Tocca «Crea percorso e inizia»: ordina le fermate e ti porta a ogni porta.\n\n"
-            "Nessun pacco a portata di mano? Nell’app, «Vedilo in azione con 3 fermate di esempio».\n\n"
+            "Nessun pacco a portata di mano? Nell’app, «Vedi un esempio» te lo mostra con 3 fermate.\n\n"
             "{ayuda}"),
         "primer_dia": (
             "Ti aiuto con il tuo primo percorso?",
@@ -711,9 +711,9 @@ _T = {
             "Hai creato il tuo account {marca} {cuando} e non hai ancora caricato nessuna fermata. "
             "Se ti sei bloccato, la via più rapida è:\n\n"
             "1. Apri {ruta}\n"
-            "2. «Carica i pacchi: uno dopo l’altro» e una foto a ogni etichetta.\n"
+            "2. «Carica pacchi» e una foto a ogni etichetta.\n"
             "3. «Crea percorso e inizia».\n\n"
-            "Oggi niente pacchi? Nell’app, «Vedilo in azione con 3 fermate di esempio».\n\n"
+            "Oggi niente pacchi? Nell’app, «Vedi un esempio» te lo mostra con 3 fermate.\n\n"
             "{plazo}\n\n"
             "{ayuda_corta}"),
         "casi_fin": (
@@ -730,7 +730,7 @@ _T = {
             "Qualche giorno fa hai creato il tuo account {marca} e non hai ancora inserito nessun pacco. "
             "Quando avrai il giro davanti, è così veloce:\n\n"
             "1. Apri {ruta}\n"
-            "2. «Carica i pacchi: uno dopo l’altro» e una foto a ogni etichetta: l’indirizzo entra da solo.\n"
+            "2. «Carica pacchi» e una foto a ogni etichetta: l’indirizzo entra da solo.\n"
             "3. «Crea percorso e inizia»: ordina le fermate per tempo e ti guida con la voce.\n\n"
             "E due cose che ti fanno risparmiare tempo: «Mani libere» (su Android dici \"consegnato\" e continui a "
             "guidare) e «I miei soldi oggi» (quanto hai guadagnato e quanto se ne va in carburante).\n\n"
@@ -757,7 +757,7 @@ _T = {
             "{progreso}"
             "Lo ricevi con {cobro}. Quando avrai i pacchi davanti:\n"
             "1. Apri {ruta}\n"
-            "2. «Carica i pacchi: uno dopo l’altro» e una foto a ogni etichetta: l’indirizzo entra da solo.\n"
+            "2. «Carica pacchi» e una foto a ogni etichetta: l’indirizzo entra da solo.\n"
             "3. «Crea percorso e inizia»: ordina le fermate e ti guida con la voce.\n\n"
             "Il tuo link per invitare: {invita}\n\n"
             "{ayuda_corta}"),
@@ -768,7 +768,7 @@ _T = {
             "vale {bono_euros}. È il nostro modo di ringraziarti per provarla sulle tue consegne vere.\n\n"
             "Come si guadagna:\n"
             "1. Apri l’app ({ruta}) o scaricala da Google Play: {play}\n"
-            "2. «Carica i pacchi: uno dopo l’altro» e una foto a ogni etichetta (o scansiona il codice): l’indirizzo "
+            "2. «Carica pacchi» e una foto a ogni etichetta (o scansiona il codice): l’indirizzo "
             "entra da solo.\n"
             "3. «Crea percorso e inizia»: ordina le fermate e ti guida con la voce fino a ogni porta.\n\n"
             "Con 20 consegne vere in 2 giorni diversi, i {bono_euros} vanno nel tuo portafoglio e li ricevi con "
@@ -815,10 +815,10 @@ _T = {
             "Deine erste Route in 3 Schritten:\n"
             "1. Öffne die App: {ruta}\n"
             "   Auf dem Handy legt «App installieren» sie auf den Startbildschirm.\n"
-            "2. Tippe auf «Pakete laden: eins nach dem anderen» und fotografiere das Etikett jedes Pakets. "
+            "2. Tippe auf «Pakete laden» und fotografiere das Etikett jedes Pakets. "
             "Die Adresse trägt sich von selbst ein; lässt sich eine nicht lesen, tippst du sie ein.\n"
             "3. Tippe auf «Route erstellen und starten»: Die App ordnet deine Stopps und führt dich zu jeder Tür.\n\n"
-            "Keine Pakete zur Hand? In der App: «Mit 3 Beispielstopps in Aktion sehen».\n\n"
+            "Keine Pakete zur Hand? In der App: «Beispiel ansehen» zeigt es mit 3 Stopps.\n\n"
             "{ayuda}"),
         "primer_dia": (
             "Soll ich dir bei deiner ersten Route helfen?",
@@ -826,9 +826,9 @@ _T = {
             "Du hast dein {marca}-Konto {cuando} erstellt und noch keinen Stopp geladen. "
             "Falls du hängen geblieben bist, geht es am schnellsten so:\n\n"
             "1. Öffne {ruta}\n"
-            "2. «Pakete laden: eins nach dem anderen» und ein Foto von jedem Etikett.\n"
+            "2. «Pakete laden» und ein Foto von jedem Etikett.\n"
             "3. «Route erstellen und starten».\n\n"
-            "Heute keine Pakete? In der App: «Mit 3 Beispielstopps in Aktion sehen».\n\n"
+            "Heute keine Pakete? In der App: «Beispiel ansehen» zeigt es mit 3 Stopps.\n\n"
             "{plazo}\n\n"
             "{ayuda_corta}"),
         "casi_fin": (
@@ -845,7 +845,7 @@ _T = {
             "Vor ein paar Tagen hast du dein {marca}-Konto erstellt und noch kein Paket geladen. "
             "Wenn du die Route vor dir hast, geht es so schnell:\n\n"
             "1. Öffne {ruta}\n"
-            "2. «Pakete laden: eins nach dem anderen» und ein Foto von jedem Etikett: Die Adresse trägt sich von selbst ein.\n"
+            "2. «Pakete laden» und ein Foto von jedem Etikett: Die Adresse trägt sich von selbst ein.\n"
             "3. «Route erstellen und starten»: Die App ordnet deine Stopps nach Fahrzeit und führt dich per Sprache.\n\n"
             "Und zwei Dinge, die Zeit sparen: «Freisprechen» (auf Android sagst du \"zugestellt\" und fährst weiter) "
             "und «Mein Geld heute» (was du verdient hast und was für Sprit draufgeht).\n\n"
@@ -872,7 +872,7 @@ _T = {
             "{progreso}"
             "Ausgezahlt wird per {cobro}. Wenn du die Pakete vor dir hast:\n"
             "1. Öffne {ruta}\n"
-            "2. «Pakete laden: eins nach dem anderen» und ein Foto von jedem Etikett: Die Adresse trägt sich von selbst ein.\n"
+            "2. «Pakete laden» und ein Foto von jedem Etikett: Die Adresse trägt sich von selbst ein.\n"
             "3. «Route erstellen und starten»: Die App ordnet deine Stopps und führt dich per Sprache.\n\n"
             "Dein Einladungslink: {invita}\n\n"
             "{ayuda_corta}"),
@@ -883,7 +883,7 @@ _T = {
             "Sie ist jetzt {bono_euros} wert. So sagen wir Danke, dass du sie auf deinen echten Zustellungen ausprobierst.\n\n"
             "So bekommst du sie:\n"
             "1. Öffne die App ({ruta}) oder hol sie dir bei Google Play: {play}\n"
-            "2. «Pakete laden: eins nach dem anderen» und ein Foto von jedem Etikett (oder scanne den Code): Die Adresse "
+            "2. «Pakete laden» und ein Foto von jedem Etikett (oder scanne den Code): Die Adresse "
             "trägt sich von selbst ein.\n"
             "3. «Route erstellen und starten»: Die App ordnet deine Stopps und führt dich per Sprache bis zu jeder Tür.\n\n"
             "Mit 20 echten Zustellungen an 2 verschiedenen Tagen landen die {bono_euros} in deinem Guthaben, ausgezahlt "
@@ -937,10 +937,10 @@ _T["br"] = {
         "Sua primeira rota, em 3 passos:\n"
         "1. Abra o app: {ruta}\n"
         "   No celular, «Instalar o app» deixa ele na tela inicial.\n"
-        "2. Toque em «Carregar pacotes: um atrás do outro» e tire uma foto da etiqueta de cada pacote. "
+        "2. Toque em «Carregar volumes» e tire uma foto da etiqueta de cada pacote. "
         "O endereço entra sozinho; se algum não for lido, você digita.\n"
         "3. Toque em «Montar rota e começar»: o app organiza as paradas e te leva até cada porta.\n\n"
-        "Sem pacotes à mão? Dentro do app, «Ver funcionando com 3 paradas de exemplo».\n\n"
+        "Sem pacotes à mão? Dentro do app, «Ver um exemplo» mostra tudo com 3 paradas.\n\n"
         "{ayuda}"),
     "primer_dia": (
         "Posso te ajudar com a sua primeira rota?",
@@ -948,9 +948,9 @@ _T["br"] = {
         "Você criou sua conta no {marca} e ainda não carregou nenhuma parada. "
         "Se ficou pela metade, o mais rápido é:\n\n"
         "1. Abra {ruta}\n"
-        "2. «Carregar pacotes: um atrás do outro» e uma foto de cada etiqueta.\n"
+        "2. «Carregar volumes» e uma foto de cada etiqueta.\n"
         "3. «Montar rota e começar».\n\n"
-        "Hoje você não tem pacotes? No app, «Ver funcionando com 3 paradas de exemplo».\n\n"
+        "Hoje você não tem pacotes? No app, «Ver um exemplo» mostra tudo com 3 paradas.\n\n"
         "{plazo}\n\n"
         "{ayuda_corta}"),
     "casi_fin": (
@@ -967,7 +967,7 @@ _T["br"] = {
         "Há alguns dias você criou sua conta no {marca} e ainda não carregou nenhum pacote. "
         "Quando estiver com a rota em mãos, é rápido assim:\n\n"
         "1. Abra {ruta}\n"
-        "2. «Carregar pacotes: um atrás do outro» e uma foto de cada etiqueta: o endereço entra sozinho.\n"
+        "2. «Carregar volumes» e uma foto de cada etiqueta: o endereço entra sozinho.\n"
         "3. «Montar rota e começar»: o app organiza as paradas por tempo e te guia por voz.\n\n"
         "E duas coisas que economizam tempo: «Mãos livres» (no Android você diz \"entregue\" e continua "
         "dirigindo) e «O meu dinheiro hoje» (quanto você já ganhou e quanto foi de combustível).\n\n"
@@ -993,7 +993,7 @@ _T["br"] = {
         "{progreso}"
         "Você recebe por {cobro}. Quando estiver com os pacotes na sua frente:\n"
         "1. Abra {ruta}\n"
-        "2. «Carregar pacotes: um atrás do outro» e uma foto de cada etiqueta: o endereço entra sozinho.\n"
+        "2. «Carregar volumes» e uma foto de cada etiqueta: o endereço entra sozinho.\n"
         "3. «Montar rota e começar»: o app organiza as paradas e te guia por voz.\n\n"
         "Seu link para convidar: {invita}\n\n"
         "{ayuda_corta}"),
@@ -1004,7 +1004,7 @@ _T["br"] = {
         "{bono_euros}. É o nosso jeito de agradecer por testar com as suas entregas de verdade.\n\n"
         "Como ganhar:\n"
         "1. Abra o app ({ruta}) ou baixe no Google Play: {play}\n"
-        "2. «Carregar pacotes: um atrás do outro» e uma foto de cada etiqueta (ou leia o código): o endereço "
+        "2. «Carregar volumes» e uma foto de cada etiqueta (ou leia o código): o endereço "
         "entra sozinho.\n"
         "3. «Montar rota e começar»: o app organiza as paradas e te guia por voz até cada porta.\n\n"
         "Com 20 entregas de verdade em 2 dias diferentes, os {bono_euros} vão para a sua carteira e você recebe "

@@ -85,6 +85,14 @@ jobs:
         run: node scripts/check-marca.mjs
       - name: Las promociones tienen una sola fecha y un solo importe (servidor = web)
         run: node scripts/check-promo.mjs
+      - name: Tokens de la app de reparto, web (letra, color, radio y sombra salen de los tokens)
+        run: node scripts/check-tokens-ruta.mjs
+      - name: Tokens de la app de reparto, nativa (letra, colores y alturas salen del tema)
+        run: node scripts/check-tokens-nativa.mjs
+      - name: Traducciones de la app de reparto (5 idiomas, mismas variables, sin huecos)
+        run: node scripts/check-textos-ruta.mjs
+      - name: Traducciones de la nativa (cada tx() con sus 5 idiomas)
+        run: node scripts/nativa-idioma.mjs --comprobar
 
   backend:
     name: Backend (sintaxis + contratos + tests de API)

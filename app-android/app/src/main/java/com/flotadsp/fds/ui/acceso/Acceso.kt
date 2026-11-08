@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -145,9 +146,9 @@ private fun Inicio(oferta: Oferta?, aviso: String?, alEntrar: () -> Unit, alCrea
             }
         }
         Spacer(Modifier.weight(1.2f))
-        Button(onClick = alCrear, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text(tx("Crear mi cuenta gratis")) }
+        Button(onClick = alCrear, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(tx("Crear mi cuenta gratis")) }
         Spacer(Modifier.height(10.dp))
-        OutlinedButton(onClick = alEntrar, modifier = Modifier.fillMaxWidth().height(56.dp),
+        OutlinedButton(onClick = alEntrar, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary)) { Text(tx("Ya tengo cuenta")) }
         Spacer(Modifier.height(8.dp))
         Text(tx("Entra con el correo y la contraseña de tu cuenta. FDS abrirá el portal de empresa, conductor o reparto que te corresponde."),
@@ -228,7 +229,7 @@ private fun Entrar(aviso: String?, alVolver: () -> Unit, alAbrirPortal: (Sesion)
         CampoClave(clave, { clave = it }, tx("Contraseña"), alListo = entrar)
         error?.let { Spacer(Modifier.height(10.dp)); Text(it, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.height(20.dp))
-        Button(onClick = entrar, enabled = !trabajando && correo.isNotBlank() && clave.isNotBlank(), modifier = Modifier.fillMaxWidth().height(56.dp)) {
+        Button(onClick = entrar, enabled = !trabajando && correo.isNotBlank() && clave.isNotBlank(), modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
             if (trabajando) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary) else Text(tx("Entrar"))
         }
         TextButton(onClick = { codigoVisible = true }, modifier = Modifier.align(Alignment.CenterHorizontally), colors = coloresBotonTexto()) {
@@ -257,7 +258,7 @@ private fun RecuperarClave(correoInicial: String, alVolver: () -> Unit, alCodigo
             Text(tx("Si {correo} tiene una cuenta de repartidor, te hemos mandado un enlace para crear una contraseña nueva. Mira también el spam.", "correo" to correo.trim()),
                 style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.height(20.dp))
-            Button(onClick = alVolver, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text(tx("Volver a entrar")) }
+            Button(onClick = alVolver, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(tx("Volver a entrar")) }
         } else {
             Text(tx("Escribe el correo de tu cuenta y te mandamos un enlace para crear una contraseña nueva."), style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.height(14.dp))
@@ -272,7 +273,7 @@ private fun RecuperarClave(correoInicial: String, alVolver: () -> Unit, alCodigo
                         error = if (e.sinRed) tx("Sin conexión. Revisa la red y vuelve a intentarlo.") else e.message
                     } finally { trabajando = false }
                 }
-            }, enabled = !trabajando && valido, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+            }, enabled = !trabajando && valido, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
                 if (trabajando) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary) else Text(tx("Mandarme el enlace"))
             }
         }
@@ -324,7 +325,7 @@ private fun CodigoConductorNativo(alVolver: () -> Unit, alAbrirPortal: (Sesion) 
                 } catch (e: ErrorApi) { error = e.message }
                 finally { ocupado = false }
             }
-        }, enabled = !ocupado && emailValido(correo) && (!solicitado || codigo.length == 6), modifier = Modifier.fillMaxWidth().height(54.dp)) {
+        }, enabled = !ocupado && emailValido(correo) && (!solicitado || codigo.length == 6), modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
             if (ocupado) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
             else Text(if (!solicitado) tx("Enviar código") else tx("Entrar"))
         }
@@ -387,7 +388,7 @@ private fun Alta(ref: String?, oferta: Oferta?, alVolver: () -> Unit) {
         }
         error?.let { Spacer(Modifier.height(6.dp)); Text(it, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.height(16.dp))
-        Button(onClick = crear, enabled = !trabajando, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+        Button(onClick = crear, enabled = !trabajando, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
             if (trabajando) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary) else Text(tx("Crear mi cuenta"))
         }
         Spacer(Modifier.height(10.dp))

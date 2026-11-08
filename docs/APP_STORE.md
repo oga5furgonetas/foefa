@@ -76,8 +76,8 @@ Android o el PC). Lo que sí cambia:
      propia, no vinculada). Nada para publicidad ni se vende a terceros. Clasificación de edad: 4+.
    - **Información de revisión**: Apple entra con una cuenta de prueba: crea una en la web (p. ej. `apple@flotadsp.com`
      con unas paradas de ejemplo cargadas) y pon usuario y contraseña ahí, con una nota: «App para repartidores
-     autónomos: escanea paquetes, ordena la ruta y navega. Para probar: entrar y pulsar "Verlo en acción con 3
-     paradas de ejemplo". No hay compras dentro de la app.»
+     autónomos: escanea paquetes, ordena la ruta y navega. Para probar: entrar y pulsar "Ver un ejemplo" (carga
+     3 paradas de muestra). No hay compras dentro de la app.»
    - Selecciona el build de TestFlight, «Guardar» y **«Enviar a revisión»**. La primera revisión suele tardar 1-3 días.
 9. Cada vez que se toque `frontend/` en `main`, el workflow vuelve a compilar y, con los secretos, sube otro build;
    para publicarlo, en App Store Connect se crea la versión nueva, se elige el build y se envía a revisión.

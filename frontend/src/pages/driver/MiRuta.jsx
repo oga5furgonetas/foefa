@@ -1,13 +1,13 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
-  MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
-  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff, Plus, FileText, Mail, CalendarClock, Lightbulb, History,
-  AlertTriangle, CarFront, Truck, Volume2, ShieldCheck, Copy,
+  ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Package,
+  MessageCircle, Clock, Search, List, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
+  PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, Plus, FileText, Mail,
+  AlertTriangle, Copy,
 } from 'lucide-react'
 import {
   repMiRuta, repZonasCarga, repEscanear, repEscanearLote, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
-  repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado, repFachada, repGanancias,
+  repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado, repGanancias,
   repTraerPrevias, repMisMarcas, repMisDirecciones, repFormasCodigo, repIncidencias, repZbe, getReferidos, repUbicar,
 } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
@@ -29,7 +29,7 @@ import { salirDeLaDemoDeReparto, decodeToken } from '../../panel/auth'
 import { eurosRef, fechaRefPromo, refCentActual, refPromoActiva, promoGratis, fechaPromo, BONO_CENT } from '../../lib/precios'
 import { textoClienteDice } from './ClienteDice'
 import { MemoriaHoja } from './MemoriaPuerta'
-import { queIncidencia } from '../../panel/components/MapaReparto'
+import { queIncidencia, colorConductor } from '../../panel/components/MapaReparto'
 import { useAtras } from '../../lib/atras'
 import { PedirAviso, mensajeAviso } from '../AvisoManana'
 import CargaGuiada from './CargaGuiada'
@@ -134,9 +134,9 @@ const aplicarPuntos = (r, puntos) => {
   }) }
 }
 const MOTIVOS = ['No había nadie', 'Dirección incorrecta', 'Rechazado', 'Fuera de horario', 'Otro']
-/* DÓNDE SE DEJA (10-10-2026, como Circuit/Spoke): un toque en vez de escribirlo.
-   El cliente lo ve en su enlace de seguimiento. Mismas claves que el servidor. */
-const DONDE = [['mano', 'En mano'], ['vecino', 'Al vecino'], ['buzon', 'En el buzón'], ['porteria', 'En portería o recepción'], ['seguro', 'En un lugar seguro']]
+/* DÓNDE SE DEJA (10-10-2026, como Circuit/Spoke): un toque en vez de escribirlo. El cliente lo ve en su enlace de
+   seguimiento. Mismas claves que el servidor. Los chips con su texto corto salen de lib/dejar.js (DONDE_CORTO); la lista
+   larga que había aquí la dejó sin uso el diseño compacto (08-11-2026). */
 const CON_QUIEN = ['mano', 'vecino', 'porteria']
 const VACIO = { codigo: '', cliente: '', telefono: '', direccion: '', contenido: '', bultos: 1, notas: '', horario: '', prioridad: false, cobrar: '', tipo: 'entrega', hueco: '' }
 
@@ -269,18 +269,16 @@ const lee = (k, def) => { try { return localStorage.getItem(k) || def } catch { 
 /* ENSEÑAR CADA COSA EN SU MOMENTO (25-10-2026). Dani: «enseña cómo utilizar las cosas, que tengan sentido, cuándo y
    por qué». Un consejo al día como mucho, solo de lo que aún no usa y justo cuando le sirve; dice por qué y cómo, y
    «Entendido» lo quita para siempre. `cuando` mira la ruta de verdad: nada de consejos que no vienen a cuento. */
+// 08-11-2026: sin el párrafo largo de cada consejo; la línea corta que se ve vive en piezas/AvisoHueco.jsx.
 const CONSEJOS = [
   { id: 'ordenar', cuando: (e) => e.pendientes >= 3 && !e.ordenada, boton: 'Ordenar ahora',
-    titulo: 'Deja que la app ponga el orden',
-    texto: 'Pulsa «Ordenar ruta»: pone las paradas en el orden que menos tarda, respeta el horario de cada cliente y te dice a qué hora llegas a cada una.' },
+    titulo: 'Deja que la app ponga el orden' },
   { id: 'hueco', cuando: (e) => e.pendientes >= 5 && e.entregados === 0 && !e.conHueco,
-    titulo: 'Apunta dónde va cada paquete',
-    texto: 'Al cargar, toca «¿Dónde va en la furgoneta?» en cada parada (delante, medio, detrás). Al llegar sabrás en qué hueco buscarlo sin revolver la carga.' },
+    titulo: 'Apunta dónde va cada paquete' },
   // 01-11-2026 (Dani: «una app de reparto con Google Maps no la va a pagar nadie»): el consejo ya no manda fuera; invita
   // a la guía de la app a quien eligió Google Maps o Waze.
   { id: 'guia_app', cuando: (e) => e.entregados >= 3 && e.pendientes > 0 && e.nav !== 'app',
-    titulo: 'Prueba la guía de la app',
-    texto: 'Pulsa «Ir con» → «Esta app»: te lleva hasta la puerta con voz, recalcula si te sales y al llegar marcas la entrega sin salir de la app.' },
+    titulo: 'Prueba la guía de la app' },
 ]
 // El consejo de hoy: el mismo todo el día (no salta de uno a otro) y ninguno más tras «Entendido».
 function consejoDeHoy(fecha, estado) {
@@ -1695,7 +1693,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
               incidencias={incidencias?.incidencias || SIN_ZONAS} zbe={zbe?.zonas || SIN_ZONAS} furgo={furgo} onAccion={accionMapa}
               fuente={incidencias?.fuente || ''} tipoZona={zbe?.tipo || 'ZBE'}
               paradas={lista(ruta.pedidos).map((p, i) => ({
-                id: p.id, lat: p.lat, lng: p.lng, estado: p.estado, motivo: p.motivo, orden: p.orden, color: '#0ea5e9', grande: siguiente?.id === p.id,
+                id: p.id, lat: p.lat, lng: p.lng, estado: p.estado, motivo: p.motivo, orden: p.orden, color: colorConductor(0), grande: siguiente?.id === p.id,
                 etiqueta: p.orden ?? i + 1, titulo: p.cliente || p.direccion, sub: p.eta ? `≈ ${p.eta} · ${p.direccion}` : p.direccion,
                 // Lo que enseña la ventana al tocar la chincheta (30-10-2026).
                 telefono: p.telefono || '', tipo: p.tipo, prioridad: !!p.prioridad, cobrar: p.cobrar > 0 ? euros(p.cobrar) : null,

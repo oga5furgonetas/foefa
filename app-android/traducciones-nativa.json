@@ -27,26 +27,12 @@
     "(6 caratteri o più)",
     "(mindestens 6 Zeichen)"
   ],
-  "1 cambio guardado en el móvil: se envía solo al volver la red.": [
-    "1 change saved on the phone: it is sent by itself when the network is back.",
-    "1 alteração guardada no telemóvel: envia-se sozinha quando voltar a rede.",
-    "1 changement enregistré sur le téléphone : il s’envoie tout seul au retour du réseau.",
-    "1 modifica salvata sul telefono: si invia da sola quando torna la rete.",
-    "1 Änderung auf dem Handy gespeichert: wird von selbst gesendet, sobald das Netz zurück ist."
-  ],
   "1 entrega pendiente": [
     "1 delivery pending",
     "1 entrega pendente",
     "1 livraison en attente",
     "1 consegna in sospeso",
     "1 Lieferung offen"
-  ],
-  "1 parada de otro día sigue sin cerrar.": [
-    "1 stop from another day is still open.",
-    "1 paragem de outro dia continua por fechar.",
-    "1 arrêt d’un autre jour est toujours ouvert.",
-    "1 fermata di un altro giorno è ancora aperta.",
-    "1 Stopp von einem anderen Tag ist noch offen."
   ],
   "1 parada en lo compartido": [
     "1 stop in what you shared",
@@ -82,13 +68,6 @@
     "Ouvrir les autorisations",
     "Apri i permessi",
     "Berechtigungen öffnen"
-  ],
-  "Abrir mi ruta": [
-    "Open my route",
-    "Abrir a minha rota",
-    "Ouvrir ma tournée",
-    "Apri il mio giro",
-    "Meine Route öffnen"
   ],
   "Acepto los Términos y la Política de Privacidad": [
     "I accept the Terms and the Privacy Policy",
@@ -132,13 +111,6 @@
     "Aggiorna su Google Play",
     "In Google Play aktualisieren"
   ],
-  "Actívala en Permisos › Cámara. Solo se usa mientras escaneas y las imágenes no salen del móvil.": [
-    "Turn it on in Permissions › Camera. It is only used while you scan, and the images never leave your phone.",
-    "Ative-a em Permissões › Câmara. Só se usa enquanto digitalizas e as imagens não saem do telemóvel.",
-    "Activez-la dans Autorisations › Appareil photo. Elle ne sert que pendant le scan et les images ne quittent pas le téléphone.",
-    "Attivala in Autorizzazioni › Fotocamera. Si usa solo mentre scansioni e le immagini non escono dal telefono.",
-    "Aktiviere sie unter Berechtigungen › Kamera. Sie wird nur beim Scannen genutzt, die Bilder verlassen das Handy nicht."
-  ],
   "Ahora mismo no hay vacantes disponibles para ti.": [
     "There are no open shifts for you right now.",
     "Agora não há vagas disponíveis para ti.",
@@ -167,26 +139,12 @@
     "Spegni la torcia",
     "Taschenlampe ausschalten"
   ],
-  "Apunta a la etiqueta": [
-    "Point at the label",
-    "Aponta para a etiqueta",
-    "Visez l’étiquette",
-    "Inquadra l’etichetta",
-    "Auf das Etikett zielen"
-  ],
   "Aquí verás los turnos que te aprueben, las vacantes para trabajar más y lo que te pida la oficina.": [
     "Here you will see the shifts approved for you, open shifts to work more and whatever the office asks of you.",
     "Aqui verás os turnos aprovados, as vagas para trabalhar mais e o que o escritório te pedir.",
     "Vous verrez ici les créneaux approuvés, les créneaux libres pour travailler plus et ce que le bureau vous demande.",
     "Qui vedrai i turni approvati, i turni liberi per lavorare di più e ciò che ti chiede l’ufficio.",
     "Hier siehst du genehmigte Schichten, freie Schichten für mehr Arbeit und was das Büro von dir braucht."
-  ],
-  "Aspecto": [
-    "Appearance",
-    "Aspeto",
-    "Apparence",
-    "Aspetto",
-    "Darstellung"
   ],
   "Asuntos propios": [
     "Personal matters",
@@ -300,20 +258,6 @@
     "Ancora nessun giorno con fermate.",
     "Noch keine Tage mit Stopps."
   ],
-  "Bono de bienvenida conseguido: {euros} en tu cartera.": [
-    "Welcome bonus earned: {euros} in your wallet.",
-    "Bónus de boas-vindas conseguido: {euros} na tua carteira.",
-    "Bonus de bienvenue obtenu : {euros} dans votre portefeuille.",
-    "Bonus di benvenuto ottenuto: {euros} nel tuo portafoglio.",
-    "Willkommensbonus erhalten: {euros} in deinem Guthaben."
-  ],
-  "Bono de bienvenida: {euros} por tu primera ruta de verdad.": [
-    "Welcome bonus: {euros} for your first real route.",
-    "Bónus de boas-vindas: {euros} pela tua primeira rota a sério.",
-    "Bonus de bienvenue : {euros} pour votre première vraie tournée.",
-    "Bonus di benvenuto: {euros} per il tuo primo giro vero.",
-    "Willkommensbonus: {euros} für deine erste echte Route."
-  ],
   "Borrar mi cuenta": [
     "Delete my account",
     "Eliminar a minha conta",
@@ -334,13 +278,6 @@
     "Briefing vocal",
     "Briefing vocale",
     "Sprach-Briefing"
-  ],
-  "Calle, número y población": [
-    "Street, number and town",
-    "Rua, número e localidade",
-    "Rue, numéro et ville",
-    "Via, numero e città",
-    "Straße, Hausnummer und Ort"
   ],
   "Cambios guardados.": [
     "Changes saved.",
@@ -384,13 +321,6 @@
     "Carrozzeria",
     "Karosserie"
   ],
-  "Cobro de {x}: ¿cómo ha pagado?": [
-    "Collecting {x}: how did they pay?",
-    "Cobrança de {x}: como pagou?",
-    "Encaissement de {x} : comment a-t-il payé ?",
-    "Incasso di {x}: come ha pagato?",
-    "{x} kassieren: Wie wurde bezahlt?"
-  ],
   "Combustible": [
     "Fuel",
     "Combustível",
@@ -404,20 +334,6 @@
     "Partagez FDS avec d’autres livreurs",
     "Condividi FDS con altri corrieri",
     "Teile FDS mit anderen Zustellern"
-  ],
-  "Comparte con esta app la hoja de la agencia (foto, captura, PDF o la lista) y las paradas entran solas.": [
-    "Share the agency’s sheet with this app (photo, screenshot, PDF or the list) and the stops come in by themselves.",
-    "Partilha com esta app a folha da agência (foto, captura, PDF ou a lista) e as paragens entram sozinhas.",
-    "Partage avec cette appli la feuille de l’agence (photo, capture, PDF ou la liste) et les arrêts entrent tout seuls.",
-    "Condividi con questa app il foglio dell’agenzia (foto, screenshot, PDF o l’elenco) e le fermate entrano da sole.",
-    "Teile das Blatt der Agentur mit dieser App (Foto, Screenshot, PDF oder die Liste), und die Stopps kommen von selbst rein."
-  ],
-  "Comparte tu enlace y consulta tu cartera": [
-    "Share your link and check your wallet",
-    "Partilha o teu link e consulta a tua carteira",
-    "Partagez votre lien et consultez votre portefeuille",
-    "Condividi il tuo link e controlla il tuo portafoglio",
-    "Teile deinen Link und sieh dein Guthaben"
   ],
   "Compartir mi enlace": [
     "Share my link",
@@ -440,20 +356,6 @@
     "Conferma",
     "Bestätigen"
   ],
-  "Confirmar la entrega": [
-    "Confirm delivery",
-    "Confirmar a entrega",
-    "Confirmer la livraison",
-    "Conferma la consegna",
-    "Zustellung bestätigen"
-  ],
-  "Consulta el calendario y solicita un cambio": [
-    "Check the calendar and request a change",
-    "Consulta o calendário e pede uma alteração",
-    "Consultez le calendrier et demandez un changement",
-    "Guarda il calendario e chiedi un cambio",
-    "Kalender ansehen und Änderung beantragen"
-  ],
   "Continuar · checklist": [
     "Continue · checklist",
     "Continuar · checklist",
@@ -467,13 +369,6 @@
     "Mot de passe (8 caractères ou plus)",
     "Password (8 caratteri o più)",
     "Passwort (mindestens 8 Zeichen)"
-  ],
-  "Contraseña y correo personal de recuperación": [
-    "Password and personal recovery email",
-    "Palavra-passe e e-mail pessoal de recuperação",
-    "Mot de passe et e-mail personnel de récupération",
-    "Password ed e-mail personale di recupero",
-    "Passwort und private Wiederherstellungs-E-Mail"
   ],
   "Correo de PayPal": [
     "PayPal email",
@@ -517,20 +412,6 @@
     "Codice a 6 cifre",
     "6-stelliger Code"
   ],
-  "Código: {x}": [
-    "Code: {x}",
-    "Código: {x}",
-    "Code : {x}",
-    "Codice: {x}",
-    "Code: {x}"
-  ],
-  "DGT (datos abiertos): cortes y obras declarados, no el tráfico en tiempo real.": [
-    "DGT (open data): reported closures and roadworks, not live traffic.",
-    "DGT (dados abertos): cortes e obras declarados, não o trânsito em tempo real.",
-    "DGT (données ouvertes) : fermetures et travaux déclarés, pas le trafic en temps réel.",
-    "DGT (dati aperti): chiusure e lavori dichiarati, non il traffico in tempo reale.",
-    "DGT (offene Daten): gemeldete Sperrungen und Baustellen, kein Echtzeitverkehr."
-  ],
   "Daño": [
     "Damage",
     "Dano",
@@ -558,13 +439,6 @@
     "D’où vous partez (dépôt, entrepôt ou domicile)",
     "Da dove parti (magazzino, deposito o casa)",
     "Wo du startest (Halle, Lager oder Zuhause)"
-  ],
-  "Dirección": [
-    "Address",
-    "Morada",
-    "Adresse",
-    "Indirizzo",
-    "Adresse"
   ],
   "Donde la dejaste al bajarte.": [
     "Where you left it when you got out.",
@@ -741,26 +615,12 @@
     "Invia verifica",
     "Bestätigung senden"
   ],
-  "Escanea la etiqueta de cada paquete: si su código trae la dirección, la parada entra sola. Si no, la lee de la foto.": [
-    "Scan each parcel’s label: if its code carries the address, the stop goes in by itself. If not, it reads it from the photo.",
-    "Lê a etiqueta de cada encomenda: se o código trouxer a morada, a paragem entra sozinha. Se não, lê-a da foto.",
-    "Scannez l’étiquette de chaque colis : si son code contient l’adresse, l’arrêt s’ajoute tout seul. Sinon, elle est lue sur la photo.",
-    "Scansiona l’etichetta di ogni pacco: se il codice contiene l’indirizzo, la fermata entra da sola. Altrimenti la legge dalla foto.",
-    "Scanne das Etikett jedes Pakets: Enthält der Code die Adresse, kommt der Stopp von selbst dazu. Sonst liest er sie aus dem Foto."
-  ],
   "Escanea los paquetes: la dirección entra sola.": [
     "Scan the parcels: the address fills in by itself.",
     "Digitaliza as encomendas: a morada entra sozinha.",
     "Scannez les colis : l’adresse se remplit toute seule.",
     "Scansiona i pacchi: l’indirizzo entra da solo.",
     "Scanne die Pakete: Die Adresse wird automatisch übernommen."
-  ],
-  "Escanear paquetes": [
-    "Scan parcels",
-    "Digitalizar volumes",
-    "Scanner des colis",
-    "Scansiona pacchi",
-    "Pakete scannen"
   ],
   "Escribe el correo de tu cuenta y te mandamos un enlace para crear una contraseña nueva.": [
     "Enter your account email and we will send you a link to create a new password.",
@@ -796,13 +656,6 @@
     "Écrire au support",
     "Scrivi al supporto",
     "Support schreiben"
-  ],
-  "Escribir una dirección": [
-    "Type an address",
-    "Escrever uma morada",
-    "Saisir une adresse",
-    "Scrivi un indirizzo",
-    "Adresse eingeben"
   ],
   "Ese correo ya está verificado.": [
     "That email is already verified.",
@@ -916,13 +769,6 @@
     "Foto non valida. Ripeti la foto di {x}.",
     "Ungültiges Foto. Wiederhole das Foto von {x}."
   ],
-  "Fotos, kilómetros y revisión antes de salir": [
-    "Photos, mileage and check before leaving",
-    "Fotos, quilómetros e revisão antes de sair",
-    "Photos, kilométrage et contrôle avant de partir",
-    "Foto, chilometri e controllo prima di partire",
-    "Fotos, Kilometerstand und Check vor der Abfahrt"
-  ],
   "Frontal": [
     "Front",
     "Frente",
@@ -1007,13 +853,6 @@
     "Salva e continua",
     "Speichern und weiter"
   ],
-  "HECHAS HOY": [
-    "DONE TODAY",
-    "FEITAS HOJE",
-    "FAITES AUJOURD’HUI",
-    "FATTE OGGI",
-    "HEUTE ERLEDIGT"
-  ],
   "Hay una verificación pendiente para {c}. Revisa ese correo personal.": [
     "There is a pending verification for {c}. Check that personal email.",
     "Há uma verificação pendente para {c}. Vê esse e-mail pessoal.",
@@ -1076,13 +915,6 @@
     "Heure de départ",
     "Ora di partenza",
     "Abfahrtszeit"
-  ],
-  "Horario: de {a} a {b}": [
-    "Hours: from {a} to {b}",
-    "Horário: das {a} às {b}",
-    "Horaires : de {a} à {b}",
-    "Orario: dalle {a} alle {b}",
-    "Zeitfenster: von {a} bis {b}"
   ],
   "Hoy llevas {x}": [
     "So far today {x}",
@@ -1160,13 +992,6 @@
     "La photo a été enregistrée ; elle n’a pas pu être vérifiée pour l’instant.",
     "La foto è stata salvata; non è stato possibile verificarla ora.",
     "Das Foto wurde gespeichert, konnte aber gerade nicht geprüft werden."
-  ],
-  "La foto, del paquete en la puerta: sin personas.": [
-    "The photo, of the parcel at the door: no people.",
-    "A foto, da encomenda à porta: sem pessoas.",
-    "La photo, du colis devant la porte : sans personnes.",
-    "La foto, del pacco alla porta: senza persone.",
-    "Das Foto zeigt das Paket an der Tür: keine Personen."
   ],
   "La oficina ha cambiado el cuadrante después de confirmarlo. Consúltalo antes de desplazarte.": [
     "The office changed the schedule after confirming it. Check it before you travel.",
@@ -1259,20 +1084,6 @@
     "Lato sinistro",
     "Linke Seite"
   ],
-  "Leer la etiqueta con una foto": [
-    "Read the label from a photo",
-    "Ler a etiqueta com uma foto",
-    "Lire l’étiquette avec une photo",
-    "Leggi l’etichetta da una foto",
-    "Etikett per Foto lesen"
-  ],
-  "Leyendo la etiqueta…": [
-    "Reading the label…",
-    "A ler a etiqueta…",
-    "Lecture de l’étiquette…",
-    "Lettura dell’etichetta…",
-    "Etikett wird gelesen …"
-  ],
   "Leyendo lo compartido…": [
     "Reading what you shared…",
     "A ler o partilhado…",
@@ -1293,13 +1104,6 @@
     "Plein",
     "Pieno",
     "Voll"
-  ],
-  "Lleva: {x}": [
-    "Contents: {x}",
-    "Leva: {x}",
-    "Contenu : {x}",
-    "Contiene: {x}",
-    "Inhalt: {x}"
   ],
   "Llevas {n} {e} en {d} {dd}.": [
     "You have {n} {e} in {d} {dd}.",
@@ -1357,13 +1161,6 @@
     "Segnata come non consegnata.",
     "Als nicht zugestellt markiert."
   ],
-  "Marcar como no entregado": [
-    "Mark as not delivered",
-    "Marcar como não entregue",
-    "Marquer comme non livré",
-    "Segna come non consegnato",
-    "Als nicht zugestellt markieren"
-  ],
   "Matrícula / placa (opcional)": [
     "Vehicle plate (optional)",
     "Matrícula (opcional)",
@@ -1406,13 +1203,6 @@
     "I miei turni e giorni liberi",
     "Meine Schichten und freien Tage"
   ],
-  "Motivo: {x}": [
-    "Reason: {x}",
-    "Motivo: {x}",
-    "Motif : {x}",
-    "Motivo: {x}",
-    "Grund: {x}"
-  ],
   "Médico": [
     "Medical",
     "Médico",
@@ -1447,20 +1237,6 @@
     "Il vous guide à la voix jusqu’à chaque porte, dans l’app, et vous validez la livraison.",
     "Ti guida con la voce fino a ogni porta, nell’app, e segni la consegna.",
     "Führt dich per Sprache bis zu jeder Tür, in der App, und du hakst die Lieferung ab."
-  ],
-  "Navegar": [
-    "Navigate",
-    "Navegar",
-    "Naviguer",
-    "Naviga",
-    "Navigieren"
-  ],
-  "Navegar con": [
-    "Navigate with",
-    "Navegar com",
-    "Naviguer avec",
-    "Naviga con",
-    "Navigieren mit"
   ],
   "Neumáticos": [
     "Tyres",
@@ -1693,13 +1469,6 @@
     "Non vedo nessuna fermata in quanto condiviso.",
     "Ich sehe keinen Stopp im Geteilten."
   ],
-  "Nota (opcional)": [
-    "Note (optional)",
-    "Nota (opcional)",
-    "Note (facultatif)",
-    "Nota (facoltativa)",
-    "Notiz (optional)"
-  ],
   "Nota de oficina: {n}": [
     "Office note: {n}",
     "Nota do escritório: {n}",
@@ -1727,20 +1496,6 @@
     "Notes (interphone, étage…)",
     "Note (portone, piano…)",
     "Notizen (Eingang, Etage …)"
-  ],
-  "Notas: {x}": [
-    "Notes: {x}",
-    "Notas: {x}",
-    "Notes : {x}",
-    "Note: {x}",
-    "Hinweise: {x}"
-  ],
-  "Nueva parada": [
-    "New stop",
-    "Nova paragem",
-    "Nouvel arrêt",
-    "Nuova fermata",
-    "Neuer Stopp"
   ],
   "Ocultar la contraseña": [
     "Hide the password",
@@ -1791,20 +1546,6 @@
     "Fermata tolta dal tuo giro.",
     "Stopp aus deiner Route entfernt."
   ],
-  "Pasa cada paquete por la cámara: te digo en qué hueco va.": [
-    "Hold each parcel up to the camera: I’ll tell you which slot it goes in.",
-    "Passa cada embalagem pela câmara: digo-te em que lugar vai.",
-    "Passe chaque colis devant la caméra : je te dis dans quel emplacement il va.",
-    "Passa ogni pacco davanti alla fotocamera: ti dico in quale posto va.",
-    "Halte jedes Paket vor die Kamera: Ich sage dir, in welchen Platz es kommt."
-  ],
-  "Pasa las etiquetas una tras otra: cada paquete entra en tu ruta.": [
-    "Scan the labels one after another: each parcel goes into your route.",
-    "Passa as etiquetas uma a seguir à outra: cada encomenda entra na tua rota.",
-    "Passez les étiquettes l’une après l’autre : chaque colis entre dans votre tournée.",
-    "Passa le etichette una dopo l’altra: ogni pacco entra nel tuo giro.",
-    "Scanne die Etiketten nacheinander: Jedes Paket kommt in deine Route."
-  ],
   "País donde repartes": [
     "Country where you deliver",
     "País onde entregas",
@@ -1847,13 +1588,6 @@
     "Metti come ti pagano e in «Oggi» vedrai quanto hai guadagnato e cosa perdi con ogni consegna mancata.",
     "Trag ein, wie du bezahlt wirst, und unter „Heute“ siehst du, was du verdient hast und was dich jede nicht gelungene Zustellung kostet."
   ],
-  "Por entregar": [
-    "To deliver",
-    "Por entregar",
-    "À livrer",
-    "Da consegnare",
-    "Zuzustellen"
-  ],
   "Portal de conductor": [
     "Driver portal",
     "Portal do condutor",
@@ -1881,13 +1615,6 @@
     "Essai gratuit : {q}.",
     "Prova gratuita: {q}.",
     "Kostenlose Testphase: {q}."
-  ],
-  "Quitar de la ruta": [
-    "Remove from route",
-    "Retirar da rota",
-    "Retirer de la tournée",
-    "Togli dal giro",
-    "Aus der Route entfernen"
   ],
   "Qué lleva (opcional)": [
     "What it contains (optional)",
@@ -2043,13 +1770,6 @@
     "Si cancella la prova di consegna di {n}: la foto, dove è stato lasciato, chi l’ha ritirato e l’ora.",
     "Der Zustellnachweis für {n} wird gelöscht: Foto, Ablageort, Empfänger und Uhrzeit."
   ],
-  "Se pone al día sola al volver la red.": [
-    "It catches up by itself when the network is back.",
-    "Atualiza-se sozinha quando voltar a rede.",
-    "Elle se met à jour toute seule au retour du réseau.",
-    "Si aggiorna da sola quando torna la rete.",
-    "Sie aktualisiert sich von selbst, sobald das Netz zurück ist."
-  ],
   "Seguir dentro": [
     "Stay",
     "Continuar dentro",
@@ -2113,13 +1833,6 @@
     "Nessuna connessione. Riproverà da solo.",
     "Keine Verbindung. Es wird automatisch erneut versucht."
   ],
-  "Sin conexión: es tu ruta de las {h}.": [
-    "No connection: this is your route from {h}.",
-    "Sem ligação: é a tua rota das {h}.",
-    "Pas de connexion : c’est votre tournée de {h}.",
-    "Senza connessione: è il tuo giro delle {h}.",
-    "Keine Verbindung: Das ist deine Route von {h}."
-  ],
   "Sin conexión: los ajustes de la ruta se cargan con red.": [
     "No connection: route settings load when there is network.",
     "Sem ligação: as definições da rota carregam com rede.",
@@ -2127,26 +1840,12 @@
     "Senza connessione: le impostazioni del giro si caricano con la rete.",
     "Keine Verbindung: Die Routeneinstellungen laden mit Netz."
   ],
-  "Sin conexión: para cargar hace falta red.": [
-    "No connection: loading needs a network.",
-    "Sem ligação: para carregar é precisa rede.",
-    "Pas de connexion : pour charger, il faut du réseau.",
-    "Nessuna connessione: per caricare serve la rete.",
-    "Keine Verbindung: Zum Beladen braucht es Netz."
-  ],
   "Sin conexión: para guardar una parada nueva hace falta red.": [
     "No connection: saving a new stop needs network.",
     "Sem ligação: para guardar uma paragem nova é precisa rede.",
     "Pas de connexion : enregistrer un nouvel arrêt nécessite le réseau.",
     "Nessuna connessione: per salvare una nuova fermata serve la rete.",
     "Keine Verbindung: Zum Speichern eines neuen Stopps braucht es Netz."
-  ],
-  "Sin conexión: para meter paradas nuevas hace falta red.": [
-    "No connection: adding new stops needs network.",
-    "Sem ligação: para meter paragens novas é precisa rede.",
-    "Pas de connexion : ajouter des arrêts nécessite le réseau.",
-    "Nessuna connessione: per aggiungere fermate serve la rete.",
-    "Keine Verbindung: Zum Hinzufügen neuer Stopps braucht es Netz."
   ],
   "Sin conexión: para ordenar la ruta hace falta red.": [
     "No connection: sorting the route needs network.",
@@ -2196,13 +1895,6 @@
     "Sans carte. Gratuit et illimité jusqu’au {fecha} ; ensuite, gratuit jusqu’à {p} arrêts par jour.",
     "Senza carta. Gratis e senza limiti fino al {fecha}; poi gratis fino a {p} fermate al giorno.",
     "Ohne Karte. Kostenlos und unbegrenzt bis {fecha}; danach kostenlos bis {p} Stopps am Tag."
-  ],
-  "Sin ubicar": [
-    "Not located",
-    "Sem localização",
-    "Non localisé",
-    "Non localizzata",
-    "Nicht verortet"
   ],
   "Solicita un turno extra en los días que la empresa necesita refuerzo. La oficina confirma cada solicitud.": [
     "Request an extra shift on the days the company needs reinforcement. The office confirms each request.",
@@ -2351,13 +2043,6 @@
     "Telefono di contatto",
     "Kontakttelefon"
   ],
-  "Teléfono: {x}": [
-    "Phone: {x}",
-    "Telefone: {x}",
-    "Téléphone : {x}",
-    "Telefono: {x}",
-    "Telefon: {x}"
-  ],
   "Tienes 1 aviso nuevo": [
     "You have 1 new notification",
     "Tens 1 aviso novo",
@@ -2406,13 +2091,6 @@
     "Travailler plus",
     "Lavorare di più",
     "Mehr arbeiten"
-  ],
-  "Traer a hoy": [
-    "Bring to today",
-    "Trazer para hoje",
-    "Ramener à aujourd’hui",
-    "Porta a oggi",
-    "Auf heute holen"
   ],
   "Trasera": [
     "Rear",
@@ -2477,13 +2155,6 @@
     "Turno extra confermato.",
     "Zusatzschicht bestätigt."
   ],
-  "Turnos aprobados, vacantes para trabajar más y lo que te pida la oficina": [
-    "Approved shifts, open shifts to work more and whatever the office asks of you",
-    "Turnos aprovados, vagas para trabalhar mais e o que o escritório te pedir",
-    "Créneaux approuvés, créneaux libres pour travailler plus et ce que le bureau vous demande",
-    "Turni approvati, turni liberi per lavorare di più e ciò che ti chiede l’ufficio",
-    "Genehmigte Schichten, freie Schichten für mehr Arbeit und was das Büro von dir braucht"
-  ],
   "Turnos aprobados, vacantes para trabajar más, inspección pendiente y la ruta del día": [
     "Approved shifts, openings to work more, pending inspection and the day’s route",
     "Turnos aprovados, vagas para trabalhar mais, inspeção pendente e a rota do dia",
@@ -2497,20 +2168,6 @@
     "Créneaux supplémentaires confirmés",
     "Turni extra confermati",
     "Bestätigte Zusatzschichten"
-  ],
-  "Uno menos": [
-    "One less",
-    "Menos um",
-    "Un de moins",
-    "Uno in meno",
-    "Eins weniger"
-  ],
-  "Uno más": [
-    "One more",
-    "Mais um",
-    "Un de plus",
-    "Uno in più",
-    "Eins mehr"
   ],
   "Usa el correo personal que vinculaste en tu cuenta. El código se enviará a ese correo, no al buzón de empresa.": [
     "Use the personal email you linked to your account. The code will be sent to that email, not to the company mailbox.",
@@ -2533,13 +2190,6 @@
     "Turni liberi",
     "Freie Schichten"
   ],
-  "Vacantes y turnos extra confirmados": [
-    "Openings and confirmed extra shifts",
-    "Vagas e turnos extra confirmados",
-    "Créneaux disponibles et services supplémentaires confirmés",
-    "Posti disponibili e turni extra confermati",
-    "Freie Schichten und bestätigte Zusatzschichten"
-  ],
   "Vehículo": [
     "Vehicle",
     "Veículo",
@@ -2547,26 +2197,12 @@
     "Veicolo",
     "Fahrzeug"
   ],
-  "Ver el mapa": [
-    "Show the map",
-    "Ver o mapa",
-    "Voir la carte",
-    "Vedi la mappa",
-    "Karte anzeigen"
-  ],
   "Ver la contraseña": [
     "Show the password",
     "Ver a palavra-passe",
     "Afficher le mot de passe",
     "Mostra la password",
     "Passwort anzeigen"
-  ],
-  "Ver la lista": [
-    "Show the list",
-    "Ver a lista",
-    "Voir la liste",
-    "Vedi la lista",
-    "Liste anzeigen"
   ],
   "Viaje": [
     "Travel",
@@ -2702,13 +2338,6 @@
     "bloccato dall’ufficio",
     "vom Büro gesperrt"
   ],
-  "bulto": [
-    "parcel",
-    "volume",
-    "colis",
-    "collo",
-    "Paket"
-  ],
   "bultos": [
     "parcels",
     "volumes",
@@ -2729,13 +2358,6 @@
     "jour",
     "giorno",
     "Tag"
-  ],
-  "días": [
-    "days",
-    "dias",
-    "jours",
-    "giorni",
-    "Tagen"
   ],
   "entrega": [
     "delivery",
@@ -2771,20 +2393,6 @@
     "livraisons en 30 jours",
     "consegne in 30 giorni",
     "Lieferungen in 30 Tagen"
-  ],
-  "incidencia cerca": [
-    "incident nearby",
-    "incidência perto",
-    "incident à proximité",
-    "incidente vicino",
-    "Vorfall in der Nähe"
-  ],
-  "incidencias cerca": [
-    "incidents nearby",
-    "incidências perto",
-    "incidents à proximité",
-    "incidenti vicino",
-    "Vorfälle in der Nähe"
   ],
   "médico": [
     "a medical reason",
@@ -2842,13 +2450,6 @@
     "una fermata",
     "einen Stopp"
   ],
-  "vas {n} min por detrás": [
-    "you are {n} min behind",
-    "vais {n} min atrasado",
-    "vous avez {n} min de retard",
-    "sei {n} min in ritardo",
-    "du bist {n} Min. im Rückstand"
-  ],
   "veces": [
     "times",
     "vezes",
@@ -2884,13 +2485,6 @@
     "{a} di {b} consegnate oggi.",
     "{a} von {b} heute zugestellt."
   ],
-  "{a} de {b} hechas": [
-    "{a} of {b} done",
-    "{a} de {b} feitas",
-    "{a} sur {b} faits",
-    "{a} di {b} fatte",
-    "{a} von {b} erledigt"
-  ],
   "{a} invitados · {b} válidos": [
     "{a} invited · {b} valid",
     "{a} convidados · {b} válidos",
@@ -2905,13 +2499,6 @@
     "{f}: chiusure e lavori dichiarati, non il traffico in tempo reale.",
     "{f}: gemeldete Sperrungen und Baustellen, kein Echtzeitverkehr."
   ],
-  "{n} cambios guardados en el móvil: se envían solos al volver la red.": [
-    "{n} changes saved on the phone: they are sent by themselves when the network is back.",
-    "{n} alterações guardadas no telemóvel: enviam-se sozinhas quando voltar a rede.",
-    "{n} changements enregistrés sur le téléphone : ils s’envoient tout seuls au retour du réseau.",
-    "{n} modifiche salvate sul telefono: si inviano da sole quando torna la rete.",
-    "{n} Änderungen auf dem Handy gespeichert: werden von selbst gesendet, sobald das Netz zurück ist."
-  ],
   "{n} entregas en {d} días distintos": [
     "{n} deliveries on {d} different days",
     "{n} entregas em {d} dias diferentes",
@@ -2925,13 +2512,6 @@
     "{n} livraisons en attente",
     "{n} consegne in sospeso",
     "{n} Lieferungen offen"
-  ],
-  "{n} paradas de otros días siguen sin cerrar.": [
-    "{n} stops from other days are still open.",
-    "{n} paragens de outros dias continuam por fechar.",
-    "{n} arrêts d’autres jours sont toujours ouverts.",
-    "{n} fermate di altri giorni sono ancora aperte.",
-    "{n} Stopps von anderen Tagen sind noch offen."
   ],
   "{n} paradas en lo compartido": [
     "{n} stops in what you shared",
@@ -2954,13 +2534,6 @@
     "{n} posto/i disponibile/i",
     "{n} Platz/Plätze frei"
   ],
-  "{n} sale de tu ruta de hoy.": [
-    "{n} leaves today’s route.",
-    "{n} sai da tua rota de hoje.",
-    "{n} sort de votre tournée du jour.",
-    "{n} esce dal tuo giro di oggi.",
-    "{n} wird aus der heutigen Route entfernt."
-  ],
   "© OpenStreetMap": [
     "© OpenStreetMap",
     "© OpenStreetMap",
@@ -2982,47 +2555,12 @@
     "Quanto carburante resta?",
     "Wie viel Kraftstoff ist noch da?"
   ],
-  "¿Dónde lo has dejado? (opcional)": [
-    "Where did you leave it? (optional)",
-    "Onde o deixaste? (opcional)",
-    "Où l’avez-vous laissé ? (facultatif)",
-    "Dove l’hai lasciato? (facoltativo)",
-    "Wo hast du es abgelegt? (optional)"
-  ],
-  "¿Dónde va en la furgoneta? (opcional)": [
-    "Where does it go in the van? (optional)",
-    "Onde vai na carrinha? (opcional)",
-    "Où va-t-il dans la camionnette ? (facultatif)",
-    "Dove va nel furgone? (facoltativo)",
-    "Wo liegt es im Transporter? (optional)"
-  ],
   "¿Eres conductor de una empresa? Tu contraseña te la da la oficina. Si vinculaste tu correo personal, puedes entrar con un código.": [
     "Are you a company driver? The office gives you your password. If you linked your personal email, you can sign in with a code.",
     "És condutor de uma empresa? A palavra-passe dá-ta o escritório. Se ligaste o teu e-mail pessoal, podes entrar com um código.",
     "Vous êtes conducteur d’une entreprise ? Le bureau vous donne votre mot de passe. Si vous avez lié votre e-mail personnel, vous pouvez vous connecter avec un code.",
     "Sei autista di un’azienda? La password te la dà l’ufficio. Se hai collegato la tua email personale, puoi accedere con un codice.",
     "Bist du Fahrer einer Firma? Dein Passwort bekommst du vom Büro. Wenn du deine private E-Mail verknüpft hast, kannst du dich mit einem Code anmelden."
-  ],
-  "¿Quitar esta parada?": [
-    "Remove this stop?",
-    "Retirar esta paragem?",
-    "Retirer cet arrêt ?",
-    "Togliere questa fermata?",
-    "Diesen Stopp entfernen?"
-  ],
-  "¿Quién lo recoge?": [
-    "Who receives it?",
-    "Quem o recebe?",
-    "Qui le réceptionne ?",
-    "Chi lo ritira?",
-    "Wer nimmt es an?"
-  ],
-  "¿Qué ha pasado?": [
-    "What happened?",
-    "O que aconteceu?",
-    "Que s’est-il passé ?",
-    "Cos’è successo?",
-    "Was ist passiert?"
   ],
   "¿Salir de la auditoría?": [
     "Leave the audit?",
@@ -3037,13 +2575,6 @@
     "Remettre dans « à livrer » ?",
     "Rimettere in «da consegnare»?",
     "Zurück zu „zuzustellen“?"
-  ],
-  "Gana {x} por cada compañero que reparta con FDS": [
-    "Earn {x} for every colleague who delivers with FDS",
-    "Ganha {x} por cada colega que entregue com a FDS",
-    "Gagne {x} pour chaque collègue qui livre avec FDS",
-    "Guadagna {x} per ogni collega che consegna con FDS",
-    "Verdiene {x} für jeden Kollegen, der mit FDS zustellt"
   ],
   "Invita a un compañero a repartir con FDS": [
     "Invite a colleague to deliver with FDS",
@@ -3066,34 +2597,6 @@
     "Invita su WhatsApp",
     "Per WhatsApp einladen"
   ],
-  "1 sin ubicar: toca para situarla en el mapa": [
-    "1 not located: tap to place it on the map",
-    "1 sem localização: toca para a situar no mapa",
-    "1 non localisé : touchez pour le placer sur la carte",
-    "1 non localizzata: tocca per metterla sulla mappa",
-    "1 nicht verortet: Tippe, um ihn auf der Karte zu setzen"
-  ],
-  "{n} sin ubicar: toca para situarlas en el mapa": [
-    "{n} not located: tap to place them on the map",
-    "{n} sem localização: toca para as situar no mapa",
-    "{n} non localisés : touchez pour les placer sur la carte",
-    "{n} non localizzate: tocca per metterle sulla mappa",
-    "{n} nicht verortet: Tippe, um sie auf der Karte zu setzen"
-  ],
-  "Abrir en {app}": [
-    "Open in {app}",
-    "Abrir no {app}",
-    "Ouvrir dans {app}",
-    "Apri in {app}",
-    "In {app} öffnen"
-  ],
-  "Aquí: {d}": [
-    "Here: {d}",
-    "Aqui: {d}",
-    "Ici : {d}",
-    "Qui: {d}",
-    "Hier: {d}"
-  ],
   "Añadida, sin situar: la sitúo al navegar.": [
     "Added, not on the map yet: I’ll place it when you navigate.",
     "Adicionada, sem localização: localizo-a quando navegares.",
@@ -3108,20 +2611,6 @@
     "Cerco l’indirizzo…",
     "Adresse wird gesucht…"
   ],
-  "Calle encontrada, sin el portal": [
-    "Street found, but not the house number",
-    "Rua encontrada, sem o número da porta",
-    "Rue trouvée, sans le numéro",
-    "Via trovata, senza il numero civico",
-    "Straße gefunden, ohne Hausnummer"
-  ],
-  "Otra calle": [
-    "Another street",
-    "Outra rua",
-    "Autre rue",
-    "Altra via",
-    "Andere Straße"
-  ],
   "Cambios guardados, sin situar: la sitúo al navegar.": [
     "Changes saved, not on the map yet: I’ll place it when you navigate.",
     "Alterações guardadas, sem localização: localizo-a quando navegares.",
@@ -3135,27 +2624,6 @@
     "Vérification de l’adresse…",
     "Controllo l’indirizzo…",
     "Adresse wird geprüft…"
-  ],
-  "En el mapa": [
-    "On the map",
-    "No mapa",
-    "Sur la carte",
-    "Sulla mappa",
-    "Auf der Karte"
-  ],
-  "Es aquí": [
-    "It’s here",
-    "É aqui",
-    "C’est ici",
-    "È qui",
-    "Hier ist es"
-  ],
-  "Mi ubicación": [
-    "My location",
-    "A minha localização",
-    "Ma position",
-    "La mia posizione",
-    "Mein Standort"
   ],
   "Mueve el mapa hasta la puerta": [
     "Move the map to the door",
@@ -3219,13 +2687,6 @@
     "Sans le numéro",
     "Senza numero civico",
     "Ohne Hausnummer"
-  ],
-  "Sin situar en el mapa": [
-    "Not on the map",
-    "Sem localização no mapa",
-    "Pas sur la carte",
-    "Non sulla mappa",
-    "Nicht auf der Karte"
   ],
   "Situar": [
     "Place it",
@@ -3359,19 +2820,5 @@
     "Pas d’aujourd’hui",
     "Non è di oggi",
     "Nicht von heute"
-  ],
-  "Ayuda": [
-    "Help",
-    "Ajuda",
-    "Aide",
-    "Aiuto",
-    "Hilfe"
-  ],
-  "Más opciones": [
-    "More options",
-    "Mais opções",
-    "Plus d’options",
-    "Altre opzioni",
-    "Weitere Optionen"
   ]
 }

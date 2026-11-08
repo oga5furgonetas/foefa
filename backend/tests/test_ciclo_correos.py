@@ -360,7 +360,7 @@ def test_en_latinoamerica_celular_y_toca_y_en_espana_movil_y_pulsa():
     es = _correo("bienvenida", _org(horas=0.5, pais="es"))["texto"]
     assert "móvil" in es and "Pulsa «" in es and "celular" not in es
     # Los botones que cita siguen siendo los de la app (aLatam no los toca).
-    assert "«Cargar paquetes: uno tras otro»" in mx
+    assert "«Cargar paquetes»" in mx           # 08-11-2026: el botón del diseño compacto (antes «…: uno tras otro»)
 
 
 def test_los_botones_que_cita_existen_en_la_app():
