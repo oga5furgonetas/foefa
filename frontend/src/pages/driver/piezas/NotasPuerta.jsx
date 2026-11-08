@@ -8,11 +8,9 @@
    «Memoria de la puerta» está en el ⋮. Los textos salen de ClienteDice, MemoriaPuerta y AntesPuerta, sin cambiarlos.
    En la tarjeta (`maxLineas`), 4 de relleno arriba y abajo en vez de 8 (la hoja se queda con los 8): con la fila de acciones a 8
    de la caja, la tarjeta de 10-hoy pasa de 292 a 280, dentro de los 284 de §5.1 d (revisor, 07-11-2026, hallazgo 5).
-   LO QUE DICE EL CLIENTE, PRIMERO (RW, 08-11-2026): en una sola línea cortada con «…» el portal salía a medias («Portal: 45…»).
-   Ahora, en la tarjeta, lo que dice el cliente puede ocupar las DOS líneas (lo que se corta es el final, la nota libre; el portal
-   queda a la vista). Si no las necesita, el siguiente dato va en la segunda, como antes; si las ocupa, los demás se quedan en
-   la hoja de la parada y la tarjeta sigue en sus 284. Cuántas líneas ocupa se mide en pantalla (con el ancho y la letra de
-   ahora) y se repite si cambian. En la hoja no cambia nada: ya lo enseña entero. */
+   RW (08-11-2026): con una sola línea el portal salía a medias («Portal: 45…»). En la tarjeta, lo que dice el cliente puede
+   ocupar las dos líneas (se corta el final, no el portal); si no las necesita, el siguiente dato va en la segunda, y si las
+   ocupa, los demás quedan en la hoja y la tarjeta sigue en sus 284. Cuántas ocupa se mide en pantalla. La hoja, igual. */
 import { useLayoutEffect, useRef, useState } from 'react'
 import { History, KeyRound, MessageSquareText, StickyNote } from 'lucide-react'
 import { tx } from '../../../lib/idioma'
@@ -21,9 +19,8 @@ import { textoMemoria } from '../MemoriaPuerta'
 import { partesAntes } from '../AntesPuerta'
 import icono from './icono'
 
-/* ¿Lo que dice el cliente ocupa las dos líneas? Una línea mide su `line-height`: más de una y media es que hay dos. Se mide al
-   pintar (antes de que el navegador dibuje, así que no parpadea) y se repite si cambia su tamaño: el giro del móvil, la letra
-   más grande o la fuente al terminar de cargar. */
+/* ¿Lo que dice el cliente ocupa las dos líneas? Más de una y media de `line-height` es que sí. Se mide antes de pintar (sin
+   parpadeo) y se repite si cambia su tamaño: el giro del móvil, la letra grande o la fuente al cargar. */
 function useOcupaDos(ref, activo, clave) {
   const [dos, setDos] = useState(false)
   useLayoutEffect(() => {

@@ -175,6 +175,7 @@ test('Compacto · la tarjeta de la siguiente enseña lo que dice el cliente en d
     const caja = await tarjeta.boundingBox()
     expect(caja.height, `a ${ancho}: la tarjeta mide 216-284 (§5.1 d)`).toBeLessThanOrEqual(284)
     expect(caja.height).toBeGreaterThanOrEqual(216)
+    test.info().annotations.push({ type: `tarjeta a ${ancho}`, description: `${caja.height} px con lo del cliente en dos líneas` })
     const entregado = await tarjeta.getByRole('button', { name: 'Entregado', exact: true }).boundingBox()
     const pestanas = await page.getByRole('navigation', { name: 'Secciones' }).boundingBox()
     expect(entregado.y + entregado.height, '«Entregado» por encima de las pestañas, sin desplazar').toBeLessThanOrEqual(pestanas.y)
@@ -199,6 +200,7 @@ test('Compacto · lo que dice el cliente, si cabe en una línea, deja la segunda
   await expect(tarjeta.getByText('Timbre 2º B')).toBeVisible()   // la segunda línea, como antes
   const caja = await tarjeta.boundingBox()
   expect(caja.height).toBeLessThanOrEqual(284)
+  test.info().annotations.push({ type: 'tarjeta a 360', description: `${caja.height} px con lo del cliente en una línea y «Timbre 2º B» debajo` })
 })
 
 test('Compacto · la guía enseña lo que dice el cliente aparte y primero, hasta el portal, antes de llegar y al llegar', async ({ page, context }) => {

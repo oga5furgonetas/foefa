@@ -38,10 +38,9 @@ import icono from './piezas/icono'
    son BotonMapa en una columna a la derecha, 12 por encima del panel (se mide con ResizeObserver: antes iban a media
    pantalla y la hoja de llegada los tapaba en los móviles de 800 o menos); y el panel de abajo con el número de 40, el
    nombre, «Llamar» y la ✕ de icono, «Llegas ≈ …», las notas en una línea y «Ya he llegado» a lo ancho (al llegar, la
-   FilaCierre). Lo que dice el cliente, aparte y primero, hasta en dos líneas (RW, 08-11-2026): con los datos de 10-hoy a
-   360×780 el panel mide 242 antes de llegar y 220 al llegar (con la línea única de antes, 198 y 176); antes de llegar pasa
-   de los 225 de §7.4 por las dos líneas del cliente, y se deja: leer el portal vale más. Lo que hace cada botón y lo que se manda al
-   servidor, igual que antes. Los dibujos del mapa (la ruta, la
+   FilaCierre). Lo que hace cada botón y lo que se manda al servidor, igual que antes. Lo que dice el cliente va aparte y
+   primero, hasta en dos líneas (RW, 08-11-2026): a 360×780 el panel mide 242 antes de llegar (198 con la línea única de
+   antes: pasa de los 225 de §7.4, y se deja, que leer el portal vale más) y 220 al llegar. Los dibujos del mapa (la ruta, la
    flecha, la chincheta) no cambian: por eso MapaGuia lleva colores hex y `check-tokens-ruta.mjs` le salta esa regla
    (DIBUJOS_DEL_MAPA). */
 
@@ -291,12 +290,10 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
   }
   const flecha = guia?.fuente === 'linea_recta' && pos && parada ? rumboEntre(pos.p, [parada.lat, parada.lng]) : null
 
-  // Las notas de la parada. LO QUE DICE EL CLIENTE VA APARTE Y PRIMERO (RW, 08-11-2026): el portal y el timbre son lo que hace
-  // falta en la puerta y, al final de una línea cortada con «…» («Cobrar 24,50 € · Detrás · izq · 2 bultos · Medi…»), no se
-  // llegaba a leer. Va en su fila, con su icono, hasta en dos líneas. Debajo, lo demás en una línea, que se corta por el final:
-  // lo que se cobra primero, luego la nota de la parada (el timbre) y, al final, lo demás: dónde va en la furgoneta, los
-  // bultos y lo que lleva. El dato con su icono, y lo que iba delante («Búscalo:», «El cliente dice:») solo para el lector
-  // de pantalla.
+  // Las notas de la parada (RW, 08-11-2026). Lo que dice el cliente va APARTE y PRIMERO, hasta en dos líneas: el portal y el
+  // timbre se necesitan en la puerta y, al final de una sola línea cortada con «…», no se llegaban a leer. Debajo, lo demás
+  // en una línea (se corta por el final): lo que se cobra, la nota de la parada (el timbre), dónde va en la furgoneta, los
+  // bultos y lo que lleva. El prefijo («Búscalo:», «El cliente dice:») va solo para el lector de pantalla.
   const dice = parada ? textoClienteDice(parada.cliente_dice) : ''
   const antes = parada ? textoAntes(parada.antes) : ''
   const notas = !parada ? [] : [
