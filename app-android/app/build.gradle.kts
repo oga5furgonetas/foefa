@@ -38,8 +38,11 @@ android {
         // La TWA llegó a code 4 (1.0.3): la nativa empieza en 10.
         // 2.4.5 (02-11-2026): el primer paquete bien situado: lo que el servidor no encuentra lo busca el móvil y, si
         // no, se pone en nuestro mapa («Situar la parada»); «Navegar» ya no manda a Google Maps.
-        versionCode = 24
-        versionName = "2.4.5"
+        // 2.4.6 (08-11-2026): el diseño compacto de la app de reparto («Entregado» a la vista al abrir, hojas y filas más
+        // bajas, «Escanear» en la cabecera, Editar y Memoria de la puerta en el menú ⋮) y que el número del portal de la
+        // nota del cliente se lea entero.
+        versionCode = 25
+        versionName = "2.4.6"
         buildConfigField("String", "API_URL", "\"$apiUrl\"")
         buildConfigField("String", "WEB_URL", "\"https://flotadsp.com\"")
         buildConfigField("String", "FCM_APP_ID", "\"$fcmAppId\"")
