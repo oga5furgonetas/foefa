@@ -395,7 +395,9 @@ private fun Situando(
                 }
                 if (buscandoYo) CircularProgressIndicator(Modifier.size(40.dp), strokeWidth = 2.dp, color = c.primary)
             }
-            Atribucion(tx("© OpenStreetMap · OpenMapTiles"), modifier = Modifier.align(Alignment.BottomStart).padding(Esp.s)
+            // F3, 08-11-2026: sin llegar al botón «Mi ubicación» (con la letra a 2,0 la atribución se le echaba encima).
+            Atribucion(tx("© OpenStreetMap · OpenMapTiles"),
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = Esp.s, top = Esp.s, end = Esp.m + Alto.boton + Esp.s, bottom = Esp.s)
                 .clickable { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, "https://www.openstreetmap.org/copyright".toUri())) } })
         }
 

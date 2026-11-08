@@ -386,49 +386,52 @@ fun MapaRuta(
                 ZoomMapa(alAcercar = { mapa.controller.zoomIn() }, alAlejar = { mapa.controller.zoomOut() })
             }
         }
-        Atribucion(tx("© OpenStreetMap"), Modifier.align(Alignment.BottomStart).padding(Esp.s))
-
-        // La tarjeta de lo tocado: radio 16, relleno 12, a 16 del borde (antes 84, por el flotante de escanear, que ya no
-        // está). En una parada, la cabecera lleva su número y la hora prevista, y tocarla abre su hoja (sale «Abrir»);
-        // la ✕ la cierra.
-        tocado?.let { t ->
-            val p = (t as? Tocado.Una)?.p
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.large, shadowElevation = 6.dp,
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(Esp.l),
-            ) {
-                Column(Modifier.padding(Esp.m)) {
-                    Row(
-                        Modifier.fillMaxWidth().then(if (p != null) Modifier.clickable { alTocar(p); tocado = null } else Modifier),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (p != null) {
-                            NumeroParada(p.orden, TamNumero.FILA, estadoDe(p, siguiente = p.id == paradas.firstOrNull()?.id))
-                            Spacer(Modifier.width(Esp.m))
-                        }
-                        Text(tituloDe(t), style = MaterialTheme.typography.titleMedium, maxLines = if (p != null) 1 else 2,
-                            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                        if (p != null) {
-                            // La hora prevista, junto al nombre como en la fila («10:05 +8» en peligro si llega tarde).
-                            val tarde = p.pendiente && (p.tardeMin ?: 0) > 0
-                            if (p.pendiente && !p.eta.isNullOrBlank()) {
-                                Spacer(Modifier.width(Esp.s))
-                                Text(if (tarde) "${p.eta} +${p.tardeMin}" else p.eta, style = MaterialTheme.typography.labelMedium.merge(TextoNumero),
-                                    color = if (tarde) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        // Abajo, en una columna: la tarjeta de lo tocado y, debajo, la atribución (F3, 08-11-2026: a 16 del borde la tarjeta
+        // tapaba a medias «© OpenStreetMap», que tiene que verse siempre).
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+            // La tarjeta de lo tocado: radio 16, relleno 12, a 16 de los lados (antes a 84 del borde, por el flotante de escanear,
+            // que ya no está). En una parada, la cabecera lleva su número y la hora prevista, y tocarla abre su hoja (sale «Abrir»);
+            // la ✕ la cierra.
+            tocado?.let { t ->
+                val p = (t as? Tocado.Una)?.p
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.large, shadowElevation = 6.dp,
+                    modifier = Modifier.fillMaxWidth().padding(start = Esp.l, end = Esp.l, top = Esp.l),
+                ) {
+                    Column(Modifier.padding(Esp.m)) {
+                        Row(
+                            Modifier.fillMaxWidth().then(if (p != null) Modifier.clickable { alTocar(p); tocado = null } else Modifier),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (p != null) {
+                                NumeroParada(p.orden, TamNumero.FILA, estadoDe(p, siguiente = p.id == paradas.firstOrNull()?.id))
+                                Spacer(Modifier.width(Esp.m))
                             }
-                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                            Text(tituloDe(t), style = MaterialTheme.typography.titleMedium, maxLines = if (p != null) 1 else 2,
+                                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            if (p != null) {
+                                // La hora prevista, junto al nombre como en la fila («10:05 +8» en peligro si llega tarde).
+                                val tarde = p.pendiente && (p.tardeMin ?: 0) > 0
+                                if (p.pendiente && !p.eta.isNullOrBlank()) {
+                                    Spacer(Modifier.width(Esp.s))
+                                    Text(if (tarde) "${p.eta} +${p.tardeMin}" else p.eta, style = MaterialTheme.typography.labelMedium.merge(TextoNumero),
+                                        color = if (tarde) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                }
+                                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                            }
+                            BotonIcono(Icons.Default.Close, tx("Cerrar"), { tocado = null })
                         }
-                        BotonIcono(Icons.Default.Close, tx("Cerrar"), { tocado = null })
-                    }
-                    when (t) {
-                        is Tocado.Una -> TarjetaParada(t.p, enZbe = if (t.p.id in enZbe) tipoZona else "", alNavegar = { alNavegar(t.p) })
-                        is Tocado.Inc -> TarjetaIncidencia(t.i, fuente)
-                        is Tocado.Zona -> TarjetaZbe(t.z, tipoZona)
-                        Tocado.LaFurgo -> furgo?.let { f -> TarjetaFurgo(f, ubicacion.myLocation, alQuitar = { alQuitarFurgo(); tocado = null }) }
-                        is Tocado.Punto -> TarjetaPunto { alAparcarEn(t.lat, t.lng); tocado = null }
+                        when (t) {
+                            is Tocado.Una -> TarjetaParada(t.p, enZbe = if (t.p.id in enZbe) tipoZona else "", alNavegar = { alNavegar(t.p) })
+                            is Tocado.Inc -> TarjetaIncidencia(t.i, fuente)
+                            is Tocado.Zona -> TarjetaZbe(t.z, tipoZona)
+                            Tocado.LaFurgo -> furgo?.let { f -> TarjetaFurgo(f, ubicacion.myLocation, alQuitar = { alQuitarFurgo(); tocado = null }) }
+                            is Tocado.Punto -> TarjetaPunto { alAparcarEn(t.lat, t.lng); tocado = null }
+                        }
                     }
                 }
             }
+            Atribucion(tx("© OpenStreetMap"), Modifier.padding(Esp.s))
         }
     }
 }

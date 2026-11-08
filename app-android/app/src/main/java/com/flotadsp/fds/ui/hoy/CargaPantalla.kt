@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.flotadsp.fds.FdsApp
 import com.flotadsp.fds.data.ErrorApi
@@ -128,12 +129,22 @@ fun CargaPantalla(vm: RutaVM, alEscanear: () -> Unit, alCerrar: () -> Unit) {
             Surface(color = c.surfaceContainerLow) {
                 Column {
                     HorizontalDivider(color = c.outlineVariant)
-                    Row(Modifier.fillMaxWidth().padding(Esp.m).navigationBarsPadding(), horizontalArrangement = Arrangement.spacedBy(Esp.s),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        BotonPrincipal(tx("Escanear"), alEscanear, icono = Icons.Default.QrCodeScanner, tono = Tono.OK,
-                            nombre = tx("Escanear para cargar"), modifier = Modifier.weight(1f))
-                        BotonNormal(if (faltan > 0) tx("Salir ({n} faltan)", "n" to faltan) else tx("Todo cargado"), alCerrar,
-                            tono = Tono.NEUTRO, contorno = true)
+                    // F3, 08-11-2026: con la letra a 1,75 o más los dos botones no caben en una fila a 360 dp («Esc…»): uno debajo del otro.
+                    val escanear = tx("Escanear")
+                    val salir = if (faltan > 0) tx("Salir ({n} faltan)", "n" to faltan) else tx("Todo cargado")
+                    if (LocalDensity.current.fontScale >= 1.75f) {
+                        Column(Modifier.fillMaxWidth().padding(Esp.m).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(Esp.s)) {
+                            BotonPrincipal(escanear, alEscanear, icono = Icons.Default.QrCodeScanner, tono = Tono.OK,
+                                nombre = tx("Escanear para cargar"), modifier = Modifier.fillMaxWidth())
+                            BotonNormal(salir, alCerrar, tono = Tono.NEUTRO, contorno = true, modifier = Modifier.fillMaxWidth())
+                        }
+                    } else {
+                        Row(Modifier.fillMaxWidth().padding(Esp.m).navigationBarsPadding(), horizontalArrangement = Arrangement.spacedBy(Esp.s),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            BotonPrincipal(escanear, alEscanear, icono = Icons.Default.QrCodeScanner, tono = Tono.OK,
+                                nombre = tx("Escanear para cargar"), modifier = Modifier.weight(1f))
+                            BotonNormal(salir, alCerrar, tono = Tono.NEUTRO, contorno = true)
+                        }
                     }
                 }
             }

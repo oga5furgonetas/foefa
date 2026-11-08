@@ -457,7 +457,10 @@ private fun Guiando(
         }
 
         // De dónde salen los datos del mapa (OpenStreetMap, por OpenFreeMap): pequeño, sobre el panel de abajo.
-        Atribucion(tx("© OpenStreetMap · OpenMapTiles"), Modifier.align(Alignment.BottomStart).padding(start = Esp.s, bottom = panelDp + Esp.s)
+        // F3, 08-11-2026: con un hueco a la derecha para los botones (voz, mapa de fuera): a 360 dp con la letra a 2,0 la
+        // atribución llegaba hasta ellos y tapaba la mitad del botón del mapa.
+        Atribucion(tx("© OpenStreetMap · OpenMapTiles"),
+            Modifier.align(Alignment.BottomStart).padding(start = Esp.s, end = Esp.m + 48.dp + Esp.s, bottom = panelDp + Esp.s)
             .clickable { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.openstreetmap.org/copyright"))) } })
 
         // Los avisos de Hoy («Entregado · Deshacer», «No se ha podido guardar») también aquí: esta ventana taparía el

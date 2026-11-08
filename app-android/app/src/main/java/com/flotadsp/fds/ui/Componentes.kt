@@ -13,6 +13,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -186,7 +187,10 @@ private fun Modifier.nombre(n: String?): Modifier = if (n == null) this else sem
 /** El texto de un botón (§3.8): dos líneas como mucho y, si aun así no cabe, la letra baja hasta 12 antes que cortarse. */
 @Composable
 private fun TextoBoton(texto: String, estilo: TextStyle) {
-    Text(texto, style = estilo, maxLines = 2, textAlign = TextAlign.Center, overflow = TextOverflow.Ellipsis,
+    // F3, 08-11-2026: una sola palabra, en una sola línea (y la letra baja hasta que cabe): con dos líneas, «Entregado» a
+    // 360 dp con la letra a 2,0 se partía por dentro («Entrega» y «do»), porque autoSize da por bueno el tamaño más grande
+    // en el que el texto «cabe» en dos líneas aunque haya que cortar la palabra.
+    Text(texto, style = estilo, maxLines = if (texto.trim().contains(' ')) 2 else 1, textAlign = TextAlign.Center, overflow = TextOverflow.Ellipsis,
         autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = estilo.fontSize))
 }
 
@@ -201,13 +205,15 @@ fun Cabecera(
 ) {
     TopAppBar(
         title = {
+            // F3, 08-11-2026: el título va primero (sin peso) y el subtítulo se queda con lo que sobra: con la letra a 2,0 el
+            // subtítulo tomaba todo y «Hola, Ana» salía «Ho…» y «Mi ruta», «…» (con la flecha y tres iconos a 360 dp).
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(titulo, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.alignByBaseline().weight(1f, fill = false))
+                    modifier = Modifier.alignByBaseline())
                 if (!subtitulo.isNullOrBlank()) {
                     Spacer(Modifier.width(Esp.s))
                     Text(subtitulo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.alignByBaseline())
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.alignByBaseline().weight(1f, fill = false))
                 }
             }
         },
@@ -320,16 +326,36 @@ fun coloresCampo() = OutlinedTextFieldDefaults.colors(
  *  En las recogidas, «No recogido» / «Recogido». El texto pasa a dos líneas antes de cortarse. */
 @Composable
 fun FilaCierre(recogida: Boolean = false, alFallar: () -> Unit, alEntregar: () -> Unit, enabled: Boolean = true, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Esp.s)) {
-        OutlinedButton(
-            onClick = alFallar, enabled = enabled, shape = MaterialTheme.shapes.medium,
-            contentPadding = PaddingValues(horizontal = Esp.s, vertical = Esp.s),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-            modifier = Modifier.weight(1f).heightIn(min = Alto.principal),
-        ) { TextoBoton(if (recogida) tx("No recogido") else tx("No entregado"), MaterialTheme.typography.titleMedium) }
-        BotonPrincipal(if (recogida) tx("Recogido") else tx("Entregado"), alEntregar, icono = Icons.Default.Check, tono = Tono.OK,
-            enabled = enabled, modifier = Modifier.weight(1.2f))
+    val escala = LocalDensity.current.fontScale
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        // F3, 08-11-2026: con la letra muy grande en una pantalla estrecha «Entregado» no cabe en su botón (1,2 de 2,2 del ancho)
+        // ni con la letra al mínimo de 12 (a 360 dp con 2,0 salía «Entrega» y «do», o «Entreg…»): entonces, uno debajo del otro, a
+        // todo el ancho, como la web a 280. Ancho de la palabra a 12 sp ≈ 62 dp × la escala; el hueco del botón, lo que queda.
+        val apilar = escala * 62f > (maxWidth.value - Esp.s.value) * (1.2f / 2.2f) - 60f
+        val fallar: @Composable (Modifier) -> Unit = { m ->
+            OutlinedButton(
+                onClick = alFallar, enabled = enabled, shape = MaterialTheme.shapes.medium,
+                contentPadding = PaddingValues(horizontal = Esp.s, vertical = Esp.s),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                modifier = m.heightIn(min = Alto.principal),
+            ) { TextoBoton(if (recogida) tx("No recogido") else tx("No entregado"), MaterialTheme.typography.titleMedium) }
+        }
+        val entregar: @Composable (Modifier) -> Unit = { m ->
+            BotonPrincipal(if (recogida) tx("Recogido") else tx("Entregado"), alEntregar, icono = Icons.Default.Check, tono = Tono.OK,
+                enabled = enabled, modifier = m)
+        }
+        if (apilar) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Esp.s)) {
+                fallar(Modifier.fillMaxWidth())
+                entregar(Modifier.fillMaxWidth())
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Esp.s)) {
+                fallar(Modifier.weight(1f))
+                entregar(Modifier.weight(1.2f))
+            }
+        }
     }
 }
 
@@ -340,8 +366,8 @@ enum class TamNumero(val alto: Dp) { FILA(32.dp), GRANDE(40.dp), PAQUETE(80.dp) 
 
 enum class EstadoNumero { SIGUIENTE, PENDIENTE, HECHA, FALLIDA }
 
-/** La píldora con el número de parada: ancho mínimo igual al alto (crece con tres cifras), relleno 8 y 12 en el
- *  paquete encontrado (§3.2 no admite el 6 de §4; los mismos px-2 y px-3 de la web, 07-11-2026); cifra tabular.
+/** La píldora con el número de parada: ancho mínimo igual al alto (crece con tres cifras), relleno 4 y 12 en el
+ *  paquete encontrado (§4 pide 6, que §3.2 no admite: 4 deja caber dos cifras, 08-11-2026); cifra tabular.
  *  Siguiente, relleno de marca; pendiente, tinte de marca; hecha, chip neutro; fallida, tinte de peligro; sin número, «·». */
 @Composable
 fun NumeroParada(n: Int?, tam: TamNumero = TamNumero.FILA, estado: EstadoNumero = EstadoNumero.PENDIENTE, modifier: Modifier = Modifier) {
@@ -358,7 +384,10 @@ fun NumeroParada(n: Int?, tam: TamNumero = TamNumero.FILA, estado: EstadoNumero 
         TamNumero.GRANDE -> MaterialTheme.typography.titleLarge
         TamNumero.PAQUETE -> MaterialTheme.typography.displayMedium
     }.merge(TextoNumero)
-    val relleno = if (tam == TamNumero.PAQUETE) Esp.m else Esp.s
+    // F3, 08-11-2026: relleno 4 (no 8) en la fila y la siguiente: con 8, dos cifras ya ensanchaban la píldora (16 sp en
+    // negrita, 19 + 16 = 35 dp > 32) y el texto de las filas 10 a 16 quedaba 3 dp (8 con la letra a 1,3) más a la derecha que
+    // el de las filas 2 a 9; con 4 caben dos cifras en 32 y crece con tres, como pide §4.
+    val relleno = if (tam == TamNumero.PAQUETE) Esp.m else Esp.xs
     Box(modifier.heightIn(min = tam.alto).widthIn(min = tam.alto).background(fondo, CircleShape).padding(horizontal = relleno),
         contentAlignment = Alignment.Center) {
         Text(n?.toString() ?: "·", style = estilo, color = letra, maxLines = 1, softWrap = false)
@@ -438,10 +467,13 @@ fun Aviso(
     alCerrar: (() -> Unit)? = null, nombreCerrar: String = tx("Cerrar"), accion2: String? = null, alAccion2: () -> Unit = {},
     /** Líneas como mucho (07-11-2026, N6): la ficha enseña entero lo que dice de la etiqueta leída. */
     maxLineas: Int = 2,
+    /** La acción, en una segunda línea y no al lado del texto (F3, 08-11-2026): para un texto largo, que con la letra grande
+     *  se queda sin ancho al compartir la fila (el aviso de la IA de la hoja de la parada). */
+    accionAbajo: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val (fondo, letra) = tinteDe(tono)
-    val dosAcciones = accion != null && accion2 != null
+    val dosAcciones = (accion != null && accion2 != null) || (accion != null && accionAbajo)
     Surface(color = fondo, contentColor = letra, shape = MaterialTheme.shapes.medium,
         modifier = modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
         Column {
@@ -455,8 +487,8 @@ fun Aviso(
             }
             if (dosAcciones) {
                 Row(Modifier.fillMaxWidth().padding(start = Esp.xs, end = Esp.xs, bottom = Esp.xs), horizontalArrangement = Arrangement.End) {
-                    BotonTexto(accion, alAccion, tono = Tono.NEUTRO)
-                    BotonTexto(accion2, alAccion2, tono = Tono.NEUTRO)
+                    if (accion != null) BotonTexto(accion, alAccion, tono = Tono.NEUTRO)
+                    if (accion2 != null) BotonTexto(accion2, alAccion2, tono = Tono.NEUTRO)
                 }
             }
         }
@@ -749,20 +781,26 @@ fun notasDe(p: Parada): List<Nota> = listOfNotNull(
 internal fun sinPrefijo(frase: String): String =
     Regex("""\)\s*:\s*""").find(frase)?.let { frase.substring(it.range.last + 1) }?.takeIf { it.isNotBlank() } ?: frase
 
-/** La caja de notas de la puerta (tinte neutro, radio 8, relleno 8): cada dato con su icono de 16 y `texto`; en la
- *  tarjeta, dos líneas como mucho (`maxLines = 2`); en la hoja, entero. No pinta nada si no hay nada. */
+/** Los datos que enseña la caja: en la tarjeta (`maxLines` finito), los `maxLines` primeros; en la hoja (`Int.MAX_VALUE`), todos. */
+internal fun notasVisibles(notas: List<Nota>, maxLines: Int): List<Nota> = if (maxLines == Int.MAX_VALUE) notas else notas.take(maxLines)
+
+/** La caja de notas de la puerta (tinte neutro, radio 8): cada dato con su icono de 16 y `texto`. En la tarjeta
+ *  (`maxLines` finito), como en la web: los `maxLines` primeros datos, cada uno en UNA línea con «…», y 4 de relleno
+ *  arriba y abajo; en la hoja (`Int.MAX_VALUE`), entera y con 8. F3, 08-11-2026: antes cada dato podía ocupar dos líneas y la
+ *  tarjeta de «Hoy» medía 310 dp con las notas de 10-hoy (§5.1 d: 284 como mucho); así, 281. No pinta nada si no hay nada. */
 @Composable
 fun NotasPuerta(p: Parada, maxLines: Int = 2, modifier: Modifier = Modifier) {
     val notas = notasDe(p)
     if (notas.isEmpty()) return
     val c = MaterialTheme.colorScheme
+    val resumen = maxLines != Int.MAX_VALUE
     Surface(color = c.surfaceVariant, contentColor = c.onSurface, shape = MaterialTheme.shapes.small, modifier = modifier.fillMaxWidth()) {
-        Column(Modifier.padding(Esp.s), verticalArrangement = Arrangement.spacedBy(Esp.xs)) {
-            notas.forEach { n ->
+        Column(Modifier.padding(horizontal = Esp.s, vertical = if (resumen) Esp.xs else Esp.s), verticalArrangement = Arrangement.spacedBy(Esp.xs)) {
+            notasVisibles(notas, maxLines).forEach { n ->
                 Row(Modifier.semantics(mergeDescendants = true) { contentDescription = n.nombre }, verticalAlignment = Alignment.Top) {
                     Icon(n.icono, contentDescription = null, tint = c.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp).size(16.dp))
                     Spacer(Modifier.width(Esp.s))
-                    Text(n.texto, style = MaterialTheme.typography.bodyMedium, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+                    Text(n.texto, style = MaterialTheme.typography.bodyMedium, maxLines = if (resumen) 1 else Int.MAX_VALUE, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -902,7 +940,8 @@ fun Pastilla(
 fun Atribucion(texto: String, modifier: Modifier = Modifier) {
     val c = MaterialTheme.colorScheme
     Surface(color = c.surface.copy(alpha = 0.85f), contentColor = c.onSurface, shape = RoundedCornerShape(6.dp), modifier = modifier) {
-        Text(texto, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        // F3, 08-11-2026: hasta dos líneas (con la letra a 2,0 la atribución no cabe en una y debe verse entera).
+        Text(texto, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }
