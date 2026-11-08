@@ -293,16 +293,18 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
 
   // Las notas de la parada. LO QUE DICE EL CLIENTE VA APARTE Y PRIMERO (RW, 08-11-2026): el portal y el timbre son lo que hace
   // falta en la puerta y, al final de una línea cortada con «…» («Cobrar 24,50 € · Detrás · izq · 2 bultos · Medi…»), no se
-  // llegaba a leer. Va en su fila, con su icono, hasta en dos líneas. Debajo, lo demás en una línea: lo que se cobra primero
-  // (la línea se corta por el final) y la nota de la parada antes que lo que lleva. El dato con su icono, y lo que iba
-  // delante («Búscalo:», «El cliente dice:») solo para el lector de pantalla.
+  // llegaba a leer. Va en su fila, con su icono, hasta en dos líneas. Debajo, lo demás en una línea, que se corta por el final:
+  // lo que se cobra primero, luego la nota de la parada (el timbre) y, al final, lo demás: dónde va en la furgoneta, los
+  // bultos y lo que lleva. El dato con su icono, y lo que iba delante («Búscalo:», «El cliente dice:») solo para el lector
+  // de pantalla.
   const dice = parada ? textoClienteDice(parada.cliente_dice) : ''
   const antes = parada ? textoAntes(parada.antes) : ''
   const notas = !parada ? [] : [
     parada.cobrar > 0 && { icono: Banknote, texto: `${tx('Cobrar')} ${importe(parada.cobrar)}` },
+    parada.notas && { icono: StickyNote, texto: parada.notas },
     parada.hueco && { icono: Package, prefijo: tx('Búscalo: {sitio}', { sitio: '' }), texto: tx(parada.hueco) },
     parada.bultos > 1 && { texto: tx('{n} bultos', { n: parada.bultos }) },
-    (parada.notas || parada.contenido) && { icono: StickyNote, texto: [parada.notas, parada.contenido].filter(Boolean).join(' · ') },
+    parada.contenido && { texto: parada.contenido },
     antes && { icono: History, texto: antes },
   ].filter(Boolean)
   const instruccion = 'line-clamp-2 text-nombre'
@@ -409,7 +411,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
             {notas.length > 0 && (
               <p data-testid="guia-notas" className="mt-1 truncate text-texto text-dark-200" title={notas.map((n) => `${n.prefijo || ''}${n.texto}`).join(' · ')}>
                 {notas.map((n, i) => (
-                  <span key={n.texto}>
+                  <span key={`${i}-${n.texto}`}>
                     {i > 0 && ' · '}
                     {icono(n.icono, 14, 'mr-1 inline-block align-text-bottom')}
                     {n.prefijo && <span className="sr-only">{n.prefijo}</span>}

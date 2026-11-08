@@ -222,18 +222,21 @@ test('Compacto · la guía enseña lo que dice el cliente aparte y primero, hast
 
   const mirar = async (cuando) => {
     // Lo que dice el cliente, a la vista y entero (78 caracteres: caben en sus dos líneas).
-    const dice = nav.getByTestId('guia-dice')
-    await expect(dice, cuando).toBeVisible()
     const portal = await aLaVista(nav.getByText(/Portal: 4521/), 'Portal: 4521')
     expect(portal.ok, `${cuando}: ${portal.motivo}`).toBe(true)
+    const dice = nav.getByTestId('guia-dice')
+    await expect(dice, cuando).toBeVisible()
     const m = await dice.locator('span.line-clamp-2').evaluate((el) => ({ alto: el.getBoundingClientRect().height, linea: parseFloat(getComputedStyle(el).lineHeight), sobra: el.scrollHeight - el.clientHeight }))
     expect(m.alto, `${cuando}: lo que dice el cliente ocupa dos líneas`).toBeGreaterThan(m.linea * 1.5)
     expect(m.sobra, `${cuando}: lo que dice el cliente se corta`).toBeLessThanOrEqual(1)
-    // Va ANTES que el resto de las notas, y lo demás sigue en su línea (lo que se cobra primero, la nota de la parada antes que lo que lleva).
+    // Va ANTES que el resto de las notas, y lo demás sigue en su línea: lo que se cobra primero, la nota de la parada («Timbre 2º B»)
+    // antes que dónde va en la furgoneta y que lo que lleva, para que el timbre no se pierda al cortarse la línea por el final.
     const [cajaDice, cajaNotas] = await Promise.all([dice.boundingBox(), nav.getByTestId('guia-notas').boundingBox()])
     expect(cajaDice.y + cajaDice.height, `${cuando}: lo que dice el cliente, encima de las demás notas`).toBeLessThanOrEqual(cajaNotas.y + 0.5)
     await expect(nav.getByTestId('guia-notas')).toContainText('Cobrar 24,50 €')
     await expect(nav.getByTestId('guia-notas')).toContainText('Detrás · izq')
+    const timbre = await aLaVista(nav.getByTestId('guia-notas').getByText('Timbre 2º B'), 'Timbre 2º B')
+    expect(timbre.ok, `${cuando}: ${timbre.motivo}`).toBe(true)
     // El panel: de 165 a 225 y, con las dos líneas del cliente, una de más (leer el portal vale más que esos 225; §5.8 / §7.4).
     const caja = await panel.boundingBox()
     expect(caja.height, `${cuando}: el panel mide ${caja.height}`).toBeGreaterThanOrEqual(165)
