@@ -49,9 +49,19 @@ function ficherosKt(dir, out = []) {
 
 /** Los comentarios, en blanco (las líneas se conservan para dar el número bueno). */
 function sinComentarios(t) {
-  return t
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-    .replace(/(^|[^:"'\\])\/\/[^\n]*/g, (m, a) => a + ' '.repeat(m.length - a.length))
+  // 08-11-2026 (revisor de F1): salta las cadenas ("image/*" no abre un comentario) y deja en blanco solo los comentarios.
+  const out = t.split('')
+  const blanco = (a, b) => { for (let k = a; k < b; k++) if (out[k] !== '\n') out[k] = ' ' }
+  let i = 0
+  while (i < t.length) {
+    const c = t[i], d = t[i + 1]
+    if (c === '/' && d === '/') { let j = t.indexOf('\n', i); if (j < 0) j = t.length; blanco(i, j); i = j; continue }
+    if (c === '/' && d === '*') { let j = t.indexOf('*/', i + 2); j = j < 0 ? t.length : j + 2; blanco(i, j); i = j; continue }
+    if (c === '"' && t.startsWith('"""', i)) { const j = t.indexOf('"""', i + 3); i = j < 0 ? t.length : j + 3; continue }
+    if (c === '"' || c === "'") { let j = i + 1; while (j < t.length && t[j] !== c && t[j] !== '\n') j += t[j] === '\\' ? 2 : 1; i = j + 1; continue }
+    i++
+  }
+  return out.join('')
 }
 
 let mirados = 0

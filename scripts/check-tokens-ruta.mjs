@@ -54,7 +54,7 @@ const EXCEPCIONES = {
   'pages/driver/MisTurnos.jsx': [41, 'los turnos del portal: no se rediseñan'],
   'pages/driver/PedirDias.jsx': [101, 'pedir días libres, turnos del portal: no se rediseña'],
   'pages/driver/TrabajarMas.jsx': [45, 'turnos extra del portal: no se rediseñan'],
-  'pages/driver/InspectionFlow.jsx': [52, 'la auditoría de la furgoneta (fotos y km antes de salir): no se rediseña'],
+  'pages/driver/InspectionFlow.jsx': [98, 'la auditoría de la furgoneta (fotos y km antes de salir): no se rediseña'],
   'pages/driver/InspectionDone.jsx': [33, 'la auditoría de la furgoneta (resumen final): no se rediseña'],
   'pages/driver/Tienda.jsx': [113, 'la tienda de ropa es del dueño del producto (solo super-admin), no de la app de reparto'],
 }
@@ -71,7 +71,7 @@ function ficheros(dir, out = []) {
 /* [patrón sobre la clase, motivo, condición extra sobre el match, id] */
 const REGLAS = [
   [/^(?:[\w-]+:)*text-\[/, 'text-[…]: la letra y el color salen de los tokens (text-texto, text-ruta-ok…)'],
-  [/^(?:[\w-]+:)*(?:bg|border|text|ring|shadow|from|via|to|divide|outline|fill|stroke|decoration|accent|caret)-\[#/, 'color hex a mano: va como --r-* en index.css', null, 'hex'],
+  [/^(?:[\w-]+:)*(?:bg|border|text|ring|shadow|from|via|to|divide|outline|fill|stroke|decoration|accent|caret)-\[#/, 'color hex a mano: va como --r-* en index.css', null, 'hexclase'],
   [/#[0-9a-fA-F]{3,8}\b/, 'color hex a mano: va como --r-* en index.css', null, 'hex'],
   [/^(?:[\w-]+:)*rounded(?:-[trblse]{1,2})?-3xl$/, 'rounded-3xl: los radios son 4 · 8 · 12 · 16 · redondo (rounded, -lg, -xl, -2xl, -full)'],
   [/^(?:[\w-]+:)*-?[a-z]+(?:-[a-z]+)*-(\d+)\.5$/, 'espaciado *.5: solo 4 · 8 · 12 · 16 · 24 (0.5 vale entre dos líneas del mismo elemento)', (m) => m[1] !== '0'],
@@ -83,9 +83,16 @@ const REGLAS = [
 const DARK = /^(?:[\w-]+:)*text-dark-(?:500|600)(?:\/\d+)?$/
 
 /* Fuera los comentarios, conservando las líneas (para decir en cuál está cada fallo). */
-const sinComentarios = (s) => s
-  .replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '))
-  .replace(/(^|[^:\\])\/\/[^\n]*/g, '$1')
+// Quita los comentarios con el analizador de Babel (08-11-2026, revisor de F1): una expresión regular no sabe que la
+// apertura de comentario de accept="image/*" está dentro de una cadena, y se tragaba el código hasta el siguiente cierre.
+import { createRequire } from 'node:module'
+const { parse: parseJs } = createRequire(join(RAIZ, 'frontend', 'package.json'))('@babel/parser')   // sale de frontend/node_modules (npm ci)
+const sinComentarios = (s) => {
+  const out = s.split('')
+  for (const c of parseJs(s, { sourceType: 'module', plugins: ['jsx'], errorRecovery: true }).comments)
+    for (let k = c.start; k < c.end; k++) if (out[k] !== String.fromCharCode(10)) out[k] = ' '
+  return out.join('')
+}
 
 const CADENA = /'((?:\\.|[^'\\\n])*)'|"((?:\\.|[^"\\\n])*)"|`((?:\\.|[^`\\])*)`/g
 
