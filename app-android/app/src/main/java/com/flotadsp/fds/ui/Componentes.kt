@@ -917,7 +917,8 @@ fun Pastilla(
 fun Atribucion(texto: String, modifier: Modifier = Modifier) {
     val c = MaterialTheme.colorScheme
     Surface(color = c.surface.copy(alpha = 0.85f), contentColor = c.onSurface, shape = RoundedCornerShape(6.dp), modifier = modifier) {
-        Text(texto, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        // F3, 08-11-2026: hasta dos líneas (con la letra a 2,0 la atribución no cabe en una y debe verse entera).
+        Text(texto, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }
