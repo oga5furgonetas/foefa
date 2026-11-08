@@ -441,10 +441,13 @@ fun Aviso(
     alCerrar: (() -> Unit)? = null, nombreCerrar: String = tx("Cerrar"), accion2: String? = null, alAccion2: () -> Unit = {},
     /** Líneas como mucho (07-11-2026, N6): la ficha enseña entero lo que dice de la etiqueta leída. */
     maxLineas: Int = 2,
+    /** La acción, en una segunda línea y no al lado del texto (F3, 08-11-2026): para un texto largo, que con la letra grande
+     *  se queda sin ancho al compartir la fila (el aviso de la IA de la hoja de la parada). */
+    accionAbajo: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val (fondo, letra) = tinteDe(tono)
-    val dosAcciones = accion != null && accion2 != null
+    val dosAcciones = (accion != null && accion2 != null) || (accion != null && accionAbajo)
     Surface(color = fondo, contentColor = letra, shape = MaterialTheme.shapes.medium,
         modifier = modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
         Column {
@@ -458,8 +461,8 @@ fun Aviso(
             }
             if (dosAcciones) {
                 Row(Modifier.fillMaxWidth().padding(start = Esp.xs, end = Esp.xs, bottom = Esp.xs), horizontalArrangement = Arrangement.End) {
-                    BotonTexto(accion, alAccion, tono = Tono.NEUTRO)
-                    BotonTexto(accion2, alAccion2, tono = Tono.NEUTRO)
+                    if (accion != null) BotonTexto(accion, alAccion, tono = Tono.NEUTRO)
+                    if (accion2 != null) BotonTexto(accion2, alAccion2, tono = Tono.NEUTRO)
                 }
             }
         }

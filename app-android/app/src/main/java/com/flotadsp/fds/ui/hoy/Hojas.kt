@@ -456,11 +456,12 @@ private fun DatosHoja(p: Parada, alRepetirFoto: () -> Unit) {
     if (ia != null && ia.nivel == "verificada") FilaDato(Icons.Default.Verified, tx("Entrega verificada por IA"), tx("Entrega verificada por IA"))
     // LA ENTREGA VERIFICADA (01-11-2026): el aviso de la IA y, si pide revisarla, «Repetir la foto» (la parada sigue
     // entregada; el servidor vuelve a mirar la nueva).
-    // F3, 08-11-2026: el aviso de la IA entero (§6.3: lo que dice la foto se queda aunque sea largo); con las dos líneas de
-    // `Aviso` se cortaba con «…» a 411 dp («…con el número o la p…»).
+    // F3, 08-11-2026: el aviso de la IA entero (§6.3: lo que dice la foto se queda aunque sea largo): con las dos líneas de
+    // `Aviso` se cortaba con «…» a 411 dp («…con el número o la p…») y, con la acción al lado, también a 360 dp con la letra a
+    // 1,3 (necesita 7 líneas en media fila). Sin tope de líneas y con «Repetir la foto» debajo, a todo el ancho.
     if (avisoIa != null) Aviso(avisoIa, tono = Tono.AVISO, icono = Icons.Default.PhotoCamera,
-        accion = if (ia.nivel == "revisar") tx("Repetir la foto") else null, alAccion = alRepetirFoto, maxLineas = 6,
-        modifier = Modifier.padding(vertical = Esp.xs))
+        accion = if (ia.nivel == "revisar") tx("Repetir la foto") else null, alAccion = alRepetirFoto, maxLineas = Int.MAX_VALUE,
+        accionAbajo = true, modifier = Modifier.padding(vertical = Esp.xs))
     if (estrellas != null) FilaDato(Icons.Default.Star, estrellas, tx("Valoración del cliente: {e}", "e" to estrellas))
     if (motivo != null) FilaDato(Icons.Default.ErrorOutline, motivo, tx("Motivo: {x}", "x" to motivo))
 }
