@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { simularApi, entrarComoAdmin } from './api-simulada.js'
+import { hablaDePagos, detalleSinPagos, TEXTO_NEUTRO } from '../src/lib/plataforma.js'
 
 /* LA APP DE IPHONE NO MENCIONA NI VENDE NADA CON PAGOS (09-11-2026). Apple rechazó la 2.4.1 por la 2.1(b) («la app incluye
    referencias a suscripción pero los productos de compra dentro de la app no se han enviado») y por la 3.1.1 («usa códigos
@@ -36,7 +37,7 @@ const COMUN = [
 const BASICO = {
   es: [
     ['suscripción', /suscr/i],
-    ['plan', SOLO('planes?')],
+    ['plan', SOLO('plan(?:es)?')],     // «plan Repartidor», «tu plan», «Ver mi plan» y «planes» (antes solo casaba «planes»)
     ['prueba gratuita o con días', /prueba gratis|prueba gratuita|d[ií]as? de prueba|periodo de prueba|prueba con (?:tarjeta|google)|prueba terminada|prueba ha terminado|prueba empieza/i],
     ['promoción', /promo(?:ci[oó]n(?:es)?|cional(?:es)?)?(?![\p{L}])/iu],
     ['cupón', /cup[oó]n/i],
@@ -77,7 +78,7 @@ const BASICO = {
   ],
   fr: [
     ['abonnement', /abonn/i],
-    ['forfait o offre', SOLO('forfaits?|offres?')],
+    ['forfait, offre o plan', SOLO('forfaits?|offres?|plans?')],
     ['essai', SOLO('essais?|essai gratuit')],
     ['promo', /promo(?:tion|tionnel(?:le)?s?)?(?![\p{L}])|code (?:cadeau|promo)/iu],
     ['cadeau', /cadeau/i],
@@ -97,7 +98,7 @@ const BASICO = {
   ],
   de: [
     ['abo', /abonnement|(?<![\p{L}])abo(?![\p{L}])/iu],
-    ['tarif', SOLO('tarife?|tarifs?')],
+    ['tarif o plan', SOLO('tarife?|tarifs?|pl[aä]ne|plan')],
     ['test', /testphase|testtage?|testzeit|probezeit|probetage?|probe(?:abo|zeitraum)|gratis-test/i],
     ['promo', /promo(?:tion|aktion)?(?![\p{L}])|gutschein|aktionscode/iu],
     ['geschenk', /geschenk/i],
@@ -433,6 +434,7 @@ ${await lo(page)}`
 
 /* ── El error del tope al añadir una parada ────────────────────────────────────────────────────────────────────────────── */
 const MENSAJE_TOPE = 'Has llegado al tope de paradas gratis de hoy. Pasa a ilimitado en «Cuenta» o sigue mañana.'
+const GEMINI_429 = 'Se ha agotado la cuota gratuita de Gemini por hoy (20 peticiones/día). No es un fallo de la app: hay que subir el plan de la API en Google AI Studio. Mientras tanto, el análisis de daños de las inspecciones tampoco funcionará.'
 async function anadirParadaA(page, error) {
   await page.route(/\/api\/reparto\/mis-pedidos$/, (r) => r.fulfill({ status: error.status, json: { detail: error.detail } }))
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
@@ -448,6 +450,13 @@ const ERRORES = [
   ['403 («Has llegado al tope de paradas del plan gratis»)', { status: 403, detail: 'Has llegado al tope de paradas del plan gratis.' }, /tope de paradas del plan gratis/],
   ['402 con la prueba terminada («Suscríbete en «Cuenta»…»)', { status: 402, detail: 'Tu prueba gratis ha terminado. Suscríbete en «Cuenta» para seguir repartiendo.' }, /Suscríbete/],
   ['403 de otra función («Tu plan X no incluye esta función»)', { status: 403, detail: 'Tu plan Reparto no incluye esta función. Actualiza tu suscripción en /planes.' }, /no incluye esta función/],
+  // Frases REALES de backend/server.py que hablan del «plan» en singular o de la cuota (las que dejaba pasar la expresión vieja).
+  ['400 de la opinión («La opinión es para el plan Repartidor»)', { status: 400, detail: 'La opinión es para el plan Repartidor' }, /La opinión es para el plan Repartidor/],
+  ['400 de la invitación («La invitación es para el plan Repartidor»)', { status: 400, detail: 'La invitación es para el plan Repartidor' }, /La invitación es para el plan Repartidor/],
+  ['400 de la cartera («La cartera es para el plan Repartidor»)', { status: 400, detail: 'La cartera es para el plan Repartidor' }, /La cartera es para el plan Repartidor/],
+  ['400 «Plan no válido»', { status: 400, detail: 'Plan no válido' }, /Plan no válido/],
+  ['400 «Ya estás en ese plan»', { status: 400, detail: 'Ya estás en ese plan' }, /Ya estás en ese plan/],
+  ['429 de la cuota gratuita de Gemini', { status: 429, detail: GEMINI_429 }, /cuota gratuita de Gemini/],
 ]
 test.describe('iPhone · los errores del servidor que hablan del plan salen neutros', () => {
   test.use({ userAgent: UA_APP })
@@ -1015,3 +1024,147 @@ test.describe('iPhone · el mercadillo no habla de planes (los precios son los d
     expect(fallos).toEqual([])
   })
 })
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+   9. LOS ERRORES REALES DEL SERVIDOR: la red de seguridad de lib/plataforma.js (hablaDePagos, detalleSinPagos)
+   Apple rechazó la 2.4.1 por lo que la app DICE: un error del servidor que cuente planes, cuotas, regalos o la cartera, pintado en
+   una pantalla del iPhone, es una referencia más. La expresión de HABLA_DE_PAGOS sale de clasificar con ast los 1.219 mensajes de
+   HTTPException de backend/server.py (898 textos distintos). Aquí van los que importan, TAL CUAL los manda el servidor (con un
+   valor de ejemplo donde él pone un dato): los que se cambian por el texto neutro y los que NO (si no, la expresión se comería
+   un error legítimo: el cobro de un cliente en una entrega, el «plano» del parking, un enlace caducado…).
+   ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+const SE_NEUTRALIZAN = [
+  'Plan no válido', 'Ya estás en ese plan', 'Plan desconocido: oro', 'La opinión es para el plan Repartidor',
+  'La invitación es para el plan Repartidor', 'La cartera es para el plan Repartidor', 'Esta suscripción es para el plan Repartidor',
+  'Este regalo es para el plan Repartidor', GEMINI_429, 'Hoy has llegado al tope de gasto del Centro de IA (5.00 $). Mañana se reinicia.',
+  'Tu plan Reparto no incluye esta función. Actualiza tu suscripción en /planes.',
+  'Has llegado al tope de paradas gratis de hoy. Pasa a ilimitado en «Cuenta» o sigue mañana.',
+  'Has alcanzado el límite de centros de tu plan. Amplía tu suscripción para añadir más.',
+  'Para subir de plan hay que completar el pago. El plan se activa solo cuando el pago se confirma.',
+  'Modo demo: solo lectura. Crea tu cuenta gratis para editar.', 'La suscripción la contrata la propia empresa',
+  'Esta cuenta no tiene suscripción que pagar', 'Esa compra no es de nuestra suscripción', 'No encontramos ninguna suscripción con ese correo',
+  'El pago con tarjeta no está configurado todavía', 'No se ha podido abrir el pago. Inténtalo en un minuto.',
+  'El cobro con tarjeta no está activo todavía (falta la clave de Stripe)', 'Stripe no responde ahora mismo. Inténtalo en un momento.',
+  'Google Play no reconoce esa compra', 'El cobro con Google Play no está configurado todavía', 'Los regalos los compra la propia cuenta',
+  'Se puede regalar 1 mes o 1 año', 'Ese regalo ha caducado', 'Ese regalo ya se ha usado', 'El regalo va de 0,01 a 50 € por cuenta',
+  'Los enlaces de invitación son de cada cuenta', 'No se pudo crear tu enlace de invitación. Inténtalo de nuevo.',
+  'El programa de invitaciones no está disponible en tu país', '«Invita y gana» no está disponible en tu país', 'La cartera es de cada cuenta',
+  'La cartera individual solo está disponible en una cuenta real de conductor', 'Tu saldo ha cambiado: vuelve a abrir la cartera',
+  'Ya tienes una retirada en revisión: espera a que te la paguemos', 'Fuera de España se cobra por PayPal', 'Elige Bizum, transferencia o PayPal',
+  'Esa retirada ya no está pendiente',
+]
+const SE_ENSENAN = [
+  'Usuario o contraseña incorrectos', 'Correo/usuario o contraseña incorrectos', 'Email o contraseña incorrectos', 'Se requiere autenticación',
+  'Tu sesión ha caducado: entra otra vez', 'Token inválido: Signature has expired', 'El enlace no es válido o ha caducado. Solicita uno nuevo.',
+  'El enlace no es válido o ha caducado. Pide a la oficina que lo envíe de nuevo.', 'El código no es válido o ha caducado. Solicita uno nuevo.',
+  'Este acceso ya no está disponible. Solicita un código por correo.', 'El enlace ha caducado. Entra con tu correo y tu contraseña.',
+  'Este enlace ha caducado. Pídele uno nuevo a la oficina.', 'La contraseña debe tener al menos 8 caracteres', 'Ese usuario ya existe, elige otro',
+  'Demasiados intentos fallidos. Espera 5 minutos.', 'Escribe un correo válido.', 'Ese email ya está en uso por otra cuenta',
+  'Ya hay un conductor activo con el correo ana@correo.es.', 'La matrícula 1234 ABC ya está dada de alta.',
+  'Pega el plan de la semana desde el portal', 'Di cómo ha pagado: efectivo, tarjeta, Bizum, Pix o transferencia',
+  'El Bizum es un móvil español de 9 cifras', 'Pon un importe válido, en euros', 'La plaza A12 no existe en el plano de NORTE',
+  'Indica un centro concreto para ver su plano', 'Hemos recibido muchas candidaturas hoy. Prueba mañana.',
+  'Ya nos llego tu candidatura para esta oferta. Gracias.', 'Esta oferta ya no esta disponible', 'Es para hoy: avisa a la oficina directamente',
+  'Tu ficha no tiene centro: habla con la oficina', 'Cuenta un poco de qué va: quien lo aprueba necesita saberlo',
+  'Ese numero no parece correcto. Escribelo con los 9 digitos.', 'No se ha podido mandar el correo ahora mismo. Inténtalo en unos minutos.',
+  'Esa foto no se puede abrir. Prueba con otra (JPG o PNG).', 'Has subido muchas fotos hoy. Prueba mañana.', 'Escribe una pregunta',
+  'El asistente no ha podido responder, prueba en un minuto', 'Esa prenda ya no está a la venta', 'Ese anuncio ya no está a la venta',
+  'Puedes tener 5 anuncios a la vez. Marca alguno como vendido o quítalo.', 'No tienes la jornada empezada', 'La foto es demasiado grande',
+  'Falta la oferta', 'Ese centro ya existe', 'Has mandado 5 correos en la ultima hora: espera un poco',
+]
+const EN_OTROS_IDIOMAS = [
+  'You exceeded your current quota, please check your plan and billing details.', 'Choose a plan', 'Your plans have changed',
+  'Votre plan a expiré', 'Ihre Pläne', 'Il tuo piano è scaduto', 'Unlimited stops',
+]
+
+/** Lo que haría `fn` con la app de iPhone (window.Capacitor 'ios') y luego deja el entorno como estaba. */
+function conIPhone(fn) {
+  const antes = globalThis.window
+  globalThis.window = { Capacitor: { isNativePlatform: () => true, getPlatform: () => 'ios' } }
+  try { return fn() } finally { if (antes === undefined) delete globalThis.window; else globalThis.window = antes }
+}
+const enElIPhone = (mensaje, status = 400) => conIPhone(() => detalleSinPagos({ detail: mensaje }, status).detail)
+
+test.describe('la red de seguridad de los errores del servidor (lib/plataforma.js)', () => {
+  test('los mensajes reales del plan, la cuota, los pagos, los regalos y la cartera se cambian por el texto neutro', () => {
+    const sueltos = SE_NEUTRALIZAN.filter((m) => !hablaDePagos(m))
+    expect(sueltos, `se le escapan al iPhone: ${sueltos.join(' | ')}`).toEqual([])
+    const sinCambiar = SE_NEUTRALIZAN.filter((m) => enElIPhone(m) !== TEXTO_NEUTRO)
+    expect(sinCambiar, `la respuesta del servidor sigue diciéndolo: ${sinCambiar.join(' | ')}`).toEqual([])
+  })
+
+  test('los errores legítimos salen tal cual (credenciales, validaciones, enlaces caducados, el cobro de un cliente, el plano del parking…)', () => {
+    const comidos = SE_ENSENAN.filter((m) => hablaDePagos(m))
+    expect(comidos, `la expresión se come errores legítimos: ${comidos.join(' | ')}`).toEqual([])
+    const cambiados = SE_ENSENAN.filter((m) => enElIPhone(m) !== m)
+    expect(cambiados, `el iPhone los cambia: ${cambiados.join(' | ')}`).toEqual([])
+  })
+
+  test('«plan» en singular y en plural, en los idiomas de la app, y la cuota o la factura que llegue de fuera', () => {
+    const sueltos = EN_OTROS_IDIOMAS.filter((m) => !hablaDePagos(m))
+    expect(sueltos, `se le escapan al iPhone: ${sueltos.join(' | ')}`).toEqual([])
+    for (const m of ['plan', 'Plan', 'tu plan', 'Ver mi plan', 'planes', 'Planes', 'plans', 'Plans']) expect(hablaDePagos(m), m).toBe(true)
+    for (const m of ['planificar la ruta', 'explanada', 'planta baja', 'Plantilla de turnos', 'el plano del almacén', 'la cuenta es correcta']) expect(hablaDePagos(m), m).toBe(false)
+  })
+
+  test('cualquier 402 sale neutro en el iPhone, y solo en el iPhone', () => {
+    expect(enElIPhone('Tu cuenta no puede continuar', 402)).toBe(TEXTO_NEUTRO)
+    expect(enElIPhone('Tu cuenta no puede continuar', 400)).toBe('Tu cuenta no puede continuar')
+    expect(enElIPhone('Tu cuenta no puede continuar', 403)).toBe('Tu cuenta no puede continuar')
+    expect(detalleSinPagos({ detail: 'Tu cuenta no puede continuar' }, 402).detail, 'sin el iPhone no se cambia nada').toBe('Tu cuenta no puede continuar')
+    for (const m of SE_NEUTRALIZAN) expect(detalleSinPagos({ detail: m }, 400).detail, `sin el iPhone: ${m}`).toBe(m)
+  })
+})
+
+const OPINION_400 = 'La opinión es para el plan Repartidor'
+for (const [titulo, ios] of [['iPhone', true], ['control · web', false]]) {
+  test.describe(`${titulo} · el error real del servidor, en la pantalla donde se pinta`, () => {
+    if (ios) test.use({ userAgent: UA_APP })
+
+    test('Cuenta · «Mándanos una idea»: 400 «La opinión es para el plan Repartidor»', async ({ page }) => {
+      const fallos = vigilar(page)
+      let envios = 0
+      await appDelRepartidor(page, { ios, estado: 'prueba' })
+      await page.route(/\/api\/opinion$/, (r) => { envios += 1; return r.fulfill({ status: 400, json: { detail: OPINION_400 } }) })
+      await irACuenta(page)
+      await page.getByRole('button', { name: /Mándanos una idea/ }).click()
+      await page.getByRole('textbox', { name: 'Mándanos una idea' }).fill('Que se vea el mapa más grande')
+      await page.getByRole('button', { name: 'Enviar', exact: true }).click()
+      const aviso = page.getByRole('alert').filter({ hasText: /plan Repartidor|No se ha podido completar/ })
+      await expect(aviso).toBeVisible()
+      expect(envios, 'la idea no llegó a mandarse al servidor').toBe(1)
+      if (ios) {
+        await expect(aviso).toHaveText(TEXTO_NEUTRO)
+        await limpia(page, 'la idea con el error del servidor')
+      } else {
+        await expect(aviso).toHaveText(OPINION_400)
+      }
+      expect(fallos).toEqual([])
+    })
+
+    test('el asistente «FDS IA» del panel: 429 de la cuota gratuita de Gemini', async ({ page }) => {
+      test.setTimeout(60000)
+      const fallos = vigilar(page)
+      let preguntas = 0
+      await panel(page, ios)
+      await page.route(/\/api\/ai\/asistente\/historial/, (r) => r.fulfill({ json: { mensajes: [] } }))
+      await page.route(/\/api\/ai\/asistente$/, (r) => { preguntas += 1; return r.fulfill({ status: 429, json: { detail: GEMINI_429 } }) })
+      await page.goto('/panel', { waitUntil: 'domcontentloaded' })
+      await expect(TITULO_DEL_PANEL(page)).toBeVisible({ timeout: 15000 })
+      await page.getByRole('button', { name: 'FDS IA' }).click()
+      const pregunta = page.getByPlaceholder('Escribe tu pregunta…')
+      await pregunta.fill('¿Qué ITV caducan este mes?')
+      await pregunta.press('Enter')
+      const aviso = page.getByText(/cuota gratuita de Gemini|No se ha podido completar/).last()
+      await expect(aviso).toBeVisible()
+      expect(preguntas, 'la pregunta no llegó al servidor').toBe(1)
+      if (ios) {
+        await expect(aviso).toHaveText(TEXTO_NEUTRO)
+        await limpia(page, 'el asistente con la cuota agotada', { perfil: 'basico' })
+      } else {
+        await expect(aviso).toHaveText(GEMINI_429)
+      }
+      expect(fallos).toEqual([])
+    })
+  })
+}

@@ -21,8 +21,14 @@ export const sinPagos = () => esAppIOS()
 
 /* Lo que cuenta el servidor de planes, pruebas, topes, regalos o invitaciones («Has llegado al tope de paradas gratis de hoy.
    Pasa a ilimitado en «Cuenta»…»). Dentro de la app de iPhone no se enseña: se cambia por un texto neutro (txError, de
-   lib/idioma.js, y el interceptor de services/api.js para los sitios que pintan `detail` tal cual). */
-const HABLA_DE_PAGOS = /suscr|subscri|\bplanes?\b|gratis|ilimitad|tope de paradas|stripe|\bregalos?\b|cup[oó]n|promo|\bbono\b|invita y gana|programa de invitaciones|pago con tarjeta|abrir el pago|«Cuenta»/i
+   lib/idioma.js, y el interceptor de services/api.js para los sitios que pintan `detail` tal cual).
+   Sale de clasificar los 1.219 mensajes de HTTPException de backend/server.py (con ast, no con expresiones regulares): cada
+   pieza está ahí porque un mensaje real la necesita, y ningún error legítimo (credenciales, validaciones, enlaces caducados,
+   el «plano» del parking, el cobro a un cliente de una entrega…) casa con ellas. El servidor habla en español: `plans`,
+   `Pläne`, `piano`, `quota` y `billing` cubren lo que pudiera llegar de fuera (Stripe, Google AI…) o en otro idioma. No
+   entra `plano(s)` (portugués) porque es el plano del parking en español; ni `plan de la semana` (WHC), que es un aviso de
+   horas. La prueba que lo vigila es e2e/ios-sin-pagos.spec.js («los mensajes reales del servidor»). */
+const HABLA_DE_PAGOS = /suscr|subscri|\bplan(?:es|s)?\b(?! de la semana)|\bpl[aä]ne\b|\bpian[oi]\b|gratis|gratuit|cuota|quota|billing|ilimitad|unlimited|\btope\b|stripe|paypal|google play|\bregal(?:o|os|ar|ad[oa]s?)\b|cup[oó]n|promo|\bbonos?\b|cartera|impago|\bretirada\b|prueba (?:gratis|gratuita|de \d|ha |terminad)|d[ií]as? de prueba|pago con tarjeta|abrir el pago|invita y gana|programa de invitaciones|enlaces? de invitaci[oó]n|«Cuenta»/i
 export const hablaDePagos = (texto) => typeof texto === 'string' && HABLA_DE_PAGOS.test(texto)
 export const TEXTO_NEUTRO = 'No se ha podido completar. Inténtalo de nuevo más tarde.'
 /** `data` de una respuesta de error del servidor: en el iPhone, el `detail` que hable de pagos (o cualquier 402) pasa a neutro. */

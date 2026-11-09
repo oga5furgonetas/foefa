@@ -55,7 +55,8 @@ export default function OpinionCorreo() {
       await opinionCorreoEnviar({ o, t, texto, ...(usa ? { valor: nota || undefined } : { motivo: motivo || undefined }) })
       setHecho(true)
     } catch (e) {
-      setErr(txError(e?.response?.data, 'No se ha podido enviar. Inténtalo otra vez.'))
+      // El error entero (no solo su `data`): en el iPhone txError mira también el código HTTP (cualquier 402 sale neutro).
+      setErr(txError(e, 'No se ha podido enviar. Inténtalo otra vez.'))
     } finally { setOcupado(false) }
   }
 
