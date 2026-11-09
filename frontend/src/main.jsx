@@ -369,9 +369,11 @@ function AppRedirect() {
 /* LO QUE SOLO EXISTE EN LA WEB (09-11-2026). Dentro de la app de iPhone la portada, los planes y precios, el regalo de
    suscripciones, la invitación con premio, la suscripción a avisos de empleo, la tienda de ropa y las demás páginas que
    venden o promocionan algo no existen: Apple rechazó la 2.4.1 por 2.1(b) y 3.1.1 (docs/APP_STORE.md). Quien llegue a una de
-   ellas (un enlace, el logo de una página legal) va a la app del repartidor. En la web y en Android, todo igual. */
-function SoloWeb({ children }) {
-  return sinPagos() ? <Navigate to="/ruta" replace /> : children
+   ellas (un enlace, el logo de una página legal) va a la app del repartidor (`a`: o a otro sitio, como el panel). Lo mismo
+   con las pantallas del dueño del producto (negocio, planes y cobros, tienda de ropa, gastos, analítica), que solo ve el
+   super-admin. En la web y en Android, todo igual. */
+function SoloWeb({ children, a = '/ruta' }) {
+  return sinPagos() ? <Navigate to={a} replace /> : children
 }
 
 /* Mientras se descarga el trozo de una pantalla. En la app del repartidor, con su papel (o el oscuro) y el cian
@@ -491,10 +493,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <Route path="origen-danos" element={<PanelOrigenDanos />} />
                 <Route path="importaciones" element={<PanelImportaciones />} />
                 <Route path="configuracion" element={<PanelConfiguracion />} />
-                <Route path="tienda" element={<PanelTienda />} />
-                <Route path="admin" element={<PanelNegocio />} />
-                <Route path="analitica" element={<PanelAnalitica />} />
-                <Route path="gastos" element={<PanelGastos />} />
+                <Route path="tienda" element={<SoloWeb a="/panel"><PanelTienda /></SoloWeb>} />
+                <Route path="admin" element={<SoloWeb a="/panel"><PanelNegocio /></SoloWeb>} />
+                <Route path="analitica" element={<SoloWeb a="/panel"><PanelAnalitica /></SoloWeb>} />
+                <Route path="gastos" element={<SoloWeb a="/panel"><PanelGastos /></SoloWeb>} />
                 <Route path="usuarios" element={<PanelUsuarios />} />
                 <Route path="perfil" element={<PanelPerfil />} />
                 <Route path="portal-conductor" element={<PanelPortalConductor />} />

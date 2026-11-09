@@ -281,6 +281,16 @@ const ESCENARIOS = [
   { nombre: 'Cuenta · con la promoción «gratis y sin límite» y la cartera de invitaciones', ancla: CUENTA,
     montar: (page, ios) => appDelRepartidor(page, { ios, estado: 'promo', referido: REFERIDO }), ver: irACuenta,
     web: [/Gratis sin límite/, /no tienes tope de paradas ni pagas nada/, /Bono de bienvenida/, /Regalo: 10 € ya en tu saldo/, /Promoción hasta el 31 de diciembre/] },
+  { nombre: 'Cuenta · cambiar correo, cambiar contraseña, borrar la cuenta y cerrar sesión', ancla: CUENTA,
+    montar: (page, ios) => appDelRepartidor(page, { ios, estado: 'prueba', referido: REFERIDO }), ver: irACuenta,
+    despues: async (page, ios, donde) => {
+      for (const [boton, cierra] of [['Cambiar correo', 'Cancelar'], ['Cambiar contraseña', 'Cancelar'], ['Borrar mi cuenta', 'Cancelar'], ['Cerrar sesión', 'Cancelar']]) {
+        await page.getByRole('button', { name: boton, exact: true }).click()
+        await quieta(page, 250)
+        await limpia(page, `${donde} · «${boton}»`)
+        await page.getByRole('button', { name: cierra, exact: true }).first().click()
+      }
+    } },
   { nombre: 'Cuenta · con el mercadillo abierto', ancla: CUENTA,
     montar: (page, ios) => appDelRepartidor(page, { ios, estado: 'prueba', merc: { visible: true, sin_leer: 2 } }), ver: irACuenta },
 
@@ -295,9 +305,22 @@ const ESCENARIOS = [
     montar: (page, ios) => appDelRepartidor(page, { ios, estado: 'tope' }), ver: irAHoy,
     web: [/Gratis: 15 paradas al día/, /Quitar el tope/] },
   { nombre: 'Hoy · con paradas: la línea «Invita y gana» al final de la lista', ancla: SIGUIENTE,
-    montar: (page, ios) => appDelRepartidor(page, { ios, estado: 'promo', referido: SIN_PREMIOS,
+    montar: (page, ios) => appDelRepartidor(page, { ios, estado: 'promo', referido: SIN_PREMIOS, ruta: { puede_pegar: true },
       pedidos: [parada(1, 'pendiente'), parada(2, 'pendiente'), parada(3, 'pendiente')] }), ver: irAHoy,
-    web: [/Gana 10 € por cada compañero que la use/, /Mi cartera/, /Promo hasta el 31 de diciembre/] },
+    web: [/Gana 10 € por cada compañero que la use/, /Mi cartera/, /Promo hasta el 31 de diciembre/],
+    despues: async (page, ios, donde) => {
+      if (!ios) return
+      await page.getByRole('button', { name: /Ver la parada \d+: Cliente 2/ }).click()
+      await quieta(page, 300)
+      await limpia(page, `${donde} · la hoja de una parada`)
+      await page.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).first().click()
+      await page.getByRole('button', { name: 'Añadir paradas' }).click()
+      await quieta(page, 300)
+      await limpia(page, `${donde} · «Añadir paradas»`)
+      await page.getByRole('dialog', { name: 'Añadir paradas' }).getByRole('button', { name: 'Lista u hoja' }).click()
+      await quieta(page, 300)
+      await limpia(page, `${donde} · pegar una lista`)
+    } },
   { nombre: 'Hoy · el bono de bienvenida de la primera ruta real (y sus condiciones)', ancla: SIGUIENTE,
     montar: (page, ios) => appDelRepartidor(page, { ios, estado: 'prueba', referido: REFERIDO, ruta: { bono: BONO },
       pedidos: [parada(1, 'pendiente'), parada(2, 'pendiente')] }), ver: irAHoy,
@@ -377,10 +400,13 @@ test.describe('iPhone · la app del repartidor no menciona ni vende nada con pag
   for (const e of ESCENARIOS) {
     test(e.nombre, async ({ page }) => {
       const fallos = vigilar(page)
+      let cuentas = 0
+      page.on('response', (r) => { if (/\/api\/org\/billing/.test(r.url())) cuentas += 1 })
       await e.montar(page, true)
       await e.ver(page)
       await expect(anclaDe(page, e.ancla), `la pantalla «${e.nombre}» no se pintó`).toBeVisible()
       await quieta(page)
+      expect(cuentas, 'la app no pidió el estado de la cuenta: este escenario no mediría nada').toBeGreaterThan(0)
       await limpia(page, e.nombre)
       if (e.despues) await e.despues(page, true, e.nombre)
       await limpia(page, `${e.nombre} (tras abrir lo que se abre)`)
@@ -884,18 +910,20 @@ test.describe('control · los textos legales de la web siguen con su suscripció
 /* ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
    7. EL PANEL DE LA EMPRESA dentro de la app: ni la prueba, ni el plan, ni el pago
    ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
-async function panel(page, ios) {
-  await entrarComoAdmin(page)
+async function panel(page, ios, { superAdmin = false } = {}) {
+  await entrarComoAdmin(page, { superAdmin })
   await simularApi(page, 'lleno')
   await arrancar(page, { ios })
   await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { status: 'trial', days_left: 5, required: false, plan: 'completo', sector: 'mensajeria', precios: { mensual: 9.99, anual: 99 } } }))
   await page.route(/\/api\/billing\/config/, (r) => r.fulfill({ json: { provider: 'stripe', ready: true, pago_en_app: true, planes: ['completo'], checkout: {} } }))
   await page.route(/\/api\/billing\/uso/, (r) => r.fulfill({ json: { en_flota: 40, colaboradores: 2, campana: 1, pagadas: 38, desfase: 2 } }))
 }
+// El título de la pantalla, dentro del contenido principal: el texto suelto casaba antes con el menú (escondido en el móvil).
+const TITULO_DEL_PANEL = (page) => page.locator('main h1').first()
 const PANEL = [
-  { nombre: 'la portada del panel con el aviso de la prueba', ruta: '/panel', ancla: /Mi día|Buenos|Buenas|Hola|Dashboard|Inicio/, web: [/Prueba gratis/i, /5 días/, /Pasar a Pro/] },
-  { nombre: 'la configuración con el plan y la suscripción', ruta: '/panel/configuracion', ancla: /Configuración/, web: [/Plan y suscripción/, /Ver planes/, /Estado:/] },
-  { nombre: 'el perfil con la facturación', ruta: '/panel/perfil', ancla: /Perfil|Mi cuenta|Cambiar contraseña|Contraseña/i, web: [/Lemon Squeezy/] },
+  { nombre: 'la portada del panel con el aviso de la prueba', ruta: '/panel', ancla: TITULO_DEL_PANEL, web: [/Prueba gratis/i, /5 días/, /Pasar a Pro/] },
+  { nombre: 'la configuración con el plan y la suscripción', ruta: '/panel/configuracion', ancla: TITULO_DEL_PANEL, web: [/Plan y suscripción/, /Ver planes/, /Estado:/] },
+  { nombre: 'el perfil con la facturación', ruta: '/panel/perfil', ancla: TITULO_DEL_PANEL, web: [/Lemon Squeezy/] },
 ]
 test.describe('iPhone · el panel de la empresa', () => {
   test.use({ userAgent: UA_APP })
@@ -905,7 +933,7 @@ test.describe('iPhone · el panel de la empresa', () => {
       const fallos = vigilar(page)
       await panel(page, true)
       await page.goto(e.ruta, { waitUntil: 'domcontentloaded' })
-      await expect(page.getByText(e.ancla).first()).toBeVisible({ timeout: 15000 })
+      await expect(anclaDe(page, e.ancla)).toBeVisible({ timeout: 15000 })
       await quieta(page, 1500)
       await limpia(page, e.nombre, { perfil: 'basico' })
       expect(fallos).toEqual([])
@@ -918,6 +946,19 @@ test.describe('iPhone · el panel de la empresa', () => {
     await expect(page.getByText('Bienvenido de nuevo')).toBeVisible()
     await quieta(page)
     await limpia(page, 'el acceso del panel', { perfil: 'basico' })
+  })
+  test('las pantallas del dueño del producto (negocio, tienda, analítica, gastos) no existen: llevan al panel y no están en el menú', async ({ page }) => {
+    test.setTimeout(60000)
+    const fallos = vigilar(page)
+    await panel(page, true, { superAdmin: true })
+    for (const ruta of ['/panel/admin', '/panel/tienda', '/panel/analitica', '/panel/gastos']) {
+      await page.goto(ruta, { waitUntil: 'domcontentloaded' })
+      await expect(page).not.toHaveURL(new RegExp(`${ruta}$`))
+      await expect(page.getByRole('link', { name: /Negocio|Super-admin|Gastos|Cómo va el negocio|Ropa|Tienda/ })).toHaveCount(0)
+      await quieta(page, 900)
+      await limpia(page, `${ruta} lleva al panel`, { perfil: 'basico' })
+    }
+    expect(fallos).toEqual([])
   })
   test('la ficha de una furgoneta, sin «cómo se factura»', async ({ page }) => {
     test.setTimeout(60000)
@@ -934,12 +975,21 @@ test.describe('iPhone · el panel de la empresa', () => {
   })
 })
 test.describe('control · el panel de la web sigue con su prueba, su plan y su facturación', () => {
+  test('y el super-admin sigue con su negocio, su analítica y sus gastos', async ({ page }) => {
+    test.setTimeout(60000)
+    await panel(page, false, { superAdmin: true })
+    for (const ruta of ['/panel/admin', '/panel/analitica', '/panel/gastos']) {
+      await page.goto(ruta, { waitUntil: 'domcontentloaded' })
+      await quieta(page, 1500)
+      expect(new URL(page.url()).pathname, `la web ya no abre ${ruta}`).toBe(ruta)
+    }
+  })
   for (const e of PANEL) {
     test(e.nombre, async ({ page }) => {
       test.setTimeout(60000)
       await panel(page, false)
       await page.goto(e.ruta, { waitUntil: 'domcontentloaded' })
-      await expect(page.getByText(e.ancla).first()).toBeVisible({ timeout: 15000 })
+      await expect(anclaDe(page, e.ancla)).toBeVisible({ timeout: 15000 })
       await quieta(page, 1500)
       const texto = await lo(page)
       for (const re of e.web) expect(texto, `el panel de la web ya no enseña ${re} en «${e.nombre}»`).toMatch(re)

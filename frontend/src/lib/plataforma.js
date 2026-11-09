@@ -22,7 +22,7 @@ export const sinPagos = () => esAppIOS()
 /* Lo que cuenta el servidor de planes, pruebas, topes, regalos o invitaciones («Has llegado al tope de paradas gratis de hoy.
    Pasa a ilimitado en «Cuenta»…»). Dentro de la app de iPhone no se enseña: se cambia por un texto neutro (txError, de
    lib/idioma.js, y el interceptor de services/api.js para los sitios que pintan `detail` tal cual). */
-const HABLA_DE_PAGOS = /suscr|subscri|\bplanes?\b|gratis|ilimitad|\btope\b|stripe|\bregalos?\b|cup[oó]n|promo|\bbono\b|invita y gana|programa de invitaciones|pago con tarjeta|abrir el pago|«Cuenta»/i
+const HABLA_DE_PAGOS = /suscr|subscri|\bplanes?\b|gratis|ilimitad|tope de paradas|stripe|\bregalos?\b|cup[oó]n|promo|\bbono\b|invita y gana|programa de invitaciones|pago con tarjeta|abrir el pago|«Cuenta»/i
 export const hablaDePagos = (texto) => typeof texto === 'string' && HABLA_DE_PAGOS.test(texto)
 export const TEXTO_NEUTRO = 'No se ha podido completar. Inténtalo de nuevo más tarde.'
 /** `data` de una respuesta de error del servidor: en el iPhone, el `detail` que hable de pagos (o cualquier 402) pasa a neutro. */

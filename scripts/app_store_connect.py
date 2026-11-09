@@ -226,10 +226,9 @@ def cmd_revision(telefono: str = ""):
     usuario, clave = fichero.read_text(encoding="utf-8").splitlines()[:2]
     notas = ("App para repartidores autónomos: escanea los paquetes (cámara), ordena la ruta por tiempo y guía parada a parada. "
              "Para probar: entrar con la cuenta de prueba y, en la pantalla de la ruta, pulsar «Ver un ejemplo» (carga una ruta "
-             "de muestra con 3 paradas). No hay compras dentro de la app: el plan de pago se contrata solo en la web.\n\n"
+             "de muestra con 3 paradas).\n\n"
              "App for independent couriers: scan parcel labels (camera), sort the route by driving time and navigate stop by stop. "
-             "To test: log in with the demo account and tap \"See an example\" on the route screen (it loads a sample route with 3 stops). "
-             "There are no in-app purchases: the paid plan is only sold on the website.")
+             "To test: log in with the demo account and tap \"See an example\" on the route screen (it loads a sample route with 3 stops).")
     attrs = {"contactFirstName": "Daniel", "contactLastName": "Lampon Vieites", "contactEmail": "dlvieites19@gmail.com",
              "demoAccountName": usuario, "demoAccountPassword": clave, "demoAccountRequired": True, "notes": notas}
     if telefono:

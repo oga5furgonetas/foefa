@@ -20,6 +20,7 @@ import MenuMovil from './components/MenuMovil'
 import EquipoEnLinea from './components/EquipoEnLinea'
 import { useT, LANGS } from '../i18n'
 import { usePlan } from '../lib/usePlan'
+import { sinPagos } from '../lib/plataforma'
 import { voces } from '../lib/sector'
 import { vigilarVersion, recargarCuandoNadieMira } from '../lib/versionApp'
 import { MARCA } from '../marca'
@@ -557,8 +558,8 @@ export default function PanelLayout() {
     if (k === 'centro-ia') return esPlataforma()
     if (!moduloOk(k)) return false
     if (k === 'vencimientos') return EXPIRY_KEYS.some((ek) => canSee(ek))
-    // La tienda de ropa es del negocio de FlotaDSP, no de la flota del cliente.
-    if (k === 'tienda' && !esPlataforma()) return false
+    // La tienda de ropa es del negocio de FlotaDSP, no de la flota del cliente (y en la app de iPhone no existe, 09-11-2026).
+    if (k === 'tienda' && (!esPlataforma() || sinPagos())) return false
     // Las órdenes de taller van con Talleres: quien puede ver los talleres
     // puede ver lo que está en ellos. Sin esto, `canSee('ordenes')` es false
     // para todo el que tenga permisos definidos —el permiso no existe en
@@ -600,7 +601,7 @@ export default function PanelLayout() {
     if (k === 'ordenes') return canSee('talleres')
     if (k === 'estado-flota') return canSee('vehiculos')
     if (k === 'admin' || k === 'bandeja' || k === 'analitica' || k === 'gastos') return sa
-    if (k === 'tienda' && !esPlataforma()) return false
+    if (k === 'tienda' && (!esPlataforma() || sinPagos())) return false
     if (k === 'usuarios') return sa || cm
     return canSee(k)
   }
@@ -608,7 +609,8 @@ export default function PanelLayout() {
     return <Navigate to={flatItems[0] ? flatItems[0].to : '/panel/perfil'} replace />
   }
 
-  const showAdmin = sa
+  // Las pantallas del dueño del producto (negocio, planes y cobros, analítica, gastos) no existen en la app de iPhone (09-11-2026).
+  const showAdmin = sa && !sinPagos()
 
   function doLogout() {
     logout()
