@@ -59,6 +59,8 @@
      causa y reprográmala en un hueco libre. Y nada de PNG en TikTok: usa el `.jpg` de cada pieza (el 06-11 falló
      «funciones» por eso). Desde el 08-11, Instagram también con `.jpg` (el carrusel C en PNG dio «Fatal»; en JPEG
      salió). Si un Instagram de las 12:00 da ERROR, la ronda de las 12:51 lo reprograma ese mismo día a las 13:00.
+     Si el ERROR dice «Could not refresh … accessToken» (09-11, TikTok), la red se ha desconectado de Metricool: no
+     sirve reintentar; avisa a Dani (reconectar en Metricool) y, cuando vuelva, reprograma los que fallaron.
    - **Si no hay conector:** no publiques en ningún sitio ni lo simules. Prepara como mucho UNA pieza nueva
      (`cd frontend && node ../scripts/redes-fotos.mjs` con una idea del final de TEXTO.md, y su texto en TEXTO.md)
      solo si hay menos de 6 piezas sin publicar.
