@@ -180,7 +180,7 @@ async def test_ninguna_otra_via_le_manda_correos_a_la_cuenta_del_iphone(mundo, m
     assert "luis@x.es" in para(), "el control no recibió nada: la prueba no mide"
     assert "ana@x.es" not in para(), f"a la cuenta del iPhone le han llegado correos: {[e['asunto'] for e in mundo.enviados if e['para'] == 'ana@x.es']}"
     assert mundo.resend == []
-    ana = await mundo.g["organizations"].find_one({"email": "ana@x.es"})
+    ana = await mundo.g["organizations"].find_one({"slug": "ana-1234"})
     assert "ciclo_correos" not in ana and "primer_dia_correo_en" not in ana
 
 

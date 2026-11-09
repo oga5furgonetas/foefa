@@ -26,8 +26,8 @@ export const sinPagos = () => esAppIOS()
    pieza está ahí porque un mensaje real la necesita, y ningún error legítimo (credenciales, validaciones, enlaces caducados,
    el «plano» del parking, el cobro a un cliente de una entrega…) casa con ellas. El servidor habla en español: `plans`,
    `Pläne`, `piano`, `quota` y `billing` cubren lo que pudiera llegar de fuera (Stripe, Google AI…) o en otro idioma. No
-   entra `plano(s)` (portugués) porque es el plano del parking en español; ni `plan de la semana` (WHC), que es un aviso de
-   horas. La prueba que lo vigila es e2e/ios-sin-pagos.spec.js («los mensajes reales del servidor»). */
+   entra `plano(s)` (portugués) porque es el plano del parking en español; ni `plan de la semana` (WHC: el plan semanal de
+   horas que se pega desde el portal). La prueba que lo vigila es e2e/ios-sin-pagos.spec.js («los mensajes reales del servidor»). */
 const HABLA_DE_PAGOS = /suscr|subscri|\bplan(?:es|s)?\b(?! de la semana)|\bpl[aä]ne\b|\bpian[oi]\b|gratis|gratuit|cuota|quota|billing|ilimitad|unlimited|\btope\b|stripe|paypal|google play|\bregal(?:o|os|ar|ad[oa]s?)\b|cup[oó]n|promo|\bbonos?\b|cartera|impago|\bretirada\b|prueba (?:gratis|gratuita|de \d|ha |terminad)|d[ií]as? de prueba|pago con tarjeta|abrir el pago|invita y gana|programa de invitaciones|enlaces? de invitaci[oó]n|«Cuenta»/i
 export const hablaDePagos = (texto) => typeof texto === 'string' && HABLA_DE_PAGOS.test(texto)
 export const TEXTO_NEUTRO = 'No se ha podido completar. Inténtalo de nuevo más tarde.'
