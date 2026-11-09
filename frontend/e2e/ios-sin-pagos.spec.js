@@ -880,6 +880,24 @@ const LEGALES = [
   ['/encargo', /Encargo|Processing/, /suscripción|subscription|Stripe/],
   ['/contacto', /Contacto|Contact/, null],
 ]
+/* Lo que aún quedaba en los textos legales del iPhone tras la primera pasada (revisión del 09-11-2026): lo que paga el cliente
+   (§8 de los términos), la facturación (la política de privacidad), el acceso «gratuito» (el aviso legal) y «Google Play services»
+   (el geocodificador de Android, en las listas de mapas de privacidad, seguridad y encargo). */
+const RESTOS_LEGALES = [
+  ['el importe pagado por el cliente', /importe pagado|amount paid/i],
+  ['la facturación', /factura|billing/i],
+  ['el acceso gratuito', /gratuito|\bis free\b/i],
+  ['Google Play', /Google Play/i],
+]
+// Lo que la web SÍ dice (el control): por página, lo de cada idioma.
+const EN_LA_WEB = [
+  ['/terminos', [/limitada al importe pagado por el cliente/, /limited to the amount paid by the customer/]],
+  ['/privacidad', [/contraseña \(en hash\), datos de facturación/, /password \(hashed\), billing details/]],
+  ['/privacidad', [/Google Play services/, /Google Play services/]],
+  ['/aviso-legal', [/El acceso a la página web pública es gratuito/, /Access to the public website is free/]],
+  ['/seguridad', [/Google Play services/, /Google Play services/]],
+  ['/encargo', [/Google Play services/, /Google Play services/]],
+]
 for (const [idioma, locale] of [['es', 'es-ES'], ['en', 'en-GB']]) {
   test.describe(`iPhone · los textos legales (${locale})`, () => {
     test.use({ userAgent: UA_APP, locale })
@@ -891,7 +909,8 @@ for (const [idioma, locale] of [['es', 'es-ES'], ['en', 'en-GB']]) {
         await page.goto(ruta, { waitUntil: 'domcontentloaded' })
         await expect(page.getByRole('heading', { level: 1 }).first()).toContainText(titulo)
         await quieta(page)
-        await limpia(page, `${ruta} en ${locale}`, { idioma, perfil: 'basico' })
+        const texto = await limpia(page, `${ruta} en ${locale}`, { idioma, perfil: 'basico' })
+        for (const [nombre, re] of RESTOS_LEGALES) expect(texto, `${ruta} en ${locale}: en el iPhone aún sale ${nombre}`).not.toMatch(re)
         expect(fallos).toEqual([])
       })
     }
@@ -903,6 +922,24 @@ for (const [idioma, locale] of [['es', 'es-ES'], ['en', 'en-GB']]) {
     })
   })
 }
+test.describe('control · los textos legales de la web siguen con el importe pagado, la facturación, el acceso gratuito y Google Play services', () => {
+  for (const [idioma, locale] of [['es', 'es-ES'], ['en', 'en-GB']]) {
+    test.describe(`(${locale})`, () => {
+      test.use({ locale })
+      for (const [ruta, [esperadoEs, esperadoEn]] of EN_LA_WEB) {
+        const esperado = idioma === 'es' ? esperadoEs : esperadoEn
+        test(`${ruta}: ${esperado.source.slice(0, 40)}`, async ({ page }) => {
+          await simularApi(page, 'vacio')
+          await arrancar(page, { ios: false })
+          await page.goto(ruta, { waitUntil: 'domcontentloaded' })
+          await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
+          await quieta(page, 600)
+          expect(await lo(page)).toMatch(esperado)
+        })
+      }
+    })
+  }
+})
 test.describe('control · los textos legales de la web siguen con su suscripción, su prueba y su «Invita y gana»', () => {
   for (const [ruta, , esperado] of LEGALES.filter((x) => x[2])) {
     test(ruta, async ({ page }) => {

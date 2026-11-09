@@ -84,7 +84,7 @@ export default function TermsEn() {
       <p>The software, brand, design and code of the Service are the property of {COMPANY.legalName}. The customer keeps ownership of the data and photographs it uploads, and grants {COMPANY.brand} a limited licence to host and process them for the sole purpose of providing the Service (including AI analysis and anonymised model improvement).</p>
 
       <h2>8. Limitation of liability</h2>
-      <p>To the maximum extent permitted by law, {COMPANY.brand} shall not be liable for indirect damages, loss of profit, loss of data or third-party claims arising from the use of the Service. Aggregate liability is limited to the amount paid by the customer in the 12 months preceding the event giving rise to the claim.</p>
+      <p>To the maximum extent permitted by law, {COMPANY.brand} shall not be liable for indirect damages, loss of profit, loss of data or third-party claims arising from the use of the Service. Aggregate liability is limited to {sinPagos() ? 'the maximum extent permitted by law.' : 'the amount paid by the customer in the 12 months preceding the event giving rise to the claim.'}</p>
 
       <h2>9. Suspension and termination</h2>
       <p>{COMPANY.brand} may suspend or cancel accounts that breach these terms{sinPagos() ? '' : ', fail to pay subscriptions,'} or in the event of fraudulent activity. Notice will be given by email where possible.</p>

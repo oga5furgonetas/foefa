@@ -87,7 +87,7 @@ export default function Terminos() {
       <p>El software, marca, diseño y código del Servicio son propiedad de {COMPANY.legalName}. El cliente conserva la titularidad de los datos y fotografías que sube, y otorga a {COMPANY.brand} una licencia limitada para alojarlos y procesarlos con el único fin de prestar el Servicio (incluido el análisis IA y la mejora anonimizada del modelo).</p>
 
       <h2>8. Limitación de responsabilidad</h2>
-      <p>En la máxima medida permitida por la ley, {COMPANY.brand} no responderá por daños indirectos, lucro cesante, pérdida de datos o reclamaciones de terceros derivadas del uso del Servicio. La responsabilidad agregada quedará limitada al importe pagado por el cliente en los 12 meses anteriores al hecho que motive la reclamación.</p>
+      <p>En la máxima medida permitida por la ley, {COMPANY.brand} no responderá por daños indirectos, lucro cesante, pérdida de datos o reclamaciones de terceros derivadas del uso del Servicio. La responsabilidad agregada quedará limitada {sinPagos() ? 'al máximo que permita la ley.' : 'al importe pagado por el cliente en los 12 meses anteriores al hecho que motive la reclamación.'}</p>
 
       <h2>9. Suspensión y baja</h2>
       <p>{COMPANY.brand} podrá suspender o cancelar cuentas que incumplan estos términos{sinPagos() ? '' : ', que impaguen suscripciones,'} o ante actividad fraudulenta. Se notificará por email cuando sea posible.</p>

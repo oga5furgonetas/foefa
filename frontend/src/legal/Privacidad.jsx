@@ -29,7 +29,7 @@ export default function Privacidad() {
 
       <h2>2. Datos que tratamos</h2>
       <ul>
-        <li><strong>Cuenta de cliente (empresa):</strong> nombre de la empresa, nombre y apellidos del titular, correo electrónico, contraseña (en hash), datos de facturación.</li>
+        <li><strong>Cuenta de cliente (empresa):</strong> nombre de la empresa, nombre y apellidos del titular, correo electrónico, contraseña (en hash){sinPagos() ? '.' : ', datos de facturación.'}</li>
         <li><strong>Conductores dados de alta por el cliente:</strong> nombre, correo, teléfono, DNI (si lo aporta), centro/estación, fotografía de perfil (opcional).</li>
         <li><strong>Vehículos:</strong> matrícula, marca, modelo, VIN, kilometraje, fechas de ITV y renting, documentos.</li>
         <li><strong>Inspecciones:</strong> fotografías del vehículo, fecha y hora, análisis de la IA (daños detectados), comentarios.</li>
@@ -41,7 +41,7 @@ export default function Privacidad() {
         {!sinPagos() && <li><strong>Programa «Invita y gana»:</strong> quién invitó a quién, el saldo de la cartera y, si pides cobrarlo, el nombre del titular y el teléfono de Bizum, el IBAN o el email de PayPal. En la cartera individual del portal guardamos también el identificador del conductor, su email de empresa y la empresa asociada a su enlace. Para evitar trampas guardamos una huella cifrada de la red desde la que se crea cada cuenta (no la dirección IP), que solo sirve para comparar dos altas.</li>}
       </ul>
       <p>No recogemos categorías especiales de datos (salud, ideología, etc.). La ubicación solo existe en el módulo de reparto y solo en jornada: fuera de ella no se guarda ningún punto.</p>
-      <p><strong>Quién decide sobre cada dato.</strong> De los datos de la propia cuenta (la empresa, su titular, la facturación) somos responsables. De los datos que la empresa mete de <em>sus</em> personas —conductores, empleados y, en el reparto, sus clientes— la responsable es la empresa y {COMPANY.brand} es su <strong>encargado del tratamiento</strong>, según el <a href="/encargo">Acuerdo de Encargo del Tratamiento</a>.{!sinPagos() && <> La cartera individual de referidos es una función separada gestionada por {COMPANY.brand}; la empresa no ve el saldo ni los datos de cobro del conductor.</>} Si eres conductor o cliente de una de esas empresas, dirígete a ella para ejercer tus derechos sobre los datos de su servicio; te ayudaremos a atenderlos.</p>
+      <p><strong>Quién decide sobre cada dato.</strong> De los datos de la propia cuenta {sinPagos() ? '(la empresa y su titular)' : '(la empresa, su titular, la facturación)'} somos responsables. De los datos que la empresa mete de <em>sus</em> personas —conductores, empleados y, en el reparto, sus clientes— la responsable es la empresa y {COMPANY.brand} es su <strong>encargado del tratamiento</strong>, según el <a href="/encargo">Acuerdo de Encargo del Tratamiento</a>.{!sinPagos() && <> La cartera individual de referidos es una función separada gestionada por {COMPANY.brand}; la empresa no ve el saldo ni los datos de cobro del conductor.</>} Si eres conductor o cliente de una de esas empresas, dirígete a ella para ejercer tus derechos sobre los datos de su servicio; te ayudaremos a atenderlos.</p>
 
       <h2>3. Finalidades y base jurídica</h2>
       <ul>

@@ -110,6 +110,10 @@ export const MAP_SERVICES = [
     purpose: 'Solo si el de FOSSGIS no contesta: lo mismo que a él (solo coordenadas, sin nombres ni teléfonos)', country: 'no consta dónde está',
     purposeEn: 'Only if the FOSSGIS one does not answer: the same as it (coordinates only, no names or phones)', countryEn: 'its location is not stated' },
 ]
+  // En la app de iPhone (09-11-2026) no sale «Google Play services»: es el componente de Android que da el geocodificador, y
+  // otra tienda de apps no se nombra en la app de Apple (docs/APP_STORE.md). La web y Android, igual.
+  .map((p) => (sinPagos() && /Google Play services/.test(p.name)
+    ? { ...p, name: p.name.replace(', Google Play services', ''), nameEn: p.nameEn.replace(', Google Play services', '') } : p))
 
 // Las frases que van con las listas (03-11-2026), las mismas en las tres páginas: cada una, cierta para CADA línea.
 export const LEGAL_NOTES = {

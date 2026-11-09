@@ -21,7 +21,7 @@ export default function PrivacyEn() {
 
       <h2>2. Data we process</h2>
       <ul>
-        <li><strong>Customer account (company):</strong> company name, name and surname of the account holder, email, password (hashed), billing details.</li>
+        <li><strong>Customer account (company):</strong> company name, name and surname of the account holder, email, password (hashed){sinPagos() ? '.' : ', billing details.'}</li>
         <li><strong>Drivers registered by the customer:</strong> name, email, phone, ID document (if provided), depot/station, profile photo (optional).</li>
         <li><strong>Vehicles:</strong> registration plate, make, model, VIN, mileage, inspection and leasing dates, documents.</li>
         <li><strong>Inspections:</strong> photographs of the vehicle, date and time, AI analysis (detected damage), comments.</li>
@@ -33,7 +33,7 @@ export default function PrivacyEn() {
         {!sinPagos() && <li><strong>“Invite and earn” programme:</strong> who invited whom, the wallet balance and, if you request a payout, the holder’s name and the Bizum phone number, the IBAN or the PayPal email. In the individual wallet of the driver portal we also store the driver identifier, their company email and the company linked to their link. To prevent cheating we store an encrypted fingerprint of the network from which each account is created (not the IP address), used only to compare two sign-ups.</li>}
       </ul>
       <p>We do not collect special categories of data (health, ideology, etc.). Location exists only in the delivery module and only during the working day: outside it, no point is stored.</p>
-      <p><strong>Who decides about each piece of data.</strong> We are the controller of the data of the account itself (the company, its holder, billing). For the data the company enters about <em>its</em> people (drivers, employees and, in deliveries, its customers) the company is the controller and {COMPANY.brand} is its <strong>processor</strong>, under the <a href="/encargo">Data Processing Agreement</a>.{!sinPagos() && <> The individual referral wallet is a separate feature run by {COMPANY.brand}; the company does not see the driver’s balance or payout details.</>} If you are a driver or a customer of one of those companies, contact it to exercise your rights over the data of its service; we will help it respond.</p>
+      <p><strong>Who decides about each piece of data.</strong> We are the controller of the data of the account itself {sinPagos() ? '(the company and its holder)' : '(the company, its holder, billing)'}. For the data the company enters about <em>its</em> people (drivers, employees and, in deliveries, its customers) the company is the controller and {COMPANY.brand} is its <strong>processor</strong>, under the <a href="/encargo">Data Processing Agreement</a>.{!sinPagos() && <> The individual referral wallet is a separate feature run by {COMPANY.brand}; the company does not see the driver’s balance or payout details.</>} If you are a driver or a customer of one of those companies, contact it to exercise your rights over the data of its service; we will help it respond.</p>
 
       <h2>3. Purposes and legal basis</h2>
       <ul>
