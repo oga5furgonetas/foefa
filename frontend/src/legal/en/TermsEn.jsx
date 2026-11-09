@@ -1,5 +1,6 @@
 import LegalLayout from '../LegalLayout'
 import { COMPANY } from '../config'
+import { sinPagos } from '../../lib/plataforma'
 
 /* The Terms and Conditions in English (30-10-2026, outside Spain): the same content as legal/Terminos.jsx, which is
    the version that applies. Keep both in step. */
@@ -24,8 +25,11 @@ export default function TermsEn() {
       <h2>4. Artificial Intelligence — scope and limits</h2>
       <p><strong>AI-generated analyses are automated assistance and do not replace human review.</strong> {COMPANY.brand} does not guarantee that the detection of damage, severity or estimated cost is accurate in every case. The customer is responsible for validating the results before using them in disputes with third parties (workshops, drivers, insurers, etc.).</p>
       <p>The Service is under active development and improves continuously. The corrections and validations made by users (anonymised and aggregated) help to calibrate and refine the system over time. {COMPANY.brand} does not guarantee a specific level of AI accuracy, but undertakes to progressively improve the quality of the analysis.</p>
-      <p><strong>Founding customers’ advantage:</strong> customers who contract the Service during its initial phase get priority access to new features and AI improvements before other users.</p>
+      {!sinPagos() && <p><strong>Founding customers’ advantage:</strong> customers who contract the Service during its initial phase get priority access to new features and AI improvements before other users.</p>}
 
+      {/* In the iPhone app (09-11-2026) the subscription, trial, payments, gifts, “Invite and earn” and bonus clauses (sections 5,
+          5 bis and 5 ter) are not shown: nothing is sold or promoted there (docs/APP_STORE.md). The web is unchanged. */}
+      {!sinPagos() && <>
       <h2>5. Subscription, trial and payments</h2>
       <ul>
         <li>Sign-up includes a free trial of <strong>14 days</strong> (<strong>7 days</strong> on the Courier plan).</li>
@@ -57,8 +61,9 @@ export default function TermsEn() {
         <li>The driver may request payment from <strong>€60</strong>, in their own name, by Bizum or transfer in Spain and by PayPal in the countries where it is available. The request is reviewed manually and normally resolved within 7 working days. If it is rejected for wrong details, the balance returns to the wallet; if fraud is confirmed, it may be cancelled.</li>
         <li>The driver is responsible for providing a payment method of their own and for declaring the income where applicable. We may ask for the tax information needed before paying. The company email identifies the wallet but is not in itself the payment method.</li>
       </ul>
+      </>}
 
-      <h2 id="mercadillo">5 quater. Couriers’ marketplace</h2>
+      <h2 id="mercadillo">{sinPagos() ? '5. ' : '5 quater. '}Couriers’ marketplace</h2>
       <ul>
         <li><strong>What it is.</strong> A board inside the app and the driver portal where couriers with an account can list things of their own they no longer use and talk to each other by private messages. It is strictly between private individuals: professional sales, shops and resale are not allowed.</li>
         <li><strong>{COMPANY.brand} is not a party to the sale.</strong> It does not sell, does not buy, charges no commission, takes no part in payment or delivery and does not guarantee the items. The deal is between the seller and the buyer, who agree the price, the payment and the handover. We recommend meeting in person, checking the item before paying and never paying in advance.</li>
@@ -82,7 +87,7 @@ export default function TermsEn() {
       <p>To the maximum extent permitted by law, {COMPANY.brand} shall not be liable for indirect damages, loss of profit, loss of data or third-party claims arising from the use of the Service. Aggregate liability is limited to the amount paid by the customer in the 12 months preceding the event giving rise to the claim.</p>
 
       <h2>9. Suspension and termination</h2>
-      <p>{COMPANY.brand} may suspend or cancel accounts that breach these terms, fail to pay subscriptions, or in the event of fraudulent activity. Notice will be given by email where possible.</p>
+      <p>{COMPANY.brand} may suspend or cancel accounts that breach these terms{sinPagos() ? '' : ', fail to pay subscriptions,'} or in the event of fraudulent activity. Notice will be given by email where possible.</p>
 
       <h2>10. Data protection</h2>
       <p>The processing of personal data is governed by the <a href="/privacidad">Privacy Policy</a>. The data the customer enters about its employees, drivers or customers is processed by us as a <strong>processor</strong> under the <a href="/encargo">Data Processing Agreement</a>, which forms part of these terms and is accepted with them.</p>

@@ -3,6 +3,7 @@ import CookiesEn from './en/CookiesEn'
 import { useIdioma } from '../lib/idioma'
 import { COMPANY } from './config'
 import { hayPixel, abrirAvisoCookies } from '../lib/metaPixel'
+import { sinPagos } from '../lib/plataforma'
 
 /* 02-11-2026 (revisiones del servidor y de la app): con el permiso de los píxeles nuestro servidor también avisa a Meta
    (API de conversiones, backend/meta_capi.py) con el correo cifrado, y aquí se decía «sin tu correo ni tus datos de
@@ -27,15 +28,16 @@ export default function Cookies() {
           <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>flota_token</code></td><td>Mantener tu sesión iniciada</td><td>Hasta cerrar sesión</td><td>Necesaria</td></tr>
           <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>flota_admin</code>, <code>flota_inicio</code></td><td>Recordar tu cuenta, tus permisos y en qué pantalla se abre la app</td><td>Hasta cerrar sesión</td><td>Necesaria</td></tr>
           <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>panel_tab</code>, <code>panel_center</code></td><td>Recordar tu pestaña y centro activo</td><td>Hasta limpiar el navegador</td><td>Preferencia</td></tr>
-          <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>flota_plan</code></td><td>Recordar el plan elegido durante el registro</td><td>Sesión</td><td>Necesaria</td></tr>
+          {!sinPagos() && <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>flota_plan</code></td><td>Recordar el plan elegido durante el registro</td><td>Sesión</td><td>Necesaria</td></tr>}
           <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>cookie_consent</code></td><td>Recordar que has visto este aviso{hayPixel() ? ' y lo que elegiste' : ''}</td><td>12 meses</td><td>Necesaria</td></tr>
           {hayPixel() && <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>_fbp</code>, <code>_fbc</code> (Meta)</td><td>Medir los anuncios de Facebook e Instagram: visitas, altas, pruebas y suscripciones (con el alta, también desde nuestro servidor)</td><td>3 meses</td><td>Marketing (solo si aceptas)</td></tr>}
           {hayPixel() && <tr><td className="py-1.5"><code>_ttp</code>, <code>_tt_enable_cookie</code>, <code>ttcsid</code> (TikTok)</td><td>Medir los anuncios de TikTok: visitas, altas, pruebas y suscripciones</td><td>Hasta 13 meses</td><td>Marketing (solo si aceptas)</td></tr>}
         </tbody>
       </table>
 
-      <h2>3. Cookies de terceros</h2>
-      <p>Durante el proceso de pago serás redirigido a <strong>Stripe</strong>, que puede establecer sus propias cookies necesarias para procesar el pago. Consulta su política en <a href="https://stripe.com/es/privacy" target="_blank" rel="noreferrer">stripe.com/es/privacy</a>.</p>
+      {/* En la app de iPhone (09-11-2026) no hay proceso de pago ni Stripe: la sección de terceros solo sale con los píxeles (nunca en la app). */}
+      {(!sinPagos() || hayPixel()) && <h2>3. Cookies de terceros</h2>}
+      {!sinPagos() && <p>Durante el proceso de pago serás redirigido a <strong>Stripe</strong>, que puede establecer sus propias cookies necesarias para procesar el pago. Consulta su política en <a href="https://stripe.com/es/privacy" target="_blank" rel="noreferrer">stripe.com/es/privacy</a>.</p>}
       {hayPixel() && <>
         <p>Si aceptas la medición de anuncios, <strong>desde tu navegador</strong>, <strong>Meta Platforms Ireland</strong> y <strong>TikTok Technology Limited</strong> (Irlanda) reciben a través de sus píxeles la página visitada y los eventos (alta, prueba, suscripción, regalo).</p>
         <p>Con ese mismo permiso, si te das de alta para repartir por tu cuenta, <strong>desde nuestro servidor</strong> (la API de conversiones de Meta) comunicamos a <strong>Meta</strong> tu alta, la primera vez que entras en la app y tu primera ruta, durante los 30 días siguientes al alta. Con cada uno van tu correo cifrado (SHA-256), tu dirección IP, tu navegador, un identificador cifrado de tu cuenta y las cookies <code>_fbp</code> y <code>_fbc</code>. Nunca tu nombre ni tu teléfono, ni las direcciones o los clientes de tus entregas: de tu reparto, solo que has hecho la primera ruta. A TikTok no le mandamos nada desde el servidor.</p>

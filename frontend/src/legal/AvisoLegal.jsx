@@ -2,6 +2,7 @@ import LegalLayout, { legalEnIngles } from './LegalLayout'
 import LegalNoticeEn from './en/LegalNoticeEn'
 import { useIdioma } from '../lib/idioma'
 import { COMPANY } from './config'
+import { sinPagos } from '../lib/plataforma'
 
 export default function AvisoLegal() {
   useIdioma()
@@ -27,7 +28,7 @@ export default function AvisoLegal() {
       <p>{COMPANY.brand} es una plataforma web (SaaS) para la gestión de flotas de vehículos de reparto, conductores e inspecciones, con análisis automático de imágenes mediante inteligencia artificial. Va dirigida exclusivamente a empresas y profesionales.</p>
 
       <h2>3. Condiciones de uso</h2>
-      <p>El acceso a la página web pública es gratuito. El uso del servicio requiere registro, aceptación de los <a href="/terminos">Términos y Condiciones</a> y de la <a href="/privacidad">Política de Privacidad</a>, y el pago de la suscripción correspondiente (salvo durante el periodo de prueba).</p>
+      <p>El acceso a la página web pública es gratuito. El uso del servicio requiere registro, aceptación de los <a href="/terminos">Términos y Condiciones</a> y de la <a href="/privacidad">Política de Privacidad</a>{sinPagos() ? '.' : ', y el pago de la suscripción correspondiente (salvo durante el periodo de prueba).'}</p>
 
       <h2>4. Propiedad intelectual</h2>
       <p>Todos los contenidos del sitio (textos, código, gráficos, logotipos, software) son titularidad de {COMPANY.legalName} o de terceros que han autorizado su uso. Queda prohibida su reproducción total o parcial sin autorización escrita previa.</p>

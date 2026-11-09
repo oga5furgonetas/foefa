@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { API_BASE } from '../services/api'
 import { saveSession } from '../panel/auth'
 import { useT, LANGS } from '../i18n'
+import { sinPagos } from '../lib/plataforma'
 
 export default function Login() {
   const { t, lang, setLang } = useT()
@@ -57,7 +58,8 @@ export default function Login() {
           <a href="/reset-password" style={{ color: '#8b94a3', fontSize: 13, textDecoration: 'none' }}>{t('login.forgot')}</a>
         </div>
         <div style={{ textAlign: 'center', marginTop: 12, color: '#8b94a3', fontSize: 13 }}>
-          {t('login.no')} <a href={rep ? '/registro?sector=autonomo&plan=autonomo' : '/registro'} style={{ color: '#0ea5e9', textDecoration: 'none', fontWeight: 600 }}>{t(rep ? 'login.rep.create' : 'login.create')}</a>
+          {/* En la app de iPhone (09-11-2026) solo se crea la cuenta de quien reparte, y sin «gratis» (ni empresa, ni planes). */}
+          {t('login.no')} <a href={rep || sinPagos() ? '/registro?sector=autonomo&plan=autonomo' : '/registro'} style={{ color: '#0ea5e9', textDecoration: 'none', fontWeight: 600 }}>{sinPagos() ? t('login.app.create') : t(rep ? 'login.rep.create' : 'login.create')}</a>
         </div>
       </div>
     </div>

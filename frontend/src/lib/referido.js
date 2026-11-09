@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { API_BASE } from '../services/api'
+import { sinPagos } from './plataforma'
 
 /* «INVITA A UN COMPAÑERO»: el código que llega en el enlace (?ref=ABC123) se
    guarda en el móvil y viaja con el alta, para que el que invitó gane su mes y
@@ -23,6 +24,7 @@ export function leerRef() {
 export function useInvitacion() {
   const [inv, setInv] = useState(null)
   useEffect(() => {
+    if (sinPagos()) return undefined   // app de iPhone (09-11-2026): no hay invitaciones; ni se guarda el código ni se pregunta por él
     guardarRef()
     const c = leerRef()
     if (!c) return undefined

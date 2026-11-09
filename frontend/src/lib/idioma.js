@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { sinPagos, hablaDePagos } from './plataforma'
 
 /* LAS TRADUCCIONES, SOLO SI HACEN FALTA (17-10-2026). textosRuta (A, B, C) y textosBrasil eran unos 250 KB del
    bloque que se descarga en todas las páginas, también para quien tiene el móvil en español (casi todos), que no
@@ -128,6 +129,11 @@ export function tx(texto, vars) {
    es texto. */
 export function txError(e, porDefecto, vars) {
   const d = e?.response?.data?.detail ?? e?.detail
+  // Dentro de la app de iPhone (09-11-2026) un error del servidor que hable de planes, pruebas, topes o pagos no se enseña:
+  // sale el texto por defecto o, si ese también habla de pagos, uno neutro (lib/plataforma.js).
+  if (sinPagos() && (hablaDePagos(d) || e?.response?.status === 402)) {
+    return hablaDePagos(porDefecto) ? tx('No se ha podido completar. Inténtalo de nuevo más tarde.') : tx(porDefecto, vars)
+  }
   return typeof d === 'string' && d.trim() ? tx(d) : tx(porDefecto, vars)
 }
 

@@ -1,5 +1,6 @@
 import LegalLayout from '../LegalLayout'
 import { COMPANY, PROCESSORS, MAP_SERVICES, LEGAL_NOTES } from '../config'
+import { sinPagos } from '../../lib/plataforma'
 
 /* The Security page in English (30-10-2026): the same content as legal/Seguridad.jsx. Only what is true today and
    can be shown (code, infrastructure or CI) goes here: every line is a commercial promise. 03-11-2026: el §6 como en
@@ -32,7 +33,7 @@ export default function SecurityEn() {
         <li>The server (API) and the database are hosted on Fly.io, in the European Union (Paris region).</li>
         <li>Frontend served by Cloudflare’s global network, with security headers (CSP) and an origin allow-list (CORS).</li>
         <li>Rate limiting on public endpoints to curb abuse.</li>
-        <li>Payments are processed by Stripe (and Google Play inside the Play app): <strong>we never see or store cards</strong>. Their notifications are verified with a cryptographic signature and rejected if unsigned.</li>
+        {!sinPagos() && <li>Payments are processed by Stripe (and Google Play inside the Play app): <strong>we never see or store cards</strong>. Their notifications are verified with a cryptographic signature and rejected if unsigned.</li>}
       </ul>
 
       <h2>4. Backups and continuity</h2>

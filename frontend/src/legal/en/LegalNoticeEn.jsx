@@ -1,5 +1,6 @@
 import LegalLayout from '../LegalLayout'
 import { COMPANY } from '../config'
+import { sinPagos } from '../../lib/plataforma'
 
 /* The Legal Notice in English (30-10-2026): the same content as legal/AvisoLegal.jsx, which is the version that applies. */
 export default function LegalNoticeEn() {
@@ -23,7 +24,7 @@ export default function LegalNoticeEn() {
       <p>{COMPANY.brand} is a web platform (SaaS) for managing delivery vehicle fleets, drivers and inspections, with automatic image analysis by artificial intelligence. It is aimed exclusively at companies and professionals.</p>
 
       <h2>3. Conditions of use</h2>
-      <p>Access to the public website is free. Using the service requires registration, acceptance of the <a href="/terminos">Terms and Conditions</a> and the <a href="/privacidad">Privacy Policy</a>, and payment of the corresponding subscription (except during the trial period).</p>
+      <p>Access to the public website is free. Using the service requires registration, acceptance of the <a href="/terminos">Terms and Conditions</a> and the <a href="/privacidad">Privacy Policy</a>{sinPagos() ? '.' : ', and payment of the corresponding subscription (except during the trial period).'}</p>
 
       <h2>4. Intellectual property</h2>
       <p>All the contents of the site (texts, code, graphics, logos, software) belong to {COMPANY.legalName} or to third parties who have authorised their use. Their full or partial reproduction without prior written authorisation is forbidden.</p>

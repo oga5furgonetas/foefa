@@ -19,6 +19,7 @@ import { Boton, Aviso, Etiqueta } from './piezas'
 import DriverReferralWallet from './DriverReferralWallet'
 import Mercadillo from '../mercadillo/Mercadillo'
 import { refCentActual } from '../../lib/precios'
+import { sinPagos } from '../../lib/plataforma'
 
 // «lunes 20/10»: las fechas de la suspensión, cortas y en hora local.
 const fechaCorta = (f) => {
@@ -151,6 +152,8 @@ export default function DriverPortal() {
     // sesión obligatoria desde ahí solo puede devolver 401. Fue la que destapó
     // el bucle de recargas del 07-09-2026.
     if (!localStorage.getItem(DRIVER_TOKEN_KEY)) return undefined
+    // En la app de iPhone (09-11-2026) no se vende nada, tampoco la ropa del equipo: no se pregunta por el escaparate.
+    if (sinPagos()) return undefined
     let vivo = true
     tiendaEscaparate()
       .then((r) => {
@@ -479,13 +482,14 @@ export default function DriverPortal() {
               onClick={() => setVista('extra')}
             />
           )}
-          <Casilla
+          {/* Sin «Comparte y gana» en la app de iPhone (09-11-2026): allí no hay invitaciones, bonos ni cartera. */}
+          {!sinPagos() && <Casilla
             icono={Gift}
             titulo="Comparte y gana"
             detalle={`${(refCentActual() / 100).toFixed(2).replace('.', ',').replace(',00', '')} € por compañero`}
             tono="verde"
             onClick={() => setVista('cartera')}
-          />
+          />}
           {merc && (
             <Casilla
               icono={Store}

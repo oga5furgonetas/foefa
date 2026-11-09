@@ -10,6 +10,7 @@ import { compressImage } from '../../lib/compressImage'
 import { useT } from '../../i18n'
 import { useToast } from '../../lib/toast'
 import { pushSupported, isPushEnabled, enablePush } from '../../lib/push'
+import { sinPagos } from '../../lib/plataforma'
 
 const PHOTO_SLOTS = [
   { id: 'frontal',      label: 'Frontal',            icon: '⬆', required: true },
@@ -431,8 +432,8 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
               </div>
             )}
 
-            {/* Incentivos */}
-            <div className="flex items-start gap-3 rounded-2xl border border-amber-500/15 bg-amber-500/5 p-4">
+            {/* Incentivos (no salen en la app de iPhone, 09-11-2026: allí no se anuncian premios ni promociones) */}
+            {!sinPagos() && <div className="flex items-start gap-3 rounded-2xl border border-amber-500/15 bg-amber-500/5 p-4">
               <span className="text-lg">🏆</span>
               <div>
                 <p className="text-xs font-bold text-amber-400">Próximamente: incentivos para conductores</p>
@@ -440,7 +441,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                   Cada mes premiaremos a quienes mantengan su furgoneta en perfecto estado y con inspecciones al día.
                 </p>
               </div>
-            </div>
+            </div>}
           </div>
         )}
 

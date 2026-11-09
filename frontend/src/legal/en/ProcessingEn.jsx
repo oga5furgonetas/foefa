@@ -1,5 +1,6 @@
 import LegalLayout from '../LegalLayout'
 import { COMPANY, PROCESSORS, MAP_SERVICES, LEGAL_NOTES } from '../config'
+import { sinPagos } from '../../lib/plataforma'
 
 /* The Data Processing Agreement in English (30-10-2026): the same content as legal/Encargo.jsx, which is the version
    that applies. 03-11-2026: §4.5 y §6 como en Encargo.jsx (subencargados con contrato, servicios de mapas sin contrato,
@@ -16,7 +17,7 @@ export default function ProcessingEn() {
       </ul>
 
       <h2>2. Subject matter, duration and nature</h2>
-      <p>Hosting and processing the data the customer enters to manage its fleet, its team and, if it uses it, its deliveries. It lasts as long as the subscription. The operations are: recording, storage, consultation, route sorting, map location, communication to the users the customer authorises, and erasure.</p>
+      <p>Hosting and processing the data the customer enters to manage its fleet, its team and, if it uses it, its deliveries. It lasts as long as {sinPagos() ? 'the service is used' : 'the subscription'}. The operations are: recording, storage, consultation, route sorting, map location, communication to the users the customer authorises, and erasure.</p>
 
       <h2>3. Data and data subjects</h2>
       <ul>

@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { API_BASE } from '../lib/apiBase'
+import { detalleSinPagos } from '../lib/plataforma'
 
 export { API_BASE }
 
@@ -67,7 +68,8 @@ export function normalizarDetalle(data) {
 api.interceptors.response.use(
   (res) => res,
   (error) => {
-    if (error?.response?.data) error.response.data = normalizarDetalle(error.response.data)
+    // Dentro de la app de iPhone (09-11-2026), lo que el servidor diga de planes, pruebas o pagos pasa a un texto neutro.
+    if (error?.response?.data) error.response.data = detalleSinPagos(normalizarDetalle(error.response.data), error.response.status)
     const status = error?.response?.status
     const url = error?.config?.url || ''
     const path = window.location.pathname

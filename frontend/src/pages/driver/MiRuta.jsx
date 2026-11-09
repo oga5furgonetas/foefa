@@ -14,6 +14,7 @@ import { hoyLocal } from '../../lib/fecha'
 import { lista } from '../../lib/lista'
 import { compressImage } from '../../lib/compressImage'
 import { origen } from '../../marca'
+import { sinPagos } from '../../lib/plataforma'
 import { leerTicketEnMovil, leerHojaEnMovil } from '../../lib/leerTicket'
 import { textoParaPegar, csvAPegar } from '../../lib/hojaReparto'
 import { lectorDeCodigos, leerCodigo } from '../../lib/codigos'
@@ -577,7 +578,8 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
      no, se pide UNA vez. Sin código (demo, suplantación, país sin programa) no sale: no se promete lo que no se puede
      pagar. */
   const referido = referidoDado !== undefined ? referidoDado : referidoPropio
-  const invitarToca = conMarcas && lista(ruta?.pedidos).some((p) => p.estado === 'entregado' && !p.ejemplo)
+  // En la app de iPhone (09-11-2026) no hay «Invita y gana»: ni la tarjeta, ni el bono, ni se pide el código.
+  const invitarToca = !sinPagos() && conMarcas && lista(ruta?.pedidos).some((p) => p.estado === 'entregado' && !p.ejemplo)
     && lee(`invitar_no_${ruta?.fecha}`, '') !== '1'
   useEffect(() => {
     if (referidoDado !== undefined || !invitarToca || referidoPropio !== null) return
@@ -1569,7 +1571,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
       {ruta.autonomo && <Boton variante="normal" tono="aviso" icono={Package} texto={tx('Cargar paquetes')} onClick={() => { cerrarAnadir(); setCarga({ n: 0 }) }} />}
     </div>
   )
-  const bono = ruta.autonomo && ruta.bono && !soloMapa
+  const bono = !sinPagos() && ruta.autonomo && ruta.bono && !soloMapa
     ? <Bono b={ruta.bono} total={total} soloEjemplo={total > 0 && lista(ruta.pedidos).every((p) => p.ejemplo)} />
     : null
 
@@ -2362,7 +2364,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
           {bienvenida === 'inicio' ? (<>
             <p className="mt-2 text-titulo text-dark-50">{tx('¿Tienes ya tus paradas de hoy?')}</p>
             <p className="mt-1 text-texto text-dark-400">{tx('En los paquetes, en una hoja o en una lista: la app las lee y ordena la ruta sola.')}</p>
-            {ruta.bono && !ruta.bono.pagado && (
+            {!sinPagos() && ruta.bono && !ruta.bono.pagado && (
               <p className="mt-2 text-boton text-ruta-aviso-texto">🎁 {tx('Tu primera ruta real te da {euros}.', { euros: eurosRef(ruta.bono.cent, locale()) })}</p>
             )}
           </>) : bienvenida === 'como' ? (<>
@@ -2707,7 +2709,7 @@ function Resumen({ hechos, ruta, marcas = null, invitacion = null, onCompartir =
         </div>
       )}
       {onCompartir && <Boton variante="normal" tono="ok" icono={Share2} texto={tx('Comparte tu día')} onClick={onCompartir} className="mt-3 w-full" />}
-      {invitacion ? <div className="mt-3">{invitacion}</div> : (
+      {invitacion ? <div className="mt-3">{invitacion}</div> : !sinPagos() && (
         <Boton variante="normal" contorno tono="ok" icono={MessageCircle} texto={tx('Invitar a un compañero')} onClick={invitar} className="mt-3 w-full" />
       )}
     </section>

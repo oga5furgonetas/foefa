@@ -23,6 +23,7 @@ export const COMPANY = {
 // Proveedores que tratan datos por encargo nuestro, con contrato (los encargados del tratamiento; en el Encargo, los
 // subencargados).
 import { hayPixel } from '../lib/metaPixel'
+import { sinPagos } from '../lib/plataforma'
 
 // 10-10-2026: faltaban Stripe (cobra el plan Repartidor), Google Play (cobra dentro de su app),
 // Resend (manda los correos) y TikTok (su píxel); sobraba Lemon Squeezy, que no está activo.
@@ -83,6 +84,8 @@ export const PROCESSORS = [
   { name: 'Google (Firebase Cloud Messaging)', purpose: 'Los avisos al instante de la app de Android, cuando están activados: el identificador del móvil para los avisos y cada aviso (su título y su texto)', country: 'EEUU/UE (DPF)',
     purposeEn: 'Instant notifications in the Android app, when turned on: the phone’s notification identifier and each notice (its title and text)', countryEn: 'USA/EU (DPF)' },
 ]
+  // En la app de iPhone (09-11-2026) no hay cobros: ni Stripe ni Google Play salen como encargados (docs/APP_STORE.md).
+  .filter((p) => !(sinPagos() && ['Stripe Payments Europe, Ltd.', 'Google Ireland Ltd. (Google Play)'].includes(p.name)))
 
 // Los servicios de mapas y de búsqueda de direcciones a los que se pregunta sin contrato, bajo sus condiciones de uso
 // (03-11-2026): sin contrato de encargo con ellos. Cada línea dice qué reciben; ninguno, nombres ni teléfonos.

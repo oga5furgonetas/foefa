@@ -5,6 +5,7 @@ import { MARCA } from '../marca'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, locale } from '../lib/idioma'
 import { medirAccion } from '../lib/analitica'
 import { esIphone } from '../lib/instalar'
+import { sinPagos } from '../lib/plataforma'
 import { evento } from '../lib/metaPixel'
 import { PARADAS_GRATIS, promoGratis, fechaPromo } from '../lib/precios'
 import { paisDelMovil, precioRepartidor, importeEn } from '../lib/region'
@@ -54,9 +55,10 @@ export default function Empezar() {
 
         <a href="/registro?sector=autonomo&plan=autonomo" onClick={() => { medirAccion('rep_alta'); evento('Lead', { content_name: 'crear_cuenta_app' }) }}
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 py-4 text-[17px] font-extrabold text-[#04121a] shadow-[0_12px_30px_-10px_rgba(20,231,216,.6)] active:scale-[.99]">
-          {tx('Crear mi cuenta gratis')} <ArrowRight size={18} />
+          {sinPagos() ? tx('Crear mi cuenta') : tx('Crear mi cuenta gratis')} <ArrowRight size={18} />
         </a>
-        <ul className="mt-3 space-y-1 text-[13px] text-dark-300">
+        {/* En la app de iPhone (09-11-2026) no se habla de planes, prueba, tope ni precios: ni la lista de lo que cuesta. */}
+        {!sinPagos() && <ul className="mt-3 space-y-1 text-[13px] text-dark-300">
           {promoGratis() ? (<>
             <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Gratis y sin límite hasta el {fecha}', { fecha: fechaPromo(locale()) })}</li>
             <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Después, gratis hasta {n} paradas al día, o sin tope por {mes}/mes', { n: PARADAS_GRATIS, mes: precioPlan().mes })}</li>
@@ -66,13 +68,14 @@ export default function Empezar() {
           <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Sin tope: {mes}/mes o {anio}/año, con 7 días de prueba', precioPlan())}</li>
           <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Sin tarjeta: la prueba empieza ya y hoy no pagas nada')}</li>
           </>)}
-        </ul>
+        </ul>}
 
         <a href="/panel/login"
           className="mt-5 flex w-full items-center justify-center rounded-2xl border border-dark-600 py-3.5 text-[15.5px] font-bold text-dark-100 active:scale-[.99]">
           {tx('Ya tengo cuenta')} · {tx('Entrar')}
         </a>
-        {esIphone() && (
+        {/* La guía de «cómo se instala desde Safari» (y que «es gratis») no tiene sentido dentro de la app de iPhone. */}
+        {esIphone() && !sinPagos() && (
           <a href="/iphone" className="mt-3 flex items-center justify-center gap-1.5 text-[13.5px] font-semibold text-brand-300">
             <Apple size={15} /> {tx('¿iPhone? Así se instala y se usa')}
           </a>

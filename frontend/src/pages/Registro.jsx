@@ -4,6 +4,7 @@ import { enAppPlay } from '../lib/enApp'
 import { evento, anunciosAceptados, cookiesMeta } from '../lib/metaPixel'
 import { leerRef, useInvitacion } from '../lib/referido'
 import { regionDelMovil } from '../lib/region'
+import { sinPagos, detalleSinPagos } from '../lib/plataforma'
 
 import { API_BASE } from '../services/api'
 import { medirAccion } from '../lib/analitica'
@@ -285,12 +286,16 @@ export default function Registro() {
   const [furgonetas, setFurgonetas] = useState(Math.max(1, Number(params.get('flota')) || (esSectorReparto ? 5 : 40)))
   const [repartidores, setRepartidores] = useState(Math.max(1, Number(params.get('repartidores')) || 5))
 
-  const [sector, setSector] = useState(params.get('sector') || '')
+  /* EN LA APP DE IPHONE (09-11-2026) SOLO SE CREA LA CUENTA DE QUIEN REPARTE, y sin una palabra de planes, prueba, precios,
+     tope, bonos ni invitaciones (Apple: 2.1(b) y 3.1.1; docs/APP_STORE.md). Ni el selector de sectores ni el de planes de
+     empresa salen, y el alta no manda ningún código de invitación. */
+  const enIOS = sinPagos()
+  const [sector, setSector] = useState(enIOS ? 'autonomo' : (params.get('sector') || ''))
   const [verPass, setVerPass] = useState(false)
   const invitacion = useInvitacion()
   // Quien reparte solo tiene un único plan: con ?sector=autonomo (el regalo, /cn)
   // no se le enseñan los planes de empresa.
-  const [selectedPlan, setSelectedPlan] = useState(paramPlan || (params.get('sector') === 'autonomo' ? 'autonomo' : ''))
+  const [selectedPlan, setSelectedPlan] = useState(enIOS ? 'autonomo' : (paramPlan || (params.get('sector') === 'autonomo' ? 'autonomo' : '')))
   const [billingMode, setBillingMode] = useState(paramBilling)
 
   const [org, setOrg] = useState('')
@@ -379,7 +384,7 @@ export default function Registro() {
           org_name: org.trim(), username: usuario, password: pass,
           slug: s, center: center.trim(), email: email.trim().toLowerCase(),
           plan: selectedPlan, sector,
-          ...(sector === 'autonomo' && leerRef() ? { ref: leerRef() } : {}),
+          ...(!enIOS && sector === 'autonomo' && leerRef() ? { ref: leerRef() } : {}),
           // Desde la app de Play no se pide tarjeta con Stripe (Google cobra con lo suyo).
           desde_app: enAppPlay(),
           ...regionDelMovil(),
@@ -390,7 +395,8 @@ export default function Registro() {
       })
       const j = await r.json()
       if (!r.ok || !j.access_token) {
-        setErr((typeof j.detail === 'string' && (soloYo ? tt(j.detail) : j.detail)) || (soloYo ? tt('No se pudo crear la cuenta. Prueba con otro correo.') : 'No se pudo crear la cuenta. Prueba con otro usuario o URL.'))
+        const detalle = detalleSinPagos(j, r.status)?.detail   // en el iPhone, lo que hable de planes o pagos sale neutro
+        setErr((typeof detalle === 'string' && (soloYo ? tt(detalle) : detalle)) || (soloYo ? tt('No se pudo crear la cuenta. Prueba con otro correo.') : 'No se pudo crear la cuenta. Prueba con otro usuario o URL.'))
         setBusy(false); return
       }
       saveSession(j)   // le faltaba admin_role; una sola función lo guarda todo
@@ -410,7 +416,8 @@ export default function Registro() {
         <div style={{ ...card, textAlign: 'center', maxWidth: 440 }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>📧</div>
           <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>{tt('¡Cuenta creada!')}</h2>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `${planInfo.color}18`, border: `1px solid ${planInfo.color}40`, borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 700, color: planInfo.color, margin: '0 0 16px' }}>
+          {/* En la app de iPhone (09-11-2026) la píldora con el plan no sale: ni «Plan Repartidor» ni «gratis hasta…». */}
+          {!enIOS && <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `${planInfo.color}18`, border: `1px solid ${planInfo.color}40`, borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 700, color: planInfo.color, margin: '0 0 16px' }}>
             {/* Quien reparte solo no tiene «7 días»: lo que dice su plan (03-11-2026, el vídeo para Apple: aquí «7 días
                 gratis» y en la cuenta «Gratis sin límite hasta el 31 de diciembre»). */}
             {soloYo && promoGratis()
@@ -418,7 +425,7 @@ export default function Registro() {
               : soloYo
               ? tt('Plan {plan} · gratis hasta {p} paradas al día', { plan: tt(planInfo.name), p: PARADAS_GRATIS })
               : tt('Plan {plan} · {n} días gratis', { plan: tt(planInfo.name), n: diasPrueba })}
-          </div>
+          </div>}
           <p style={{ color: '#8b94a3', fontSize: 14, lineHeight: 1.6, margin: '0 0 8px' }}>
             {tt('Hemos enviado un email de bienvenida a')} <b style={{ color: '#0ea5e9' }}>{email}</b>.
           </p>
@@ -468,7 +475,7 @@ export default function Registro() {
         {/* QUIEN REPARTE SOLO VE PRIMERO QUE ES GRATIS (10-10-2026). Medido: desde la app,
             «Repartir yo mismo» → este formulario → se iban sin enviarlo; lo primero que leían
             era «Repartidor 9,99 €/mes» y lo de gratis estaba en la letra pequeña. */}
-        {soloYo ? (
+        {enIOS ? null : soloYo ? (
           <div style={{ background: 'rgba(52,211,153,.08)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 14, padding: '14px 16px', marginBottom: 20 }}>
             <div style={{ fontWeight: 900, fontSize: 19, color: '#eef1f6', lineHeight: 1.25 }}>{promoGratis()
               ? tt('Gratis y sin límite hasta el {fecha} · sin tarjeta', { fecha: fechaPromo(locale()) })
@@ -508,9 +515,9 @@ export default function Registro() {
         </div>
         )}
 
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', borderRadius: 99, padding: '3px 12px', fontSize: 11, fontWeight: 700, color: '#34d399', marginBottom: 16 }}>
+        {!enIOS && <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', borderRadius: 99, padding: '3px 12px', fontSize: 11, fontWeight: 700, color: '#34d399', marginBottom: 16 }}>
           ✓ {soloYo ? tt('Gratis · sin tarjeta · hoy 0 €') : `${diasPrueba} días gratis · sin tarjeta · cancela cuando quieras`}
-        </div>
+        </div>}
 
         {soloYo && invitacion && (
           <div style={{ marginBottom: 6, padding: '9px 12px', borderRadius: 10, background: 'rgba(167,139,250,.12)', border: '1px solid rgba(167,139,250,.35)', color: '#ddd6fe', fontSize: 13, fontWeight: 600 }}>
@@ -583,7 +590,7 @@ export default function Registro() {
           <input type="checkbox" checked={accept} onChange={(e) => setAccept(e.target.checked)} style={{ marginTop: 2 }} />
           <span>
             {conEnlaces(tt('Acepto los [Términos], el [Acuerdo de Encargo del Tratamiento] y la [Política de Privacidad].'), ['/terminos', '/encargo', '/privacidad'])}
-            {' '}{soloYo && promoGratis()
+            {' '}{enIOS ? null : soloYo && promoGratis()
               ? tt('Gratis y sin límite hasta el {fecha}. Después sigues gratis con hasta {p} paradas al día; sin tarjeta no se cobra nunca. Sin tope: plan {plan} ({precio} €/mes).', {
                 fecha: fechaPromo(locale()), p: PARADAS_GRATIS, plan: tt(planInfo.name), precio: displayPrice.toFixed(2).replace('.', ',') })
               : soloYo
@@ -600,7 +607,7 @@ export default function Registro() {
           disabled={busy}
           onClick={submit}
         >
-          {busy ? tt('Creando cuenta…') : tt('Crear cuenta con plan {plan}', { plan: tt(planInfo.name) })}
+          {busy ? tt('Creando cuenta…') : enIOS ? tt('Crear mi cuenta') : tt('Crear cuenta con plan {plan}', { plan: tt(planInfo.name) })}
         </button>
 
         {err && (

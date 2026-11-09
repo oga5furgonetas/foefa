@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, Check, CheckCircle2, ExternalLink, FileSignature, Loader2, LogOut, Plus, ShieldCheck } from 'lucide-react'
 import { signInspection, getDriverOffers, clickDriverOffer } from '../../services/api'
 import { useT } from '../../i18n'
+import { sinPagos } from '../../lib/plataforma'
 
 /* La declaración de firma es un texto LEGAL: se firma en el idioma que el
    conductor está usando, porque firmar algo que no entiendes no vale nada. */
@@ -29,10 +30,12 @@ function DriverOffers() {
   const [offers, setOffers] = useState([])
 
   useEffect(() => {
+    // En la app de iPhone (09-11-2026) no hay ofertas ni promociones patrocinadas: ni se piden ni se cuentan.
+    if (sinPagos()) return
     getDriverOffers().then(r => setOffers(r.data?.offers || [])).catch(() => {})
   }, [])
 
-  if (!offers.length) return null
+  if (!offers.length || sinPagos()) return null
 
   function open(o) {
     clickDriverOffer(o.id).catch(() => {})

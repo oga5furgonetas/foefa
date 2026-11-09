@@ -2,6 +2,7 @@ import LegalLayout, { legalEnIngles } from './LegalLayout'
 import TermsEn from './en/TermsEn'
 import { useIdioma } from '../lib/idioma'
 import { COMPANY } from './config'
+import { sinPagos } from '../lib/plataforma'
 
 export default function Terminos() {
   useIdioma()
@@ -27,8 +28,11 @@ export default function Terminos() {
       <h2>4. Inteligencia Artificial — alcance y límites</h2>
       <p><strong>Los análisis generados por la IA son una asistencia automatizada y no sustituyen la revisión humana.</strong> {COMPANY.brand} no garantiza que la detección de daños, severidad o coste estimado sea exacta en todos los casos. El cliente es responsable de validar los resultados antes de utilizarlos en disputas con terceros (talleres, conductores, aseguradoras, etc.).</p>
       <p>El Servicio se encuentra en desarrollo activo y mejora de forma continua. Las correcciones y validaciones realizadas por los usuarios (de forma anonimizada y agregada) contribuyen a calibrar y perfeccionar el sistema con el tiempo. {COMPANY.brand} no garantiza un nivel de precisión específico de la IA, pero se compromete a mejorar progresivamente la calidad del análisis.</p>
-      <p><strong>Ventaja para clientes fundadores:</strong> los clientes que contraten el Servicio durante su fase inicial recibirán acceso prioritario a nuevas funciones y mejoras de la IA antes que el resto de usuarios.</p>
+      {!sinPagos() && <p><strong>Ventaja para clientes fundadores:</strong> los clientes que contraten el Servicio durante su fase inicial recibirán acceso prioritario a nuevas funciones y mejoras de la IA antes que el resto de usuarios.</p>}
 
+      {/* En la app de iPhone (09-11-2026) no salen las cláusulas de suscripción, prueba, pagos, regalos, «Invita y gana» ni
+          bonos (secciones 5, 5 bis y 5 ter): allí no se vende ni se promociona nada (docs/APP_STORE.md). La web, igual. */}
+      {!sinPagos() && <>
       <h2>5. Suscripción, prueba y pagos</h2>
       <ul>
         <li>El alta incluye un periodo de prueba gratuito de <strong>14 días</strong> (<strong>7 días</strong> en el plan Repartidor).</li>
@@ -60,8 +64,9 @@ export default function Terminos() {
         <li>El conductor puede solicitar el pago desde <strong>60 €</strong>, a su nombre, por Bizum o transferencia en España y por PayPal en los países donde esté disponible. La solicitud se revisa manualmente; normalmente se resuelve en 7 días hábiles. Si se rechaza por datos incorrectos, el saldo vuelve a su cartera; si se confirma fraude, puede anularse.</li>
         <li>El conductor es responsable de facilitar un medio de cobro propio y de declarar los ingresos cuando corresponda. Podemos pedir información fiscal necesaria antes de pagar. El email de empresa identifica la cartera, pero no es por sí mismo el medio de pago.</li>
       </ul>
+      </>}
 
-      <h2 id="mercadillo">5 quater. Mercadillo de repartidores</h2>
+      <h2 id="mercadillo">{sinPagos() ? '5. ' : '5 quater. '}Mercadillo de repartidores</h2>
       <ul>
         <li><strong>Qué es.</strong> Un tablón dentro de la app y del portal del conductor donde los repartidores con cuenta pueden anunciar cosas suyas que ya no usan y hablar entre ellos por mensajes privados. Es solo entre particulares: no se admiten ventas profesionales, tiendas ni reventa.</li>
         <li><strong>{COMPANY.brand} no es parte de la venta.</strong> No vende, no compra, no cobra comisión, no interviene en el pago ni en la entrega y no garantiza los artículos. El trato es entre quien vende y quien compra, que acuerdan el precio, el pago y la entrega. Recomendamos quedar en persona, revisar el artículo antes de pagar y no pagar nunca por adelantado.</li>
@@ -85,7 +90,7 @@ export default function Terminos() {
       <p>En la máxima medida permitida por la ley, {COMPANY.brand} no responderá por daños indirectos, lucro cesante, pérdida de datos o reclamaciones de terceros derivadas del uso del Servicio. La responsabilidad agregada quedará limitada al importe pagado por el cliente en los 12 meses anteriores al hecho que motive la reclamación.</p>
 
       <h2>9. Suspensión y baja</h2>
-      <p>{COMPANY.brand} podrá suspender o cancelar cuentas que incumplan estos términos, que impaguen suscripciones, o ante actividad fraudulenta. Se notificará por email cuando sea posible.</p>
+      <p>{COMPANY.brand} podrá suspender o cancelar cuentas que incumplan estos términos{sinPagos() ? '' : ', que impaguen suscripciones,'} o ante actividad fraudulenta. Se notificará por email cuando sea posible.</p>
 
       <h2>10. Protección de datos</h2>
       <p>El tratamiento de datos personales se rige por la <a href="/privacidad">Política de Privacidad</a>. Los datos que el cliente introduce de sus empleados, conductores o clientes los tratamos como <strong>encargado del tratamiento</strong> según el <a href="/encargo">Acuerdo de Encargo del Tratamiento</a>, que forma parte de estos términos y se acepta con ellos.</p>

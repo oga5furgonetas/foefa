@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom'
 import { Loader2, Package, CheckCircle2, Clock, XCircle, Truck, Phone, Check, ShieldCheck } from 'lucide-react'
 import { API_BASE } from '../services/api'
 import { tx, txError, useIdioma, locale } from '../lib/idioma'
+import { sinPagos } from '../lib/plataforma'
 import { textoClienteDice } from './driver/ClienteDice'
 
 /* ── «¿CUÁNDO LLEGA MI PEDIDO?» ─────────────────────────────────────────────
@@ -217,7 +218,7 @@ export default function SeguimientoPedido() {
         )}
       </div>
       {/* 11-10-2026: quien recibe el paquete a veces también reparte. Discreto, sin datos de nadie. */}
-      {d && (
+      {d && !sinPagos() && (
         <a href="/repartidores?utm_source=seguimiento&utm_medium=pie" className="mt-4 block text-center text-[12.5px] text-dark-400 underline-offset-2 hover:underline">
           {tx('¿Repartes? Ordena tu ruta gratis con {app}', { app: 'FDS' })} →
         </a>

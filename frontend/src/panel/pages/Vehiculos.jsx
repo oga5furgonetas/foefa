@@ -11,6 +11,7 @@ import VidaVehiculo from '../components/VidaVehiculo'
 import { ultimaRueda } from '../../lib/rueda'
 import { useOrden } from '../../lib/orden'
 import { usePlan } from '../../lib/usePlan'
+import { sinPagos } from '../../lib/plataforma'
 import ThOrden from '../components/ThOrden'
 import QRCode from 'qrcode'
 import {
@@ -995,8 +996,8 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
                 </div>
                 {/* CÓMO SE FACTURA (06-10-2026). /planes vende las de subcontratas a 3 € y
                     las de campaña a 0,30 € por día; sin marcarlas aquí, la factura las
-                    cobraba como propias, a precio de plan. */}
-                <div className="col-span-2 px-3 py-2.5">
+                    cobraba como propias, a precio de plan. En la app de iPhone no sale (09-11-2026): allí no se habla de planes ni de precios. */}
+                {!sinPagos() && <div className="col-span-2 px-3 py-2.5">
                   <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-dark-500">Cómo se factura</div>
                   <div className="flex flex-wrap gap-1.5">
                     {ALTAS.map(([k, label]) => {
@@ -1014,8 +1015,8 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
                     })}
                   </div>
                   <p className="mt-1.5 text-[11.5px] leading-snug text-dark-500">{ALTA_AYUDA[vehicle.alta || 'propia']}</p>
-                </div>
-                {vehicle.alta === 'campana' && (<>
+                </div>}
+                {!sinPagos() && vehicle.alta === 'campana' && (<>
                   <EditableField label="Campaña desde" icon={<Calendar size={13} />}
                     value={vehicle.campana_desde} type="date"
                     onSave={v => patch({ campana_desde: v })}
@@ -3143,7 +3144,7 @@ export default function Vehiculos() {
                           {verMatricula(v.license_plate)}
                           {v.vin && <QrCode size={9} className="ml-1.5 inline text-dark-700" title="Tiene VIN" />}
                           {v.bloqueada && <Lock size={10} className="ml-1.5 inline text-amber-400" title="Bloqueada para la plantilla diaria" />}
-                          {ALTA_CORTA[v.alta] && (
+                          {ALTA_CORTA[v.alta] && !sinPagos() && (
                             <span className="ml-1.5 rounded bg-dark-800 px-1 py-px text-[9px] font-semibold tracking-normal text-dark-400"
                               title={ALTA_AYUDA[v.alta]}>{ALTA_CORTA[v.alta]}</span>
                           )}

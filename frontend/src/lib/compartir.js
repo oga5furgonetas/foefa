@@ -3,6 +3,7 @@ import { origen } from '../marca'
 import { medirAccion } from './analitica'
 import { getReferidos } from '../services/api'
 import { promoGratis, fechaPromo, eurosRef, refPromoActiva, BONO_CENT } from './precios'
+import { sinPagos } from './plataforma'
 
 /* INVITAR A UN COMPAÑERO. Un toque abre el «compartir» del móvil (o WhatsApp)
    con el mensaje y su enlace (?ref=…). El importe sale del servidor porque las
@@ -27,6 +28,7 @@ export function textoInvitar(codigo, porInvitado) {
 }
 
 export async function invitar() {
+  if (sinPagos()) return   // en la app de iPhone (09-11-2026) no hay «Invita y gana» ni «pruébala gratis»: no se comparte nada
   medirAccion('invitar')
   let referido = {}
   try { referido = (await getReferidos()).data || {} } catch { /* sin sesión o sin código: enlace normal */ }

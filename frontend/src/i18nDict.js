@@ -20,6 +20,8 @@ export const DICT = {
   'login.rep.user':  { es: 'Tu correo', en: 'Your email', fr: 'Ton e-mail', de: 'Deine E-Mail', it: 'La tua email', pt: 'O teu email' },
   'login.rep.err':   { es: 'Correo o contraseña incorrectos', en: 'Wrong email or password', fr: 'E-mail ou mot de passe incorrect', de: 'E-Mail oder Passwort falsch', it: 'Email o password errati', pt: 'Email ou palavra-passe incorretos' },
   'login.rep.create': { es: 'Crear cuenta gratis', en: 'Create a free account', fr: 'Créer un compte gratuit', de: 'Kostenloses Konto erstellen', it: 'Crea un account gratis', pt: 'Criar conta grátis' },
+  // App de iPhone (09-11-2026): «Crear mi cuenta» sin «gratis»; allí no se habla de planes, pruebas ni precios.
+  'login.app.create': { es: 'Crear mi cuenta', en: 'Create my account', fr: 'Créer mon compte', de: 'Mein Konto erstellen', it: 'Crea il mio account', pt: 'Criar a minha conta' },
   'login.forgot':  { es: '¿Olvidaste tu contraseña?', en: 'Forgot your password?', fr: 'Mot de passe oublié ?', de: 'Passwort vergessen?', it: 'Password dimenticata?', pt: 'Esqueceste a palavra-passe?' },
   'cmdk.placeholder':      { es: 'Buscar módulo, matrícula o conductor…', en: 'Search module, plate or driver…', fr: 'Module, plaque ou chauffeur…', de: 'Modul, Kennzeichen oder Fahrer…', it: 'Modulo, targa o autista…', pt: 'Módulo, matrícula ou motorista…' },
   'cmdk.empty':            { es: 'Sin resultados', en: 'No results', fr: 'Aucun résultat', de: 'Keine Ergebnisse', it: 'Nessun risultato', pt: 'Sem resultados' },

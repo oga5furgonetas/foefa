@@ -13,7 +13,7 @@ import { evento, apuntarParaLaVuelta } from '../lib/metaPixel'
 import { getAdmin, logout, esSuplantacion } from '../panel/auth'
 import { MARCA, origen } from '../marca'
 import { enAppPlay } from '../lib/enApp'
-import { esAppIOS } from '../lib/plataforma'
+import { sinPagos } from '../lib/plataforma'
 import { lista } from '../lib/lista'
 import { tx, useIdioma, locale, IDIOMAS, idioma, cambiarIdioma, txError } from '../lib/idioma'
 import { refCentActual, refPromoActiva, REF_PROMO_HASTA, REF_PROMO_CENT, fechaRefPromo } from '../lib/precios'
@@ -52,9 +52,10 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
   const lang = useIdioma()
   const admin = getAdmin()
   const enApp = enAppPlay()
-  // En la app de iPhone no se vende nada (Apple exige su pago dentro de la app, regla 3.1.1): ni suscribirse, ni regalos,
-  // ni el portal de la tarjeta; el plan se lleva desde la web. Ver docs/APP_STORE.md.
-  const enIOS = esAppIOS()
+  // En la app de iPhone no se vende, no se menciona ni se desbloquea nada con pagos (Apple, reglas 2.1(b) y 3.1.1; rechazo del
+  // 09-11-2026): ni la tarjeta del plan, ni suscribirse, ni regalos, ni el código de regalo, ni «Invita y gana». La cuenta
+  // enseña solo el acceso, el idioma, la privacidad y salir. Ver docs/APP_STORE.md.
+  const enIOS = sinPagos()
   const b = billing || {}
   const precios = b.precios || { mensual: 9.99, anual: 99 }
   monedaPlan = precios.moneda || 'EUR'
@@ -67,21 +68,21 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
     <div className="mx-auto max-w-md">
       {/* La cabecera de la pestaña (diseño compacto, 07-11-2026, §5.11): «Tu cuenta» en «titulo» y el nombre al lado. */}
       <Cabecera titulo={tx('Tu cuenta')} subtitulo={admin?.name || ''} fija className="-mx-4 mb-3" />
-      {!billing ? <Loader2 className="mx-auto my-10 animate-spin text-dark-400" /> : suplantando ? <Estado b={b} precios={precios} /> : (
+      {enIOS ? null : !billing ? <Loader2 className="mx-auto my-10 animate-spin text-dark-400" /> : suplantando ? <Estado b={b} precios={precios} /> : (
         <>
           <Estado b={b} precios={precios} />
-          {!enApp && !enIOS && b.status === 'suspended' && b.pago_proveedor === 'stripe' && b.stripe_status !== 'canceled'
+          {!enApp && b.status === 'suspended' && b.pago_proveedor === 'stripe' && b.stripe_status !== 'canceled'
             ? <BotonPortal toast={toast} texto={tx('Revisar mi tarjeta y pagar')} principal />
             // Durante la promoción no hay nada que pagar: no se ofrece suscribirse.
-            : !enApp && !enIOS && !b.suscrito && !conPlay(b) && !b.promo?.activa && <Suscribirse b={b} precios={precios} toast={toast} />}
+            : !enApp && !b.suscrito && !conPlay(b) && !b.promo?.activa && <Suscribirse b={b} precios={precios} toast={toast} />}
           {enApp && !b.suscrito && !conPlay(b) && !b.promo?.activa && b.play?.listo && <PagarConPlay b={b} toast={toast} recargar={recargar} />}
           {conPlay(b) && <GestionarPlay b={b} />}
-          {!enApp && !enIOS && b.suscrito && <Gestionar b={b} precios={precios} toast={toast} recargar={recargar} />}
+          {!enApp && b.suscrito && <Gestionar b={b} precios={precios} toast={toast} recargar={recargar} />}
           <Canjear toast={toast} recargar={recargar} />
-          {!enApp && !enIOS && b.regalos && <Regalar precios={b.regalos} toast={toast} resaltar={resaltarRegalo} />}
+          {!enApp && b.regalos && <Regalar precios={b.regalos} toast={toast} resaltar={resaltarRegalo} />}
         </>
       )}
-      {!suplantando && <Invitar toast={toast} />}
+      {!suplantando && !enIOS && <Invitar toast={toast} />}
       {merc && (
         <button type="button" onClick={() => window.dispatchEvent(new Event('fds-abrir-mercadillo'))}
           className="mt-3 flex min-h-16 w-full items-center gap-3 rounded-xl bg-dark-900 px-3 py-2 text-left">
@@ -110,7 +111,9 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
       </section>
       <div className="mt-3 rounded-xl bg-dark-900 p-3 text-sec text-dark-400">
         <p className="flex gap-2"><ShieldCheck size={18} className="shrink-0 text-ruta-marca" aria-hidden="true" />
-          {tx('Tus datos y los de tus clientes son tuyos: la foto de la etiqueta se lee en tu móvil y los datos de los clientes se borran solos a los días que fijes en Ajustes. Los pagos los procesa Stripe: tu tarjeta no pasa por nosotros.')}</p>
+          {enIOS
+            ? tx('Tus datos y los de tus clientes son tuyos: la foto de la etiqueta se lee en tu móvil y los datos de los clientes se borran solos a los días que fijes en Ajustes.')
+            : tx('Tus datos y los de tus clientes son tuyos: la foto de la etiqueta se lee en tu móvil y los datos de los clientes se borran solos a los días que fijes en Ajustes. Los pagos los procesa Stripe: tu tarjeta no pasa por nosotros.')}</p>
         {/* Los tres enlaces, cada uno con su zona de toque de 48 (07-11-2026, regla 7): una frase con enlaces dentro, al
             saltar de línea, deja zonas de 14 de alto. */}
         <p className="mt-1 flex flex-wrap items-center gap-x-4">
@@ -691,13 +694,13 @@ function TarjetaRegalo({ r, nuevo, toast }) {
 export function Muro({ billing, toast, recargar, irACuenta }) {
   useIdioma()
   const enApp = enAppPlay()
-  // En la app de iPhone no se vende nada (Apple exige su pago dentro de la app, regla 3.1.1): ni suscribirse, ni regalos,
-  // ni el portal de la tarjeta; el plan se lleva desde la web. Ver docs/APP_STORE.md.
-  const enIOS = esAppIOS()
+  // En la app de iPhone no hay muro (09-11-2026): nada se bloquea ni se vende allí (RutaApp ni lo pide). Ver docs/APP_STORE.md.
+  const enIOS = sinPagos()
   const b = billing || {}
   const precios = b.precios || { mensual: 9.99, anual: 99 }
   monedaPlan = precios.moneda || 'EUR'
   const empezar = b.falta_tarjeta
+  if (enIOS) return null
   return (
     <div className="mx-auto max-w-md">
       <section className="rounded-xl border-2 border-ruta-marca bg-dark-900 p-3 text-center">
@@ -725,7 +728,7 @@ export function Muro({ billing, toast, recargar, irACuenta }) {
         b.status === 'suspended' && b.pago_proveedor === 'stripe' && b.stripe_status !== 'canceled'
           ? <p className="mt-3 rounded-xl bg-dark-900 p-3 text-center text-texto text-dark-400">{tx('Revisa el pago de tu suscripción.')}</p>
           : <PagarConPlay b={b} toast={toast} recargar={recargar} titulo={empezar ? tx('Elige cómo quieres pagar después') : tx('Elige tu plan')} />
-      ) : enIOS ? null : b.status === 'suspended' && b.pago_proveedor === 'stripe' && b.stripe_status !== 'canceled' ? (
+      ) : b.status === 'suspended' && b.pago_proveedor === 'stripe' && b.stripe_status !== 'canceled' ? (
         // Pago fallido con la suscripción viva: se arregla la tarjeta, no se
         // contrata otra (saldrían dos cobros).
         <BotonPortal toast={toast} texto={tx('Revisar mi tarjeta y pagar')} principal />

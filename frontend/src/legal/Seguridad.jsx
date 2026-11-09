@@ -2,6 +2,7 @@ import LegalLayout, { legalEnIngles } from './LegalLayout'
 import SecurityEn from './en/SecurityEn'
 import { useIdioma } from '../lib/idioma'
 import { COMPANY, PROCESSORS, MAP_SERVICES, LEGAL_NOTES } from './config'
+import { sinPagos } from '../lib/plataforma'
 
 /* Trust center. REGLA DE ORO: aquí solo se afirma lo que es verdad HOY y se
    puede demostrar (código, infra o CI). Nada aspiracional: cada línea de esta
@@ -40,7 +41,7 @@ export default function Seguridad() {
         <li>El servidor (la API) y la base de datos están en Fly.io, en la Unión Europea (región de París).</li>
         <li>Frontend servido por la red global de Cloudflare, con cabeceras de seguridad (CSP) y lista blanca de orígenes (CORS).</li>
         <li>Limitación de peticiones (rate limiting) en los endpoints públicos para frenar abusos.</li>
-        <li>Los pagos los procesa Stripe (y Google Play dentro de la app de Play): <strong>nunca vemos ni almacenamos tarjetas</strong>. Sus notificaciones se verifican con firma criptográfica y se rechazan si no están firmadas.</li>
+        {!sinPagos() && <li>Los pagos los procesa Stripe (y Google Play dentro de la app de Play): <strong>nunca vemos ni almacenamos tarjetas</strong>. Sus notificaciones se verifican con firma criptográfica y se rechazan si no están firmadas.</li>}
       </ul>
 
       <h2>4. Copias de seguridad y continuidad</h2>

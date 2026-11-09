@@ -4,6 +4,7 @@ import { importe } from './region'
 import { medirAccion } from './analitica'
 import { getReferidos } from '../services/api'
 import { enlaceInvitar } from './compartir'
+import { sinPagos } from './plataforma'
 
 /* «COMPARTE TU DÍA» (11-10-2026). Al acabar, el repartidor saca una imagen de su jornada (paradas, horas,
    km) para su estado de WhatsApp o sus redes, con SU código QR de invitación: quien la ve y se registra
@@ -23,9 +24,10 @@ function texto(ctx, t, x, y, { tam = 60, peso = 800, color = '#f4fbfb', alinear 
    hizo, a la primera, cuánto le quedó por hora y a qué hora acabó. Cada dato sale solo si se tiene (sin tarifa no hay
    €/hora; sin fallidas, «100 % a la primera»). */
 export async function imagenDelDia({ paradas, minutos, km, enlace, aLaPrimera = null, porHora = null, horaFin = '' }) {
-  // El QR primero (es lo único que espera): luego se dibuja todo de un tirón.
+  // El QR primero (es lo único que espera): luego se dibuja todo de un tirón. Sin `enlace` (la app de iPhone, 09-11-2026: no hay
+  // invitaciones ni «pruébala gratis») la imagen va sin QR.
   const qr = document.createElement('canvas')
-  await QRCode.toCanvas(qr, enlace, { margin: 1, width: 360 })
+  if (enlace) await QRCode.toCanvas(qr, enlace, { margin: 1, width: 360 })
   const c = document.createElement('canvas')
   c.width = ANCHO
   c.height = ALTO
@@ -57,26 +59,32 @@ export async function imagenDelDia({ paradas, minutos, km, enlace, aLaPrimera = 
   texto(ctx, tx('Foto a la etiqueta · guía con voz'), 90, yFrase + 70, { tam: 40, peso: 600, color: '#a9c2c6' })
 
   // El QR de su invitación, en una tarjeta blanca.
-  const yQr = yFrase + 180
-  ctx.fillStyle = '#ffffff'
-  ctx.beginPath()
-  ctx.roundRect ? ctx.roundRect(90, yQr, 420, 420, 32) : ctx.rect(90, yQr, 420, 420)
-  ctx.fill()
-  ctx.drawImage(qr, 120, yQr + 30, 360, 360)
-  texto(ctx, tx('Escanéalo y'), 560, yQr + 140, { tam: 46, color: '#ffffff' })
-  texto(ctx, tx('pruébala gratis'), 560, yQr + 200, { tam: 46, color: '#ffd43b' })
-  texto(ctx, new URL(enlace).host, 560, yQr + 280, { tam: 40, peso: 700, color: '#a9c2c6' })
+  if (enlace) {
+    const yQr = yFrase + 180
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.roundRect ? ctx.roundRect(90, yQr, 420, 420, 32) : ctx.rect(90, yQr, 420, 420)
+    ctx.fill()
+    ctx.drawImage(qr, 120, yQr + 30, 360, 360)
+    texto(ctx, tx('Escanéalo y'), 560, yQr + 140, { tam: 46, color: '#ffffff' })
+    texto(ctx, tx('pruébala gratis'), 560, yQr + 200, { tam: 46, color: '#ffd43b' })
+    texto(ctx, new URL(enlace).host, 560, yQr + 280, { tam: 40, peso: 700, color: '#a9c2c6' })
+  }
   return new Promise((ok) => c.toBlob((b) => ok(b), 'image/png'))
 }
 
 export async function compartirDia({ paradas, minutos, km, aLaPrimera = null, porHora = null, horaFin = '' }) {
   medirAccion('compartir_dia')
+  // En la app de iPhone (09-11-2026) no hay invitaciones: ni código, ni QR, ni enlace, ni «pruébala gratis»; solo el día.
+  const sin = sinPagos()
   let codigo = ''
-  try { codigo = (await getReferidos()).data?.codigo || '' } catch { /* sin código: enlace normal */ }
-  const enlace = enlaceInvitar(codigo).replace('utm_medium=compartir', 'utm_medium=dia')
+  if (!sin) { try { codigo = (await getReferidos()).data?.codigo || '' } catch { /* sin código: enlace normal */ } }
+  const enlace = sin ? '' : enlaceInvitar(codigo).replace('utm_medium=compartir', 'utm_medium=dia')
   const blob = await imagenDelDia({ paradas, minutos, km, enlace, aLaPrimera, porHora, horaFin })
   const extra = aLaPrimera != null ? `${tx('{p} % a la primera', { p: aLaPrimera })}. ` : ''
-  const texto = `${tx('Hoy he hecho {n} paradas con FDS: la ruta se ordena sola. Pruébala gratis:', { n: paradas })} ${extra}${enlace}`
+  const texto = sin
+    ? `${tx('Hoy he hecho {n} paradas con FDS: la ruta se ordena sola.', { n: paradas })} ${extra}`.trim()
+    : `${tx('Hoy he hecho {n} paradas con FDS: la ruta se ordena sola. Pruébala gratis:', { n: paradas })} ${extra}${enlace}`
   const fichero = new File([blob], 'mi-dia-fds.png', { type: 'image/png' })
   try {
     if (navigator.canShare?.({ files: [fichero] })) { await navigator.share({ files: [fichero], text: texto }); return 'compartido' }

@@ -1,7 +1,7 @@
 import React, { Suspense, lazy, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import { escucharInstalacion, prepararModoApp } from './lib/instalar'
-import { arrancarEnLaApp, recordarZona } from './lib/plataforma'
+import { arrancarEnLaApp, recordarZona, sinPagos } from './lib/plataforma'
 import { BrowserRouter, Route, Routes, useLocation, Navigate } from 'react-router-dom'
 /* Tipografía self-hosted (la CSP bloquea Google Fonts). Vite las sirve desde
    el propio dominio.
@@ -366,6 +366,14 @@ function AppRedirect() {
   return <Navigate to={destino} replace />
 }
 
+/* LO QUE SOLO EXISTE EN LA WEB (09-11-2026). Dentro de la app de iPhone la portada, los planes y precios, el regalo de
+   suscripciones, la invitación con premio, la suscripción a avisos de empleo, la tienda de ropa y las demás páginas que
+   venden o promocionan algo no existen: Apple rechazó la 2.4.1 por 2.1(b) y 3.1.1 (docs/APP_STORE.md). Quien llegue a una de
+   ellas (un enlace, el logo de una página legal) va a la app del repartidor. En la web y en Android, todo igual. */
+function SoloWeb({ children }) {
+  return sinPagos() ? <Navigate to="/ruta" replace /> : children
+}
+
 /* Mientras se descarga el trozo de una pantalla. En la app del repartidor, con su papel (o el oscuro) y el cian
    de la marca: el negro con un círculo naranja de antes era lo primero que se veía al abrir la app. */
 function RouteLoader() {
@@ -406,23 +414,23 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <CookieBanner />
           <Suspense fallback={<RouteLoader />}>
             <Routes>
-              <Route path="/" element={<Landing />} />
+              <Route path="/" element={<SoloWeb><Landing /></SoloWeb>} />
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/registro" element={<Registro />} />
               <Route path="/prueba-reparto" element={<PruebaReparto />} />
-              <Route path="/calculadora-repartidor" element={<CalculadoraRepartidor />} />
+              <Route path="/calculadora-repartidor" element={<SoloWeb><CalculadoraRepartidor /></SoloWeb>} />
               <Route path="/empezar" element={<Empezar />} />
-              <Route path="/repartidores" element={<Repartidores />} />
-              <Route path="/iphone" element={<Iphone />} />
-              <Route path="/invita" element={<Invita />} />
+              <Route path="/repartidores" element={<SoloWeb><Repartidores /></SoloWeb>} />
+              <Route path="/iphone" element={<SoloWeb><Iphone /></SoloWeb>} />
+              <Route path="/invita" element={<SoloWeb><Invita /></SoloWeb>} />
               <Route path="/opinion" element={<OpinionCorreo />} />
               <Route path="/mercadillo" element={<MercadilloPagina />} />
               <Route path="/ruta" element={<RutaApp />} />
               <Route path="/pase" element={<PaseMovil />} />
               <Route path="/s/:token" element={<SeguimientoPedido />} />
-              <Route path="/regalo/:codigo" element={<RegaloPagina />} />
-              <Route path="/planes" element={<Planes />} />
+              <Route path="/regalo/:codigo" element={<SoloWeb><RegaloPagina /></SoloWeb>} />
+              <Route path="/planes" element={<SoloWeb><Planes /></SoloWeb>} />
               <Route path="/privacidad" element={<Privacidad />} />
               <Route path="/terminos" element={<Terminos />} />
               <Route path="/encargo" element={<Encargo />} />
@@ -431,7 +439,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/contacto" element={<Contacto />} />
               <Route path="/security" element={<Seguridad />} />
               <Route path="/seguridad" element={<Seguridad />} />
-              <Route path="/peritaje-tecnico" element={<PeritajeTecnico />} />
+              <Route path="/peritaje-tecnico" element={<SoloWeb><PeritajeTecnico /></SoloWeb>} />
               <Route path="/verify" element={<Verify />} />
               <Route path="/verify/:hash" element={<Verify />} />
               <Route path="/app" element={<AppRedirect />} />
@@ -440,8 +448,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/taller/t/:token" element={<PortalTallerLista />} />
               <Route path="/empleo" element={<Ofertas />} />
               <Route path="/empleo/:slug/:oferta" element={<EmpleoPublica />} />
-              <Route path="/empleo/prioridad" element={<EmpleoPrioridad />} />
-              <Route path="/t/:token" element={<TiendaPublica />} />
+              <Route path="/empleo/prioridad" element={<SoloWeb><EmpleoPrioridad /></SoloWeb>} />
+              <Route path="/t/:token" element={<SoloWeb><TiendaPublica /></SoloWeb>} />
               <Route path="/taller/:token" element={<PortalTaller />} />
               <Route path="/verificar-correo-conductor" element={<VerificarCorreoConductor />} />
               <Route path="/conductor" element={<DriverPortal />} />

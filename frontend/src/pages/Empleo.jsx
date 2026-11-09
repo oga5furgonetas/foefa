@@ -12,6 +12,7 @@ import { refPromoActiva, fechaRefPromo } from '../lib/precios'
 import RopaCartel from './RopaCartel'
 import { normalizarDetalle } from '../services/api'
 import { MARCA } from '../marca'
+import { sinPagos } from '../lib/plataforma'
 
 /* LA PÁGINA DONDE SE APUNTA LA GENTE — sin login y desde el móvil.
    ══════════════════════════════════════════════════════════════════════════
@@ -240,7 +241,8 @@ export default function Empleo() {
               No hace falta repetirla: si te llamamos, nos lo das entonces.
             </p>
           )}
-          <div className="mx-auto mt-6 max-w-sm rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-lime-50 p-4 text-left shadow-sm">
+          {/* Sin «Invita y gana» en la app de iPhone (09-11-2026): allí no hay premios, bonos ni promociones. */}
+          {!sinPagos() && <div className="mx-auto mt-6 max-w-sm rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-lime-50 p-4 text-left shadow-sm">
             <div className="flex items-start gap-3">
               <span className="rounded-xl bg-emerald-600 p-2.5 text-lime-100"><Gift size={20} /></span>
               <div>
@@ -255,7 +257,7 @@ export default function Empleo() {
               Ver Flota y crear mi enlace <ArrowRight size={16} />
             </a>
             <p className="mt-2 text-center text-[10.5px] leading-relaxed text-slate-500">El premio requiere 20 entregas reales a direcciones distintas en 2 días, durante los primeros 30 días. <a className="underline" href="/terminos#invita">Condiciones</a>.</p>
-          </div>
+          </div>}
           {/* LA TIENDA, AQUI Y NO ANTES. Esta persona acaba de apuntarse: es
               el unico momento del embudo en que se le puede ensenar otra cosa
               sin quitarle atencion a lo que vino a hacer. Y solo aparece si el
@@ -266,10 +268,10 @@ export default function Empleo() {
               quitarle atencion a lo que vino a hacer. Y solo aparece si el
               backend manda el enlace —o sea, si la tienda esta abierta—, asi
               que cerrarla lo borra de aqui sin tocar esta pantalla. */}
-          <div className="mx-auto mt-9 max-w-sm">
+          {!sinPagos() && <div className="mx-auto mt-9 max-w-sm">
             <RopaCartel url={oferta.tienda} desde={oferta.tienda_desde}
               prendas={oferta.tienda_prendas} titulo="La ropa del equipo" />
-          </div>
+          </div>}
           <p className="mt-8 text-[12px] text-slate-400">
             Puedes pedirnos que borremos tus datos cuando quieras.
           </p>
@@ -485,7 +487,7 @@ export default function Empleo() {
               </span>
             </label>
 
-            <label className="flex items-start gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3.5 text-[13px] leading-relaxed text-slate-700">
+            {!sinPagos() && <label className="flex items-start gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3.5 text-[13px] leading-relaxed text-slate-700">
               <input type="checkbox" checked={f.novedades_fds} onChange={(e) => set('novedades_fds', e.target.checked)}
                 className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-600" />
               <span>
@@ -493,7 +495,7 @@ export default function Empleo() {
                 <span className="mt-0.5 block text-[12px] text-slate-600">Como la app de reparto gratis y el bono de 10 € por tu primera ruta.</span>
                 <span className="mt-0.5 block text-[12px] text-slate-500">Opcional y separado de la candidatura. Si la marcas, necesitamos tu correo. Puedes retirar el consentimiento cuando quieras; consulta cómo hacerlo en la <a href="/privacidad" target="_blank" rel="noreferrer" className="underline">política de privacidad</a>.</span>
               </span>
-            </label>
+            </label>}
 
             <div className="flex gap-2">
               <button type="button" onClick={() => setPaso(1)}

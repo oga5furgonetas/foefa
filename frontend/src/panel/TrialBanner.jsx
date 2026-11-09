@@ -3,6 +3,7 @@ import { Clock, Sparkles, AlertTriangle } from 'lucide-react'
 import { getOrgBilling, getBillingConfig, stripeSuscripcion } from './api'
 import { getAdmin, getOrgId } from './auth'
 import { useT } from '../i18n'
+import { sinPagos } from '../lib/plataforma'
 
 // Convierte claves antiguas (capitalizadas) a las nuevas (lowercase)
 const PLAN_KEY_MAP = {
@@ -19,25 +20,28 @@ export default function TrialBanner() {
   const [billing, setBilling] = useState(null)
   const [cfg, setCfg] = useState(null)
 
+  // En la app de iPhone (09-11-2026) el panel no enseña la prueba, el plan ni el pago: ni se pregunta por ellos.
+  const iOS = sinPagos()
   useEffect(() => {
+    if (iOS) return
     getOrgBilling().then((r) => setBilling(r.data)).catch(() => setBilling(null))
     getBillingConfig().then((r) => setCfg(r.data)).catch(() => setCfg(null))
-  }, [])
+  }, [iOS])
 
   // Al volver de Stripe (?pago=ok) la activación llega por el webhook unos
   // segundos después: se vuelve a preguntar hasta verla activa (máx. 1 min).
   const [pagoOk] = useState(() => new URLSearchParams(window.location.search).get('pago') === 'ok')
   useEffect(() => {
-    if (!pagoOk || billing?.status === 'active') return undefined
+    if (iOS || !pagoOk || billing?.status === 'active') return undefined
     let n = 0
     const t = setInterval(() => {
       n += 1
       getOrgBilling().then((r) => { setBilling(r.data); if (r.data?.status === 'active' || n >= 12) clearInterval(t) }).catch(() => {})
     }, 5000)
     return () => clearInterval(t)
-  }, [pagoOk, billing?.status])
+  }, [iOS, pagoOk, billing?.status])
 
-  if (!billing) return null
+  if (iOS || !billing) return null
   if (billing.account_type === 'owner' || billing.status === 'owner') return null
   if (billing.status === 'active') {
     return pagoOk ? (

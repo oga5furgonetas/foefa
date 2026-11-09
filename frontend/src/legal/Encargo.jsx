@@ -2,6 +2,7 @@ import LegalLayout, { legalEnIngles } from './LegalLayout'
 import ProcessingEn from './en/ProcessingEn'
 import { useIdioma } from '../lib/idioma'
 import { COMPANY, PROCESSORS, MAP_SERVICES, LEGAL_NOTES } from './config'
+import { sinPagos } from '../lib/plataforma'
 
 /* CONTRATO DE ENCARGO DEL TRATAMIENTO (art. 28.3 RGPD), como anexo de los
    términos. Lo exige la ley en cuanto una empresa mete en la plataforma datos
@@ -31,7 +32,7 @@ export default function Encargo() {
       </ul>
 
       <h2>2. Objeto, duración y naturaleza</h2>
-      <p>Alojar y procesar los datos que el cliente introduce para gestionar su flota, su equipo y, si lo usa, su reparto. Dura lo que dure la suscripción. Las operaciones son: registro, conservación, consulta, ordenación de rutas, ubicación en mapa, comunicación a los usuarios que el cliente autoriza y supresión.</p>
+      <p>Alojar y procesar los datos que el cliente introduce para gestionar su flota, su equipo y, si lo usa, su reparto. Dura {sinPagos() ? 'lo que dure el uso del servicio' : 'lo que dure la suscripción'}. Las operaciones son: registro, conservación, consulta, ordenación de rutas, ubicación en mapa, comunicación a los usuarios que el cliente autoriza y supresión.</p>
 
       <h2>3. Datos e interesados</h2>
       <ul>

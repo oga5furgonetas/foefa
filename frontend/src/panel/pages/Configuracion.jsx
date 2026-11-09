@@ -9,6 +9,7 @@ import { lista } from '../../lib/lista'
 import { getAdmin, isSuperAdmin } from '../auth'
 import { usePlan } from '../../lib/usePlan'
 import { voces, esReparto } from '../../lib/sector'
+import { sinPagos } from '../../lib/plataforma'
 
 /* ────────────────────────────────────────────────────────────────────────────
    QUIÉN RECIBE EL RESUMEN DE CADA CENTRO
@@ -593,6 +594,8 @@ export default function Configuracion() {
   function load() {
     getOrgCenters().then((r) => setCenters(r.data?.centers || [])).catch(() => setCenters([]))
     getTelegramConfig().then((r) => setTg(r.data)).catch(() => setTg({}))
+    // En la app de iPhone (09-11-2026) la configuración no enseña el plan, la suscripción ni el pago: ni se piden.
+    if (sinPagos()) return
     getOrgBilling().then((r) => setBilling(r.data)).catch(() => setBilling(null))
     getBillingUso().then((r) => setUso(r.data)).catch(() => setUso(null))
   }
@@ -672,8 +675,8 @@ export default function Configuracion() {
 
       {!reparte && <Destinatarios centers={centers || []} />}
 
-      {/* Plan */}
-      <div className="card p-5">
+      {/* Plan (no sale en la app de iPhone, 09-11-2026: allí no se menciona ni se gestiona ninguna suscripción) */}
+      {!sinPagos() && <div className="card p-5">
         <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-dark-200"><CreditCard size={16} /> {t('cfg.plan')}</div>
         {billing ? (
           <div className="text-sm text-dark-300">
@@ -732,7 +735,7 @@ export default function Configuracion() {
           ) : null}
           <a href="/planes" className="btn-secondary inline-flex text-sm">{t('cfg.see.plans')}</a>
         </div>
-      </div>
+      </div>}
     </div>
   )
 }

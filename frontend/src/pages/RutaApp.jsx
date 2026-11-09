@@ -33,6 +33,7 @@ import { getReferidos, mercEstado } from '../services/api'
 import { eurosRef, refCentActual, refPromoActiva, REF_PROMO_HASTA, fechaRefPromo } from '../lib/precios'
 import { useAtras } from '../lib/atras'
 import { vestirDeApp } from '../lib/tema'
+import { sinPagos } from '../lib/plataforma'
 
 /* LO QUE NO HACE FALTA PARA ABRIR LA APP, SE CARGA CUANDO SE USA (25-10-2026). «Ajustes» viene de la pantalla
    de Reparto del panel, que arrastra el mapa entero (Leaflet); la cuenta trae el QR y el cobro, y el mercadillo
@@ -88,8 +89,8 @@ export default function RutaApp() {
   // LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): la respuesta de /referidos entera, para la tarjeta de «Hoy»
   // (MiRuta no vuelve a pedirla): null mientras no contesta, false si esta cuenta no tiene código. Si la llamada falla
   // (sin cobertura en la nave, un error), undefined: así MiRuta la pide ella cuando haya una entrega real, que es cuando
-  // hace falta, en vez de quedarse sin tarjeta toda la sesión.
-  const [referido, setReferido] = useState(null)
+  // hace falta, en vez de quedarse sin tarjeta toda la sesión. En la app de iPhone (09-11-2026) no hay «Invita y gana»: false, sin preguntar.
+  const [referido, setReferido] = useState(sinPagos() ? false : null)
   const vistoRegalo = (clave) => { try { return !!localStorage.getItem(`fds_regalo_${clave}`) } catch { return false } }
   const verRegalo = () => {
     try { localStorage.setItem(`fds_regalo_${saldoRegalo?.clave}`, '1') } catch { /* incógnito */ }
@@ -98,7 +99,7 @@ export default function RutaApp() {
   useEffect(() => {
     // Sin sesión no se pregunta (03-11-2026): la pantalla ya se va a «Entra en FDS», y la respuesta (un error) la hacía
     // repintar y repetir esa redirección, que cortaba la primera (net::ERR_ABORTED en la prueba «Correo · sin sesión»).
-    if (esSuplantacion() || !isAuthed()) return
+    if (esSuplantacion() || !isAuthed() || sinPagos()) return
     getReferidos().then(({ data }) => {
       setReferido(data?.codigo ? data : false)
       if (data?.por_invitado) setPorInvitado(data.por_invitado)
@@ -134,6 +135,13 @@ export default function RutaApp() {
     if (!isAuthed()) return
     const q = new URLSearchParams(window.location.search)
     const limpiar = () => window.history.replaceState(null, '', '/ruta')
+    // En la app de iPhone (09-11-2026) no se canjea ni se paga nada: se olvida lo pendiente, se limpia la dirección y se sigue.
+    if (sinPagos()) {
+      try { sessionStorage.removeItem('regalo_pendiente') } catch { /* nada */ }
+      if (['canjear', 'regalo', 'regalo_propio', 'pago'].some((k) => q.has(k))) limpiar()
+      recargar()
+      return undefined
+    }
     // Un regalo pendiente (del enlace /regalo/… o de ?canjear=): se canjea
     // ANTES de mirar el pago, para no enseñar el muro a quien ya lo tiene.
     let pendiente = q.get('canjear') || ''
@@ -187,7 +195,8 @@ export default function RutaApp() {
     if (!billing?.sector || esSuplantacion()) return
     apuntarInicio(billing.sector === 'autonomo' ? '/ruta' : null)
   }, [billing?.sector])
-  const bloqueado = !!billing?.bloqueo
+  // En la app de iPhone (09-11-2026) nada bloquea ni limita: sin muro, sin avisos de prueba ni de tope, sin «Invita y gana».
+  const bloqueado = !sinPagos() && !!billing?.bloqueo
   // Recién creada la cuenta: antes de la ruta, instalar la app (se puede saltar).
   const [instalarPrimero, setInstalarPrimero] = useState(() => recienAlta() && !yaEsApp() && !esSuplantacion())
   useEffect(() => { if (yaEsApp()) olvidarRecienAlta() }, [])
@@ -276,25 +285,27 @@ export default function RutaApp() {
   /* UN SOLO AVISO DE LA CUENTA en «Hoy» (07-11-2026, diseño compacto, §5.1 b), en este orden: el regalo de saldo
      (17-10-2026, Dani: «para que vea que es real», una vez por regalo) › los días de prueba que quedan › el plan gratis
      (10-10-2026: sin pagar no hay muro; se reparte con un tope de paradas al día) › instalar la app › el aviso de la
-     mañana. Va a MiRuta, que lo pinta en su hueco si no hay otro aviso de la ruta que mande antes. */
+     mañana. Va a MiRuta, que lo pinta en su hueco si no hay otro aviso de la ruta que mande antes. En la app de iPhone
+     (09-11-2026) no hay regalo de saldo, ni días de prueba, ni plan gratis con tope: solo instalar la app o el aviso de la mañana. */
+  const conPagos = !sinPagos()
   const avisoApp = tab !== 'hoy' ? null
-    : saldoRegalo ? (
+    : conPagos && saldoRegalo ? (
       <Aviso testid="aviso-regalo" tono="ok" icono={Gift} texto={tx('+{euros} en tu cartera', { euros: eurosRef(saldoRegalo.cent, locale()) })}
         accion={tx('Verlo')} onAccion={() => { verRegalo(); setTab('cuenta') }} onCerrar={verRegalo} />
     // Con la prueba ya acabada (0 días) y el plan gratis en marcha, manda el del plan gratis: «Quedan 0 días de prueba» no dice nada.
-    ) : billing?.status === 'trial' && !billing.promo?.activa && !billing.bloqueo && !billing.falta_tarjeta && billing.days_left != null && billing.days_left <= 3
+    ) : conPagos && billing?.status === 'trial' && !billing.promo?.activa && !billing.bloqueo && !billing.falta_tarjeta && billing.days_left != null && billing.days_left <= 3
       && !(billing.gratis?.activo && billing.days_left <= 0) ? (
       // El texto y la acción por separado (§6.2; revisor, hallazgo 6): con las claves viejas, que ya llevaban «· Ver mi plan»,
       // «Ver mi plan» salía dos veces y el texto saltaba de línea («… · Ver mi / plan   Verlo»).
       <Aviso tono="aviso" icono={Clock} texto={billing.days_left === 1 ? tx('Queda 1 día de prueba') : tx('Quedan {n} días de prueba', { n: billing.days_left })}
         accion={tx('Ver mi plan')} onAccion={() => setTab('cuenta')} />
-    ) : !bloqueado && billing?.gratis?.activo ? (
+    ) : conPagos && !bloqueado && billing?.gratis?.activo ? (
       <Aviso tono="neutro" icono={Package} texto={tx('Gratis: {n} paradas al día', { n: billing.gratis.tope })} accion={tx('Quitar el tope')} onAccion={() => setTab('cuenta')} />
     ) : verInstalar ? <InstalarApp compacto />
       : verManana && !esSuplantacion() ? <AvisoManana compacto toast={toast} />
         : null
   // «Invita y gana», al final de la lista (23-10-2026: encima del escáner distraía; quien ya reparte lo ve al bajar).
-  const pieApp = tab === 'hoy' && !esSuplantacion() && !bonoPendiente && (billing?.pais || 'es') !== 'cn' ? (
+  const pieApp = conPagos && tab === 'hoy' && !esSuplantacion() && !bonoPendiente && (billing?.pais || 'es') !== 'cn' ? (
     <LineaEstado icono={Euro} accion={tx('Invitar')} onAccion={invitar}
       texto={<button type="button" onClick={() => setTab('cuenta')} className="flex min-h-12 w-full items-center text-left">
         <span className="truncate">{tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(porInvitado, locale()) })}{promoHasta ? ` ${tx('Promo hasta el {fecha}', { fecha: fechaRefPromo(locale(), promoHasta) })}.` : ''} <span className="font-semibold underline">{tx('Mi cartera')}</span></span>

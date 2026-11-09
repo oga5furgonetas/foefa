@@ -3,6 +3,7 @@ import { useT } from '../../i18n'
 import { Loader2, KeyRound, User, Mail, Receipt, ExternalLink, ShieldCheck, Check } from 'lucide-react'
 import { getAdmin, isSuperAdmin } from '../auth'
 import { changeMyPassword, getMe, setMyEmail } from '../api'
+import { sinPagos } from '../../lib/plataforma'
 
 export default function Perfil() {
   const { t } = useT()
@@ -96,12 +97,12 @@ export default function Perfil() {
         {emailMsg && <p className={`mt-2 text-sm ${emailMsg.ok ? 'text-emerald-400' : 'text-red-400'}`}>{emailMsg.text}</p>}
       </div>
 
-      {/* Facturación */}
-      <div className="card p-5">
+      {/* Facturación (no sale en la app de iPhone, 09-11-2026: allí no hay cobros, facturas ni enlaces a pagar) */}
+      {!sinPagos() && <div className="card p-5">
         <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-dark-200"><Receipt size={16} /> {t('prof.billing')}</div>
         <p className="text-sm text-dark-400">Tus cobros y facturas (con IVA) los gestiona Lemon Squeezy como Merchant of Record. Desde su panel descargas facturas y ves los pagos.</p>
         <a href="https://app.lemonsqueezy.com" target="_blank" rel="noreferrer" className="btn-secondary mt-3 inline-flex items-center gap-1.5 text-sm">{t('prof.go.billing')} <ExternalLink size={14} /></a>
-      </div>
+      </div>}
     </div>
   )
 }
