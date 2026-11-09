@@ -43,7 +43,8 @@ Android o el PC). Lo que sí cambia:
   External Testing → Public link; Apple revisa el build para pruebas externas en menos de un día) sin dar de alta a nadie.
 - **Las capturas de la ficha** ya están hechas desde la propia app a tamaño de iPhone 6,7" (1290×2796):
   `frontend/ios/listing/capturas/es-ES` y `en-US` (se regeneran con `node e2e/capturas-app-store.mjs <carpeta> es|en`
-  con `vite preview --port 4174` en marcha). Apple las admite en JPEG.
+  con `vite preview --port 4174` en marcha; el generador simula la app de iPhone —`window.Capacitor`—, así la página del
+  cliente (06) sale sin «Ordena tu ruta gratis»; con `cliente` al final sale solo la 06). Apple las admite en JPEG.
 
 ## Pasos de Dani (una vez)
 
@@ -81,7 +82,9 @@ Android o el PC). Lo que sí cambia:
    - **Información de revisión**: Apple entra con una cuenta de prueba: crea una en la web (p. ej. `apple@flotadsp.com`
      con unas paradas de ejemplo cargadas) y pon usuario y contraseña ahí, con una nota: «App para repartidores
      autónomos: escanea paquetes, ordena la ruta y navega. Para probar: entrar y pulsar "Ver un ejemplo" (carga
-     3 paradas de muestra).» (Sin una palabra de planes ni de pagos: la app no los tiene, ver abajo.)
+     3 paradas de muestra). Usa la cuenta de prueba de estas notas y no crees otra.» (Sin una palabra de planes ni de
+     pagos: la app no los tiene, ver abajo. Lo de no crear otra cuenta: cada alta es una cuenta más en producción y, con
+     un servidor sin `desde_ios`, manda la bienvenida estándar con la prueba.)
    - Selecciona el build de TestFlight, «Guardar» y **«Enviar a revisión»**. La primera revisión suele tardar 1-3 días.
 9. Cada vez que se toque `frontend/` en `main`, el workflow vuelve a compilar y, con los secretos, sube otro build;
    para publicarlo, en App Store Connect se crea la versión nueva, se elige el build y se envía a revisión.
@@ -196,7 +199,8 @@ HOW TO ACCESS
 - Self-employed courier: log in with: user <USUARIO_PRUEBA_AUTONOMO> / password <CLAVE>. On the route screen tap
   "Ver un ejemplo" to load a sample route with 3 stops.
 - Company driver: log in with: <CORREO_CONDUCTOR_PRUEBA> / password <CLAVE> (company "<NOMBRE EMPRESA PRUEBA>").
-- Registration: "Crear mi cuenta" → name, e-mail, password.
+- Registration: "Crear mi cuenta" → name, e-mail, password. Please use the test accounts above instead of creating a
+  new one.
 - Account deletion: Cuenta → "Borrar mi cuenta" (asks for the password; deletes the account and its data).
 
 EXTERNAL SERVICES
@@ -292,16 +296,36 @@ app). Fuera del iPhone (web, Android, PWA) no cambia nada.
   Las pantallas del dueño del producto (Negocio, con planes y cobros, la tienda de ropa, la analítica y los gastos; solo las
   ve el super-admin) no existen en el iPhone: ni en el menú ni por la dirección (llevan al panel).
 - **Textos legales** (`legal/`, en español y en inglés): los Términos sin las cláusulas de suscripción, prueba, pagos,
-  regalos, «Invita y gana», bono y cartera; la Privacidad sin «Invita y gana», cartera ni pagos; las Cookies sin Stripe ni
-  `flota_plan`; Seguridad, Aviso legal y Encargo sin «pagos» ni «suscripción»; Stripe y Google Play fuera de la lista de
-  encargados.
+  regalos, «Invita y gana», bono y cartera, y con el §8 diciendo «limitada al máximo que permita la ley» (to the maximum
+  extent permitted by law) en vez de «al importe pagado por el cliente en los 12 meses anteriores»; la Privacidad sin
+  «Invita y gana», cartera, pagos ni «datos de facturación»; las Cookies sin Stripe ni `flota_plan`; Seguridad, Aviso legal
+  y Encargo sin «pagos» ni «suscripción» y el Aviso legal sin «el acceso a la página web pública es gratuito»; Stripe y
+  Google Play fuera de la lista de encargados y sin «Google Play services» (la línea del geocodificador de Android pasa a
+  llamarse «Google (geocodificador de Android)»).
 - **Páginas de la web que en el iPhone no existen** (`main.jsx`, `SoloWeb`; llevan a la app del repartidor): la portada (`/`),
   `/planes`, `/regalo/…`, `/invita`, `/repartidores`, `/calculadora-repartidor`, `/iphone`, `/empleo/prioridad`,
   `/peritaje-tecnico` y `/t/…` (la tienda). En la candidatura de empleo y en el seguimiento del cliente, sin «Invita y
   gana», promociones, ropa ni «ordena tu ruta gratis».
-- **Errores del servidor** (`txError`, `services/api.js`): lo que mande el servidor sobre plan, suscripción, prueba, tope,
-  regalo, promoción o Stripe, y cualquier 402, sale como «No se ha podido completar. Inténtalo de nuevo más tarde.» (o el
-  texto por defecto de la pantalla). El servidor no se tocó.
+- **Errores del servidor** (`txError`, `services/api.js`, `HABLA_DE_PAGOS` en `lib/plataforma.js`): lo que mande el servidor
+  sobre plan (singular o plural), suscripción, prueba con días, tope, cuota, regalo, bono, cartera, retirada, enlaces de
+  invitación, promoción, Stripe, PayPal o Google Play, y cualquier 402, sale como «No se ha podido completar. Inténtalo de
+  nuevo más tarde.» (o el texto por defecto de la pantalla). La expresión sale de clasificar con `ast` los 1.221
+  `HTTPException` de `server.py` (1.219 con texto, 898 distintos): los 66 que hablan de pagos se neutralizan y los legítimos (credenciales,
+  validaciones, enlaces caducados, el cobro de un cliente en una entrega, el «plano» del parking, «Pega el plan de la
+  semana») salen tal cual. «Mándanos una idea» y la respuesta del correo «¿Qué tal te va?» pasan el error entero a
+  `txError` (así vale también el código HTTP).
+- **Alta y correos del servidor** (T4): el alta manda `desde_ios: true` (`Registro.jsx`, `AltaRapida.jsx`; solo dentro de la
+  app: en la web y en Android el cuerpo es el de siempre). El servidor (`register_dsp`) guarda `alta_ios` y pone
+  `correos_baja` (con `correos_baja_at` y el motivo `alta_ios`): esa cuenta no recibe la bienvenida ni ningún correo del
+  ciclo (primer día, casi fin, recordatorio, invita, bono, opinión, «bono25») ni la bienvenida genérica con «Tu prueba
+  gratuita de N días», y el aviso de la mañana (un push) no lleva la frase del bono. Los correos de la cuenta (contraseña,
+  códigos, verificación) no cambian. Un servidor sin esto ignora el campo nuevo: el build del iPhone puede salir antes.
+- **Enlaces que salen de la app** (T5): dentro de la app `window.location.origin` es `capacitor://localhost`, que fuera de ella
+  no abre; `origen()` (`src/marca.js`) da allí la web pública (`VITE_WEB_ORIGIN`, que `app-ios.yml` pasa al compilar, y por
+  defecto `https://flotadsp.com`): el seguimiento que el repartidor manda al cliente por WhatsApp, el portal del conductor y
+  «Copiar enlace para el cliente» del panel. En la web y en Android, la dirección de siempre.
+- **Capturas de la ficha** (T2): el generador (`e2e/capturas-app-store.mjs`) simula la app de iPhone (`window.Capacitor`); la
+  06 (enlace del cliente, es y en) ya no enseña «Ordena tu ruta gratis con FDS».
 
 ### Cómo se vigila
 - **`frontend/e2e/ios-sin-pagos.spec.js`**: simula la app (`window.Capacitor` con `getPlatform() 'ios'`, el puente nativo y
@@ -309,41 +333,70 @@ app). Fuera del iPhone (web, Android, PWA) no cambia nada.
   promoción…), «Hoy» con sus avisos, bono e invitaciones, el error del tope, el alta entera, la entrada, el portal del
   conductor con la auditoría y su final, el panel y los textos legales, también con el móvil en los seis idiomas (y pt-BR),
   y comprueba que NADA de lo que se ve —ni los nombres accesibles, marcadores o títulos— casa con el vocabulario prohibido
-  (suscripción, plan, prueba con días, precio, €/mes, promo, cupón, código de regalo, bono, invita y gana, gana N €,
-  gratis hasta, paradas al día, Stripe, pagar, comprar, premium… y sus equivalentes en en, pt, fr, it y de). Cada pantalla
-  tiene su **control**: la misma ruta sin simular el iPhone sigue enseñando lo que enseña la web. Comprobado también al
-  revés: con `sinPagos = () => false` fallan 89 de las 107 pruebas del iPhone (las otras 18 no tienen nada que esconder).
+  (suscripción, plan —en singular también—, prueba con días, precio, €/mes, promo, cupón, código de regalo, bono, invita y
+  gana, gana N €, gratis hasta, paradas al día, Stripe, pagar, comprar, premium… y sus equivalentes en en, pt, fr, it y de).
+  Cada pantalla tiene su **control**: la misma ruta sin simular el iPhone sigue enseñando lo que enseña la web. Suma, de la
+  segunda pasada: la tabla de 41 mensajes REALES del servidor que se neutralizan y 45 que no (comprobados contra
+  `server.py`), «Mándanos una idea» y el asistente con el error real, las páginas legales sin «importe pagado», «facturación»,
+  «gratuito» ni «Google Play», el cuerpo del alta con `desde_ios` y los enlaces que salen de la app.
+  Comprobado también al revés: con `sinPagos = () => false` fallan 99 de las 200 pruebas del archivo (97 de las 118 del
+  iPhone y 2 de las de Node); las 74 de control de la web siguen en verde y las otras 21 del iPhone no tienen nada que esconder.
+- **`backend/tests/test_alta_ios.py`** (8 pruebas): el alta del iPhone queda sin correos y sin bienvenida; sin `desde_ios`
+  sigue la bienvenida del ciclo y la de las empresas; el ciclo entero, el primer día y la campaña de 25 € le saltan a la
+  cuenta de la web y no a la del iPhone; el aviso de la mañana no habla del bono a esa cuenta; el esquema ignora campos
+  desconocidos.
 - **Regla para quien toque la app**: toda pantalla o texto nuevo con plan, precio, prueba, regalo, bono o invitación lleva
-  `sinPagos()`; si no, esa prueba falla.
+  `sinPagos()`; si no, esa prueba falla. Un mensaje de error nuevo del servidor que hable de eso, también: añadirlo a la
+  tabla de la prueba (o a `HABLA_DE_PAGOS` si no lo casa).
 
 ### Lo que NO cambia (y hay que tener presente)
 - El servidor sigue con sus reglas: desde el 01-01-2027 aplica el tope de 15 paradas nuevas al día a las cuentas sin
   suscripción (`REP_GRATIS_HASTA`), también a las del iPhone, que no sabe de qué plataforma viene una cuenta. En la app
-  sale un aviso neutro (sin «plan» ni «tope»). Si no se quiere que el iPhone tenga tope, hay que decidirlo en el servidor
-  antes de esa fecha.
-- Los correos que manda el servidor (bienvenida, «te quedan N días de prueba») siguen hablando de plan y prueba: no están
-  en la app, pero una cuenta creada en el iPhone también los recibe.
+  sale un aviso neutro (sin «plan» ni «tope»). Ver «Pendiente de Dani».
+- Los correos que manda el servidor a cuentas creadas en el iPhone (bienvenida, ciclo, «te quedan N días de prueba», bono)
+  ya no salen **si el servidor lleva este cambio** (`desde_ios`): hay que desplegarlo ANTES de que el revisor cree una
+  cuenta. Las cuentas creadas antes (pruebas, revisores anteriores) ya recibieron lo suyo y no llevan `alta_ios`.
+- Siguen sin la marca de «correos de baja» y sin tocar: los envíos que hace el super-admin a mano (`/admin/correo`), el
+  resumen semanal de inspecciones (no habla de plan ni de precios) y los correos de cuenta (contraseña, códigos). Los
+  avisos al móvil («Tu primera ruta con FDS», el de la mañana) no pasan por `correos_baja` y no llegan a un iPhone: la app de
+  iPhone no tiene plugin de avisos y su WebView no admite web push.
 - El mercadillo (anuncios entre repartidores) lleva el precio del objeto que se vende y el consejo «no pagues por
   adelantado»: no es un plan ni un pago de la app y se queda.
-- OJO, ajeno a esto: dentro de la app `origen()` es `capacitor://localhost`, así que el enlace de seguimiento que el
-  repartidor manda al cliente por WhatsApp sale con esa dirección, que no abre fuera de la app.
+- Las listas de proveedores de los textos legales siguen nombrando la app de Android donde un proveedor solo la sirve
+  (avisos con Firebase, mapa de OpenFreeMap, geocodificador de Android): es lo que pasa de verdad; solo se quitó «Google Play
+  services».
+- Las capturas 01-05 de la ficha son las del 30-10 (antes del diseño compacto): su generador ya no encuentra el botón
+  «Editar parada» (la ficha de la parada cambió con el diseño compacto), así que no se regeneraron; solo las dos 06.
+
+### Pendiente de Dani (no es de la app)
+- **El tope de 15 paradas nuevas al día** del servidor desde el 01-01-2027 alcanzará también a las cuentas del iPhone, y allí
+  no hay forma de quitarlo dentro de la app (sin pagos en la app no se puede vender «sin tope»). Es una decisión de negocio:
+  quitar el tope a las cuentas con `alta_ios`, ofrecerlo con la compra de Apple más adelante, o aceptarlo.
+- **Los correos ya enviados** antes de este cambio (a cuentas creadas en el iPhone: las de prueba, las de revisores de
+  Apple anteriores) no se pueden retirar, y esas cuentas no llevan `alta_ios`: siguen en el ciclo hasta que se den de baja
+  (enlace del correo).
 
 ### Qué contestar a Apple (Centro de resolución, en inglés; poner el número de build al subirlo)
 ```
-Thank you for the review. We removed all references to subscriptions, plans, trials, prices, promo codes and bonuses from the
-iOS app; it is free for couriers on iPhone and nothing in the app unlocks functionality through mechanisms other than the App
-Store.
-- 2.1(b): the app no longer mentions any subscription or In-App Purchase product (account screen, notices, sign-up, legal pages
-  and the company panel included), so there are no In-App Purchase products to submit.
-- 3.1.1: the gift/promo code field, and any other code, coupon, bonus or referral reward, is gone from the iOS app.
-A new binary (build <N>) is attached.
+Thank you for the review. In this build (<N>) we removed from the iOS app's screens and notices the references to
+subscriptions, plans, prices, free trials, promo codes, gifts, bonuses and referral rewards. The app has no In-App Purchase
+products and does not unlock anything with codes; it is free to use for couriers on iPhone.
+- 2.1(b): the iOS app screens and notices no longer mention subscriptions or In-App Purchase products (account screen,
+  notices, sign-up, legal pages and the company panel included), so there are no In-App Purchase products to submit.
+- 3.1.1: the gift/promo code field, and any other code, coupon, bonus or referral reward, is no longer in the iOS app.
+- Accounts created in the iOS app are not sent any email about plans, trials, prices or bonuses.
 ```
+(La última línea solo es cierta con el servidor desplegado con `desde_ios`: si no se ha desplegado antes de contestar, quitarla.)
 
 ### Pasos para reenviarla
 1. Mezclar la rama `ios/sin-pagos` en `main`.
-2. **«App iPhone (App Store)»** → Run workflow (sube el build N a App Store Connect; `app-ios.yml` ya no se lanza solo);
-   `python scripts/app_store_connect.py builds` dice cuándo está procesado y `adjuntar` lo pone en la versión.
-3. Poner las notas de revisión de arriba (sin «free plan, no card» ni nada de pagos): `python scripts/app_store_connect.py
-   revision`, o a mano en la versión → Información para el equipo de revisión.
-4. Contestar en el Centro de resolución con el texto de arriba y volver a enviar. Si el envío rechazado no deja reenviar,
+2. **Desplegar el servidor** (`desde_ios`, `scripts/deploy-backend.ps1`) ANTES del build: así la cuenta que cree el revisor
+   no recibe correos con plan, prueba ni precios.
+3. **«App iPhone (App Store)»** → Run workflow (sube el build N a App Store Connect; `app-ios.yml` ya no se lanza solo y
+   compila la web con `VITE_WEB_ORIGIN`); `python scripts/app_store_connect.py builds` dice cuándo está procesado y `adjuntar`
+   lo pone en la versión.
+4. Poner las notas de revisión (sin «free plan, no card» ni nada de pagos; piden usar la cuenta de prueba y no crear otra):
+   `python scripts/app_store_connect.py revision`, o a mano en la versión → Información para el equipo de revisión. Las
+   cuentas de prueba (autónomo y conductor) siguen vivas; no borrarlas.
+5. Contestar en el Centro de resolución con el texto de arriba y volver a enviar. Si el envío rechazado no deja reenviar,
    como el 03-11: quitar su elemento rechazado y crear uno nuevo por la API (`enviar`).
