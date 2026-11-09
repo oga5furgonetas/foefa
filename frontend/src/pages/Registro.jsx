@@ -429,9 +429,10 @@ export default function Registro() {
               ? tt('Plan {plan} · gratis hasta {p} paradas al día', { plan: tt(planInfo.name), p: PARADAS_GRATIS })
               : tt('Plan {plan} · {n} días gratis', { plan: tt(planInfo.name), n: diasPrueba })}
           </div>}
-          <p style={{ color: '#8b94a3', fontSize: 14, lineHeight: 1.6, margin: '0 0 8px' }}>
+          {/* Desde la app de iPhone (09-11-2026) el servidor no manda correo de bienvenida (`desde_ios`, register_dsp): no se dice que sí. */}
+          {!enIOS && <p style={{ color: '#8b94a3', fontSize: 14, lineHeight: 1.6, margin: '0 0 8px' }}>
             {tt('Hemos enviado un email de bienvenida a')} <b style={{ color: '#0ea5e9' }}>{email}</b>.
-          </p>
+          </p>}
           <p style={{ color: '#64748b', fontSize: 12, marginBottom: 22 }}>
             {soloYo ? tt('Ya puedes escanear tus primeros paquetes.') : 'Puedes acceder ahora y verificar tu email después.'}
           </p>

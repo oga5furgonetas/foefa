@@ -662,6 +662,8 @@ test.describe('iPhone · la entrada, el acceso y el alta', () => {
     await limpia(page, 'el alta con el error del servidor')
     await page.getByRole('button', { name: 'Crear mi cuenta', exact: true }).click()
     await expect(page.getByText('¡Cuenta creada!')).toBeVisible()
+    // Con `desde_ios` el servidor no manda correo de bienvenida: la pantalla no dice que lo ha mandado.
+    await expect(page.getByText(/email de bienvenida/i)).toHaveCount(0)
     await limpia(page, 'la cuenta creada')
     expect(cuerpos[1].plan).toBe('autonomo')
     expect(cuerpos[1].ref, 'en el iPhone el alta no manda código de invitación').toBeUndefined()
@@ -686,6 +688,7 @@ test.describe('control · el alta de la web no manda desde_ios', () => {
     await page.getByRole('checkbox').check()
     await page.getByRole('button', { name: /Crear cuenta con plan Repartidor/ }).click()
     await expect(page.getByText('¡Cuenta creada!')).toBeVisible()
+    await expect(page.getByText(/Hemos enviado un email de bienvenida a/), 'control: en la web sí dice que lo ha mandado').toBeVisible()
     expect(cuerpos).toHaveLength(1)
     expect(cuerpos[0], 'en la web el alta no manda desde_ios').not.toHaveProperty('desde_ios')
     expect(cuerpos[0]).toHaveProperty('desde_app', false)
