@@ -1,7 +1,8 @@
 // LAS CAPTURAS DE LA FICHA DE LA APP STORE (30-10-2026): Dani no tiene iPhone, así que salen de la propia app (la misma
 // web que va dentro de la app de iPhone) a tamaño de iPhone 6,7" (1290×2796: 430×932 CSS a 3x), con la API simulada
 // (los mismos datos que e2e/calle.spec.js y e2e/fuera.spec.js), no maquetas. En español (A Coruña) y en inglés (Seattle).
-// Uso: node e2e/capturas-app-store.mjs <carpeta de salida> [es|en]   (con `vite preview --port 4174` en marcha)
+// Uso: node e2e/capturas-app-store.mjs <carpeta de salida> [es|en] [cliente]   (con `vite preview --port 4174` en marcha; otro puerto:
+// BASE=http://localhost:5200). Con «cliente» sale solo la 06 (el enlace del cliente) y no las cinco de la ruta.
 import { chromium } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -9,6 +10,7 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
 
 const OUT = process.argv[2]
 const IDIOMA = process.argv[3] || 'es'
+const SOLO = process.argv[4] || ''
 const BASE = process.env.BASE || 'http://localhost:4174'
 mkdirSync(OUT, { recursive: true })
 // El UA de la app de iPhone (lleva FDSApp/: la web la trata como app, sin «instalar» ni Google Play).
@@ -24,6 +26,15 @@ async function contexto() {
   })
   const page = await ctx.newPage()
   await page.addInitScript(() => {
+    // La app de iPhone de verdad (09-11-2026): su puente nativo de Capacitor y el objeto global, como arrancar() de
+    // e2e/ios-sin-pagos.spec.js. Con ellos esAppIOS() / sinPagos() son ciertos y la web enseña lo mismo que dentro de la app: sin
+    // «Ordena tu ruta gratis con FDS» en la página del cliente ni nada con planes o pagos (Apple 2.1(b) y 3.1.1). Solo con el UA
+    // (FDSApp/) sinPagos() era falso y las capturas salían como la web. `chunk_curacion` agotado: la web no se recarga sola si un
+    // plugin de Capacitor no carga.
+    window.webkit = window.webkit || {}
+    window.webkit.messageHandlers = { ...(window.webkit.messageHandlers || {}), bridge: { postMessage() {} } }
+    window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'ios', nativePromise: () => new Promise(() => {}), nativeCallback() {} }
+    try { sessionStorage.setItem('chunk_curacion', JSON.stringify({ t: Date.now(), n: 3 })) } catch { /* nada */ }
     localStorage.setItem('cookie_consent', JSON.stringify({ v: 3, anuncios: false, at: '2026-10-29T00:00:00Z' }))
     localStorage.setItem('fds_tour_ruta', '1'); localStorage.setItem('fds_aviso_manana', 'no'); localStorage.setItem('fds_instalar_cerrado', '1')
     localStorage.setItem('ruta_vista', 'lista'); localStorage.setItem('guia_voz', '0')
@@ -58,7 +69,8 @@ const PEDIDOS = ES ? [
 ]
 
 // 1. La ruta: lista con la siguiente parada, el dinero y lo que dijo el cliente; la furgoneta aparcada; una parada; el mapa.
-{
+ruta: {
+  if (SOLO === 'cliente') break ruta
   const { ctx, page } = await contexto()
   await page.clock.install({ time: new Date(ES ? '2026-10-29T10:30:00+01:00' : '2026-10-29T10:30:00-07:00') })
   await page.clock.resume()
