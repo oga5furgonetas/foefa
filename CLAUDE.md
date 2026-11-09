@@ -56,7 +56,21 @@ queda solo como nombre interno del repo y de la infraestructura (`flota-backend`
 visible nombra otra plataforma o la marca escrita a mano. El logo es
 `frontend/public/favicon.svg`; los PNG salen de él con
 `node scripts/generar-iconos.mjs`. Los enlaces (portal, taller, empleo) salen
-del dominio donde se sirve la app (`origen()`), nunca escritos.
+del dominio donde se sirve la app (`origen()`), nunca escritos. La única excepción (09-11-2026): dentro de la app de
+iPhone la web se sirve desde `capacitor://localhost`, que fuera de la app no abre, y allí `origen()` da la web pública
+(`VITE_WEB_ORIGIN`, que pasa `app-ios.yml`; por defecto `https://flotadsp.com`).
+
+## La app de iPhone no vende ni menciona pagos
+
+Apple rechazó la 2.4.1 (09-11-2026) por 2.1(b) y 3.1.1: veía el plan, un código de regalo e «Invita y gana». Desde
+entonces, dentro de la app de iPhone (`sinPagos()` = `esAppIOS()`, `frontend/src/lib/plataforma.js`; `window.Capacitor`
+solo existe allí) NO puede verse nada de suscripción, plan, precio, prueba con días, «gratis hasta…», tope de paradas,
+códigos, cupones, regalos, bonos, «Invita y gana», cartera, Stripe o PayPal. La web y Android no cambian. Una pantalla o
+texto nuevo con cualquiera de eso lleva `sinPagos()`; un mensaje de error nuevo del servidor que lo mencione también
+(`HABLA_DE_PAGOS`). Lo vigila `frontend/e2e/ios-sin-pagos.spec.js` (cada pantalla con su control en la web) y el alta
+desde el iPhone manda `desde_ios` para que el servidor no le mande correos de plan o prueba
+(`backend/tests/test_alta_ios.py`). Detalle, qué se esconde y cómo se reenvía a Apple: `docs/APP_STORE.md`
+(«Rechazo del 09-11-2026»).
 
 ## El diseño compacto de la app de reparto
 

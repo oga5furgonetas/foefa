@@ -377,26 +377,37 @@ app). Fuera del iPhone (web, Android, PWA) no cambia nada.
   (enlace del correo).
 
 ### Qué contestar a Apple (Centro de resolución, en inglés; poner el número de build al subirlo)
+Lo que se mandó el 09-11-2026 (build 20), sin prometer nada que no se pueda comprobar en la app (ni el correo de bienvenida ni
+«es gratis»: el servidor pondrá el tope de 15 paradas al día en 2027):
 ```
-Thank you for the review. In this build (<N>) we removed from the iOS app's screens and notices the references to
-subscriptions, plans, prices, free trials, promo codes, gifts, bonuses and referral rewards. The app has no In-App Purchase
-products and does not unlock anything with codes; it is free to use for couriers on iPhone.
-- 2.1(b): the iOS app screens and notices no longer mention subscriptions or In-App Purchase products (account screen,
-  notices, sign-up, legal pages and the company panel included), so there are no In-App Purchase products to submit.
-- 3.1.1: the gift/promo code field, and any other code, coupon, bonus or referral reward, is no longer in the iOS app.
-- Accounts created in the iOS app are not sent any email about plans, trials, prices or bonuses.
+Hello, and thank you for the review.
+
+We have addressed both issues in a new binary of version 2.4.1 (build <N>).
+
+Guideline 2.1(b): the iOS app no longer contains any reference to subscriptions, plans, prices, free-trial periods or
+In-App Purchase products. We removed them from the iOS app's screens and notices (account screen, home notices, sign-up and
+sign-in, legal pages and the company panel included). The app has no In-App Purchase products, so there is nothing to submit.
+
+Guideline 3.1.1: the gift/promo code field, and any other code, coupon, bonus or referral reward, has been removed from the
+iOS app. Nothing is sold, unlocked or redeemed inside the iOS app.
+
+The demo account in the App Review Information is unchanged. Thank you for your time.
 ```
-(La última línea solo es cierta con el servidor desplegado con `desde_ios`: si no se ha desplegado antes de contestar, quitarla.)
 
 ### Pasos para reenviarla
 1. Mezclar la rama `ios/sin-pagos` en `main`.
 2. **Desplegar el servidor** (`desde_ios`, `scripts/deploy-backend.ps1`) ANTES del build: así la cuenta que cree el revisor
    no recibe correos con plan, prueba ni precios.
-3. **«App iPhone (App Store)»** → Run workflow (sube el build N a App Store Connect; `app-ios.yml` ya no se lanza solo y
-   compila la web con `VITE_WEB_ORIGIN`); `python scripts/app_store_connect.py builds` dice cuándo está procesado y `adjuntar`
-   lo pone en la versión.
-4. Poner las notas de revisión (sin «free plan, no card» ni nada de pagos; piden usar la cuenta de prueba y no crear otra):
-   `python scripts/app_store_connect.py revision`, o a mano en la versión → Información para el equipo de revisión. Las
-   cuentas de prueba (autónomo y conductor) siguen vivas; no borrarlas.
+3. **«App iPhone (App Store)»** → Run workflow (sube el build N a App Store Connect y compila la web con `VITE_WEB_ORIGIN`;
+   el número de build es el de la ejecución del workflow). OJO: un push a `main` que toque `.github/workflows/app-ios.yml`,
+   `frontend/ios/` o `frontend/capacitor.config.json` lo lanza SOLO (el #18 del 09-11 salió así); un cambio de `frontend/src`
+   no. `python scripts/app_store_connect.py builds` dice cuándo está procesado y `adjuntar N` lo pone en la versión (que pasa
+   de REJECTED a PREPARE_FOR_SUBMISSION).
+4. Poner las notas de revisión (sin «free plan, no card» ni nada de pagos; piden usar la cuenta de prueba y no crear otra;
+   el punto 6 describe el MERCADILLO como contenido de usuarios, con sus controles). OJO: `python scripts/app_store_connect.py
+   revision` PISA las notas largas por las cortas y reescribe la cuenta de prueba; para cambiar solo las notas, el PATCH de
+   `notes` en `appStoreReviewDetails/<id>` (4.000 caracteres como máximo; el script del PC `fds-emu/asc_notas_poner.py`
+   las pone con el número de build y no toca la cuenta de prueba), o a mano en la versión → Información para el equipo de
+   revisión. Las cuentas de prueba (autónomo y conductor) siguen vivas; no borrarlas.
 5. Contestar en el Centro de resolución con el texto de arriba y volver a enviar. Si el envío rechazado no deja reenviar,
    como el 03-11: quitar su elemento rechazado y crear uno nuevo por la API (`enviar`).
