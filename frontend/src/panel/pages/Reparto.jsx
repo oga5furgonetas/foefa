@@ -189,7 +189,7 @@ export default function Reparto() {
   async function copiarEnlace(p) {
     try {
       const { data } = await enlaceSeguimiento(p.id)
-      const url = `${window.location.origin}/s/${data.token}`
+      const url = `${origen()}/s/${data.token}`   // origen(): dentro de la app de iPhone, la web pública y no capacitor://localhost
       await navigator.clipboard.writeText(url)
       toast.success('Enlace copiado: el cliente ve la hora estimada, sin datos personales')
     } catch (e) { toast.error(e?.response?.data?.detail || 'No se pudo copiar el enlace') }

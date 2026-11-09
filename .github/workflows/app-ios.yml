@@ -50,6 +50,9 @@ jobs:
         working-directory: frontend
         env:
           VITE_API_URL: https://flota-backend.fly.dev/api
+          # La web pública: los enlaces que salen de la app (el seguimiento que el repartidor manda al cliente, el portal del
+          # conductor…) llevan esta dirección y no capacitor://localhost, que fuera de la app no abre (src/marca.js, origen()).
+          VITE_WEB_ORIGIN: https://flotadsp.com
         run: |
           npm ci
           npm run build

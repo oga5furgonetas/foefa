@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { simularApi, entrarComoAdmin } from './api-simulada.js'
 import { hablaDePagos, detalleSinPagos, TEXTO_NEUTRO } from '../src/lib/plataforma.js'
+import { origen } from '../src/marca.js'
 
 /* LA APP DE IPHONE NO MENCIONA NI VENDE NADA CON PAGOS (09-11-2026). Apple rechazó la 2.4.1 por la 2.1(b) («la app incluye
    referencias a suscripción pero los productos de compra dentro de la app no se han enviado») y por la 3.1.1 («usa códigos
@@ -1248,6 +1249,105 @@ for (const [titulo, ios] of [['iPhone', true], ['control · web', false]]) {
       } else {
         await expect(aviso).toHaveText(GEMINI_429)
       }
+      expect(fallos).toEqual([])
+    })
+  })
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+   10. LOS ENLACES QUE SALEN DE LA APP (origen(), src/marca.js)
+   Dentro de la app de iPhone la web se abre desde `capacitor://localhost`: el seguimiento que el repartidor manda al cliente por
+   WhatsApp, el portal del conductor o el enlace que la oficina copia salían como capacitor://localhost/… y fuera de la app no abren.
+   Con la app de iPhone, origen() da la web pública (VITE_WEB_ORIGIN o, por defecto, https://flotadsp.com); en la web y en Android,
+   la dirección desde la que se sirve, como siempre.
+   ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+const WEB_PUBLICA = 'https://flotadsp.com'
+const TOKEN_SEGUIMIENTO = 'tok1234567890abcdef'
+/** Lo que haría `fn` con ese `window` (de mentira) y luego deja el entorno como estaba. */
+function conVentana(ventana, fn) {
+  const antes = globalThis.window
+  if (ventana === undefined) delete globalThis.window; else globalThis.window = ventana
+  try { return fn() } finally { if (antes === undefined) delete globalThis.window; else globalThis.window = antes }
+}
+const lugar = (origin, protocol) => ({ location: { origin, protocol } })
+const IOS = { isNativePlatform: () => true, getPlatform: () => 'ios' }
+const ANDROID = { isNativePlatform: () => true, getPlatform: () => 'android' }
+
+test.describe('origen() (src/marca.js)', () => {
+  test('en la web y en Android es la dirección desde la que se sirve, igual que antes', () => {
+    for (const [origin, protocol] of [['https://flotadsp.com', 'https:'], ['https://flota-2fg.pages.dev', 'https:'], ['https://otra-empresa.example.org', 'https:'],
+      ['http://localhost:5173', 'http:'], ['http://localhost:4173', 'http:'], ['https://flotadsp.com:8443', 'https:']]) {
+      const antes = origin.replace(/\/+$/, '')       // lo que hacía origen() antes de este cambio
+      expect(conVentana(lugar(origin, protocol), origen), origin).toBe(antes)
+      // y con un Capacitor de Android (o la web dentro de la app de Play, donde window.Capacitor no existe), igual
+      expect(conVentana({ ...lugar(origin, protocol), Capacitor: ANDROID }, origen), `Android · ${origin}`).toBe(antes)
+    }
+    expect(conVentana(undefined, origen), 'sin ventana').toBe('')
+  })
+
+  test('en la app de iPhone es la web pública, venga el origen como venga', () => {
+    for (const [nombre, ventana] of [
+      ['capacitor://localhost', lugar('capacitor://localhost', 'capacitor:')],
+      ['ionic://localhost', lugar('ionic://localhost', 'ionic:')],
+      ['file://', lugar('null', 'file:')],
+      ['con la app puesta, aunque el origen sea https', { ...lugar('https://localhost', 'https:'), Capacitor: IOS }],
+      ['con la app puesta y sin protocolo conocido', { location: { origin: 'app://x' }, Capacitor: IOS }],
+    ]) expect(conVentana(ventana, origen), nombre).toBe(WEB_PUBLICA)
+  })
+})
+
+for (const [titulo, ios] of [['iPhone', true], ['control · web', false]]) {
+  test.describe(`${titulo} · los enlaces que salen de la app llevan ${ios ? 'la web pública' : 'la dirección de siempre'}`, () => {
+    if (ios) test.use({ userAgent: UA_APP })
+    const esperado = (page) => (ios ? WEB_PUBLICA : new URL(page.url()).origin)
+    const sinDireccionDeLaApp = (texto) => expect(texto, 'el enlace sale con la dirección de la app y no abre fuera de ella').not.toMatch(/capacitor:|localhost/)
+
+    test('el seguimiento que el repartidor manda al cliente por WhatsApp (/s/<token>)', async ({ page }) => {
+      const fallos = vigilar(page)
+      await appDelRepartidor(page, { ios, estado: 'prueba',
+        pedidos: [parada(1, 'pendiente', { telefono: '612345678', seguimiento: TOKEN_SEGUIMIENTO }), parada(2, 'pendiente', { telefono: '612345679', seguimiento: 'tok2tok2tok2tok2tok2' })] })
+      await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+      const whatsapp = SIGUIENTE(page).getByRole('link', { name: 'WhatsApp' })
+      await expect(whatsapp).toBeVisible()
+      const mensaje = decodeURIComponent(new URL(await whatsapp.getAttribute('href')).searchParams.get('text') || '')
+      expect(mensaje).toContain(`Puede seguirlo aquí: ${esperado(page)}/s/${TOKEN_SEGUIMIENTO}`)
+      if (ios) sinDireccionDeLaApp(mensaje)
+      expect(fallos).toEqual([])
+    })
+
+    test('el portal del conductor que el panel da a la empresa (/panel/portal-conductor)', async ({ page }) => {
+      test.setTimeout(60000)
+      const fallos = vigilar(page)
+      await panel(page, ios)
+      await page.goto('/panel/portal-conductor', { waitUntil: 'domcontentloaded' })
+      const enlaces = page.locator('input[readonly]')
+      await expect(enlaces.first()).toBeVisible({ timeout: 15000 })
+      const valores = await enlaces.evaluateAll((els) => els.map((e) => e.value))
+      expect(valores.length).toBeGreaterThan(0)
+      for (const v of valores) {
+        expect(v.startsWith(`${esperado(page)}/conductor/`), v).toBe(true)
+        if (ios) sinDireccionDeLaApp(v)
+      }
+      expect(fallos).toEqual([])
+    })
+
+    test('«Copiar enlace para el cliente» del reparto del panel (/s/<token>)', async ({ page }) => {
+      test.setTimeout(60000)
+      const fallos = vigilar(page)
+      await panel(page, ios)
+      await page.addInitScript(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => { window.__copiado = t } } }) })
+      await page.route(/\/api\/reparto\/pedidos(?:\?|$)/, (r) => r.fulfill({ json: { fecha: HOY, ve_datos: true, sin_ubicar: 0, base: { direccion: 'Almacén', lat: 43.36, lng: -8.41 },
+        pedidos: [{ id: 'p1', fecha: HOY, codigo: '8412345', cliente: 'Marta Ríos', telefono: '600111222', direccion: 'Avda. Montero Ríos 12, 15003', lat: 43.369, lng: -8.405,
+          contenido: '3 cajas', bultos: 4, escaneos: 2, conductor_id: 'd1', conductor_nombre: 'ANA PÉREZ', estado: 'pendiente', orden: 1, geo: 'ok' }],
+        conductores: [{ conductor_id: 'd1', nombre: 'ANA PÉREZ', total: 1, entregados: 0, fallidos: 0, pendientes: 1, bultos: 4, km: 1.2 }] } }))
+      await page.route(/\/api\/reparto\/pedidos\/p1\/enlace$/, (r) => r.fulfill({ json: { token: TOKEN_SEGUIMIENTO } }))
+      await page.goto('/panel/reparto', { waitUntil: 'domcontentloaded' })
+      await expect(page.getByText('Marta Ríos').first()).toBeVisible({ timeout: 15000 })
+      await page.getByRole('button', { name: 'Copiar enlace para el cliente' }).first().click()
+      await expect.poll(() => page.evaluate(() => window.__copiado || '')).not.toBe('')
+      const copiado = await page.evaluate(() => window.__copiado)
+      expect(copiado).toBe(`${esperado(page)}/s/${TOKEN_SEGUIMIENTO}`)
+      if (ios) sinDireccionDeLaApp(copiado)
       expect(fallos).toEqual([])
     })
   })
