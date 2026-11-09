@@ -17,7 +17,7 @@
    la web: `VITE_WEB_ORIGIN` al compilar (app-ios.yml) y, si no se da, la de
    producción. En la web y en Android, la de siempre. */
 
-import { esAppIOS } from './lib/plataforma'
+import { esAppIOS } from './lib/plataforma.js'   // con la extensión: así también lo importa Node (scripts), no solo Vite
 
 // La web pública, para los enlaces que salen de la app de iPhone (https://flotadsp.com: docs/ESTADO.md, desplegar.yml).
 const WEB_PUBLICA = String(import.meta.env?.VITE_WEB_ORIGIN || 'https://flotadsp.com').trim().replace(/\/+$/, '')

@@ -31,7 +31,9 @@ import NumeroParada from './NumeroParada'
    el hueco puesto («📦 Detrás · izq») · Ejemplo. */
 export function etiquetasDe(p, { juntas = 1, zbe = '' } = {}) {
   const e = []
-  if (p.cobrar > 0) e.push({ texto: tx('Cobrar {euros}', { euros: importe(p.cobrar) }), tono: 'aviso', icono: Banknote })
+  // «Cobrar» + el importe, no «Cobrar {euros}»: esa clave es la de retirar dinero de la cartera («Cash out» en inglés, «auszahlen» en alemán),
+  // y una parada con importe a cobrar al cliente no retira nada (09-11-2026, como en FilaParada.jsx).
+  if (p.cobrar > 0) e.push({ texto: `${tx('Cobrar')} ${importe(p.cobrar)}`, tono: 'aviso', icono: Banknote })
   if (p.ventana_desde) e.push({ texto: `${p.ventana_desde}–${p.ventana_hasta || ''}`, tono: 'neutro', icono: Clock, titulo: tx('Horario: de {a} a {b}', { a: p.ventana_desde, b: p.ventana_hasta || '' }) })
   if (p.prioridad) e.push({ texto: tx('Urgente'), tono: 'aviso', icono: AlertTriangle })
   if (p.tipo === 'recogida') e.push({ texto: tx('Recogida'), tono: 'neutro', icono: Package })

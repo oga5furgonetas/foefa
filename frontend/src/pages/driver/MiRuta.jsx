@@ -2192,7 +2192,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null, re
       {/* COBRAR: «Cobrar {x}» con «¿Cómo ha pagado?» de subtítulo, los métodos en una rejilla de 3 de 48 (marcan el pago y
           abren la prueba, como siempre) y «No ha pagado» como botón de texto (su nombre sigue siendo el de antes). */}
       {cobro && (
-        <Hoja titulo={tx('Cobrar {euros}', { euros: euros(cobro.cobrar) })} subtitulo={tx('¿Cómo ha pagado?')} onClose={() => setCobro(null)}>
+        <Hoja titulo={`${tx('Cobrar')} ${euros(cobro.cobrar)}`} subtitulo={tx('¿Cómo ha pagado?')} onClose={() => setCobro(null)}>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {metodosCobro().map(([k, t]) => (
               <Boton key={k} variante="normal" tono="ok" texto={tx(t)} onClick={() => marcar(cobro, 'entregado', '', { metodo: k })} />

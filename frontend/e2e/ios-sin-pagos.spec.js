@@ -1355,3 +1355,23 @@ for (const [titulo, ios] of [['iPhone', true], ['control · web', false]]) {
     })
   })
 }
+
+/* «COBRAR» DE UNA PARADA (09-11-2026): el importe que quien reparte cobra a SU cliente al entregar (contra reembolso). Con la clave
+   «Cobrar {euros}», que es la de retirar dinero de la cartera, la ficha de la parada y la hoja de cobrar decían «Cash out €12.50» en
+   inglés y «12,50 € auszahlen» en alemán: palabras de sacar saldo, justo en la parada de ejemplo que se le dice al revisor de Apple que
+   abra (la 2 lleva 12,5 € a cobrar). Ahora es «Cobrar» + el importe, que en inglés es «Collect» y en alemán «Kassieren». */
+for (const [locale, cobrar, saldo] of [['en-GB', /Collect/, /Cash out/], ['de-DE', /Kassieren/, /auszahlen/]]) {
+  test.describe(`iPhone · cobrar al cliente en una parada (${locale})`, () => {
+    test.use({ userAgent: UA_APP, locale })
+    test('la ficha de la parada habla de cobrar, no de retirar dinero', async ({ page }) => {
+      const fallos = vigilar(page)
+      await appDelRepartidor(page, { estado: 'prueba2', pedidos: [parada(1, 'pendiente', { cobrar: 12.5 })] })
+      await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+      await expect(page.locator('nav.ruta-pestanas')).toBeVisible()
+      await page.getByText('Cliente 1').first().click()
+      await expect(page.getByRole('dialog').getByText(cobrar).first()).toBeVisible()
+      expect(await page.locator('body').innerText(), 'una parada con cobro no habla de retirar saldo').not.toMatch(saldo)
+      expect(fallos).toEqual([])
+    })
+  })
+}
