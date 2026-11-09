@@ -664,10 +664,57 @@ test.describe('iPhone · la entrada, el acceso y el alta', () => {
     await limpia(page, 'la cuenta creada')
     expect(cuerpos[1].plan).toBe('autonomo')
     expect(cuerpos[1].ref, 'en el iPhone el alta no manda código de invitación').toBeUndefined()
+    // El servidor, con esto, no le manda ningún correo con plan, prueba gratuita, precios o bono (backend/tests/test_alta_ios.py).
+    expect(cuerpos.map((c) => c.desde_ios), 'en el iPhone el alta dice que viene de la app del iPhone').toEqual([true, true])
     expect(await page.evaluate(() => localStorage.getItem('fds_ref')), 'ni lo guarda').toBeNull()
     expect(fallos).toEqual([])
   })
 })
+/* DESDE_IOS (T4): solo dentro de la app del iPhone. En la web y en Android el cuerpo del alta es el de siempre: sin el campo nuevo. */
+const SESION_ALTA = { access_token: 'cabecera.eyJzdWIiOiJ1MSJ9.firma', token_type: 'bearer', id: 'u1', name: 'Ana', role: 'admin', account_type: 'dsp', slug: 'ana-x1y2' }
+test.describe('control · el alta de la web no manda desde_ios', () => {
+  test('/registro: el cuerpo del alta es el de siempre', async ({ page }) => {
+    await simularApi(page, 'vacio')
+    await arrancar(page, { ios: false })
+    const cuerpos = []
+    await page.route(/\/api\/auth\/register$/, async (r) => { cuerpos.push(r.request().postDataJSON()); return r.fulfill({ json: SESION_ALTA }) })
+    await page.goto('/registro?sector=autonomo&plan=autonomo', { waitUntil: 'domcontentloaded' })
+    await page.getByPlaceholder('Pepe').fill('Ana')
+    await page.getByPlaceholder('tu@correo.com').fill('ana@correo.es')
+    await page.locator('input[type=password]').first().fill('una-clave-larga')
+    await page.getByRole('checkbox').check()
+    await page.getByRole('button', { name: /Crear cuenta con plan Repartidor/ }).click()
+    await expect(page.getByText('¡Cuenta creada!')).toBeVisible()
+    expect(cuerpos).toHaveLength(1)
+    expect(cuerpos[0], 'en la web el alta no manda desde_ios').not.toHaveProperty('desde_ios')
+    expect(cuerpos[0]).toHaveProperty('desde_app', false)
+    expect(cuerpos[0]).toHaveProperty('plan', 'autonomo')
+  })
+})
+/* La portada /repartidores (el alta rápida) solo existe en la web: en el iPhone la ruta lleva a la app. Para probar que su alta también
+   avisa, la página se abre como la web y la app del iPhone se «enciende» justo antes de pulsar el botón (esAppIOS() se mira al enviar). */
+for (const [titulo, ios] of [['en la app del iPhone', true], ['control · en la web', false]]) {
+  test(`el alta rápida de la portada, ${titulo}: ${ios ? 'manda' : 'no manda'} desde_ios`, async ({ page }) => {
+    await simularApi(page, 'vacio')
+    await arrancar(page, { ios: false })
+    const cuerpos = []
+    await page.route(/\/api\/auth\/register$/, async (r) => { cuerpos.push(r.request().postDataJSON()); return r.fulfill({ json: SESION_ALTA }) })
+    await page.route(/\/ruta$/, (r) => (r.request().resourceType() === 'document'
+      ? r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>ruta</title>' }) : r.fallback()))
+    await page.goto('/repartidores?v=a', { waitUntil: 'domcontentloaded' })
+    const form = page.getByRole('form', { name: 'Crear mi cuenta gratis' })
+    await form.getByPlaceholder('Tu nombre').fill('Ana')
+    await form.getByPlaceholder('Tu correo').fill('ana@example.com')
+    await form.getByPlaceholder('Contraseña').fill('una-clave-de-prueba')
+    await form.getByRole('checkbox').check()
+    if (ios) await page.evaluate(() => { window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'ios' } })
+    await form.getByRole('button', { name: 'Crear mi cuenta gratis' }).click()
+    await page.waitForURL(/\/ruta$/)
+    expect(cuerpos).toHaveLength(1)
+    if (ios) expect(cuerpos[0]).toHaveProperty('desde_ios', true)
+    else expect(cuerpos[0]).not.toHaveProperty('desde_ios')
+  })
+}
 test.describe('control · la web (sin simular el iPhone) sigue enseñando la entrada y el alta de siempre', () => {
   for (const e of ENTRADA.filter((x) => x.web)) {
     test(e.nombre, async ({ page }) => {

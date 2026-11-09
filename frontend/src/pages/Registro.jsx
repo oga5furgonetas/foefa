@@ -387,6 +387,9 @@ export default function Registro() {
           ...(!enIOS && sector === 'autonomo' && leerRef() ? { ref: leerRef() } : {}),
           // Desde la app de Play no se pide tarjeta con Stripe (Google cobra con lo suyo).
           desde_app: enAppPlay(),
+          // Desde la app del iPhone (09-11-2026) el servidor no manda ningún correo con plan, prueba ni precios; en la web y en
+          // Android no se manda nada nuevo.
+          ...(enIOS ? { desde_ios: true } : {}),
           ...regionDelMovil(),
           // Medición de anuncios desde el servidor (02-11-2026): lo que contestó al aviso de cookies y, solo si aceptó,
           // las cookies del píxel (lib/metaPixel.js).

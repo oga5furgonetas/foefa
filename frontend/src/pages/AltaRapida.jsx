@@ -8,6 +8,7 @@ import { evento, eventoUnaVez, anunciosAceptados, cookiesMeta } from '../lib/met
 import { leerRef } from '../lib/referido'
 import { regionDelMovil, paisDelMovil, precioRepartidor, importeEn } from '../lib/region'
 import { enAppPlay } from '../lib/enApp'
+import { esAppIOS } from '../lib/plataforma'
 import { PARADAS_GRATIS, promoGratis, fechaPromo } from '../lib/precios'
 
 /* El precio del plan al mes en la moneda del país de quien se da de alta (30-10-2026): «$9.99», «MX$149». */
@@ -68,6 +69,8 @@ export default function AltaRapida({ dias = 7, enfocar = false }) {
           center: '', email: correo, plan: 'autonomo', sector: 'autonomo',
           ...(leerRef() ? { ref: leerRef() } : {}),
           desde_app: enAppPlay(), ...regionDelMovil(),
+          // Desde la app del iPhone (09-11-2026) el servidor no manda correos con plan, prueba ni precios; en la web y en Android, nada nuevo.
+          ...(esAppIOS() ? { desde_ios: true } : {}),
           // Medición de anuncios desde el servidor (02-11-2026): lo que contestó al aviso de cookies y, solo si aceptó,
           // las cookies del píxel (lib/metaPixel.js).
           anuncios: anunciosAceptados(), ...cookiesMeta(),

@@ -747,6 +747,10 @@ class RegisterRequest(BaseModel):
     plan: Optional[str] = None   # plan elegido: basico | pro | flota | enterprise
     sector: Optional[str] = None  # paqueteria | supermercado | distribucion | otra
     desde_app: Optional[bool] = None  # alta desde la app de Play: ahí no se pide tarjeta con Stripe
+    # Alta desde la app del iPhone (09-11-2026, Apple 2.1(b) y 3.1.1): allí no se habla de plan, prueba ni precios, y tampoco en
+    # los correos (ver register_dsp). Solo lo manda la web dentro de esa app; un servidor sin esto ignora el campo (esta clase
+    # no prohíbe campos de más), así que un build del iPhone puede salir antes que el servidor.
+    desde_ios: Optional[bool] = None
     zona_horaria: Optional[str] = None  # la del móvil (Intl): horas y «hoy» del reparto
     pais: Optional[str] = None          # ISO2; si no se conoce, se deduce de la zona horaria
     # China (PIPL): consentimiento aparte para tratar los datos fuera de China.
@@ -5066,6 +5070,16 @@ async def register_dsp(data: RegisterRequest, request: Request):
         else:
             org["referido_por"] = invitador["id"]
     org["alta_red"] = _huella_red(ip)
+    # ALTA DESDE LA APP DEL IPHONE (09-11-2026): Apple rechazó la 2.4.1 por 2.1(b) y 3.1.1 (docs/APP_STORE.md) y quien se da de alta
+    # allí no recibe ningún correo con plan, prueba gratuita, precios, bono o «Invita y gana»: ni la bienvenida ni los del ciclo
+    # (primer día, casi fin, recordatorio, invita, bono, opinión y «bono25»). Se reutiliza la baja de esos correos (`correos_baja`:
+    # la respetan es_candidata, toca_bono25, la vuelta del ciclo, la del primer día y la campaña del bono), con su fecha y el
+    # motivo; `alta_ios` queda para saber de dónde vino. Los correos de la cuenta (contraseña, códigos) no dependen de ello.
+    if data.desde_ios:
+        org["alta_ios"] = True
+        org["correos_baja"] = True
+        org["correos_baja_at"] = org["created_at"]
+        org["correos_baja_motivo"] = "alta_ios"
     org["pais"], org["zona_horaria"] = _region_alta(data.zona_horaria, data.pais)
     if (data.idioma or "").strip().lower()[:2] in ("es", "en", "pt", "fr", "it", "de", "zh"):
         org["idioma"] = data.idioma.strip().lower()[:2]
@@ -5138,7 +5152,8 @@ async def register_dsp(data: RegisterRequest, request: Request):
         # Quien reparte solo: la bienvenida del ciclo (los pasos de la primera
         # ruta, en su idioma). En segundo plano: el alta no espera al correo.
         asyncio.create_task(_ciclo_enviar(org_id, "bienvenida"))
-    elif recipient and resend_key:
+    elif recipient and resend_key and not org.get("alta_ios"):
+        # (Desde la app del iPhone no sale éste, que habla de la «prueba gratuita» y del plan: ver `alta_ios` más arriba.)
         plan_label = {"basico": "Básico", "pro": "Pro", "flota": "Flota", "operacion": "Operación",
                       "completo": "Completo", "autonomo": "Repartidor"}.get(org.get("plan") or "", "Pro")
         try:
@@ -22978,7 +22993,8 @@ async def _aviso_manana_vuelta(ahora: Optional[datetime] = None) -> int:
             idioma = ciclo_correos.idioma_de(org)
             titulo, cuerpo = _AVISO_MANANA_TEXTOS[idioma]
             b = _bono_resumen(org, ahora)
-            if b and not b["pagado"]:
+            # Sin la frase del bono a quien se dio de alta desde el iPhone (09-11-2026): allí no se habla de bonos (`alta_ios`).
+            if b and not b["pagado"] and not org.get("alta_ios"):
                 cuerpo = _AVISO_MANANA_BONO[idioma].format(euros=ciclo_correos._euros(b["cent"] / 100, idioma))
             usuarios = list(set(await global_db.push_subscriptions.distinct("user_id", {"org_id": org["id"]}))
                             | set(await global_db.push_tokens.distinct("user_id", {"org_id": org["id"]})))
