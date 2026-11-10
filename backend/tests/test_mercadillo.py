@@ -7,7 +7,12 @@ rechaza o retira y quien denuncia reciba acuse y decisión (DSA); y que todo se 
 Y bloquear a una persona (10-11-2026; Apple, guideline 1.2): que quien bloquea deje de ver al otro AL INSTANTE
 y por todos los caminos (lista, ficha, foto, buzón, globito), que ninguno pueda escribir al otro, que al
 bloqueado no se le diga nada, que desbloquear lo devuelva todo, que Dani se entere y que la clave de nadie
-salga hacia la web."""
+salga hacia la web.
+
+Y lo que faltaba de esa misma guideline (10-11-2026): quitarle el mercadillo a quien incumple («ejecting the user»:
+403 en TODAS las rutas, recorridas de verdad, y `expulsado` en el estado) y devolvérselo; las normas aceptadas
+(`normas_ok`); el filtro básico de insultos y amenazas, con el mismo cuidado lo que entra que lo que NO entra; y
+que borrar una empresa, un conductor o alguien de oficina se lleve su mercadillo sin impedir nunca el borrado."""
 import ast
 import inspect
 import io as _io
@@ -18,6 +23,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient
 from PIL import Image
 from pymongo.errors import DuplicateKeyError
@@ -1042,10 +1048,23 @@ def _textos_de_error(*funciones) -> list:
     return fuera
 
 
-def test_los_textos_del_bloqueo_se_leen_tambien_en_el_iphone():
+def _textos_de_invalido() -> list:
+    """Todo lo que `mercadillo.py` le dice a quien rellena un anuncio o escribe un mensaje: el texto de cada
+    `Invalido(…)`, que el servidor devuelve tal cual en un 400 (las constantes, con su valor)."""
+    fuera = []
+    for n in ast.walk(ast.parse(Path(mc.__file__).read_text(encoding="utf-8"))):
+        if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "Invalido" and n.args:
+            t = n.args[0]
+            fuera.append(t.value if isinstance(t, ast.Constant) else getattr(mc, t.id))
+    return fuera
+
+
+def test_los_textos_del_bloqueo_se_leen_tambien_en_el_iphone(monkeypatch):
     """Dentro de la app del iPhone la web cambia por un texto neutro («No se ha podido completar…») todo error del
     servidor que «hable de pagos» (`HABLA_DE_PAGOS` en frontend/src/lib/plataforma.js: plan, gratis, tope, bono,
-    cartera…). Bloquear es justo lo que Apple va a mirar allí: ninguno de sus mensajes puede caer en esa red."""
+    cartera…). Bloquear es justo lo que Apple va a mirar allí: ninguno de sus mensajes puede caer en esa red.
+    Y lo mismo todo lo del 10-11-2026: a quien se le quita el mercadillo tiene que poder leer POR QUÉ, y quien no
+    puede enviar un mensaje, que es por un insulto."""
     web = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib" / "plataforma.js").read_text(encoding="utf-8")
     red = re.search(r"HABLA_DE_PAGOS\s*=\s*/(.+)/i\s*$", web, re.M)
     assert red, "no encuentro HABLA_DE_PAGOS en plataforma.js: ¿se ha movido?"
@@ -1060,6 +1079,27 @@ def test_los_textos_del_bloqueo_se_leen_tambien_en_el_iphone():
         assert esperado in textos, f"el buscador de textos no ha visto «{esperado}»"
     assert any(t.startswith("Tienes 0 personas bloqueadas") for t in textos) and len(set(textos)) >= 13
     assert [t for t in textos if habla_de_pagos.search(t)] == []
+    # LO NUEVO (expulsar, normas, filtro). Primero, lo que dicen las rutas nuevas y la puerta…
+    nuevos = _textos_de_error("merc_normas", "admin_mercadillo_expulsar", "admin_mercadillo_readmitir", "_merc_dentro")
+    for esperado in ("Tienes que aceptar las normas para usar el mercadillo", "A quien modera no se le puede quitar el mercadillo",
+                     "Esa clave no es de una persona del mercadillo", "Elige el motivo: es lo que se le dice a esa persona",
+                     "Esa persona no ha usado el mercadillo", "Esa persona ya tiene acceso al mercadillo"):
+        assert esperado in nuevos, f"el buscador de textos no ha visto «{esperado}»"
+    # …lo que lee la persona a la que se le quita el mercadillo (el 403 de cada ruta, el estado, su aviso y su correo),
+    # con cada motivo, con nota y sin ella, y con el contacto de verdad; cuando se le devuelve; y los dos asuntos…
+    monkeypatch.setattr(server, "CORREO_CONTACTO", "contacto@flotadsp.com")
+    de_expulsion = [server._merc_texto_expulsion({"motivo": motivo, "nota": nota})
+                    for motivo in mc.MOTIVOS_EXPULSION.values() for nota in ("", "Insultos en dos conversaciones.")]
+    assert len(set(de_expulsion)) == 12 and all(t.startswith("Te hemos quitado el acceso al mercadillo. Motivo: ") for t in de_expulsion)
+    nuevos += de_expulsion + list(mc.MOTIVOS_EXPULSION.values()) + [
+        server._MERC_READMITIDO, "Te hemos quitado el acceso al mercadillo", "Vuelves a tener acceso al mercadillo"]
+    # …y lo que contesta el filtro (con todo lo demás que `mercadillo.py` le dice a quien escribe).
+    de_validar = _textos_de_invalido()
+    for esperado in ("Ese mensaje no se puede enviar: no se permiten insultos, amenazas ni contenido ofensivo. Cámbialo y vuelve a enviarlo.",
+                     "Ese anuncio no se puede enviar: quita los insultos o el contenido ofensivo del texto.", "Escribe el mensaje."):
+        assert esperado in de_validar, f"el buscador de textos no ha visto «{esperado}»"
+    nuevos += de_validar
+    assert len(set(nuevos)) >= 36 and [t for t in nuevos if habla_de_pagos.search(t)] == []
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -1156,3 +1196,847 @@ async def test_la_baja_no_se_para_si_el_mercadillo_falla(mundo, monkeypatch):
     assert await server.borrar_cuenta({"password": "secreta123"}, PEPE) == {"ok": True}
     assert (await mundo.g["admin_users"].find_one({"id": "a1"}))["disabled"] is True
     assert mundo.g["bajas_cuentas"].docs[0]["org_id"] == "o1" and "petición de borrar una cuenta" in mundo.enviados[-1].subject
+
+
+# ── QUITARLE EL MERCADILLO A UNA PERSONA (10-11-2026) ───────────────────────
+# Apple (guideline 1.2): ante una denuncia, «removing the content and ejecting the user». Lo que se vigila: que quien
+# está fuera no entre por NINGUNA ruta (se recorren las de verdad, sacadas del router), que se le diga el motivo y cómo
+# reclamar, que lo suyo desaparezca al instante, que solo pueda hacerlo Dani y que la clave de nadie salga de su panel.
+MOTIVOS_EXPULSION = {                     # el contrato, letra a letra: es lo que lee la persona y lo que pinta la web
+    "ofensivo": "Has publicado o enviado contenido ofensivo.",
+    "acoso": "Has acosado o molestado a otra persona.",
+    "prohibido": "Has intentado vender algo que las normas no permiten.",
+    "estafa": "Hemos visto un engaño o un intento de estafa.",
+    "repetido": "Has incumplido las normas varias veces.",
+    "otro": "Has incumplido las normas del mercadillo.",
+}
+SOLO_DANI = "Acceso solo para el super-admin"
+YA_TIENE_ACCESO = "Esa persona ya tiene acceso al mercadillo"
+READMITIDO = ("Vuelves a tener acceso al mercadillo. Los anuncios que se retiraron no vuelven solos: si todavía vendes "
+              "algo, publícalo otra vez. Y recuerda cumplir las normas.")
+
+
+def _fuera(motivo="ofensivo", nota="") -> str:
+    """Lo que lee la persona a la que se le ha quitado el mercadillo: el motivo, la nota si la hay y cómo reclamar."""
+    return (f"Te hemos quitado el acceso al mercadillo. Motivo: {MOTIVOS_EXPULSION[motivo]}{' ' + nota if nota else ''} "
+            "Si crees que es un error, escribe a contacto@x.es y lo revisamos.")
+
+
+async def _expulsar(quien: str, motivo="ofensivo", **extra) -> dict:
+    return await server.admin_mercadillo_expulsar({"clave": CLAVES[quien], "motivo": motivo, **extra}, DANI)
+
+
+def _por_http(mundo, monkeypatch):
+    """Lo que hace falta para pasar por FastAPI con la sesión de cada uno (la ficha vive en la base de su empresa)."""
+    async def la_misma(driver_id):
+        return driver_id
+    monkeypatch.setattr(server, "_ficha_activa_de", la_misma)
+    monkeypatch.setattr(server, "_ADMIN_EXISTS_CACHE", {})
+    mundo.g["admin_users"] = Col([{"id": "a1", "username": "pepe@x.es", "org_id": "o1"},
+                                  {"id": "a9", "username": "oficina@x.es", "org_id": "empresa"},
+                                  {"id": "dani", "username": "dani", "super_admin": True}])
+
+
+def _sesion(user) -> dict:
+    return {"Authorization": "Bearer " + server.create_token(user["sub"], user["role"], user["name"], org_id=user["org_id"],
+                                                             super_admin=bool(user.get("sa")))}
+
+
+def _rutas_del_mercadillo() -> list:
+    """Las rutas `/api/mercadillo…` QUE TIENE MONTADAS LA APP, con su verbo. Salen del router y no de una lista escrita
+    a mano: una ruta nueva entra sola en el recorrido, y sin la guarda lo hace fallar."""
+    return sorted((r.path, verbo) for r in server.app.routes if isinstance(r, APIRoute)
+                  and (r.path + "/").startswith("/api/mercadillo/") for verbo in r.methods)
+
+
+async def _llamar(web, ruta: str, verbo: str, sesion: dict):
+    """Una llamada cualquiera a esa ruta: aquí importa si la puerta deja pasar, no lo que se conteste dentro."""
+    url = re.sub(r"\{[^}]+\}", "x", ruta)
+    if verbo in ("GET", "DELETE"):
+        return await web.request(verbo, url, headers=sesion)
+    r = await web.request(verbo, url, json={}, headers=sesion)
+    if r.status_code == 422:                                     # esa ruta pide un fichero (la foto), no un JSON
+        r = await web.request(verbo, url, files={"file": ("foto.jpg", b"no-es-una-foto", "image/jpeg")}, headers=sesion)
+    return r
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_a_quien_se_le_quita_el_mercadillo_no_entra_por_ninguna_ruta(mundo, monkeypatch):
+    """La guarda está UNA vez, en la puerta (`_merc_dentro`). Aquí se llama a CADA ruta del mercadillo con la sesión
+    de una persona expulsada —un autónomo, una conductora y alguien de oficina—: todas contestan 403 con su motivo
+    y cómo reclamar, menos `/mercadillo/estado`, que es la que se lo explica a la web."""
+    _por_http(mundo, monkeypatch)
+    await _abrir(mundo)
+    for quien in (PEPE, ANA, OFICINA, LUIS):
+        await _publicado(quien, f"Cosa de {quien['name']}")
+    rutas = _rutas_del_mercadillo()
+    # El recorrido no está vacío ni es de otra cosa: están las de siempre y las de hoy, y ninguna del panel de Dani.
+    assert len(rutas) >= 18 and len(rutas) == len(set(rutas)) and not [r for r, _ in rutas if "/admin/" in r]
+    assert {("/api/mercadillo", "GET"), ("/api/mercadillo", "POST"), ("/api/mercadillo/estado", "GET"),
+            ("/api/mercadillo/buzon", "GET"), ("/api/mercadillo/fotos", "POST"), ("/api/mercadillo/foto/{foto_id}", "GET"),
+            ("/api/mercadillo/anuncio/{anuncio_id}", "PATCH"), ("/api/mercadillo/conversacion/{conv_id}", "POST"),
+            ("/api/mercadillo/bloquear", "POST"), ("/api/mercadillo/bloqueados/{bloqueo_id}", "DELETE"),
+            ("/api/mercadillo/denunciar", "POST"), ("/api/mercadillo/normas", "POST")} <= set(rutas)
+    fuera = {"pepe": (PEPE, "estafa", ""), "ana": (ANA, "ofensivo", "Insultos en dos conversaciones."),
+             "oficina": (OFICINA, "otro", "")}
+    async with AsyncClient(transport=ASGITransport(app=server.app), base_url="http://testserver") as web:
+        async def recorrido(user) -> dict:
+            return {(ruta, verbo): await _llamar(web, ruta, verbo, _sesion(user)) for ruta, verbo in rutas}
+
+        def entra(respuestas: dict) -> bool:
+            """Con llamadas de relleno cada ruta contesta 200, 400 o 404 (nunca que no hay sesión, ni un 422, ni un
+            500) y ninguna dice que está fuera."""
+            return (all(r.status_code in (200, 400, 404) for r in respuestas.values())
+                    and not [k for k, r in respuestas.items() if "Te hemos quitado" in r.text or "expulsado" in r.text])
+        # EL CONTROL: antes, todos entran por todas (así el 403 de después solo puede ser el de la expulsión).
+        for user in (PEPE, ANA, OFICINA, LUIS, DANI):
+            assert entra(await recorrido(user)), user["name"]
+        for nombre, (user, motivo, nota) in fuera.items():
+            r = await web.post("/api/admin/mercadillo/expulsar", headers=_sesion(DANI),
+                               json={"clave": CLAVES[nombre], "motivo": motivo, "nota": nota})
+            assert r.status_code == 200 and r.json()["ok"] is True and r.json()["anuncios"] == 1
+        for nombre, (user, motivo, nota) in fuera.items():
+            texto, yo = _fuera(motivo, nota), await server._merc_yo(user)
+            respuestas = await recorrido(user)
+            assert len(respuestas) == len(rutas)
+            for (ruta, verbo), r in respuestas.items():
+                if ruta == "/api/mercadillo/estado":
+                    assert (r.status_code, r.json()) == (200, {
+                        "visible": True, "abierto": True, "expulsado": True, "texto": texto, "sin_leer": 0,
+                        "yo": {"nombre": yo["nombre"], "tipo": yo["tipo"]}}), nombre
+                else:
+                    assert (r.status_code, r.json()) == (403, {"detail": texto}), (nombre, verbo, ruta)
+        # A los demás no les cambia nada. Y a quien modera no se le puede dejar fuera ni con un dato a mano.
+        await mundo.g["mercadillo_expulsados"].insert_one({"clave": "fds", "motivo": MOTIVOS_EXPULSION["otro"]})
+        for user in (LUIS, DANI):
+            assert entra(await recorrido(user)), user["name"]
+        assert "expulsado" not in await server.merc_estado(DANI)
+        # Con el mercadillo apagado nadie lo ve, tampoco quien está fuera (no se le cuenta nada de más).
+        await server.admin_mercadillo_visible({"visible": False}, DANI)
+        assert (await web.get("/api/mercadillo/estado", headers=_sesion(ANA))).json() == {"visible": False}
+        r = await web.get("/api/mercadillo", headers=_sesion(ANA))
+        assert (r.status_code, r.json()) == (404, {"detail": "El mercadillo todavía no está abierto"})
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_quitarle_el_mercadillo_a_alguien_retira_lo_suyo_cierra_sus_conversaciones_y_se_lo_dice(mundo):
+    assert mc.MOTIVOS_EXPULSION == MOTIVOS_EXPULSION
+    await _abrir(mundo)
+    publicado, pendiente, vendido = (await _publicado(ANA, "Soporte de móvil"), await _anuncio(ANA, "Mochila", "12"),
+                                     await _publicado(ANA, "Gorra", "8"))
+    await server.merc_cambiar(vendido["id"], {"accion": "vendido"}, ANA)
+    de_pepe, de_luis = await _publicado(PEPE, "Carretilla"), await _publicado(LUIS, "Botas")
+    le_compran = (await server.merc_contactar(publicado["id"], {"texto": "¿Sigue?"}, PEPE))["conversacion_id"]
+    compra = (await server.merc_contactar(de_pepe["id"], {"texto": "Me interesa"}, ANA))["conversacion_id"]
+    ajena = (await server.merc_contactar(de_luis["id"], {"texto": "hola"}, PEPE))["conversacion_id"]
+    await server.merc_denunciar({"anuncio_id": publicado["id"], "motivo": "ofensivo", "texto": "insulta en el anuncio"}, LUIS)
+    await server.merc_denunciar({"anuncio_id": de_pepe["id"], "motivo": "otro"}, LUIS)       # la de otro anuncio sigue abierta
+    await server.merc_bloquear({"anuncio_id": de_luis["id"]}, ANA)                           # un bloqueo que hizo ella
+    await server.merc_bloquear({"anuncio_id": publicado["id"]}, OFICINA)                     # y uno que le hicieron
+    fin_de_la_gorra = (await mundo.g["mercadillo_anuncios"].find_one({"id": vendido["id"]}))["fin"]
+    avisos, correos = len(mundo.g["mercadillo_avisos"].docs), len(mundo.enviados)
+    r = await _expulsar("ana", "ofensivo", nota="  Insultos en dos conversaciones.  ")
+    texto = _fuera("ofensivo", "Insultos en dos conversaciones.")
+    # LA RESPUESTA (solo para Dani: lleva la clave) y lo que queda guardado.
+    assert set(r) == {"ok", "expulsado", "anuncios", "conversaciones"} and (r["ok"], r["anuncios"], r["conversaciones"]) == (True, 2, 2)
+    e = r["expulsado"]
+    assert {k: v for k, v in e.items() if k != "ts"} == {
+        "clave": CLAVES["ana"], "nombre": "Ana P.", "motivo_clave": "ofensivo", "motivo": MOTIVOS_EXPULSION["ofensivo"],
+        "nota": "Insultos en dos conversaciones."} and _es_fecha(e["ts"])
+    assert mundo.g["mercadillo_expulsados"].docs == [e]
+    # NO ENTRA, y el estado se lo explica.
+    await _falla(server.merc_lista("", ANA), 403, texto)
+    assert await server.merc_estado(ANA) == {"visible": True, "abierto": True, "expulsado": True, "texto": texto, "sin_leer": 0,
+                                             "yo": {"nombre": "Ana P.", "tipo": "conductor"}}
+    # SUS ANUNCIOS en revisión o publicados quedan retirados, con el motivo y su fecha; lo ya acabado y lo de los
+    # demás, como estaba.
+    por_titulo = {a["titulo"]: a for a in mundo.g["mercadillo_anuncios"].docs}
+    for titulo in ("Soporte de móvil", "Mochila"):
+        a = por_titulo[titulo]
+        assert (a["estado"], a["motivo"], a["motivo_clave"]) == (
+            "retirado", MOTIVOS_EXPULSION["ofensivo"] + " Insultos en dos conversaciones.", "expulsion") and _es_fecha(a["fin"])
+    assert pendiente["titulo"] == "Mochila"                                  # (el que estaba en revisión)
+    assert (por_titulo["Gorra"]["estado"], por_titulo["Gorra"]["fin"], por_titulo["Gorra"]["motivo_clave"]) == ("vendido", fin_de_la_gorra, "")
+    assert (por_titulo["Carretilla"]["estado"], por_titulo["Botas"]["estado"]) == ("publicado", "publicado")
+    assert await _titulos(PEPE) == await _titulos(DANI) == {"Carretilla", "Botas"}
+    assert (await server.admin_mercadillo(DANI))["por_revisar"] == []
+    await _falla(server.merc_contactar(publicado["id"], {"texto": "¿sigue?"}, OFICINA), 404, A_LA_VENTA)
+    # LA DENUNCIA que tenía su anuncio se cierra como «retirado» y a quien denunció se le dice; la del otro, abierta.
+    den = {d["objetivo"]["titulo"]: d for d in mundo.g["mercadillo_denuncias"].docs}
+    assert (den["Soporte de móvil"]["estado"], den["Soporte de móvil"]["decision"]) == ("resuelta", "retirado")
+    assert den["Carretilla"]["estado"] == "abierta"
+    nuevos = mundo.g["mercadillo_avisos"].docs[avisos:]
+    assert [x["texto"] for x in nuevos if x["para"] == CLAVES["luis"]] == [
+        "Sobre tu aviso de «Soporte de móvil»: lo hemos retirado. Gracias por avisar."]
+    # SUS CONVERSACIONES (donde vendía y donde compraba) quedan cerradas para la otra persona; las ajenas, abiertas.
+    convs = {c["id"]: c for c in mundo.g["mercadillo_conversaciones"].docs}
+    assert [(convs[c]["bloqueada"], convs[c]["cerrada_por"]) for c in (le_compran, compra)] == [(True, "expulsion")] * 2
+    assert convs[ajena].get("bloqueada") is None and "cerrada_por" not in convs[ajena]
+    assert {c["id"]: c["bloqueada"] for c in (await server.merc_buzon(PEPE))["conversaciones"]} == {
+        le_compran: True, compra: True, ajena: False}
+    for cid in (le_compran, compra):
+        await _falla(server.merc_responder(cid, {"texto": "¿hola?"}, PEPE), 403, CERRADA)
+    await server.merc_responder(ajena, {"texto": "¿sigue?"}, PEPE)
+    # SE LE DICE, con el motivo y cómo reclamar: un aviso (que leerá si vuelve) y, como al buzón ya no entra, un correo.
+    assert [x["texto"] for x in nuevos if x["para"] == CLAVES["ana"]] == [texto]
+    a_ana = [c for c in mundo.enviados[correos:] if c.to == "ana@x.es"]
+    assert len(a_ana) == 1 and a_ana[0].subject == "Te hemos quitado el acceso al mercadillo" and texto in a_ana[0].texto
+    # QUEDA APUNTADO quién lo hizo, a quién y por qué.
+    rastro = mundo.g["audit_log"].docs[-1]
+    assert (rastro["action"], rastro["actor_id"]) == ("mercadillo_expulsar", "dani") and rastro["detail"] == {
+        "clave": CLAVES["ana"], "nombre": "Ana P.", "motivo": "ofensivo", "nota": "Insultos en dos conversaciones.",
+        "anuncios": 2, "conversaciones": 2}
+    # SUS BLOQUEOS no se tocan.
+    assert sorted((b["de"], b["a"]) for b in mundo.g["mercadillo_bloqueos"].docs) == sorted([
+        (CLAVES["ana"], CLAVES["luis"]), (CLAVES["oficina"], CLAVES["ana"])])
+    # DOS VECES no falla: dice que ya estaba, con la expulsión de antes, y no se le avisa otra vez.
+    avisos, correos, rastros = len(mundo.g["mercadillo_avisos"].docs), len(mundo.enviados), len(mundo.g["audit_log"].docs)
+    assert await _expulsar("ana", "estafa", nota="otra cosa") == {"ok": True, "ya": True, "expulsado": e, "anuncios": 0, "conversaciones": 0}
+    assert mundo.g["mercadillo_expulsados"].docs == [e]
+    assert (len(mundo.g["mercadillo_avisos"].docs), len(mundo.enviados), len(mundo.g["audit_log"].docs)) == (avisos, correos, rastros)
+    # Y si una expulsión se quedó A MEDIAS (apuntada, pero falló la base antes de retirar lo suyo), repetirla lo termina.
+    await mundo.g["mercadillo_anuncios"].update_one({"id": publicado["id"]}, {"$set": {"estado": "publicado"}})
+    await mundo.g["mercadillo_conversaciones"].update_one({"id": compra}, {"$unset": {"bloqueada": "", "cerrada_por": ""}})
+    r = await _expulsar("ana")
+    assert (r["ya"], r["anuncios"], r["conversaciones"]) == (True, 1, 1)
+    assert (await mundo.g["mercadillo_anuncios"].find_one({"id": publicado["id"]}))["estado"] == "retirado"
+    assert (await mundo.g["mercadillo_conversaciones"].find_one({"id": compra}))["cerrada_por"] == "expulsion"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_no_se_expulsa_a_quien_modera_ni_una_clave_mal_escrita_ni_sin_motivo_ni_a_un_desconocido(mundo):
+    await _abrir(mundo)
+    await _publicado(ANA, "Soporte de móvil")
+    # A quien modera, nunca (aunque falte lo demás).
+    for cuerpo in ({"clave": "fds", "motivo": "ofensivo"}, {"clave": " fds ", "motivo": "ofensivo"}, {"clave": "fds"}):
+        await _falla(server.admin_mercadillo_expulsar(cuerpo, DANI), 400, "A quien modera no se le puede quitar el mercadillo")
+    # Una clave es `o:<org>`, `d:<org>:<id>` o `a:<org>:<id>`: lo demás (también un tipo cambiado) no es de nadie.
+    mal_escritas = ["", "ana", "Ana P.", "owner", "o:", "d:owner", "d:owner:", "a::a9", "x:owner:d1", "o:o1:de-mas",
+                    "d:ow ner:d1", "fds:1", "O:o1", "d:owner:d1 y más", None, 5, True, ["o:o1"], {"clave": "o:o1"}]
+    for clave in mal_escritas:
+        await _falla(server.admin_mercadillo_expulsar({"clave": clave, "motivo": "ofensivo"}, DANI), 400,
+                     "Esa clave no es de una persona del mercadillo")
+    for cuerpo in ({}, [], {"motivo": "ofensivo"}):
+        await _falla(server.admin_mercadillo_expulsar(cuerpo, DANI), 400, "Esa clave no es de una persona del mercadillo")
+    # Siempre con uno de SUS motivos (los de rechazar un anuncio son otros): es lo que se le dice a esa persona.
+    assert "denuncias" in mc.MOTIVOS_RECHAZO and "denuncias" not in mc.MOTIVOS_EXPULSION
+    for motivo in (None, "", "porque sí", "denuncias", ["ofensivo"], 3):
+        await _falla(server.admin_mercadillo_expulsar({"clave": CLAVES["ana"], "motivo": motivo}, DANI), 400,
+                     "Elige el motivo: es lo que se le dice a esa persona")
+    await _falla(server.admin_mercadillo_expulsar({"clave": CLAVES["ana"], "nota": "sin motivo"}, DANI), 400,
+                 "Elige el motivo: es lo que se le dice a esa persona")
+    # Una clave bien escrita que no ha pasado por el mercadillo (mal copiada, quizá): no se deja fuera a nadie a ciegas.
+    for nadie in ("o:nunca-ha-entrado", "d:owner:d999", CLAVES["oficina"], CLAVES["luis"], CLAVES["ana"] + "0"):
+        await _falla(server.admin_mercadillo_expulsar({"clave": nadie, "motivo": "otro"}, DANI), 404,
+                     "Esa persona no ha usado el mercadillo")
+    assert mundo.g["mercadillo_expulsados"].docs == [] and mundo.g["audit_log"].docs == []
+    assert (await server.merc_lista("", ANA))["mios"][0]["estado"] == "publicado"
+    # El control: con su clave y un motivo, sí.
+    assert (await _expulsar("ana", "repetido"))["expulsado"]["motivo"] == "Has incumplido las normas varias veces."
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_nombre_de_la_persona_expulsada_sale_de_su_dato_mas_reciente(mundo):
+    """A quien se expulsa se le nombra con lo último que dejó en el mercadillo: un anuncio, una conversación o un
+    bloqueo (también el que le hicieron). Con uno solo de los tres ya «ha usado el mercadillo»."""
+    g = mundo.g
+    g["mercadillo_anuncios"].docs.append({"id": "viejo", "titulo": "Viejo", "estado": "vendido", "creado": "2026-10-01T10:00:00+00:00",
+                                          "actualizado": "2026-10-02T10:00:00+00:00", "vendedor": {"clave": "o:x1", "nombre": "Pepe P."}})
+    g["mercadillo_conversaciones"].docs.append({"id": "c1", "anuncio_id": "otro", "anuncio_titulo": "Otro", "creada": "2026-10-05T10:00:00+00:00",
+                                                "ultimo": "2026-11-01T10:00:00+00:00", "comprador": {"clave": "o:x1", "nombre": "José P."},
+                                                "vendedor": {"clave": "d:x2:d7", "nombre": "Rosa M."}})
+    g["mercadillo_bloqueos"].docs.append({"id": "b1", "de": "a:x3:a7", "a": "o:x1", "de_nombre": "Juan", "a_nombre": "Pepe Pérez",
+                                          "ts": "2026-10-20T10:00:00+00:00"})
+    assert await server._merc_nombre_de("o:x1") == "José P."                 # su conversación es lo último
+    g["mercadillo_bloqueos"].docs[0]["ts"] = "2026-11-05T10:00:00+00:00"
+    assert await server._merc_nombre_de("o:x1") == "Pepe Pérez"              # ahora lo último es el bloqueo que le hicieron
+    g["mercadillo_anuncios"].docs[0]["actualizado"] = "2026-11-08T10:00:00+00:00"
+    assert await server._merc_nombre_de("o:x1") == "Pepe P."                 # y ahora, su anuncio
+    assert await server._merc_nombre_de("d:x2:d7") == "Rosa M." and await server._merc_nombre_de("a:x3:a7") == "Juan"
+    assert await server._merc_nombre_de("o:x4") is None and await server._merc_nombre_de("o:x") is None
+    # Solo con una conversación (la que vendía) o solo con un bloqueo (que hizo), se les puede quitar; y cada uno
+    # queda con su nombre. La conversación de Rosa se cierra.
+    for clave, nombre, conversaciones in (("d:x2:d7", "Rosa M.", 1), ("a:x3:a7", "Juan", 0)):
+        r = await server.admin_mercadillo_expulsar({"clave": clave, "motivo": "acoso"}, DANI)
+        assert (r["expulsado"]["clave"], r["expulsado"]["nombre"], r["anuncios"], r["conversaciones"]) == (clave, nombre, 0, conversaciones)
+    assert g["mercadillo_conversaciones"].docs[0]["cerrada_por"] == "expulsion"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_devolver_el_acceso_deja_entrar_otra_vez_pero_no_resucita_nada(mundo):
+    await _abrir(mundo)
+    a = await _publicado(ANA, "Soporte de móvil")
+    cid = (await server.merc_contactar(a["id"], {"texto": "¿Sigue?"}, PEPE))["conversacion_id"]
+    # A quien no está fuera no hay nada que devolverle (ni a una clave rara, ni a quien modera).
+    for cuerpo in ({"clave": CLAVES["ana"]}, {}, [], {"clave": None}, {"clave": ["x"]}, {"clave": "fds"}, {"clave": ""}):
+        await _falla(server.admin_mercadillo_readmitir(cuerpo, DANI), 404, YA_TIENE_ACCESO)
+    await _expulsar("ana", "acoso")
+    await _expulsar("pepe", "otro")                                          # el control: Pepe sigue fuera hasta el final
+    await _falla(server.merc_lista("", ANA), 403, _fuera("acoso"))
+    avisos, correos = len(mundo.g["mercadillo_avisos"].docs), len(mundo.enviados)
+    assert await server.admin_mercadillo_readmitir({"clave": f"  {CLAVES['ana']} "}, DANI) == {"ok": True}
+    assert [e["clave"] for e in mundo.g["mercadillo_expulsados"].docs] == [CLAVES["pepe"]]
+    # ENTRA otra vez, y el estado ya no dice que está fuera.
+    estado = await server.merc_estado(ANA)
+    assert "expulsado" not in estado and "texto" not in estado and (estado["visible"], estado["yo"]["nombre"]) == (True, "Ana P.")
+    # NO RESUCITA su anuncio ni reabre su conversación…
+    assert [(m["titulo"], m["estado"], m["motivo"]) for m in (await server.merc_lista("", ANA))["mios"]] == [
+        ("Soporte de móvil", "retirado", MOTIVOS_EXPULSION["acoso"])]
+    assert [(c["id"], c["bloqueada"]) for c in (await server.merc_buzon(ANA))["conversaciones"]] == [(cid, True)]
+    await _falla(server.merc_responder(cid, {"texto": "ya estoy"}, ANA), 403, CERRADA)
+    assert await _titulos(LUIS) == set()
+    # …pero puede volver a enviar lo que venda, y escribir.
+    cascos = await _publicado(ANA, "Cascos")
+    assert await _titulos(LUIS) == {"Cascos"}
+    assert (await server.merc_contactar(cascos["id"], {"texto": "hola"}, LUIS))["ok"] is True
+    # SE LE AVISA (a su buzón, que ya puede abrir, y a su correo) y queda apuntado.
+    de_ana = [x["texto"] for x in mundo.g["mercadillo_avisos"].docs[avisos:] if x["para"] == CLAVES["ana"]]
+    assert de_ana[0] == READMITIDO and READMITIDO in [x["texto"] for x in (await server.merc_buzon(ANA))["avisos"]]
+    vuelta = [c for c in mundo.enviados[correos:] if c.to == "ana@x.es" and c.subject == "Vuelves a tener acceso al mercadillo"]
+    assert len(vuelta) == 1 and READMITIDO in vuelta[0].texto
+    rastros = [(x["action"], x["actor_id"], x["detail"]) for x in mundo.g["audit_log"].docs]
+    assert ("mercadillo_readmitir", "dani", {"clave": CLAVES["ana"]}) in rastros
+    # A Pepe no se le ha devuelto nada; y devolvérselo dos veces a Ana dice que ya lo tiene.
+    await _falla(server.merc_lista("", PEPE), 403, _fuera("otro"))
+    await _falla(server.admin_mercadillo_readmitir({"clave": CLAVES["ana"]}, DANI), 404, YA_TIENE_ACCESO)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_panel_de_dani_ensena_a_quien_ha_dejado_fuera_y_de_quien_es_cada_denuncia(mundo):
+    await _abrir(mundo)
+    de_ana, de_pepe = await _publicado(ANA, "Soporte de móvil"), await _publicado(PEPE, "Carretilla")
+    cid = (await server.merc_contactar(de_ana["id"], {"texto": "hola"}, PEPE))["conversacion_id"]
+    await server.merc_denunciar({"anuncio_id": de_pepe["id"], "motivo": "estafa"}, LUIS)
+    await server.merc_denunciar({"conversacion_id": cid, "motivo": "ofensivo"}, ANA)
+    # Denuncias de algo que ya se borró (a su plazo): no hay a quién señalar, y el panel no se cae.
+    for tipo in ("anuncio", "conversacion"):
+        await mundo.g["mercadillo_denuncias"].insert_one({
+            "id": f"huerfana-{tipo}", "objetivo": {"tipo": tipo, "id": "ya-no-existe", "titulo": "Borrado"}, "motivo": "otro",
+            "texto": "", "de": CLAVES["luis"], "de_nombre": "Luis G.", "ts": "2026-11-11T10:00:00+00:00", "estado": "abierta"})
+    panel = await server.admin_mercadillo(DANI)
+    assert panel["expulsados"] == [] and panel["totales"]["expulsados"] == 0
+    assert panel["motivos_expulsion"] == MOTIVOS_EXPULSION == mc.MOTIVOS_EXPULSION
+    # EN CADA DENUNCIA, de quién es lo denunciado (con su clave: aquí sí): de un anuncio, quien vende; de una
+    # conversación, los dos, cada uno con su papel.
+    personas = {d["id"] if d["id"].startswith("huerfana") else d["objetivo"]["tipo"]: d["personas"] for d in panel["denuncias"]}
+    assert personas == {
+        "anuncio": [{"clave": CLAVES["pepe"], "nombre": "Pepe P.", "papel": "vendedor"}],
+        "conversacion": [{"clave": CLAVES["ana"], "nombre": "Ana P.", "papel": "vendedor"},
+                         {"clave": CLAVES["pepe"], "nombre": "Pepe P.", "papel": "comprador"}],
+        "huerfana-anuncio": [], "huerfana-conversacion": []}
+    # LOS QUE ESTÁN FUERA, lo último primero, con el motivo y la nota (para devolvérselo).
+    e1 = (await _expulsar("pepe", "estafa", nota="Pedía el pago por adelantado."))["expulsado"]
+    mundo.g["mercadillo_expulsados"].docs[0]["ts"] = e1["ts"] = "2026-01-09T10:00:00+00:00"       # (hace meses: para el orden)
+    e2 = (await _expulsar("ana", "acoso"))["expulsado"]
+    panel = await server.admin_mercadillo(DANI)
+    assert panel["expulsados"] == [e2, e1] and panel["totales"]["expulsados"] == 2
+    assert all(list(x) == ["clave", "nombre", "ts", "motivo_clave", "motivo", "nota"] for x in panel["expulsados"])
+    assert (e1["motivo"], e1["nota"], e2["motivo"], e2["nota"]) == (
+        "Hemos visto un engaño o un intento de estafa.", "Pedía el pago por adelantado.", "Has acosado o molestado a otra persona.", "")
+    # La denuncia del anuncio de Pepe se cerró al retirárselo; la de la conversación sigue para que Dani la resuelva.
+    assert sorted(d["objetivo"]["tipo"] for d in panel["denuncias"] if not d["id"].startswith("huerfana")) == ["conversacion"]
+    await server.admin_mercadillo_readmitir({"clave": CLAVES["pepe"]}, DANI)
+    panel = await server.admin_mercadillo(DANI)
+    assert panel["expulsados"] == [e2] and panel["totales"]["expulsados"] == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_solo_dani_quita_y_devuelve_el_mercadillo_como_lo_llama_la_web(mundo, monkeypatch):
+    """Las dos rutas nuevas del panel, por FastAPI: sin sesión, 401; con la de cualquiera que no sea el super-admin,
+    403 y no pasa nada; y con la de Dani, el JSON exacto del contrato (que la web simula en sus pruebas)."""
+    _por_http(mundo, monkeypatch)
+    await _abrir(mundo)
+    a = await _publicado(ANA, "Soporte de móvil")
+    for ruta in (server.admin_mercadillo_expulsar, server.admin_mercadillo_readmitir):
+        assert inspect.signature(ruta).parameters["user"].default.dependency is server.require_superadmin
+    cuerpo = {"clave": CLAVES["ana"], "motivo": "ofensivo", "nota": "Insultos."}
+    async with AsyncClient(transport=ASGITransport(app=server.app), base_url="http://testserver") as web:
+        for ruta in ("/api/admin/mercadillo/expulsar", "/api/admin/mercadillo/readmitir"):
+            assert (await web.post(ruta, json=cuerpo)).status_code == 401
+            for quien in (PEPE, ANA, OFICINA, LUIS):
+                r = await web.post(ruta, json=cuerpo, headers=_sesion(quien))
+                assert (r.status_code, r.json()) == (403, {"detail": SOLO_DANI})
+        assert mundo.g["mercadillo_expulsados"].docs == [] and await _titulos(LUIS) == {"Soporte de móvil"}
+        # POST /admin/mercadillo/expulsar
+        r = await web.post("/api/admin/mercadillo/expulsar", json=cuerpo, headers=_sesion(DANI))
+        e = {"clave": CLAVES["ana"], "nombre": "Ana P.", "ts": mundo.g["mercadillo_expulsados"].docs[0]["ts"],
+             "motivo_clave": "ofensivo", "motivo": "Has publicado o enviado contenido ofensivo.", "nota": "Insultos."}
+        assert (r.status_code, r.json()) == (200, {"ok": True, "expulsado": e, "anuncios": 1, "conversaciones": 0})
+        r = await web.post("/api/admin/mercadillo/expulsar", json=cuerpo, headers=_sesion(DANI))
+        assert (r.status_code, r.json()) == (200, {"ok": True, "ya": True, "expulsado": e, "anuncios": 0, "conversaciones": 0})
+        for mal, codigo, detalle in (({"clave": "fds", "motivo": "otro"}, 400, "A quien modera no se le puede quitar el mercadillo"),
+                                     ({"clave": "ana", "motivo": "otro"}, 400, "Esa clave no es de una persona del mercadillo"),
+                                     ({"clave": CLAVES["pepe"]}, 400, "Elige el motivo: es lo que se le dice a esa persona"),
+                                     ({"clave": CLAVES["pepe"], "motivo": "otro"}, 404, "Esa persona no ha usado el mercadillo")):
+            r = await web.post("/api/admin/mercadillo/expulsar", json=mal, headers=_sesion(DANI))
+            assert (r.status_code, r.json()) == (codigo, {"detail": detalle})
+        # Lo que ve la persona: el estado se lo explica y lo demás es 403 con ese mismo texto.
+        texto = _fuera("ofensivo", "Insultos.")
+        r = await web.get("/api/mercadillo/estado", headers=_sesion(ANA))
+        assert (r.status_code, r.json()) == (200, {"visible": True, "abierto": True, "expulsado": True, "texto": texto,
+                                                   "sin_leer": 0, "yo": {"nombre": "Ana P.", "tipo": "conductor"}})
+        r = await web.get(f"/api/mercadillo/anuncio/{a['id']}", headers=_sesion(ANA))
+        assert (r.status_code, r.json()) == (403, {"detail": texto})
+        # GET /admin/mercadillo: los campos nuevos.
+        r = await web.get("/api/admin/mercadillo", headers=_sesion(DANI))
+        assert r.status_code == 200 and r.json()["expulsados"] == [e] and r.json()["totales"]["expulsados"] == 1
+        assert r.json()["motivos_expulsion"] == MOTIVOS_EXPULSION
+        # POST /admin/mercadillo/readmitir: ella misma no se lo devuelve; Dani sí, y la segunda vez ya lo tiene.
+        r = await web.post("/api/admin/mercadillo/readmitir", json={"clave": CLAVES["ana"]}, headers=_sesion(ANA))
+        assert r.status_code == 403 and len(mundo.g["mercadillo_expulsados"].docs) == 1
+        r = await web.post("/api/admin/mercadillo/readmitir", json={"clave": CLAVES["ana"]}, headers=_sesion(DANI))
+        assert (r.status_code, r.json()) == (200, {"ok": True})
+        r = await web.post("/api/admin/mercadillo/readmitir", json={"clave": CLAVES["ana"]}, headers=_sesion(DANI))
+        assert (r.status_code, r.json()) == (404, {"detail": YA_TIENE_ACCESO})
+        r = await web.get("/api/mercadillo/estado", headers=_sesion(ANA))
+        assert r.status_code == 200 and "expulsado" not in r.json() and r.json()["visible"] is True
+        # Y LAS NORMAS, por su ruta: sin sesión no; sin el «acepto», 400; con él, queda dicho en la lista y en el estado.
+        assert (await web.post("/api/mercadillo/normas", json={"acepto": True})).status_code == 401
+        for ruta in ("/api/mercadillo", "/api/mercadillo/estado"):
+            assert (await web.get(ruta, headers=_sesion(ANA))).json()["normas_ok"] is False
+        r = await web.post("/api/mercadillo/normas", json={}, headers=_sesion(ANA))
+        assert (r.status_code, r.json()) == (400, {"detail": "Tienes que aceptar las normas para usar el mercadillo"})
+        r = await web.post("/api/mercadillo/normas", json={"acepto": True}, headers=_sesion(ANA))
+        assert (r.status_code, r.json()) == (200, {"ok": True, "normas_ok": True})
+        for ruta in ("/api/mercadillo", "/api/mercadillo/estado"):
+            assert (await web.get(ruta, headers=_sesion(ANA))).json()["normas_ok"] is True
+            assert (await web.get(ruta, headers=_sesion(DANI))).json()["normas_ok"] is True
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_al_quitar_el_mercadillo_tampoco_sale_la_clave_de_nadie_fuera_del_panel(mundo):
+    """Lo nuevo (el estado de quien está fuera, su 403, sus avisos y sus correos, las normas) sigue sin llevar la clave
+    de nadie. El panel de Dani sí la lleva: es con lo que se le dice a quién quitarle el mercadillo."""
+    await _abrir(mundo)
+    de_ana, de_pepe, de_oficina, de_luis = (await _publicado(ANA, "Soporte de móvil"), await _publicado(PEPE, "Carretilla"),
+                                            await _publicado(OFICINA, "Silla de oficina"), await _publicado(LUIS, "Botas"))
+    cid = (await server.merc_contactar(de_ana["id"], {"texto": "hola"}, PEPE))["conversacion_id"]
+    await server.merc_denunciar({"anuncio_id": de_ana["id"], "motivo": "ofensivo"}, LUIS)
+    await server.merc_denunciar({"anuncio_id": de_luis["id"], "motivo": "otro"}, OFICINA)        # esta sigue abierta
+    del_panel = [await _expulsar("pepe", "estafa", nota="Pedía el pago por adelantado."), await _expulsar("ana", "acoso"),
+                 await _expulsar("oficina", "otro"), await _expulsar("ana", "acoso")]
+    vistas, errores = [], []
+    for user in (PEPE, ANA, OFICINA):
+        vistas.append(await server.merc_estado(user))
+        errores += [await _falla(intento, 403) for intento in (
+            server.merc_lista("", user), server.merc_buzon(user), server.merc_normas({"acepto": True}, user),
+            server.merc_conversacion(cid, user), server.merc_anuncio(de_luis["id"], user),
+            server.merc_bloquear({"anuncio_id": de_luis["id"]}, user), server.merc_bloqueados(user))]
+    await server.admin_mercadillo_readmitir({"clave": CLAVES["pepe"]}, DANI)
+    vistas += [await server.merc_normas({"acepto": True}, LUIS), await server.merc_normas({"acepto": True}, PEPE)]
+    for user in (LUIS, PEPE, DANI):
+        vistas += [await server.merc_estado(user), await server.merc_lista("", user), await server.merc_buzon(user)]
+    # Lo que les llega: cada aviso de su buzón y cada correo (asunto y texto).
+    vistas += [x["texto"] for x in mundo.g["mercadillo_avisos"].docs] + [c.texto for c in mundo.enviados] + [
+        c.subject for c in mundo.enviados]
+    assert len(errores) == 21 and len(vistas) > 30
+    assert [h for v in vistas for h in _claves_en(v)] == [] and [h for e in errores for h in _claves_en(e.detail)] == []
+    assert {e.detail for e in errores} == {_fuera("estafa", "Pedía el pago por adelantado."), _fuera("acoso"), _fuera("otro")}
+    # El control: lo de Dani SÍ las lleva (así que el buscador las habría visto).
+    assert [_claves_en(r)[0] for r in del_panel] == [".expulsado.clave"] * 4
+    en_el_panel = _claves_en(await server.admin_mercadillo(DANI))
+    assert ".expulsados[0].clave" in en_el_panel and ".denuncias[0].personas[0].clave" in en_el_panel
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_a_una_persona_se_la_expulsa_una_vez_aunque_lleguen_dos_toques_a_la_vez(mundo, monkeypatch):
+    """Sin un índice ÚNICO por `clave`, el `except DuplicateKeyError` de expulsar sería papel mojado: dos toques a la vez
+    dejarían dos expulsiones y dos avisos a esa persona (y devolverle el acceso, borrando una, no se lo devolvería)."""
+    creados = []
+
+    async def idx(coleccion, *args, **kwargs):
+        creados.append((coleccion, args, kwargs))
+
+    async def nada(*a, **k):
+        return []
+    monkeypatch.setattr(server, "_idx", idx)
+    monkeypatch.setattr(server, "_ensure_tenant_indexes", nada)
+    mundo.g.list_collection_names = nada
+    await server.create_indexes()
+    col = mundo.g["mercadillo_expulsados"]
+    assert [(args, kwargs) for c, args, kwargs in creados if c is col] == [
+        (("clave",), {"unique": True, "name": "mercadillo_expulsado_unico"})]
+    # Dos toques A LA VEZ: los dos pasan el «¿ya estaba?», el índice rechaza el segundo, y este contesta `ya` con la
+    # expulsión que ganó, sin un segundo aviso; lo suyo queda retirado igual.
+    await _abrir(mundo)
+    a = await _publicado(ANA, "Soporte de móvil")
+    guardar = col.insert_one
+
+    async def el_otro_toque_llego_antes(doc):
+        await guardar({**doc, "ts": "2026-11-10T09:00:00+00:00", "motivo_clave": "acoso", "motivo": MOTIVOS_EXPULSION["acoso"]})
+        raise DuplicateKeyError("E11000 duplicate key error collection: mercadillo_expulsados index: mercadillo_expulsado_unico")
+    monkeypatch.setattr(col, "insert_one", el_otro_toque_llego_antes)
+    avisos, correos, rastros = len(mundo.g["mercadillo_avisos"].docs), len(mundo.enviados), len(mundo.g["audit_log"].docs)
+    r = await _expulsar("ana", "ofensivo")
+    assert (r["ok"], r["ya"]) == (True, True) and len(col.docs) == 1
+    assert (r["expulsado"]["motivo_clave"], r["expulsado"]["ts"]) == ("acoso", "2026-11-10T09:00:00+00:00")
+    assert (len(mundo.g["mercadillo_avisos"].docs), len(mundo.enviados), len(mundo.g["audit_log"].docs)) == (avisos, correos, rastros)
+    assert (await mundo.g["mercadillo_anuncios"].find_one({"id": a["id"]}))["estado"] == "retirado"
+    await _falla(server.merc_lista("", ANA), 403, _fuera("acoso"))
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_baja_de_la_cuenta_se_lleva_tambien_su_expulsion(mundo):
+    await _abrir(mundo)
+    _con_cuenta(mundo)
+    await _publicado(PEPE, "Carretilla")
+    await _publicado(ANA, "Soporte de móvil")
+    await _expulsar("pepe", "estafa")
+    await _expulsar("ana", "otro")
+    assert await server.borrar_cuenta({"password": "secreta123"}, PEPE) == {"ok": True}
+    assert [e["clave"] for e in mundo.g["mercadillo_expulsados"].docs] == [CLAVES["ana"]]
+
+
+# ── LAS NORMAS, ACEPTADAS (10-11-2026) ──────────────────────────────────────
+NORMAS_SIN_ACEPTAR = "Tienes que aceptar las normas para usar el mercadillo"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_las_normas_se_aceptan_una_vez_por_version_y_el_servidor_solo_lo_dice(mundo, monkeypatch):
+    """Apple: «require that users agree to terms». El servidor apunta quién, qué versión y cuándo, y lo dice con
+    `normas_ok`; la pantalla la impone la WEB (solo con un `false` estricto). Las demás rutas NO lo exigen: la app de
+    iPhone que está en revisión no conoce esa pantalla y dejaría de poder escribir."""
+    await _falla(server.merc_normas({"acepto": True}, ANA), 404, "El mercadillo todavía no está abierto")   # pasa por la puerta
+    await _abrir(mundo)
+    a = await _publicado(PEPE, "Carretilla")
+    assert mundo.g["mercadillo_prefs"].docs == []
+    for quien in (ANA, PEPE, OFICINA):
+        assert (await server.merc_estado(quien))["normas_ok"] is False and (await server.merc_lista("", quien))["normas_ok"] is False
+    # A quien modera no se le piden.
+    assert (await server.merc_estado(DANI))["normas_ok"] is True and (await server.merc_lista("", DANI))["normas_ok"] is True
+    # SIN ACEPTARLAS se puede seguir usando todo (el servidor no lo exige).
+    cid = (await server.merc_contactar(a["id"], {"texto": "¿Sigue?"}, ANA))["conversacion_id"]
+    await server.merc_responder(cid, {"texto": "Sí"}, PEPE)
+    assert (await server.merc_buzon(ANA))["conversaciones"][0]["id"] == cid and (await server.merc_estado(ANA))["normas_ok"] is False
+    # Sin un «acepto» de verdad no vale (ni «true» en texto, ni un 1, ni otro campo).
+    for cuerpo in ({}, [], {"acepto": False}, {"acepto": "true"}, {"acepto": 1}, {"acepto": None}, {"acepta": True}):
+        await _falla(server.merc_normas(cuerpo, ANA), 400, NORMAS_SIN_ACEPTAR)
+    assert mundo.g["mercadillo_prefs"].docs == [] and (await server.merc_estado(ANA))["normas_ok"] is False
+    # «ACEPTO LAS NORMAS»: queda apuntado quién, qué versión y cuándo.
+    assert await server.merc_normas({"acepto": True}, ANA) == {"ok": True, "normas_ok": True}
+    guardado = mundo.g["mercadillo_prefs"].docs
+    assert len(guardado) == 1 and guardado[0]["clave"] == CLAVES["ana"] and set(guardado[0]["normas"]) == {"v", "ts"}
+    assert guardado[0]["normas"]["v"] == mc.NORMAS_VERSION == "2026-11-10" and _es_fecha(guardado[0]["normas"]["ts"])
+    assert (await server.merc_estado(ANA))["normas_ok"] is True and (await server.merc_lista("", ANA))["normas_ok"] is True
+    assert (await server.merc_estado(PEPE))["normas_ok"] is False            # cada uno, las suyas
+    # Aceptarlas no toca sus avisos al móvil, ni ponerlos borra lo aceptado; y dos veces no deja dos apuntes.
+    await server.merc_avisos_movil({"activo": True}, ANA)
+    await server.merc_normas({"acepto": True}, ANA)
+    estado = await server.merc_estado(ANA)
+    assert (estado["normas_ok"], estado["avisos_movil"], len(mundo.g["mercadillo_prefs"].docs)) == (True, True, 1)
+    assert await server.merc_normas({"acepto": True}, DANI) == {"ok": True, "normas_ok": True}      # él también puede pulsarlo
+    # Un dato viejo o roto no es un «sí» (ni un 500).
+    await mundo.g["mercadillo_prefs"].insert_one({"clave": CLAVES["oficina"], "normas": mc.NORMAS_VERSION})
+    await mundo.g["mercadillo_prefs"].insert_one({"clave": CLAVES["luis"], "normas": {"ts": "2026-11-10T10:00:00+00:00"}})
+    assert [(await server.merc_estado(q))["normas_ok"] for q in (OFICINA, LUIS)] == [False, False]
+    # CAMBIAN LAS NORMAS: a todos se les vuelven a pedir (a quien modera, no), y al aceptar queda la versión nueva.
+    monkeypatch.setattr(mc, "NORMAS_VERSION", "2027-01-15")
+    assert (await server.merc_estado(ANA))["normas_ok"] is False and (await server.merc_lista("", ANA))["normas_ok"] is False
+    assert (await server.merc_estado(DANI))["normas_ok"] is True
+    assert await server.merc_normas({"acepto": True}, ANA) == {"ok": True, "normas_ok": True}
+    de_ana = await mundo.g["mercadillo_prefs"].find_one({"clave": CLAVES["ana"]})
+    assert (await server.merc_estado(ANA))["normas_ok"] is True and (de_ana["normas"]["v"], de_ana["push"]) == ("2027-01-15", True)
+
+
+# ── EL FILTRO DEL LENGUAJE OFENSIVO (10-11-2026) ────────────────────────────
+# Apple: «a method for filtering objectionable content». Es un filtro BÁSICO de lista (palabras y frases enteras, sin
+# mayúsculas ni tildes): no lo detecta todo, y se prueba con el mismo cuidado lo que para que lo que NO puede parar.
+MENSAJE_OFENSIVO = "Ese mensaje no se puede enviar: no se permiten insultos, amenazas ni contenido ofensivo. Cámbialo y vuelve a enviarlo."
+ANUNCIO_OFENSIVO = "Ese anuncio no se puede enviar: quita los insultos o el contenido ofensivo del texto."
+ENTRA = [
+    # insultos, tal cual y disfrazados de mayúsculas, signos, saltos de línea o letras «anchas»
+    "hijo de puta", "¡HIJO DE PUTA!", "Hijo-de-Puta", "hijo  de\nputa", "Vendo esto, hijos de puta", "ｈｉｊｏ ｄｅ ｐｕｔａ",
+    "eres un gilipollas", "GILIPOLLAS.", "subnormal", "tu puta madre", "me cago en tus muertos", "coño de tu madre",
+    "malparido", "eres una mierda",
+    # racistas y homófobos
+    "maricón", "MARICÓN", "Maricones todos", "negro de mierda", "puto moro", "sudaca", "gitanos de mierda",
+    # amenazas
+    "Te voy a matar", "te voy a partir la cara", "ojalá te mueras", "voy a matarte, ya lo sabes",
+    # inglés y los pocos de otros idiomas
+    "fuck you", "Fuck off!", "I'll kill you", "motherfucker", "you bitch", "nigger", "faggot", "kill yourself",
+    "filho da puta", "fillo de puta", "fill de puta", "connard", "enculé", "nique ta mère", "vaffanculo", "Arschlöcher",
+]
+NO_ENTRA = [
+    # dentro de otra palabra, nunca
+    "disputa", "computadora", "Scunthorpe", "mariconera Nike", "Assassin's Creed", "Essex", "analógico", "gilipollez",
+    # lo que se vende y cómo se habla en un mercadillo de repartidores
+    "un chaleco negro", "Chaleco reflectante negro, talla L", "Funda negra para iPhone", "moro", "moros y cristianos",
+    "gitano", "móvil chino de mierda", "Lima bastarda", "kill switch", "2 años de uso", "Níger", "Kike", "marica",
+    "pedido retrasado", "el paquet porta retard", "mongola", "polla",
+    # palabrotas sueltas, que entre compañeros no van contra nadie
+    "puta", "está de puta madre", "ni puta idea", "el puto móvil no carga", "eres un puto crack", "eres una puta máquina",
+    "coño", "joder", "mierda", "esta furgo es una mierda", "hostia", "qué cabrón, qué suerte", "fuck", "shit",
+    "perdona, soy idiota", "te mato jaja",
+    # frases normales que se parecen a una amenaza
+    "te voy a buscar a la nave", "sé dónde vives, te lo acerco", "hijo de vecino",
+    # nada, o algo que no es texto
+    "", "   ", None, 5,
+]
+
+
+@pytest.mark.parametrize("texto", ENTRA)
+def test_el_filtro_para_insultos_y_amenazas(texto):
+    assert mc.ofensivo(texto) is True
+    with pytest.raises(mc.Invalido) as e:
+        mc.mensaje(texto)
+    assert str(e.value) == MENSAJE_OFENSIVO
+
+
+@pytest.mark.parametrize("texto", NO_ENTRA)
+def test_el_filtro_no_para_lo_que_se_dice_y_se_vende_en_un_mercadillo_de_repartidores(texto):
+    assert mc.ofensivo(texto) is False
+    if str(texto or "").strip():
+        assert mc.mensaje(texto) == str(texto).strip()
+
+
+def test_la_lista_del_filtro_es_corta_y_esta_escrita_como_se_compara():
+    """Cada entrada, en minúsculas, sin tildes (con su ñ) y con un espacio entre palabras: si no, no casaría nunca.
+    Y ninguna de las palabras que aquí tienen un uso normal está sola en la lista."""
+    assert [x for x in mc.OFENSIVO if mc._palabras(x) != f" {x} "] == []
+    assert len(set(mc.OFENSIVO)) == len(mc.OFENSIVO) and 80 <= len(mc.OFENSIVO) <= 200
+    assert [x for x in mc.OFENSIVO if not mc.ofensivo(f"«{x.upper()}»")] == []
+    de_uso_normal = {"puta", "puto", "coño", "joder", "mierda", "hostia", "cabron", "negro", "negra", "moro", "mora", "gitano",
+                     "chino", "marica", "bastardo", "retard", "retrasado", "polla", "zorra", "perra", "cerdo", "idiota",
+                     "tonto", "imbecil", "fuck", "shit", "kike", "ano"}
+    assert de_uso_normal & set(mc.OFENSIVO) == set()
+    # Cómo compara: sin mayúsculas ni tildes, palabra a palabra; la ñ no es una n («año» no es «ano»).
+    assert mc._palabras("¡Hijo de PUTA!") == " hijo de puta " and mc._palabras("Año, año y São") == " año año y sao "
+    assert mc._palabras(None) == mc._palabras("  ¡¿?!  ") == "  "
+
+
+def test_el_filtro_mira_el_titulo_la_descripcion_y_la_zona_del_anuncio_y_no_los_nombres():
+    base = {"titulo": "Chaleco negro", "categoria": "ropa", "estado_articulo": "como_nuevo", "precio": "15",
+            "descripcion": "Está de puta madre, casi sin usar.", "zona": "Coruña (zona del Moro)", "fotos": ["a"], "acepto": True}
+    assert mc.validar(base)["titulo"] == "Chaleco negro"
+    for cambio in ({"titulo": "Chaleco para gilipollas"}, {"descripcion": "Si regateas eres un subnormal."},
+                   {"zona": "donde los sudacas"}, {"titulo": "TE VOY A MATAR"}):
+        with pytest.raises(mc.Invalido) as e:
+            mc.validar({**base, **cambio})
+        assert str(e.value) == ANUNCIO_OFENSIVO
+    # Una frase no se forma a caballo entre dos campos (cada uno se mira por separado).
+    assert mc.validar({**base, "titulo": "Regalo para tu hijo de", "descripcion": "puta madre de calidad"})["zona"] == "Coruña (zona del Moro)"
+    # Los nombres no pasan por el filtro (salen de la cuenta, no los escribe en el mercadillo).
+    assert mc.nombre_publico("Gilipollas Pérez") == "Gilipollas P."
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_filtro_en_me_interesa_al_responder_al_publicar_y_al_corregir_pero_no_en_una_denuncia(mundo):
+    await _abrir(mundo)
+    a = await _publicado(ANA, "Soporte de móvil")
+    # «ME INTERESA»: no se abre la conversación ni se le cuenta un interesado.
+    await _falla(server.merc_contactar(a["id"], {"texto": "Baja el precio, hijo de puta"}, PEPE), 400, MENSAJE_OFENSIVO)
+    assert mundo.g["mercadillo_conversaciones"].docs == [] and mundo.g["mercadillo_mensajes"].docs == []
+    assert mundo.g["mercadillo_anuncios"].docs[0]["interesados"] == 0
+    cid = (await server.merc_contactar(a["id"], {"texto": "¿Sigue disponible? Está de puta madre"}, PEPE))["conversacion_id"]
+    # RESPONDER, de cada lado: no se guarda ni le llega nada al otro.
+    correos = len(mundo.enviados)
+    for quien, texto in ((ANA, "te voy a matar"), (PEPE, "¡GILIPOLLAS!"), (PEPE, "fuck you")):
+        await _falla(server.merc_responder(cid, {"texto": texto}, quien), 400, MENSAJE_OFENSIVO)
+    assert len(mundo.g["mercadillo_mensajes"].docs) == 1 and len(mundo.enviados) == correos
+    assert (await server.merc_responder(cid, {"texto": "Sí, el negro. ¡Joder, qué rápido!"}, ANA))["texto"] == "Sí, el negro. ¡Joder, qué rápido!"
+    # PUBLICAR: en el título, en la descripción o en la zona; no queda ni el anuncio ni la foto cogida.
+    f = await server.merc_subir_foto(_Fichero(_jpeg_con_gps()), LUIS)
+    base = {"titulo": "Botas de seguridad", "categoria": "ropa", "estado_articulo": "buen_estado", "precio": "20",
+            "zona": "A Coruña", "fotos": [f["id"]], "acepto": True}
+    a_dani = len(mundo.enviados)
+    for cambio in ({"titulo": "Botas para maricones"}, {"descripcion": "Si regateas, eres un subnormal."}, {"zona": "donde los sudacas"}):
+        await _falla(server.merc_crear({**base, **cambio}, LUIS), 400, ANUNCIO_OFENSIVO)
+    assert (await server.merc_lista("", LUIS))["mios"] == [] and len(mundo.enviados) == a_dani
+    assert (await mundo.g["mercadillo_fotos"].find_one({"id": f["id"]}))["anuncio"] is None
+    botas = await server.merc_crear({**base, "descripcion": "Negras, del 43. Están de puta madre."}, LUIS)
+    await server.admin_mercadillo_anuncio(botas["id"], {"accion": "aprobar"}, DANI)
+    # CORREGIR: el anuncio se queda como estaba (ni cambia ni vuelve a revisión).
+    await _falla(server.merc_cambiar(botas["id"], {**base, "titulo": "Botas, hijos de puta"}, LUIS), 400, ANUNCIO_OFENSIVO)
+    guardado = await mundo.g["mercadillo_anuncios"].find_one({"id": botas["id"]})
+    assert (guardado["titulo"], guardado["estado"]) == ("Botas de seguridad", "publicado") and "Botas de seguridad" in await _titulos(PEPE)
+    assert (await server.merc_cambiar(botas["id"], {**base, "titulo": "Botas de seguridad negras"}, LUIS))["estado"] == "pendiente"
+    # LA DENUNCIA NO SE FILTRA: quien denuncia puede tener que citar lo que le han dicho.
+    cita = "Me ha llamado hijo de puta y me ha escrito «te voy a matar»"
+    assert await server.merc_denunciar({"conversacion_id": cid, "motivo": "ofensivo", "texto": cita}, ANA) == {"ok": True}
+    assert mundo.g["mercadillo_denuncias"].docs[-1]["texto"] == cita
+    assert await server.merc_denunciar({"anuncio_id": a["id"], "motivo": "ofensivo", "texto": "pone «sudacas»"}, PEPE) == {"ok": True}
+    # LO QUE YA ESTABA GUARDADO no se toca: un mensaje de antes del filtro se sigue leyendo (y se puede denunciar).
+    await mundo.g["mercadillo_mensajes"].insert_one({"id": "de-antes", "conv": cid, "de": CLAVES["pepe"], "texto": "gilipollas",
+                                                    "ts": "2026-01-01T10:00:00+00:00"})
+    assert "gilipollas" in [m["texto"] for m in (await server.merc_conversacion(cid, ANA))["mensajes"]]
+    assert (await server.admin_mercadillo(DANI))["denuncias"][0]["mensajes"][0]["texto"] == "gilipollas"
+
+
+# ── LA LIMPIEZA AL BORRAR (10-11-2026) ──────────────────────────────────────
+# Quien deja de poder entrar no puede dejar anuncios publicados ni conversaciones abiertas a nombre de alguien que ya
+# no contesta. Y al revés: un fallo del mercadillo no puede impedir NUNCA que se borre una empresa o una persona.
+def _mercadillo_de(mundo, clave: str) -> dict:
+    """Lo que queda en el mercadillo de esa persona: cuántos anuncios activos, conversaciones abiertas, bloqueos (hechos o
+    recibidos), preferencias y expulsiones."""
+    g = mundo.g
+    return {"anuncios": len([a for a in g["mercadillo_anuncios"].docs
+                             if a["vendedor"].get("clave") == clave and a["estado"] in mc.ESTADOS_ACTIVOS]),
+            "conversaciones": len([c for c in g["mercadillo_conversaciones"].docs if not c.get("bloqueada")
+                                   and clave in (c["comprador"]["clave"], c["vendedor"]["clave"])]),
+            "bloqueos": len([b for b in g["mercadillo_bloqueos"].docs if clave in (b["de"], b["a"])]),
+            "prefs": len([p for p in g["mercadillo_prefs"].docs if p["clave"] == clave]),
+            "expulsiones": len([e for e in g["mercadillo_expulsados"].docs if e["clave"] == clave])}
+
+
+VACIO = {"anuncios": 0, "conversaciones": 0, "bloqueos": 0, "prefs": 0, "expulsiones": 0}
+
+
+async def _con_mercadillo(mundo, *personas) -> None:
+    """Cada una con un anuncio publicado, una conversación abierta (Luis le escribe), un bloqueo (bloquea a Dani), sus
+    avisos al móvil y las normas aceptadas."""
+    dani = await _publicado(DANI, "iPhone 18 Pro · 256 GB", "1.300")
+    for i, p in enumerate(personas):
+        a = await _publicado(p, f"Cosa {i}")
+        await server.merc_contactar(a["id"], {"texto": "¿Sigue?"}, LUIS)
+        await server.merc_bloquear({"anuncio_id": dani["id"]}, p)
+        await server.merc_avisos_movil({"activo": True}, p)
+        await server.merc_normas({"acepto": True}, p)
+
+
+async def _roto(clave):
+    raise RuntimeError("la base no contesta")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_borrar_una_empresa_se_lleva_el_mercadillo_de_todas_sus_personas_y_solo_el_suyo(mundo, monkeypatch):
+    borradas = []
+
+    async def tirar(nombre):
+        borradas.append(nombre)
+    monkeypatch.setattr(server, "client", SimpleNamespace(drop_database=tirar))
+    mundo.g["organizations"].docs += [
+        {"id": "emp", "name": "Reparto Norte", "account_type": "dsp", "plan": "completo", "sector": "reparto", "slug": "norte"},
+        {"id": "emp2", "name": "Reparto Norte 2", "account_type": "dsp", "plan": "completo", "sector": "reparto", "slug": "norte2"},
+        {"id": "sol", "name": "Sol Vila", "account_type": "dsp", "plan": "autonomo", "sector": "autonomo", "slug": "sol"},
+        {"id": "sol2", "name": "Sol Díaz", "account_type": "dsp", "plan": "autonomo", "sector": "autonomo", "slug": "sol2"}]
+    mundo.g["admin_users"] = Col([{"id": "j1", "org_id": "emp"}, {"id": "j1b", "org_id": "emp2"}, {"id": "s1", "org_id": "sol"},
+                                  {"id": "s2", "org_id": "sol2"}, {"id": "a9", "org_id": "empresa"}])
+    marta, carlos = ({"sub": "j1", "role": "admin", "org_id": "emp", "name": "Marta Ruiz"},
+                     {"sub": "c1", "role": "driver", "org_id": "emp", "name": "Carlos Vez"})
+    sol = {"sub": "s1", "role": "admin", "org_id": "sol", "name": "Sol"}
+    # Las de control se llaman casi igual (mismo conductor «c1», y «emp2»/«sol2» EMPIEZAN por «emp»/«sol»).
+    marta2, carlos2, sol2 = {**marta, "sub": "j1b", "org_id": "emp2"}, {**carlos, "org_id": "emp2"}, {**sol, "sub": "s2", "org_id": "sol2"}
+    await _abrir(mundo)
+    todas = (marta, carlos, sol, marta2, carlos2, sol2, ANA)
+    await _con_mercadillo(mundo, *todas)
+    claves = {n: (await server._merc_yo(p))["clave"] for n, p in zip(("marta", "carlos", "sol", "marta2", "carlos2", "sol2", "ana"), todas)}
+    assert claves == {"marta": "a:emp:j1", "carlos": "d:emp:c1", "sol": "o:sol", "marta2": "a:emp2:j1b", "carlos2": "d:emp2:c1",
+                      "sol2": "o:sol2", "ana": CLAVES["ana"]}
+    await mundo.g["mercadillo_expulsados"].insert_one({"clave": "d:emp:c9", "nombre": "Uno de emp", "ts": "2026-11-10T10:00:00+00:00"})
+    await mundo.g["mercadillo_expulsados"].insert_one({"clave": "d:emp2:c9", "nombre": "Uno de emp2", "ts": "2026-11-10T10:00:00+00:00"})
+    entero = {"anuncios": 1, "conversaciones": 1, "bloqueos": 1, "prefs": 1, "expulsiones": 0}
+    assert all(_mercadillo_de(mundo, c) == entero for c in claves.values())
+    # NO ES DE CUALQUIERA, y lo que no es una cuenta de cliente no se borra (ni se toca su mercadillo).
+    await _falla(server.require_superadmin(marta), 403)
+    await _falla(server.admin_delete_org("owner", DANI), 404, "Empresa no encontrada")
+    assert _mercadillo_de(mundo, claves["ana"]) == entero
+    # SE BORRA «emp»: el mercadillo de su oficina y de su conductor se cierra (y la expulsión de uno de los suyos se va).
+    assert await server.admin_delete_org("emp", DANI) == {"ok": True}
+    assert borradas == ["dsp_emp"] and await server.get_org("emp") is None
+    assert [u["id"] for u in mundo.g["admin_users"].docs] == ["j1b", "s1", "s2", "a9"]
+    assert _mercadillo_de(mundo, claves["marta"]) == _mercadillo_de(mundo, claves["carlos"]) == VACIO
+    assert [e["clave"] for e in mundo.g["mercadillo_expulsados"].docs] == ["d:emp2:c9"]
+    quitados = [a for a in mundo.g["mercadillo_anuncios"].docs if a["estado"] == "quitado"]
+    assert sorted(a["vendedor"]["clave"] for a in quitados) == ["a:emp:j1", "d:emp:c1"] and all(_es_fecha(a["fin"]) for a in quitados)
+    cerradas = [c for c in mundo.g["mercadillo_conversaciones"].docs if c.get("bloqueada")]
+    assert sorted(c["vendedor"]["clave"] for c in cerradas) == ["a:emp:j1", "d:emp:c1"] and {c["cerrada_por"] for c in cerradas} == {"baja"}
+    # …y SOLO el suyo: «emp2», las dos autónomas y Ana siguen enteras.
+    for n in ("marta2", "carlos2", "sol", "sol2", "ana"):
+        assert _mercadillo_de(mundo, claves[n]) == entero, n
+    assert len(await _titulos(DANI)) == 6                                    # (lo de Dani y lo de los cinco que siguen)
+    # SE BORRA «sol» (quien reparte por su cuenta: su mercadillo es el de la cuenta) y «sol2» ni se entera.
+    assert await server.admin_delete_org("sol", DANI) == {"ok": True}
+    assert _mercadillo_de(mundo, claves["sol"]) == VACIO and _mercadillo_de(mundo, claves["sol2"]) == entero
+    # Un punto en el id de la cuenta no es un comodín, y «o:emp» no es «o:emp2».
+    filtro = server._merc_de_la_cuenta("a.b")["$regex"]
+    assert [c for c in ("o:a.b", "d:a.b:x", "a:a.b:y", "o:aXb", "d:aXb:x", "o:a.b2", "d:a.b2:x", "xo:a.b", "o:a.b:z") if re.search(filtro, c)] == [
+        "o:a.b", "d:a.b:x", "a:a.b:y"]
+    # SI EL MERCADILLO FALLA, la empresa se borra igual.
+    monkeypatch.setattr(server, "_merc_baja", _roto)
+    assert await server.admin_delete_org("emp2", DANI) == {"ok": True}
+    assert await server.get_org("emp2") is None and borradas == ["dsp_emp", "dsp_sol", "dsp_emp2"]
+    assert [x["action"] for x in mundo.g["audit_log"].docs] == ["org_delete"] * 3
+    assert _mercadillo_de(mundo, claves["marta2"]) == entero                 # (no se pudo cerrar: queda como estaba)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_borrar_un_conductor_se_lleva_su_mercadillo_y_borrar_solo_su_cuenta_de_acceso_no(mundo, monkeypatch):
+    tenant = Db()
+    tenant["drivers"] = Col([{"id": "d1", "name": "Ana", "active": True}, {"id": "d2", "name": "Luis", "active": True},
+                             {"id": "d3", "name": "Rosa", "active": True}])
+    tenant["driver_accounts"] = Col([{"driver_id": "d1", "email": "ana@x.es"}, {"driver_id": "d3", "email": "rosa@x.es"}])
+    limpiados = []
+
+    async def correo_personal(driver_id, org_id):
+        limpiados.append(driver_id)
+    monkeypatch.setattr(server, "db", tenant)
+    monkeypatch.setattr(server, "_limpiar_correo_personal_conductor", correo_personal)
+    jefe = {"sub": "jefe", "role": "admin", "org_id": "owner", "name": "Jefe"}
+    rosa = {"sub": "d3", "role": "driver", "org_id": "owner", "name": "Rosa Mar"}
+    ana_de_otra = {**ANA, "org_id": "empresa"}                              # otra empresa con un conductor «d1»
+    await _abrir(mundo)
+    await _con_mercadillo(mundo, ANA, rosa, ana_de_otra, PEPE)
+    entero = {"anuncios": 1, "conversaciones": 1, "bloqueos": 1, "prefs": 1, "expulsiones": 0}
+    await _expulsar("ana", "otro")                                           # (Ana, además, estaba fuera: también se va)
+    de_ana = {"anuncios": 0, "conversaciones": 0, "bloqueos": 1, "prefs": 1, "expulsiones": 1}
+    assert _mercadillo_de(mundo, CLAVES["ana"]) == de_ana
+    # BORRAR SOLO SU CUENTA DE ACCESO no deja fuera a nadie (vuelve a entrar con un código a su correo o con la
+    # contraseña inicial): su mercadillo no se toca.
+    assert await server.delete_driver_account("d3", jefe) == {"success": True, "driver_id": "d3"}
+    assert tenant["driver_accounts"].docs == [{"driver_id": "d1", "email": "ana@x.es"}]
+    assert _mercadillo_de(mundo, "d:owner:d3") == entero and "Cosa 1" in await _titulos(PEPE)
+    # Un conductor que no existe: 404, y no se toca el mercadillo de nadie.
+    await _falla(server.delete_driver("no-existe", jefe), 404, "Conductor no encontrado")
+    assert _mercadillo_de(mundo, "d:owner:d3") == entero and _mercadillo_de(mundo, CLAVES["ana"]) == de_ana
+    # BORRAR AL CONDUCTOR (la ficha queda de baja: ya no entra): su mercadillo se va con él, y solo el suyo.
+    assert await server.delete_driver("d1", jefe) == {"success": True}
+    assert (await tenant["drivers"].find_one({"id": "d1"}))["active"] is False and limpiados == ["d1"]
+    assert _mercadillo_de(mundo, CLAVES["ana"]) == VACIO
+    for clave in ("d:owner:d3", "d:empresa:d1", CLAVES["pepe"]):             # la compañera, el «d1» de otra empresa y Pepe
+        assert _mercadillo_de(mundo, clave) == entero, clave
+    assert mundo.g["audit_log"].docs[-1]["action"] == "driver_delete"
+    # Quien borra desde la base por defecto no lleva la empresa en su sesión: es la del dueño.
+    assert await server.delete_driver("d3", {"sub": "viejo", "role": "admin", "name": "Sin empresa"}) == {"success": True}
+    assert _mercadillo_de(mundo, "d:owner:d3") == VACIO and _mercadillo_de(mundo, "d:empresa:d1") == entero
+    # SI EL MERCADILLO FALLA, al conductor se le da de baja igual.
+    monkeypatch.setattr(server, "_merc_baja", _roto)
+    assert await server.delete_driver("d2", jefe) == {"success": True}
+    assert (await tenant["drivers"].find_one({"id": "d2"}))["active"] is False and limpiados == ["d1", "d3", "d2"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_borrar_a_alguien_de_oficina_se_lleva_su_mercadillo_y_solo_el_suyo(mundo, monkeypatch):
+    monkeypatch.setattr(server, "_ADMIN_EXISTS_CACHE", {})
+    mundo.g["admin_users"] = Col([{"id": "a9", "username": "oficina@x.es", "org_id": "empresa"},
+                                  {"id": "a8", "username": "otra@x.es", "org_id": "empresa"},
+                                  {"id": "a1", "username": "pepe@x.es", "org_id": "o1"}, {"id": "a2", "username": "socio@x.es", "org_id": "o1"},
+                                  {"id": "v1", "username": "viejo"}])
+    otra = {"sub": "a8", "role": "admin", "org_id": "empresa", "name": "Otra Persona"}
+    quien_borra = {"sub": "jefa", "role": "admin", "org_id": "empresa", "name": "Jefa", "sa": True}
+    await _abrir(mundo)
+    await _con_mercadillo(mundo, OFICINA, otra, PEPE)
+    entero = {"anuncios": 1, "conversaciones": 1, "bloqueos": 1, "prefs": 1, "expulsiones": 0}
+    # No puede cualquiera (como siempre): alguien de oficina sin ese permiso no borra a un compañero, ni su mercadillo.
+    await _falla(server.delete_admin("a9", otra), 403, "Sin permisos para eliminar usuarios")
+    assert _mercadillo_de(mundo, CLAVES["oficina"]) == entero
+    # SE BORRA a la persona de oficina: ya no entra (su sesión deja de valer), y su mercadillo se va con ella.
+    assert await server.delete_admin("a9", quien_borra) == {"success": True}
+    assert await mundo.g["admin_users"].find_one({"id": "a9"}) is None and mundo.g["admin_tombstones"].docs[0]["username"] == "oficina@x.es"
+    assert _mercadillo_de(mundo, CLAVES["oficina"]) == VACIO
+    assert _mercadillo_de(mundo, "a:empresa:a8") == entero                   # su compañera, entera
+    # En la cuenta de quien reparte por su cuenta el mercadillo es DE LA CUENTA («o:…»), que sigue viva con quien queda:
+    # borrar a su otro usuario no lo toca.
+    assert await server.delete_admin("a2", {**quien_borra, "org_id": "o1"}) == {"success": True}
+    assert _mercadillo_de(mundo, CLAVES["pepe"]) == entero and "Cosa 2" in await _titulos(LUIS)
+    # Un usuario de la base por defecto (sin empresa) nunca entró al mercadillo: no hay nada que cerrar.
+    cerrados = []
+
+    async def apuntar(clave):
+        cerrados.append(clave)
+    monkeypatch.setattr(server, "_merc_baja", apuntar)
+    assert await server.delete_admin("v1", {"sub": "jefa", "role": "admin", "name": "Jefa", "sa": True}) == {"success": True}
+    assert cerrados == []
+    # SI EL MERCADILLO FALLA, el usuario se borra igual.
+    monkeypatch.setattr(server, "_merc_baja", _roto)
+    assert await server.delete_admin("a8", quien_borra) == {"success": True}
+    assert await mundo.g["admin_users"].find_one({"id": "a8"}) is None and _mercadillo_de(mundo, "a:empresa:a8") == entero
