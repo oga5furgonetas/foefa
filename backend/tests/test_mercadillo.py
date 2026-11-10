@@ -18,6 +18,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from httpx import ASGITransport, AsyncClient
 from PIL import Image
 from pymongo.errors import DuplicateKeyError
 
@@ -644,6 +645,10 @@ async def test_bloquear_dos_veces_no_falla_y_no_se_bloquea_lo_que_no_se_ve_ni_a_
     # Sin decir a quién, lo que no existe, lo que no ve, lo de otros, lo suyo: nada de eso bloquea a nadie.
     await _falla(server.merc_bloquear({}, PEPE), 400, "Falta a quién bloqueas")
     await _falla(server.merc_bloquear([], PEPE), 400, "Falta a quién bloqueas")
+    # Un cuerpo con los tipos cambiados (una lista o un número donde va un id) no es un 500: no encuentra nada.
+    for raro in ({"anuncio_id": ["x"]}, {"anuncio_id": {"a": 1}}, {"conversacion_id": 5}, {"conversacion_id": True}):
+        await _falla(server.merc_bloquear(raro, PEPE), 404)
+    await _falla(server.merc_desbloquear("../../no-es-un-id", PEPE), 404, "Ese bloqueo ya no está")
     await _falla(server.merc_bloquear({"anuncio_id": "no-existe"}, PEPE), 404, "Ese anuncio ya no está")
     await _falla(server.merc_bloquear({"anuncio_id": pendiente["id"]}, PEPE), 404, "Ese anuncio ya no está")
     await _falla(server.merc_bloquear({"conversacion_id": cid}, LUIS), 404, "Esa conversación no existe")
@@ -920,6 +925,69 @@ async def test_bloquear_es_de_quien_esta_dentro_del_mercadillo(mundo):
             await _falla(intento, 403)
     assert mundo.g["mercadillo_bloqueos"].docs == []
     assert (await server.merc_bloquear({"anuncio_id": a["id"]}, ANA))["ok"] is True
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_bloquear_como_lo_llama_la_web_rutas_sesion_y_json(mundo, monkeypatch):
+    """El contrato tal como lo usa la web (que en sus pruebas lo simula): las rutas y los verbos de verdad, con su
+    sesión, y el JSON exacto de cada respuesta. El resto de este fichero llama a las funciones; esto pasa por FastAPI."""
+    async def la_misma(driver_id):
+        return driver_id
+    monkeypatch.setattr(server, "_ficha_activa_de", la_misma)               # (la ficha vive en la base de su empresa)
+    monkeypatch.setattr(server, "_ADMIN_EXISTS_CACHE", {})
+    mundo.g["admin_users"] = Col([{"id": "a1", "username": "pepe@x.es", "org_id": "o1"},
+                                  {"id": "dani", "username": "dani", "super_admin": True}])
+
+    def de(user):
+        return {"Authorization": "Bearer " + server.create_token(user["sub"], user["role"], user["name"], org_id=user["org_id"],
+                                                                 super_admin=bool(user.get("sa")))}
+    await _abrir(mundo)
+    a = await _publicado(ANA, "Soporte de móvil")
+    async with AsyncClient(transport=ASGITransport(app=server.app), base_url="http://testserver") as web:
+        for sin_sesion in (await web.post("/api/mercadillo/bloquear", json={"anuncio_id": a["id"]}),
+                           await web.get("/api/mercadillo/bloqueados"), await web.delete("/api/mercadillo/bloqueados/x")):
+            assert sin_sesion.status_code == 401
+        # POST /mercadillo/bloquear: el bloqueo, y «ya» si se repite.
+        r = await web.post("/api/mercadillo/bloquear", json={"anuncio_id": a["id"]}, headers=de(PEPE))
+        assert r.status_code == 200 and set(r.json()) == {"ok", "bloqueo"} and set(r.json()["bloqueo"]) == {"id", "nombre", "desde"}
+        b = r.json()["bloqueo"]
+        assert b["nombre"] == "Ana P." and re.fullmatch(r"[0-9a-f]{16}", b["id"])
+        r = await web.post("/api/mercadillo/bloquear", json={"anuncio_id": a["id"]}, headers=de(PEPE))
+        assert (r.status_code, r.json()) == (200, {"ok": True, "ya": True, "bloqueo": b})
+        for cuerpo, quien, codigo, texto in (
+                ({}, PEPE, 400, "Falta a quién bloqueas"), ({"anuncio_id": "no-existe"}, PEPE, 404, "Ese anuncio ya no está"),
+                ({"conversacion_id": "no-existe"}, PEPE, 404, "Esa conversación no existe"), ({"anuncio_id": a["id"]}, ANA, 400, "Es tu anuncio"),
+                ({"anuncio_id": a["id"]}, DANI, 400, "Tú moderas el mercadillo: retira el anuncio o cierra la conversación en Negocio")):
+            r = await web.post("/api/mercadillo/bloquear", json=cuerpo, headers=de(quien))
+            assert (r.status_code, r.json()) == (codigo, {"detail": texto})
+        # GET /mercadillo y /mercadillo/estado: ya filtrados y con cuántas personas tiene bloqueadas.
+        r = await web.get("/api/mercadillo", headers=de(PEPE))
+        assert r.status_code == 200 and r.json()["anuncios"] == [] and r.json()["bloqueados"] == 1
+        r = await web.get("/api/mercadillo/estado", headers=de(PEPE))
+        assert r.status_code == 200 and (r.json()["bloqueados"], r.json()["sin_leer"]) == (1, 0)
+        # La ficha, la foto y «Me interesa», según las reglas.
+        for ruta in (f"/api/mercadillo/anuncio/{a['id']}", f"/api/mercadillo/foto/{a['fotos'][0]}"):
+            r = await web.get(ruta, headers=de(PEPE))
+            assert (r.status_code, r.json()) == (404, {"detail": "Ese anuncio ya no está"})
+        r = await web.post(f"/api/mercadillo/anuncio/{a['id']}/contactar", json={"texto": "hola"}, headers=de(PEPE))
+        assert (r.status_code, r.json()) == (400, {"detail": HAS_BLOQUEADO})
+        r = await web.get(f"/api/mercadillo/foto/{a['fotos'][0]}", headers=de(ANA))
+        assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg"
+        # GET /mercadillo/bloqueados y el panel de Dani (solo él).
+        r = await web.get("/api/mercadillo/bloqueados", headers=de(PEPE))
+        assert (r.status_code, r.json()) == (200, {"bloqueados": [{**b, "titulo": "Soporte de móvil"}]})
+        assert (await web.get("/api/admin/mercadillo", headers=de(PEPE))).status_code == 403
+        r = await web.get("/api/admin/mercadillo", headers=de(DANI))
+        assert r.status_code == 200 and r.json()["totales"]["bloqueos"] == 1 and r.json()["bloqueados_varios"] == []
+        assert r.json()["bloqueos"] == [{"id": b["id"], "de_nombre": "Pepe P.", "a_nombre": "Ana P.", "a_clave": CLAVES["ana"],
+                                         "ts": b["desde"], "origen": {"tipo": "anuncio", "titulo": "Soporte de móvil"}}]
+        # DELETE /mercadillo/bloqueados/{id}: solo el suyo, y vuelve todo.
+        r = await web.delete(f"/api/mercadillo/bloqueados/{b['id']}", headers=de(ANA))
+        assert (r.status_code, r.json()) == (404, {"detail": "Ese bloqueo ya no está"})
+        r = await web.delete(f"/api/mercadillo/bloqueados/{b['id']}", headers=de(PEPE))
+        assert (r.status_code, r.json()) == (200, {"ok": True})
+        r = await web.get("/api/mercadillo", headers=de(PEPE))
+        assert [x["titulo"] for x in r.json()["anuncios"]] == ["Soporte de móvil"] and r.json()["bloqueados"] == 0
 
 
 def _textos_de_error(*funciones) -> list:
