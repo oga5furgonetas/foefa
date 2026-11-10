@@ -1749,7 +1749,8 @@ ENTRA = [
     "eres un gilipollas", "GILIPOLLAS.", "subnormal", "tu puta madre", "me cago en tus muertos", "coño de tu madre",
     "malparido", "eres una mierda",
     # racistas y homófobos
-    "maricón", "MARICÓN", "Maricones todos", "negro de mierda", "puto moro", "sudaca", "gitanos de mierda",
+    "maricón", "MARICÓN", "Maricones todos", "no seas maricón", "negro de mierda", "puta negra", "puto moro",
+    "moros de mierda", "sudaca", "gitanos de mierda",
     # amenazas
     "Te voy a matar", "te voy a partir la cara", "ojalá te mueras", "voy a matarte, ya lo sabes",
     # inglés y los pocos de otros idiomas
@@ -1757,8 +1758,9 @@ ENTRA = [
     "filho da puta", "fillo de puta", "fill de puta", "connard", "enculé", "nique ta mère", "vaffanculo", "Arschlöcher",
 ]
 NO_ENTRA = [
-    # dentro de otra palabra, nunca
+    # dentro de otra palabra, nunca (Cuntis es un concello de Pontevedra; Dickies, ropa de trabajo; «salopette», un peto)
     "disputa", "computadora", "Scunthorpe", "mariconera Nike", "Assassin's Creed", "Essex", "analógico", "gilipollez",
+    "Recojo en Cuntis", "Pantalón Dickies", "salopette de travail", "Impresora HP",
     # lo que se vende y cómo se habla en un mercadillo de repartidores
     "un chaleco negro", "Chaleco reflectante negro, talla L", "Funda negra para iPhone", "moro", "moros y cristianos",
     "gitano", "móvil chino de mierda", "Lima bastarda", "kill switch", "2 años de uso", "Níger", "Kike", "marica",
@@ -1767,8 +1769,9 @@ NO_ENTRA = [
     "puta", "está de puta madre", "ni puta idea", "el puto móvil no carga", "eres un puto crack", "eres una puta máquina",
     "coño", "joder", "mierda", "esta furgo es una mierda", "hostia", "qué cabrón, qué suerte", "fuck", "shit",
     "perdona, soy idiota", "te mato jaja",
-    # frases normales que se parecen a una amenaza
-    "te voy a buscar a la nave", "sé dónde vives, te lo acerco", "hijo de vecino",
+    # frases normales que se parecen a una amenaza o a un insulto
+    "te voy a buscar a la nave", "sé dónde vives, te lo acerco", "hijo de vecino", "me voy a matar a currar",
+    "hay moros en la costa", "lo cobro en negro",
     # nada, o algo que no es texto
     "", "   ", None, 5,
 ]
