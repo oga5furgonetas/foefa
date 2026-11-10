@@ -332,3 +332,8 @@ export const mercAvisosMovil = (activo) => api.post('/mercadillo/avisos-movil', 
 export const mercBloquear = (d) => api.post('/mercadillo/bloquear', d)
 export const mercBloqueados = () => api.get('/mercadillo/bloqueados')
 export const mercDesbloquear = (id) => api.delete(`/mercadillo/bloqueados/${id}`)
+/* ACEPTAR LAS NORMAS (10-11-2026; Apple, guideline 1.2: quien usa el mercadillo acepta antes unas normas que dicen que no se
+   tolera el contenido ofensivo ni a quien abusa). La primera vez que se entra, y cada vez que cambien, el servidor contesta
+   `normas_ok: false` en /mercadillo y /mercadillo/estado: la web enseña las normas y, al pulsar «Acepto las normas», lo apunta
+   aquí. La pantalla la impone la web: el servidor guarda quién aceptó y cuándo, pero no cierra las demás rutas. */
+export const mercNormas = () => api.post('/mercadillo/normas', { acepto: true })

@@ -6,15 +6,20 @@ import {
 import {
   mercEstado, mercLista, mercAnuncio, mercSubirFoto, mercFotoBlob, mercCrear, mercCambiar, mercContactar,
   mercBuzon, mercConversacion, mercResponder, mercAvisosLeidos, mercDenunciar, mercAvisosMovil,
-  mercBloquear, mercBloqueados, mercDesbloquear,
+  mercBloquear, mercBloqueados, mercDesbloquear, mercNormas,
 } from '../../services/api'
 import { compressImage } from '../../lib/compressImage'
 import { useAtras } from '../../lib/atras'
 import { enablePush } from '../../lib/push'
+import { esAppIOS } from '../../lib/plataforma'
 
 /* AVISOS AL MÓVIL (17-10-2026). Dani: «si quiere que le salte en el móvil, que reciba notificaciones». Lo elige
    cada uno: aquí se pide el permiso del navegador y se apunta en el servidor. El aviso dice quién escribe y sobre
-   qué anuncio, nunca el mensaje. */
+   qué anuncio, nunca el mensaje.
+   DENTRO DE LA APP DE IPHONE NO SE PINTA (10-11-2026): allí los avisos del navegador no existen, y el botón solo sabía
+   contestar «Este navegador no permite avisos. En iPhone, primero añade la app a la pantalla de inicio…», que dentro de
+   la app no tiene sentido. Vale para todos los sitios que lo usan (el buzón, la conversación, «Mis anuncios» y Negocio).
+   En la web y en Android, igual que antes. */
 const NO_SE_PUDO = {
   denied: 'El móvil tiene bloqueados los avisos de esta web. Actívalos en los ajustes del navegador y vuelve a probar.',
   unsupported: 'Este navegador no permite avisos. En iPhone, primero añade la app a la pantalla de inicio y ábrela desde ahí.',
@@ -35,6 +40,7 @@ export function AvisosMovil({ activo, onCambio, pregunta, detalle = 'Cuando algu
       onCambio?.(!!data?.avisos_movil)
     } catch { setErr(NO_SE_PUDO.error) } finally { setOcupado(false) }
   }
+  if (esAppIOS()) return null
   if (pregunta) {
     if (activo) return null
     return (
@@ -159,10 +165,25 @@ const NORMAS = [
   'Si algo no cumple, pulsa «Denunciar». Lo revisamos en 24 horas como mucho y te decimos qué hemos hecho. No se tolera el contenido ofensivo ni el acoso: quien lo haga se queda sin mercadillo.',
 ]
 
-function Normas({ onBack }) {
+/* Las normas se ven de dos maneras. Desde «Normas y seguridad» (y desde «Vender»), para leerlas: sin nada que aceptar.
+   Y LA PRIMERA VEZ QUE SE ENTRA AL MERCADILLO (10-11-2026; Apple, guideline 1.2: quien usa una app con contenido de otros
+   acepta antes unas condiciones que dicen que no se tolera el contenido ofensivo ni a quien abusa), con `alAceptar`: dice
+   «Antes de entrar…» y lleva abajo, siempre a la vista, «Acepto las normas», que lo apunta en el servidor (quién, qué versión
+   y cuándo) y deja pasar. Si el servidor no deja, se lee lo que conteste y no se pasa. */
+function Normas({ onBack, alAceptar }) {
+  const [enviando, setEnviando] = useState(false)
+  const [err, setErr] = useState('')
+  const aceptar = async () => {
+    setEnviando(true); setErr('')
+    try {
+      await mercNormas()
+      alAceptar()
+    } catch (e) { setErr(texto(e, 'No se ha podido guardar. Inténtalo otra vez.')) } finally { setEnviando(false) }
+  }
   return (
-    <div>
+    <div className={alAceptar ? 'pb-28' : ''}>
       <Cabecera titulo="Normas del mercadillo" onBack={onBack} />
+      {alAceptar && <p className="mb-3 text-[15px] font-semibold leading-snug text-dark-50">Antes de entrar, lee las normas y acéptalas.</p>}
       <ul className="space-y-2.5">
         {NORMAS.map((n) => (
           <li key={n} className="flex gap-2.5 rounded-2xl border border-dark-700 bg-dark-900 p-3 text-[14px] leading-snug text-dark-100">
@@ -173,6 +194,35 @@ function Normas({ onBack }) {
       <p className="mt-4 text-[12.5px] leading-relaxed text-dark-400">
         Las condiciones completas están en los <a href="/terminos#mercadillo" target="_blank" rel="noreferrer" className="text-brand-300 underline">Términos</a> y
         cómo tratamos tus datos, en la <a href="/privacidad" target="_blank" rel="noreferrer" className="text-brand-300 underline">Privacidad</a>.
+      </p>
+      {alAceptar && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-dark-800 bg-dark-950/95 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+          <div className="mx-auto max-w-md">
+            {err && <p role="alert" className="mb-2 text-[13px] text-red-300">{err}</p>}
+            <button type="button" onClick={aceptar} disabled={enviando}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-3.5 text-[15.5px] font-bold text-brand-tinta disabled:opacity-50">
+              {enviando ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} strokeWidth={2.6} />} Acepto las normas
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* A QUIEN SE LE HA QUITADO EL ACCESO (10-11-2026; Apple, guideline 1.2: a quien incumple se le echa). El servidor le contesta
+   403 en todo el mercadillo salvo en /mercadillo/estado, que dice `expulsado` y el `texto` con el motivo y a dónde escribir si
+   cree que es un error. Aquí solo se lee eso: ni lista, ni «Vender», ni buzón. El correo del texto se puede pulsar. */
+function SinAcceso({ texto: t, onBack }) {
+  const partes = String(t || 'Te hemos quitado el acceso al mercadillo.').split(/([\w.+-]+@[\w-]+(?:\.[\w-]+)+)/)
+  return (
+    <div>
+      <Cabecera titulo="Mercadillo" onBack={onBack} />
+      <p role="alert" className="flex gap-2.5 rounded-2xl border border-red-500/40 bg-red-500/10 p-3.5 text-[14.5px] leading-relaxed text-dark-50">
+        <Ban size={18} className="mt-1 shrink-0 text-red-300" />
+        <span className="min-w-0 break-words">
+          {partes.map((p, n) => (n % 2 ? <a key={n} href={`mailto:${p}`} className="font-semibold underline">{p}</a> : p))}
+        </span>
       </p>
     </div>
   )
@@ -363,13 +413,11 @@ function Ficha({ id, motivos, estados, onBack, onChat, onEditar, onBloqueado }) 
       <div className="mt-3">
         <p className="text-[26px] font-extrabold leading-none text-dark-50">{euros(a.precio_cent)}</p>
         <p className="mt-1.5 text-[18px] font-bold leading-snug text-dark-50">{a.titulo}</p>
-        <div className="mt-2 flex flex-wrap gap-1.5 text-[12px]">
-          <span className="rounded-full bg-dark-800 px-2.5 py-1 font-semibold text-dark-200">{estados?.[a.estado_articulo] || a.estado_articulo}</span>
-          {a.zona && <span className="rounded-full bg-dark-800 px-2.5 py-1 font-semibold text-dark-200">{a.zona}</span>}
-          {a.publicado_en && <span className="rounded-full bg-dark-800 px-2.5 py-1 text-dark-400">Desde el {fecha(a.publicado_en)}</span>}
-        </div>
         {/* Quien vende, ANTES de la descripción (10-11-2026): con una descripción larga quedaba muy abajo, y «Bloquear a…» y
-            «Denunciar» tienen que estar en la primera pantalla del anuncio, sin buscarlos. */}
+            «Denunciar» tienen que estar en la primera pantalla del anuncio, sin buscarlos. Y antes también de las etiquetas
+            (estado, zona y fecha), que han bajado debajo de esta tarjeta: en la pantalla más pequeña (375 × 647, la app de
+            iPhone abierta en un iPad, que es donde revisa Apple) y con un título de dos líneas, la barra de «Me interesa»
+            tapaba parte de «Bloquear a…». */}
         <div className="mt-3 rounded-2xl border border-dark-700 bg-dark-900 p-3">
           <Vendedor v={a.vendedor} />
           {!a.mio && (
@@ -377,6 +425,11 @@ function Ficha({ id, motivos, estados, onBack, onChat, onEditar, onBloqueado }) 
               <Acciones nombre={quien} onBloquear={() => setBloquear(true)} onDenunciar={() => setDenunciar(true)} />
             </div>
           )}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-1.5 text-[12px]">
+          <span className="rounded-full bg-dark-800 px-2.5 py-1 font-semibold text-dark-200">{estados?.[a.estado_articulo] || a.estado_articulo}</span>
+          {a.zona && <span className="rounded-full bg-dark-800 px-2.5 py-1 font-semibold text-dark-200">{a.zona}</span>}
+          {a.publicado_en && <span className="rounded-full bg-dark-800 px-2.5 py-1 text-dark-400">Desde el {fecha(a.publicado_en)}</span>}
         </div>
         {a.descripcion && <p className="mt-3 whitespace-pre-line text-[14.5px] leading-relaxed text-dark-200">{a.descripcion}</p>}
         <p className="mt-3 flex gap-2 rounded-2xl bg-amber-400/10 p-3 text-[12.5px] leading-snug text-amber-100">
@@ -777,14 +830,23 @@ export default function Mercadillo({ onBack, inicio = 'lista' }) {
   const [estado, setEstado] = useState(null)
   const [cat, setCat] = useState('')
   const [err, setErr] = useState('')
+  const [listo, setListo] = useState(false)             // ya ha contestado el servidor (bien o mal) la primera vez
+  /* La lista y el estado, cada uno por su lado (10-11-2026): a quien se le ha quitado el acceso, la lista le contesta 403 y
+     el estado le dice por qué (`expulsado` y su `texto`). Con Promise.all, ese 403 se llevaba el estado por delante. */
   const recargar = useCallback(async () => {
-    try {
-      const [{ data: l }, { data: e }] = await Promise.all([mercLista(), mercEstado()])
-      setDatos(l); setEstado(e); setErr('')
-    } catch (e) { setErr(texto(e, 'No se ha podido abrir el mercadillo.')) }
+    const [l, e] = await Promise.allSettled([mercLista(), mercEstado()])
+    const est = e.status === 'fulfilled' ? e.value.data : null
+    if (est) setEstado(est)
+    if (l.status === 'fulfilled') setDatos(l.value.data)
+    const fallo = [l, e].find((x) => x.status === 'rejected')
+    setErr(fallo && !est?.expulsado ? texto(fallo.reason, 'No se ha podido abrir el mercadillo.') : '')
+    setListo(true)
   }, [])
-  // Al entrar y al volver a la portada se refresca (un anuncio nuevo, un mensaje leído…).
-  useEffect(() => { if (actual.v === 'lista' && pila.length === 1) recargar() }, [actual.v, pila.length, recargar])
+  // Al entrar (por la pantalla que sea) y al volver a la portada se refresca (un anuncio nuevo, un mensaje leído…).
+  const pedido = useRef(false)
+  useEffect(() => {
+    if (!pedido.current || (actual.v === 'lista' && pila.length === 1)) { pedido.current = true; recargar() }
+  }, [actual.v, pila.length, recargar])
   /* Tras bloquear: a la lista (desde un anuncio) o al buzón (desde una conversación), ya sin esa persona. Se quitan de en
      medio las pantallas por las que se llegó: el anuncio y la conversación de esa persona ya no se pueden abrir. */
   const alBloquear = async (r, destino) => {
@@ -794,6 +856,27 @@ export default function Mercadillo({ onBack, inicio = 'lista' }) {
     window.scrollTo?.(0, 0)
   }
   const bloqueados = Number(datos?.bloqueados ?? estado?.bloqueados) || 0
+  const normasAceptadas = () => {
+    setEstado((x) => ({ ...(x || {}), normas_ok: true }))
+    setDatos((x) => (x ? { ...x, normas_ok: true } : x))
+    window.scrollTo?.(0, 0)
+  }
+
+  /* ANTES QUE CUALQUIER PANTALLA (10-11-2026), también si se entra directo al buzón:
+     · hasta que el servidor contesta la primera vez, solo la cabecera: quien no puede pasar no llega a ver «Vender» ni el buzón;
+     · a quien se le ha quitado el acceso, solo el porqué (`estado.expulsado`);
+     · y con `normas_ok === false`, las normas con «Acepto las normas». ESTRICTO: si el campo no viene (un servidor de antes
+       de las normas), no hay pantalla y nadie se queda fuera por esto. En las dos, volver es salir del mercadillo. */
+  if (!listo) {
+    return (
+      <Marco>
+        <Cabecera titulo="Mercadillo" sub="Compra y vende entre repartidores. Sin comisiones." onBack={onBack} />
+        <Loader2 className="mx-auto mt-10 animate-spin text-dark-500" />
+      </Marco>
+    )
+  }
+  if (estado?.expulsado) return <Marco><SinAcceso texto={estado.texto} onBack={onBack} /></Marco>
+  if (estado?.normas_ok === false || datos?.normas_ok === false) return <Marco><Normas onBack={onBack} alAceptar={normasAceptadas} /></Marco>
 
   const comun = { motivos: datos?.motivos_denuncia }
   const estadosTxt = datos?.estados_articulo
