@@ -16,7 +16,9 @@ import { hablaDePagos } from '../src/lib/plataforma.js'
      GET  /admin/mercadillo → `expulsados`, `motivos_expulsion`, `totales.expulsados` y `personas` en cada denuncia
    Las reglas (qué pasa con los anuncios y las conversaciones de quien se queda sin acceso, quién puede quitarlo) las prueba el
    servidor en backend/tests/test_mercadillo.py. Lo de la persona va dos veces: en la web y SIMULANDO LA APP DE IPHONE, donde
-   ninguna de estas pantallas puede decir nada del vocabulario prohibido (e2e/iphone.js) y «Avisarme en el móvil» no sale. */
+   ninguna de estas pantallas puede decir nada del vocabulario prohibido (e2e/iphone.js) y «Avisarme en el móvil» no sale.
+   Aquí va también (10-11-2026, cuarta tanda) lo que pasa al salir de las normas a los Términos o a la Privacidad dentro del
+   iPhone: de la página legal se vuelve a donde se estaba («De una página legal se vuelve a donde se estaba»). */
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==', 'base64')
 const HOY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' })
