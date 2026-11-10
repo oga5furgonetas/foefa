@@ -549,49 +549,70 @@ la regla 1.2, más el contacto que pide el texto de la regla; los números son l
 
 ### Pasos para sacarlo si Apple rechaza
 El orden es el que funcionó el 09-11, con una diferencia: **esta vez el servidor va antes que el build**, porque lo que el
-revisor va a pulsar («Bloquear») depende de él.
+revisor va a pulsar («Acepto las normas», «Bloquear») depende de él.
 
 0. **Leer el rechazo y la captura del revisor** (Chrome con la sesión de Dani, página del envío; la captura se saca como dice
    la memoria `apple-revision-con-chrome`). Lo que Apple critica casi siempre está en esa captura. Elegir la respuesta de este
    kit que toque; si el motivo no está aquí, no improvisar una.
-1. **Fusionar `ios/plan-b` en `main`**, con lo de «Antes de dar algo por bueno» de `CLAUDE.md` en verde. La rama la
-   escribieron tres agentes a la vez (servidor, web y este kit): repasar que el contrato de la API es el mismo en los dos
-   lados. OJO: un push a `main` que toque `.github/workflows/app-ios.yml`, `frontend/ios/` o
-   `frontend/capacitor.config.json` lanza SOLO un build del iPhone; el plan B no debería tocarlos. Esto tiene que salir vacío:
+1. **Poner la fecha de ese día en las normas y en los textos legales** (en la rama, antes de fusionar): `NORMAS_VERSION` en
+   `backend/mercadillo.py`, y `lastUpdate` en `Terminos.jsx`, `Privacidad.jsx`, `en/TermsEn.jsx` y `en/PrivacyEn.jsx`
+   (`frontend/src/legal/`). Hoy dicen todos `2026-11-10`. Con una versión nueva, las normas se le piden otra vez a todo el
+   mundo desde que se despliega (también a las cuentas de prueba de Apple, si alguien las hubiera aceptado con ellas). Las
+   pruebas que leen esa fecha se cambian en el mismo commit; las enseña esta orden (la de `NORMAS_VERSION` en
+   `test_mercadillo.py` y las de «Última actualización» / «Last updated» en las de `frontend/e2e`):
+   `grep -rn --include=*.py --include=*.js "2026-11-10" backend/tests frontend/e2e | grep -v "T[0-9][0-9]:"`
+2. **Fusionar `ios/plan-b` en `main`**, con lo de «Antes de dar algo por bueno» de `CLAUDE.md` en verde. OJO: un push a
+   `main` que toque `.github/workflows/app-ios.yml`, `frontend/ios/` o `frontend/capacitor.config.json` lanza SOLO un build
+   del iPhone; el plan B no los toca. Esto salía vacío el 10-11 y tiene que seguir saliendo vacío:
    `git diff --stat main...ios/plan-b -- .github/workflows/app-ios.yml frontend/ios frontend/capacitor.config.json`
-2. **CI de GitHub en verde.**
-3. **Con el «sí» de Dani en el chat** (el modo auto bloquea los despliegues y no se rodea): el servidor
-   (`scripts/deploy-backend.ps1`) y la web (`scripts/deploy-frontend.ps1`). La app de iPhone habla con la API de producción:
-   con un servidor sin el bloqueo, «Bloquear» fallaría delante del revisor.
-4. **Comprobar en producción antes del build** (cinco minutos, con la sesión de Dani) **[COMPROBAR]**:
-   - Negocio → Mercadillo: está **encendido** y hay al menos **un anuncio publicado que no es de la cuenta de prueba** y al
-     que le quedan más de dos semanas. Los anuncios duran 30 días: uno publicado el 17-10 caduca hacia el 16-11; si el único
-     que hay es de entonces, volver a publicarlo. Con el mercadillo vacío el revisor no encuentra «Bloquear» y rechaza otra
-     vez.
-   - Con una cuenta de pruebas en la web: bloquear desde ese anuncio, ver que desaparece, «Personas bloqueadas», desbloquear.
-   - La cuenta de prueba de Apple no se queda con nadie bloqueado (si no, el revisor no verá el anuncio).
+3. **CI de GitHub en verde.**
+4. **Con el «sí» de Dani en el chat** (el modo auto bloquea los despliegues y no se rodea): primero el servidor
+   (`scripts/deploy-backend.ps1`) y después la web (`scripts/deploy-frontend.ps1`). La app de iPhone habla con la API de
+   producción: con un servidor sin lo nuevo no saldría la pantalla de normas y «Bloquear» fallaría delante del revisor. El
+   servidor nuevo sirve igual a la app que está en revisión y a las webs en caché (no les exige las normas). Antes de decir
+   «sí», Dani tiene que saber que desde ese momento el filtro vale para todos, y que con la web desplegada todo el que
+   entre al mercadillo tendrá que aceptar las normas una vez (Pendiente de Dani, 7).
+5. **Comprobar en producción antes del build** (diez minutos, con la sesión de Dani) **[COMPROBAR]**:
+   - **Con las dos cuentas de prueba de Apple (la de quien reparte y la del conductor) NO se entra al mercadillo** después
+     de desplegar. Si alguien pulsa «Acepto las normas» con una de ellas, el revisor ya no verá esa pantalla con esa
+     cuenta; el arreglo es cambiar otra vez `NORMAS_VERSION` y volver a desplegar el servidor.
+   - Negocio → Mercadillo: está **encendido** y hay al menos **un anuncio publicado que no es de ninguna de esas dos
+     cuentas** y al que le quedan más de dos semanas. En un anuncio propio no salen ni «Bloquear a…» ni «Denunciar»: sin
+     uno ajeno, el revisor no tiene a quién denunciar ni bloquear, y rechaza otra vez. Mejor que sea de Dani o de otra
+     cuenta de pruebas: así lo que el revisor pruebe (escribir, denunciar, bloquear) no le cae a un repartidor de verdad.
+     Los anuncios duran 30 días: uno publicado el 17-10 caduca hacia el 16-11; si el único que hay es de entonces, volver a
+     publicarlo.
+   - Con OTRA cuenta de pruebas, en la web: entrar al mercadillo (salen las normas) → «Acepto las normas» → abrir ese
+     anuncio → «Me interesa» con un insulto de la lista (no se envía y sale el aviso) → «Bloquear a …» → «Bloquear» (el
+     anuncio desaparece de la lista).
+   - En Negocio → Mercadillo → «Bloqueos»: ese bloqueo está apuntado (quién, a quién, cuándo y desde qué anuncio).
+   - De vuelta en la cuenta de pruebas: «Personas bloqueadas» → «Desbloquear» (el anuncio vuelve a la lista).
+   - «Quitar del mercadillo» no se prueba con un repartidor de verdad (le retira los anuncios y le llega el aviso). Si se
+     quiere ver entero, con una cuenta de pruebas que tenga un anuncio: «Quitar del mercadillo» → esa cuenta entra y solo
+     lee el motivo → «Devolver el acceso».
    - Negocio → Mercadillo dice si a Dani le llegan los avisos al móvil o por correo.
-5. **El build del iPhone**: GitHub → Actions → «App iPhone (App Store)» → Run workflow sobre `main`. Cuándo lo ha procesado
+6. **El build del iPhone**: GitHub → Actions → «App iPhone (App Store)» → Run workflow sobre `main`. Cuándo lo ha procesado
    Apple lo dice `python scripts/app_store_connect.py builds` (el número de build es el de la ejecución del workflow).
-6. **`python scripts/app_store_connect.py adjuntar N`**: la versión pasa de REJECTED a PREPARE_FOR_SUBMISSION.
-7. **Las notas de revisión** (abajo): `python -I -X utf8 asc_notas_poner.py <fichero> N --seco` y, si cuadra, sin `--seco`
+7. **`python scripts/app_store_connect.py adjuntar N`**: la versión pasa de REJECTED a PREPARE_FOR_SUBMISSION.
+8. **Las notas de revisión** (abajo): `python -I -X utf8 asc_notas_poner.py <fichero> N --seco` y, si cuadra, sin `--seco`
    (el script está en `%LOCALAPPDATA%\Temp\fds-emu`; cambia `BUILD_N` por N, se niega si pasan de 4.000 caracteres y no toca
    la cuenta de prueba). NO usar `app_store_connect.py revision`: pisa las notas largas por las cortas.
-8. **Responder** en el envío rechazado («Responder al equipo de revisión de apps», 4.000 caracteres como máximo) con la
+9. **Responder** en el envío rechazado («Responder al equipo de revisión de apps», 4.000 caracteres como máximo) con la
    respuesta de este kit, con el número de build en lugar de `BUILD_N` y los huecos `<…>` rellenos. El texto lo ve Dani antes.
-9. **«Editar»** en el elemento → **«Actualizar revisión»** (pasa a «Listo para revisión») → **«Volver a enviar a revisión de
-   apps»**. El botón de reenviar sale gris hasta hacer lo anterior. Comprobar por la API: WAITING_FOR_REVIEW con el build N.
-   Si el envío no deja reenviar (pasó el 03-11): quitar su elemento rechazado y crear uno nuevo por la API (`enviar`).
-10. Apuntarlo en `docs/ESTADO.md` y vigilar (`fds-emu/vigilar_apple.py`).
+10. **«Editar»** en el elemento → **«Actualizar revisión»** (pasa a «Listo para revisión») → **«Volver a enviar a revisión de
+    apps»**. El botón de reenviar sale gris hasta hacer lo anterior. Comprobar por la API: WAITING_FOR_REVIEW con el build N.
+    Si el envío no deja reenviar (pasó el 03-11): quitar su elemento rechazado y crear uno nuevo por la API (`enviar`).
+11. Apuntarlo en `docs/ESTADO.md` y vigilar (`fds-emu/vigilar_apple.py`).
 
 Cuánto tarda (estimado, no medido): del «sí» de Dani al reenvío, entre hora y media y dos horas si todo sale a la primera. Lo
 que más pesa es la CI de GitHub, el Mac que compila la app (15-20 minutos) y que Apple procese el build. Lo alarga una CI en
 rojo o una avería de GitHub como la del 09-11.
 
-**Si Apple aprueba el build 20**, nada de esto corre prisa: el bloqueo sale en la siguiente versión. Entonces hay que subir
-la versión (`APP_VERSION` en `app-ios.yml` y `appendUserAgent` en `capacitor.config.json`: tocarlos en `main` ya lanza el
+**Si Apple aprueba el build 20**, nada de esto corre prisa: todo sale en la siguiente versión. Entonces hay que subir la
+versión (`APP_VERSION` en `app-ios.yml` y `appendUserAgent` en `capacitor.config.json`: tocarlos en `main` ya lanza el
 build), crearla en App Store Connect (`python scripts/app_store_connect.py version X.Y.Z`) y mandar las notas de abajo con
-ese build. El servidor y la web se pueden desplegar antes, con el «sí» de Dani: el servidor nuevo sirve igual a la app vieja.
+ese build; los pasos 1, 4 y 5 valen igual. El servidor y la web se pueden desplegar antes, con el «sí» de Dani: el servidor
+nuevo sirve igual a la app vieja (que no enseña ni las normas ni «Bloquear»; el filtro sí le vale, porque es del servidor).
 
 ### Respuestas para el Centro de resolución (en inglés, listas para pegar)
 Cada párrafo va en una sola línea a propósito (así se pega sin saltos a media frase). `BUILD_N` es el número de build; lo que
