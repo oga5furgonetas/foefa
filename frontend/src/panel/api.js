@@ -346,7 +346,9 @@ export const importShiftsPegado = (body) => api.post('/shifts/import-pegado', bo
 export const setAliasNombres = (mapa) => api.put('/shifts/alias-nombres', { mapa })
 
 // Bloqueos: dias en los que no se pueden pedir libres.
-export const getShiftBlocks = (center) => api.get('/shift-blocks', { params: { center } })
+// `pasados` (10-11-2026): sin él llegan solo los vigentes o futuros; con él, también los que ya pasaron, aparte.
+export const getShiftBlocks = (center, pasados = false) =>
+  api.get('/shift-blocks', { params: { center, ...(pasados ? { pasados: true } : {}) } })
 export const createShiftBlock = (body) => api.post('/shift-blocks', body)
 export const deleteShiftBlock = (id) => api.delete(`/shift-blocks/${id}`)
 
@@ -435,6 +437,9 @@ export const contarPeticionesPendientes = (center) =>
 // Rechazar exige motivo: lo lee el conductor tal cual.
 export const resolveShiftRequest = (id, action, motivo) =>
   api.post(`/shift-requests/${id}/resolve`, { action, motivo })
+// Todos los días de una petición de golpe (10-11-2026): un solo aviso al conductor con todas las fechas.
+export const resolverGrupoPeticiones = (ids, action, motivo) =>
+  api.post('/shift-requests/resolver-grupo', { ids, action, motivo })
 // Refuerzos (18-10-2026): la oficina pide gente para un día; se apunta quien libra y quiere.
 export const getRefuerzos = (center) => api.get('/refuerzos', { params: centerParam(center) })
 export const crearRefuerzo = (body) => api.post('/refuerzos', body)

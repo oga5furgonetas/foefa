@@ -33208,8 +33208,16 @@ async def _bloqueos_que_afectan(driver_id: str, center: str, fechas: list) -> li
 
 
 @api_router.get("/shift-blocks")
-async def listar_bloqueos(center: str = "", admin: dict = Depends(require_admin)):
-    """Los bloqueos vigentes. Cada uno con a quién afecta."""
+async def listar_bloqueos(center: str = "", pasados: bool = False, admin: dict = Depends(require_admin)):
+    """Los bloqueos vigentes. Cada uno con a quién afecta.
+
+    (10-11-2026) De verdad los vigentes: los que aún no han acabado (`hasta`
+    de hoy en adelante), los próximos primero. Antes salían todos los de
+    siempre, del más viejo al más nuevo, y el cierre de Navidad de este año
+    acababa debajo de los del año pasado. Los que ya pasaron se cuentan en
+    `n_pasados` y, con `pasados=true`, vienen aparte en `pasados` (el último
+    primero), para el «ver pasados» plegado del panel.
+    """
     q = {}
     if center and center not in ("Todos", "todos"):
         q["center"] = {"$regex": re.escape(center.strip()), "$options": "i"}
@@ -33224,7 +33232,14 @@ async def listar_bloqueos(center: str = "", admin: dict = Depends(require_admin)
             {"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(500)}
     for d in docs:
         d["driver_name"] = nombres.get(d.get("driver_id")) if d.get("driver_id") else None
-    return {"bloqueos": docs, "total": len(docs)}
+    hoy = _dia_negocio()
+    vigentes = sorted((d for d in docs if str(d.get("hasta") or "") >= hoy), key=lambda d: str(d.get("desde") or ""))
+    viejos = sorted((d for d in docs if str(d.get("hasta") or "") < hoy),
+                    key=lambda d: str(d.get("desde") or ""), reverse=True)
+    out = {"bloqueos": vigentes, "total": len(vigentes), "n_pasados": len(viejos)}
+    if pasados:
+        out["pasados"] = viejos
+    return out
 
 
 @api_router.post("/shift-blocks")
@@ -33415,11 +33430,15 @@ async def create_shift_request(data: dict = Body(...), user: dict = Depends(requ
     await db.shift_requests.insert_many([dict(f) for f in filas])
 
     # Que la oficina se entere sin tener que estar mirando la pantalla.
+    # Con la nave en el título y las fechas como se leen (10-11-2026): la cuenta dueña recibe los avisos de las
+    # tres naves, y «2026-11-16, 2026-11-17» en un móvil no se lee de un vistazo.
     try:
+        _nave = (drv.get("center") or "").strip()
         await push_center_event(
             drv.get("center") or "",
-            f"📅 {drv.get('name', 'Un conductor')} pide {len(nuevas)} día{'s' if len(nuevas) > 1 else ''}",
-            f"{MOTIVOS_PETICION[motivo]} · {', '.join(nuevas[:4])}",
+            f"📅 {drv.get('name', 'Un conductor')} pide {len(nuevas)} día{'s' if len(nuevas) > 1 else ''}"
+            + (f" · {_nave}" if _nave else ""),
+            f"{MOTIVOS_PETICION[motivo]} · {_fechas_dias(nuevas)}",
             "/panel/turnos")
     except Exception as e:
         logger.debug("Push petición de días: %s", e)
@@ -33521,6 +33540,17 @@ async def resolve_shift_request(req_id: str, data: dict = Body(...),
     WhatsApp por qué, y la discusión vuelve al sitio del que se la quería sacar
     — que es el problema entero que resuelve tener esto por escrito.
     """
+    new_status, _req = await _resolver_peticion(req_id, data, admin)
+    return {"success": True, "status": new_status}
+
+
+async def _resolver_peticion(req_id: str, data: dict, admin: dict, avisar: bool = True):
+    """Contesta UN día. Devuelve (estado nuevo, la petición como estaba).
+
+    Separado de la ruta el 10-11-2026 para que resolver un grupo entero haga
+    exactamente lo mismo día a día, pero con `avisar=False`: el aviso al
+    conductor se manda una sola vez al final, con todos los días juntos.
+    """
     action = _texto_cuerpo(data.get("action"), 20)
     if action not in {"aprobar", "rechazar"}:
         raise HTTPException(status_code=400, detail="action debe ser aprobar|rechazar")
@@ -33563,23 +33593,8 @@ async def resolve_shift_request(req_id: str, data: dict = Body(...),
     )
     # Que se entere: si la respuesta no llega, el conductor vuelve a preguntar
     # de palabra y no hemos arreglado nada.
-    try:
-        # Un día de más aprobado se dice como lo que es (Dani, 24-10-2026: «que tengan constancia de que son extra»).
-        if new_status == "aprobado" and req.get("type") == "extra":
-            await _avisar_usuarios(
-                [req["driver_id"]], f"✅ Día extra confirmado: {_refuerzo_dia(req['date'])}",
-                motivo or "Ya está en tus turnos como EXTRA. Lo tienes en «Trabajar más».", "/conductor?vista=extra")
-        else:
-            await _avisar_usuarios(
-                [req["driver_id"]],
-                f"Tu petición del {req['date']}: {'aprobada' if new_status == 'aprobado' else 'rechazada'}",
-                motivo or ("Ya puedes verlo en tus turnos." if new_status == "aprobado" else ""),
-                # Al CONDUCTOR se le manda a SU portal. Estaba apuntando a
-                # /panel/portal-conductor, que es la pantalla de administracion:
-                # tocar el aviso le llevaba a un sitio donde no puede entrar.
-                "/conductor")
-    except Exception as e:
-        logger.debug("Push respuesta petición: %s", e)
+    if avisar:
+        await _avisar_respuesta([req], new_status, motivo)
     if new_status == "aprobado":
         await _turno_aprobado(req)
     elif req.get("status") == "aprobado":
@@ -33587,7 +33602,97 @@ async def resolve_shift_request(req_id: str, data: dict = Body(...),
     # De un refuerzo: al cubrirse se cierra (y se da las gracias a quien esperaba); si se desaprueba, se reabre.
     if req.get("refuerzo_id"):
         await _refuerzo_recalcular(req["refuerzo_id"])
-    return {"success": True, "status": new_status}
+    return new_status, req
+
+
+async def _avisar_respuesta(reqs: list, new_status: str, motivo: str):
+    """El aviso al conductor de que se le ha contestado: UNO por persona, con
+    todos sus días y las fechas como se leen (10-11-2026). Antes iba uno por
+    día y con la fecha en crudo: aprobar 4 días eran 4 notificaciones seguidas
+    de «Tu petición del 2026-11-16: aprobada»."""
+    por_conductor: dict = {}
+    for r in reqs:
+        if r.get("driver_id"):
+            # Un día de más aprobado se dice como lo que es (Dani, 24-10-2026: «que tengan constancia de que son
+            # extra»), así que va en su propio aviso.
+            extra = new_status == "aprobado" and r.get("type") == "extra"
+            por_conductor.setdefault((r["driver_id"], extra), []).append(str(r.get("date") or "")[:10])
+    for (did, extra), fechas in por_conductor.items():
+        fechas = sorted(set(f for f in fechas if f))
+        uno = len(fechas) == 1
+        try:
+            if extra:
+                await _avisar_usuarios(
+                    [did], f"✅ Día extra confirmado: {_refuerzo_dia(fechas[0])}" if uno
+                    else f"✅ Días extra confirmados: {_fechas_dias(fechas)}",
+                    motivo or ("Ya está en tus turnos como EXTRA. Lo tienes en «Trabajar más»." if uno
+                               else "Ya están en tus turnos como EXTRA. Los tienes en «Trabajar más»."),
+                    "/conductor?vista=extra")
+            else:
+                si = new_status == "aprobado"
+                await _avisar_usuarios(
+                    [did],
+                    f"Tu petición del {_fechas_dias(fechas)}: {'aprobada' if si else 'rechazada'}" if uno
+                    else f"Tus días {_fechas_dias(fechas)}: {'aprobados' if si else 'rechazados'}",
+                    motivo or ("Ya puedes verlo en tus turnos." if si else ""),
+                    # Al CONDUCTOR se le manda a SU portal. Estaba apuntando a
+                    # /panel/portal-conductor, que es la pantalla de administracion:
+                    # tocar el aviso le llevaba a un sitio donde no puede entrar.
+                    "/conductor")
+        except Exception as e:
+            logger.debug("Push respuesta petición: %s", e)
+
+
+@api_router.post("/shift-requests/resolver-grupo")
+async def resolver_grupo_peticiones(data: dict = Body(...), admin: dict = Depends(require_admin)):
+    """Aprobar o rechazar todos los días de una petición de golpe. body: {ids, action, motivo}
+
+    (10-11-2026) Hace día a día lo mismo que `/shift-requests/{id}/resolve`,
+    pero manda UN solo aviso al conductor con todas las fechas. Un día que el
+    conductor canceló con la bandeja abierta no para el resto: vuelve en
+    `canceladas`, como hacía el panel al recibir el 409 de ese día. Un día que
+    no se puede aprobar (suspendido, o un extra que la ley no deja) vuelve en
+    `saltadas` con el porqué. Cualquier otro error para, como antes, y avisa
+    de lo que sí se contestó.
+    """
+    ids = list(dict.fromkeys(str(x) for x in _lista_cuerpo(data.get("ids"), 62) if x))
+    if not ids:
+        raise HTTPException(status_code=400, detail="Faltan los días a contestar")
+    action = _texto_cuerpo(data.get("action"), 20)
+    if action not in {"aprobar", "rechazar"}:
+        raise HTTPException(status_code=400, detail="action debe ser aprobar|rechazar")
+    if not _puede(admin, "aprobar-dias"):
+        raise HTTPException(status_code=403,
+                            detail="No tienes permiso para aprobar o rechazar días")
+    motivo = _texto_cuerpo(data.get("motivo"))[:300]
+    if action == "rechazar" and len(motivo) < 3:
+        raise HTTPException(status_code=400,
+                            detail="Para rechazar hay que escribir el motivo: lo va a leer el conductor")
+    new_status = "aprobado" if action == "aprobar" else "rechazado"
+    hechas, canceladas, saltadas = [], [], []
+    try:
+        for rid in ids:
+            antes = await db.shift_requests.find_one({"id": rid}, {"_id": 0, "status": 1, "date": 1})
+            if not antes:
+                saltadas.append({"id": rid, "date": None, "detail": "Esa petición ya no existe"})
+                continue
+            if antes.get("status") == "cancelado":
+                canceladas.append(rid)
+                continue
+            try:
+                _st, req = await _resolver_peticion(rid, {"action": action, "motivo": motivo}, admin, avisar=False)
+            except HTTPException as e:
+                if e.status_code != 409:
+                    raise
+                saltadas.append({"id": rid, "date": antes.get("date"), "detail": e.detail})
+                continue
+            hechas.append(req)
+    finally:
+        # Aunque algo pare a la mitad, lo que ya se contestó se le dice.
+        if hechas:
+            await _avisar_respuesta(hechas, new_status, motivo)
+    return {"success": True, "status": new_status, "resueltas": [r["id"] for r in hechas],
+            "canceladas": canceladas, "saltadas": saltadas}
 
 
 # ── EL CONDUCTOR CANCELA O CAMBIA LO QUE PIDIÓ ───────────────────────────────
@@ -33598,7 +33703,8 @@ async def resolve_shift_request(req_id: str, data: dict = Body(...),
 # un aprobado cancelado devuelve el cuadrante a lo que había.
 
 def _fechas_dias(fechas: list) -> str:
-    """«16, 17 y 18/10» para los avisos: corto, que se lee en el móvil."""
+    """«16/10, 17/10 y 18/10» para los avisos: corto, que se lee en el móvil (el comentario decía «16, 17 y
+    18/10», que no es lo que sale; corregido el 10-11-2026)."""
     fs = sorted({str(f)[:10] for f in fechas})
     if not fs:
         return ""
@@ -33860,19 +33966,52 @@ async def _extra_impedimentos(center: str, fecha: str, ids) -> dict:
 
 
 async def _maximas_y_ruta(center: str, desde: str, hasta: str) -> dict:
-    """{fecha: {maximo, en_ruta, falta}} de cada día con máxima puesta en el cuadrante. `en_ruta` cuenta a quien sale
-    a ruta ese día (bajas, suspensiones y libres ya fuera); `falta` es lo que no llega (≤ 0 si llega)."""
+    """{fecha: {maximo, en_ruta, bajan, falta}} de cada día con máxima puesta en el cuadrante. `en_ruta` cuenta a
+    quien sale a ruta ese día (bajas, suspensiones y libres ya fuera); `bajan`, los que la fila «Bajan de otros
+    centros» del Cuadrante suma y aún no tienen turno aquí; `falta` es lo que no llega (≤ 0 si llega)."""
     pat = {"$regex": re.escape((center or "").strip()[:4]), "$options": "i"}
     maximas = {}
     async for d in db.route_demand.find({"center": pat, "date": {"$gte": desde, "$lte": hasta}}, {"_id": 0}):
         if d.get("maximo") is not None:
             maximas[d["date"]] = int(d["maximo"])
     en_ruta = {}
+    bajan = {}
     if maximas:
-        async for s in db.shifts.find({"center": pat, "date": {"$gte": desde, "$lte": hasta}, **_FILTRO_RUTA},
-                                      {"_id": 0, "date": 1}):
+        # Quién sale a ruta y de qué nave es su ficha: los prestados que ya tienen el turno puesto aquí.
+        prestados_turno: dict = {}
+        turnos = [s async for s in db.shifts.find({"center": pat, "date": {"$gte": desde, "$lte": hasta}, **_FILTRO_RUTA},
+                                                  {"_id": 0, "date": 1, "driver_id": 1})]
+        for s in turnos:
             en_ruta[s["date"]] = en_ruta.get(s["date"], 0) + 1
-    return {f: {"maximo": m, "en_ruta": en_ruta.get(f, 0), "falta": m - en_ruta.get(f, 0)} for f, m in maximas.items()}
+        ids = sorted({s["driver_id"] for s in turnos if s.get("driver_id")})
+        if ids:
+            de_otra = {d["id"] for d in await db.drivers.find({"id": {"$in": ids}}, {"_id": 0, "id": 1, "center": 1})
+                       .to_list(5000) if d.get("center") and not re.search(pat["$regex"], str(d["center"]), re.I)}
+            for s in turnos:
+                if s.get("driver_id") in de_otra:
+                    prestados_turno[s["date"]] = prestados_turno.get(s["date"], 0) + 1
+        # «BAJAN DE OTROS CENTROS» (10-11-2026). En el Cuadrante esa fila cuenta como rutas hechas
+        # (cuadranteComun.js: dif = rutas + bajan - máxima), y aquí no se miraba: el sábado con 3 que bajan de
+        # DGA1 salía a 0 en el Cuadrante y Refuerzos decía «faltan 3», y en «Trabajar más» salían vacantes que
+        # no hacían falta. El ajuste se guarda con la nave tal como se escribió en el Cuadrante; se busca como el
+        # resto de esta cuenta (por sus 4 primeras letras) y, si hubiera dos escrituras, manda la exacta. Los
+        # prestados que ya tienen aquí su turno ya están en `en_ruta`: se suman solo los que faltan por apuntar,
+        # para no contarlos dos veces.
+        exacto = (center or "").strip().lower()
+        elegido: dict = {}
+        async for a in db[_CUA_AJUSTES].find({"tipo": "refuerzo_dia", "center": pat,
+                                              "fecha": {"$gte": desde, "$lte": hasta}}, {"_id": 0}):
+            f = str(a.get("fecha") or "")
+            es_exacto = str(a.get("center") or "").strip().lower() == exacto
+            if f in maximas and (f not in elegido or (es_exacto and not elegido[f][0])):
+                try:
+                    elegido[f] = (es_exacto, max(0, int(a.get("refuerzo") or 0)))
+                except (TypeError, ValueError):
+                    continue
+        for f, (_e, n) in elegido.items():
+            bajan[f] = max(0, n - prestados_turno.get(f, 0))
+    return {f: {"maximo": m, "en_ruta": en_ruta.get(f, 0), "bajan": bajan.get(f, 0),
+                "falta": m - en_ruta.get(f, 0) - bajan.get(f, 0)} for f, m in maximas.items()}
 
 
 @api_router.get("/refuerzos/faltas")
@@ -33898,7 +34037,8 @@ async def refuerzos_faltas(center: str = "", dias: int = 14, admin: dict = Depen
         if m["falta"] <= 0:
             continue
         r = refs.get(f)
-        item = {"date": f, "dia": _refuerzo_dia(f), "maximo": m["maximo"], "en_ruta": m["en_ruta"], "falta": m["falta"],
+        item = {"date": f, "dia": _refuerzo_dia(f), "maximo": m["maximo"], "en_ruta": m["en_ruta"],
+                "bajan": m["bajan"], "falta": m["falta"],
                 "pueden": len(await _refuerzo_libres(center, f)), "refuerzo": None}
         if r:
             item["refuerzo"] = {"id": r["id"], "plazas": r["plazas"], "estado": r["estado"], "auto": bool(r.get("auto")),
