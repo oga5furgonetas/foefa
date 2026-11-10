@@ -2387,6 +2387,41 @@ def test_los_invisibles_ni_parten_una_palabra_ni_cambian_lo_que_no_entraba():
     assert (limpio["titulo"], limpio["descripcion"]) == ("Mochila​ térmica", "Dis­putada \U0001f468‍\U0001f469‍\U0001f467")
 
 
+# Y AL REVÉS (10-11-2026): un invisible ENTRE dos palabras no las junta para colarse. Quitado, «hijo de​puta» se leía
+# «hijo deputa» y pasaba. El filtro mira las DOS lecturas: con los invisibles quitados (los junta) y con cada uno contado
+# como un espacio (los separa); si casa en cualquiera, no se envía.
+ENTRE_PALABRAS = ["hijo de​puta", "fuck​you", "kill​you", "eres​un​maricón", "suck​my​dick",
+                  "I'll​kill​you", "te⁠voy⁠a⁠matar", "puto‌moro", "hijo de﻿puta"]
+
+
+@pytest.mark.parametrize("texto", ENTRE_PALABRAS)
+def test_un_caracter_invisible_entre_dos_palabras_no_las_junta_para_saltarse_el_filtro(texto):
+    assert mc.ofensivo(texto) is True
+    with pytest.raises(mc.Invalido) as e:
+        mc.mensaje(texto)
+    assert str(e.value) == MENSAJE_OFENSIVO
+
+
+def test_las_dos_lecturas_de_los_invisibles_no_paran_lo_que_no_entraba():
+    # Cada invisible, en lugar de cada espacio de cada frase de la lista: se para.
+    for nombre, c in INVISIBLES.items():
+        for frase in mc.OFENSIVO:
+            assert mc.ofensivo(frase.replace(" ", c)), (nombre, frase)
+    # Lo de la cuarta tanda sigue igual: lo partido por dentro se para y lo que no entraba no entra.
+    assert all(mc.ofensivo(t) for t in CON_INVISIBLE)
+    assert not any(mc.ofensivo(t) for t in ("a​ño", "año", "Scun​thorpe", "dis​puta", "dis­puta", "pu​ta",
+                                            "está de pu​ta madre", "an‍̃o"))
+    # Separar por el invisible no cambia lo que no entraba: delante, detrás y tras la primera letra, sigue pasando.
+    # (Metido justo donde deja suelta una palabrota, «maricon​era» o «porn​o», SÍ se para: es lo que se lee al separar.)
+    for c in INVISIBLES.values():
+        for texto in [t for t in NO_ENTRA if isinstance(t, str) and t.strip()]:
+            for i in (0, 1, len(texto)):
+                assert mc.ofensivo(texto[:i] + c + texto[i:]) is False, (texto, i)
+    assert mc.ofensivo("maricon­era") is True and mc.ofensivo("mariconera") is False
+    familia = "Vendo el carrito \U0001f468‍\U0001f469‍\U0001f467 casi nuevo ❤️ 1️⃣"
+    assert mc.ofensivo(familia) is False and mc.mensaje(familia) == familia
+
+
 def test_el_filtro_mira_el_titulo_la_descripcion_y_la_zona_del_anuncio_y_no_los_nombres():
     base = {"titulo": "Chaleco negro", "categoria": "ropa", "estado_articulo": "como_nuevo", "precio": "15",
             "descripcion": "Está de puta madre, casi sin usar.", "zona": "Coruña (zona del Moro)", "fotos": ["a"], "acepto": True}

@@ -176,24 +176,32 @@ ANUNCIO_OFENSIVO = "Ese anuncio no se puede enviar: quita los insultos o el cont
 _NO_SE_VE = ("Cf", "Mn", "Me")
 
 
-def _palabras(texto) -> str:
+def _palabras(texto, invisible: str = "") -> str:
     """El texto como lo compara el filtro: en minúsculas, sin tildes (la ñ se queda: «año» no es «ano»), sin los
-    caracteres que no se ven (`_NO_SE_VE`: no parten una palabra, se quitan) y palabra a palabra, con un espacio a cada
-    lado («¡Hijo de PUTA!» → « hijo de puta »). Así una entrada de la lista solo casa con palabras enteras, nunca con
-    un trozo de otra. Es una COPIA para comparar: lo que se guarda es lo que se escribió, con sus emojis."""
+    caracteres que no se ven (`_NO_SE_VE`: por defecto se quitan y no parten una palabra; con `invisible=" "` cada uno
+    cuenta como un espacio) y palabra a palabra, con un espacio a cada lado («¡Hijo de PUTA!» → « hijo de puta »). Así
+    una entrada de la lista solo casa con palabras enteras, nunca con un trozo de otra. Es una COPIA para comparar: lo
+    que se guarda es lo que se escribió, con sus emojis."""
     plano = []
     for c in unicodedata.normalize("NFKD", unicodedata.normalize("NFC", str(texto or "")).casefold()):
         if c == "̃" and plano and plano[-1] == "n":          # la virgulilla de la ñ no es una tilde
             plano[-1] = "ñ"
-        elif not unicodedata.combining(c) and unicodedata.category(c) not in _NO_SE_VE:
+        elif unicodedata.combining(c):                          # una tilde: se quita en las dos lecturas
+            continue
+        elif unicodedata.category(c) in _NO_SE_VE:
+            if invisible:
+                plano.append(invisible)
+        else:
             plano.append(c)
     return " " + " ".join(re.findall(r"[^\W_]+", "".join(plano))) + " "
 
 
 def ofensivo(texto) -> bool:
-    """¿Lleva algún insulto o amenaza de `OFENSIVO`? Un filtro básico de lista, por palabras y frases enteras."""
-    palabras = _palabras(texto)
-    return any(f" {frase} " in palabras for frase in OFENSIVO)
+    """¿Lleva algún insulto o amenaza de `OFENSIVO`? Un filtro básico de lista, por palabras y frases enteras. Mira las
+    dos lecturas de los caracteres que no se ven (10-11-2026): quitados (juntan: «gili·pollas» → «gilipollas») y
+    contados como un espacio (separan: «hijo de·puta» → «hijo de puta»). Casar en cualquiera de las dos basta."""
+    lecturas = (_palabras(texto), _palabras(texto, " "))
+    return any(f" {frase} " in palabras for palabras in lecturas for frase in OFENSIVO)
 
 
 def precio_cent(v) -> int:
