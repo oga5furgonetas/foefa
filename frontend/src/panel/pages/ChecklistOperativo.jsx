@@ -27,7 +27,9 @@ export default function ChecklistOperativo() {
   async function enviarResumen() {
     setEnviando(true)
     try {
-      const r = await enviarResumenTurno({ shift, date })
+      // Con la nave: el servidor manda SOLO el de esta (10-11-2026). Sin ella
+      // avisaba a los coordinadores y al Telegram de todas las naves.
+      const r = await enviarResumenTurno({ shift, date, center })
       const mio = (r.data?.enviados || []).find((x) => x.center === center)
       alert(mio
         ? `Resumen enviado: ${center} ${mio.hechas}/${mio.total}${mio.faltan ? ` · ${mio.faltan} sin hacer` : ' · todo hecho'}`

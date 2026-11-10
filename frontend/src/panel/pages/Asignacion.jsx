@@ -109,6 +109,18 @@ function estadoItv(v) {
   return null
 }
 
+/* ¿Está en el taller o con el candado de su ficha? (10-11-2026) El desplegable
+   solo quitaba las de baja y se podía sacar a ruta una que está en el taller,
+   también con «Copiar ayer». Se mira el estado REAL ('taller' o `bloqueada`),
+   no «no operativa» como SelectFurgo de Furgonetas fijas, que llama «taller» a
+   cualquier otro estado. */
+function noOperativa(v) {
+  if (!v) return null
+  if (v.bloqueada) return 'bloqueada'
+  return v.status === 'taller' ? 'taller' : null
+}
+const ETIQUETA_NO_OPERATIVA = { taller: 'ff.estado.taller', bloqueada: 'ff.estado.bloqueada' }
+
 function matchRoster(parsed, drivers, vehicles) {
   return parsed.map(row => {
     const normSearch = amazonToNorm(row.rawName)
@@ -299,11 +311,14 @@ function SlotRow({ slot, vehicles, drivers, usedV, usedD, onChange, onDelete, in
           }`}
         >
           <option value="">{t('asgn.plate.ph')}</option>
-          {vehicles.filter(v => v.status !== 'baja').map(v => (
-            <option key={v.id} value={v.id} disabled={usedV.has(v.id) && v.id !== slot.vehicle_id}>
-              {v.license_plate}
-            </option>
-          ))}
+          {/* Las de taller o con candado, al final y marcadas (10-11-2026). */}
+          {vehicles.filter(v => v.status !== 'baja')
+            .sort((a, b) => (noOperativa(a) ? 1 : 0) - (noOperativa(b) ? 1 : 0))
+            .map(v => (
+              <option key={v.id} value={v.id} disabled={usedV.has(v.id) && v.id !== slot.vehicle_id}>
+                {v.license_plate}{noOperativa(v) ? ` (${t(ETIQUETA_NO_OPERATIVA[noOperativa(v)])})` : ''}
+              </option>
+            ))}
         </select>
         {/* Debajo de la matrícula y no al final de la fila: el aviso tiene que
             leerse mirando la furgoneta, que es lo que se está eligiendo. */}
@@ -391,10 +406,15 @@ function SlotRow({ slot, vehicles, drivers, usedV, usedD, onChange, onDelete, in
         }
       </div>
 
-      {/* Delete */}
+      {/* Delete. Solo se esconde (hasta pasar el ratón) en pantallas anchas
+          con ratón: en el móvil estaba invisible pero recibía toques, y tocar
+          ese hueco borraba la fila sin verla (10-11-2026). */}
       <button
+        type="button"
         onClick={onDelete}
-        className="btn-ghost shrink-0 p-1.5 text-dark-700 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+        aria-label={t('asgn.del.row')}
+        title={t('asgn.del.row')}
+        className="btn-ghost shrink-0 p-1.5 text-dark-500 transition-opacity hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:hover)_and_(min-width:640px)]:text-dark-700 [@media(hover:hover)_and_(min-width:640px)]:opacity-0"
       >
         <Trash2 size={14} />
       </button>
@@ -404,10 +424,17 @@ function SlotRow({ slot, vehicles, drivers, usedV, usedD, onChange, onDelete, in
 
 /* ── Main page ── */
 export default function Asignacion() {
-  const { center, centers } = useOutletContext()
+  const { center, centers, setCenter } = useOutletContext()
   const { t } = useT()
   const [date, setDate] = useState(isoToday())
   const [slots, setSlots] = useState([])
+  /* CAMBIOS SIN GUARDAR (10-11-2026): tras pegar el roster, copiar ayer o tocar
+     filas no se veía que faltaba guardar, y cambiar de día o de nave recargaba
+     y se perdía todo sin avisar. Ahora se marca junto a Guardar y se pregunta. */
+  const [cambios, setCambios] = useState(false)
+  const cambiosRef = useRef(false)
+  useEffect(() => { cambiosRef.current = cambios }, [cambios])
+  const cargado = useRef({ center, date })   // la nave y el día de lo que hay en pantalla
   const [vehicles, setVehicles] = useState([])
   const [drivers, setDrivers] = useState([])
   const [inspMap, setInspMap] = useState({})
@@ -439,6 +466,7 @@ export default function Asignacion() {
   const load = useCallback(async () => {
     if (noCenter) return
     setLoading(true); setMsg(null)
+    cargado.current = { center, date }
     try {
       const [da, vs, ds, insp] = await Promise.all([
         getDailyAssignment(center, date),
@@ -452,6 +480,7 @@ export default function Asignacion() {
       const doc = Array.isArray(da.data) ? da.data[0] : da.data
       const loadedSlots = Array.isArray(doc?.slots) ? doc.slots : []
       setSlots(loadedSlots)
+      setCambios(false)
       const insps = Array.isArray(insp.data) ? insp.data : []
       const map = buildInspMap(loadedSlots, insps)
       prevInspRef.current = map
@@ -460,7 +489,36 @@ export default function Asignacion() {
     finally { setLoading(false) }
   }, [center, date, noCenter])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    // La nave se elige arriba, fuera de esta pantalla: si se cambia con cambios
+    // sin guardar se pregunta y, si dice que no, se vuelve a la de antes sin
+    // recargar (lo de pantalla se queda).
+    if (cambiosRef.current && center !== cargado.current.center) {
+      if (typeof setCenter === 'function' && !window.confirm(t('asgn.unsaved.confirm'))) {
+        setCenter(cargado.current.center)
+        return
+      }
+      cambiosRef.current = false; setCambios(false)
+    }
+    // De vuelta a la nave de antes tras decir que no: nada que recargar.
+    if (cambiosRef.current && center === cargado.current.center && date === cargado.current.date) return
+    load()
+  }, [load]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Y al cerrar o recargar la pestaña, el aviso del navegador.
+  useEffect(() => {
+    if (!cambios) return
+    const h = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', h)
+    return () => window.removeEventListener('beforeunload', h)
+  }, [cambios])
+
+  function cambiarFecha(nueva) {
+    if (nueva === date) return
+    if (cambios && !window.confirm(t('asgn.unsaved.confirm'))) return
+    cambiosRef.current = false; setCambios(false)
+    setDate(nueva)
+  }
 
   /* ── Polling cada 30s — actualización a tiempo real ── */
   useEffect(() => {
@@ -531,6 +589,14 @@ export default function Asignacion() {
     return r
   }, [slots, vehicles])
 
+  /* Las asignadas que están en el taller o con candado, sea al elegirlas o tras
+     «Copiar ayer» (10-11-2026): «1234 ABC (Taller)». */
+  const noOperativas = useMemo(() => slots.map(sl => {
+    const v = sl.vehicle_id ? vehicles.find(x => x.id === sl.vehicle_id) : null
+    const no = noOperativa(v)
+    return no ? `${v.license_plate} (${t(ETIQUETA_NO_OPERATIVA[no])})` : null
+  }).filter(Boolean), [slots, vehicles, t])
+
   const usedV = useMemo(() => new Set(slots.map(s => s.vehicle_id).filter(Boolean)), [slots])
   const usedD = useMemo(() => new Set(slots.map(s => s.driver_id).filter(Boolean)), [slots])
 
@@ -542,6 +608,7 @@ export default function Asignacion() {
       const prev = Array.isArray(doc?.slots) ? doc.slots : []
       if (!prev.length) { setMsg({ ok: false, t: t('asgn.copy.empty') }); return }
       setSlots(prev)
+      setCambios(true)
       setMsg({ ok: true, t: t('asgn.copy.ok').replace('{n}', prev.length) })
     } catch { setMsg({ ok: false, t: t('asgn.copy.error') }) }
   }
@@ -552,11 +619,20 @@ export default function Asignacion() {
       driver_id: m.driver_id, driver_name: m.driver_name,
       rawName: m.rawName, _driverOk: m._driverOk, route: m.route,
     })))
+    setCambios(true)
   }
 
-  function updateSlot(i, patch) { setSlots(arr => arr.map((s, k) => k === i ? { ...s, ...patch } : s)) }
-  function deleteSlot(i) { setSlots(arr => arr.filter((_, k) => k !== i)) }
-  function addSlot() { setSlots(s => [...s, { vehicle_id: '', vehicle_plate: '', driver_id: '', driver_name: '' }]) }
+  function updateSlot(i, patch) { setSlots(arr => arr.map((s, k) => k === i ? { ...s, ...patch } : s)); setCambios(true) }
+  function deleteSlot(i) {
+    // Una fila con furgoneta o conductor no se quita de un toque (10-11-2026).
+    const s = slots[i]
+    if (s && (s.vehicle_id || s.driver_id)) {
+      const fila = [s.vehicle_plate, s.driver_name].filter(Boolean).join(' · ') || '—'
+      if (!window.confirm(t('asgn.del.confirm').replace('{fila}', fila))) return
+    }
+    setSlots(arr => arr.filter((_, k) => k !== i)); setCambios(true)
+  }
+  function addSlot() { setSlots(s => [...s, { vehicle_id: '', vehicle_plate: '', driver_id: '', driver_name: '' }]); setCambios(true) }
 
   async function save() {
     const clean = slots
@@ -569,6 +645,7 @@ export default function Asignacion() {
     try {
       await putDailyAssignment({ center, date, slots: clean })
       setSlots(clean)
+      setCambios(false)
       setMsg({ ok: true, t: t('asgn.save.ok').replace('{n}', clean.length) })
     } catch { setMsg({ ok: false, t: t('asgn.save.error') }) }
     finally { setBusy(false) }
@@ -614,7 +691,7 @@ export default function Asignacion() {
         </div>
         <div className="flex items-center gap-2 text-dark-500">
           <Calendar size={14} />
-          <input type="date" className="input w-44 py-1.5" value={date} onChange={e => setDate(e.target.value)} />
+          <input type="date" className="input w-44 py-1.5" value={date} onChange={e => cambiarFecha(e.target.value)} />
         </div>
       </div>
 
@@ -649,14 +726,17 @@ export default function Asignacion() {
         <button onClick={load} className="btn-ghost p-2 text-dark-400 hover:text-dark-200" title="Recargar">
           <RotateCcw size={14} />
         </button>
-        <button
-          onClick={save}
-          disabled={busy || slots.length === 0}
-          className="btn-primary ml-auto flex items-center gap-2 disabled:opacity-40"
-        >
-          {busy ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-          {t('asgn.save')}
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {cambios && <span className="text-xs font-semibold text-amber-400">{t('asgn.unsaved')}</span>}
+          <button
+            onClick={save}
+            disabled={busy || slots.length === 0}
+            className="btn-primary flex items-center gap-2 disabled:opacity-40"
+          >
+            {busy ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+            {t('asgn.save')}
+          </button>
+        </div>
       </div>
 
       {/* Message */}
@@ -722,6 +802,14 @@ export default function Asignacion() {
                   la furgoneta en plena ruta.
                 </span>
               </span>
+            </div>
+          )}
+
+          {/* Igual que el de la ITV: una en el taller o con candado no sale a ruta. */}
+          {noOperativas.length > 0 && (
+            <div role="alert" className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-amber-500/40 bg-amber-500/[0.08] px-3 py-2 text-[12.5px] leading-snug text-amber-200">
+              <AlertTriangle size={15} className="flex-none" />
+              <span><b>{t('asgn.noop.warn')}</b> {noOperativas.join(' · ')}</span>
             </div>
           )}
 

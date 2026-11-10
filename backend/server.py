@@ -15805,7 +15805,8 @@ async def _resumen_turno(center: str, date: str, shift: str) -> Optional[dict]:
     }
 
 
-async def enviar_resumen_turno(shift: str, date: Optional[str] = None) -> list:
+async def enviar_resumen_turno(shift: str, date: Optional[str] = None,
+                               center: Optional[str] = None) -> list:
     """Manda el cierre de turno de cada centro: qué se hizo y qué quedó colgado.
 
     Es la otra mitad de los avisos al marcar. Ver los ticks según caen dice si
@@ -15818,6 +15819,11 @@ async def enviar_resumen_turno(shift: str, date: Optional[str] = None) -> list:
     """
     date = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     centros = await db.daily_checklists.distinct("center", {"date": date, "shift": shift})
+    # `center` (10-11-2026): el botón «Resumen» de una nave avisaba a los
+    # coordinadores y al Telegram de TODAS. Con nave, solo la suya; el envío
+    # automático a su hora no la pasa y sigue mandando todas.
+    if center:
+        centros = [c for c in centros if c == center]
     turno = "mañana" if shift == "manana" else "tarde"
     enviados = []
 
@@ -16657,12 +16663,21 @@ async def start_resumen_diario_scheduler():
 
 @api_router.post("/checklist/enviar-resumen")
 async def checklist_enviar_resumen(data: dict = Body(default={}),
-                                   _=Depends(require_admin)):
-    """Dispara el cierre de turno ahora, para probarlo sin esperar a la hora."""
+                                   user: dict = Depends(require_admin)):
+    """Dispara el cierre de turno ahora, para probarlo sin esperar a la hora.
+
+    Con `center` (10-11-2026) solo se manda el de esa nave, y solo si quien lo
+    pide puede verla. Sin él (la web de antes, en caché) se mandan todas, como
+    siempre."""
     shift = data.get("shift") or "manana"
     if shift not in ("manana", "tarde"):
         raise HTTPException(400, "shift debe ser manana o tarde")
-    return {"enviados": await enviar_resumen_turno(shift, data.get("date"))}
+    center = _texto_cuerpo(data.get("center"), 60)
+    if center.lower() in ("todos", "all"):
+        center = ""
+    if center and not _user_can_see_center(user, center):
+        raise HTTPException(403, "No tienes acceso a este centro")
+    return {"enviados": await enviar_resumen_turno(shift, data.get("date"), center=center or None)}
 
 
 @app.on_event("startup")
@@ -38508,6 +38523,8 @@ async def crear_plantilla_compartida(body: dict = Body(...), admin: dict = Depen
     now = datetime.now(timezone.utc).isoformat()
     doc = {"id": str(uuid.uuid4()), "center": center, "state": state,
            "revision": 1, "updated_at": now, "updated_by": admin.get("name") or "Usuario"}
+    # Quién la tocó, por persona: «Nueva plantilla» pregunta si es otra (10-11-2026).
+    doc["toques"] = {k.split(".", 1)[1]: v for k, v in _plantilla_toque(admin, now).items()}
     await db.plantillas_compartidas.insert_one(doc)
     return _plantilla_shared_payload(doc)
 
@@ -38528,16 +38545,69 @@ async def plantilla_compartida_activa(center: str, admin: dict = Depends(require
 
 
 @api_router.delete("/tools/plantilla-compartida/{draft_id}")
-async def cerrar_plantilla_compartida(draft_id: str, admin: dict = Depends(require_admin)):
+async def cerrar_plantilla_compartida(draft_id: str, preguntar: bool = False,
+                                      admin: dict = Depends(require_admin)):
     """Cierra el borrador compartido del centro («Nueva plantilla») para TODOS
     los dispositivos. Sin esto, el auto-unirse volvía a enganchar el borrador
-    viejo y el botón de empezar otra parecía no funcionar."""
+    viejo y el botón de empezar otra parecía no funcionar.
+
+    `preguntar` (10-11-2026): «Nueva plantilla» borraba la hoja que María
+    estaba editando sin decir nada, y sus guardados siguientes acababan en
+    «conflicto». Con `preguntar=1`, si OTRA persona la ha tocado en los
+    últimos 10 minutos no se borra: se contesta quién y hace cuánto para que
+    la pantalla pregunte. Sin el parámetro (la web de antes, en caché) se
+    borra como siempre."""
     doc = await db.plantillas_compartidas.find_one({"id": draft_id}, {"_id": 0})
     if not doc:
         return {"ok": True}
     _filtro_centro(admin, doc.get("center"))
+    if preguntar:
+        otro = await _plantilla_otro_editando(doc["center"], admin)
+        if otro:
+            return {"ok": False, "editando": otro}
     await db.plantillas_compartidas.delete_many({"center": doc["center"]})
     return {"ok": True}
+
+
+_PLANTILLA_OTRO_MIN = 10
+
+
+def _plantilla_toque(admin: dict, ahora: str) -> dict:
+    """Quién tocó la hoja y cuándo, POR PERSONA (`toques.<id>`), para saber si
+    otra persona la está editando aunque el último cambio sea mío (10-11-2026).
+    `updated_by` solo guarda al último, y con eso no se puede."""
+    clave = re.sub(r"[^A-Za-z0-9_-]", "_", str(admin.get("sub") or ""))[:64] or "sin_id"
+    return {"toques.%s" % clave: {"nombre": admin.get("name") or "Usuario", "at": ahora}}
+
+
+async def _plantilla_otro_editando(center: str, admin: dict) -> Optional[dict]:
+    """La última persona DISTINTA de quien pregunta que ha tocado algún
+    borrador del centro en los últimos 10 minutos: {nombre, minutos}, o None."""
+    mia = next(iter(_plantilla_toque(admin, "")))[len("toques."):]
+    mi_nombre = admin.get("name") or "Usuario"
+    ahora = datetime.now(timezone.utc)
+    mejor = None
+    async for d in db.plantillas_compartidas.find({"center": center}, {"_id": 0}):
+        toques = d.get("toques")
+        if not isinstance(toques, dict):
+            # Borrador de antes de apuntar los toques: solo se sabe el último.
+            toques = ({} if (d.get("updated_by") or "") == mi_nombre
+                      else {"_ultimo": {"nombre": d.get("updated_by"), "at": d.get("updated_at")}})
+        for clave, toq in toques.items():
+            if clave == mia or not isinstance(toq, dict):
+                continue
+            try:
+                cuando = datetime.fromisoformat(str(toq.get("at") or ""))
+            except ValueError:
+                continue
+            if cuando.tzinfo is None:
+                cuando = cuando.replace(tzinfo=timezone.utc)
+            seg = (ahora - cuando).total_seconds()
+            if seg > _PLANTILLA_OTRO_MIN * 60 or (mejor and cuando <= mejor[0]):
+                continue
+            mejor = (cuando, {"nombre": str(toq.get("nombre") or "Otro usuario")[:80],
+                              "minutos": max(1, round(max(seg, 0) / 60))})
+    return mejor[1] if mejor else None
 
 
 @api_router.put("/tools/plantilla-compartida/{draft_id}")
@@ -38584,9 +38654,11 @@ async def _plantilla_doc(draft_id: str, admin: dict) -> dict:
 
 async def _plantilla_tocada(draft_id: str, cambios: dict, admin: dict, extra: dict = None) -> dict:
     """Aplica un cambio pequeño y devuelve la plantilla ya guardada."""
+    ahora = datetime.now(timezone.utc).isoformat()
     orden = {"$set": {**cambios,
-                      "updated_at": datetime.now(timezone.utc).isoformat(),
-                      "updated_by": admin.get("name") or "Usuario"},
+                      "updated_at": ahora,
+                      "updated_by": admin.get("name") or "Usuario",
+                      **_plantilla_toque(admin, ahora)},
              "$inc": {"revision": 1}}
     if extra:
         orden.update(extra)
@@ -38620,7 +38692,8 @@ async def plantilla_compartida_celda(draft_id: str, body: dict = Body(...), admi
     r = await db.plantillas_compartidas.update_one(
         filtro,
         {"$set": {"state.rows.%d.%s" % (fila, campo): valor,
-                  "updated_at": ahora, "updated_by": admin.get("name") or "Usuario"},
+                  "updated_at": ahora, "updated_by": admin.get("name") or "Usuario",
+                  **_plantilla_toque(admin, ahora)},
          "$inc": {"revision": 1}})
     if not r.matched_count:
         doc = await db.plantillas_compartidas.find_one({"id": draft_id}, {"_id": 0}) or doc0
@@ -38655,7 +38728,8 @@ async def plantilla_compartida_marca(draft_id: str, body: dict = Body(...),
     await db.plantillas_compartidas.update_one(
         {"id": draft_id},
         {op: {campo: valor},
-         "$set": {"updated_at": ahora, "updated_by": admin.get("name") or "Usuario"},
+         "$set": {"updated_at": ahora, "updated_by": admin.get("name") or "Usuario",
+                  **_plantilla_toque(admin, ahora)},
          "$inc": {"revision": 1}})
     doc = await db.plantillas_compartidas.find_one({"id": draft_id}, {"_id": 0})
     return _plantilla_shared_payload(doc or {})

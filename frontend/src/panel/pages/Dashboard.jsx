@@ -392,7 +392,10 @@ function DashboardFlota() {
      la lista de decisiones de antes, así que siguen en los seis idiomas. */
   const semanaTotal = semana.reduce((a, d) => a + d.n, 0)
   const salidasHoy = hoy?.salidas?.total || 0
-  const turno = (hoy?.checklist || [])[0]
+  // El turno que toca a esta hora (10-11-2026): por la tarde enseñaba siempre el de mañana. Las 15:00 son
+  // el cierre del de mañana por defecto (turno_manana en _HORARIOS_DEF, server.py). Si solo hay uno, ese.
+  const turnos = hoy?.checklist || []
+  const turno = turnos.find((c) => c.turno === (new Date().getHours() >= 15 ? 'tarde' : 'manana')) || turnos[0]
   const abiertas = data.open_incidents || 0
   const urgentes = ef?.niveles?.urgente || 0
   const aTaller = urgentes + (ef?.niveles?.taller || 0)

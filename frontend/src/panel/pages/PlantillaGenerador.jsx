@@ -46,6 +46,28 @@ function guardarPref(clave, valor) {
   try { localStorage.setItem(clave, JSON.stringify(valor)) } catch { /* nada */ }
 }
 
+/* La fecha de la hoja («10/11/2026», o «2026-11-10») como día, o null si no se
+   entiende. Para avisar al entrar solo en un borrador de otro día (10-11-2026):
+   el de la tarde se reabría a la mañana siguiente con la fecha de ayer. */
+function fechaHoja(texto) {
+  const s = String(texto || '').trim()
+  let m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})$/)
+  if (m) return new Date(m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]), Number(m[2]) - 1, Number(m[1]))
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null
+}
+/* «dd/mm» si la hoja NO es de hoy ni de mañana (la de mañana se hace la tarde
+   antes, y reabrirla es justo lo que se quiere); null si es de esos días o no
+   lleva una fecha que se entienda. */
+function hojaDeOtroDia(texto) {
+  const d = fechaHoja(texto)
+  if (!d || Number.isNaN(d.getTime())) return null
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
+  const dias = Math.round((d - hoy) / 864e5)
+  if (dias === 0 || dias === 1) return null
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 function descargarBlob(blob, nombre) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -206,6 +228,8 @@ export default function PlantillaGenerador() {
   // Tras "Nueva plantilla" NO nos re-unimos al borrador compartido: el
   // auto-unirse re-enganchaba el borrador viejo y el botón parecía roto.
   const suppressJoin = useRef(false)
+  // «Esta hoja es del dd/mm»: al entrar solo en un borrador de otro día.
+  const [hojaVieja, setHojaVieja] = useState(null)
 
   const [copiedHours, setCopiedHours] = useState(null)
   // Pestaña: la plantilla del día, o quién lleva qué furgoneta (se recuerda).
@@ -289,7 +313,11 @@ export default function PlantillaGenerador() {
   useEffect(() => {
     if (noCenter || step !== 'upload' || suppressJoin.current) return
     apiFetch(`/tools/plantilla-compartida?center=${encodeURIComponent(center)}`)
-      .then(r => r.json()).then(d => { if (d?.id) applySharedDraft(d) }).catch(() => {})
+      .then(r => r.json()).then(d => {
+        if (!d?.id) return
+        applySharedDraft(d)
+        setHojaVieja(hojaDeOtroDia(d.state?.date))
+      }).catch(() => {})
   }, [center, noCenter, step]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cambiar de centro reactiva el auto-unirse (la supresión era para ESTE centro).
@@ -371,11 +399,24 @@ export default function PlantillaGenerador() {
   }
   function removeFile(idx, setter) { setter(prev => prev.filter((_, i) => i !== idx)) }
 
-  function reset() {
-    // Cierra el borrador compartido para TODOS los dispositivos.
-    suppressJoin.current = true
+  async function reset() {
+    // Cierra el borrador compartido para TODOS los dispositivos. Antes lo
+    // borraba sin decir nada aunque María lo estuviera editando en ese momento
+    // (10-11-2026): ahora, si OTRA persona lo ha tocado en los últimos 10 min,
+    // el servidor no lo borra y se pregunta con su nombre.
     const draftId = sharedDraft?.id
-    if (draftId) apiFetch(`/tools/plantilla-compartida/${draftId}`, { method: 'DELETE' }).catch(() => {})
+    if (draftId) {
+      try {
+        const j = await (await apiFetch(`/tools/plantilla-compartida/${draftId}?preguntar=1`, { method: 'DELETE' })).json()
+        if (j?.ok === false && j.editando) {
+          if (!window.confirm(t('pg.borrarOtro').replace('{nombre}', j.editando.nombre || t('pg.otroUsuario'))
+            .replace('{min}', j.editando.minutos))) return
+          await apiFetch(`/tools/plantilla-compartida/${draftId}`, { method: 'DELETE' }).catch(() => {})
+        }
+      } catch { /* sin red: se empieza otra igual, como antes */ }
+    }
+    suppressJoin.current = true
+    setHojaVieja(null)
     setRutasList([]); setVehList([]); setVehText(''); setRutasText('')
     setStep('upload'); setData(null); setAviso('')
     setRedSet(new Set()); setYellowSet(new Set()); setPinkSet(new Set()); setMarkedSet(new Set())
@@ -651,6 +692,7 @@ export default function PlantillaGenerador() {
   }, [firmaFurgos, step, center]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function editMeta(field, value) {
+    if (field === 'date') setHojaVieja(null)
     setData(prev => ({ ...prev, [field]: value }))
     clearTimeout(metaTimer.current)
     metaTimer.current = setTimeout(() => mandar('/meta', json({ [field]: value })), 500)
@@ -811,6 +853,18 @@ export default function PlantillaGenerador() {
           {sharedNote && (
             <div className="mb-3 flex items-center gap-2 rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-300">
               <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" /> {sharedNote}
+            </div>
+          )}
+          {hojaVieja && (
+            <div role="status" className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2 text-xs text-amber-200">
+              <AlertTriangle size={13} className="shrink-0" />
+              <span className="min-w-0 flex-1 font-semibold">{t('pg.hojaDel').replace('{fecha}', hojaVieja)}</span>
+              <button type="button" onClick={() => setHojaVieja(null)} className="btn-ghost px-2 py-1 text-xs text-dark-200">
+                {t('pg.seguirConElla')}
+              </button>
+              <button type="button" onClick={reset} className="btn-primary px-2 py-1 text-xs">
+                {t('pg.empezarHoy')}
+              </button>
             </div>
           )}
           {aviso && (
