@@ -681,10 +681,15 @@ const delAdmin = (id, persona, titulo, estado = 'publicado') => ({ ...SOPORTE, i
 const LO_QUE_PASA = 'No podrá entrar al mercadillo. Sus anuncios se retiran y sus conversaciones se cierran. Se le dice el motivo y cómo reclamar. Puedes devolverle el acceso cuando quieras.'
 const QUITAR = { name: 'Quitar del mercadillo', exact: true }
 
+/* Las claves de verdad son largas y sin espacios: `d:<empresa>:<conductor>`, con dos identificadores de 32 letras. */
+const claveLarga = (clave) => clave.split(':').map((parte, n) => (n ? `${parte}9f3c1a7e5b2d4c6f8a0b1c2d3e4f5a6b`.slice(0, 32) : parte)).join(':')
+
 /** Negocio → Mercadillo con memoria: a quién se le quita el acceso sale después en `expulsados`. `antiguo`: un servidor de antes
- *  de todo esto (sin `expulsados`, sin `motivos_expulsion`, sin `personas` en las denuncias y sin `totales.expulsados`). */
-async function negocio(page, { errorExpulsar = null, errorReadmitir = null, antiguo = false } = {}) {
-  const s = { expulsados: [YA_SIN_ACCESO], llamadas: [], cuerpos: [] }
+ *  de todo esto (sin `expulsados`, sin `motivos_expulsion`, sin `personas` en las denuncias y sin `totales.expulsados`).
+ *  `clavesLargas`: cada clave, con el largo que tienen las de verdad. `s.lecturas`: cuántas veces se ha leído el panel. */
+async function negocio(page, { errorExpulsar = null, errorReadmitir = null, antiguo = false, clavesLargas = false } = {}) {
+  const s = { expulsados: [YA_SIN_ACCESO], llamadas: [], cuerpos: [], lecturas: 0 }
+  const conSusClaves = (j) => (clavesLargas ? JSON.parse(JSON.stringify(j).replace(/"([doa]:org\d[^"]*)"/g, (_, clave) => JSON.stringify(claveLarga(clave)))) : j)
   const personas = (lista) => (antiguo ? {} : { personas: lista })
   const datos = () => ({
     conf: { visible: true }, avisos: { activo: false, movil: false }, motivos_rechazo: { otro: 'No cumple las normas del mercadillo.' },
@@ -711,13 +716,14 @@ async function negocio(page, { errorExpulsar = null, errorReadmitir = null, anti
   await simularApi(page, 'vacio')
   await arrancar(page, { ios: false })
   await page.route(/\/api\/mercadillo\/foto\//, (x) => x.fulfill({ status: 200, contentType: 'image/png', body: PNG }))
-  await page.route(/\/api\/admin\/mercadillo$/, (x) => x.fulfill({ json: datos() }))
+  await page.route(/\/api\/admin\/mercadillo$/, (x) => { s.lecturas += 1; return x.fulfill({ json: conSusClaves(datos()) }) })
   await page.route(/\/api\/admin\/mercadillo\/(?:expulsar|readmitir)$/, (x) => {
     const que = x.request().url().split('/').pop()
     const cuerpo = x.request().postDataJSON()
     s.llamadas.push(que); s.cuerpos.push(cuerpo)
     const error = que === 'expulsar' ? errorExpulsar : errorReadmitir
-    if (error) return x.fulfill({ status: error.status, json: { detail: error.detail } })
+    // Sin `detail`: un error que no es del mercadillo (el servidor caído), que no trae texto que enseñar.
+    if (error) return x.fulfill({ status: error.status, json: error.detail ? { detail: error.detail } : {} })
     if (que === 'readmitir') {
       s.expulsados = s.expulsados.filter((e) => e.clave !== cuerpo.clave)
       return x.fulfill({ json: { ok: true } })
@@ -897,15 +903,80 @@ test.describe('Negocio · quitar a una persona del mercadillo y devolverle el ac
     expect(fallos).toEqual([])
   })
 
-  test('lo que conteste el servidor al devolver el acceso se lee tal cual, y la persona sigue en la lista', async ({ page }) => {
+  /* «ESA PERSONA YA TIENE ACCESO» (404; 10-11-2026, cuarta tanda). Pasa cuando el panel va atrasado: se le devolvió desde otra
+     pestaña, o sus datos se han borrado. Antes se leía el aviso y la fila se quedaba ahí, con su «Devolver el acceso» que ya no
+     podía hacer nada. Ahora se lee el aviso Y se vuelve a leer el panel: la fila que sobraba desaparece. */
+  test('si al devolver el acceso el servidor dice que esa persona ya lo tiene (404), se lee el aviso y el panel se recarga: la fila desaparece', async ({ page }) => {
     test.setTimeout(60000)
+    const fallos = vigilar(page)
     const YA_TIENE = 'Esa persona ya tiene acceso al mercadillo'
     const { s, seccion } = await negocio(page, { errorReadmitir: { status: 404, detail: YA_TIENE } })
+    const fila = sinAccesoEn(seccion).getByRole('listitem')
+    await expect(fila).toHaveCount(1)
+    await expect(fila).toContainText('Pedro S. (a:org2:u3)')
+    s.expulsados = []                                                 // en el servidor ya no está sin acceso: el panel va atrasado
+    const leidas = s.lecturas
     page.on('dialog', (d) => d.accept())
-    await sinAccesoEn(seccion).getByRole('button', { name: 'Devolver el acceso' }).click()
+    await fila.getByRole('button', { name: 'Devolver el acceso' }).click()
     await expect(seccion.getByRole('alert')).toHaveText(YA_TIENE)
     expect(s.llamadas).toEqual(['readmitir'])
+    await expect(fila, 'la fila que sobraba desaparece').toHaveCount(0)
+    await expect(sinAccesoEn(seccion).getByText('Nadie ha perdido el acceso.')).toBeVisible()
+    await expect(casilla(seccion, 'Sin acceso')).toContainText('0')
+    expect(s.lecturas, 'el panel se ha leído otra vez').toBe(leidas + 1)
+    await expect(seccion.getByRole('alert'), 'y el aviso sigue a la vista después de recargar').toHaveText(YA_TIENE)
+    // Donde decía «Sin acceso desde el…» vuelve a ofrecer «Quitar del mercadillo».
+    const bloqueoPedro = seccion.getByRole('listitem').filter({ hasText: 'bloqueó a Pedro S.' })
+    await expect(bloqueoPedro.getByRole('button', QUITAR)).toHaveCount(1)
+    await expect(bloqueoPedro.getByText(/Sin acceso/)).toHaveCount(0)
+    expect(fallos).toEqual([])
+  })
+
+  // El control: otro error (el servidor caído) no dice que esa persona tenga acceso. Se lee, y la fila sigue ahí para reintentar.
+  test('control · con otro error al devolver el acceso (un 500), se lee el aviso, la persona sigue en la lista y el panel no se recarga', async ({ page }) => {
+    test.setTimeout(60000)
+    const { s, seccion } = await negocio(page, { errorReadmitir: { status: 500 } })
+    const leidas = s.lecturas
+    page.on('dialog', (d) => d.accept())
+    await sinAccesoEn(seccion).getByRole('button', { name: 'Devolver el acceso' }).click()
+    await expect(seccion.getByRole('alert')).toHaveText('No se pudo hacer')
+    expect(s.llamadas).toEqual(['readmitir'])
+    await expect(sinAccesoEn(seccion).getByRole('button', { name: 'Devolver el acceso' }), 'se puede reintentar').toBeEnabled()
     await expect(sinAccesoEn(seccion).getByRole('listitem')).toHaveCount(1)
+    await quieta(page, 400)
+    expect(s.lecturas, 'el panel no se vuelve a leer').toBe(leidas)
+  })
+
+  /* LAS CLAVES LARGAS NO SE SALEN DE LADO EN UN MÓVIL (10-11-2026, cuarta tanda). La clave de una persona es
+     `d:<empresa>:<conductor>`: dos identificadores largos, sin un espacio por donde partirla. En un móvil se salía de su fila (y de
+     la hoja «Quitar del mercadillo») por la derecha. Ahora se parte por donde haga falta, en los tres sitios donde Negocio la
+     pinta: la hoja, «Sin acceso al mercadillo» y los bloqueos. */
+  test.describe('en un móvil (375 px de ancho)', () => {
+    test.use({ viewport: { width: 375, height: 740 } })
+    test('las claves largas no se salen de lado: ni en la hoja «Quitar del mercadillo», ni en «Sin acceso al mercadillo», ni en los bloqueos', async ({ page }) => {
+      test.setTimeout(60000)
+      const fallos = vigilar(page)
+      const { seccion } = await negocio(page, { clavesLargas: true })
+      const LARGA = claveLarga(LUIS.clave)
+      expect(LARGA.length, 'la prueba: una clave del largo de las de verdad').toBeGreaterThan(60)
+      /** Las cajas a las que se les sale algo por la derecha (lo que se sale, ensancha lo que su caja puede desplazar). */
+      const seSalen = (cajas) => cajas.evaluateAll((els) => els.filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent.trim().slice(0, 70)))
+      const bloqueos = seccion.getByRole('group', { name: 'Bloqueos' })
+      await expect(bloqueos.getByRole('listitem').filter({ hasText: `Bloqueado por 2 personas: Luis G. (${LARGA})` })).toHaveCount(1)
+      await expect(bloqueos.getByRole('listitem').filter({ hasText: `· ${LARGA}` })).toHaveCount(2)
+      expect(await seSalen(bloqueos.getByRole('listitem')), 'en los bloqueos, una clave se sale de su fila').toEqual([])
+      const filas = sinAccesoEn(seccion).getByRole('listitem')
+      await expect(filas).toContainText(`Pedro S. (${claveLarga(PEDRO.clave)})`)
+      expect(await seSalen(filas), 'en «Sin acceso al mercadillo», una clave se sale de su fila').toEqual([])
+      // La hoja, con la clave entera dentro.
+      await seccion.getByRole('listitem').filter({ hasText: 'Escáner de la nave · ' }).getByRole('button', QUITAR).click()
+      const hoja = page.getByRole('dialog', { name: 'Quitar del mercadillo a Luis G.' })
+      await expect(hoja.getByText(LARGA, { exact: true })).toBeVisible()
+      expect(await seSalen(hoja.locator(':scope > div')), 'en la hoja «Quitar del mercadillo», la clave se sale').toEqual([])
+      // Y la página no se puede desplazar de lado.
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 'la página no se desplaza de lado').toBeLessThanOrEqual(0)
+      expect(fallos).toEqual([])
+    })
   })
 
   test('con un servidor de antes (sin expulsados, sin motivos y sin personas en las denuncias): «Nadie ha perdido el acceso» y nada se rompe', async ({ page }) => {

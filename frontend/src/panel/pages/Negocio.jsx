@@ -668,7 +668,9 @@ function QuitarDelMercadillo({ persona, motivos, onCerrar, onHecho }) {
       <div className="w-full max-w-md space-y-3 rounded-2xl border border-dark-700 bg-dark-900 p-4">
         <div>
           <p className="text-[15px] font-bold text-dark-50">Quitar del mercadillo a {persona.nombre}</p>
-          <p className="text-[11.5px] text-dark-500">{persona.clave}</p>
+          {/* `break-all` (10-11-2026), aquí, en «Sin acceso al mercadillo» y en los bloqueos: la clave de una persona
+              (`d:<empresa>:<conductor>`) son dos identificadores largos sin un espacio, y en un móvil se salía de lado. */}
+          <p className="break-all text-[11.5px] text-dark-500">{persona.clave}</p>
         </div>
         <p className="text-[12.5px] leading-snug text-dark-300">No podrá entrar al mercadillo. Sus anuncios se retiran y sus conversaciones se cierran. Se le dice el motivo y cómo reclamar. Puedes devolverle el acceso cuando quieras.</p>
         <select value={motivo} onChange={(e) => setMotivo(e.target.value)} disabled={ocupado} aria-label="Por qué se le quita" className={campo}>
@@ -726,9 +728,19 @@ function MercadilloAdmin() {
       : `${nombre} ya no tiene acceso al mercadillo: ${cuantos(r?.anuncios, 'anuncio retirado', 'anuncios retirados')} y ${cuantos(r?.conversaciones, 'conversación cerrada', 'conversaciones cerradas')}.`)
     await cargar()
   }
-  const devolver = (e) => {
+  /* Si el servidor contesta 404 («Esa persona ya tiene acceso al mercadillo»: se le devolvió desde otra pestaña, o sus datos se
+     han borrado), el panel va atrasado y esa fila sobra: se lee el aviso Y se vuelve a leer el panel (10-11-2026). Con cualquier
+     otro error la fila se queda, para reintentar. El aviso se pone DESPUÉS de leer: `cargar` lo limpia cuando le sale bien. */
+  const devolver = async (e) => {
     if (!window.confirm(`¿Devolver el acceso al mercadillo a ${e.nombre}? Se le avisa. Sus anuncios no vuelven solos: tendrá que enviarlos otra vez.`)) return
-    hacer(`acceso:${e.clave}`, () => adminMercadilloReadmitir(e.clave))
+    setOcupado(`acceso:${e.clave}`); setErr(''); setHecho('')
+    try {
+      await adminMercadilloReadmitir(e.clave)
+      await cargar()
+    } catch (x) {
+      if (x?.response?.status === 404) await cargar()
+      setErr(x?.response?.data?.detail || 'No se pudo hacer')
+    } finally { setOcupado('') }
   }
   const visible = !!d?.conf?.visible
   const cambiarVisible = () => {
@@ -875,7 +887,7 @@ function MercadilloAdmin() {
           <ul className="mt-1.5 space-y-1.5">
             {d.bloqueados_varios.map((x) => (
               <li key={x.clave} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-xl bg-amber-500/10 px-3 py-2 text-[12.5px] font-semibold text-amber-200">
-                <span>Bloqueado por {x.n} personas: {x.nombre} <span className="font-normal">({x.clave})</span></span>
+                <span>Bloqueado por {x.n} personas: {x.nombre} <span className="break-all font-normal">({x.clave})</span></span>
                 {acceso(x.clave, x.nombre)}
               </li>
             ))}
@@ -889,7 +901,7 @@ function MercadilloAdmin() {
                   <p className="font-semibold text-dark-100">{b.de_nombre} bloqueó a {b.a_nombre}</p>
                   {acceso(b.a_clave, b.a_nombre)}
                 </div>
-                <p className="text-dark-400">{fechaHoraLocal(b.ts)} · desde {b.origen?.tipo === 'conversacion' ? 'la conversación sobre' : 'el anuncio'} «{b.origen?.titulo || 'sin título'}» · {b.a_clave}</p>
+                <p className="text-dark-400">{fechaHoraLocal(b.ts)} · desde {b.origen?.tipo === 'conversacion' ? 'la conversación sobre' : 'el anuncio'} «{b.origen?.titulo || 'sin título'}» · <span className="break-all">{b.a_clave}</span></p>
               </li>
             ))}
           </ul>
@@ -905,7 +917,7 @@ function MercadilloAdmin() {
             {d.expulsados.map((e) => (
               <li key={e.clave} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-xl border border-dark-800 p-2.5 text-[12.5px]">
                 <div className="min-w-0">
-                  <p className="font-semibold text-dark-100">{e.nombre} <span className="font-normal text-dark-400">({e.clave})</span></p>
+                  <p className="font-semibold text-dark-100">{e.nombre} <span className="break-all font-normal text-dark-400">({e.clave})</span></p>
                   <p className="text-dark-400">{fechaHoraLocal(e.ts)} · {d.motivos_expulsion?.[e.motivo_clave] || e.motivo}</p>
                   {e.nota && <p className="text-dark-300">Nota: {e.nota}</p>}
                 </div>
