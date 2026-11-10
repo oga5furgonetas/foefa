@@ -27,7 +27,6 @@ const LISTAS = {
   motivos_denuncia: { prohibido: 'Está prohibido o es ilegal', estafa: 'Es un engaño o una posible estafa', robado: 'Es robado o de una empresa',
     ofensivo: 'Es ofensivo o es acoso', otro: 'Otra cosa' },
 }
-
 const YO = { nombre: 'Ana P.', tipo: 'autonomo' }
 const SOPORTE = { id: 'a2', titulo: 'Soporte de móvil para la furgoneta', descripcion: 'Poco uso.', precio_cent: 1500, categoria: 'movil', estado_articulo: 'como_nuevo',
   zona: 'A Coruña', fotos: ['f-a2'], estado: 'publicado', mio: false, publicado_en: '2026-11-08T10:00:00+00:00', vendedor: { nombre: 'Luis G.', tipo: 'conductor' } }
@@ -114,6 +113,18 @@ const anuncio = (page) => page.getByRole('button', { name: /Soporte de móvil/ }
 const cabecera = (page, titulo) => page.locator('main').getByText(titulo, { exact: true })
 const normas = (page) => page.locator('main').getByRole('listitem')
 const ANTES_DE_ENTRAR = 'Antes de entrar, lee las normas y acéptalas.'
+const apartadoDelMercadillo = (pagina) => pagina.getByRole('heading', { name: /Mercadillo de repartidores|Couriers’ marketplace/ })
+/** «Llega a su apartado»: la página se ha desplazado y el título del apartado del mercadillo está entero en la pantalla y ARRIBA
+ *  (en su tercio de arriba: no vale que asome por abajo). */
+async function enSuApartado(pagina, donde) {
+  const apartado = apartadoDelMercadillo(pagina)
+  await expect(apartado, `${donde}: el apartado del mercadillo no está en la pantalla`).toBeInViewport({ ratio: 1 })
+  const { desplazado, alto } = await pagina.evaluate(() => ({ desplazado: window.scrollY, alto: window.innerHeight }))
+  expect(desplazado, `${donde}: la página no se ha desplazado hasta el apartado`).toBeGreaterThan(300)
+  const y = (await apartado.boundingBox()).y
+  expect(y, `${donde}: el título del apartado no queda tapado por arriba`).toBeGreaterThanOrEqual(0)
+  expect(y, `${donde}: el apartado queda arriba, no asomando por abajo`).toBeLessThan(alto / 3)
+}
 
 for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
   test.describe(`Mercadillo · las normas la primera vez y quien se queda sin acceso (${donde})`, () => {
@@ -169,27 +180,30 @@ for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
       expect(fallos).toEqual([])
     })
 
-    /* Dentro de la app de iPhone un enlace con target="_blank" a una página de la propia app no abre nada (Capacitor se lo pasa
-       al sistema, y `capacitor://localhost/…` fuera de la app no existe): desde la pantalla en la que se aceptan las normas, los
-       Términos se tienen que poder leer. Van en la misma ventana, en su versión de dentro de la app (sin nada de pagos).
-       OJO: la página se abre ARRIBA, no en su apartado del mercadillo (las páginas legales no se desplazan solas a `#mercadillo`;
-       medido el 10-11-2026: el título del apartado queda 1.281 px más abajo en 375 × 647). Aquí solo se comprueba que el apartado
-       está en la página. */
-    if (ios) {
-      test('dentro del iPhone, «Términos» se abre en la misma ventana, con su apartado del mercadillo y sin nada prohibido', async ({ page, context }) => {
-        const fallos = vigilar(page)
-        await entrar(page, { ios, normas: false })
-        await page.getByRole('link', { name: 'Términos', exact: true }).click()
-        await expect(page).toHaveURL(/\/terminos#mercadillo$/)
-        await expect(page.getByRole('heading', { level: 1 })).toHaveText('Términos y Condiciones de Uso')
-        await expect(page.getByRole('heading', { name: /Mercadillo de repartidores/ })).toBeVisible()
-        await expect(page.getByText('Para usar el mercadillo tienes que aceptar sus normas la primera vez que entras', { exact: false })).toBeVisible()
-        expect(context.pages(), 'no se ha abierto otra ventana').toHaveLength(1)
-        await quieta(page, 400)
-        await limpia(page, 'los términos abiertos desde las normas del mercadillo', { perfil: 'basico' })
-        expect(fallos).toEqual([])
-      })
-    }
+    /* «Términos», desde la pantalla en la que se aceptan las normas, se tiene que poder leer Y LLEGAR A SU APARTADO (10-11-2026).
+       En la web se abre en otra pestaña. Dentro de la app de iPhone un enlace con target="_blank" a una página de la propia app no
+       abre nada (Capacitor se lo pasa al sistema, y `capacitor://localhost/…` fuera de la app no existe): va en la misma
+       ventana, en su versión de dentro de la app (sin nada de pagos). Antes la página se abría ARRIBA (las páginas legales no se
+       desplazaban solas a `#mercadillo`: el título del apartado quedaba 1.281 px más abajo en 375 × 647). */
+    test(ios ? 'dentro del iPhone, «Términos» se abre en la misma ventana y llega a su apartado del mercadillo, sin nada prohibido'
+      : 'en la web, «Términos» se abre en otra pestaña y llega a su apartado del mercadillo', async ({ page, context }) => {
+      const fallos = vigilar(page)
+      await entrar(page, { ios, normas: false })
+      const enlace = page.getByRole('link', { name: 'Términos', exact: true })
+      let terminos = page
+      if (ios) await enlace.click()
+      else [terminos] = await Promise.all([context.waitForEvent('page'), enlace.click()])
+      await expect(terminos).toHaveURL(/\/terminos#mercadillo$/)
+      await expect(terminos.getByRole('heading', { level: 1 })).toHaveText('Términos y Condiciones de Uso')
+      await enSuApartado(terminos, 'los términos abiertos desde las normas')
+      await expect(terminos.getByText('Para usar el mercadillo tienes que aceptar sus normas la primera vez que entras', { exact: false })).toBeVisible()
+      expect(context.pages(), ios ? 'no se ha abierto otra ventana' : 'se ha abierto en otra pestaña').toHaveLength(ios ? 1 : 2)
+      if (ios) {
+        await quieta(terminos, 400)
+        await limpia(terminos, 'los términos abiertos desde las normas del mercadillo', { perfil: 'basico' })
+      }
+      expect(fallos).toEqual([])
+    })
 
     test('volver sin aceptar es salir del mercadillo; al entrar otra vez, se vuelven a pedir', async ({ page }) => {
       const fallos = vigilar(page)
@@ -291,6 +305,47 @@ for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
       expect(fallos).toEqual([])
     })
   })
+}
+
+/* ── LOS TÉRMINOS, EN SU APARTADO (10-11-2026) ────────────────────────────────────────────────────────────────────────────────
+   Las normas enlazan a /terminos#mercadillo. Una página de React no se desplaza sola al `#…` (cuando el navegador lo busca, el
+   texto aún no está pintado) y se abría arriba. Ahora llega a su apartado: en la pantalla más pequeña (375 × 647), en la web y en
+   la app de iPhone, en español y en inglés. Sin `#` en la dirección no cambia nada: arriba, como siempre. De paso, la fecha de
+   «Última actualización» de los Términos, que han cambiado hoy (como la de la Privacidad). */
+for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
+  for (const [idioma, locale] of [['es', 'es-ES'], ['en', 'en-GB']]) {
+    test.describe(`Términos · su apartado del mercadillo (${donde}, ${locale})`, () => {
+      test.use({ locale, viewport: { width: 375, height: 647 }, ...(ios ? { userAgent: UA_APP } : {}) })
+      test('/terminos#mercadillo deja «Mercadillo de repartidores» dentro de la pantalla (375 × 647); /terminos, arriba como siempre', async ({ page }) => {
+        const fallos = vigilar(page)
+        await simularApi(page, 'vacio')
+        await arrancar(page, { ios })
+        await page.goto('/terminos#mercadillo', { waitUntil: 'domcontentloaded' })
+        await expect(page.getByRole('heading', { level: 1 })).toHaveText(idioma === 'es' ? 'Términos y Condiciones de Uso' : 'Terms and Conditions of Use')
+        await enSuApartado(page, `/terminos#mercadillo (${donde}, ${locale})`)
+        await expect(apartadoDelMercadillo(page)).toHaveText(new RegExp(idioma === 'es' ? 'Mercadillo de repartidores$' : 'Couriers’ marketplace$'))
+        await expect(page.getByText(idioma === 'es' ? 'Última actualización: 2026-11-10' : 'Last updated: 2026-11-10', { exact: true })).toHaveCount(1)
+        if (ios) {
+          await quieta(page, 400)
+          await limpia(page, `/terminos#mercadillo en el iPhone (${locale})`, { idioma, perfil: 'basico' })
+        }
+        // Y quieta: se desplaza al llegar, no cada vez que se pinta. Tras subir a mano, la página no vuelve sola al apartado.
+        await page.evaluate(() => document.fonts.ready)
+        await page.evaluate(() => window.scrollTo(0, 0))
+        await quieta(page, 500)
+        expect(await page.evaluate(() => window.scrollY), 'tras subir a mano, la página no vuelve sola al apartado').toBe(0)
+
+        // El control: sin apartado en la dirección, la página se abre arriba y no se mueve.
+        await page.goto('/terminos', { waitUntil: 'domcontentloaded' })
+        await expect(page.getByRole('heading', { level: 1 })).toBeInViewport({ ratio: 1 })
+        await page.evaluate(() => document.fonts.ready)
+        await quieta(page, 500)
+        expect(await page.evaluate(() => window.scrollY), '/terminos sin apartado: arriba').toBe(0)
+        await expect(apartadoDelMercadillo(page)).not.toBeInViewport()
+        expect(fallos).toEqual([])
+      })
+    })
+  }
 }
 
 /* ── `normas_ok === false`, ESTRICTO ─────────────────────────────────────────────────────────────────────────────────────────

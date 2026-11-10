@@ -9,7 +9,7 @@ export default function Terminos() {
   // Fuera de España (30-10-2026): la traducción de cortesía al inglés; el español es la versión que vale.
   if (legalEnIngles()) return <TermsEn />
   return (
-    <LegalLayout title="Términos y Condiciones de Uso">
+    <LegalLayout title="Términos y Condiciones de Uso" lastUpdate="2026-11-10">
       <p>Al registrarte o usar {COMPANY.brand} (en adelante, "el Servicio"), aceptas estas condiciones. Si no estás de acuerdo, no uses el Servicio.</p>
 
       <h2>1. Quiénes somos</h2>

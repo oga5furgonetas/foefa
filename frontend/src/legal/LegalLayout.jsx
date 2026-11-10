@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Zap } from 'lucide-react'
 import { COMPANY } from './config'
@@ -17,6 +18,23 @@ export const legalEnIngles = () => idioma() !== 'es'
 export default function LegalLayout({ title, lastUpdate, children }) {
   useIdioma()
   const en = legalEnIngles()
+  /* QUIEN LLEGA CON UN APARTADO EN LA DIRECCIÓN LLEGA A ESE APARTADO (10-11-2026). Las normas del mercadillo enlazan a
+     /terminos#mercadillo, y la página se abría arriba: una página de React no se desplaza sola al `#…`, porque cuando el
+     navegador lo busca el texto aún no está pintado. Se lleva al montarse y, una vez más, cuando la letra ha cargado (que es la
+     que decide dónde cae cada línea). El hueco de arriba cuenta con la barra de estado del iPhone, que va encima de la web.
+     Sin apartado en la dirección no se toca nada: la página se abre arriba, como siempre. */
+  useEffect(() => {
+    let id = ''
+    try { id = decodeURIComponent((window.location.hash || '').slice(1)) } catch { id = '' }
+    const el = id && document.getElementById(id)
+    if (!el) return undefined
+    let vivo = true
+    const ir = () => { if (vivo) el.scrollIntoView() }
+    el.style.scrollMarginTop = 'calc(env(safe-area-inset-top, 0px) + 1rem)'
+    ir()
+    document.fonts?.ready?.then(ir).catch(() => {})
+    return () => { vivo = false }
+  }, [])
   return (
     <div className="min-h-screen bg-dark-950 text-dark-50">
       <nav className="border-b border-dark-800">

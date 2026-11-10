@@ -6,7 +6,7 @@ import { sinPagos } from '../../lib/plataforma'
    the version that applies. Keep both in step. */
 export default function TermsEn() {
   return (
-    <LegalLayout title="Terms and Conditions of Use">
+    <LegalLayout title="Terms and Conditions of Use" lastUpdate="2026-11-10">
       <p>By registering for or using {COMPANY.brand} (hereinafter, “the Service”), you accept these terms. If you do not agree, do not use the Service.</p>
 
       <h2>1. Who we are</h2>

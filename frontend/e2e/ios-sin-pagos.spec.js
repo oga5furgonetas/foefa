@@ -798,14 +798,18 @@ const RESTOS_LEGALES = [
 const SIGUE_EN_EL_IPHONE = {
   /* 10-11-2026 (Apple, guideline 1.2): lo nuevo del mercadillo se lee también dentro del iPhone, en español y en inglés. En los
      términos: las normas se aceptan al entrar, el filtro automático de palabras y qué se le dice a quien se queda sin acceso.
-     En la privacidad: cuándo se aceptaron las normas y, si se quita el acceso, el motivo y la fecha. */
+     En la privacidad: cuándo se aceptaron las normas y, si se quita el acceso, el motivo y la fecha.
+     10-11-2026 (tercera tanda): la fecha de «Última actualización» de los términos (han cambiado hoy, como la privacidad) y, en la
+     privacidad, que en el registro de auditoría queda que se tomó la decisión de quitar el acceso y cuándo. */
   '/terminos': [/tienes que aceptar sus normas la primera vez que entras|you must accept its rules the first time you enter/,
     /un filtro automático de palabras no deja enviar anuncios ni mensajes con insultos o amenazas|an automatic word filter stops listings and messages containing insults or threats from being sent/,
-    /Le decimos el motivo, y puede pedir que lo revisemos escribiendo a|We tell them the reason, and they can ask us to review it by writing to/],
+    /Le decimos el motivo, y puede pedir que lo revisemos escribiendo a|We tell them the reason, and they can ask us to review it by writing to/,
+    /Última actualización: 2026-11-10|Last updated: 2026-11-10/],
   '/privacidad': [/Cloudflare, Inc\./, /OpenStreetMap Foundation/, /komoot GmbH/, /Google \(Gemini \/ Vertex AI\)/, /Mercadillo|Marketplace/,
     /cuándo aceptaste las normas del mercadillo y qué versión|when you accepted the marketplace rules and which version/,
     /guardamos el motivo que te damos y la fecha|we store the reason we give you and the date/,
-    /se guardan hasta que se te devuelve o hasta la baja de tu cuenta|are kept until it is given back or until your account is deleted/],
+    /se guardan hasta que se te devuelve o hasta la baja de tu cuenta\. En el registro de auditoría queda apuntado, además, que se tomó esa decisión y cuándo\.|are kept until it is given back or until your account is deleted\. The audit log also records that the decision was taken and when\./,
+    /Última actualización: 2026-11-10|Last updated: 2026-11-10/],
   '/seguridad': [/Cloudflare, Inc\./, /OpenStreetMap Foundation/, /komoot GmbH/],
   '/encargo': [/Cloudflare, Inc\./, /OpenStreetMap Foundation/, /komoot GmbH/],
 }
@@ -825,6 +829,9 @@ const EN_LA_WEB = [
     [ruta, [/Están en la UE salvo Google \(adherida al DPF\), la OpenStreetMap Foundation/, /They are in the EU except Google \(certified under the DPF\), the OpenStreetMap Foundation/]],
   ]),
   ['/privacidad', [/Datos fiscales: 6 años \(art\. 30 Código de Comercio\)\. Los pagos de «Invita y gana»/, /Tax data: 6 years \(art\. 30 of the Spanish Commercial Code\)\. “Invite and earn” payouts/]],
+  // 10-11-2026 (tercera tanda): lo que dicen igual la web y el iPhone, también en la web: la fecha de los términos y la frase del registro de auditoría.
+  ['/terminos', [/Última actualización: 2026-11-10/, /Last updated: 2026-11-10/]],
+  ['/privacidad', [/En el registro de auditoría queda apuntado, además, que se tomó esa decisión y cuándo\./, /The audit log also records that the decision was taken and when\./]],
 ]
 for (const [idioma, locale] of [['es', 'es-ES'], ['en', 'en-GB']]) {
   test.describe(`iPhone · los textos legales (${locale})`, () => {

@@ -15,7 +15,9 @@ import { sinPagos } from '../lib/plataforma'
    10-11-2026: bloquear a una persona en el mercadillo (§2, §3 y §4: a quién bloqueas y cuándo, quién lo ve y cuándo se
    borra); y dentro de la app de iPhone no sale «Datos fiscales: 6 años» (§4): allí no se cobra ni se factura nada.
    10-11-2026 (ampliación): cuándo aceptaste las normas del mercadillo; si se te quita el acceso, el motivo y la fecha (solo
-   lo ve quien modera, hasta que se devuelve o hasta la baja); y el filtro automático de palabras (§2, §3 y §4). */
+   lo ve quien modera, hasta que se devuelve o hasta la baja); y el filtro automático de palabras (§2, §3 y §4).
+   10-11-2026 (tercera tanda): en el registro de auditoría queda, además, que se tomó la decisión de quitar el acceso y cuándo
+   (§4). Qué apunta ese registro de cada decisión lo pone el servidor (`mercadillo_expulsar` y `mercadillo_readmitir`). */
 export default function Privacidad() {
   useIdioma()
   // Fuera de España (30-10-2026): la traducción de cortesía al inglés; el español es la versión que vale.
@@ -65,7 +67,7 @@ export default function Privacidad() {
         <li>Datos de cuenta: durante la vigencia del contrato y hasta 1 año tras la baja, para responder reclamaciones.</li>
         <li>Inspecciones y fotos: durante la vigencia del contrato; el cliente puede solicitar su eliminación en cualquier momento.</li>
         <li>Reparto: los datos personales de cada pedido se borran solos a los días que fije la empresa (por defecto 30, máximo 90); los recorridos de ubicación, a los 30 días; los enlaces de seguimiento que recibe el cliente dejan de funcionar al día siguiente del reparto y no muestran datos personales.</li>
-        <li>Mercadillo: los anuncios y sus fotos se borran solos 60 días después de acabar (vendido, caducado, quitado o retirado); las conversaciones, 6 meses después del último mensaje; los avisos y las denuncias ya resueltas, a los 6 meses. Las fotos que no llegan a publicarse, a los 2 días. Los bloqueos se borran cuando desbloqueas a la persona o cuando pides la baja de tu cuenta. Cuándo aceptaste las normas se guarda hasta la baja de tu cuenta. Si se te quita el acceso al mercadillo, el motivo y la fecha se guardan hasta que se te devuelve o hasta la baja de tu cuenta.</li>
+        <li>Mercadillo: los anuncios y sus fotos se borran solos 60 días después de acabar (vendido, caducado, quitado o retirado); las conversaciones, 6 meses después del último mensaje; los avisos y las denuncias ya resueltas, a los 6 meses. Las fotos que no llegan a publicarse, a los 2 días. Los bloqueos se borran cuando desbloqueas a la persona o cuando pides la baja de tu cuenta. Cuándo aceptaste las normas se guarda hasta la baja de tu cuenta. Si se te quita el acceso al mercadillo, el motivo y la fecha se guardan hasta que se te devuelve o hasta la baja de tu cuenta. En el registro de auditoría queda apuntado, además, que se tomó esa decisión y cuándo.</li>
         {/* En la app de iPhone (10-11-2026) no sale: allí no se cobra ni se factura nada (docs/APP_STORE.md). La web, igual. */}
         {!sinPagos() && <li>Datos fiscales: 6 años (art. 30 Código de Comercio). Los pagos de «Invita y gana» (titular, importe y cuenta o Bizum) se guardan ese mismo plazo.</li>}
         <li>Datos de candidaturas: hasta 12 meses. La elección sobre novedades se conserva junto con la candidatura durante ese plazo o hasta que se retire el consentimiento y se solicite la supresión cuando proceda.</li>
