@@ -875,59 +875,73 @@ reparte); `Registro.jsx` (en el iPhone el alta es siempre la de quien reparte); 
 (`/auth/driver-account/{id}`, lo que usa Panel → Conductores); la frase entre `<…>` (`_merc_baja`, que llama
 `borrar_cuenta`), con el plan B fusionado.
 
-### Las notas de revisión con el bloqueo (el punto 6 nuevo)
+### Las notas de revisión con el plan B (el punto 6 nuevo)
 Las notas que tiene Apple desde el 09-11 dicen en su punto 6 que el mercadillo tiene revisión previa, «Denunciar», ocultación
-con 3 avisos, mensajes privados, términos y contacto; de bloquear no pueden decir nada. Estas son las notas enteras para
-cuando el bloqueo esté en la app (con el plan B fusionado). **El párrafo nuevo es el punto 6**; lo demás que cambia está en
-la lista de debajo. `BUILD_N` es la marca del número de build.
+con 3 avisos, mensajes privados, términos y contacto; de aceptar las normas, del filtro, de bloquear y de quitar el acceso no
+pueden decir nada. Estas son las notas enteras para cuando todo eso esté en la app (con el plan B fusionado). **Lo nuevo es
+el punto 6**, que sigue la lista de Apple; lo demás que cambia está en la lista de debajo. `BUILD_N` es la marca del número
+de build.
 
 ```
 FDS – information for App Review (build BUILD_N).
 
-0. CHANGES IN THIS BUILD (Guideline 1.2): users can block other users in the marketplace, and its rules and the Terms now state zero tolerance for objectionable content and a 24-hour review of reports (point 6). Unchanged: the iOS app has no in-app purchases; it sells nothing, shows no plans or subscription prices and redeems no codes.
+0. CHANGES SINCE THE LAST REVIEW (Guideline 1.2), in the marketplace: rules to accept on first entry, an automatic word filter, user blocking, and removal of an offender's access (point 6). Unchanged: the iOS app has no in-app purchases; it sells nothing, shows no plans or subscription prices and redeems no codes.
 
-1. SCREEN RECORDING: attached (FDS-iPhone-demo.mp4, 2 min 37 s, no audio), captured on a physical iPhone with an earlier build (16) from TestFlight; its Account and registration screens (parts 4 and 5) are simpler now and show no plan, price, code or bonus. English captions: (1) launch and log in; (2) scanning two parcel labels with the camera and reading a photographed label to add each stop; (3) proof of delivery with signature and photo, and a stop marked as not delivered; (4) account deletion; (5) registration. Route ordering and the marketplace are not in it: see points 3 and 6.
+1. SCREEN RECORDING: attached (FDS-iPhone-demo.mp4, 2 min 37 s, no audio), captured on a physical iPhone with an earlier build (16) from TestFlight; its Account and registration screens (parts 4 and 5) are simpler now and show no plan, price, code or bonus. Captions: (1) launch and log in; (2) scanning parcel labels with the camera and reading a photographed label; (3) proof of delivery with signature and photo, and a stop marked as not delivered; (4) account deletion; (5) registration. Route ordering and the marketplace are not in it: see points 3 and 6.
 
 2. PURPOSE AND AUDIENCE: FDS is a delivery-route app for self-employed parcel couriers (and the drivers of small delivery companies) in Spain, Portugal and Latin America. The courier scans the parcel labels with the camera or photographs the paper delivery sheet; the app geocodes the addresses, orders the stops by time windows and driving time, guides stop by stop with voice guidance, records proof of delivery (photo, signature, cash on delivery) and shows the day's earnings.
 
 3. HOW TO ACCESS THE MAIN FEATURES:
-- With the test account entered above (username and password): log in, then on the route screen tap "Ver un ejemplo" (See an example) to load sample stops, scan any parcel label with the camera, or add a stop by hand; order the route; open a stop and mark it delivered with a photo.
-- Registration: the sign-in screen (after Cuenta → "Cerrar sesión") has "¿No tienes cuenta? Crear mi cuenta" ("No account? Create my account"): name, e-mail, password. The test account is enough; a new one is not needed.
+- With the test account entered above: log in, then on the route screen tap "Ver un ejemplo" (See an example) to load sample stops, scan any parcel label with the camera, or add a stop by hand; order the route; open a stop and mark it delivered with a photo.
+- Registration: the sign-in screen (after Cuenta → "Cerrar sesión") has "¿No tienes cuenta? Crear mi cuenta" ("No account? Create my account"): name, e-mail, password. The test account is enough.
 - Account deletion: Cuenta → "Borrar mi cuenta" (asks for the password; the account is disabled immediately and its data erased within 30 days).
 
 4. EXTERNAL SERVICES: our own API (flota-backend.fly.dev, Fly.io, Paris); OpenStreetMap, Photon, Nominatim and CartoCiudad (geocoding, map tiles); OSRM (driving times); barcode reading and OCR run on the device; Google Gemini on our server reads photographed delivery sheets. No advertising SDKs, tracking pixels or third-party analytics in the iOS app.
 
 5. REGIONAL DIFFERENCES: none (only the earnings currency and the road-works feed, Spain: DGT, follow the route's country).
 
-6. USER-GENERATED CONTENT (Guideline 1.2): the only user-generated content is the optional "Mercadillo de repartidores" card in the Account tab (in Spanish): classified ads between couriers for second-hand goods and van equipment (physical items; the app handles no payment for them) and private one-to-one text messages about each ad. Precautions:
-- Terms: accepted at registration (by the courier, or by the company for its drivers); they and the rules ("Normas y seguridad") state zero tolerance for objectionable content and abusive users.
-- Filter: we review every ad (text and photos) before it is published; an ad reported by 3 people is hidden until we review it.
-- Report: flag button ("Denunciar") on every ad and conversation; we answer the reporter.
-- Block: open an ad → "Bloquear a …" on the seller card (also in every conversation): that user's ads and conversations leave the blocker's marketplace at once, neither can message the other, and it is reported to us. Undo: Mensajes → "Personas bloqueadas".
-- We review reports within 24 hours and remove the content and the offender's access.
+6. USER-GENERATED CONTENT (Guideline 1.2): only the optional "Mercadillo de repartidores" card in the Account tab (in Spanish): classified ads between couriers for second-hand goods and van equipment (physical items; the app handles no payment for them) and private one-to-one text messages about each ad. Precautions:
+- Rules: shown on first entry; the user must tap "Acepto las normas" (I accept the rules) to go on. They and the Terms state zero tolerance for objectionable content and abusive users.
+- Filter: a person reviews every ad before it is published; a basic automatic word filter rejects ads and messages with insults or threats; an ad reported by 3 people is hidden until we review it.
+- Report: "Denunciar" (Report) on every ad and conversation; we answer the reporter.
+- Block: open an ad → "Bloquear a …" (Block) on the seller card, also in every conversation → "Bloquear": that user's ads and conversations leave the blocker's marketplace at once, neither can message the other, and the block is recorded in our moderation panel. Undo: Mensajes → "Personas bloqueadas".
+- A person reviews reports within 24 hours; objectionable content is removed and the offending account loses access to the marketplace.
 - Contact: contacto@flotadsp.com (Account tab, Terms).
 No other public content: a courier's stops are visible only to that courier (and to their own company for company drivers). Not a regulated industry.
 ```
 
 El mismo texto está en `C:/Users/dlvie/AppData/Local/Temp/claude/34f2eefc27d3445b/9022e766-4683-4c72-a196-f839ddac5172/scratchpad/notas-revision-planb.txt`
 (junto a `notas-revision-nuevas.txt`, las actuales, que no se han tocado). Esa carpeta es de la sesión del 10-11 y puede no
-durar: lo que vale es el bloque de arriba, que sirve tal cual para `asc_notas_poner.py` (paso 7) guardado en un fichero UTF-8.
+durar: lo que vale es el bloque de arriba, que sirve tal cual para `asc_notas_poner.py` (paso 8) guardado en un fichero UTF-8.
+
+Lo que el punto 6 dice, y lo que no dice a propósito:
+- «a basic automatic word filter»: es una lista de palabras. No dice que lo detecte todo.
+- «the block is recorded in our moderation panel»: es lo que pasa siempre. El aviso al móvil de Dani depende de que tenga
+  puestos los avisos, y por eso no se promete.
+- «the offending account loses access»: una cuenta, no una persona.
+- «A person reviews reports within 24 hours»: es el compromiso de Dani (Pendiente de Dani, 1). Sin su «sí», estas notas no
+  se mandan.
+- No dice nada de «Avisarme en el móvil» ni del panel de moderación por dentro: el revisor no los ve en la app.
 
 Lo que cambia respecto a las actuales, además del punto 6:
 - La cabecera pierde la fecha y el resumen en español (hacía falta el sitio; el número de build ya dice de cuándo son).
-- El punto 0 pasa a contar lo nuevo de este build (bloqueo, tolerancia cero y 24 horas) y deja en una frase lo de los pagos:
-  «the iOS app has no in-app purchases; it sells nothing, shows no plans or subscription prices and redeems no codes». Está
-  escrito para un rechazo por la regla 1.2: **si el rechazo es por otra, el punto 0 se reescribe** para esa regla.
+- El punto 0 pasa a contar lo nuevo desde la última revisión (las normas que se aceptan, el filtro, el bloqueo y quitar el
+  acceso) y deja en una frase lo de los pagos: «the iOS app has no in-app purchases; it sells nothing, shows no plans or
+  subscription prices and redeems no codes». Está escrito para un rechazo por la regla 1.2: **si el rechazo es por otra, el
+  punto 0 se reescribe** para esa regla.
 - Ya no dice «nothing is sold, unlocked or redeemed inside the iOS app». «Unlocked» era verdad el 09-11 y lo sigue siendo hoy
   (nadie tiene tope), pero dejará de ser exacto el 01-01-2027: quien pague el plan fuera no tendrá tope tampoco en el iPhone
   (Pendiente de Dani, 2).
-- El punto 1 dice que el mercadillo no sale en el vídeo y manda al punto 6.
+- El punto 1 dice que el mercadillo no sale en el vídeo y manda al punto 6. Para hacer sitio dice «Captions» (antes «English
+  captions») y «scanning parcel labels with the camera and reading a photographed label» (antes «two parcel labels» y «to
+  add each stop»).
 - El punto 2 dice «with voice guidance» (como la ficha de la tienda) en vez de «hands-free voice»: el manos libres por voz no
   está comprobado en el iPhone.
-- El punto 3 pierde la línea de «no hay compras» (ahora está en el punto 0). Los puntos 4 y 5 no cambian.
+- El punto 3 pierde la línea de «no hay compras» (ahora está en el punto 0) y, para hacer sitio, «(username and password)» y
+  «a new one is not needed». Los puntos 4 y 5 no cambian.
 
 **La cuenta de caracteres**, como la hace `asc_notas_poner.py` (`strip()` y `BUILD_N` por el número de build). Esta orden da
-los caracteres y los bytes; el 10-11 dio `3935 3949`:
+los caracteres y los bytes; el 10-11 dio `3954 3970`:
 
 ```
 python -I -X utf8 -c "import sys; t=open(sys.argv[1],encoding='utf-8').read().strip().replace('BUILD_N',sys.argv[2]); print(len(t), len(t.encode('utf-8')))" notas-revision-planb.txt 21
@@ -935,11 +949,11 @@ python -I -X utf8 -c "import sys; t=open(sys.argv[1],encoding='utf-8').read().st
 
 | Fichero | Build | Caracteres | Bytes UTF-8 | Margen hasta 4.000 |
 | --- | --- | --- | --- | --- |
-| `notas-revision-planb.txt` (la propuesta) | 21 | 3.935 | 3.949 | 65 caracteres |
-| `notas-revision-planb.txt` | 9999 | 3.937 | 3.951 | 63 caracteres |
+| `notas-revision-planb.txt` (la propuesta) | 21 | 3.954 | 3.970 | 46 caracteres |
+| `notas-revision-planb.txt` | 9999 | 3.956 | 3.972 | 44 caracteres |
 | `notas-revision-nuevas.txt` (las actuales) | 20 | 3.911 | 3.923 | 89 caracteres |
 
-Quedan 63 caracteres libres: cualquier frase que se añada obliga a quitar otra. `asc_notas_poner.py` se niega a
+Quedan 44 caracteres libres: cualquier frase que se añada obliga a quitar otra. `asc_notas_poner.py` se niega a
 escribir si se pasan de 4.000.
 
 ### Pendiente de Dani (de este plan B)
