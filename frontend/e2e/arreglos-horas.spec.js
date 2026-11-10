@@ -1,0 +1,171 @@
+/* global Buffer */
+import { test, expect } from '@playwright/test'
+import { simularApi, entrarComoAdmin } from './api-simulada.js'
+
+/* ARREGLOS DE HORAS Y DE LA SUBIDA DE LA DNR (10-11-2026), de
+   docs/REVISION-FLOTA-PROPIA-10-11.md: horas_dnr-1, -2, -3 y el «de paso» de la DNR. */
+
+const json = (body) => (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+
+const conductor = (nombre, trabajado, extra) => ({
+  nombre, trabajado, planificado: 0, bloques: [], dias_trabajados: 5, margen_semanal: 3270 - trabajado,
+  supera_semanal: false, pasara_hoy: false, cerrado: trabajado, al_limite: false, trabajando_ahora: false,
+  riesgo_diario: [], bloques_pasados: [], incumple_propio: false, cuadra: true, trabajado_origen: 'portal', ...extra,
+})
+
+const ANALISIS = (extra) => ({
+  centro: 'NORTE', semana_del_plan: '2026-11-08', guardado: true, aviso_guardado: null, otra_nave: null,
+  pegado_en: new Date().toISOString(), pegado_hoy: true,
+  whc: { conductores_con_actividad: 2, excepciones: null, excepciones_conocidas: false, porcentaje: null,
+    tier: null, coste_por_excepcion: 50 },
+  whc_propio: { conductores: 2, incumplen: 0, por_semanal: 0, por_bloque: 0, porcentaje: 100,
+    limite_semanal_min: 3270, limite_bloque_min: 660, quien: [] },
+  ritmo: { dia_semana: 3, dia_leido_del_plan: true, bloques_ref: 3, horas_ref_min: 1620, pasados: 0, peligro: 1,
+    justos: 0, en_ruta_ahora: 1, avisos: [
+      { nombre: 'ANA PÉREZ', trabajado: 3300, estado: 'peligro', exceso: 300, proyeccion: 3300,
+        proyeccion_pasa: true, bloques: 6, bloques_leidos: 6, bloques_hechos: 6, bloques_restantes: 0, trabajando_ahora: true },
+    ] },
+  conductores: [
+    conductor('ANA PÉREZ', 3300, { pasara_hoy: true, cerrado: 2800, trabajando_ahora: true }),
+    conductor('SARA VIDAL', 1620, {}),
+  ],
+  resumen: { total: 2, superan: 0, pasaran_hoy: 1, bloque_pasado: 0, incumplen_propio: 0, al_limite: 0,
+    con_riesgo_diario: 0, no_cuadran: 0 },
+  aviso_diario: 'Los bloques largos son un aviso de riesgo, no un incumplimiento.',
+  ...extra,
+})
+
+const ESTADO = { semana_en_curso: '2026-11-08', faltan: [], como_se_arregla: '',
+  naves: [{ centro: 'NORTE', semana: '2026-11-08', al_dia: true, conductores: 2, semanas_atras: 0 }] }
+const TEXTO = 'ANA PÉREZ\n55h 00m / 60h\n'.repeat(4)
+
+test.describe('Horas · arreglos del 10-11-2026', () => {
+  test('al abrir, el plan guardado se analiza sin guardar y dice cuándo se pegó', async ({ page }) => {
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const hace2 = new Date(Date.now() - 2 * 86400000)
+    hace2.setHours(9, 0, 0, 0)
+    const pegado = hace2.toISOString()
+    const cuerpos = []
+    await page.route(/\/api\/whc\/estado/, json(ESTADO))
+    await page.route(/\/api\/whc\/plan/, json({ hay: true, semana: '2026-11-08', week: '2026-11-08', texto: TEXTO,
+      excepciones: null, pegado_en: pegado, updated_at: pegado }))
+    await page.route(/\/api\/whc\/analizar/, (route) => {
+      cuerpos.push(route.request().postDataJSON())
+      // Como el servidor: con guardar=false no guarda y el plan no es de hoy.
+      return json(ANALISIS({ guardado: false, pegado_en: pegado, pegado_hoy: false }))(route)
+    })
+    await page.goto('/panel/horas', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText(/Cómo vamos · NORTE/)).toBeVisible({ timeout: 15000 })
+    expect(cuerpos).toHaveLength(1)
+    expect(cuerpos[0].guardar).toBe(false)
+    await expect(page.getByText(/Pegado el \S+ a las 9:00 \(hace 2 días\)/)).toBeVisible()
+    // Lo de «hoy» y «ahora» no se presenta como de hoy.
+    await expect(page.getByText('Se pasa hoy si acaba', { exact: true })).toHaveCount(0)
+    await expect(page.getByText(/Se pasaba si acababa \(/)).toBeVisible()
+    await expect(page.getByText('A quién mirar hoy')).toHaveCount(0)
+    await expect(page.locator('span[title="En ruta ahora"]')).toHaveCount(0)
+    // Y no es un pegado que se haya quedado sin guardar.
+    await expect(page.getByText(/Analizado pero/)).toHaveCount(0)
+  })
+
+  test('el plan de otra nave no se guarda en la elegida y se puede mandar a la suya', async ({ page }) => {
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const centros = []
+    await page.route(/\/api\/whc\/estado/, json(ESTADO))
+    await page.route(/\/api\/whc\/plan/, json({ hay: false, semana: '2026-11-08' }))
+    await page.route(/\/api\/whc\/analizar/, (route) => {
+      const b = route.request().postDataJSON()
+      centros.push(b.center)
+      if (b.center === 'SUR') return json(ANALISIS({ centro: 'SUR' }))(route)
+      return json(ANALISIS({ guardado: false, otra_nave: { centro: 'SUR', por: 'cabecera' },
+        aviso_guardado: 'Este plan es de SUR y tienes elegida NORTE, así que no se ha guardado.' }))(route)
+    })
+    await page.goto('/panel/horas', { waitUntil: 'domcontentloaded' })
+    await page.locator('#horas-plan').fill(TEXTO)
+    await page.getByRole('button', { name: 'Ver cómo vamos' }).click()
+    await expect(page.getByText('Este plan es de SUR y tienes elegida NORTE.')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('No se ha guardado este pegado.')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Guardarlo en SUR' }).click()
+    await expect(page.getByText(/Guardado en SUR/)).toBeVisible()
+    expect(centros).toEqual(['NORTE', 'SUR'])
+  })
+
+  test('al cambiar de nave se vacía la casilla de excepciones', async ({ page }) => {
+    await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/whc\/estado/, json(ESTADO))
+    await page.route(/\/api\/whc\/plan/, (route) => {
+      const nave = new URL(route.request().url()).searchParams.get('center')
+      return json(nave === 'NORTE'
+        ? { hay: true, semana: '2026-11-08', texto: TEXTO, excepciones: 2, updated_at: new Date().toISOString() }
+        : { hay: false, semana: '2026-11-08' })(route)
+    })
+    await page.route(/\/api\/whc\/analizar/, json(ANALISIS({ guardado: false })))
+    await page.goto('/panel/horas', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('#horas-excepciones')).toHaveValue('2', { timeout: 15000 })
+    await page.getByRole('button', { name: 'SUR', exact: true }).click()
+    await expect(page.locator('#horas-plan')).toBeVisible()
+    await expect(page.locator('#horas-excepciones')).toHaveValue('')
+  })
+
+  test('un plan de otra semana lo dice, y «Borrar» borra esa semana', async ({ page }) => {
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const borrados = []
+    await page.route(/\/api\/whc\/estado/, json(ESTADO))
+    await page.route(/\/api\/whc\/plan/, (route) => {
+      if (route.request().method() === 'DELETE') {
+        borrados.push(new URL(route.request().url()).searchParams.get('week'))
+        return json({ ok: true, borrados: 1, semana: '2026-11-01' })(route)
+      }
+      return json({ hay: true, semana: '2026-11-08', texto: TEXTO, excepciones: null,
+        updated_at: new Date().toISOString() })(route)
+    })
+    await page.route(/\/api\/whc\/analizar/, json(ANALISIS({ guardado: false, semana_del_plan: '2026-11-01' })))
+    await page.goto('/panel/horas', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Este plan es de la semana del 01/11, no de esta.')).toBeVisible({ timeout: 15000 })
+    let pregunta = ''
+    page.once('dialog', (d) => { pregunta = d.message(); d.accept() })
+    await page.getByRole('button', { name: 'Borrar' }).click()
+    await expect(page.locator('#horas-plan')).toBeVisible()
+    expect(pregunta).toContain('de la semana del 01/11')
+    expect(borrados).toEqual(['2026-11-01'])
+  })
+
+  test('con el plan de esta semana no sale el aviso de otra semana', async ({ page }) => {
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/whc\/estado/, json(ESTADO))
+    await page.route(/\/api\/whc\/plan/, json({ hay: true, semana: '2026-11-08', texto: TEXTO, excepciones: null,
+      updated_at: new Date().toISOString() }))
+    await page.route(/\/api\/whc\/analizar/, json(ANALISIS({ guardado: false })))
+    await page.goto('/panel/horas', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText(/Cómo vamos · NORTE/)).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText(/no de esta\./)).toHaveCount(0)
+    await expect(page.getByText(/Pegado hoy a las/)).toBeVisible()
+    await expect(page.getByText('Se pasa hoy si acaba', { exact: true })).toBeVisible()
+  })
+})
+
+test.describe('DNR diaria · la previa de la subida', () => {
+  test('avisa de lo que viene sin clasificar con su texto de verdad', async ({ page }) => {
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const AVISO = 'Los 3 DNR del 2026-11-06 vienen sin clasificar (ninguno con DSC = Y). Amazon suele tardar 2-4 días en clasificarlos.'
+    await page.route(/\/api\/diarios\/subir/, json({
+      guardado: false, ficheros: 1, con_error: 0, primer_dia: '2026-11-06', ultimo_dia: '2026-11-06',
+      totales: { reportes: 1, dnr: 3, otras: 0, resumen: 1 },
+      resultados: [{ fichero: 'hoy.html', centro: 'NORTE', fecha_reporte: '2026-11-08', fecha_dnr: '2026-11-06',
+        dnr: 3, rts: 0, pod: 0, cc: 0, conductores: 1, descuadres: 0, sin_clasificar: 3, avisos: [AVISO], guardado: false }],
+    }))
+    await page.goto('/panel/diarios', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('button', { name: 'Subir Daily Report' })).toBeVisible({ timeout: 15000 })
+    await page.locator('input[type=file][accept=".html,.htm"]').setInputFiles({ name: 'hoy.html', mimeType: 'text/html',
+      buffer: Buffer.from('<html><h1>ES TDSL NORTE Daily Report 2026-11-08</h1></html>') })
+    await expect(page.getByText(AVISO)).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('(3 sin clasif.)')).toBeVisible()
+    await expect(page.getByText(/anteriores al 13-05-2026/)).toHaveCount(0)
+  })
+})

@@ -444,7 +444,12 @@ export default function Diarios() {
                       <>
                         <td className="whitespace-nowrap px-2 py-1 tabular-nums text-dark-300">{r.fecha_reporte}</td>
                         <td className="whitespace-nowrap px-2 py-1 tabular-nums text-dark-400">{r.fecha_dnr}</td>
-                        <td className="px-2 py-1 text-right tabular-nums text-dark-200">{r.dnr}</td>
+                        <td className="px-2 py-1 text-right tabular-nums text-dark-200">
+                          {r.dnr}
+                          {r.sin_clasificar > 0 && (
+                            <span className="ml-1 text-[10.5px] text-amber-300">({r.sin_clasificar} sin clasif.)</span>
+                          )}
+                        </td>
                         <td className="px-2 py-1 text-right tabular-nums text-dark-500">{r.rts}</td>
                         <td className="px-2 py-1 text-right tabular-nums text-dark-500">{r.pod}</td>
                         <td className="px-2 py-1 text-right tabular-nums text-dark-500">{r.cc}</td>
@@ -461,17 +466,32 @@ export default function Diarios() {
             </table>
           </div>
 
-          {/* Los avisos de los reportes viejos, agrupados: uno por fichero
-              llenaría la pantalla y dicen todos lo mismo. */}
+          {/* LOS AVISOS, CON SU TEXTO DE VERDAD (10-11-2026). Antes cualquier aviso
+              salía como «anteriores al 13-05-2026», y el de un reporte recién bajado
+              que viene sin clasificar (hay que volver a subirlo) ni llegaba. Se
+              enseñan los dos primeros y el resto, plegados: con 92 reportes viejos
+              llenarían la pantalla. */}
           {(() => {
-            const viejos = (previaSubida.resultados || []).filter((r) => (r.avisos || []).length)
-            return viejos.length ? (
-              <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2 text-[12px] leading-relaxed text-amber-200">
-                {viejos.length} {viejos.length === 1 ? 'reporte es' : 'reportes son'} anteriores al 13-05-2026 y no
-                traen la columna DSC. Sus DNR se guardan <b>sin clasificar</b>: existen, pero no se
-                puede saber cuáles puntúan. No cuentan como defectos.
+            const avisos = (previaSubida.resultados || []).flatMap((r) =>
+              (r.avisos || []).map((a) => ({ fichero: r.fichero, fecha: r.fecha_reporte, texto: a })))
+            if (!avisos.length) return null
+            const caja = 'mt-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2 text-[12px] leading-relaxed text-amber-200'
+            const uno = (a, i) => (
+              <p key={`${a.fichero}-${i}`} className={caja}>
+                <b>{a.fecha || a.fichero}:</b> {a.texto}
               </p>
-            ) : null
+            )
+            return (
+              <>
+                {avisos.slice(0, 2).map(uno)}
+                {avisos.length > 2 && (
+                  <details className="mt-2 text-[12px] text-amber-200/90">
+                    <summary className="cursor-pointer">Ver {avisos.length - 2} avisos más</summary>
+                    {avisos.slice(2).map((a, i) => uno(a, i + 2))}
+                  </details>
+                )}
+              </>
+            )
           })()}
 
           <button onClick={confirmarSubida} disabled={subiendo || !previaSubida.totales?.reportes}
