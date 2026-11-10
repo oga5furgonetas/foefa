@@ -48,8 +48,9 @@ const SIN_ACEPTAR = 'Tienes que aceptar las normas para usar el mercadillo'
 /** El mercadillo del servidor, simulado y CON MEMORIA. `normas`: lo que vale `normas_ok` (sin decirlo, el campo NO viene, como en
  *  un servidor de antes); `normasEn`: en qué respuesta viene ('las dos', 'estado' o 'lista'); `expulsado`: el texto de quien se
  *  ha quedado sin acceso (entonces todo contesta 403 con él, salvo /estado). Se pueden cambiar a mitad de la prueba (`s.…`).
- *  `demora`: lo que tardan en contestar el estado y la lista (ms), para ver qué se pinta mientras tanto. */
-async function mercadillo(page, { normas, normasEn = 'las dos', expulsado = '', errorNormas = null, demora = 0 } = {}) {
+ *  `demora`: lo que tardan en contestar el estado y la lista (ms), para ver qué se pinta mientras tanto.
+ *  `estadoCae` y `listaCae`: /mercadillo/estado o la lista NO llegan: un código de error (500…) o 'red' (se corta la conexión). */
+async function mercadillo(page, { normas, normasEn = 'las dos', expulsado = '', errorNormas = null, demora = 0, estadoCae = null, listaCae = null } = {}) {
   const s = { normas, expulsado, llamadas: [], aceptado: null, pedidas: [] }
   const campo = (donde) => (s.normas === undefined || (normasEn !== 'las dos' && normasEn !== donde) ? {} : { normas_ok: s.normas })
   await page.route(/\/api\/mercadillo(?:\/[^?]*)?(?:\?.*)?$/, async (x) => {
@@ -57,13 +58,17 @@ async function mercadillo(page, { normas, normasEn = 'las dos', expulsado = '', 
     const metodo = pet.method()
     const ruta = new URL(pet.url()).pathname.replace(/^.*\/api\/mercadillo/, '')
     const json = (j, status = 200) => x.fulfill({ status, json: j })
+    // Lo que no llega: sin red, o con el error de un servidor caído (que no trae ningún `detail` del mercadillo).
+    const caida = (como) => (como === 'red' ? x.abort('connectionfailed') : x.fulfill({ status: como, contentType: 'text/plain', body: 'Internal Server Error' }))
     s.pedidas.push(`${metodo} ${ruta || '/'}`)
     if (demora && (ruta === '/estado' || ruta === '')) await new Promise((r) => setTimeout(r, demora))
     if (ruta === '/estado') {
+      if (estadoCae) return caida(estadoCae)
       return json(s.expulsado
         ? { visible: true, abierto: true, expulsado: true, texto: s.expulsado, sin_leer: 0, yo: YO }
         : { visible: true, abierto: true, sin_leer: 1, yo: YO, avisos_movil: false, ...campo('estado') })
     }
+    if (listaCae && ruta === '' && metodo === 'GET') return caida(listaCae)
     if (s.expulsado) return json({ detail: s.expulsado }, 403)
     if (ruta === '' && metodo === 'GET') return json({ anuncios: [SOPORTE], mios: [], ...LISTAS, activos_max: 3, dias: 30, yo: YO, bloqueados: 0, ...campo('lista') })
     if (ruta === '/normas' && metodo === 'POST') {
@@ -279,6 +284,43 @@ for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
       await expect(cabecera(page, 'Mercadillo')).toBeVisible()
       await expect(vender(page)).toHaveCount(0)
       await expect(anuncio(page)).toHaveCount(0)
+      expect(fallos).toEqual([])
+    })
+
+    /* SI EL ESTADO NO LLEGA Y LA LISTA DICE 403 (10-11-2026, cuarta tanda). Quien no puede pasar se entera por /mercadillo/estado
+       (`expulsado` y su `texto`). Si justo esa petición no llega (se corta la conexión, o un 5xx) y la lista contesta 403, se
+       pintaba la portada entera —«Vender», «Mis anuncios», el buzón, las normas— con el error encima. Ahora sale la pantalla de
+       quien no puede pasar, con lo que diga ese 403. */
+    for (const [como, estadoCae] of [['con un 500', 500], ['sin conexión', 'red']]) {
+      test(`si /mercadillo/estado no llega (${como}) y la lista contesta 403: la pantalla de quien no puede pasar con el texto de ese 403, no la portada`, async ({ page }) => {
+        const fallos = vigilar(page)
+        const TEXTO = sinAcceso('prohibido')
+        const s = await entrar(page, { ios, expulsado: TEXTO, estadoCae })
+        const porque = page.getByRole('alert')
+        await expect(porque).toHaveText(TEXTO)
+        await expect(porque, 'el porqué se dice una vez').toHaveCount(1)
+        await expect(cabecera(page, 'Mercadillo')).toBeVisible()
+        await expect(porque.getByRole('link', { name: CONTACTO })).toHaveAttribute('href', `mailto:${CONTACTO}`)
+        for (const nombre of [/Vender algo que no uses/, /^Mensajes/, 'Mis anuncios', 'Normas y seguridad', /Personas bloqueadas/, 'Acepto las normas', 'Todo']) {
+          await expect(page.getByRole('button', { name: nombre }), `a quien no puede pasar no se le ofrece ${nombre}`).toHaveCount(0)
+        }
+        expect(await page.locator('main').getByRole('button').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label') || b.textContent.trim())),
+          'lo único que se puede pulsar es «Volver»').toEqual(['Volver'])
+        await expect(anuncio(page)).toHaveCount(0)
+        await sinVocabulario(page, 'quien no puede pasar, con el estado sin llegar')
+        expect([...new Set(s.pedidas)].sort(), 'ha pedido el estado (que no ha llegado) y la lista (403)').toEqual(['GET /', 'GET /estado'])
+        expect(fallos).toEqual([])
+      })
+    }
+
+    // El control: lo de arriba es SOLO para el 403. Si lo que falla es otra cosa (todo caído), a nadie se le cierra el mercadillo.
+    test('control · si no llegan ni el estado ni la lista (500 los dos), no es la pantalla de quien no puede pasar: la portada con su aviso, como siempre', async ({ page }) => {
+      const fallos = vigilar(page)
+      await entrar(page, { ios, estadoCae: 500, listaCae: 500 })
+      await expect(page.getByRole('alert')).toHaveText('No se ha podido abrir el mercadillo.')
+      await expect(vender(page)).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Normas y seguridad' })).toBeVisible()
+      await expect(page.getByText(/Te hemos quitado el acceso/)).toHaveCount(0)
       expect(fallos).toEqual([])
     })
 

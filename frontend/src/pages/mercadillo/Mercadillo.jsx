@@ -857,15 +857,21 @@ export default function Mercadillo({ onBack, inicio = 'lista' }) {
   const [cat, setCat] = useState('')
   const [err, setErr] = useState('')
   const [listo, setListo] = useState(false)             // ya ha contestado el servidor (bien o mal) la primera vez
+  const [sinPaso, setSinPaso] = useState('')            // el 403 de la lista cuando el estado no ha llegado a decir por qué
   /* La lista y el estado, cada uno por su lado (10-11-2026): a quien se le ha quitado el acceso, la lista le contesta 403 y
-     el estado le dice por qué (`expulsado` y su `texto`). Con Promise.all, ese 403 se llevaba el estado por delante. */
+     el estado le dice por qué (`expulsado` y su `texto`). Con Promise.all, ese 403 se llevaba el estado por delante.
+     Y SI EL ESTADO NO LLEGA (sin conexión, o un 5xx) Y LA LISTA CONTESTA 403, quien entra tampoco puede pasar: se le dice lo
+     que conteste ese 403 en la pantalla de quien no puede pasar, en vez de pintarle la portada («Vender», el buzón, las
+     normas…) con el error encima. Solo con el 403: si lo que falla es otra cosa, a nadie se le cierra el mercadillo. */
   const recargar = useCallback(async () => {
     const [l, e] = await Promise.allSettled([mercLista(), mercEstado()])
     const est = e.status === 'fulfilled' ? e.value.data : null
     if (est) setEstado(est)
     if (l.status === 'fulfilled') setDatos(l.value.data)
     const fallo = [l, e].find((x) => x.status === 'rejected')
-    setErr(fallo && !est?.expulsado ? texto(fallo.reason, 'No se ha podido abrir el mercadillo.') : '')
+    const prohibido = !est && l.status === 'rejected' && l.reason?.response?.status === 403
+    setSinPaso(prohibido ? texto(l.reason, 'No se ha podido abrir el mercadillo.') : '')
+    setErr(fallo && !est?.expulsado && !prohibido ? texto(fallo.reason, 'No se ha podido abrir el mercadillo.') : '')
     setListo(true)
   }, [])
   // Al entrar (por la pantalla que sea) y al volver a la portada se refresca (un anuncio nuevo, un mensaje leído…).
@@ -894,7 +900,8 @@ export default function Mercadillo({ onBack, inicio = 'lista' }) {
 
   /* ANTES QUE CUALQUIER PANTALLA (10-11-2026), también si se entra directo al buzón:
      · hasta que el servidor contesta la primera vez, solo la cabecera: quien no puede pasar no llega a ver «Vender» ni el buzón;
-     · a quien se le ha quitado el acceso, solo el porqué (`estado.expulsado`);
+     · a quien se le ha quitado el acceso, solo el porqué (`estado.expulsado`; o, si el estado no ha llegado, el 403 de la
+       lista: `sinPaso`);
      · y con `normas_ok === false`, las normas con «Acepto las normas». ESTRICTO: si el campo no viene (un servidor de antes
        de las normas), no hay pantalla y nadie se queda fuera por esto. En las dos, volver es salir del mercadillo. */
   if (!listo) {
@@ -906,6 +913,7 @@ export default function Mercadillo({ onBack, inicio = 'lista' }) {
     )
   }
   if (estado?.expulsado) return <Marco><SinAcceso texto={estado.texto} onBack={onBack} /></Marco>
+  if (sinPaso) return <Marco><SinAcceso texto={sinPaso} onBack={onBack} /></Marco>
   if (estado?.normas_ok === false || datos?.normas_ok === false) return <Marco><Normas onBack={onBack} alAceptar={normasAceptadas} /></Marco>
 
   const comun = { motivos: datos?.motivos_denuncia, puedeBloquear: !modera }
