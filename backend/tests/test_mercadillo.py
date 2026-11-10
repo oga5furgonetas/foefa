@@ -498,6 +498,21 @@ async def _titulos(user) -> set:
     return {a["titulo"] for a in (await server.merc_lista("", user))["anuncios"]}
 
 
+def _solo_lo_pedido(col, monkeypatch) -> list:
+    """Esa colección de mentira, devolviendo en `find_one` SOLO los campos que se le piden, como MongoDB (la base de
+    mentira ignora a propósito las proyecciones de inclusión). Así una lectura que se olvide de pedir el campo del que
+    depende falla aquí, y no en producción. Devuelve dónde queda apuntada cada lectura: (filtro, proyección)."""
+    leidas, buscar = [], col.find_one
+
+    async def find_one(q=None, proyeccion=None, **k):
+        leidas.append((q, proyeccion))
+        d = await buscar(q, proyeccion, **k)
+        pedidos = [c for c, v in (proyeccion or {}).items() if v and c != "_id"]
+        return d if d is None or not pedidos else {c: d[c] for c in pedidos if c in d}
+    monkeypatch.setattr(col, "find_one", find_one)
+    return leidas
+
+
 @pytest.mark.asyncio(loop_scope="session")
 async def test_bloquear_desde_un_anuncio_y_dejan_de_verse_los_dos(mundo):
     await _abrir(mundo)
@@ -2153,6 +2168,68 @@ async def test_las_normas_se_aceptan_una_vez_por_version_y_el_servidor_solo_lo_d
     assert (await server.merc_estado(ANA))["normas_ok"] is True and (de_ana["normas"]["v"], de_ana["push"]) == ("2027-01-15", True)
 
 
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_estado_lee_las_preferencias_una_sola_vez_con_lo_justo_y_por_su_indice(mundo, monkeypatch):
+    """`/mercadillo/estado` lo piden cuatro pantallas de fuera del mercadillo (para el globito) y leía DOS veces
+    `mercadillo_prefs` —los avisos al móvil y las normas—, y sin índice. Ahora es una lectura, con lo justo, de la que
+    salen los dos datos. Ningún resultado cambia."""
+    await _abrir(mundo)
+    prefs = mundo.g["mercadillo_prefs"]
+    leidas, de_otra_forma = _solo_lo_pedido(prefs, monkeypatch), []         # (como MongoDB: vuelve solo lo que se pide)
+    for metodo in ("find", "count_documents", "distinct"):
+        def apuntada(*a, _de_verdad=getattr(prefs, metodo), _metodo=metodo, **k):
+            de_otra_forma.append(_metodo)
+            return _de_verdad(*a, **k)
+        monkeypatch.setattr(prefs, metodo, apuntada)
+    lo_justo = {"_id": 0, "push": 1, "normas": 1}
+    aceptadas, viejas = {"v": mc.NORMAS_VERSION, "ts": "2026-11-10T10:00:00+00:00"}, {"v": "2025-01-01", "ts": "2025-01-01T10:00:00+00:00"}
+    de_ana = {"clave": CLAVES["ana"], "push": True, "normas": aceptadas}     # (las de otra persona no son las suyas)
+    # NINGÚN RESULTADO CAMBIA: lo guardado → (avisos al móvil, normas aceptadas), con UNA lectura cada vez.
+    casos = [(None, False, False), ({}, False, False), ({"push": True}, True, False), ({"push": False}, False, False),
+             ({"normas": aceptadas}, False, True), ({"push": True, "normas": aceptadas}, True, True),
+             ({"push": False, "normas": aceptadas}, False, True), ({"push": True, "normas": viejas}, True, False),
+             ({"push": 1, "normas": mc.NORMAS_VERSION}, True, False), ({"push": None, "normas": {"ts": "2026-11-10T10:00:00+00:00"}}, False, False)]
+    for guardado, avisos, normas in casos:
+        prefs.docs = [dict(de_ana)] + ([{"clave": CLAVES["luis"], "ts": "2026-11-10T09:00:00+00:00", **guardado}] if guardado is not None else [])
+        leidas.clear()
+        estado = await server.merc_estado(LUIS)
+        assert (estado["avisos_movil"], estado["normas_ok"]) == (avisos, normas), guardado
+        assert leidas == [({"clave": CLAVES["luis"]}, lo_justo)] and de_otra_forma == [], guardado
+    assert estado == {"visible": True, "abierto": True, "sin_leer": 0, "bloqueados": 0, "normas_ok": False,
+                      "yo": {"nombre": "Luis G.", "tipo": "conductor"}, "avisos_movil": False}
+    # A quien modera no se le piden las normas; sus avisos al móvil salen de esa misma (y única) lectura.
+    for guardado, avisos in ((None, False), ({"push": True}, True), ({"push": False, "normas": viejas}, False)):
+        prefs.docs = [dict(de_ana)] + ([{"clave": "fds", **guardado}] if guardado is not None else [])
+        leidas.clear()
+        estado = await server.merc_estado(DANI)
+        assert (estado["avisos_movil"], estado["normas_ok"], estado["por_revisar"]) == (avisos, True, 0), guardado
+        assert leidas == [({"clave": "fds"}, lo_justo)] and de_otra_forma == []
+    # La lista, que también dice `normas_ok`, sigue con su única lectura.
+    prefs.docs = [dict(de_ana), {"clave": CLAVES["luis"], "push": True, "normas": aceptadas}]
+    leidas.clear()
+    assert (await server.merc_lista("", LUIS))["normas_ok"] is True and leidas == [({"clave": CLAVES["luis"]}, lo_justo)]
+    # Quien está fuera (se le ha quitado el mercadillo) o no lo tiene abierto no lee ninguna preferencia.
+    await _publicado(LUIS, "Botas")
+    await _expulsar("luis", "otro")
+    leidas.clear()
+    assert (await server.merc_estado(LUIS))["expulsado"] is True and leidas == []
+    await server.admin_mercadillo_visible({"visible": False}, DANI)
+    assert await server.merc_estado(ANA) == {"visible": False} and leidas == [] and de_otra_forma == []
+    # EL ÍNDICE: por `clave`, que es por lo que se lee. Sin «único»: nadie espera ahí un duplicado.
+    creados = []
+
+    async def idx(coleccion, *args, **kwargs):
+        creados.append((coleccion, args, kwargs))
+
+    async def nada(*a, **k):
+        return []
+    monkeypatch.setattr(server, "_idx", idx)
+    monkeypatch.setattr(server, "_ensure_tenant_indexes", nada)
+    mundo.g.list_collection_names = nada
+    await server.create_indexes()
+    assert [(args, kwargs) for col, args, kwargs in creados if col is prefs] == [(("clave",), {})]
+
+
 # ── EL FILTRO DEL LENGUAJE OFENSIVO (10-11-2026) ────────────────────────────
 # Apple: «a method for filtering objectionable content». Es un filtro BÁSICO de lista (palabras y frases enteras, sin
 # mayúsculas ni tildes): no lo detecta todo, y se prueba con el mismo cuidado lo que para que lo que NO puede parar.
@@ -2782,21 +2859,6 @@ async def test_borrar_a_alguien_de_oficina_se_lleva_su_mercadillo_y_solo_el_suyo
 # desactivado; la ficha del conductor está de baja. Y lo que vale para el correo vale para el aviso al móvil.
 QUITADO, DEVUELTO = "Te hemos quitado el acceso al mercadillo", "Vuelves a tener acceso al mercadillo"
 CORREOS = {"pepe": "pepe@x.es", "ana": "ana@x.es", "luis": "luis@x.es", "oficina": "oficina@x.es"}
-
-
-def _solo_lo_pedido(col, monkeypatch) -> list:
-    """Esa colección de mentira, devolviendo en `find_one` SOLO los campos que se le piden, como MongoDB (la base de
-    mentira ignora a propósito las proyecciones de inclusión). Así una lectura que se olvide de pedir el campo del que
-    depende falla aquí, y no en producción. Devuelve dónde queda apuntada cada lectura: (filtro, proyección)."""
-    leidas, buscar = [], col.find_one
-
-    async def find_one(q=None, proyeccion=None, **k):
-        leidas.append((q, proyeccion))
-        d = await buscar(q, proyeccion, **k)
-        pedidos = [c for c, v in (proyeccion or {}).items() if v and c != "_id"]
-        return d if d is None or not pedidos else {c: d[c] for c in pedidos if c in d}
-    monkeypatch.setattr(col, "find_one", find_one)
-    return leidas
 
 
 def _con_fichas(mundo, monkeypatch) -> dict:

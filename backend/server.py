@@ -1940,6 +1940,9 @@ async def create_indexes():
         # único que hace saltar el `except DuplicateKeyError` de `admin_mercadillo_expulsar` (dos toques a la vez
         # dejarían dos expulsiones y dos avisos); y por `clave` se mira en cada entrada al mercadillo.
         await _idx(global_db[_MERC_EXPULSADOS], "clave", unique=True, name="mercadillo_expulsado_unico")
+        # Mercadillo, preferencias (10-11-2026): se leen por `clave` en cada `/mercadillo/estado`, que lo piden cuatro
+        # pantallas de fuera del mercadillo (el globito). Sin «único»: se guardan con upsert y nadie espera un duplicado.
+        await _idx(global_db.mercadillo_prefs, "clave")
         # Crear índices en BDs de DSPs ya existentes (por si arrancamos con DSPs sin índices)
         orgs = await global_db.organizations.find(
             {"account_type": "dsp", "db_name": {"$exists": True}}, {"db_name": 1}
@@ -57081,9 +57084,14 @@ async def _merc_correo_de(clave: str) -> str:
 # Dani: «si quiere que le salte en el móvil, que reciba notificaciones». Lo ELIGE cada uno en el mercadillo
 # (`mercadillo_prefs.push`); el permiso del móvil lo da el propio navegador. El aviso dice quién escribe y sobre
 # qué anuncio, NUNCA el mensaje: la pantalla de bloqueo la ve cualquiera.
+async def _merc_prefs(clave: str) -> dict:
+    """Sus preferencias del mercadillo, en UNA lectura (por `clave`, que tiene su índice) y con lo justo: los avisos
+    al móvil (`push`) y las normas que aceptó (`normas`). Es el único sitio que las lee."""
+    return await global_db.mercadillo_prefs.find_one({"clave": clave}, {"_id": 0, "push": 1, "normas": 1}) or {}
+
+
 async def _merc_push_activo(clave: str) -> bool:
-    p = await global_db.mercadillo_prefs.find_one({"clave": clave}, {"_id": 0, "push": 1}) or {}
-    return bool(p.get("push"))
+    return bool((await _merc_prefs(clave)).get("push"))
 
 
 async def _merc_push_usuarios(clave: str) -> list:
@@ -57232,15 +57240,15 @@ def _merc_k(clave: str) -> str:
     return clave.replace(".", "_")
 
 
-async def _merc_normas_ok(yo: dict) -> bool:
+async def _merc_normas_ok(yo: dict, prefs: Optional[dict] = None) -> bool:
     """¿Ha aceptado las normas de AHORA (`mercadillo.NORMAS_VERSION`)? A quien modera no se le piden.
     El servidor lo apunta y lo dice (`normas_ok`); la pantalla de normas la impone la WEB, no las demás rutas: la
     app de iPhone que está en revisión y las webs en caché no la conocen, y con un 403 aquí dejarían de poder
-    escribir. Sin el campo (un servidor antiguo) la web no enseña la pantalla: nadie se queda fuera por esto."""
+    escribir. Sin el campo (un servidor antiguo) la web no enseña la pantalla: nadie se queda fuera por esto.
+    `prefs`: lo que dio `_merc_prefs(yo["clave"])`, si quien llama ya lo ha leído (así no se lee dos veces)."""
     if yo["tipo"] == "fds":
         return True
-    p = await global_db.mercadillo_prefs.find_one({"clave": yo["clave"]}, {"_id": 0, "normas": 1}) or {}
-    normas = p.get("normas")
+    normas = (prefs if prefs is not None else await _merc_prefs(yo["clave"])).get("normas")
     return isinstance(normas, dict) and normas.get("v") == mercadillo.NORMAS_VERSION
 
 
@@ -57261,10 +57269,13 @@ async def merc_estado(user: dict = Depends(require_any_auth)):
         return {"visible": True, "abierto": conf["visible"], "expulsado": True, "texto": _merc_texto_expulsion(expulsion),
                 "sin_leer": 0, "yo": {"nombre": yo["nombre"], "tipo": yo["tipo"]}}
     bloqueados, _ = await _merc_bloqueos(yo)
+    # Esto lo piden cuatro pantallas de fuera del mercadillo (el globito): las preferencias, UNA lectura, y de ella
+    # salen las normas y los avisos al móvil (antes eran dos, y sin índice).
+    prefs = await _merc_prefs(yo["clave"])
     r = {"visible": True, "abierto": conf["visible"], "sin_leer": await _merc_sin_leer(yo, bloqueados),
          "bloqueados": len(bloqueados),                           # a cuántas personas tiene bloqueadas
-         "normas_ok": await _merc_normas_ok(yo),                  # False: la web le enseña las normas antes de pasar
-         "yo": {"nombre": yo["nombre"], "tipo": yo["tipo"]}, "avisos_movil": await _merc_push_activo(yo["clave"])}
+         "normas_ok": await _merc_normas_ok(yo, prefs),           # False: la web le enseña las normas antes de pasar
+         "yo": {"nombre": yo["nombre"], "tipo": yo["tipo"]}, "avisos_movil": bool(prefs.get("push"))}
     if yo["tipo"] == "fds":
         r["por_revisar"] = await global_db[_MERC_ANUNCIOS].count_documents({"estado": {"$in": ["pendiente", "en_revision"]}})
     return r
