@@ -9,12 +9,18 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
      · cuadrante-7: aprobar un grupo es UNA llamada (un solo aviso al conductor).
      · cuadrante-6: la fila de Refuerzos dice cuántos bajan de otros centros.
      · cuadrante-11: Días cerrados, los vigentes con la fecha legible y los pasados plegados.
-     · cuadrante-12: al cambiar de nave, el Cuadrante vacía lo de la otra y no deja tocar nada. */
+     · cuadrante-12: al cambiar de nave, el Cuadrante vacía lo de la otra y no deja tocar nada.
+   Y lo que encontró la revisión de estos arreglos (R2, R13, R14, R16, R20, R21, R22): las cargas y guardados de la
+   nave anterior que vuelven tarde no pintan nada, contestar un grupo que falla a mitad refresca la bandeja, el 409
+   del servidor de antes sigue dando su aviso, y «Personas» y «Ajustes» esperan a la nave nueva. */
 
 const json = (body, status = 200) => (route) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 const dia = (n) => { const d = new Date(); d.setHours(12); d.setDate(d.getDate() + n); return iso(d) }
 const ddmm = (f) => `${f.slice(8, 10)}/${f.slice(5, 7)}`
+// Como lo pinta Turnos (toLocaleDateString del idioma del panel): en español el día 1 sale «1/12», no «01/12»; escrito
+// a mano con ddmm, la prueba de Días cerrados fallaba los días en que la fecha caía del 1 al 9 (visto el 11-11-2026).
+const comoPantalla = (f) => new Date(`${f}T12:00:00`).toLocaleDateString('es', { day: '2-digit', month: '2-digit' })
 const PET = (id, n, grupo = 'g1') => ({ id, grupo, date: dia(n), status: 'pendiente', type: 'libre', motivo: 'asuntos',
   motivo_label: 'Asuntos propios', note: 'boda de mi prima', driver_id: 'd1', driver_name: 'ANA PÉREZ', center: 'NORTE',
   created_at: new Date().toISOString() })
@@ -113,15 +119,94 @@ test.describe('Días libres · peticiones', () => {
     await page.route(/\/api\/shift-requests\/resolver-grupo/, json({ detail: 'Not Found' }, 404))
     const sueltas = []
     await page.route(/\/api\/shift-requests\/p\d\/resolve/, (route) => {
-      sueltas.push(route.request().url().match(/shift-requests\/(p\d)\//)[1])
+      const id = route.request().url().match(/shift-requests\/(p\d)\//)[1]
+      sueltas.push(id)
       pendientes = pendientes.filter((p) => !sueltas.includes(p.id))
+      // El servidor de siempre: el día que quien lo pidió ya canceló contesta 409 (revisión del 10-11-2026, R16).
+      if (id === 'p2') return json({ detail: 'El conductor ha cancelado esta petición' }, 409)(route)
       return json({ success: true, status: 'aprobado' })(route)
     })
     await page.goto('/panel/turnos', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('ANA PÉREZ', { exact: true })).toBeVisible({ timeout: 15000 })
     await page.getByRole('button', { name: 'Aprobar' }).click()
     await expect.poll(() => sueltas).toEqual(['p1', 'p2'])
+    await expect(page.getByText('1 de esos días ya los había cancelado ANA PÉREZ: esos no se han tocado.')).toBeVisible()
     await expect(page.getByText('No hay solicitudes pendientes')).toBeVisible()
+  })
+
+  /* Revisión del 10-11-2026 (R14): si la llamada del grupo falla a mitad, parte ya está contestada en el servidor.
+     La bandeja se vuelve a leer, así que reintentar ya no lleva esos días; y mientras se contesta, los botones no
+     responden (un doble toque eran dos grupos y dos avisos). */
+  test('si contestar un grupo falla a mitad, la bandeja se refresca y no se puede pulsar dos veces', async ({ page }) => {
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    let pendientes = [PET('p1', 5), PET('p2', 6)]
+    let lecturas = 0
+    await page.route(/\/api\/shift-requests\?/, (route) => {
+      const st = new URL(route.request().url()).searchParams.get('status')
+      if (st === 'pendiente') lecturas += 1
+      return json({ requests: st === 'pendiente' ? pendientes : [] })(route)
+    })
+    let soltar
+    const suelta = new Promise((r) => { soltar = r })
+    const grupos = []
+    await page.route(/\/api\/shift-requests\/resolver-grupo/, async (route) => {
+      grupos.push(route.request().postDataJSON())
+      await suelta
+      pendientes = [PET('p2', 6)]                    // el 1.º se aprobó y avisó; el 2.º no llegó
+      return json({ detail: 'Error interno' }, 500)(route)
+    })
+    await page.goto('/panel/turnos', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('ANA PÉREZ', { exact: true })).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText(`${comoPantalla(dia(5))} · ${comoPantalla(dia(6))}`)).toBeVisible()
+    const aprobar = page.getByRole('button', { name: 'Aprobar' })
+    await aprobar.click()
+    await expect(aprobar).toBeDisabled()
+    await aprobar.click({ force: true }).catch(() => {})
+    const antes = lecturas
+    soltar()
+    await expect(page.getByText('Error interno')).toBeVisible()
+    await expect.poll(() => lecturas).toBeGreaterThan(antes)
+    await expect(page.getByText(comoPantalla(dia(6)), { exact: true })).toBeVisible()
+    await expect(page.getByText(`${comoPantalla(dia(5))} · ${comoPantalla(dia(6))}`)).toHaveCount(0)
+    await expect(aprobar).toBeEnabled()
+    expect(grupos).toHaveLength(1)
+  })
+
+  /* Revisión del 10-11-2026 (R13): se aprueba en NORTE y se cambia a SUR mientras tanto. Al volver la respuesta,
+     la recarga es de SUR: la bandeja de NORTE no se pinta bajo SUR. */
+  test('si se cambia de nave mientras se contesta, la bandeja que queda es la de la nave nueva', async ({ page }) => {
+    await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
+    await simularApi(page, 'vacio')
+    const pedidas = []
+    await page.route(/\/api\/shift-requests\?/, (route) => {
+      const u = new URL(route.request().url())
+      const st = u.searchParams.get('status')
+      const c = u.searchParams.get('center')
+      if (st === 'pendiente') pedidas.push(c)
+      const norte = [PET('p1', 5), { ...PET('p9', 8, 'g9'), driver_id: 'd2', driver_name: 'LUIS RUIZ' }]
+      const sur = [{ ...PET('s1', 5, 'gs'), driver_id: 'd5', driver_name: 'SARA VIDAL', center: 'SUR' }]
+      return json({ requests: st !== 'pendiente' ? [] : c === 'SUR' ? sur : norte })(route)
+    })
+    let soltar
+    const suelta = new Promise((r) => { soltar = r })
+    await page.route(/\/api\/shift-requests\/resolver-grupo/, async (route) => {
+      await suelta
+      return json({ success: true, status: 'aprobado', resueltas: ['p1'], canceladas: [], saltadas: [] })(route)
+    })
+    await page.goto('/panel/turnos', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('ANA PÉREZ', { exact: true })).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'Aprobar' }).first().click()
+    await page.getByRole('button', { name: 'SUR', exact: true }).click()
+    await expect(page.getByText('SARA VIDAL', { exact: true })).toBeVisible()
+    const respuesta = page.waitForResponse(/\/api\/shift-requests\/resolver-grupo/)
+    const tras = pedidas.length
+    soltar()
+    await respuesta
+    await page.waitForTimeout(500)
+    expect(pedidas.slice(tras).filter((c) => c !== 'SUR')).toEqual([])
+    await expect(page.getByText('SARA VIDAL', { exact: true })).toBeVisible()
+    await expect(page.getByText('LUIS RUIZ', { exact: true })).toHaveCount(0)
   })
 })
 
@@ -156,8 +241,8 @@ test.describe('Días libres · Refuerzos y Días cerrados', () => {
     await page.getByRole('button', { name: 'Días cerrados', exact: true }).click({ timeout: 15000 })
     const vigentes = page.getByTestId('dias-cerrados')
     await expect(vigentes).toContainText('Pico de Navidad')
-    await expect(vigentes).toContainText(`${ddmm(dia(20))} → `)
-    await expect(vigentes).toContainText(ddmm(dia(30)))
+    await expect(vigentes).toContainText(`${comoPantalla(dia(20))} → `)
+    await expect(vigentes).toContainText(comoPantalla(dia(30)))
     await expect(vigentes).not.toContainText(dia(20))                 // nada de 2026-12-20
     await expect(vigentes).not.toContainText('Prime Day del año pasado')
     const pasados = page.getByTestId('dias-cerrados-pasados')
@@ -205,8 +290,94 @@ test.describe('Cuadrante · cambiar de nave', () => {
     await expect(page.getByText('Cargando el cuadrante…')).toBeVisible()
     await expect(page.getByRole('button', { name: /ANA PÉREZ/ })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Ninguno (menú)' })).toHaveAttribute('aria-pressed', 'true')
+    // Se intenta tocar una celda en ese rato (revisión del 10-11-2026, R21): no queda ninguna, y nada se guarda.
+    const celdas = page.getByTitle(/^(ANA PÉREZ|SARA VIDAL) · /)
+    await expect(celdas).toHaveCount(0)
+    await celdas.first().click({ timeout: 1000 }).catch(() => {})
     soltarSur()
     await expect(page.getByRole('button', { name: /SARA VIDAL/ })).toBeVisible()
     expect(celdasGuardadas).toEqual([])
+  })
+
+  /* Revisión del 10-11-2026 (R2): en NORTE, con un pincel, se toca una celda y, con el guardado aún por el aire,
+     se cambia a SUR. El cargar que lanza ese guardado al volver es el de NORTE: no puede pedir NORTE ni pintar su
+     tabla bajo SUR. */
+  test('un guardado de la nave anterior que vuelve tarde no vuelve a pintar su cuadrante', async ({ page }) => {
+    await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
+    await simularApi(page, 'vacio')
+    let soltar
+    const suelta = new Promise((r) => { soltar = r })
+    await page.route(/\/api\/cuadrante\/celdas/, async (route) => {
+      await suelta
+      return json({ ok: true, guardadas: 1, bloqueadas: [{ motivo: 'de NORTE' }] })(route)
+    })
+    const pedidas = []
+    await page.route(/\/api\/cuadrante\?/, (route) => {
+      const c = new URL(route.request().url()).searchParams.get('center')
+      pedidas.push(c)
+      return json(c === 'SUR' ? DATOS('SUR', 'SARA VIDAL') : DATOS('NORTE', 'ANA PÉREZ'))(route)
+    })
+    await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('button', { name: /ANA PÉREZ/ })).toBeVisible({ timeout: 15000 })
+    await page.getByTitle('Libra', { exact: true }).first().click()
+    await page.getByTitle(/^ANA PÉREZ · /).first().click()
+    await page.getByRole('button', { name: 'SUR', exact: true }).click()
+    await expect(page.getByRole('button', { name: /SARA VIDAL/ })).toBeVisible()
+    const tras = pedidas.length
+    const respuesta = page.waitForResponse(/\/api\/cuadrante\/celdas/)
+    soltar()
+    await respuesta
+    await page.waitForTimeout(500)
+    expect(pedidas.slice(tras)).toEqual([])
+    await expect(page.getByRole('button', { name: /SARA VIDAL/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /ANA PÉREZ/ })).toHaveCount(0)
+    await expect(page.getByText(/de NORTE/)).toHaveCount(0)        // el aviso de aquel guardado no sale en SUR
+  })
+
+  /* Revisión del 10-11-2026 (R22 y R20): en «Personas y notas» y en «Ajustes y estudio», mientras llega la nave
+     nueva sale «Cargando…», no «0 personas»; y el colchón que se ve (y que se guardaría al salir del campo) es el
+     de la nave nueva, no el de la anterior ni el 2 por defecto. */
+  test('Personas y Ajustes esperan a la nave nueva y el colchón no se queda con el de la otra', async ({ page }) => {
+    await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
+    await simularApi(page, 'vacio')
+    let soltarSur
+    let surListo = Promise.resolve()
+    let colchonSur = 3
+    const config = []
+    await page.route(/\/api\/cuadrante\/config/, (route) => { config.push(route.request().postDataJSON()); return json({ ok: true })(route) })
+    await page.route(/\/api\/cuadrante\?/, async (route) => {
+      const c = new URL(route.request().url()).searchParams.get('center')
+      if (c === 'SUR') {
+        await surListo
+        return json({ ...DATOS('SUR', 'SARA VIDAL'), config: { colchon: colchonSur, permitir_extra: true } })(route)
+      }
+      return json({ ...DATOS('NORTE', 'ANA PÉREZ'), config: { colchon: 1, permitir_extra: true } })(route)
+    })
+    await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('button', { name: /ANA PÉREZ/ })).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'Personas y notas' }).click()
+    await expect(page.getByText('1 personas en el cuadrante')).toBeVisible()
+    surListo = new Promise((r) => { soltarSur = r })
+    await page.getByRole('button', { name: 'SUR', exact: true }).click()
+    await expect(page.getByText('Cargando el cuadrante…')).toBeVisible()
+    await expect(page.getByText(/personas en el cuadrante/)).toHaveCount(0)
+    await page.getByRole('button', { name: 'Ajustes y estudio' }).click()
+    await expect(page.getByText('Cargando el cuadrante…')).toBeVisible()
+    await expect(page.getByLabel('Colchón', { exact: true })).toHaveCount(0)
+    soltarSur()
+    const colchon = page.getByLabel('Colchón', { exact: true })
+    await expect(colchon).toHaveValue('3')
+    await colchon.focus()
+    await colchon.blur()
+    await page.waitForTimeout(300)
+    expect(config).toEqual([])
+    // Con la pestaña abierta, los datos se recargan con otro colchón (alguien lo cambió): el campo lo sigue.
+    colchonSur = 5
+    await page.getByLabel(/Si con 5 días no se llega/).click()
+    await expect(colchon).toHaveValue('5')
+    await colchon.focus()
+    await colchon.blur()
+    await page.waitForTimeout(300)
+    expect(config).toEqual([{ center: 'SUR', permitir_extra: false }])
   })
 })

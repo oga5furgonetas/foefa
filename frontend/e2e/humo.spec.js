@@ -919,9 +919,11 @@ test.describe('Portal del conductor · tus peticiones', () => {
   })
 
   /* La otra punta: la oficina aprueba con la bandeja abierta y, entretanto,
-     quien lo pidió ha cancelado uno de los días. Ese día contesta 409; los
-     demás se aprueban igual y se dice cuántos estaban cancelados (antes se
-     paraba a la mitad y al reintentar volvía a chocar). */
+     quien lo pidió ha cancelado uno de los días. El panel manda el grupo entero
+     y el servidor devuelve ese día en `canceladas`; los demás se aprueban igual
+     y se dice cuántos estaban cancelados (antes se paraba a la mitad y al
+     reintentar volvía a chocar). El 409 día a día del servidor de antes lo
+     prueba arreglos-cuadrante.spec.js. */
   test('la oficina aprueba aunque un día ya lo haya cancelado quien lo pidió', async ({ page }) => {
     const fallos = vigilar(page)
     await entrarComoAdmin(page)
@@ -930,12 +932,11 @@ test.describe('Portal del conductor · tus peticiones', () => {
       { ...PET('p2', 11, 'pendiente', 'g1'), driver_name: 'ANA PÉREZ', center: 'NORTE' }]
     await page.route(/\/api\/shift-requests\?/, (route) => json({
       requests: new URL(route.request().url()).searchParams.get('status') === 'pendiente' ? pendientes : [] })(route))
-    const aprobadas = []
+    const mandados = []
     /* Desde el 10-11-2026 el panel contesta el grupo entero en una llamada (un solo aviso al conductor); el día
        cancelado vuelve en `canceladas`, que es lo que antes era el 409 de ese día. */
     await page.route(/\/api\/shift-requests\/resolver-grupo/, (route) => {
-      const { ids } = route.request().postDataJSON()
-      aprobadas.push(...ids.filter((id) => id !== 'p2'))
+      mandados.push(route.request().postDataJSON())
       pendientes = []
       return json({ success: true, status: 'aprobado', resueltas: ['p1'], canceladas: ['p2'], saltadas: [] })(route)
     })
@@ -943,7 +944,9 @@ test.describe('Portal del conductor · tus peticiones', () => {
     await expect(page.getByText('ANA PÉREZ')).toBeVisible({ timeout: 15000 })
     await page.getByRole('button', { name: 'Aprobar' }).click()
     await expect(page.getByText('1 de esos días ya los había cancelado ANA PÉREZ: esos no se han tocado.')).toBeVisible()
-    expect(aprobadas).toEqual(['p1'])
+    // Lo que manda el panel: los dos días del grupo, en UNA llamada (el servidor decide cuál estaba cancelado).
+    expect(mandados.map((b) => [...b.ids].sort())).toEqual([['p1', 'p2']])
+    expect(mandados[0].action).toBe('aprobar')
     await expect(page.getByText('ANA PÉREZ', { exact: true })).toHaveCount(0)
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })

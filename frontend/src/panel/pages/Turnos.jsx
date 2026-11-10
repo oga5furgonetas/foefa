@@ -759,8 +759,15 @@ export default function Turnos() {
   const [errPeticiones, setErrPeticiones] = useState('')
   const [cargandoPeticiones, setCargandoPeticiones] = useState(true)
   const pedidaPet = useRef(0)
+  const [resolviendo, setResolviendo] = useState(() => new Set())   // grupos que se están contestando
+  /* La nave que está arriba AHORA (revisión del 10-11-2026): tras contestar un
+     grupo se recarga con las funciones de aquel render, que llevan dentro la
+     nave de entonces. Si se cambió de nave mientras tanto, esas cargas viejas
+     no piden nada: pisaban la bandeja y los conductores de la nueva. */
+  const naveRef = useRef(center)
+  naveRef.current = center
   const cargarPeticiones = useCallback(async () => {
-    if (noCenter) return
+    if (noCenter || naveRef.current !== center) return
     const n = ++pedidaPet.current
     setCargandoPeticiones(true); setErrPeticiones('')
     try {
@@ -775,8 +782,11 @@ export default function Turnos() {
   // Al cambiar de nave, la lista de la otra no se queda a la vista mientras llega la nueva.
   useEffect(() => { setSolicitudes([]); cargarPeticiones() }, [cargarPeticiones])
 
+  // Como `pedidaPet`: solo pinta la última carga pedida (10-11-2026).
+  const pedidaCarga = useRef(0)
   const cargar = useCallback(async () => {
-    if (noCenter) return
+    if (noCenter || naveRef.current !== center) return
+    const n = ++pedidaCarga.current
     setCargando(true); setErr(''); setAviso('')
     /* Con la rejilla escondida no se pide lo que solo usa ella (turnos del
        mes, cobertura, máximas, códigos y las aprobadas de siempre, hasta mil):
@@ -790,15 +800,16 @@ export default function Turnos() {
           getDrivers(center),
           getShiftRequests(center, 'aprobado', { desde: hoyLocal() }).catch(() => null),
         ])
+        if (n !== pedidaCarga.current) return
         setDrivers(lista(rd.data).filter((d) => d.active !== false).sort(porNombre))
         setAprobados(new Set(
           lista(rapr?.data?.requests)
             .filter((r) => r.type === 'libre')
             .map((r) => `${r.driver_id}|${r.date}`)))
       } catch {
-        setErr(t('turns.drivers.err'))
+        if (n === pedidaCarga.current) setErr(t('turns.drivers.err'))
       } finally {
-        setCargando(false)
+        if (n === pedidaCarga.current) setCargando(false)
       }
       return
     }
@@ -816,6 +827,7 @@ export default function Turnos() {
         // rejilla no se queda en blanco por no poder leer una tabla de colores.
         getCodigosCuadrante().catch(() => null),
       ])
+      if (n !== pedidaCarga.current) return
       const info = rcod?.data?.info
       setCodigos(info && Object.keys(info).length ? info : COD_DEF)
       // Alfabético. La lista venía en el orden en que están en la base de
@@ -847,9 +859,9 @@ export default function Turnos() {
       setDemanda(dm)
       setMaximas(mx)
     } catch {
-      setErr(t('turns.error'))
+      if (n === pedidaCarga.current) setErr(t('turns.error'))
     } finally {
-      setCargando(false)
+      if (n === pedidaCarga.current) setCargando(false)
     }
   }, [center, primerDia, hasta, mesDesde, mesHasta, noCenter])
 
@@ -1421,6 +1433,7 @@ export default function Turnos() {
      Un "no" a secas deja al conductor preguntando por WhatsApp por qué, que es
      justo el sitio del que se le quiere sacar. El motivo lo lee él tal cual. */
   const resolver = async (grupo, accion) => {
+    if (resolviendo.has(grupo.key)) return
     let motivo = ''
     if (accion === 'rechazar') {
       motivo = (window.prompt(
@@ -1439,6 +1452,8 @@ export default function Turnos() {
        desplegando), se hace como antes, día a día. */
     let cancelados = 0
     let saltados = []
+    // Mientras se contesta, los botones de ese grupo no responden: un doble toque eran dos grupos y dos avisos.
+    setResolviendo((s) => new Set(s).add(grupo.key))
     try {
       try {
         const { data } = await resolverGrupoPeticiones(grupo.ids, accion, motivo)
@@ -1468,6 +1483,11 @@ export default function Turnos() {
       }
     } catch (e) {
       setErr(e?.response?.data?.detail || t('turns.req.err'))
+      // Si paró a la mitad, parte ya está contestada (y avisada): se refresca la bandeja para que reintentar
+      // no vuelva a contestar esos días (revisión del 10-11-2026).
+      await cargarPeticiones()
+    } finally {
+      setResolviendo((s) => { const x = new Set(s); x.delete(grupo.key); return x })
     }
   }
 
@@ -2548,10 +2568,10 @@ export default function Turnos() {
                 </div>
                 {puedeAprobar ? (
                   <div className="flex gap-2">
-                    <button onClick={() => resolver(g, 'aprobar')} className="flex items-center gap-1 rounded-lg bg-emerald-500/15 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25">
-                      <Check size={13} /> {t('turns.approve')}
+                    <button onClick={() => resolver(g, 'aprobar')} disabled={resolviendo.has(g.key)} className="flex items-center gap-1 rounded-lg bg-emerald-500/15 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50">
+                      {resolviendo.has(g.key) ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} {t('turns.approve')}
                     </button>
-                    <button onClick={() => resolver(g, 'rechazar')} className="flex items-center gap-1 rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/25">
+                    <button onClick={() => resolver(g, 'rechazar')} disabled={resolviendo.has(g.key)} className="flex items-center gap-1 rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/25 disabled:opacity-50">
                       <X size={13} /> {t('turns.reject')}
                     </button>
                   </div>
