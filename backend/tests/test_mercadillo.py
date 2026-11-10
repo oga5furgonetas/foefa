@@ -76,6 +76,8 @@ def mundo(monkeypatch):
     # El cupo de bloqueos del día vive en memoria: cada prueba empieza con el suyo a cero.
     for cupo in [k for k in server._public_actions if k.startswith("merc_bloquear:")]:
         del server._public_actions[cupo]
+    # Y lo mismo la memoria de «de esta pareja ya se le avisó a Dani» (desbloquear y volver a bloquear no repite).
+    monkeypatch.setattr(server, "_MERC_PAR_AVISADO", {})
     return SimpleNamespace(g=g, enviados=enviados)
 
 
@@ -932,6 +934,86 @@ async def test_dani_ve_cada_bloqueo_y_se_le_avisa_sin_que_el_bloqueo_retire_nada
     assert not [x for x in mundo.g["mercadillo_avisos"].docs if "bloque" in x["texto"].lower()]
     de_mas_a_menos = (await server.admin_mercadillo(DANI))["bloqueados_varios"]
     assert [(x["nombre"], x["n"]) for x in de_mas_a_menos] == [("Ana P.", 3)]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_desbloquear_y_volver_a_bloquear_no_le_repite_a_dani_el_aviso_de_varias_personas(mundo, monkeypatch):
+    """El aviso normal «N personas han bloqueado a X» (al móvil o, si no, un correo) es para cuando SE SUMA alguien.
+    Antes, quien ya la tenía bloqueada podía desbloquearla y volver a bloquearla, y cada vez salía otro: hasta 30
+    correos al día por cuenta, de una cuota de 100. Ahora, si de esa pareja ya se avisó en los últimos 7 días, ese
+    bloqueo va solo al móvil, como uno suelto. La memoria vive en el proceso y NO en la base: allí, de un bloqueo no
+    queda nada al desbloquear (es lo que dice la Privacidad)."""
+    pushes = []
+
+    async def push(ids, titulo, cuerpo, url="/panel"):
+        pushes.append(SimpleNamespace(titulo=titulo, cuerpo=cuerpo))
+    monkeypatch.setattr(server, "send_web_push_to_users", push)
+    mundo.g["admin_users"] = Col([{"id": "dani", "super_admin": True}, {"id": "a9", "username": "oficina@x.es", "org_id": "empresa"}])
+    mundo.g["organizations"].docs.append({"id": "o2", "name": "Rosa", "plan": "autonomo"})
+    rosa = {"sub": "x", "role": "admin", "org_id": "o2", "name": "Rosa"}
+    await _abrir(mundo)
+    a = await _publicado(ANA, "Soporte de móvil")
+
+    def normales() -> list:
+        return [c.subject for c in mundo.enviados if c.to == "contacto@x.es" and "han bloqueado a" in c.subject]
+
+    async def va_y_vuelve(quien, veces=1):
+        for _ in range(veces):
+            await server.merc_desbloquear((await server.merc_bloqueados(quien))["bloqueados"][0]["id"], quien)
+            assert "ya" not in await server.merc_bloquear({"anuncio_id": a["id"]}, quien)
+    await server.merc_bloquear({"anuncio_id": a["id"]}, LUIS)
+    assert normales() == []                                                  # una sola persona: queda en el panel
+    await server.merc_bloquear({"anuncio_id": a["id"]}, PEPE)
+    assert normales() == ["Mercadillo: 2 personas han bloqueado a Ana P."]   # se suma la segunda: el aviso normal
+    # PEPE, que es quien hizo saltar el aviso, la desbloquea y la vuelve a bloquear 5 veces: ni un aviso normal más.
+    await va_y_vuelve(PEPE, 5)
+    assert len(normales()) == 1
+    # LUIS, que ya la tenía bloqueada (iba en la cuenta de esas «2 personas»), tampoco lo repite.
+    await va_y_vuelve(LUIS, 5)
+    assert len(normales()) == 1 and len(mundo.g["mercadillo_bloqueos"].docs) == 2
+    # Una TERCERA persona sí avisa: se ha sumado alguien. Y después, ninguna de las tres lo repite.
+    await server.merc_bloquear({"anuncio_id": a["id"]}, OFICINA)
+    assert normales()[1:] == ["Mercadillo: 3 personas han bloqueado a Ana P."]
+    for quien in (OFICINA, PEPE, LUIS):
+        await va_y_vuelve(quien)
+    assert len(normales()) == 2
+    # Con los avisos al móvil puestos, el bloqueo repetido le salta a Dani como uno suelto: UNO por bloqueo, nunca
+    # los dos, y sin gastar un correo.
+    monkeypatch.setattr(server, "_push_enabled", True)
+    await server.merc_avisos_movil({"activo": True}, DANI)
+    mundo.g["push_subscriptions"] = Col([{"endpoint": "dani-movil", "user_id": "dani"}])
+    correos = len(mundo.enviados)
+    await va_y_vuelve(PEPE)
+    assert [(p.titulo, p.cuerpo) for p in pushes] == [
+        ("Mercadillo · bloqueo", "Pepe P. ha bloqueado a Ana P. desde el anuncio «Soporte de móvil».")]
+    # A LOS 7 DÍAS se olvida: si entonces vuelve a bloquearla (y siguen siendo varias), se avisa otra vez.
+    par = (CLAVES["pepe"], CLAVES["ana"])
+    assert set(server._MERC_PAR_AVISADO) == {(CLAVES[q], CLAVES["ana"]) for q in ("pepe", "luis", "oficina")}
+    server._MERC_PAR_AVISADO[par] -= 7 * 86400 - 60                          # hace 7 días menos un minuto: todavía no
+    await va_y_vuelve(PEPE)
+    assert [p.titulo for p in pushes] == ["Mercadillo · bloqueo"] * 2
+    server._MERC_PAR_AVISADO[par] -= 120                                     # hace 7 días y un minuto: ya sí
+    await va_y_vuelve(PEPE)
+    assert pushes[-1].titulo == "Mercadillo · 3 personas han bloqueado a Ana P." and len(pushes) == 3
+    await va_y_vuelve(PEPE)
+    assert pushes[-1].titulo == "Mercadillo · bloqueo" and len(pushes) == 4 and len(mundo.enviados) == correos
+    # LA MEMORIA ESTÁ ACOTADA: llena, tira primero lo caducado y, si no basta, todo (lo peor es un aviso de más).
+    monkeypatch.setattr(server, "_MERC_PAR_AVISADO_MAX", 6)
+    ahora = server.time.time()
+    server._MERC_PAR_AVISADO.update({("o:viejo1", "o:z"): ahora - 8 * 86400, ("o:viejo2", "o:z"): ahora - 30 * 86400,
+                                     ("o:reciente", "o:z"): ahora - 3600})
+    assert len(server._MERC_PAR_AVISADO) == 6
+    await server.merc_bloquear({"anuncio_id": a["id"]}, rosa)                 # la cuarta: aviso, y hace sitio
+    assert pushes[-1].titulo == "Mercadillo · 4 personas han bloqueado a Ana P."
+    assert set(server._MERC_PAR_AVISADO) == {("o:reciente", "o:z")} | {(CLAVES[q], CLAVES["ana"]) for q in ("pepe", "luis", "oficina")} | {
+        ("o:o2", CLAVES["ana"])}
+    monkeypatch.setattr(server, "_MERC_PAR_AVISADO_MAX", 3)                  # ya no cabe ni tirando lo caducado
+    server._MERC_PAR_AVISADO[(CLAVES["luis"], CLAVES["ana"])] -= 8 * 86400
+    await va_y_vuelve(LUIS)
+    assert set(server._MERC_PAR_AVISADO) == {(CLAVES[q], CLAVES["ana"]) for q in ("pepe", "luis", "oficina")} | {("o:o2", CLAVES["ana"])}
+    # Y NO ESTÁ EN LA BASE: cuando Pepe desbloquea, allí no queda nada que diga que la tuvo bloqueada.
+    await server.merc_desbloquear((await server.merc_bloqueados(PEPE))["bloqueados"][0]["id"], PEPE)
+    assert [n for n, col in mundo.g.items() if any(CLAVES["pepe"] in repr(d) and CLAVES["ana"] in repr(d) for d in col.docs)] == []
 
 
 _CAMPOS_DE_CLAVE = {"clave", "a_clave", "de_clave", "de", "a", "para", "dueno", "org_id"}

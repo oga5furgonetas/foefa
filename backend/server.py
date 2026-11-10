@@ -57638,16 +57638,37 @@ def _merc_bloqueo_vista(b: dict) -> dict:
     return {"id": b.get("id"), "nombre": b.get("a_nombre") or "Repartidor", "desde": b.get("ts")}
 
 
+# De qué parejas (quien bloquea, a quién) se le ha contado ya a Dani en un aviso normal de «N personas han bloqueado
+# a X», y cuándo. Ese aviso es para cuando SE SUMA alguien: si quien ya contaba desbloquea y vuelve a bloquear, no se
+# repite (serían hasta 30 correos al día por cuenta, de una cuota de 100). Se recuerda 7 días y EN LA MEMORIA DEL
+# PROCESO, acotada como `_ADMIN_EXISTS_CACHE`; en la base no, a propósito: la Privacidad dice que de un bloqueo no
+# queda nada al desbloquear. Si el servidor se reinicia se olvida, y lo peor que pasa es un aviso de más.
+_MERC_PAR_AVISADO: dict = {}                              # (de, a) -> time.time() del aviso normal que la contó
+_MERC_PAR_AVISADO_S = 7 * 86400
+_MERC_PAR_AVISADO_MAX = 5000
+
+
 async def _merc_bloqueo_a_dani(b: dict) -> None:
     """Dani se entera de CADA bloqueo (Apple: «blocking should also notify the developer»). Uno suelto, al móvil
     si tiene los avisos puestos (queda apuntado en Negocio → Mercadillo; un correo por cada uno quemaría la
     cuota). Cuando a la misma persona ya la han bloqueado varias personas distintas, el aviso normal —móvil o,
-    si no, correo— cada vez que se suma una: eso sí hay que mirarlo. Un aviso por bloqueo, nunca los dos."""
+    si no, correo— cada vez que se suma una: eso sí hay que mirarlo. Un aviso por bloqueo, nunca los dos.
+    Quien ya iba contado en un aviso normal de los últimos 7 días y vuelve a bloquearla (desbloqueó y bloqueó otra
+    vez) no se ha «sumado»: su bloqueo va como uno suelto (`_MERC_PAR_AVISADO`)."""
     origen = b.get("origen") or {}
     desde = ("el anuncio" if origen.get("tipo") == "anuncio" else "una conversación sobre") + f" «{origen.get('titulo') or ''}»"
     hecho = f"{b['de_nombre']} ha bloqueado a {b['a_nombre']} desde {desde}."
-    n = await global_db[_MERC_BLOQUEOS].count_documents({"a": b["a"]})        # (de, a) es único: n personas distintas
-    if n >= mercadillo.BLOQUEOS_PARA_AVISAR:
+    quienes = await global_db[_MERC_BLOQUEOS].distinct("de", {"a": b["a"]})    # las personas que la tienen bloqueada
+    n, ahora = len(quienes), time.time()
+    ya_contado = ahora - _MERC_PAR_AVISADO.get((b["de"], b["a"]), 0) < _MERC_PAR_AVISADO_S
+    if n >= mercadillo.BLOQUEOS_PARA_AVISAR and not ya_contado:
+        if len(_MERC_PAR_AVISADO) >= _MERC_PAR_AVISADO_MAX:                   # llena: fuera lo caducado y, si no basta, todo
+            for par in [p for p, t in _MERC_PAR_AVISADO.items() if ahora - t >= _MERC_PAR_AVISADO_S]:
+                del _MERC_PAR_AVISADO[par]
+            if len(_MERC_PAR_AVISADO) >= _MERC_PAR_AVISADO_MAX:
+                _MERC_PAR_AVISADO.clear()
+        # El aviso dice cuántas son: quedan contadas TODAS las que la tienen bloqueada ahora, no solo la última.
+        _MERC_PAR_AVISADO.update({(de, b["a"]): ahora for de in quienes})
         await _merc_a_dani(f"Mercadillo: {n} personas han bloqueado a {b['a_nombre']}"[:140],
                            f"{hecho} Ya son {n} personas distintas las que han bloqueado a {b['a_nombre']}.\n\n"
                            "Un bloqueo no retira nada por sí solo: mira sus anuncios y las denuncias que tenga, y decide.")
