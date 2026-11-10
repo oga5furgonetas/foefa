@@ -578,6 +578,38 @@ async def test_si_bloquea_quien_compraba_la_que_vende_conserva_su_anuncio_y_tamp
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_si_los_dos_se_bloquean_manda_el_bloqueo_de_cada_uno(mundo):
+    """El bloqueado puede bloquear a su vez (desde la conversación, que conserva). Entonces a cada uno se le aplica
+    lo SUYO —no la ve y, si escribe, se le dice que desbloquee—, y quitar uno de los dos bloqueos no quita el otro."""
+    await _abrir(mundo)
+    a, p = await _publicado(ANA, "Soporte de móvil"), await _publicado(PEPE, "Carretilla")
+    cid = (await server.merc_contactar(a["id"], {"texto": "hola"}, PEPE))["conversacion_id"]
+    de_ana = (await server.merc_bloquear({"conversacion_id": cid}, ANA))["bloqueo"]
+    await _falla(server.merc_bloquear({"anuncio_id": a["id"]}, PEPE), 404, "Ese anuncio ya no está")   # por su anuncio ya no puede
+    de_pepe = (await server.merc_bloquear({"conversacion_id": cid}, PEPE))["bloqueo"]                  # por la conversación, sí
+    assert (de_ana["nombre"], de_pepe["nombre"]) == ("Pepe P.", "Ana P.")
+    for quien in (ANA, PEPE):
+        assert (await server.merc_buzon(quien))["conversaciones"] == [] and (await server.merc_lista("", quien))["bloqueados"] == 1
+        await _falla(server.merc_conversacion(cid, quien), 404, "Esa conversación no existe")
+        await _falla(server.merc_responder(cid, {"texto": "eh"}, quien), 400, HAS_BLOQUEADO)
+    await _falla(server.merc_contactar(p["id"], {"texto": "eh"}, ANA), 400, HAS_BLOQUEADO)
+    assert (await _titulos(ANA), await _titulos(PEPE)) == ({"Soporte de móvil"}, {"Carretilla"})
+    # Ana desbloquea: sigue en pie el de Pepe, así que ella pasa a ser «la bloqueada» (la ve cerrada y no ve lo de él).
+    await server.merc_desbloquear(de_ana["id"], ANA)
+    assert (await _titulos(ANA), await _titulos(PEPE)) == ({"Soporte de móvil"}, {"Carretilla"})
+    assert [(c["id"], c["bloqueada"]) for c in (await server.merc_buzon(ANA))["conversaciones"]] == [(cid, True)]
+    await _falla(server.merc_responder(cid, {"texto": "¿hola?"}, ANA), 403, CERRADA)
+    await _falla(server.merc_contactar(p["id"], {"texto": "¿hola?"}, ANA), 404, A_LA_VENTA)
+    assert (await server.merc_buzon(PEPE))["conversaciones"] == []
+    await _falla(server.merc_responder(cid, {"texto": "eh"}, PEPE), 400, HAS_BLOQUEADO)
+    # Y cuando desbloquea también Pepe, vuelve todo.
+    await server.merc_desbloquear(de_pepe["id"], PEPE)
+    assert await _titulos(ANA) == await _titulos(PEPE) == {"Soporte de móvil", "Carretilla"}
+    await server.merc_responder(cid, {"texto": "perdona"}, PEPE)
+    assert [(c["id"], c["bloqueada"]) for c in (await server.merc_buzon(ANA))["conversaciones"]] == [(cid, False)]
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_lo_bloqueado_no_cuenta_sin_leer_ni_aunque_un_mensaje_se_cruce_con_el_bloqueo(mundo):
     await _abrir(mundo)
     a = await _publicado(ANA, "Soporte de móvil")
