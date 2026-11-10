@@ -45,6 +45,14 @@ OFICINA = {"sub": "a9", "role": "admin", "org_id": "empresa", "name": "Oficina"}
 CLAVES = {"pepe": "o:o1", "ana": "d:owner:d1", "luis": "d:owner:d2", "oficina": "a:empresa:a9"}
 
 
+class _Bases(dict):
+    """`client[<base>]` de mentira: la base de cada empresa por su nombre (las que nadie ha puesto, vacías)."""
+
+    def __missing__(self, nombre):
+        self[nombre] = Db()
+        return self[nombre]
+
+
 @pytest.fixture
 def mundo(monkeypatch):
     g = Db()
@@ -71,6 +79,9 @@ def mundo(monkeypatch):
     # La base de la EMPRESA de quien hace la petición (allí están las fichas de sus conductores), vacía: en estas
     # pruebas los conductores no tienen ficha salvo que la prueba se la ponga (`mundo.t["drivers"]`).
     t = Db()
+    # Y las bases de TODAS las empresas, por su nombre (`client[…]`: de ahí sale la ficha de un conductor cuando se le va a
+    # escribir, sea de la empresa que sea). La del dueño —la de Ana y Luis— es esa misma `t`.
+    monkeypatch.setattr(server, "client", _Bases({server._DEFAULT_DB_NAME: t}))
     monkeypatch.setattr(server, "global_db", g)
     monkeypatch.setattr(server, "db", t)
     monkeypatch.setattr(server, "get_org", org)
@@ -83,7 +94,7 @@ def mundo(monkeypatch):
         del server._public_actions[cupo]
     # Y lo mismo la memoria de «de esta pareja ya se le avisó a Dani» (desbloquear y volver a bloquear no repite).
     monkeypatch.setattr(server, "_MERC_PAR_AVISADO", {})
-    return SimpleNamespace(g=g, t=t, enviados=enviados)
+    return SimpleNamespace(g=g, t=t, enviados=enviados, bases=server.client)
 
 
 def _jpeg_con_gps() -> bytes:
@@ -2762,3 +2773,141 @@ async def test_borrar_a_alguien_de_oficina_se_lleva_su_mercadillo_y_solo_el_suyo
     assert await server.delete_admin("a8", quien_borra) == {"success": True}
     assert _ROTAS == [("a:empresa:a8", True)]
     assert await mundo.g["admin_users"].find_one({"id": "a8"}) is None and _mercadillo_de(mundo, "a:empresa:a8") == con_expulsion
+
+
+# ── A QUIEN YA NO TIENE CUENTA NO SE LE ESCRIBE DEL MERCADILLO (10-11-2026) ──
+# Expulsar a quien ya pidió la baja (o a un conductor ya borrado) se sigue pudiendo —protege si vuelve—, pero le salía
+# el correo «Te hemos quitado el acceso…» a alguien que había pedido que se borrasen sus datos. Ya no tiene cuenta: la
+# cuenta de quien reparte por su cuenta no existe o ha pedido la baja; el usuario de oficina no existe o está
+# desactivado; la ficha del conductor está de baja.
+QUITADO, DEVUELTO = "Te hemos quitado el acceso al mercadillo", "Vuelves a tener acceso al mercadillo"
+CORREOS = {"pepe": "pepe@x.es", "ana": "ana@x.es", "luis": "luis@x.es", "oficina": "oficina@x.es"}
+
+
+def _solo_lo_pedido(col, monkeypatch) -> list:
+    """Esa colección de mentira, devolviendo en `find_one` SOLO los campos que se le piden, como MongoDB (la base de
+    mentira ignora a propósito las proyecciones de inclusión). Así una lectura que se olvide de pedir el campo del que
+    depende falla aquí, y no en producción. Devuelve dónde queda apuntada cada lectura: (filtro, proyección)."""
+    leidas, buscar = [], col.find_one
+
+    async def find_one(q=None, proyeccion=None, **k):
+        leidas.append((q, proyeccion))
+        d = await buscar(q, proyeccion, **k)
+        pedidos = [c for c, v in (proyeccion or {}).items() if v and c != "_id"]
+        return d if d is None or not pedidos else {c: d[c] for c in pedidos if c in d}
+    monkeypatch.setattr(col, "find_one", find_one)
+    return leidas
+
+
+def _con_fichas(mundo, monkeypatch) -> dict:
+    """La función DE VERDAD que busca el correo de cada uno (el fixture la simula) y de dónde lo saca: la cuenta de Pepe
+    (con su contraseña, para pedir la baja), el usuario de la de oficina y las fichas de Ana y de Luis. Devuelve la
+    sesión de quien borra conductores."""
+    monkeypatch.setattr(server, "_merc_correo_de", _CORREO_DE_REAL)
+    _con_cuenta(mundo)
+    mundo.t["drivers"] = Col([{"id": "d1", "name": "Ana", "active": True, "email": "ana@x.es"},
+                              {"id": "d2", "name": "Luis", "email": "luis@x.es"}])           # (Luis: una ficha vieja, sin el campo)
+
+    async def sin_correo_personal(driver_id, org_id):
+        return None
+    monkeypatch.setattr(server, "_limpiar_correo_personal_conductor", sin_correo_personal)
+    return {"sub": "jefe", "role": "admin", "org_id": "owner", "name": "Jefe"}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_correo_de_cada_uno_solo_sale_si_sigue_teniendo_cuenta(mundo, monkeypatch):
+    mundo.g["organizations"].docs += [
+        {"id": "o2", "name": "Sol", "plan": "autonomo", "email": "sol@x.es", "baja_solicitada_en": "2026-11-09T10:00:00+00:00"},
+        {"id": "o3", "name": "Sin correo", "plan": "autonomo"}, {"id": "o4", "name": "Correo raro", "plan": "autonomo", "email": "no-es-un-correo"}]
+    mundo.g["admin_users"] = Col([{"id": "a9", "username": "oficina@x.es", "org_id": "empresa"},
+                                  {"id": "a8", "username": "otra", "email": "otra@x.es", "org_id": "empresa"},
+                                  {"id": "a7", "username": "fuera@x.es", "org_id": "empresa", "disabled": True},
+                                  {"id": "a6", "username": "sin-arroba", "org_id": "empresa"}])
+    mundo.t["drivers"] = Col([{"id": "d1", "email": "ana@x.es", "active": True}, {"id": "d2", "email": "luis@x.es"},
+                              {"id": "d3", "email": "rosa@x.es", "active": False}, {"id": "d4", "email": "nulo@x.es", "active": None},
+                              {"id": "d5", "active": True}])
+    # Otra empresa con un conductor «d1», de baja: su ficha se busca en SU base, no en la del dueño.
+    mundo.bases["dsp_empresa"]["drivers"] = Col([{"id": "d1", "email": "otra-ana@x.es", "active": False},
+                                                 {"id": "d6", "email": "carlos@x.es", "active": True}])
+    # Como en MongoDB: de cada lectura vuelve solo lo que se pide (si no se pide `disabled` o `active`, no se ve la baja).
+    de_usuarios, de_fichas = _solo_lo_pedido(mundo.g["admin_users"], monkeypatch), _solo_lo_pedido(mundo.t["drivers"], monkeypatch)
+    _solo_lo_pedido(mundo.bases["dsp_empresa"]["drivers"], monkeypatch)
+    casos = {
+        # quien reparte por su cuenta: su cuenta existe y no ha pedido la baja
+        "o:o1": "pepe@x.es", "o:o2": "", "o:o3": "", "o:o4": "", "o:no-existe": "",
+        # oficina: su usuario existe y no está desactivado (el correo, o su usuario si es un correo)
+        "a:empresa:a9": "oficina@x.es", "a:empresa:a8": "otra@x.es", "a:empresa:a7": "", "a:empresa:a6": "", "a:empresa:nadie": "",
+        # conductor: su ficha no está de baja (sin el campo, o con algo que no es un «no» claro, está en activo)
+        "d:owner:d1": "ana@x.es", "d:owner:d2": "luis@x.es", "d:owner:d3": "", "d:owner:d4": "nulo@x.es", "d:owner:d5": "",
+        "d:owner:no-existe": "", "d:empresa:d1": "", "d:empresa:d6": "carlos@x.es",
+        # y lo que no es una persona con correo
+        "fds": "", "": "", "x:y": "", "d:owner": "", "a:empresa": "",
+    }
+    assert {c: await _CORREO_DE_REAL(c) for c in casos} == casos
+    # Una lectura por persona, por su id y con lo justo (nada de traerse la ficha o el usuario enteros).
+    assert de_usuarios[0] == ({"id": "a9"}, {"_id": 0, "email": 1, "username": 1, "disabled": 1}) and len(de_usuarios) == 5
+    assert de_fichas[0] == ({"id": "d1"}, {"_id": 0, "email": 1, "active": 1}) and len(de_fichas) == 6
+    # Vuelve a estar en activo (o deja de estarlo): se mira cada vez, no se recuerda.
+    await mundo.t["drivers"].update_one({"id": "d3"}, {"$set": {"active": True}})
+    await mundo.t["drivers"].update_one({"id": "d1"}, {"$set": {"active": False}})
+    await mundo.g["organizations"].update_one({"id": "o2"}, {"$unset": {"baja_solicitada_en": ""}})
+    await mundo.g["admin_users"].update_one({"id": "a7"}, {"$unset": {"disabled": ""}})
+    assert [await _CORREO_DE_REAL(c) for c in ("d:owner:d3", "d:owner:d1", "o:o2", "a:empresa:a7")] == ["rosa@x.es", "", "sol@x.es", "fuera@x.es"]
+    # Si la base no contesta, no hay correo (y no se cae quien iba a avisar).
+
+    async def rota(_id):
+        raise RuntimeError("la base no contesta")
+    monkeypatch.setattr(server, "get_org", rota)
+    assert [await _CORREO_DE_REAL(c) for c in ("o:o1", "d:owner:d3", "a:empresa:a9")] == ["", "", "oficina@x.es"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_a_quien_ya_no_tiene_cuenta_no_se_le_escribe_del_mercadillo(mundo, monkeypatch):
+    jefe = _con_fichas(mundo, monkeypatch)
+    await _abrir(mundo)
+    for quien in (PEPE, ANA, LUIS, OFICINA):
+        await _publicado(quien, f"Cosa de {quien['name']}")
+    assert {m.to for m in mundo.enviados} == {"contacto@x.es", *CORREOS.values()}      # (lo de verdad los encuentra a todos)
+
+    async def quitar_y_devolver(quien: str) -> list:
+        """Dani le quita el mercadillo a esa persona y se lo devuelve: los correos que salen (y a quién no)."""
+        antes, avisos = len(mundo.enviados), len(mundo.g["mercadillo_avisos"].docs)
+        r = await _expulsar(quien, "otro")
+        assert r["ok"] is True and not r.get("ya")                            # la expulsión se crea SIEMPRE
+        assert [e["motivo_clave"] for e in mundo.g["mercadillo_expulsados"].docs if e["clave"] == CLAVES[quien]] == ["otro"]
+        assert await server.admin_mercadillo_readmitir({"clave": CLAVES[quien]}, DANI) == {"ok": True}
+        assert len(mundo.g["mercadillo_avisos"].docs) == avisos + 2          # (y queda apuntado en su buzón del mercadillo)
+        assert [m.to for m in mundo.enviados[antes:] if m.to != CORREOS[quien]] == []
+        return [m.subject for m in mundo.enviados[antes:]]
+    # EL CONTROL: a quien sigue en activo le llega, a su correo, con el motivo y cómo reclamar.
+    for quien in CORREOS:
+        assert await quitar_y_devolver(quien) == [QUITADO, DEVUELTO], quien
+    assert mundo.enviados[-2].texto.startswith(_fuera("otro")) and mundo.enviados[-1].texto.startswith(READMITIDO)
+    # PEPE PIDE LA BAJA de su cuenta. Expulsarla se sigue pudiendo (protege si vuelve)… y ya no se le escribe.
+    assert await server.borrar_cuenta({"password": "secreta123"}, PEPE) == {"ok": True}
+    assert (mundo.enviados[-1].to, "petición de borrar una cuenta" in mundo.enviados[-1].subject) == ("contacto@x.es", True)
+    assert await quitar_y_devolver("pepe") == []
+    # A UNA CONDUCTORA BORRADA (su ficha queda de baja), tampoco. Ni a quien tiene la ficha en «no activo» sin borrarle.
+    assert await server.delete_driver("d1", jefe) == {"success": True}
+    assert await quitar_y_devolver("ana") == []
+    await mundo.t["drivers"].update_one({"id": "d2"}, {"$set": {"active": False}})
+    assert await quitar_y_devolver("luis") == []
+    # A la de oficina con el usuario desactivado, o ya borrado, tampoco.
+    await mundo.g["admin_users"].update_one({"id": "a9"}, {"$set": {"disabled": True}})
+    assert await quitar_y_devolver("oficina") == []
+    await mundo.g["admin_users"].delete_one({"id": "a9"})
+    assert await quitar_y_devolver("oficina") == []
+    # SI VUELVEN A ESTAR EN ACTIVO (la oficina reactiva la ficha), se les vuelve a escribir.
+    await mundo.t["drivers"].update_many({}, {"$set": {"active": True}})
+    assert await quitar_y_devolver("ana") == [QUITADO, DEVUELTO] and await quitar_y_devolver("luis") == [QUITADO, DEVUELTO]
+    # LO MISMO CON «TIENES UN MENSAJE»: con la ficha de baja no le sale el correo (ni cuenta como avisado); al volver, sí.
+    botas = await _publicado(LUIS, "Botas")
+
+    def a_luis() -> list:
+        return [m.subject for m in mundo.enviados if m.to == "luis@x.es" and "mensaje" in m.subject]
+    await mundo.t["drivers"].update_one({"id": "d2"}, {"$set": {"active": False}})
+    cid = (await server.merc_contactar(botas["id"], {"texto": "¿Siguen a la venta?"}, ANA))["conversacion_id"]
+    assert a_luis() == [] and (await mundo.g["mercadillo_conversaciones"].find_one({"id": cid}))["avisado"] == {}
+    await mundo.t["drivers"].update_one({"id": "d2"}, {"$set": {"active": True}})
+    await server.merc_responder(cid, {"texto": "¿Hola?"}, ANA)
+    assert a_luis() == ["Tienes un mensaje en el mercadillo: Botas"]

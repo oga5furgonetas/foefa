@@ -57041,23 +57041,37 @@ async def _merc_entregas(yo: dict) -> Optional[int]:
         return None
 
 
+async def _merc_contacto(clave: str) -> Optional[dict]:
+    """A QUIEN YA NO TIENE CUENTA NO SE LE ESCRIBE DEL MERCADILLO (10-11-2026).
+    Antes, expulsar a quien ya había pedido la baja le mandaba «Te hemos quitado el acceso…» a alguien que había
+    pedido que se borrasen sus datos. Devuelve con qué correo se le escribe (`{"correo": …}`, que puede ir vacío) a
+    quien SIGUE teniendo cuenta, y None a quien ya no:
+      · `o:<org>` (quien reparte por su cuenta): la cuenta no existe o ha pedido la baja (`baja_solicitada_en`);
+      · `a:<org>:<id>` (oficina): su usuario no existe o está desactivado (`disabled`);
+      · `d:<org>:<id>` (conductor): su ficha está de baja (`active: False`). Sin ficha o sin el campo se le escribe
+        como siempre: a nadie se le deja de avisar por un dato que falta.
+    Se mira al ir a escribirle y no se guarda: si la ficha se reactiva, se le vuelve a escribir. Expulsar a esa
+    persona se sigue pudiendo (protege si vuelve); lo que no sale es el aviso. Por «fds» no se pregunta."""
+    if clave.startswith("o:"):
+        org = await get_org(clave[2:])
+        return None if not org or org.get("baja_solicitada_en") else {"correo": org.get("email")}
+    if clave.startswith("a:"):
+        _p, _org, admin_id = clave.split(":", 2)
+        u = await global_db.admin_users.find_one({"id": admin_id}, {"_id": 0, "email": 1, "username": 1, "disabled": 1})
+        return None if not u or u.get("disabled") else {"correo": u.get("email") or u.get("username")}
+    if clave.startswith("d:"):
+        _p, org_id, driver_id = clave.split(":", 2)
+        org = await get_org(org_id) or {}
+        dr = await client[_tenant_db_name(org)].drivers.find_one({"id": driver_id}, {"_id": 0, "email": 1, "active": 1}) or {}
+        return None if dr.get("active") is False else {"correo": dr.get("email")}
+    return None
+
+
 async def _merc_correo_de(clave: str) -> str:
-    """El correo de una persona del mercadillo, para avisarle (nunca se enseña a nadie)."""
+    """El correo de una persona del mercadillo, para avisarle (nunca se enseña a nadie). "" si no tiene, si ya no
+    tiene cuenta (`_merc_contacto`) o si no se ha podido mirar."""
     try:
-        if clave.startswith("o:"):
-            org = await get_org(clave[2:]) or {}
-            c = str(org.get("email") or "")
-        elif clave.startswith("a:"):
-            _p, _org, admin_id = clave.split(":", 2)
-            u = await global_db.admin_users.find_one({"id": admin_id}, {"_id": 0, "email": 1, "username": 1}) or {}
-            c = str(u.get("email") or u.get("username") or "")
-        elif clave.startswith("d:"):
-            _p, org_id, driver_id = clave.split(":", 2)
-            org = await get_org(org_id) or {}
-            dr = await client[_tenant_db_name(org)].drivers.find_one({"id": driver_id}, {"_id": 0, "email": 1}) or {}
-            c = str(dr.get("email") or "")
-        else:
-            return ""
+        c = str((await _merc_contacto(clave) or {}).get("correo") or "")
         return c if _correo_valido(c) else ""
     except Exception:                                            # noqa: BLE001
         return ""
