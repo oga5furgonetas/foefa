@@ -12,7 +12,11 @@ salga hacia la web.
 Y lo que faltaba de esa misma guideline (10-11-2026): quitarle el mercadillo a quien incumple («ejecting the user»:
 403 en TODAS las rutas, recorridas de verdad, y `expulsado` en el estado) y devolvérselo; las normas aceptadas
 (`normas_ok`); el filtro básico de insultos y amenazas, con el mismo cuidado lo que entra que lo que NO entra; y
-que borrar una empresa, un conductor o alguien de oficina se lleve su mercadillo sin impedir nunca el borrado."""
+que borrar una empresa, un conductor o alguien de oficina cierre su mercadillo sin impedir nunca el borrado.
+
+Y lo que encontró la segunda revisión (10-11-2026): que una baja que se puede deshacer (la de la cuenta, la de un
+conductor) NO borre lo que protege a los demás —la expulsión y los bloqueos—, que a quien ya no tiene cuenta no se le
+escriba, que un carácter que no se ve no se salte el filtro y que una lectura que falla no tumbe el mercadillo."""
 import ast
 import functools
 import inspect
@@ -72,7 +76,9 @@ def mundo(monkeypatch):
         return True
 
     async def correo_de(clave):
-        return correos.get(clave, "")
+        # Se simula DE DÓNDE sale el correo de cada uno, no SI se le escribe: eso lo decide lo de verdad (a quien ya no
+        # tiene cuenta —pidió la baja, su ficha está de baja— no se le escribe).
+        return correos.get(clave, "") if await server._merc_contacto(clave) is not None else ""
 
     async def entregas(yo):
         return 7 if yo["tipo"] == "autonomo" else None
@@ -1718,8 +1724,8 @@ async def test_quitarle_el_mercadillo_a_alguien_retira_lo_suyo_cierra_sus_conver
     a_ana = [c for c in mundo.enviados[correos:] if c.to == "ana@x.es"]
     assert len(a_ana) == 1 and a_ana[0].subject == "Te hemos quitado el acceso al mercadillo" and texto in a_ana[0].texto
     # QUEDA APUNTADO quién lo hizo, a quién y cuándo, CON LO JUSTO: el registro de auditoría no caduca nunca, y la
-    # Privacidad dice que el motivo se guarda «hasta que se te devuelve el acceso o hasta la baja». Así que allí va la
-    # clave del motivo (no su texto), y ni el nombre de la persona ni la nota de Dani.
+    # Privacidad dice que el motivo se guarda «hasta que se te devuelve o hasta que se borran los datos de tu cuenta».
+    # Así que allí va la clave del motivo (no su texto), y ni el nombre de la persona ni la nota de Dani.
     rastro = mundo.g["audit_log"].docs[-1]
     assert (rastro["action"], rastro["actor_id"]) == ("mercadillo_expulsar", "dani") and _es_fecha(rastro["at"])
     assert rastro["detail"] == {"clave": CLAVES["ana"], "motivo": "ofensivo", "anuncios": 2, "conversaciones": 2}
@@ -2486,7 +2492,7 @@ async def test_borrar_una_empresa_se_lleva_el_mercadillo_de_todas_sus_personas_y
 
     async def tirar(nombre):
         borradas.append(nombre)
-    monkeypatch.setattr(server, "client", SimpleNamespace(drop_database=tirar))
+    monkeypatch.setattr(mundo.bases, "drop_database", tirar, raising=False)   # (las bases de mentira, y además se dejan tirar)
     mundo.g["organizations"].docs += [
         {"id": "emp", "name": "Reparto Norte", "account_type": "dsp", "plan": "completo", "sector": "reparto", "slug": "norte"},
         {"id": "emp2", "name": "Reparto Norte 2", "account_type": "dsp", "plan": "completo", "sector": "reparto", "slug": "norte2"},
@@ -2605,9 +2611,10 @@ async def test_borrar_un_conductor_cierra_su_mercadillo_sin_borrar_lo_que_proteg
 
 
 # ── CON LA FICHA DE BAJA NO SE ENTRA (10-11-2026) ───────────────────────────
-# Borrar a un conductor se lleva su mercadillo, pero su sesión vale hasta 30 días y la puerta no miraba la ficha: con
+# Borrar a un conductor cierra su mercadillo, pero su sesión vale hasta 30 días y la puerta no miraba la ficha: con
 # el token de antes volvía a entrar y abría conversaciones que ya no cerraba nadie. Lo delicado es el revés: que por
-# mirar la ficha no se quede fuera NADIE que esté en activo (sin ficha en esa base, sin el campo, con otra ficha).
+# mirar la ficha no se quede fuera NADIE que esté en activo (sin ficha en esa base, sin el campo, con otra ficha), ni
+# se quede sin mercadillo nadie porque esa lectura falle.
 SOLO_REPARTIDORES = "El mercadillo es para repartidores"
 
 
@@ -3050,6 +3057,9 @@ async def test_a_quien_ya_no_tiene_cuenta_tampoco_le_salta_el_aviso_al_movil(mun
     for quien, ids in moviles.items():
         assert await quitar_y_devolver(quien) == ([ids, ids], []), quien
     assert pushes[-2].cuerpo == _fuera("otro")[:170]
+    # (El móvil no depende de tener un correo apuntado: a quien no lo tiene en su ficha le salta igual.)
+    await mundo.t["drivers"].update_one({"id": "d2"}, {"$unset": {"email": ""}})
+    assert await _CORREO_DE_REAL(CLAVES["luis"]) == "" and await quitar_y_devolver("luis") == ([["d2"]] * 2, [])
     # Pepe pide la baja de su cuenta y a Ana la borran: «Avisarme en el móvil» se queda puesto (no se borra nada)…
     assert await server.borrar_cuenta({"password": "secreta123"}, PEPE) == {"ok": True}
     assert await server.delete_driver("d1", jefe) == {"success": True}
