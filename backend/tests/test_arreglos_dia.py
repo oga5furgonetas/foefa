@@ -60,7 +60,6 @@ async def _borrador(cliente, cab):
 async def test_si_otra_persona_la_esta_editando_no_se_borra_y_dice_quien(cliente, base):
     maria, jefe = _cab("u-maria", "María"), _cab("u-jefe", "Jefe OGA5")
     bid = await _borrador(cliente, maria)
-    # (Por `/meta` y no por `/celda`: la base de mentira no sabe entrar en «state.rows.0».)
     r = await cliente.patch(f"/api/tools/plantilla-compartida/{bid}/meta", headers=maria, json={"week": "47"})
     assert r.status_code == 200, r.text
 
@@ -79,10 +78,46 @@ async def test_si_otra_persona_la_esta_editando_no_se_borra_y_dice_quien(cliente
 async def test_aunque_el_ultimo_cambio_sea_mio_cuenta_que_otra_la_toco(cliente, base):
     maria, jefe = _cab("u-maria", "María"), _cab("u-jefe", "Jefe OGA5")
     bid = await _borrador(cliente, maria)
-    await cliente.patch(f"/api/tools/plantilla-compartida/{bid}/marca", headers=jefe,
-                        json={"tipo": "red_routes", "valor": "CA_A1", "activo": True})
+    r = await cliente.patch(f"/api/tools/plantilla-compartida/{bid}/marca", headers=jefe,
+                            json={"tipo": "red_routes", "valor": "CA_A1", "activo": True})
+    assert r.status_code == 200, r.text
+    # El último cambio es de verdad del jefe: si /marca fallara, la prueba no demostraría nada.
+    assert base.plantillas_compartidas.docs[0]["updated_by"] == "Jefe OGA5"
     r = await cliente.delete(f"/api/tools/plantilla-compartida/{bid}?preguntar=1", headers=jefe)
     assert r.json()["ok"] is False and r.json()["editando"]["nombre"] == "María"
+
+
+# Lo que más se usa para editar: celda a celda (/celda) y pegar las horas (/horas). La hoja
+# la crea el jefe, así que el único toque de María es el de ESA operación (10-11-2026).
+
+async def test_maria_escribiendo_celdas_cuenta_como_que_la_esta_editando(cliente, base):
+    maria, jefe = _cab("u-maria", "María"), _cab("u-jefe", "Jefe OGA5")
+    bid = await _borrador(cliente, jefe)
+    r = await cliente.patch(f"/api/tools/plantilla-compartida/{bid}/celda", headers=maria,
+                            json={"fila": 0, "campo": "furgo", "valor": "1234 ABC", "ruta_ref": "CA_A1"})
+    assert r.status_code == 200, r.text
+    doc = base.plantillas_compartidas.docs[0]
+    assert doc["state"]["rows"][0]["furgo"] == "1234 ABC"
+    assert doc["toques"]["u-maria"]["nombre"] == "María"
+
+    r = await cliente.delete(f"/api/tools/plantilla-compartida/{bid}?preguntar=1", headers=jefe)
+    assert r.json()["ok"] is False and r.json()["editando"]["nombre"] == "María"
+    assert len(base.plantillas_compartidas.docs) == 1
+
+
+async def test_maria_pegando_las_horas_cuenta_como_que_la_esta_editando(cliente, base):
+    maria, jefe = _cab("u-maria", "María"), _cab("u-jefe", "Jefe OGA5")
+    bid = await _borrador(cliente, jefe)
+    r = await cliente.patch(f"/api/tools/plantilla-compartida/{bid}/horas", headers=maria,
+                            json={"h_salida": "09:40"})
+    assert r.status_code == 200, r.text
+    doc = base.plantillas_compartidas.docs[0]
+    assert doc["state"]["rows"][0]["h_salida"] == "09:40"
+    assert doc["toques"]["u-maria"]["nombre"] == "María"
+
+    r = await cliente.delete(f"/api/tools/plantilla-compartida/{bid}?preguntar=1", headers=jefe)
+    assert r.json()["ok"] is False and r.json()["editando"]["nombre"] == "María"
+    assert len(base.plantillas_compartidas.docs) == 1
 
 
 async def test_si_solo_la_he_tocado_yo_se_borra_sin_preguntar(cliente, base):
