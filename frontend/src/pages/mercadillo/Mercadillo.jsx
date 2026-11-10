@@ -866,24 +866,26 @@ export default function Mercadillo({ onBack, inicio = 'lista' }) {
   const [cat, setCat] = useState('')
   const [err, setErr] = useState('')
   const [listo, setListo] = useState(false)             // ya ha contestado el servidor (bien o mal) la primera vez
-  const [sinPaso, setSinPaso] = useState('')            // el 403 de la lista cuando el estado no ha llegado a decir por qué
+  const [sinPaso, setSinPaso] = useState('')            // el 403 (o 404) de la lista cuando el estado no ha llegado a decir por qué
   /* La lista y el estado, cada uno por su lado (10-11-2026): a quien se le ha quitado el acceso, la lista le contesta 403 y
      el estado le dice por qué (`expulsado` y su `texto`). Con Promise.all, ese 403 se llevaba el estado por delante.
      Y SI EL ESTADO NO LLEGA (sin conexión, o un 5xx) Y LA LISTA CONTESTA 403, quien entra tampoco puede pasar: se le dice lo
      que conteste ese 403 en la pantalla de quien no puede pasar, en vez de pintarle la portada («Vender», el buzón, las
-     normas…) con el error encima. Solo con el 403: si lo que falla es otra cosa, a nadie se le cierra el mercadillo.
+     normas…) con el error encima. Solo con el 403 (o el 404, abajo): si lo que falla es otra cosa, a nadie se le cierra el mercadillo.
      LO MISMO SI EL ESTADO DICE `{visible: false}` (quinta tanda): a quien el servidor no deja pasar por `_merc_yo` (la ficha
      de baja, una empresa sin el mercadillo) el estado le contesta eso, sin `texto`, y la lista 403 con el porqué. Y con la
-     lista en 403 se vacía lo que hubiera cargado: no se quedan pintados los anuncios de antes. */
+     lista en 403 se vacía lo que hubiera cargado: no se quedan pintados los anuncios de antes.
+     Y CON EL MERCADILLO APAGADO (sexta tanda): el estado contesta `{visible: false}` y la lista 404 «El mercadillo todavía no
+     está abierto». Ese 404 cuenta como el 403: la misma puerta, y también se vacía lo cargado. Un 500 o sin red, no. */
   const recargar = useCallback(async () => {
     const [l, e] = await Promise.allSettled([mercLista(), mercEstado()])
     const est = e.status === 'fulfilled' ? e.value.data : null
     if (est) setEstado(est)
-    const lista403 = l.status === 'rejected' && l.reason?.response?.status === 403
+    const listaNo = l.status === 'rejected' && [403, 404].includes(l.reason?.response?.status)
     if (l.status === 'fulfilled') setDatos(l.value.data)
-    else if (lista403) setDatos(null)
+    else if (listaNo) setDatos(null)
     const fallo = [l, e].find((x) => x.status === 'rejected')
-    const prohibido = lista403 && (!est || est.visible === false)
+    const prohibido = listaNo && (!est || est.visible === false)
     setSinPaso(prohibido ? texto(l.reason, 'No se ha podido abrir el mercadillo.') : '')
     setErr(fallo && !est?.expulsado && !prohibido ? texto(fallo.reason, 'No se ha podido abrir el mercadillo.') : '')
     setListo(true)

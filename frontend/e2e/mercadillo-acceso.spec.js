@@ -53,9 +53,12 @@ const SIN_ACEPTAR = 'Tienes que aceptar las normas para usar el mercadillo'
  *  `demora`: lo que tardan en contestar el estado y la lista (ms), para ver qué se pinta mientras tanto.
  *  `estadoCae` y `listaCae`: /mercadillo/estado o la lista NO llegan: un código de error (500…) o 'red' (se corta la conexión).
  *  `oculto`: el texto del 403 de quien el servidor no deja pasar por `_merc_yo` (la ficha de baja, una empresa sin el
- *  mercadillo): entonces /estado contesta 200 `{visible: false}`, sin más, y todo lo demás 403 con ese texto. */
-async function mercadillo(page, { normas, normasEn = 'las dos', expulsado = '', oculto = '', errorNormas = null, demora = 0, estadoCae = null, listaCae = null } = {}) {
-  const s = { normas, expulsado, oculto, llamadas: [], aceptado: null, pedidas: [] }
+ *  mercadillo): entonces /estado contesta 200 `{visible: false}`, sin más, y todo lo demás 403 con ese texto.
+ *  `apagado`: el texto del 404 de cuando Dani apaga el mercadillo: /estado contesta 200 `{visible: false}` y todo lo demás 404.
+ *  `listaNo`: con el estado bueno, la lista contesta 403 con ese texto (lo demás, como siempre).
+ *  `apagado`, `listaNo` y `listaCae` también se pueden cambiar a mitad de la prueba (`s.…`). */
+async function mercadillo(page, { normas, normasEn = 'las dos', expulsado = '', oculto = '', apagado = '', listaNo = '', errorNormas = null, demora = 0, estadoCae = null, listaCae = null } = {}) {
+  const s = { normas, expulsado, oculto, apagado, listaNo, listaCae, llamadas: [], aceptado: null, pedidas: [] }
   const campo = (donde) => (s.normas === undefined || (normasEn !== 'las dos' && normasEn !== donde) ? {} : { normas_ok: s.normas })
   await page.route(/\/api\/mercadillo(?:\/[^?]*)?(?:\?.*)?$/, async (x) => {
     const pet = x.request()
@@ -68,14 +71,16 @@ async function mercadillo(page, { normas, normasEn = 'las dos', expulsado = '', 
     if (demora && (ruta === '/estado' || ruta === '')) await new Promise((r) => setTimeout(r, demora))
     if (ruta === '/estado') {
       if (estadoCae) return caida(estadoCae)
-      if (s.oculto) return json({ visible: false })
+      if (s.oculto || s.apagado) return json({ visible: false })
       return json(s.expulsado
         ? { visible: true, abierto: true, expulsado: true, texto: s.expulsado, sin_leer: 0, yo: YO }
         : { visible: true, abierto: true, sin_leer: 1, yo: YO, avisos_movil: false, ...campo('estado') })
     }
-    if (listaCae && ruta === '' && metodo === 'GET') return caida(listaCae)
+    if (s.listaCae && ruta === '' && metodo === 'GET') return caida(s.listaCae)
     if (s.expulsado) return json({ detail: s.expulsado }, 403)
     if (s.oculto) return json({ detail: s.oculto }, 403)
+    if (s.apagado) return json({ detail: s.apagado }, 404)
+    if (s.listaNo && ruta === '' && metodo === 'GET') return json({ detail: s.listaNo }, 403)
     if (ruta === '' && metodo === 'GET') return json({ anuncios: [SOPORTE], mios: [], ...LISTAS, activos_max: 3, dias: 30, yo: YO, bloqueados: 0, ...campo('lista') })
     if (ruta === '/normas' && metodo === 'POST') {
       s.llamadas.push('normas')
@@ -359,6 +364,74 @@ for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
       await expect(vender(page)).toHaveCount(0)
       await expect(page.getByRole('button', { name: 'Normas y seguridad' })).toHaveCount(0)
       await sinVocabulario(page, 'quien se queda fuera con la lista ya cargada')
+      expect(fallos).toEqual([])
+    })
+
+    /* LO MISMO CON EL MERCADILLO APAGADO (10-11-2026, sexta tanda). Cuando Dani lo apaga, a los demás el estado les contesta
+       `{visible: false}` y la lista 404 «El mercadillo todavía no está abierto». La puerta solo miraba el 403: se volvía a la
+       portada con el error, «Vender» y los anuncios de antes. */
+    const APAGADO = 'El mercadillo todavía no está abierto'
+    const soloVolver = async (page) => expect(await page.locator('main').getByRole('button').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label') || b.textContent.trim())),
+      'lo único que se puede pulsar es «Volver»').toEqual(['Volver'])
+    /** Con la lista ya cargada, al buzón; ahí `cambio(s)` cambia el servidor, y «Volver» a la portada lo recarga. */
+    async function cargadaYVolver(page, cambio) {
+      const s = await entrar(page, { ios })
+      await expect(anuncio(page)).toBeVisible()
+      await page.getByRole('button', { name: /^Mensajes/ }).click()
+      await expect(page.getByRole('button', { name: /Luis G\./ })).toBeVisible()
+      cambio(s)
+      await page.getByRole('button', { name: 'Volver' }).click()
+      return s
+    }
+
+    test('si el estado dice {visible: false} y la lista contesta 404 (el mercadillo apagado): solo la cabecera y el texto de ese 404, sin «Vender»', async ({ page }) => {
+      const fallos = vigilar(page)
+      const s = await entrar(page, { ios, apagado: APAGADO })
+      const porque = page.getByRole('alert')
+      await expect(porque).toHaveText(APAGADO)
+      await expect(porque, 'el texto se dice una vez').toHaveCount(1)
+      await expect(cabecera(page, 'Mercadillo')).toBeVisible()
+      await expect(vender(page)).toHaveCount(0)
+      await soloVolver(page)
+      await expect(anuncio(page)).toHaveCount(0)
+      await sinVocabulario(page, 'el mercadillo apagado, en la primera carga')
+      expect([...new Set(s.pedidas)].sort()).toEqual(['GET /', 'GET /estado'])
+      expect(fallos).toEqual([])
+    })
+
+    test('con la lista ya cargada, si al volver a la portada el mercadillo está apagado ({visible: false} y la lista 404): solo la cabecera y ese texto, ningún anuncio de antes', async ({ page }) => {
+      const fallos = vigilar(page)
+      await cargadaYVolver(page, (s) => { s.apagado = APAGADO })       // Dani lo apaga con el buzón delante
+      await expect(page.getByRole('alert')).toHaveText(APAGADO)
+      await expect(cabecera(page, 'Mercadillo')).toBeVisible()
+      await expect(anuncio(page), 'los anuncios de antes no se quedan pintados').toHaveCount(0)
+      await expect(vender(page)).toHaveCount(0)
+      await soloVolver(page)
+      await sinVocabulario(page, 'el mercadillo apagado con la lista ya cargada')
+      expect(fallos).toEqual([])
+    })
+
+    // El control: con el estado en `{visible: false}`, un fallo pasajero de la lista (500 o sin red) no cierra a nadie.
+    for (const [como, cae] of [['con un 500', 500], ['sin conexión', 'red']]) {
+      test(`control · con la lista ya cargada, si al volver el estado dice {visible: false} y la lista no llega (${como}): la portada con su aviso, no la pantalla de quien no puede pasar`, async ({ page }) => {
+        const fallos = vigilar(page)
+        await cargadaYVolver(page, (s) => { s.apagado = APAGADO; s.listaCae = cae })
+        await expect(page.getByRole('alert')).toHaveText('No se ha podido abrir el mercadillo.')
+        await expect(vender(page)).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Normas y seguridad' })).toBeVisible()
+        expect(fallos).toEqual([])
+      })
+    }
+
+    /* «NO QUEDAN LOS ANUNCIOS DE ANTES», SUJETO (sexta tanda). Con el estado bueno (visible, sin `expulsado`) y la lista en 403
+       no es la pantalla de quien no puede pasar, sino la portada con su aviso; pero sin los anuncios que tenía cargados. */
+    test('con la lista ya cargada, si al volver el estado es el bueno y la lista contesta 403: la portada con su aviso y ningún anuncio de antes', async ({ page }) => {
+      const fallos = vigilar(page)
+      await cargadaYVolver(page, (s) => { s.listaNo = NO_ES_SUYO })
+      await expect(page.getByRole('alert')).toHaveText(NO_ES_SUYO)
+      await expect(vender(page), 'es la portada, no la pantalla de quien no puede pasar').toBeVisible()
+      await expect(anuncio(page), 'los anuncios de antes no se quedan pintados').toHaveCount(0)
+      await sinVocabulario(page, 'la portada con la lista en 403')
       expect(fallos).toEqual([])
     })
 
