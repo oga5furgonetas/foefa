@@ -1241,21 +1241,39 @@ def _arbol_del_servidor():
 def _textos_de_error(*funciones) -> list:
     """Los textos que esas funciones de server.py le dan a la persona: el de cada HTTPException y el del cupo del día
     (los f-string, con «0» en cada hueco; `_MERC_CERRADA` y demás constantes, con su valor)."""
+    return [t for t in _detalles_de_error(*funciones) if not isinstance(t, ast.AST)]
+
+
+def _detalles_de_error(*funciones) -> list:
+    """Lo mismo, sin dejarse nada: el texto de cada error de esas funciones (escrito en el sitio, en un f-string o en
+    una constante) y, cuando el texto lo calcula otra cosa (`str(e)`, `_merc_texto_expulsion(…)`), ese trozo de
+    código tal cual, para que quien vigila los textos sepa que tiene que ir a buscarlo allí."""
     arbol, fuera = _arbol_del_servidor(), []
     for fn in ast.walk(arbol):
         if not (isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)) and fn.name in funciones):
             continue
         for n in ast.walk(fn):
             nombre = getattr(getattr(n, "func", None), "id", "") if isinstance(n, ast.Call) else ""
-            t = n.args[1] if nombre == "HTTPException" and len(n.args) > 1 else (
-                n.args[3] if nombre == "_rl_public_action" and len(n.args) > 3 else None)
+            if nombre not in ("HTTPException", "_rl_public_action"):
+                continue
+            donde = 1 if nombre == "HTTPException" else 3
+            t = n.args[donde] if len(n.args) > donde else next((k.value for k in n.keywords if k.arg == "detail"), None)
             if isinstance(t, ast.Constant):
                 fuera.append(t.value)
             elif isinstance(t, ast.JoinedStr):
                 fuera.append("".join(v.value if isinstance(v, ast.Constant) else "0" for v in t.values))
             elif isinstance(t, ast.Name):
                 fuera.append(getattr(server, t.id))
+            elif t is not None:
+                fuera.append(t)
     return fuera
+
+
+def _funciones_del_mercadillo() -> list:
+    """Todas las funciones del mercadillo que hay en server.py (sus rutas y sus ayudantes). Salen del código y no de
+    una lista escrita a mano: una función nueva entra sola en la vigilancia de sus textos."""
+    return sorted({fn.name for fn in ast.walk(_arbol_del_servidor()) if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+                   and fn.name.startswith(("merc_", "_merc_", "admin_mercadillo"))})
 
 
 def _textos_de_invalido() -> list:
@@ -1310,6 +1328,25 @@ def test_los_textos_del_bloqueo_se_leen_tambien_en_el_iphone(monkeypatch):
         assert esperado in de_validar, f"el buscador de textos no ha visto «{esperado}»"
     nuevos += de_validar
     assert len(set(nuevos)) >= 36 and [t for t in nuevos if habla_de_pagos.search(t)] == []
+    # Y TODO LO DEMÁS que el mercadillo le puede contestar a alguien (10-11-2026: con la ficha de baja, un conductor
+    # lee «El mercadillo es para repartidores» también dentro del iPhone): los errores de TODAS sus funciones, sacadas
+    # del código. Una función o un texto nuevo entra solo aquí.
+    funciones = _funciones_del_mercadillo()
+    assert {"_merc_yo", "_merc_dentro", "merc_estado", "merc_lista", "merc_subir_foto", "_merc_foto_limpia", "merc_crear",
+            "merc_cambiar", "_merc_escribir", "merc_denunciar", "merc_bloquear", "merc_normas", "admin_mercadillo_anuncio",
+            "admin_mercadillo_expulsar"} <= set(funciones) and len(funciones) >= 55
+    todos = _textos_de_error(*funciones)
+    for esperado in ("El mercadillo es para repartidores", "El mercadillo es de cada cuenta", "Tu empresa no tiene el mercadillo",
+                     "El mercadillo todavía no está abierto", "Has subido muchas fotos hoy. Prueba mañana.",
+                     "Esa foto no se puede abrir. Prueba con otra (JPG o PNG).", "Vas muy rápido. Espera un poco antes de mandar más mensajes.",
+                     "Puedes tener 0 anuncios a la vez. Marca alguno como vendido o quítalo.", "Elige por qué lo denuncias",
+                     "Ese anuncio no es tuyo o ya no está", "Elige el motivo: es lo que le llega a quien lo publicó"):
+        assert esperado in todos, f"el buscador de textos no ha visto «{esperado}»"
+    assert set(textos) <= set(todos) and len(set(todos)) >= 40 and [t for t in todos if habla_de_pagos.search(t)] == []
+    # Lo único que no está escrito en el sitio es lo que ya se ha mirado arriba: lo que dice `mercadillo.py` y el
+    # texto de quien se queda sin acceso. Si aparece otra forma de componer un error, hay que traerla aquí.
+    calculados = {ast.unparse(t) for t in _detalles_de_error(*funciones) if isinstance(t, ast.AST)}
+    assert calculados == {"str(e)", "_merc_texto_expulsion(expulsion)"}
 
 
 @pytest.mark.asyncio(loop_scope="session")
