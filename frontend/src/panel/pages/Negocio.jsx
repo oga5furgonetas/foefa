@@ -21,6 +21,7 @@ import {
   crearEnlaceTienda, getSuscripcionesEmpleo, enviarCampanaCandidatos,
   adminReferidosConductores, adminRetiradas, adminRetiradaPagada, adminRetiradaRechazar, adminOpiniones,
   adminMercadillo, adminMercadilloVisible, adminMercadilloAnuncio, adminMercadilloDenuncia,
+  adminMercadilloExpulsar, adminMercadilloReadmitir,
 } from '../api'
 import { API_BASE } from '../../services/api'
 import { hoyLocal, fechaHoraLocal } from '../../lib/fecha'
@@ -639,21 +640,90 @@ function ResumenReferidosConductores() {
   </section>
 }
 
+/* QUITAR A UNA PERSONA DEL MERCADILLO (10-11-2026). Apple (guideline 1.2) pide que a quien publica contenido ofensivo o abusa
+   de otros se le pueda echar, no solo retirarle el contenido. Se quita a una PERSONA (su clave), nunca a una empresa, y
+   siempre con motivo: es lo que se le dice, junto con dónde reclamar. Lo que pasa (sus anuncios se retiran, sus
+   conversaciones se cierran, se le avisa) lo hace el servidor; aquí se elige el motivo y se lee lo que conteste. */
+const cuantos = (n, uno, varios) => `${Number(n) || 0} ${Number(n) === 1 ? uno : varios}`
+function QuitarDelMercadillo({ persona, motivos, onCerrar, onHecho }) {
+  const [motivo, setMotivo] = useState('')
+  const [nota, setNota] = useState('')
+  const [ocupado, setOcupado] = useState(false)
+  const [err, setErr] = useState('')
+  const quitar = async () => {
+    setOcupado(true); setErr('')
+    try {
+      const { data } = await adminMercadilloExpulsar({ clave: persona.clave, motivo, nota: nota.trim() })
+      await onHecho(data)
+    } catch (e) { setErr(e?.response?.data?.detail || 'No se pudo quitar el acceso'); setOcupado(false) }
+  }
+  const campo = 'w-full rounded-lg border border-dark-700 bg-dark-900 px-2 py-2 text-[13px] text-dark-100'
+  return (
+    <div role="dialog" aria-modal="true" aria-label={`Quitar del mercadillo a ${persona.nombre}`} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3">
+      <div className="w-full max-w-md space-y-3 rounded-2xl border border-dark-700 bg-dark-900 p-4">
+        <div>
+          <p className="text-[15px] font-bold text-dark-50">Quitar del mercadillo a {persona.nombre}</p>
+          <p className="text-[11.5px] text-dark-500">{persona.clave}</p>
+        </div>
+        <p className="text-[12.5px] leading-snug text-dark-300">No podrá entrar al mercadillo. Sus anuncios se retiran y sus conversaciones se cierran. Se le dice el motivo y cómo reclamar. Puedes devolverle el acceso cuando quieras.</p>
+        <select value={motivo} onChange={(e) => setMotivo(e.target.value)} disabled={ocupado} aria-label="Por qué se le quita" className={campo}>
+          <option value="">Motivo (se le dice a esa persona)…</option>
+          {Object.entries(motivos || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        <input value={nota} onChange={(e) => setNota(e.target.value)} disabled={ocupado} maxLength={500} placeholder="Nota (opcional; también se le dice)"
+          aria-label="Algo más que decirle" className={campo} />
+        {err && <p role="alert" className="text-xs text-red-300">{err}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onCerrar} disabled={ocupado} className="btn-secondary px-3 py-1.5 text-[12.5px]">Cancelar</button>
+          <button type="button" onClick={quitar} disabled={ocupado || !motivo}
+            className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-[12.5px] font-bold text-white disabled:opacity-50">
+            {ocupado && <Loader2 size={13} className="animate-spin" />} Quitar el acceso
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* EL MERCADILLO (17-10-2026). Encenderlo para todos, la vista previa, revisar cada anuncio ANTES de que
    salga (rechazar y retirar llevan siempre motivo: le llega a quien lo publicó) y resolver denuncias (quien
-   denuncia recibe la decisión). Las conversaciones solo se ven aquí cuando alguien las denuncia. */
+   denuncia recibe la decisión). Las conversaciones solo se ven aquí cuando alguien las denuncia.
+   10-11-2026: junto a cada persona, «Quitar del mercadillo»; y abajo, a quién se le ha quitado, con «Devolver el acceso». */
 function MercadilloAdmin() {
   const [d, setD] = useState(null)
   const [err, setErr] = useState('')
   const [ocupado, setOcupado] = useState('')
   const [motivo, setMotivo] = useState({})
   const [nota, setNota] = useState({})
+  const [quitar, setQuitar] = useState(null)            // { clave, nombre }: a quién se le va a quitar el mercadillo
+  const [hecho, setHecho] = useState('')
   const cargar = () => adminMercadillo().then(({ data }) => { setD(data); setErr('') })
     .catch((e) => setErr(e?.response?.data?.detail || 'No se pudo leer el mercadillo'))
   useEffect(() => { cargar() }, [])
   async function hacer(id, fn) {
-    setOcupado(id); setErr('')
+    setOcupado(id); setErr(''); setHecho('')
     try { await fn(); await cargar() } catch (e) { setErr(e?.response?.data?.detail || 'No se pudo hacer') } finally { setOcupado('') }
+  }
+  /* Quien ya no tiene acceso, por su clave. «Quitar del mercadillo» sale junto a cada persona con clave (quien vende un
+     anuncio, las personas de una denuncia, a quien han bloqueado); si ya no lo tiene, en su lugar dice desde cuándo. A quien
+     modera (`fds`) no se le puede quitar: no se ofrece. */
+  const sinAcceso = Object.fromEntries((d?.expulsados || []).map((e) => [e.clave, e]))
+  const acceso = (clave, nombre, donde = '') => {
+    if (!clave || clave === 'fds') return null
+    const e = sinAcceso[clave]
+    if (e) return <span className={`${donde} shrink-0 text-[12px] font-semibold text-amber-300`}>Sin acceso{fechaHoraLocal(e.ts) ? ` desde el ${fechaHoraLocal(e.ts).slice(0, 10)}` : ''}</span>
+    return <button type="button" onClick={() => setQuitar({ clave, nombre: nombre || 'esta persona' })} className={`${donde} shrink-0 text-[12px] font-semibold text-red-300 underline`}>Quitar del mercadillo</button>
+  }
+  const quitado = async (r) => {
+    const nombre = quitar?.nombre
+    setQuitar(null); setErr('')
+    setHecho(r?.ya ? `${nombre} ya no tenía acceso al mercadillo.`
+      : `${nombre} ya no tiene acceso al mercadillo: ${cuantos(r?.anuncios, 'anuncio retirado', 'anuncios retirados')} y ${cuantos(r?.conversaciones, 'conversación cerrada', 'conversaciones cerradas')}.`)
+    await cargar()
+  }
+  const devolver = (e) => {
+    if (!window.confirm(`¿Devolver el acceso al mercadillo a ${e.nombre}? Se le avisa. Sus anuncios no vuelven solos: tendrá que enviarlos otra vez.`)) return
+    hacer(`acceso:${e.clave}`, () => adminMercadilloReadmitir(e.clave))
   }
   const visible = !!d?.conf?.visible
   const cambiarVisible = () => {
@@ -672,7 +742,8 @@ function MercadilloAdmin() {
     </div>
   )
   const t = d?.totales || {}
-  return <section className="card space-y-3 p-4" aria-label="Mercadillo de repartidores">
+  return <>
+  <section className="card space-y-3 p-4" aria-label="Mercadillo de repartidores">
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div className="min-w-0">
         <h3 className="flex items-center gap-2 text-sm font-bold"><Tag size={16} className="text-brand-300" /> Mercadillo de repartidores</h3>
@@ -691,6 +762,7 @@ function MercadilloAdmin() {
       {visible ? 'Visible: lo ven todos los repartidores (portal del conductor y app del autónomo).' : 'Oculto: solo lo ves tú, en «Verlo como repartidor». Pruébalo y enciéndelo cuando quieras.'}
     </p>
     {err && <p role="alert" className="text-xs text-red-300">{err}</p>}
+    {hecho && <p role="status" className="rounded-xl bg-emerald-500/10 px-3 py-2 text-[12.5px] font-semibold text-emerald-200">{hecho}</p>}
     {!d ? <Loader2 size={16} className="animate-spin text-dark-500" /> : <>
       {/* Los avisos de Dani (anuncios por revisar, denuncias, mensajes de sus anuncios): al móvil si los pone aquí
           desde el móvil; si no, por correo a contacto@ (que gasta cuota). */}
@@ -698,8 +770,8 @@ function MercadilloAdmin() {
       <p className="-mt-2 text-[12px] text-dark-400">
         {d.avisos?.movil ? 'Te llegan al móvil, sin gastar correos.' : d.avisos?.activo ? 'Activados, pero ningún móvil apuntado todavía: actívalos desde tu móvil. Mientras, te llegan por correo.' : 'Ahora te llegan por correo a contacto@. Actívalos desde tu móvil y dejarán de gastar correos.'}
       </p>
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
-        {[['Por revisar', t.por_revisar], ['Publicados', t.publicados], ['Denuncias', t.denuncias], ['Conversaciones', t.conversaciones], ['Vendidos', t.vendidos], ['Bloqueos', t.bloqueos]].map(([label, value]) =>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
+        {[['Por revisar', t.por_revisar], ['Publicados', t.publicados], ['Denuncias', t.denuncias], ['Conversaciones', t.conversaciones], ['Vendidos', t.vendidos], ['Bloqueos', t.bloqueos], ['Sin acceso', t.expulsados]].map(([label, value]) =>
           <div key={label} className="rounded-xl border border-dark-800 bg-dark-900/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-dark-500">{label}</p><p className="mt-1 text-lg font-bold text-dark-100">{value ?? 0}</p></div>)}
       </div>
 
@@ -717,11 +789,12 @@ function MercadilloAdmin() {
                 {a.estado === 'en_revision' && <p className="mt-1 text-[12px] font-semibold text-amber-300">Oculto por denuncias: decide abajo o en «Denuncias».</p>}
                 {a.descripcion && <p className="mt-1 whitespace-pre-line text-[13px] text-dark-200">{a.descripcion}</p>}
                 {selMotivo(a.id)}
-                <div className="mt-2 flex flex-wrap gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button disabled={ocupado === a.id} onClick={() => hacer(a.id, () => adminMercadilloAnuncio(a.id, { accion: 'aprobar' }))}
                     className="btn-primary flex items-center gap-1 px-3 py-1.5 text-[12.5px]"><Check size={13} /> {a.estado === 'en_revision' ? 'No incumple: publicar' : 'Aprobar'}</button>
                   <button disabled={ocupado === a.id || !motivo[a.id]} onClick={() => hacer(a.id, () => adminMercadilloAnuncio(a.id, { accion: a.estado === 'en_revision' ? 'retirar' : 'rechazar', motivo: motivo[a.id], nota: nota[a.id] || '' }))}
                     className="btn-secondary px-3 py-1.5 text-[12.5px] text-red-300 disabled:opacity-50">{a.estado === 'en_revision' ? 'Retirar' : 'Rechazar'}</button>
+                  {acceso(a.vendedor?.clave, a.vendedor?.nombre, 'ml-auto')}
                 </div>
               </li>
             ))}
@@ -737,6 +810,13 @@ function MercadilloAdmin() {
               <li key={x.id} className="rounded-xl border border-red-500/30 bg-red-500/[.04] p-3 text-[12.5px]">
                 <p className="font-semibold text-dark-100">{x.objetivo.tipo === 'anuncio' ? 'Anuncio' : 'Conversación sobre'} «{x.objetivo.titulo}» · {d.motivos_denuncia?.[x.motivo]}</p>
                 <p className="text-dark-400">De {x.de_nombre} · {String(x.ts || '').slice(0, 16).replace('T', ' ')}</p>
+                {/* De quién es lo denunciado: quien vende el anuncio o, en una conversación, los dos. */}
+                {(x.personas || []).map((p) => (
+                  <p key={`${p.papel}:${p.clave}`} className="mt-1 flex flex-wrap items-center gap-x-3 text-dark-300">
+                    <span>{p.papel === 'comprador' ? 'Compra' : 'Vende'}: <b className="text-dark-100">{p.nombre}</b></span>
+                    {acceso(p.clave, p.nombre)}
+                  </p>
+                ))}
                 {x.texto && <p className="mt-1 text-dark-200">«{x.texto}»</p>}
                 {(x.mensajes || []).length > 0 && (
                   <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-lg bg-dark-900 p-2">
@@ -767,26 +847,31 @@ function MercadilloAdmin() {
                   <span className="min-w-0 flex-1"><b className="text-dark-100">{a.titulo}</b> · {eurosM(a.precio_cent)}<span className="block text-dark-400">{a.vendedor?.nombre} · hasta el {String(a.caduca || '').slice(0, 10)} · {a.interesados || 0} interesados</span></span>
                 </div>
                 {selMotivo(a.id)}
-                <button disabled={ocupado === a.id || !motivo[a.id]} onClick={() => hacer(a.id, () => adminMercadilloAnuncio(a.id, { accion: 'retirar', motivo: motivo[a.id], nota: nota[a.id] || '' }))}
-                  className="mt-2 btn-secondary px-3 py-1.5 text-[12.5px] text-red-300 disabled:opacity-50">Retirar</button>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button disabled={ocupado === a.id || !motivo[a.id]} onClick={() => hacer(a.id, () => adminMercadilloAnuncio(a.id, { accion: 'retirar', motivo: motivo[a.id], nota: nota[a.id] || '' }))}
+                    className="btn-secondary px-3 py-1.5 text-[12.5px] text-red-300 disabled:opacity-50">Retirar</button>
+                  {acceso(a.vendedor?.clave, a.vendedor?.nombre, 'ml-auto')}
+                </div>
               </li>
             ))}
           </ul>
         </details>
       )}
 
-      {/* LOS BLOQUEOS (10-11-2026), solo para mirar. Apple (guideline 1.2) pide que, cuando alguien bloquea a otra persona, el
-          desarrollador se entere: aquí queda quién, a quién, cuándo y desde qué anuncio o conversación, y arriba, a quién han
-          bloqueado dos personas o más. Un bloqueo no oculta ni castiga nada por sí solo (se podría usar para ir a por alguien):
-          lo que se retire o se cierre se decide arriba, en los anuncios y en las denuncias. */}
+      {/* LOS BLOQUEOS (10-11-2026). Apple (guideline 1.2) pide que, cuando alguien bloquea a otra persona, el desarrollador se
+          entere: aquí queda quién, a quién, cuándo y desde qué anuncio o conversación, y arriba, a quién han bloqueado dos
+          personas o más. Un bloqueo no oculta ni castiga nada por sí solo (se podría usar para ir a por alguien): se mira y se
+          decide. Los bloqueos no se tocan desde aquí; lo único que se puede pulsar es «Quitar del mercadillo» a la persona
+          bloqueada, y lo que se retire o se cierre se decide arriba, en los anuncios y en las denuncias. */}
       <div role="group" aria-label="Bloqueos">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-dark-500">Bloqueos</p>
-        <p className="mt-1 text-[12px] text-dark-400">Quién ha bloqueado a quién. Un bloqueo no retira ni cierra nada por sí solo: si hace falta, retira el anuncio o cierra la conversación.</p>
+        <p className="mt-1 text-[12px] text-dark-400">Quién ha bloqueado a quién. Un bloqueo no retira ni cierra nada por sí solo: si hace falta, retira el anuncio, cierra la conversación o quita a esa persona del mercadillo.</p>
         {(d.bloqueados_varios || []).length > 0 && (
           <ul className="mt-1.5 space-y-1.5">
             {d.bloqueados_varios.map((x) => (
-              <li key={x.clave} className="rounded-xl bg-amber-500/10 px-3 py-2 text-[12.5px] font-semibold text-amber-200">
-                Bloqueado por {x.n} personas: {x.nombre} <span className="font-normal">({x.clave})</span>
+              <li key={x.clave} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-xl bg-amber-500/10 px-3 py-2 text-[12.5px] font-semibold text-amber-200">
+                <span>Bloqueado por {x.n} personas: {x.nombre} <span className="font-normal">({x.clave})</span></span>
+                {acceso(x.clave, x.nombre)}
               </li>
             ))}
           </ul>
@@ -795,8 +880,31 @@ function MercadilloAdmin() {
           <ul className="mt-1.5 space-y-1.5">
             {d.bloqueos.map((b) => (
               <li key={b.id} className="rounded-xl border border-dark-800 p-2.5 text-[12.5px]">
-                <p className="font-semibold text-dark-100">{b.de_nombre} bloqueó a {b.a_nombre}</p>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                  <p className="font-semibold text-dark-100">{b.de_nombre} bloqueó a {b.a_nombre}</p>
+                  {acceso(b.a_clave, b.a_nombre)}
+                </div>
                 <p className="text-dark-400">{fechaHoraLocal(b.ts)} · desde {b.origen?.tipo === 'conversacion' ? 'la conversación sobre' : 'el anuncio'} «{b.origen?.titulo || 'sin título'}» · {b.a_clave}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* SIN ACCESO AL MERCADILLO (10-11-2026): a quién se le ha quitado, cuándo y qué se le dijo. «Devolver el acceso» le deja
+          entrar otra vez (y se le avisa), pero no resucita sus anuncios ni reabre sus conversaciones. */}
+      <div role="group" aria-label="Sin acceso al mercadillo">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-dark-500">Sin acceso al mercadillo</p>
+        {!(d.expulsados || []).length ? <p className="mt-1 text-sm text-dark-500">Nadie ha perdido el acceso.</p> : (
+          <ul className="mt-1.5 space-y-1.5">
+            {d.expulsados.map((e) => (
+              <li key={e.clave} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-xl border border-dark-800 p-2.5 text-[12.5px]">
+                <div className="min-w-0">
+                  <p className="font-semibold text-dark-100">{e.nombre} <span className="font-normal text-dark-400">({e.clave})</span></p>
+                  <p className="text-dark-400">{fechaHoraLocal(e.ts)} · {d.motivos_expulsion?.[e.motivo_clave] || e.motivo}</p>
+                  {e.nota && <p className="text-dark-300">Nota: {e.nota}</p>}
+                </div>
+                <button type="button" disabled={ocupado === `acceso:${e.clave}`} onClick={() => devolver(e)} className="btn-secondary shrink-0 px-3 py-1.5 text-[12.5px]">Devolver el acceso</button>
               </li>
             ))}
           </ul>
@@ -804,6 +912,9 @@ function MercadilloAdmin() {
       </div>
     </>}
   </section>
+    {/* Fuera de la sección: su `space-y-3` le pondría margen a la capa fija y dejaría una franja sin tapar. */}
+    {quitar && <QuitarDelMercadillo persona={quitar} motivos={d?.motivos_expulsion} onCerrar={() => setQuitar(null)} onHecho={quitado} />}
+  </>
 }
 
 /* OPINIONES DE LOS REPARTIDORES (17-10-2026). Lo que contestan en la app («¿Qué tal te va?»), en

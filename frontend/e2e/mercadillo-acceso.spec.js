@@ -1,0 +1,543 @@
+import { Buffer } from 'node:buffer'
+import { test, expect } from '@playwright/test'
+import { simularApi, entrarComoAdmin } from './api-simulada.js'
+import { UA_APP, lo, limpia, prohibidas, vigilar, quieta, arrancar } from './iphone.js'
+import { hablaDePagos } from '../src/lib/plataforma.js'
+
+/* QUIÉN ENTRA AL MERCADILLO (10-11-2026; la ampliación del plan B por si Apple pide la guideline 1.2).
+   A una app con contenido de sus usuarios Apple le pide, además de denunciar y bloquear (e2e/mercadillo-bloqueo.spec.js), que
+   quien entra acepte antes unas normas, y que a quien abusa se le pueda echar. Aquí se prueba la pantalla con la API simulada,
+   con el contrato del servidor TAL CUAL (nombres de campos, códigos y textos):
+     GET  /mercadillo y /mercadillo/estado  → `normas_ok: bool` (la pantalla de normas sale SOLO con `false`)
+     POST /mercadillo/normas {acepto: true} → {ok, normas_ok: true}  (400 «Tienes que aceptar las normas…»)
+     GET  /mercadillo/estado (sin acceso)   → {visible, abierto, expulsado: true, texto, sin_leer: 0, yo}; lo demás, 403 con ese texto
+     POST /admin/mercadillo/expulsar  {clave, motivo, nota} → {ok, expulsado, anuncios, conversaciones}
+     POST /admin/mercadillo/readmitir {clave}               → {ok}
+     GET  /admin/mercadillo → `expulsados`, `motivos_expulsion`, `totales.expulsados` y `personas` en cada denuncia
+   Las reglas (qué pasa con los anuncios y las conversaciones de quien se queda sin acceso, quién puede quitarlo) las prueba el
+   servidor en backend/tests/test_mercadillo.py. Lo de la persona va dos veces: en la web y SIMULANDO LA APP DE IPHONE, donde
+   ninguna de estas pantallas puede decir nada del vocabulario prohibido (e2e/iphone.js) y «Avisarme en el móvil» no sale. */
+
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==', 'base64')
+const HOY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' })
+const LISTAS = {
+  categorias: { movil: 'Móviles y electrónica', furgoneta: 'Furgoneta y accesorios', otros: 'Otras cosas' },
+  estados_articulo: { nuevo: 'Nuevo', como_nuevo: 'Como nuevo', buen_estado: 'Buen estado' },
+  motivos_denuncia: { prohibido: 'Está prohibido o es ilegal', estafa: 'Es un engaño o una posible estafa', acoso: 'Me insulta o me acosa', otro: 'Otra cosa' },
+}
+const YO = { nombre: 'Ana P.', tipo: 'autonomo' }
+const SOPORTE = { id: 'a2', titulo: 'Soporte de móvil para la furgoneta', descripcion: 'Poco uso.', precio_cent: 1500, categoria: 'movil', estado_articulo: 'como_nuevo',
+  zona: 'A Coruña', fotos: ['f-a2'], estado: 'publicado', mio: false, publicado_en: '2026-11-08T10:00:00+00:00', vendedor: { nombre: 'Luis G.', tipo: 'conductor' } }
+const MENSAJES = [{ id: 'm2', mio: true, texto: 'Hola, ¿sigue disponible?', ts: '2026-11-09T11:00:00+00:00' }, { id: 'm3', mio: false, texto: 'Sí, sigue disponible', ts: '2026-11-09T12:00:00+00:00' }]
+
+/* Lo que dice el servidor (backend/mercadillo.py y server.py), TAL CUAL. */
+const MOTIVOS_EXPULSION = {
+  ofensivo: 'Has publicado o enviado contenido ofensivo.',
+  acoso: 'Has acosado o molestado a otra persona.',
+  prohibido: 'Has intentado vender algo que las normas no permiten.',
+  estafa: 'Hemos visto un engaño o un intento de estafa.',
+  repetido: 'Has incumplido las normas varias veces.',
+  otro: 'Has incumplido las normas del mercadillo.',
+}
+const CONTACTO = 'contacto@flotadsp.com'
+const sinAcceso = (motivo, nota = '') => `Te hemos quitado el acceso al mercadillo. Motivo: ${MOTIVOS_EXPULSION[motivo]}${nota ? ` ${nota}` : ''} Si crees que es un error, escribe a ${CONTACTO} y lo revisamos.`
+const SIN_ACEPTAR = 'Tienes que aceptar las normas para usar el mercadillo'
+
+/** El mercadillo del servidor, simulado y CON MEMORIA. `normas`: lo que vale `normas_ok` (sin decirlo, el campo NO viene, como en
+ *  un servidor de antes); `normasEn`: en qué respuesta viene ('las dos', 'estado' o 'lista'); `expulsado`: el texto de quien se
+ *  ha quedado sin acceso (entonces todo contesta 403 con él, salvo /estado). Se pueden cambiar a mitad de la prueba (`s.…`). */
+async function mercadillo(page, { normas, normasEn = 'las dos', expulsado = '', errorNormas = null } = {}) {
+  const s = { normas, expulsado, llamadas: [], aceptado: null, pedidas: [] }
+  const campo = (donde) => (s.normas === undefined || (normasEn !== 'las dos' && normasEn !== donde) ? {} : { normas_ok: s.normas })
+  await page.route(/\/api\/mercadillo(?:\/[^?]*)?(?:\?.*)?$/, async (x) => {
+    const pet = x.request()
+    const metodo = pet.method()
+    const ruta = new URL(pet.url()).pathname.replace(/^.*\/api\/mercadillo/, '')
+    const json = (j, status = 200) => x.fulfill({ status, json: j })
+    s.pedidas.push(`${metodo} ${ruta || '/'}`)
+    if (ruta === '/estado') {
+      return json(s.expulsado
+        ? { visible: true, abierto: true, expulsado: true, texto: s.expulsado, sin_leer: 0, yo: YO }
+        : { visible: true, abierto: true, sin_leer: 1, yo: YO, avisos_movil: false, ...campo('estado') })
+    }
+    if (s.expulsado) return json({ detail: s.expulsado }, 403)
+    if (ruta === '' && metodo === 'GET') return json({ anuncios: [SOPORTE], mios: [], ...LISTAS, activos_max: 3, dias: 30, yo: YO, bloqueados: 0, ...campo('lista') })
+    if (ruta === '/normas' && metodo === 'POST') {
+      s.llamadas.push('normas')
+      try { s.aceptado = pet.postDataJSON() } catch { s.aceptado = null }
+      if (errorNormas) return json({ detail: errorNormas.detail }, errorNormas.status)
+      if (s.aceptado?.acepto !== true) return json({ detail: SIN_ACEPTAR }, 400)
+      s.normas = true
+      return json({ ok: true, normas_ok: true })
+    }
+    if (ruta.startsWith('/foto/')) return x.fulfill({ status: 200, contentType: 'image/png', body: PNG })
+    if (ruta === '/anuncio/a2' && metodo === 'GET') return json({ ...SOPORTE, conversacion_id: 'c2' })
+    if (ruta === '/buzon') {
+      return json({ conversaciones: [{ id: 'c2', anuncio_id: 'a2', titulo: SOPORTE.titulo, precio_cent: SOPORTE.precio_cent, foto: 'f-a2', estado_anuncio: 'publicado',
+        con: 'Luis G.', soy: 'comprador', ultimo: '2026-11-09T12:00:00+00:00', ultimo_texto: 'Sí, sigue disponible', bloqueada: false, sin_leer: true }], avisos: [] })
+    }
+    if (ruta === '/conversacion/c2' && metodo === 'GET') return json({ id: 'c2', soy: 'comprador', con: 'Luis G.', bloqueada: false, anuncio: SOPORTE, mensajes: MENSAJES })
+    return json({ ok: true })
+  })
+  return s
+}
+
+/** Al mercadillo: por su dirección (/mercadillo) o, con `porLaApp`, por la app de quien reparte por su cuenta (Cuenta → Mercadillo). */
+async function entrar(page, { ios = false, porLaApp = false, ...opciones } = {}) {
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await arrancar(page, { ios })
+  const s = await mercadillo(page, opciones)
+  if (porLaApp) {
+    // Lo mínimo de la app de quien reparte por su cuenta (/ruta), con los campos de verdad del servidor.
+    await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'], pais: 'es',
+      status: 'trial', days_left: 6, required: false, precios: { mensual: 9.99, anual: 99 }, gratis: { activo: false, tope: 15, usadas: 0 } } }))
+    await page.route(/\/api\/referidos$/, (r) => r.fulfill({ status: 403, json: { detail: 'Los enlaces de invitación son de cada cuenta' } }))
+    await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: { activo: true, autonomo: true, empresa: '', fecha: HOY, ia_tickets: false, jornada: {},
+      aviso_aceptado: true, base: null, pais: 'es', prefijo: '34', ruta: null, pedidos: [] } }))
+    await page.goto('/ruta?tab=cuenta', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: /Mercadillo de repartidores/ }).click()
+  } else {
+    await page.goto('/mercadillo', { waitUntil: 'domcontentloaded' })
+  }
+  return s
+}
+
+const vender = (page) => page.getByRole('button', { name: /Vender algo que no uses/ })
+const acepto = (page) => page.getByRole('button', { name: 'Acepto las normas', exact: true })
+const anuncio = (page) => page.getByRole('button', { name: /Soporte de móvil/ })
+const cabecera = (page, titulo) => page.locator('main').getByText(titulo, { exact: true })
+const normas = (page) => page.locator('main').getByRole('listitem')
+const ANTES_DE_ENTRAR = 'Antes de entrar, lee las normas y acéptalas.'
+
+for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
+  test.describe(`Mercadillo · las normas la primera vez y quien se queda sin acceso (${donde})`, () => {
+    if (ios) test.use({ userAgent: UA_APP })
+    /** En el iPhone, además, que la pantalla de ahora no diga nada de lo prohibido (planes, pagos, otra plataforma…). */
+    const sinVocabulario = async (page, que) => { if (ios) { await quieta(page, 250); await limpia(page, `mercadillo en el iPhone · ${que}`, { perfil: 'basico' }) } }
+
+    test('con normas_ok: false, antes que nada salen las normas; «Acepto las normas» lo apunta en el servidor y deja pasar', async ({ page }) => {
+      const fallos = vigilar(page)
+      const s = await entrar(page, { ios, normas: false })
+      await expect(cabecera(page, 'Normas del mercadillo')).toBeVisible()
+      await expect(page.getByText(ANTES_DE_ENTRAR, { exact: true })).toBeVisible()
+      await expect(normas(page)).toHaveCount(9)
+      await expect(normas(page).first()).toHaveText('Solo particulares: vende cosas tuyas que ya no usas. Nada de tiendas ni reventa.')
+      await expect(normas(page).last()).toContainText('No se tolera el contenido ofensivo ni el acoso: quien lo haga se queda sin mercadillo.')
+      await expect(page.getByRole('link', { name: 'Términos', exact: true })).toHaveAttribute('href', '/terminos#mercadillo')
+      await expect(page.getByRole('link', { name: 'Privacidad', exact: true })).toHaveAttribute('href', '/privacidad')
+      // «Acepto las normas», a la vista sin desplazar nada; y detrás no hay mercadillo: ni «Vender», ni anuncios, ni buzón.
+      await expect(acepto(page)).toBeInViewport({ ratio: 1 })
+      expect(await page.evaluate(() => window.scrollY), 'la prueba no ha desplazado la pantalla').toBe(0)
+      await expect(vender(page)).toHaveCount(0)
+      await expect(anuncio(page)).toHaveCount(0)
+      await expect(page.getByRole('button', { name: /^Mensajes/ })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Mis anuncios' })).toHaveCount(0)
+      await sinVocabulario(page, 'las normas que se aceptan al entrar')
+      expect(s.llamadas, 'leerlas no las acepta').toEqual([])
+
+      await acepto(page).click()
+      await expect(vender(page)).toBeVisible()
+      expect(s.llamadas).toEqual(['normas'])
+      expect(s.aceptado, 'el POST lleva la aceptación').toEqual({ acepto: true })
+      await expect(anuncio(page)).toBeVisible()
+      await expect(acepto(page)).toHaveCount(0)
+      await sinVocabulario(page, 'la lista tras aceptar las normas')
+
+      // «Normas y seguridad», al pie de la lista, sigue igual: se leen, sin nada que aceptar.
+      await page.getByRole('button', { name: 'Normas y seguridad' }).click()
+      await expect(cabecera(page, 'Normas del mercadillo')).toBeVisible()
+      await expect(normas(page)).toHaveCount(9)
+      await expect(page.getByText(ANTES_DE_ENTRAR)).toHaveCount(0)
+      await expect(acepto(page)).toHaveCount(0)
+      // Y al volver a la lista (que vuelve a preguntar al servidor) no se piden otra vez.
+      await page.getByRole('button', { name: 'Volver' }).click()
+      await expect(vender(page)).toBeVisible()
+      await expect(acepto(page)).toHaveCount(0)
+      expect(s.llamadas).toEqual(['normas'])
+      expect(fallos).toEqual([])
+    })
+
+    test('volver sin aceptar es salir del mercadillo; al entrar otra vez, se vuelven a pedir', async ({ page }) => {
+      const fallos = vigilar(page)
+      const s = await entrar(page, { ios, porLaApp: true, normas: false })
+      await expect(acepto(page)).toBeVisible()
+      await page.getByRole('button', { name: 'Volver' }).click()
+      const tarjeta = page.getByRole('button', { name: /Mercadillo de repartidores/ })
+      await expect(tarjeta, 'de vuelta en «Cuenta»').toBeVisible()
+      await expect(acepto(page)).toHaveCount(0)
+      expect(s.llamadas, 'volver no acepta nada').toEqual([])
+      await tarjeta.click()
+      await expect(acepto(page)).toBeVisible()
+      await expect(vender(page)).toHaveCount(0)
+      expect(fallos).toEqual([])
+    })
+
+    test('si el servidor no deja aceptar, se lee lo que contesta y no se pasa', async ({ page }) => {
+      const fallos = vigilar(page)
+      const s = await entrar(page, { ios, normas: false, errorNormas: { status: 400, detail: SIN_ACEPTAR } })
+      await acepto(page).click()
+      await expect(page.getByRole('alert')).toHaveText(SIN_ACEPTAR)
+      expect(s.llamadas).toEqual(['normas'])
+      await expect(acepto(page), 'se puede volver a intentar').toBeEnabled()
+      await expect(vender(page)).toHaveCount(0)
+      await sinVocabulario(page, 'las normas con el error del servidor')
+      expect(fallos).toEqual([])
+    })
+
+    test('a quien se le ha quitado el acceso: solo la cabecera y el porqué; ni lista, ni «Vender», ni buzón', async ({ page }) => {
+      const fallos = vigilar(page)
+      const TEXTO = sinAcceso('acoso', 'Varias personas nos han avisado.')
+      // La tarjeta de fuera («Cuenta») no cambia: por ella se entra, y volver lleva otra vez a ella.
+      const s = await entrar(page, { ios, porLaApp: true, expulsado: TEXTO })
+      const porque = page.getByRole('alert')
+      await expect(porque).toHaveText(TEXTO)
+      await expect(porque, 'el porqué se dice una vez (el 403 de la lista no se pinta además)').toHaveCount(1)
+      await expect(cabecera(page, 'Mercadillo')).toBeVisible()
+      await expect(porque.getByRole('link', { name: CONTACTO })).toHaveAttribute('href', `mailto:${CONTACTO}`)
+      for (const nombre of [/Vender algo que no uses/, /^Mensajes/, 'Mis anuncios', 'Normas y seguridad', /Personas bloqueadas/, 'Acepto las normas']) {
+        await expect(page.getByRole('button', { name: nombre }), `a quien no tiene acceso no se le ofrece ${nombre}`).toHaveCount(0)
+      }
+      await expect(anuncio(page)).toHaveCount(0)
+      await sinVocabulario(page, 'quien se ha quedado sin acceso')
+      // No ha pedido nada de dentro: solo el estado y la lista (que le contesta 403).
+      expect([...new Set(s.pedidas)].sort()).toEqual(['GET /', 'GET /estado'])
+      await page.getByRole('button', { name: 'Volver' }).click()
+      await expect(page.getByRole('button', { name: /Mercadillo de repartidores/ }), 'de vuelta en «Cuenta»').toBeVisible()
+      await expect(porque).toHaveCount(0)
+      expect(fallos).toEqual([])
+    })
+
+    test('si le quitan el acceso con el mercadillo abierto: la pantalla de dentro dice el porqué y, al volver, ya no hay mercadillo', async ({ page }) => {
+      const fallos = vigilar(page)
+      const TEXTO = sinAcceso('ofensivo')
+      const s = await entrar(page, { ios })
+      await expect(anuncio(page)).toBeVisible()
+      s.expulsado = TEXTO                                              // se lo quitan ahora, con la lista delante
+      await anuncio(page).click()
+      await expect(page.getByRole('alert'), 'el 403 del anuncio se lee tal cual').toHaveText(TEXTO)
+      await sinVocabulario(page, 'el anuncio que ya no se puede abrir')
+      await page.getByRole('button', { name: 'Volver' }).click()
+      await expect(page.getByRole('alert')).toHaveText(TEXTO)
+      await expect(cabecera(page, 'Mercadillo')).toBeVisible()
+      await expect(vender(page)).toHaveCount(0)
+      await expect(anuncio(page)).toHaveCount(0)
+      expect(fallos).toEqual([])
+    })
+
+    /* «Avisarme en el móvil» son los avisos del navegador. Dentro de la app de iPhone no existen, y el botón solo sabía contestar
+       «Este navegador no permite avisos. En iPhone, primero añade la app a la pantalla de inicio…»: allí no se pinta. */
+    test(ios ? '«Avisarme en el móvil» no sale dentro de la app de iPhone: ni en el buzón ni después de escribir' : 'control · en la web «Avisarme en el móvil» sigue en el buzón y después de escribir', async ({ page }) => {
+      const fallos = vigilar(page)
+      await entrar(page, { ios })
+      await page.getByRole('button', { name: 'Mensajes, 1 sin leer' }).click()
+      await expect(page.getByText('Privados entre quien compra y quien vende')).toBeVisible()
+      await expect(page.getByText('Sí, sigue disponible')).toBeVisible()
+      const interruptor = page.getByRole('switch', { name: 'Avisarme en el móvil' })
+      if (ios) {
+        await expect(interruptor).toHaveCount(0)
+        expect(await lo(page), 'el buzón del iPhone no habla de avisos al móvil').not.toMatch(/en el móvil|navegador|pantalla de inicio/i)
+      } else {
+        await expect(interruptor).toBeVisible()
+        await expect(page.getByText('Cuando alguien te escriba o se revise tu anuncio')).toBeVisible()
+      }
+      await sinVocabulario(page, 'el buzón sin «Avisarme en el móvil»')
+      await page.getByRole('button', { name: /Luis G\./ }).click()
+      await expect(page.getByText('Hola, ¿sigue disponible?')).toBeVisible()
+      const pregunta = page.getByText('¿Te avisamos en el móvil cuando te contesten?')
+      const si = page.getByRole('button', { name: 'Sí, avísame en el móvil' })
+      if (ios) {
+        await expect(pregunta).toHaveCount(0)
+        await expect(si).toHaveCount(0)
+        expect(await lo(page), 'la conversación del iPhone no habla de avisos al móvil').not.toMatch(/en el móvil|navegador|pantalla de inicio/i)
+      } else {
+        await expect(pregunta).toBeVisible()
+        await expect(si).toBeVisible()
+      }
+      await sinVocabulario(page, 'la conversación sin la pregunta de los avisos')
+      expect(fallos).toEqual([])
+    })
+  })
+}
+
+/* ── `normas_ok === false`, ESTRICTO ─────────────────────────────────────────────────────────────────────────────────────────
+   La pantalla de normas la impone la web, no el servidor (la app de iPhone que está en revisión y las webs en caché no la
+   conocen). Por eso solo sale cuando el servidor dice `false`: con `true`, sin el campo (un servidor de antes) o con cualquier
+   otra cosa se entra como siempre, y nadie se queda fuera por esto. */
+test('Mercadillo · las normas solo se piden con normas_ok === false: con true, sin el campo o con null se entra directo', async ({ page }) => {
+  const s = await entrar(page, { normas: true })
+  for (const valor of [true, undefined, null]) {
+    s.normas = valor
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(vender(page), `con normas_ok ${valor === undefined ? 'sin venir' : valor} se entra directo`).toBeVisible()
+    await expect(anuncio(page)).toBeVisible()
+    await expect(acepto(page)).toHaveCount(0)
+    await expect(page.getByText(ANTES_DE_ENTRAR)).toHaveCount(0)
+  }
+  // El control, en la misma página: con `false`, sí.
+  s.normas = false
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(acepto(page)).toBeVisible()
+  await expect(vender(page)).toHaveCount(0)
+  expect(s.llamadas).toEqual([])
+})
+
+for (const [solo, de] of [['estado', '/mercadillo/estado'], ['lista', '/mercadillo']]) {
+  test(`Mercadillo · si normas_ok: false viene solo en ${de}, las normas se piden igual y aceptarlas deja pasar`, async ({ page }) => {
+    const s = await entrar(page, { normas: false, normasEn: solo })
+    await expect(acepto(page)).toBeVisible()
+    await expect(vender(page)).toHaveCount(0)
+    await acepto(page).click()
+    await expect(vender(page)).toBeVisible()
+    await expect(anuncio(page)).toBeVisible()
+    expect(s.aceptado).toEqual({ acepto: true })
+  })
+}
+
+/* Lo que contesta el servidor en lo nuevo (backend/mercadillo.py y server.py, TAL CUAL el 10-11-2026): el texto de quien se queda
+   sin acceso (con cada motivo, y con nota), el de las normas sin aceptar, los dos del filtro de palabras y el aviso de que se le
+   devuelve el acceso (sale en su buzón). Dentro de la app de iPhone, un error que hable de planes o de topes se cambia por un
+   texto neutro (lib/plataforma.js): estos tienen que leerse como son (dicen qué pasa y qué hacer) y no pueden llevar nada del
+   vocabulario prohibido allí. */
+const DEL_SERVIDOR = [
+  ...Object.keys(MOTIVOS_EXPULSION).map((k) => sinAcceso(k)), sinAcceso('acoso', 'Varias personas nos han avisado.'),
+  SIN_ACEPTAR,
+  'Ese mensaje no se puede enviar: no se permiten insultos, amenazas ni contenido ofensivo. Cámbialo y vuelve a enviarlo.',
+  'Ese anuncio no se puede enviar: quita los insultos o el contenido ofensivo del texto.',
+  'Vuelves a tener acceso al mercadillo. Los anuncios que se retiraron no vuelven solos: si todavía vendes algo, publícalo otra vez. Y recuerda cumplir las normas.',
+]
+test('Mercadillo · lo que contesta el servidor (sin acceso, normas y filtro de palabras) se lee tal cual también en el iPhone', () => {
+  const neutros = DEL_SERVIDOR.filter((m) => hablaDePagos(m))
+  expect(neutros, `en el iPhone se cambiarían por el texto neutro: ${neutros.join(' | ')}`).toEqual([])
+  const faltas = DEL_SERVIDOR.flatMap((m) => prohibidas(m, 'es', 'basico'))
+  expect(faltas, `dicen algo prohibido en el iPhone: ${faltas.join(' | ')}`).toEqual([])
+})
+
+/* ── El panel de Dani (Negocio → Mercadillo): quitar a una persona del mercadillo y devolverle el acceso ─────────────────────
+   Solo el super-admin, y solo en la web (dentro de la app de iPhone Negocio no existe). Aquí sí sale la clave de cada persona:
+   es con lo que se le quita el acceso. A quien modera (`fds`) no se le ofrece. */
+const LUIS = { clave: 'd:org1:d7', nombre: 'Luis G.' }
+const MARTA = { clave: 'o:org9', nombre: 'Marta R.' }
+const PEDRO = { clave: 'a:org2:u3', nombre: 'Pedro S.' }
+const YA_SIN_ACCESO = { ...PEDRO, ts: '2026-11-09T08:15:00+00:00', motivo_clave: 'estafa', motivo: MOTIVOS_EXPULSION.estafa, nota: 'Pedía Bizum por adelantado.' }
+const delAdmin = (id, persona, titulo, estado = 'publicado') => ({ ...SOPORTE, id, titulo, estado, caduca: '2026-12-08T10:00:00+00:00', interesados: 1,
+  vendedor: { nombre: persona.nombre, tipo: persona.tipo || 'conductor', clave: persona.clave, org_id: 'org1' } })
+const LO_QUE_PASA = 'No podrá entrar al mercadillo. Sus anuncios se retiran y sus conversaciones se cierran. Se le dice el motivo y cómo reclamar. Puedes devolverle el acceso cuando quieras.'
+const QUITAR = { name: 'Quitar del mercadillo', exact: true }
+
+/** Negocio → Mercadillo con memoria: a quién se le quita el acceso sale después en `expulsados`. `antiguo`: un servidor de antes
+ *  de todo esto (sin `expulsados`, sin `motivos_expulsion`, sin `personas` en las denuncias y sin `totales.expulsados`). */
+async function negocio(page, { errorExpulsar = null, errorReadmitir = null, antiguo = false } = {}) {
+  const s = { expulsados: [YA_SIN_ACCESO], llamadas: [], cuerpos: [] }
+  const personas = (lista) => (antiguo ? {} : { personas: lista })
+  const datos = () => ({
+    conf: { visible: true }, avisos: { activo: false, movil: false }, motivos_rechazo: { otro: 'No cumple las normas del mercadillo.' },
+    motivos_denuncia: LISTAS.motivos_denuncia, categorias: LISTAS.categorias, estados_articulo: LISTAS.estados_articulo,
+    por_revisar: [delAdmin('p1', LUIS, 'Escáner de la nave', 'pendiente')],
+    publicados: [delAdmin('a1', { clave: 'fds', nombre: 'Dani · FDS', tipo: 'fds' }, 'iPhone 18 Pro · 256 GB'), delAdmin('a3', MARTA, 'Carretilla plegable')],
+    denuncias: [
+      { id: 'n1', objetivo: { tipo: 'anuncio', id: 'a3', titulo: 'Carretilla plegable' }, motivo: 'estafa', de_nombre: 'Ana P.', ts: '2026-11-10T08:00:00+00:00',
+        texto: 'Pide el dinero antes de quedar', ...personas([{ ...MARTA, papel: 'vendedor' }]) },
+      { id: 'n2', objetivo: { tipo: 'conversacion', id: 'c9', titulo: 'Gorra de invierno' }, motivo: 'acoso', de_nombre: 'Ana P.', ts: '2026-11-10T08:30:00+00:00', texto: '',
+        mensajes: [{ de: 'Luis G.', texto: 'Te vas a enterar', ts: '2026-11-10T08:20:00+00:00' }],
+        ...personas([{ clave: 'o:org5', nombre: 'Ana P.', papel: 'vendedor' }, { ...LUIS, papel: 'comprador' }]) },
+    ],
+    bloqueos: [
+      { id: '00b10c0e00000003', de_nombre: 'Marta R.', a_nombre: 'Luis G.', a_clave: LUIS.clave, ts: '2026-11-10T09:30:00+00:00', origen: { tipo: 'conversacion', titulo: 'Gorra de invierno' } },
+      { id: '00b10c0e00000002', de_nombre: 'Ana P.', a_nombre: 'Luis G.', a_clave: LUIS.clave, ts: '2026-11-09T18:05:00+00:00', origen: { tipo: 'anuncio', titulo: 'Escáner de la nave' } },
+      { id: '00b10c0e00000001', de_nombre: 'Ana P.', a_nombre: 'Pedro S.', a_clave: PEDRO.clave, ts: '2026-11-08T09:00:00+00:00', origen: { tipo: 'anuncio', titulo: 'Batería externa' } },
+    ],
+    bloqueados_varios: [{ clave: LUIS.clave, nombre: 'Luis G.', n: 2 }],
+    ...(antiguo ? {} : { expulsados: s.expulsados, motivos_expulsion: MOTIVOS_EXPULSION }),
+    totales: { por_revisar: 1, publicados: 2, denuncias: 2, conversaciones: 3, vendidos: 0, bloqueos: 3, ...(antiguo ? {} : { expulsados: s.expulsados.length }) },
+  })
+  await entrarComoAdmin(page, { superAdmin: true })
+  await simularApi(page, 'vacio')
+  await arrancar(page, { ios: false })
+  await page.route(/\/api\/mercadillo\/foto\//, (x) => x.fulfill({ status: 200, contentType: 'image/png', body: PNG }))
+  await page.route(/\/api\/admin\/mercadillo$/, (x) => x.fulfill({ json: datos() }))
+  await page.route(/\/api\/admin\/mercadillo\/(?:expulsar|readmitir)$/, (x) => {
+    const que = x.request().url().split('/').pop()
+    const cuerpo = x.request().postDataJSON()
+    s.llamadas.push(que); s.cuerpos.push(cuerpo)
+    const error = que === 'expulsar' ? errorExpulsar : errorReadmitir
+    if (error) return x.fulfill({ status: error.status, json: { detail: error.detail } })
+    if (que === 'readmitir') {
+      s.expulsados = s.expulsados.filter((e) => e.clave !== cuerpo.clave)
+      return x.fulfill({ json: { ok: true } })
+    }
+    const p = [LUIS, MARTA].find((y) => y.clave === cuerpo.clave)
+    const nuevo = { clave: p.clave, nombre: p.nombre, ts: '2026-11-10T09:45:00+00:00', motivo_clave: cuerpo.motivo, motivo: MOTIVOS_EXPULSION[cuerpo.motivo], nota: cuerpo.nota || '' }
+    s.expulsados = [nuevo, ...s.expulsados]
+    return x.fulfill({ json: { ok: true, expulsado: nuevo, anuncios: 2, conversaciones: 1 } })
+  })
+  await page.goto('/panel/admin?s=mercadillo', { waitUntil: 'domcontentloaded' })
+  const seccion = page.getByRole('region', { name: 'Mercadillo de repartidores' })
+  await expect(seccion.getByText('Visible: lo ven todos los repartidores', { exact: false })).toBeVisible()
+  return { s, seccion }
+}
+const casilla = (seccion, nombre) => seccion.locator('div.grid > div').filter({ hasText: nombre })
+const sinAccesoEn = (seccion) => seccion.getByRole('group', { name: 'Sin acceso al mercadillo' })
+
+test.describe('Negocio · quitar a una persona del mercadillo y devolverle el acceso', () => {
+  test('«Quitar del mercadillo» junto a cada persona; con su motivo lo manda, y desde entonces dice «Sin acceso desde el…»', async ({ page }) => {
+    test.setTimeout(60000)
+    const fallos = vigilar(page)
+    const { s, seccion } = await negocio(page)
+    await seccion.getByText('Publicados (2)').click()                 // los publicados van plegados
+
+    // Junto a cada persona con clave: quien vende (por revisar y publicados), las personas de cada denuncia y a quien han bloqueado.
+    const porRevisar = seccion.getByRole('listitem').filter({ hasText: 'Escáner de la nave · ' })
+    const publicado = seccion.getByRole('listitem').filter({ hasText: 'Carretilla plegable · ' })
+    const deDani = seccion.getByRole('listitem').filter({ hasText: 'iPhone 18 Pro · 256 GB · ' })
+    // (con mayúscula y su motivo: «desde la conversación sobre «Gorra de invierno»» es también una fila de los bloqueos)
+    const denunciaAnuncio = seccion.getByRole('listitem').filter({ hasText: /Anuncio «Carretilla plegable» · Es un engaño/ })
+    const denunciaConversacion = seccion.getByRole('listitem').filter({ hasText: /Conversación sobre «Gorra de invierno» · Me insulta/ })
+    const bloqueos = seccion.getByRole('group', { name: 'Bloqueos' })
+    const variosLuis = bloqueos.getByRole('listitem').filter({ hasText: 'Bloqueado por 2 personas: Luis G.' })
+    const bloqueosLuis = bloqueos.getByRole('listitem').filter({ hasText: 'bloqueó a Luis G.' })
+    const bloqueoPedro = bloqueos.getByRole('listitem').filter({ hasText: 'bloqueó a Pedro S.' })
+    await expect(porRevisar.getByRole('button', QUITAR)).toHaveCount(1)
+    await expect(publicado.getByRole('button', QUITAR)).toHaveCount(1)
+    await expect(denunciaAnuncio.getByText('Vende: Marta R.')).toBeVisible()
+    await expect(denunciaAnuncio.getByRole('button', QUITAR)).toHaveCount(1)
+    await expect(denunciaConversacion.getByText('Vende: Ana P.')).toBeVisible()
+    await expect(denunciaConversacion.getByText('Compra: Luis G.')).toBeVisible()
+    await expect(denunciaConversacion.getByRole('button', QUITAR), 'en una conversación, las dos personas').toHaveCount(2)
+    await expect(variosLuis.getByRole('button', QUITAR)).toHaveCount(1)
+    await expect(bloqueosLuis).toHaveCount(2)
+    await expect(bloqueosLuis.getByRole('button', QUITAR)).toHaveCount(2)
+    // A quien modera no se le ofrece; y quien ya no tiene acceso lo dice en lugar del botón.
+    await expect(deDani).toHaveCount(1)
+    await expect(deDani.getByRole('button', QUITAR), 'a quien modera no se le quita el mercadillo').toHaveCount(0)
+    await expect(bloqueoPedro.getByText('Sin acceso desde el 09/11/2026', { exact: true })).toBeVisible()
+    await expect(bloqueoPedro.getByRole('button', QUITAR)).toHaveCount(0)
+    // Lo de siempre sigue en su sitio: aprobar, rechazar, retirar y resolver denuncias.
+    await expect(porRevisar.getByRole('button', { name: 'Aprobar' })).toBeEnabled()
+    await expect(porRevisar.getByRole('button', { name: 'Rechazar' })).toBeDisabled()
+    await expect(publicado.getByRole('button', { name: 'Retirar', exact: true })).toBeDisabled()
+    await expect(denunciaConversacion.getByRole('button', { name: 'Cerrar la conversación' })).toBeEnabled()
+    await expect(denunciaAnuncio.getByRole('button', { name: 'No incumple' })).toBeEnabled()
+
+    // La hoja: a quién (con su clave), qué pasa, el motivo (obligatorio) y la nota. «Cancelar» no manda nada.
+    await porRevisar.getByRole('button', QUITAR).click()
+    const hoja = page.getByRole('dialog', { name: 'Quitar del mercadillo a Luis G.' })
+    await expect(hoja).toBeVisible()
+    await expect(hoja).toHaveAttribute('aria-modal', 'true')
+    await expect(hoja.getByText(LUIS.clave, { exact: true })).toBeVisible()
+    await expect(hoja.getByText(LO_QUE_PASA, { exact: true })).toBeVisible()
+    const motivo = hoja.getByLabel('Por qué se le quita')
+    await expect(motivo.locator('option')).toHaveText(['Motivo (se le dice a esa persona)…', ...Object.values(MOTIVOS_EXPULSION)])
+    const quitar = hoja.getByRole('button', { name: 'Quitar el acceso', exact: true })
+    await expect(quitar, 'sin motivo no se quita').toBeDisabled()
+    await hoja.getByRole('button', { name: 'Cancelar', exact: true }).click()
+    await expect(hoja).toHaveCount(0)
+    expect(s.llamadas, '«Cancelar» no quita nada').toEqual([])
+
+    await porRevisar.getByRole('button', QUITAR).click()
+    await expect(quitar, 'la hoja se abre limpia cada vez').toBeDisabled()
+    await motivo.selectOption('acoso')
+    await hoja.getByLabel('Algo más que decirle').fill('  Insultos en dos conversaciones.  ')
+    await quitar.click()
+    await expect(seccion.getByRole('status')).toHaveText('Luis G. ya no tiene acceso al mercadillo: 2 anuncios retirados y 1 conversación cerrada.')
+    expect(s.llamadas).toEqual(['expulsar'])
+    expect(s.cuerpos[0], 'se quita a una persona: su clave, el motivo y la nota').toEqual({ clave: 'd:org1:d7', motivo: 'acoso', nota: 'Insultos en dos conversaciones.' })
+    await expect(hoja).toHaveCount(0)
+
+    // Desde entonces, donde salía «Quitar del mercadillo» junto a Luis dice desde cuándo no tiene acceso. Los demás, igual.
+    for (const [fila, n] of [[porRevisar, 1], [denunciaConversacion, 1], [variosLuis, 1], [bloqueosLuis, 2]]) {
+      await expect(fila.getByText('Sin acceso desde el 10/11/2026', { exact: true })).toHaveCount(n)
+    }
+    await expect(porRevisar.getByRole('button', QUITAR)).toHaveCount(0)
+    await expect(bloqueos.getByRole('button', QUITAR)).toHaveCount(0)
+    await expect(denunciaConversacion.getByRole('button', QUITAR), 'a la otra persona de la conversación se le sigue pudiendo quitar').toHaveCount(1)
+    await expect(publicado.getByRole('button', QUITAR)).toHaveCount(1)
+    // Y está en «Sin acceso al mercadillo», el primero, con su clave, cuándo, el motivo que se le dijo y la nota.
+    const filas = sinAccesoEn(seccion).getByRole('listitem')
+    await expect(filas).toHaveCount(2)
+    await expect(filas.nth(0)).toContainText('Luis G. (d:org1:d7)')
+    await expect(filas.nth(0)).toContainText(/10\/11\/2026 \d\d:45 · Has acosado o molestado a otra persona\./)
+    await expect(filas.nth(0)).toContainText('Nota: Insultos en dos conversaciones.')
+    await expect(filas.nth(0).getByRole('button', { name: 'Devolver el acceso' })).toBeVisible()
+    await expect(filas.nth(1)).toContainText('Pedro S. (a:org2:u3)')
+    await expect(casilla(seccion, 'Sin acceso')).toContainText('2')
+    await expect(page.getByText(/undefined|NaN/)).toHaveCount(0)
+    expect(fallos).toEqual([])
+  })
+
+  test('lo que conteste el servidor al quitar el acceso se lee tal cual en la hoja, que no se cierra', async ({ page }) => {
+    test.setTimeout(60000)
+    const fallos = vigilar(page)
+    const NO_HA_USADO = 'Esa persona no ha usado el mercadillo'
+    const { s, seccion } = await negocio(page, { errorExpulsar: { status: 404, detail: NO_HA_USADO } })
+    await seccion.getByRole('listitem').filter({ hasText: 'Bloqueado por 2 personas: Luis G.' }).getByRole('button', QUITAR).click()
+    const hoja = page.getByRole('dialog', { name: 'Quitar del mercadillo a Luis G.' })
+    await hoja.getByLabel('Por qué se le quita').selectOption('otro')
+    await hoja.getByRole('button', { name: 'Quitar el acceso', exact: true }).click()
+    await expect(hoja.getByRole('alert')).toHaveText(NO_HA_USADO)
+    expect(s.cuerpos[0], 'sin nota, la nota va vacía').toEqual({ clave: 'd:org1:d7', motivo: 'otro', nota: '' })
+    await expect(hoja.getByRole('button', { name: 'Quitar el acceso', exact: true }), 'se puede volver a intentar').toBeEnabled()
+    await expect(seccion.getByRole('status')).toHaveCount(0)
+    await expect(sinAccesoEn(seccion).getByRole('listitem')).toHaveCount(1)
+    expect(fallos).toEqual([])
+  })
+
+  test('«Sin acceso al mercadillo»: a quién, cuándo y por qué; «Devolver el acceso» pregunta, lo manda y le quita de la lista', async ({ page }) => {
+    test.setTimeout(60000)
+    const fallos = vigilar(page)
+    const { s, seccion } = await negocio(page)
+    const fila = sinAccesoEn(seccion).getByRole('listitem').filter({ hasText: 'Pedro S.' })
+    await expect(fila).toContainText('Pedro S. (a:org2:u3)')
+    await expect(fila).toContainText(/09\/11\/2026 \d\d:15 · Hemos visto un engaño o un intento de estafa\./)
+    await expect(fila).toContainText('Nota: Pedía Bizum por adelantado.')
+    await expect(casilla(seccion, 'Sin acceso')).toContainText('1')
+
+    // Antes pregunta (se le avisa, y sus anuncios no vuelven solos). Decir que no, no manda nada.
+    const preguntas = []
+    let si = false
+    page.on('dialog', (d) => { preguntas.push(d.message()); return si ? d.accept() : d.dismiss() })
+    await fila.getByRole('button', { name: 'Devolver el acceso' }).click()
+    await expect.poll(() => preguntas.length).toBe(1)
+    expect(preguntas[0]).toBe('¿Devolver el acceso al mercadillo a Pedro S.? Se le avisa. Sus anuncios no vuelven solos: tendrá que enviarlos otra vez.')
+    await expect(fila).toHaveCount(1)
+    expect(s.llamadas, 'decir que no, no devuelve nada').toEqual([])
+
+    si = true
+    await fila.getByRole('button', { name: 'Devolver el acceso' }).click()
+    await expect(sinAccesoEn(seccion).getByText('Nadie ha perdido el acceso.')).toBeVisible()
+    expect(s.llamadas).toEqual(['readmitir'])
+    expect(s.cuerpos[0], 'se le devuelve a una persona: su clave').toEqual({ clave: 'a:org2:u3' })
+    await expect(fila).toHaveCount(0)
+    await expect(casilla(seccion, 'Sin acceso')).toContainText('0')
+    // Y donde decía «Sin acceso desde el…» vuelve a ofrecer «Quitar del mercadillo».
+    const bloqueoPedro = seccion.getByRole('listitem').filter({ hasText: 'bloqueó a Pedro S.' })
+    await expect(bloqueoPedro.getByRole('button', QUITAR)).toHaveCount(1)
+    await expect(bloqueoPedro.getByText(/Sin acceso/)).toHaveCount(0)
+    expect(fallos).toEqual([])
+  })
+
+  test('lo que conteste el servidor al devolver el acceso se lee tal cual, y la persona sigue en la lista', async ({ page }) => {
+    test.setTimeout(60000)
+    const YA_TIENE = 'Esa persona ya tiene acceso al mercadillo'
+    const { s, seccion } = await negocio(page, { errorReadmitir: { status: 404, detail: YA_TIENE } })
+    page.on('dialog', (d) => d.accept())
+    await sinAccesoEn(seccion).getByRole('button', { name: 'Devolver el acceso' }).click()
+    await expect(seccion.getByRole('alert')).toHaveText(YA_TIENE)
+    expect(s.llamadas).toEqual(['readmitir'])
+    await expect(sinAccesoEn(seccion).getByRole('listitem')).toHaveCount(1)
+  })
+
+  test('con un servidor de antes (sin expulsados, sin motivos y sin personas en las denuncias): «Nadie ha perdido el acceso» y nada se rompe', async ({ page }) => {
+    test.setTimeout(60000)
+    const fallos = vigilar(page)
+    const { seccion } = await negocio(page, { antiguo: true })
+    await expect(sinAccesoEn(seccion).getByText('Nadie ha perdido el acceso.')).toBeVisible()
+    await expect(sinAccesoEn(seccion).getByRole('listitem')).toHaveCount(0)
+    await expect(casilla(seccion, 'Sin acceso')).toContainText('0')
+    await expect(seccion.getByText(/^(?:Vende|Compra): /)).toHaveCount(0)
+    await expect(seccion.getByText(/Sin acceso desde/)).toHaveCount(0)
+    await expect(seccion.getByRole('button', { name: 'Cerrar la conversación' })).toBeEnabled()
+    await expect(page.getByText(/undefined|NaN/)).toHaveCount(0)
+    expect(fallos).toEqual([])
+  })
+})

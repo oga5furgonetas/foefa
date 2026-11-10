@@ -871,3 +871,7 @@ export const adminMercadillo = () => api.get('/admin/mercadillo')
 export const adminMercadilloVisible = (visible) => api.post('/admin/mercadillo/visible', { visible })
 export const adminMercadilloAnuncio = (id, d) => api.post(`/admin/mercadillo/anuncio/${id}`, d)
 export const adminMercadilloDenuncia = (id, d) => api.post(`/admin/mercadillo/denuncia/${id}`, d)
+/* Quitar a una persona del mercadillo y devolverle el acceso (10-11-2026; Apple, guideline 1.2: «ejecting the user»). Se quita a
+   una PERSONA (su clave, que solo se ve en este panel), siempre con motivo ({clave, motivo, nota}): es lo que se le dice. */
+export const adminMercadilloExpulsar = (d) => api.post('/admin/mercadillo/expulsar', d)
+export const adminMercadilloReadmitir = (clave) => api.post('/admin/mercadillo/readmitir', { clave })

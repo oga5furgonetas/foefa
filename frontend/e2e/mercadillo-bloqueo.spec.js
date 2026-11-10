@@ -33,6 +33,8 @@ const IPHONE = anuncio('a1', 'fds', { nombre: 'Dani · FDS', tipo: 'fds' }, 'iPh
 const SOPORTE = anuncio('a2', 'luis', { nombre: 'Luis G.', tipo: 'conductor' }, 'Soporte de móvil para la furgoneta', 1500)
 const CARRETILLA = anuncio('a3', 'marta', { nombre: 'Marta R.', tipo: 'autonomo', entregas: 420 }, 'Carretilla plegable', 2500)
 const GORRA = anuncio('m1', 'yo', { nombre: 'Ana P.', tipo: 'autonomo' }, 'Gorra de invierno', 800, { mio: true })
+// Con un título de DOS líneas en un móvil estrecho (solo sale donde se pide, con `otros`): el detalle de la ficha del 10-11-2026.
+const NEVERA = anuncio('a4', 'luis', { nombre: 'Luis G.', tipo: 'conductor' }, 'Nevera portátil de 12 V para la furgoneta, poco uso', 4500)
 const CONVERSACIONES = [
   { id: 'c1', persona: 'luis', con: 'Luis G.', soy: 'vendedor', anuncio: GORRA, ultimo: '2026-11-09T18:00:00+00:00', ultimo_texto: '¿Me la dejas en 5?', sin_leer: true,
     mensajes: [{ id: 'm1', mio: false, texto: '¿Me la dejas en 5?', ts: '2026-11-09T18:00:00+00:00' }] },
@@ -44,10 +46,11 @@ const DEL_MODERADOR = 'Tú moderas el mercadillo: retira el anuncio o cierra la 
 
 /** El mercadillo del servidor, simulado y CON MEMORIA: lo que se bloquea deja de salir, como en el de verdad. Devuelve lo que
  *  ha pasado (`llamadas`, en orden, y el cuerpo de cada una) para poder decir qué mandó la web y cuándo. */
-async function mercadillo(page, { bloqueos = [], errorBloquear = null, cuentaEn = 'lista' } = {}) {
+async function mercadillo(page, { bloqueos = [], errorBloquear = null, cuentaEn = 'lista', otros = [] } = {}) {
   const s = { bloqueos: bloqueos.map((b) => ({ ...b })), llamadas: [], bloqueo: null, denuncia: null, desbloqueo: null }
   const bloqueada = (persona) => s.bloqueos.some((b) => b.persona === persona)
   const publico = ({ persona: _persona, ...a }) => a
+  const DE_OTROS = [IPHONE, SOPORTE, CARRETILLA, ...otros]
   await page.route(/\/api\/mercadillo(?:\/[^?]*)?(?:\?.*)?$/, async (x) => {
     const pet = x.request()
     const metodo = pet.method()
@@ -59,12 +62,12 @@ async function mercadillo(page, { bloqueos = [], errorBloquear = null, cuentaEn 
         ...(cuentaEn === 'estado' ? { bloqueados: s.bloqueos.length } : {}) })
     }
     if (ruta === '' && metodo === 'GET') {
-      return json({ anuncios: [IPHONE, SOPORTE, CARRETILLA].filter((a) => !bloqueada(a.persona)).map(publico), mios: [publico(GORRA)], ...LISTAS,
+      return json({ anuncios: DE_OTROS.filter((a) => !bloqueada(a.persona)).map(publico), mios: [publico(GORRA)], ...LISTAS,
         activos_max: 3, dias: 30, yo: YO, ...(cuentaEn === 'lista' ? { bloqueados: s.bloqueos.length } : {}) })
     }
     if (ruta.startsWith('/foto/')) return x.fulfill({ status: 200, contentType: 'image/png', body: PNG })
     if (ruta.startsWith('/anuncio/') && metodo === 'GET') {
-      const a = [IPHONE, SOPORTE, CARRETILLA, GORRA].find((y) => `/anuncio/${y.id}` === ruta)
+      const a = [...DE_OTROS, GORRA].find((y) => `/anuncio/${y.id}` === ruta)
       if (!a || bloqueada(a.persona)) return json({ detail: 'Ese anuncio ya no está' }, 404)
       return json({ ...publico(a), conversacion_id: (CONVERSACIONES.find((c) => c.anuncio.id === a.id && c.soy === 'comprador') || {}).id || null })
     }
@@ -76,7 +79,7 @@ async function mercadillo(page, { bloqueos = [], errorBloquear = null, cuentaEn 
     }
     if (ruta.startsWith('/conversacion/') && metodo === 'GET') {
       const c = CONVERSACIONES.find((y) => `/conversacion/${y.id}` === ruta)
-      if (!c || bloqueada(c.persona)) return json({ detail: 'Esa conversación ya no está' }, 404)
+      if (!c || bloqueada(c.persona)) return json({ detail: 'Esa conversación no existe' }, 404)
       return json({ id: c.id, soy: c.soy, con: c.con, bloqueada: false, anuncio: publico(c.anuncio), mensajes: c.mensajes })
     }
     if (ruta === '/avisos/leidos') return json({ ok: true })
@@ -87,10 +90,11 @@ async function mercadillo(page, { bloqueos = [], errorBloquear = null, cuentaEn 
     if (ruta === '/bloquear' && metodo === 'POST') {
       s.llamadas.push('bloquear'); s.bloqueo = cuerpo()
       if (errorBloquear) return json({ detail: errorBloquear.detail }, errorBloquear.status)
-      const a = [IPHONE, SOPORTE, CARRETILLA].find((y) => y.id === s.bloqueo.anuncio_id)
+      const a = DE_OTROS.find((y) => y.id === s.bloqueo.anuncio_id)
       const c = CONVERSACIONES.find((y) => y.id === s.bloqueo.conversacion_id)
       if (!s.bloqueo.anuncio_id && !s.bloqueo.conversacion_id) return json({ detail: 'Falta a quién bloqueas' }, 400)
-      if (!a && !c) return json({ detail: 'Ese anuncio ya no está' }, 404)
+      // Como el servidor: el anuncio que no ve y la conversación que no es suya, cada uno con su texto.
+      if (!a && !c) return json({ detail: s.bloqueo.anuncio_id ? 'Ese anuncio ya no está' : 'Esa conversación no existe' }, 404)
       const persona = a ? a.persona : c.persona
       const previo = s.bloqueos.find((b) => b.persona === persona)
       if (previo) return json({ ok: true, ya: true, bloqueo: { id: previo.id, nombre: previo.nombre, desde: previo.desde } })
@@ -340,6 +344,27 @@ for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
         await page.getByRole('button', { name: /Luis G\./ }).click()
         await enLaPrimeraPantalla(page, page.getByRole('button', { name: 'Bloquear a Luis G.', exact: true }), page.getByLabel('Escribe un mensaje'), 'la conversación (375 × 647)')
       })
+
+      /* El detalle del 10-11-2026: con un título de DOS líneas, en esa pantalla la barra de «Me interesa» tapaba parte de
+         «Bloquear a…». Las etiquetas (estado, zona y fecha) han bajado debajo de la tarjeta de quien vende. */
+      test('y con un título de dos líneas (375 × 647), «Bloquear a…» cabe entero encima de «Me interesa»; las etiquetas van debajo', async ({ page }) => {
+        await page.setViewportSize({ width: 375, height: 647 })
+        await entrar(page, { ios, otros: [NEVERA] })
+        await tarjeta(page, NEVERA).click()
+        const bloquear = page.getByRole('button', { name: 'Bloquear a Luis G.', exact: true })
+        await expect(bloquear).toBeVisible()
+        await page.evaluate(() => document.fonts.ready)                 // con la letra de verdad: es la que decide cuántas líneas son
+        // Que la prueba mida lo que dice: el título de la ficha (el último; el de la cabecera va cortado a una línea) ocupa dos.
+        const lineas = await page.getByText(NEVERA.titulo, { exact: true }).last()
+          .evaluate((el) => el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight))
+        expect(Math.round(lineas), 'el título de esta prueba tiene que ocupar dos líneas').toBe(2)
+        await enLaPrimeraPantalla(page, bloquear, page.getByRole('button', { name: 'Me interesa' }), 'la ficha con un título de dos líneas (375 × 647)')
+        // Las etiquetas no se han perdido: siguen en la ficha, debajo de la tarjeta de quien vende.
+        const etiqueta = page.getByText('Como nuevo', { exact: true })
+        await expect(etiqueta).toHaveCount(1)
+        await expect(page.getByText(/^Desde el 8 nov/)).toHaveCount(1)
+        expect((await etiqueta.boundingBox()).y, 'las etiquetas van debajo de «Bloquear a…»').toBeGreaterThan((await bloquear.boundingBox()).y)
+      })
     }
   })
 }
@@ -374,7 +399,7 @@ const DEL_SERVIDOR = [
   DEL_MODERADOR, 'Es tu anuncio', 'No puedes bloquearte a ti', 'Falta a quién bloqueas', 'Esa persona ya no está en el mercadillo',
   'Tienes 200 personas bloqueadas, que es el máximo. Desbloquea a alguna en «Personas bloqueadas» para bloquear a otra.',
   'Has bloqueado a mucha gente hoy. Prueba mañana.', 'Ese bloqueo ya no está', 'Ese anuncio ya no está', 'Ese anuncio ya no está a la venta',
-  'Esta conversación está cerrada', 'Has bloqueado a esta persona. Desbloquéala para escribirle.',
+  'Esta conversación está cerrada', 'Has bloqueado a esta persona. Desbloquéala para escribirle.', 'Esa conversación no existe',
 ]
 test('Mercadillo · lo que contesta el servidor al bloquear se lee tal cual también en el iPhone', () => {
   const neutros = DEL_SERVIDOR.filter((m) => hablaDePagos(m))
@@ -383,7 +408,7 @@ test('Mercadillo · lo que contesta el servidor al bloquear se lee tal cual tamb
   expect(faltas, `dicen algo prohibido en el iPhone: ${faltas.join(' | ')}`).toEqual([])
 })
 
-/* ── El panel de Dani (Negocio → Mercadillo): quién ha bloqueado a quién, solo para mirar ────────────────────────────────────
+/* ── El panel de Dani (Negocio → Mercadillo): quién ha bloqueado a quién ─────────────────────────────────────────────────────
    Apple pide que el bloqueo «avise al desarrollador». GET /admin/mercadillo trae `bloqueos` (los 200 últimos), `bloqueados_varios`
    (a quién han bloqueado dos personas o más) y `totales.bloqueos`. Aquí sí sale la clave: es el panel del super-admin. */
 const ADMIN = { conf: { visible: true }, por_revisar: [], publicados: [], denuncias: [], avisos: { activo: false, movil: false },
@@ -400,7 +425,7 @@ async function negocio(page, datos) {
 }
 
 test.describe('Negocio · los bloqueos del mercadillo', () => {
-  test('quién ha bloqueado a quién, cuándo y desde dónde; arriba, a quién han bloqueado varias personas; y nada que pulsar', async ({ page }) => {
+  test('quién ha bloqueado a quién, cuándo y desde dónde; arriba, a quién han bloqueado varias personas; y un bloqueo no se toca', async ({ page }) => {
     test.setTimeout(60000)
     const fallos = vigilar(page)
     const s = await negocio(page, {
@@ -422,7 +447,12 @@ test.describe('Negocio · los bloqueos del mercadillo', () => {
     await expect(filas.nth(1)).toContainText(/09\/11\/2026 \d\d:05 · desde el anuncio «Escáner de la nave» · d:org1:d7/)
     await expect(filas.nth(2)).toContainText('Ana P. bloqueó a Dani · FDS')
     await expect(filas.nth(2)).toContainText(/desde el anuncio «sin título» · fds/)
-    await expect(b.getByRole('button'), 'los bloqueos son solo para mirar').toHaveCount(0)
+    /* Los bloqueos siguen sin poder tocarse. Desde la ampliación del 10-11-2026 lo único que se pulsa aquí es «Quitar del
+       mercadillo» a la persona bloqueada (una vez arriba y una en cada bloqueo suyo); a quien modera (`fds`) no se le ofrece.
+       Qué hace ese botón se prueba en e2e/mercadillo-acceso.spec.js. */
+    await expect(b.getByRole('button', { name: 'Quitar del mercadillo', exact: true })).toHaveCount(3)
+    await expect(b.getByRole('button'), 'en los bloqueos no hay nada más que pulsar').toHaveCount(3)
+    await expect(filas.nth(2).getByRole('button'), 'a quien modera no se le quita el mercadillo').toHaveCount(0)
     await expect(s.locator('div.grid > div').filter({ hasText: 'Bloqueos' })).toContainText('3')
     await expect(page.getByText(/undefined|NaN/)).toHaveCount(0)
     expect(fallos).toEqual([])
