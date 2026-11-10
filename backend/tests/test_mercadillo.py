@@ -3064,9 +3064,8 @@ async def test_el_correo_de_cada_uno_solo_sale_si_sigue_teniendo_cuenta(mundo, m
     }
     assert {c: await _CORREO_DE_REAL(c) for c in casos} == casos
     # Una lectura por persona, por su id y con lo justo (nada de traerse la ficha o el usuario enteros).
-    # (La primera es la de «o:o2», con la baja pedida: busca un usuario de esa cuenta que siga, y no queda ninguno.)
-    assert de_usuarios[0] == ({"org_id": "o2", "disabled": {"$ne": True}}, {"_id": 0, "email": 1, "username": 1})
-    assert de_usuarios[1] == ({"id": "a9"}, {"_id": 0, "email": 1, "username": 1, "disabled": 1}) and len(de_usuarios) == 6
+    # («o:o2», con la baja pedida, no pasa por aquí: lista los usuarios de su cuenta con `find`, y no le queda ninguno.)
+    assert de_usuarios[0] == ({"id": "a9"}, {"_id": 0, "email": 1, "username": 1, "disabled": 1}) and len(de_usuarios) == 5
     assert de_fichas[0] == ({"id": "d1"}, {"_id": 0, "email": 1, "active": 1}) and len(de_fichas) == 6
     # Vuelve a estar en activo (o deja de estarlo): se mira cada vez, no se recuerda.
     await mundo.t["drivers"].update_one({"id": "d3"}, {"$set": {"active": True}})
@@ -3241,8 +3240,8 @@ async def test_el_socio_que_sigue_con_la_cuenta_no_se_queda_sin_avisos(mundo, mo
 @pytest.mark.asyncio(loop_scope="session")
 async def test_si_pide_la_baja_el_del_correo_de_la_cuenta_se_le_escribe_al_socio_que_sigue(mundo, monkeypatch):
     """El correo de la cuenta (`organizations.email`) es el de quien la registró. Si es ESE quien pide la baja y el socio
-    sigue, el mercadillo le escribe al socio (el primer usuario en activo por `id`) y a quien se ha ido, nada: ni el
-    mensaje de Ana ni el «Te hemos quitado el acceso…» al expulsar la cuenta."""
+    sigue, el mercadillo le escribe al socio (el primero por `id` de los que siguen que tenga un correo) y a quien se ha
+    ido, nada: ni el mensaje de Ana ni el «Te hemos quitado el acceso…» al expulsar la cuenta."""
     monkeypatch.setattr(server, "_merc_correo_de", _CORREO_DE_REAL)
     await _abrir(mundo)
     socio = {"sub": "a2", "role": "admin", "org_id": "o1", "name": "Socio"}
@@ -3264,15 +3263,49 @@ async def test_si_pide_la_baja_el_del_correo_de_la_cuenta_se_le_escribe_al_socio
     await _expulsar("pepe")
     para = [m.to for m in mundo.enviados[antes:]]
     assert "pepe@x.es" not in para and para.count("socio@x.es") == 2, para
-    # Sin `email`, su usuario (como en la rama `a:`); y el primero por `id`, siempre el mismo.
+    # Sin `email` vale su usuario SI es un correo. El de a2 («socio-user») no lo es: el siguiente que lo tenga (a3).
     await mundo.g["admin_users"].update_one({"id": "a2"}, {"$unset": {"email": ""}})
     await mundo.g["admin_users"].update_one({"id": "a3"}, {"$unset": {"disabled": ""}})
-    assert await server._merc_contacto("o:o1") == {"correo": "socio-user"}
-    await mundo.g["admin_users"].update_one({"id": "a2"}, {"$set": {"disabled": True}})
     assert await server._merc_contacto("o:o1") == {"correo": "tercero@x.es"}
+    # Con los dos con correo, el primero por `id` (a2), siempre el mismo: ni por orden de alta (a3 se creó antes) ni por
+    # el de su usuario («zz…» va después de «tercero…»).
+    await mundo.g["admin_users"].update_one({"id": "a2"}, {"$set": {"username": "zz-socio@x.es"}})
+    assert await server._merc_contacto("o:o1") == {"correo": "zz-socio@x.es"}
+    # Ninguno de los que siguen tiene un correo: la cuenta sigue viva (le llega al móvil y al buzón), pero sin correo.
+    await mundo.g["admin_users"].update_one({"id": "a2"}, {"$set": {"username": "socio-user"}})
+    await mundo.g["admin_users"].update_one({"id": "a3"}, {"$set": {"username": "almacen"}})
+    assert await server._merc_contacto("o:o1") == {"correo": ""} and await _CORREO_DE_REAL("o:o1") == ""
     # Sin nadie en activo: None.
+    await mundo.g["admin_users"].update_one({"id": "a2"}, {"$set": {"disabled": True}})
     await mundo.g["admin_users"].update_one({"id": "a3"}, {"$set": {"disabled": True}})
     assert await server._merc_contacto("o:o1") is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_si_pide_la_baja_el_socio_el_correo_sigue_siendo_el_de_la_cuenta(mundo, monkeypatch):
+    """El caso contrario: pide la baja EL SOCIO y sigue quien registró la cuenta. El correo de la cuenta
+    (`organizations.email`) no es de quien se ha ido, así que se le sigue escribiendo ahí: aunque el usuario de quien sigue
+    no lleve `email` y entre con un usuario que no es un correo, y aunque otro usuario vaya por delante por `id` (tenga
+    correo o no). Sin esto, la baja del socio dejaba sin correos al que sigue o se los mandaba a un tercero."""
+    monkeypatch.setattr(server, "_merc_correo_de", _CORREO_DE_REAL)
+    await _abrir(mundo)
+    socio = {"sub": "a2", "role": "admin", "org_id": "o1", "name": "Socio"}
+    mundo.g["admin_users"] = Col([{"id": "a0", "username": "tercero@x.es", "org_id": "o1"},
+                                  {"id": "a1", "username": "pepe", "org_id": "o1"},
+                                  {"id": "a2", "username": "socio@x.es", "email": "socio@x.es", "org_id": "o1",
+                                   "hashed_password": server.hash_password("clave-del-socio")}])
+    server._public_actions.pop("borrar:a2", None)
+    assert (await mundo.g["organizations"].find_one({"id": "o1"}))["email"] == "pepe@x.es"
+    assert await server.borrar_cuenta({"password": "clave-del-socio"}, socio) == {"ok": True}
+    # El correo de la cuenta no es el de quien se ha ido: sigue siendo ese (y no el del tercero, que va antes por `id`).
+    assert await server._merc_contacto("o:o1") == {"correo": "pepe@x.es"}
+    a = await _publicado(PEPE, "Carretilla")
+    antes = len(mundo.enviados)
+    await server.merc_contactar(a["id"], {"texto": "¿Sigue disponible?"}, ANA)
+    assert [m.to for m in mundo.enviados[antes:]] == ["pepe@x.es"]
+    # Y si el que va por delante no tiene correo, tampoco tapa al de la cuenta.
+    await mundo.g["admin_users"].update_one({"id": "a0"}, {"$set": {"username": "almacen"}})
+    assert await server._merc_contacto("o:o1") == {"correo": "pepe@x.es"}
 
 
 @pytest.mark.asyncio(loop_scope="session")

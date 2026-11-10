@@ -57058,7 +57058,8 @@ async def _merc_contacto(clave: str) -> Optional[dict]:
     quien SIGUE teniendo cuenta, y None a quien ya no:
       · `o:<org>` (quien reparte por su cuenta): la cuenta no existe, o ha pedido la baja (`baja_solicitada_en`) y no
         le queda ningún usuario sin desactivar. `borrar_cuenta` apunta la baja en la EMPRESA pero desactiva solo a quien
-        la pide: si la cuenta tiene otro usuario, ese sigue entrando como `o:<org>` y se le sigue avisando;
+        la pide: si la cuenta tiene otro usuario, ese sigue entrando como `o:<org>` y se le sigue avisando (en el
+        correo de la cuenta, o en el suyo si el de la cuenta era de quien se ha ido);
       · `a:<org>:<id>` (oficina): su usuario no existe o está desactivado (`disabled`);
       · `d:<org>:<id>` (conductor): su ficha está de baja (`active: False`). Sin ficha o sin el campo se le escribe
         como siempre: a nadie se le deja de avisar por un dato que falta.
@@ -57069,12 +57070,27 @@ async def _merc_contacto(clave: str) -> Optional[dict]:
         if not org:
             return None
         if org.get("baja_solicitada_en"):
-            # Con la baja pedida, `organizations.email` puede ser el de quien la pidió (el que registró la cuenta):
-            # se le escribe a un usuario que SIGUE (el primero por `id`, siempre el mismo), como en la rama `a:`.
-            u = await global_db.admin_users.find_one(
-                {"org_id": org.get("id") or clave[2:], "disabled": {"$ne": True}},
-                {"_id": 0, "email": 1, "username": 1}, sort=[("id", 1)])
-            return {"correo": u.get("email") or u.get("username")} if u else None
+            # Con la baja pedida la cuenta sigue viva mientras le quede un usuario sin desactivar (None si no queda
+            # ninguno). El correo sigue siendo el de la cuenta (`organizations.email`) SALVO que sea el de quien se ha
+            # ido (el `email` o el `username` de un usuario desactivado: quien registró la cuenta y ha pedido que se
+            # borren sus datos). Solo entonces se le escribe a quien SIGUE: el primero por `id` (siempre el mismo) que
+            # tenga un correo; si ninguno lo tiene, sin correo (le llega al móvil y a su buzón).
+            usuarios = await global_db.admin_users.find(
+                {"org_id": org.get("id") or clave[2:]},
+                {"_id": 0, "id": 1, "email": 1, "username": 1, "disabled": 1}).to_list(50)
+            siguen = sorted((u for u in usuarios if u.get("disabled") is not True), key=lambda u: str(u.get("id") or ""))
+            if not siguen:
+                return None
+            de_la_cuenta = org.get("email")
+            de_quien_se_fue = {str(u.get(k)).strip().lower() for u in usuarios if u.get("disabled") is True
+                               for k in ("email", "username") if isinstance(u.get(k), str)}
+            if isinstance(de_la_cuenta, str) and de_la_cuenta.strip().lower() in de_quien_se_fue:
+                for u in siguen:
+                    for c in (u.get("email"), u.get("username")):
+                        if isinstance(c, str) and _correo_valido(c):
+                            return {"correo": c}
+                return {"correo": ""}
+            return {"correo": de_la_cuenta}
         return {"correo": org.get("email")}
     if clave.startswith("a:"):
         _p, _org, admin_id = clave.split(":", 2)
