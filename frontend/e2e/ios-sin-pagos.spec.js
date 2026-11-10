@@ -796,7 +796,16 @@ const RESTOS_LEGALES = [
 ]
 // Lo que el iPhone SÍ sigue diciendo en las tres páginas con las listas de proveedores: no se han quedado vacías.
 const SIGUE_EN_EL_IPHONE = {
-  '/privacidad': [/Cloudflare, Inc\./, /OpenStreetMap Foundation/, /komoot GmbH/, /Google \(Gemini \/ Vertex AI\)/, /Mercadillo|Marketplace/],
+  /* 10-11-2026 (Apple, guideline 1.2): lo nuevo del mercadillo se lee también dentro del iPhone, en español y en inglés. En los
+     términos: las normas se aceptan al entrar, el filtro automático de palabras y qué se le dice a quien se queda sin acceso.
+     En la privacidad: cuándo se aceptaron las normas y, si se quita el acceso, el motivo y la fecha. */
+  '/terminos': [/tienes que aceptar sus normas la primera vez que entras|you must accept its rules the first time you enter/,
+    /un filtro automático de palabras no deja enviar anuncios ni mensajes con insultos o amenazas|an automatic word filter stops listings and messages containing insults or threats from being sent/,
+    /Le decimos el motivo, y puede pedir que lo revisemos escribiendo a|We tell them the reason, and they can ask us to review it by writing to/],
+  '/privacidad': [/Cloudflare, Inc\./, /OpenStreetMap Foundation/, /komoot GmbH/, /Google \(Gemini \/ Vertex AI\)/, /Mercadillo|Marketplace/,
+    /cuándo aceptaste las normas del mercadillo y qué versión|when you accepted the marketplace rules and which version/,
+    /guardamos el motivo que te damos y la fecha|we store the reason we give you and the date/,
+    /se guardan hasta que se te devuelve o hasta la baja de tu cuenta|are kept until it is given back or until your account is deleted/],
   '/seguridad': [/Cloudflare, Inc\./, /OpenStreetMap Foundation/, /komoot GmbH/],
   '/encargo': [/Cloudflare, Inc\./, /OpenStreetMap Foundation/, /komoot GmbH/],
 }

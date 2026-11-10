@@ -45,8 +45,9 @@ const SIN_ACEPTAR = 'Tienes que aceptar las normas para usar el mercadillo'
 
 /** El mercadillo del servidor, simulado y CON MEMORIA. `normas`: lo que vale `normas_ok` (sin decirlo, el campo NO viene, como en
  *  un servidor de antes); `normasEn`: en qué respuesta viene ('las dos', 'estado' o 'lista'); `expulsado`: el texto de quien se
- *  ha quedado sin acceso (entonces todo contesta 403 con él, salvo /estado). Se pueden cambiar a mitad de la prueba (`s.…`). */
-async function mercadillo(page, { normas, normasEn = 'las dos', expulsado = '', errorNormas = null } = {}) {
+ *  ha quedado sin acceso (entonces todo contesta 403 con él, salvo /estado). Se pueden cambiar a mitad de la prueba (`s.…`).
+ *  `demora`: lo que tardan en contestar el estado y la lista (ms), para ver qué se pinta mientras tanto. */
+async function mercadillo(page, { normas, normasEn = 'las dos', expulsado = '', errorNormas = null, demora = 0 } = {}) {
   const s = { normas, expulsado, llamadas: [], aceptado: null, pedidas: [] }
   const campo = (donde) => (s.normas === undefined || (normasEn !== 'las dos' && normasEn !== donde) ? {} : { normas_ok: s.normas })
   await page.route(/\/api\/mercadillo(?:\/[^?]*)?(?:\?.*)?$/, async (x) => {
@@ -55,6 +56,7 @@ async function mercadillo(page, { normas, normasEn = 'las dos', expulsado = '', 
     const ruta = new URL(pet.url()).pathname.replace(/^.*\/api\/mercadillo/, '')
     const json = (j, status = 200) => x.fulfill({ status, json: j })
     s.pedidas.push(`${metodo} ${ruta || '/'}`)
+    if (demora && (ruta === '/estado' || ruta === '')) await new Promise((r) => setTimeout(r, demora))
     if (ruta === '/estado') {
       return json(s.expulsado
         ? { visible: true, abierto: true, expulsado: true, texto: s.expulsado, sin_leer: 0, yo: YO }
@@ -293,6 +295,20 @@ for (const [solo, de] of [['estado', '/mercadillo/estado'], ['lista', '/mercadil
     expect(s.aceptado).toEqual({ acepto: true })
   })
 }
+
+/* Hasta que el servidor contesta la primera vez (quién es, si tiene acceso, si ha aceptado las normas) el mercadillo pinta solo su
+   cabecera. Así quien no puede pasar no llega a ver, ni un momento, «Vender», los anuncios ni el buzón. */
+test('Mercadillo · mientras el servidor no ha contestado solo se ve la cabecera: quien no puede pasar no llega a ver «Vender» ni el buzón', async ({ page }) => {
+  const TEXTO = sinAcceso('repetido')
+  await entrar(page, { expulsado: TEXTO, demora: 1500 })
+  await expect(cabecera(page, 'Mercadillo')).toBeVisible()
+  // Sin `expect` que reintente (esperaría a que llegase la respuesta): AHORA MISMO lo único que se puede pulsar es «Volver».
+  expect(await page.locator('main').getByRole('button').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label') || b.textContent.trim())),
+    'mientras carga no hay nada del mercadillo que pulsar').toEqual(['Volver'])
+  expect(await page.getByRole('alert').count(), 'todavía no ha contestado').toBe(0)
+  await expect(page.getByRole('alert')).toHaveText(TEXTO)
+  await expect(vender(page)).toHaveCount(0)
+})
 
 /* Lo que contesta el servidor en lo nuevo (backend/mercadillo.py y server.py, TAL CUAL el 10-11-2026): el texto de quien se queda
    sin acceso (con cada motivo, y con nota), el de las normas sin aceptar, los dos del filtro de palabras y el aviso de que se le
