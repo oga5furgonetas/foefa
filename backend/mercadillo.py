@@ -114,9 +114,13 @@ def _texto(v, maximo: int) -> str:
 # Qué entra: insultos inequívocos, insultos racistas u homófobos y amenazas; en español y en inglés, y los pocos de
 # gallego, catalán, portugués, francés, italiano y alemán que no significan otra cosa.
 # Qué NO entra, a propósito (mejor corto y sin falsos positivos que largo):
-#   · las palabrotas sueltas, que entre compañeros no van contra nadie: «puta» («está de puta madre» es un elogio),
-#     «puto», «coño», «joder», «mierda», «hostia», «cabrón» (en España también es un piropo y en México «está
-#     cabrón» es «está difícil»), y lo mismo en inglés («fuck», «shit»): entran cuando van CONTRA alguien;
+#   · las palabrotas sueltas EN ESPAÑOL, que entre compañeros se usan sin ir contra nadie: «puta» («está de puta
+#     madre» es un elogio), «puto», «coño», «joder», «mierda», «hostia», «cabrón» (en España también es un piropo y
+#     en México «está cabrón» es «está difícil»): entran cuando van CONTRA alguien («hijo de puta», «eres una mierda»).
+#     En inglés es al revés (10-11-2026): el mercadillo está en español y una palabrota suelta en inglés («fuck»,
+#     «shit», «bullshit»…) no es el habla normal de aquí, así que pararla no molesta a nadie: entran también sueltas.
+#     Las que NO entran son las palabras inglesas que aquí significan otra cosa o son nombres: «rape» (el pescado, y
+#     «pelado al rape»), «dick» («Moby Dick», la ropa Dickies), «cock», «ass», «sex», «sexy» y «porno»;
 #   · lo que tiene un uso normal en un mercadillo de repartidores: «negro» (un chaleco negro), «moro», «gitano» o
 #     «chino» sin más, «marica» (en Colombia es «tío»), «bastardo» (hay limas bastardas), «retard» (en catalán
 #     es «retraso»: una palabra de repartidor), «retrasado» (un pedido), «polla», «zorra», «perra», «cerdo»…;
@@ -150,6 +154,8 @@ OFENSIVO = (
     "cunt", "cunts", "cocksucker", "cocksuckers", "wanker", "wankers", "whore", "whores", "slut", "sluts",
     "shithead", "shitheads", "suck my dick", "nigger", "niggers", "nigga", "niggas", "faggot", "faggots",
     "kill you", "kill u", "kill yourself", "hope you die",
+    # Inglés: las palabrotas, también sueltas (aquí no son el habla normal; lo que NO entra, arriba).
+    "fuck", "fucking", "fuckin", "fucked", "shit", "shitty", "bullshit", "pussy", "porn",
     # Gallego, catalán y portugués.
     "fillo de puta", "filla de puta", "fillo da puta", "filla da puta", "fill de puta", "fills de puta",
     "filho da puta", "filha da puta", "vai tomar no cu", "vai se foder", "vai te foder",

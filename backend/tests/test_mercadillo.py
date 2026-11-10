@@ -2006,6 +2006,10 @@ ENTRA = [
     # inglés y los pocos de otros idiomas
     "fuck you", "Fuck off!", "I'll kill you", "motherfucker", "you bitch", "nigger", "faggot", "kill yourself",
     "filho da puta", "fillo de puta", "fill de puta", "connard", "enculé", "nique ta mère", "vaffanculo", "Arschlöcher",
+    # las palabrotas en inglés, también SUELTAS (aquí no son el habla normal: pararlas no molesta a nadie)
+    "fuck", "FUCK", "Fuck!", "what the fuck", "fucking", "Fucking caro", "fuckin", "fuckin' hell", "fucked", "shit", "SHIT",
+    "holy shit", "eso es shit", "shitty", "un móvil shitty", "bullshit", "this is bullshit", "BULLSHIT", "bull shit",
+    "pussy", "Pussy.", "porn", "vendo porn", "PORN",
 ]
 NO_ENTRA = [
     # dentro de otra palabra, nunca (Cuntis es un concello de Pontevedra; Dickies, ropa de trabajo; «salopette», un peto)
@@ -2017,8 +2021,12 @@ NO_ENTRA = [
     "pedido retrasado", "el paquet porta retard", "mongola", "polla",
     # palabrotas sueltas, que entre compañeros no van contra nadie
     "puta", "está de puta madre", "ni puta idea", "el puto móvil no carga", "eres un puto crack", "eres una puta máquina",
-    "coño", "joder", "mierda", "esta furgo es una mierda", "hostia", "qué cabrón, qué suerte", "fuck", "shit",
+    "coño", "joder", "mierda", "esta furgo es una mierda", "hostia", "qué cabrón, qué suerte",
     "perdona, soy idiota", "te mato jaja",
+    # palabras inglesas que aquí son otra cosa (el rape es un pescado) o un nombre, y las que solo se les parecen
+    "rape a la plancha", "Rape fresco, lo llevo a la nave", "pelado al rape", "Moby Dick", "Dick Turpin", "Dickies",
+    "cock", "ass", "sex", "sexy", "porno", "Vendo revistas porno", "setas shiitake", "shiitake", "funda fucsia",
+    "Pussycat Dolls", "pornografía no, gracias", "Fuckencio", "shitake",
     # frases normales que se parecen a una amenaza o a un insulto
     "te voy a buscar a la nave", "sé dónde vives, te lo acerco", "hijo de vecino", "me voy a matar a currar",
     "hay moros en la costa", "lo cobro en negro",
@@ -2050,8 +2058,12 @@ def test_la_lista_del_filtro_es_corta_y_esta_escrita_como_se_compara():
     assert [x for x in mc.OFENSIVO if not mc.ofensivo(f"«{x.upper()}»")] == []
     de_uso_normal = {"puta", "puto", "coño", "joder", "mierda", "hostia", "cabron", "negro", "negra", "moro", "mora", "gitano",
                      "chino", "marica", "bastardo", "retard", "retrasado", "polla", "zorra", "perra", "cerdo", "idiota",
-                     "tonto", "imbecil", "fuck", "shit", "kike", "ano"}
+                     "tonto", "imbecil", "kike", "ano",
+                     # inglés que aquí significa otra cosa o es un nombre: el rape (pescado), Moby Dick, Dickies…
+                     "rape", "dick", "cock", "ass", "sex", "sexy", "porno"}
     assert de_uso_normal & set(mc.OFENSIVO) == set()
+    # Las palabrotas en inglés SÍ están sueltas (10-11-2026): en un mercadillo en español no son el habla normal.
+    assert {"fuck", "fucking", "fuckin", "fucked", "shit", "shitty", "bullshit", "pussy", "porn"} <= set(mc.OFENSIVO)
     # Cómo compara: sin mayúsculas ni tildes, palabra a palabra; la ñ no es una n («año» no es «ano»).
     assert mc._palabras("¡Hijo de PUTA!") == " hijo de puta " and mc._palabras("Año, año y São") == " año año y sao "
     assert mc._palabras(None) == mc._palabras("  ¡¿?!  ") == "  "
