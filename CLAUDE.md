@@ -69,7 +69,8 @@ códigos, cupones, regalos, bonos, «Invita y gana», cartera, Stripe o PayPal. 
 texto nuevo con cualquiera de eso lleva `sinPagos()`; un mensaje de error nuevo del servidor que lo mencione también
 (`HABLA_DE_PAGOS`). Lo vigila `frontend/e2e/ios-sin-pagos.spec.js` (cada pantalla con su control en la web) y el alta
 desde el iPhone manda `desde_ios` para que el servidor no le mande correos de plan o prueba
-(`backend/tests/test_alta_ios.py`). Detalle, qué se esconde y cómo se reenvía a Apple: `docs/APP_STORE.md`
+(`backend/tests/test_alta_ios.py`). El vocabulario prohibido vive en `frontend/e2e/iphone.js`, y la app de iPhone tampoco
+nombra otras plataformas (Android, Google Play). Detalle, qué se esconde y cómo se reenvía a Apple: `docs/APP_STORE.md`
 («Rechazo del 09-11-2026»).
 
 ## El diseño compacto de la app de reparto

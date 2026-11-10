@@ -459,7 +459,8 @@ Primero, lo que Apple pide a una app con contenido de usuarios, en el orden de s
 2. **Un filtro automático de palabras** (servidor). Cada anuncio lo sigue revisando una persona ANTES de publicarse. Además,
    una lista básica de insultos, insultos racistas u homófobos y amenazas —en español y en inglés, con las palabrotas
    inglesas también sueltas y unos pocos de gallego, catalán, portugués, francés, italiano y alemán— no deja enviar ni un
-   anuncio (título, descripción y zona) ni un mensaje que lleve alguno: «Ese mensaje no se puede enviar: no se permiten
+   anuncio (título, descripción y zona) ni un mensaje que lleve alguno. El anuncio contesta «Ese anuncio no se puede enviar:
+   quita los insultos o el contenido ofensivo del texto.»; el mensaje, «Ese mensaje no se puede enviar: no se permiten
    insultos, amenazas ni contenido ofensivo. Cámbialo y vuelve a enviarlo.». **Es una lista, y así hay que decirlo**: compara
    palabras y frases enteras, sin mayúsculas ni tildes; no entiende el contexto ni las letras cambiadas («h1jo de…») y **no
    lo detecta todo**. Deja pasar a propósito las palabrotas españolas sueltas, que entre compañeros no van contra nadie
@@ -620,7 +621,7 @@ nuevo sirve igual a la app vieja (que no enseña ni las normas ni «Bloquear»; 
 ### Respuestas para el Centro de resolución (en inglés, listas para pegar)
 Cada párrafo va en una sola línea a propósito (así se pega sin saltos a media frase). `BUILD_N` es el número de build; lo que
 va entre `<…>` hay que rellenarlo o quitarlo. Todas caben en los 4.000 caracteres del cuadro de respuesta (medidas el 10-11
-con un build de cuatro cifras: de 800 caracteres, la de la 2.3.10, a 3.871, la de la 1.2). Se contesta **solo** a lo que
+con un build de cuatro cifras: de 800 caracteres, la de la 2.3.10, a 3.906, la de la 1.2). Se contesta **solo** a lo que
 Apple pregunte: no se pega una respuesta que no han pedido. Si el rechazo vuelve a ser 2.1(b) o 3.1.1, vale la respuesta del
 09-11 de más arriba, mirando primero en la captura qué ha visto el revisor.
 
@@ -672,7 +673,7 @@ The only user-generated content in the app is the optional couriers' marketplace
 
 Contact: contacto@flotadsp.com, published in the Account tab, the Terms and the Privacy Policy.
 
-To check it with the demo account: Cuenta (Account) → "Mercadillo de repartidores" → "Acepto las normas" → open an ad → "Bloquear a …" → "Bloquear": the ad is no longer listed. To undo it: "Personas bloqueadas" (at the bottom of the list of ads, and in Mensajes) → "Desbloquear".
+To check it with the demo account: Cuenta (Account) → "Mercadillo de repartidores" → "Acepto las normas" → open an ad → "Bloquear a …" → "Bloquear": the ad is no longer listed. To undo it: "Personas bloqueadas" (at the bottom of the list of ads, and in the messages screen, the speech-bubble icon) → "Desbloquear".
 
 Thank you for your time.
 ```
@@ -908,7 +909,7 @@ FDS – information for App Review (build BUILD_N).
 - Rules: shown on first entry; the user must tap "Acepto las normas" (I accept the rules) to go on. They and the Terms state zero tolerance for objectionable content and abusive users.
 - Filter: a person reviews every ad before it is published; a basic automatic word filter rejects ads and messages with insults or threats; an ad reported by 3 people is hidden until we review it.
 - Report: "Denunciar" (Report) on every ad and conversation; we answer the reporter.
-- Block: open an ad → "Bloquear a …" (Block) on the seller card, also in every conversation → "Bloquear": that user's ads and conversations leave the blocker's marketplace at once, neither can message the other, and the block is recorded in our moderation panel. Undo: Mensajes → "Personas bloqueadas".
+- Block: open an ad → "Bloquear a …" (Block) on the seller card, also in every conversation → "Bloquear": that user's ads and conversations leave the blocker's marketplace at once, neither can message the other, and the block is recorded in our moderation panel. Undo: "Personas bloqueadas" (below the ad list).
 - A person reviews reports within 24 hours; objectionable content is removed and the offending account loses access to the marketplace.
 - Contact: contacto@flotadsp.com (Account tab, Terms).
 No other public content: a courier's stops are visible only to that courier (and to their own company for company drivers). Not a regulated industry.
@@ -945,7 +946,7 @@ Lo que cambia respecto a las actuales, además del punto 6:
   «a new one is not needed». Los puntos 4 y 5 no cambian.
 
 **La cuenta de caracteres**, como la hace `asc_notas_poner.py` (`strip()` y `BUILD_N` por el número de build). Esta orden da
-los caracteres y los bytes; el 10-11 dio `3954 3970`:
+los caracteres y los bytes; el 10-11 dio `3963 3977`:
 
 ```
 python -I -X utf8 -c "import sys; t=open(sys.argv[1],encoding='utf-8').read().strip().replace('BUILD_N',sys.argv[2]); print(len(t), len(t.encode('utf-8')))" notas-revision-planb.txt 21
@@ -953,11 +954,11 @@ python -I -X utf8 -c "import sys; t=open(sys.argv[1],encoding='utf-8').read().st
 
 | Fichero | Build | Caracteres | Bytes UTF-8 | Margen hasta 4.000 |
 | --- | --- | --- | --- | --- |
-| `notas-revision-planb.txt` (la propuesta) | 21 | 3.954 | 3.970 | 46 caracteres |
-| `notas-revision-planb.txt` | 9999 | 3.956 | 3.972 | 44 caracteres |
+| `notas-revision-planb.txt` (la propuesta) | 21 | 3.963 | 3.977 | 37 caracteres |
+| `notas-revision-planb.txt` | 9999 | 3.965 | 3.979 | 35 caracteres |
 | `notas-revision-nuevas.txt` (las actuales) | 20 | 3.911 | 3.923 | 89 caracteres |
 
-Quedan 44 caracteres libres: cualquier frase que se añada obliga a quitar otra. `asc_notas_poner.py` se niega a
+Quedan 35 caracteres libres: cualquier frase que se añada obliga a quitar otra. `asc_notas_poner.py` se niega a
 escribir si se pasan de 4.000.
 
 ### Pendiente de Dani (de este plan B)
