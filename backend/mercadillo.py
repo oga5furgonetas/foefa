@@ -19,7 +19,7 @@ Cómo queda legal (resumen; el detalle está en Términos → «Mercadillo» y e
   · Bloquear (10-11-2026): cualquiera puede bloquear a quien vende un anuncio o a quien le escribe. Dejan de
     verse los anuncios el uno al otro y ninguno puede escribir al otro; a quien se bloquea no se le avisa y a
     quien modera sí. Un bloqueo no retira nada por sí solo. Se guarda quién bloquea a quién y cuándo, solo lo
-    ve quien modera, y se borra al desbloquear o al pedir la baja de la cuenta.
+    ve quien modera, y se borra al desbloquear o cuando se borran los datos de la cuenta.
   · Lo que Apple pide además a una app con contenido de usuarios (guideline 1.2; 10-11-2026): aceptar las normas
     la primera vez que se entra (`NORMAS_VERSION`), un filtro automático del lenguaje ofensivo en anuncios y
     mensajes (`ofensivo`, abajo: un filtro básico de lista) y poder quitarle el mercadillo a quien incumple, con

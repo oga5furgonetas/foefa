@@ -7069,8 +7069,10 @@ async def admin_delete_org(org_id: str, user: dict = Depends(require_superadmin)
     await global_db.admin_users.delete_many({"org_id": org_id})
     await global_db.organizations.delete_one({"id": org_id})
     # EL MERCADILLO SE VA CON LA CUENTA (10-11-2026): el de TODAS sus personas (quien reparte por su cuenta, sus
-    # conductores y su gente de oficina), que ya no pueden entrar ni contestar. Si falla, la empresa se borra igual.
-    await _merc_baja_sin_parar(_merc_de_la_cuenta(org_id), "Empresa eliminada")
+    # conductores y su gente de oficina), que ya no pueden entrar ni contestar. Y ENTERO (`del_todo`): aquí es donde se
+    # borran de verdad los datos de la cuenta, también sus bloqueos, sus preferencias (con las normas aceptadas) y sus
+    # expulsiones, que la baja de la cuenta y el borrado de un conductor dejan. Si falla, la empresa se borra igual.
+    await _merc_baja_sin_parar(_merc_de_la_cuenta(org_id), "Empresa eliminada", del_todo=True)
     logger.info("Empresa eliminada: %s", org.get("slug"))
     await _audit(user, "org_delete", {"org_id": org_id, "org": org.get("slug")})
     return {"ok": True}
@@ -7456,10 +7458,14 @@ async def borrar_cuenta(data: dict = Body(...), user: dict = Depends(get_current
                                               "nombre": org.get("name") or "", "pedida_en": ahora,
                                               "estado_pago": org.get("status") or "", "borrada": False})
     logger.info("Baja pedida desde la app: org %s", org["id"])
-    # EL MERCADILLO SE VA CON LA CUENTA (10-11-2026). Antes la cuenta quedaba desactivada pero sus anuncios seguían
+    # EL MERCADILLO SE CIERRA CON LA CUENTA (10-11-2026). Antes la cuenta quedaba desactivada pero sus anuncios seguían
     # publicados hasta caducar (y a nombre de alguien que ya no puede contestar). Un fallo aquí no impide la baja.
+    # SIN `del_todo`: aquí se desactiva solo al usuario que pide la baja, y si la cuenta tiene otro usuario, ese sigue
+    # entrando con la misma cuenta (`o:<org>`). Por eso NO se borran su expulsión ni sus bloqueos (una cuenta expulsada
+    # volvería al mercadillo, y quien la bloqueó quedaría otra vez a su alcance) ni sus preferencias: eso se borra con
+    # los datos de la cuenta, cuando se borra la empresa (`admin_delete_org`).
     try:
-        await _merc_baja(f"o:{org['id']}")
+        await _merc_baja(f"o:{org['id']}", del_todo=False)
     except Exception as e:                                       # noqa: BLE001
         logger.warning("Baja de la cuenta: no se ha podido cerrar su mercadillo (org %s): %s", org["id"], e)
     if CORREO_CONTACTO:
@@ -8844,9 +8850,10 @@ async def delete_admin(admin_id: str, _admin: dict = Depends(require_admin)):
     _ADMIN_EXISTS_CACHE.pop(admin_id, None)
     # SU MERCADILLO SE VA CON ÉL (10-11-2026): ya no puede entrar ni contestar. Solo el de esa persona de oficina
     # (`a:<org>:<id>`); en una cuenta de quien reparte por su cuenta el mercadillo es de la cuenta (`o:<org>`), que
-    # sigue viva con quien le borra. Si falla, el usuario se borra igual.
+    # sigue viva con quien le borra. Y ENTERO (`del_todo`): el usuario se borra de verdad (`delete_one`, con su lápida)
+    # y no vuelve, así que se van también sus bloqueos, sus preferencias y su expulsión. Si falla, se borra igual.
     if target.get("org_id"):
-        await _merc_baja_sin_parar(f"a:{target['org_id']}:{admin_id}", "Usuario de oficina eliminado")
+        await _merc_baja_sin_parar(f"a:{target['org_id']}:{admin_id}", "Usuario de oficina eliminado", del_todo=True)
     return {"success": True}
 
 
@@ -27515,14 +27522,18 @@ async def delete_driver(driver_id: str, user=Depends(require_admin)):
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Conductor no encontrado")
     await _limpiar_correo_personal_conductor(driver_id, user.get("org_id"))
-    # SU MERCADILLO SE VA CON ÉL (10-11-2026): con la ficha de baja ya no puede entrar (ni con contraseña, ni con
-    # código, ni renovar la sesión), así que tampoco contestar a quien le escriba. Si falla, se le da de baja igual.
+    # SU MERCADILLO SE CIERRA CON ÉL (10-11-2026): con la ficha de baja ya no puede entrar (ni con contraseña, ni con
+    # código, ni renovar la sesión), así que tampoco contestar a quien le escriba: sus anuncios se quitan y sus
+    # conversaciones se cierran. Si falla, se le da de baja igual.
+    # SIN `del_todo`: esto NO borra la ficha, la deja con `active: False`, y la oficina la reactiva cuando quiere. Por
+    # eso su expulsión, sus bloqueos (los que hizo y los que le hicieron) y sus preferencias se quedan: al reactivarla,
+    # quien estaba expulsado sigue fuera y quien le bloqueó sigue sin verle. Se borran con los datos de la empresa.
     # (Borrar solo su CUENTA de acceso, `delete_driver_account`, no le deja fuera —vuelve a entrar con un código o
     # con la contraseña inicial—: por eso allí el mercadillo no se toca.)
     # Las OTRAS bajas (la ficha a «no activo» con PATCH/PUT, o desde la hoja de Google) tampoco lo limpian, a
     # propósito: una baja temporal perdería sus anuncios y sus conversaciones. Mientras dure no entra —`_merc_yo`
     # mira la ficha, también con la sesión que ya tenía abierta— y sus anuncios caducan solos.
-    await _merc_baja_sin_parar(f"d:{user.get('org_id') or OWNER_ORG_ID}:{driver_id}", "Conductor eliminado")
+    await _merc_baja_sin_parar(f"d:{user.get('org_id') or OWNER_ORG_ID}:{driver_id}", "Conductor eliminado", del_todo=False)
     await _audit(user, "driver_delete", {"driver_id": driver_id})
     return {"success": True}
 
@@ -56965,7 +56976,11 @@ async def _merc_dentro(user: dict) -> dict:
 #   · Al instante: no entra (403 en todo lo que pasa por `_merc_dentro`), sus anuncios activos se retiran (y se
 #     cierran sus denuncias, avisando a quien denunció) y sus conversaciones abiertas quedan cerradas.
 #   · Devolverle el acceso borra la expulsión y nada más: ni resucita anuncios ni reabre conversaciones.
-#   · Sus bloqueos no se tocan. La baja de la cuenta (`_merc_baja`) se lleva también su expulsión.
+#   · Sus bloqueos no se tocan. Y la expulsión NO se va con una baja que se puede deshacer: ni con la baja de la cuenta
+#     (desactiva solo al usuario que la pide) ni al borrar a un conductor (su ficha se puede reactivar). Se borra al
+#     devolverle el acceso o cuando se borran de verdad los datos de la cuenta (`_merc_baja` con `del_todo`).
+#   · EL LÍMITE QUE SE CONOCE: el acceso se le quita a una CUENTA o a una FICHA (su clave), no a la persona física. Si
+#     vuelve con otra cuenta o la oficina le hace otra ficha, entra; y se le quita otra vez.
 # La clave de nadie sale de `/admin/mercadillo*`: a la persona se le dice el motivo, nunca cómo se la nombra dentro.
 _MERC_CLAVE_PERSONA = re.compile(r"o:[^:\s]+|[da]:[^:\s]+:\S+")   # `o:<org>`, `d:<org>:<id>` o `a:<org>:<id>`
 _MERC_READMITIDO = ("Vuelves a tener acceso al mercadillo. Los anuncios que se retiraron no vuelven solos: si todavía "
@@ -57781,13 +57796,19 @@ def _merc_de_la_cuenta(org_id: str) -> dict:
     return {"$regex": f"^(o:{org}$|[da]:{org}:)"}
 
 
-async def _merc_baja(clave) -> dict:
-    """LA BAJA SE LLEVA SU MERCADILLO (10-11-2026). Quien se va ya no puede entrar ni contestar: sus anuncios en
-    revisión o publicados se quitan (y se borran a su plazo, como cualquier anuncio quitado), sus conversaciones
-    quedan cerradas para la otra persona, y se borran sus bloqueos —los que hizo y los que le hicieron—, sus
-    preferencias (con las normas que aceptó) y su expulsión si la tenía.
-    `clave`: la de una persona o, para una cuenta entera, `_merc_de_la_cuenta(org_id)`. Lo llaman la baja de la
-    cuenta y los borrados (de una empresa, de un conductor, de alguien de oficina), que no se paran si esto falla."""
+async def _merc_baja(clave, del_todo: bool = False) -> dict:
+    """LA BAJA CIERRA SU MERCADILLO (10-11-2026). Quien se va ya no puede entrar ni contestar. SIEMPRE: sus anuncios en
+    revisión o publicados se quitan (y se borran a su plazo, como cualquier anuncio quitado) y sus conversaciones
+    quedan cerradas para la otra persona.
+    UNA BAJA QUE SE PUEDE DESHACER NO BORRA LO QUE PROTEGE A LOS DEMÁS: sus bloqueos —los que hizo y los que le
+    hicieron—, sus preferencias (con las normas que aceptó) y su expulsión se borran SOLO con `del_todo=True`, que es
+    cuando se borran de verdad los datos de la cuenta: al borrar la empresa (`admin_delete_org`) o a alguien de oficina
+    (`delete_admin`: ese usuario no vuelve). La baja de la cuenta (`borrar_cuenta`) desactiva solo al usuario que la
+    pide —si la cuenta tiene otro, sigue entrando— y borrar a un conductor (`delete_driver`) deja su ficha, que la
+    oficina puede reactivar: si se llevaran la expulsión y los bloqueos, la persona expulsada volvería a entrar y
+    quien la bloqueó quedaría otra vez a su alcance.
+    `clave`: la de una persona o, para una cuenta entera, `_merc_de_la_cuenta(org_id)`. Los borrados no se paran si
+    esto falla. Lo que devuelve tiene siempre la misma forma (`bloqueos` y `expulsiones` valen 0 si no se borran)."""
     ahora = datetime.now(timezone.utc).isoformat()
     an = await global_db[_MERC_ANUNCIOS].update_many(
         {"vendedor.clave": clave, "estado": {"$in": list(mercadillo.ESTADOS_ACTIVOS)}},
@@ -57795,19 +57816,22 @@ async def _merc_baja(clave) -> dict:
     cv = await global_db[_MERC_CONVS].update_many(
         {"$or": [{"comprador.clave": clave}, {"vendedor.clave": clave}], "bloqueada": {"$ne": True}},
         {"$set": {"bloqueada": True, "cerrada_por": "baja"}})
-    bl = await global_db[_MERC_BLOQUEOS].delete_many({"$or": [{"de": clave}, {"a": clave}]})
-    await global_db.mercadillo_prefs.delete_many({"clave": clave})
-    ex = await global_db[_MERC_EXPULSADOS].delete_many({"clave": clave})
     hechos = {"anuncios": getattr(an, "modified_count", 0) or 0, "conversaciones": getattr(cv, "modified_count", 0) or 0,
-              "bloqueos": getattr(bl, "deleted_count", 0) or 0, "expulsiones": getattr(ex, "deleted_count", 0) or 0}
-    logger.info("Baja: mercadillo de %s cerrado (%s)", clave, hechos)
+              "bloqueos": 0, "expulsiones": 0}
+    if del_todo:
+        bl = await global_db[_MERC_BLOQUEOS].delete_many({"$or": [{"de": clave}, {"a": clave}]})
+        await global_db.mercadillo_prefs.delete_many({"clave": clave})
+        ex = await global_db[_MERC_EXPULSADOS].delete_many({"clave": clave})
+        hechos.update(bloqueos=getattr(bl, "deleted_count", 0) or 0, expulsiones=getattr(ex, "deleted_count", 0) or 0)
+    logger.info("Baja: mercadillo de %s cerrado (%s%s)", clave, hechos, ", con todo lo suyo borrado" if del_todo else "")
     return hechos
 
 
-async def _merc_baja_sin_parar(clave, de_que: str) -> None:
-    """`_merc_baja` para los borrados: el mercadillo se limpia, pero un fallo aquí NUNCA impide el borrado."""
+async def _merc_baja_sin_parar(clave, de_que: str, del_todo: bool = False) -> None:
+    """`_merc_baja` para los borrados: el mercadillo se limpia, pero un fallo aquí NUNCA impide el borrado.
+    `del_todo`: lo que le pasa a `_merc_baja` (True solo si esa persona o esa cuenta ya no vuelve)."""
     try:
-        await _merc_baja(clave)
+        await _merc_baja(clave, del_todo=del_todo)
     except Exception as e:                                       # noqa: BLE001
         logger.warning("%s: no se ha podido cerrar su mercadillo (%s): %s", de_que, clave, e)
 
@@ -57951,8 +57975,9 @@ async def admin_mercadillo_expulsar(data: dict = Body(default={}), user: dict = 
     except Exception as err:                                     # noqa: BLE001 — la expulsión ya está hecha
         logger.warning("aviso de una expulsión del mercadillo: %s", err)
     # En la auditoría, LO JUSTO: ese registro no caduca nunca, y la Privacidad dice que el motivo y la fecha se guardan
-    # «hasta que se te devuelve el acceso o hasta la baja» (eso es `mercadillo_expulsados`, que sí se borra). Aquí queda
-    # que se tomó la decisión, sobre quién (su clave) y cuándo, con la clave corta del motivo: ni su nombre ni la nota.
+    # «hasta que se te devuelve o hasta que se borran los datos de tu cuenta» (eso es `mercadillo_expulsados`, que sí se
+    # borra). Aquí queda que se tomó la decisión, sobre quién (su clave) y cuándo, con la clave corta del motivo: ni su
+    # nombre ni la nota.
     await _audit(user, "mercadillo_expulsar", {"clave": clave, "motivo": motivo_clave, **hechos})
     return {"ok": True, "expulsado": _merc_expulsado_vista(e), **hechos}
 
