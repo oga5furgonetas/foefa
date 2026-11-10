@@ -57242,9 +57242,13 @@ async def merc_lista(categoria: str = "", user: dict = Depends(require_any_auth)
 
 async def _merc_anuncio_visible(anuncio_id: str, yo: dict, para_bloquear: bool = False) -> dict:
     """El anuncio si este usuario puede verlo: publicado, suyo, de una conversación suya o el super-admin.
-    Con un bloqueo por medio, en cualquiera de los dos sentidos, no está: el mismo 404 que si lo hubieran quitado
-    (por aquí pasan la ficha, sus fotos y denunciarlo). `para_bloquear`: a quien YA ha bloqueado se le encuentra
-    igual, para que bloquear dos veces a la misma persona no falle."""
+    Con un bloqueo por medio, en cualquiera de los dos sentidos, no está: 404 con el mismo texto que un anuncio que
+    no existe (por aquí pasan la ficha, sus fotos y denunciarlo).
+    `para_bloquear` (solo lo pasa «Bloquear a…») es otra regla: basta con que el anuncio EXISTA, en el estado que sea,
+    y con que quien lo vende no le haya bloqueado a él. Así encuentra a quien YA tiene bloqueado (bloquear dos veces
+    no falla) y también un anuncio que ha dejado de estar publicado: la web manda la denuncia ANTES del bloqueo y, si
+    esa denuncia es la tercera, el anuncio pasa a revisión; con la regla de «verlo», quien denunciaba por acoso se
+    quedaba sin poder bloquear. Para ver, denunciar o contactar, lo que no está publicado sigue sin estar."""
     a = await global_db[_MERC_ANUNCIOS].find_one({"id": str(anuncio_id)[:64]}, {"_id": 0})
     if not a:
         raise HTTPException(404, "Ese anuncio ya no está")
@@ -57254,7 +57258,7 @@ async def _merc_anuncio_visible(anuncio_id: str, yo: dict, para_bloquear: bool =
     bloqueados, me_bloquean = await _merc_bloqueos(yo)
     if vendedor in me_bloquean or (vendedor in bloqueados and not para_bloquear):
         raise HTTPException(404, "Ese anuncio ya no está")
-    if _merc_estado(a, datetime.now(timezone.utc)) == "publicado":
+    if para_bloquear or _merc_estado(a, datetime.now(timezone.utc)) == "publicado":
         return a
     if await global_db[_MERC_CONVS].find_one({"anuncio_id": a["id"], "comprador.clave": yo["clave"]}, {"_id": 0, "id": 1}):
         return a

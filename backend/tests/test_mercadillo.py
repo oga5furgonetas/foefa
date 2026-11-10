@@ -679,9 +679,9 @@ async def test_desbloquear_lo_devuelve_todo_menos_lo_que_cerro_la_moderacion(mun
 async def test_bloquear_dos_veces_no_falla_y_no_se_bloquea_lo_que_no_se_ve_ni_a_uno_mismo(mundo, monkeypatch):
     await _abrir(mundo)
     a = await _publicado(ANA, "Soporte de móvil")
-    pendiente = await _anuncio(LUIS, "Botas", "20")                           # sin aprobar: Pepe no lo ve
     cid = (await server.merc_contactar(a["id"], {"texto": "hola"}, PEPE))["conversacion_id"]
-    # Sin decir a quién, lo que no existe, lo que no ve, lo de otros, lo suyo: nada de eso bloquea a nadie.
+    # Sin decir a quién, lo que no existe, la conversación de otros, lo suyo: nada de eso bloquea a nadie. (Un anuncio
+    # que existe pero no está publicado SÍ vale para bloquear a quien lo vende: es la prueba siguiente.)
     await _falla(server.merc_bloquear({}, PEPE), 400, "Falta a quién bloqueas")
     await _falla(server.merc_bloquear([], PEPE), 400, "Falta a quién bloqueas")
     # Un cuerpo con los tipos cambiados (una lista o un número donde va un id) no es un 500: no encuentra nada.
@@ -689,7 +689,6 @@ async def test_bloquear_dos_veces_no_falla_y_no_se_bloquea_lo_que_no_se_ve_ni_a_
         await _falla(server.merc_bloquear(raro, PEPE), 404)
     await _falla(server.merc_desbloquear("../../no-es-un-id", PEPE), 404, "Ese bloqueo ya no está")
     await _falla(server.merc_bloquear({"anuncio_id": "no-existe"}, PEPE), 404, "Ese anuncio ya no está")
-    await _falla(server.merc_bloquear({"anuncio_id": pendiente["id"]}, PEPE), 404, "Ese anuncio ya no está")
     await _falla(server.merc_bloquear({"conversacion_id": cid}, LUIS), 404, "Esa conversación no existe")
     await _falla(server.merc_bloquear({"anuncio_id": a["id"]}, ANA), 400, "Es tu anuncio")
     await mundo.g["mercadillo_conversaciones"].insert_one({
@@ -724,6 +723,74 @@ async def test_bloquear_dos_veces_no_falla_y_no_se_bloquea_lo_que_no_se_ve_ni_a_
     r = await server.merc_bloquear({"anuncio_id": a["id"]}, PEPE)
     assert r == {"ok": True, "ya": True, "bloqueo": {"id": "0000elotrotoque0", "nombre": "Ana P.", "desde": col.docs[0]["ts"]}}
     assert len(col.docs) == 1 and avisado == []
+
+
+async def _no_se_ve(anuncio: dict, user) -> None:
+    """Ese anuncio, para esa persona, no está: ni su ficha, ni su foto, ni se puede denunciar, ni «Me interesa»."""
+    for intento in (server.merc_anuncio(anuncio["id"], user), server.merc_ver_foto(anuncio["fotos"][0], user),
+                    server.merc_denunciar({"anuncio_id": anuncio["id"], "motivo": "ofensivo"}, user)):
+        await _falla(intento, 404, "Ese anuncio ya no está")
+    await _falla(server.merc_contactar(anuncio["id"], {"texto": "hola"}, user), 404, A_LA_VENTA)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_se_bloquea_tambien_desde_un_anuncio_que_ya_no_esta_publicado(mundo):
+    """La web manda la denuncia ANTES del bloqueo («Denunciar también este anuncio»). Si esa denuncia es la tercera, el
+    anuncio pasa a revisión y deja de verse: quien denunciaba por acoso se quedaba sin poder bloquear (404 para siempre).
+    Para BLOQUEAR basta con que el anuncio exista (en el estado que sea), no sea suyo y quien lo vende no le haya
+    bloqueado a él. Ver la ficha, sus fotos, denunciarlo y «Me interesa» NO cambian: lo que no está publicado no se ve."""
+    await _abrir(mundo)
+    a = await _publicado(ANA, "Algo raro")
+    mundo.g["organizations"].docs += [{"id": "o2", "name": "Rosa", "plan": "autonomo"}, {"id": "o3", "name": "Juan", "plan": "autonomo"}]
+    for quien in ({"sub": "x", "role": "admin", "org_id": "o2", "name": "Rosa"}, {"sub": "y", "role": "admin", "org_id": "o3", "name": "Juan"}):
+        await server.merc_denunciar({"anuncio_id": a["id"], "motivo": "ofensivo"}, quien)
+    # Pepe marca «Denunciar también este anuncio»: primero va su denuncia, que es la tercera y oculta el anuncio…
+    assert await server.merc_denunciar({"anuncio_id": a["id"], "motivo": "ofensivo", "texto": "me insulta"}, PEPE) == {"ok": True}
+    assert mundo.g["mercadillo_anuncios"].docs[0]["estado"] == "en_revision" and await _titulos(PEPE) == set()
+    await _no_se_ve(a, PEPE)
+    # …y después el bloqueo, que se hace igual.
+    r = await server.merc_bloquear({"anuncio_id": a["id"]}, PEPE)
+    assert set(r) == {"ok", "bloqueo"} and r["ok"] is True and r["bloqueo"]["nombre"] == "Ana P."
+    assert [(b["de"], b["a"], b["origen"]) for b in mundo.g["mercadillo_bloqueos"].docs] == [
+        (CLAVES["pepe"], CLAVES["ana"], {"tipo": "anuncio", "id": a["id"], "titulo": "Algo raro"})]
+    assert await server.merc_bloquear({"anuncio_id": a["id"]}, PEPE) == {"ok": True, "ya": True, "bloqueo": r["bloqueo"]}
+    # DESDE CUALQUIER ESTADO: un anuncio de Luis en cada uno de los que no se ven.
+    casos = {}
+    for titulo, cierre in (("Quitado", lambda x: server.merc_cambiar(x["id"], {"accion": "quitar"}, LUIS)),
+                           ("Vendido", lambda x: server.merc_cambiar(x["id"], {"accion": "vendido"}, LUIS)),
+                           ("Retirado", lambda x: server.admin_mercadillo_anuncio(x["id"], {"accion": "retirar", "motivo": "otro"}, DANI)),
+                           ("Caducado", lambda x: mundo.g["mercadillo_anuncios"].update_one(
+                               {"id": x["id"]}, {"$set": {"caduca": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()}}))):
+        casos[titulo] = await _publicado(LUIS, titulo)
+        await cierre(casos[titulo])
+    casos["Rechazado"] = await _anuncio(LUIS, "Rechazado")
+    await server.admin_mercadillo_anuncio(casos["Rechazado"]["id"], {"accion": "rechazar", "motivo": "fotos"}, DANI)
+    casos["Pendiente"] = await _anuncio(LUIS, "Pendiente")
+    ahora = datetime.now(timezone.utc)
+    estados = {x["titulo"]: server._merc_estado(x, ahora) for x in mundo.g["mercadillo_anuncios"].docs if x["titulo"] in casos}
+    assert estados == {"Quitado": "quitado", "Vendido": "vendido", "Retirado": "retirado", "Caducado": "caducado",
+                       "Rechazado": "rechazado", "Pendiente": "pendiente"}
+    assert await _titulos(PEPE) == set()
+    for titulo, anuncio in casos.items():
+        await _no_se_ve(anuncio, PEPE)                                         # no lo ve (como siempre)…
+        r = await server.merc_bloquear({"anuncio_id": anuncio["id"]}, PEPE)   # …y puede bloquear a quien lo vende
+        assert set(r) == {"ok", "bloqueo"} and r["bloqueo"]["nombre"] == "Luis G.", titulo
+        guardado = await mundo.g["mercadillo_bloqueos"].find_one({"id": r["bloqueo"]["id"]})
+        assert (guardado["de"], guardado["a"], guardado["origen"]) == (
+            CLAVES["pepe"], CLAVES["luis"], {"tipo": "anuncio", "id": anuncio["id"], "titulo": titulo})
+        await _no_se_ve(anuncio, PEPE)                                         # bloquear no le abre nada
+        assert await server.merc_desbloquear(r["bloqueo"]["id"], PEPE) == {"ok": True}
+    # LO QUE SIGUE IGUAL. Un anuncio que no existe; el suyo (aunque no esté publicado)…
+    await _falla(server.merc_bloquear({"anuncio_id": "no-existe"}, PEPE), 404, "Ese anuncio ya no está")
+    for anuncio in casos.values():
+        await _falla(server.merc_bloquear({"anuncio_id": anuncio["id"]}, LUIS), 400, "Es tu anuncio")
+    # …y si quien lo vende le ha bloqueado a ÉL, por su anuncio no puede (esté como esté el anuncio).
+    de_pepe = await _publicado(PEPE, "Carretilla")
+    await server.merc_bloquear({"anuncio_id": de_pepe["id"]}, LUIS)
+    for anuncio in casos.values():
+        await _falla(server.merc_bloquear({"anuncio_id": anuncio["id"]}, PEPE), 404, "Ese anuncio ya no está")
+    assert sorted((b["de"], b["a"]) for b in mundo.g["mercadillo_bloqueos"].docs) == [
+        (CLAVES["luis"], CLAVES["pepe"]), (CLAVES["pepe"], CLAVES["ana"])]
 
 
 @pytest.mark.asyncio(loop_scope="session")
