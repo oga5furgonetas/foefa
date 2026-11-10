@@ -168,9 +168,12 @@ for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
 
     /* Dentro de la app de iPhone un enlace con target="_blank" a una página de la propia app no abre nada (Capacitor se lo pasa
        al sistema, y `capacitor://localhost/…` fuera de la app no existe): desde la pantalla en la que se aceptan las normas, los
-       Términos se tienen que poder leer. Van en la misma ventana, en su versión de dentro de la app (sin nada de pagos). */
+       Términos se tienen que poder leer. Van en la misma ventana, en su versión de dentro de la app (sin nada de pagos).
+       OJO: la página se abre ARRIBA, no en su apartado del mercadillo (las páginas legales no se desplazan solas a `#mercadillo`;
+       medido el 10-11-2026: el título del apartado queda 1.281 px más abajo en 375 × 647). Aquí solo se comprueba que el apartado
+       está en la página. */
     if (ios) {
-      test('dentro del iPhone, «Términos» se abre en la misma ventana, en la parte del mercadillo y sin nada prohibido', async ({ page, context }) => {
+      test('dentro del iPhone, «Términos» se abre en la misma ventana, con su apartado del mercadillo y sin nada prohibido', async ({ page, context }) => {
         const fallos = vigilar(page)
         await entrar(page, { ios, normas: false })
         await page.getByRole('link', { name: 'Términos', exact: true }).click()
