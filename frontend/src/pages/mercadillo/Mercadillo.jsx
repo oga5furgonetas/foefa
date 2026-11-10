@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, Plus, MessageCircle, Tag, ShieldCheck, Flag, Send, Loader2, X, Check, ImagePlus, ChevronRight,
-  Info, Eye, BadgeCheck, Store, Bell, BellOff,
+  Info, Eye, BadgeCheck, Store, Bell, BellOff, Ban,
 } from 'lucide-react'
 import {
   mercEstado, mercLista, mercAnuncio, mercSubirFoto, mercFotoBlob, mercCrear, mercCambiar, mercContactar,
   mercBuzon, mercConversacion, mercResponder, mercAvisosLeidos, mercDenunciar, mercAvisosMovil,
+  mercBloquear, mercBloqueados, mercDesbloquear,
 } from '../../services/api'
 import { compressImage } from '../../lib/compressImage'
 import { useAtras } from '../../lib/atras'
@@ -153,7 +154,9 @@ const NORMAS = [
   'Cada anuncio lo revisamos antes de publicarlo. Dura 30 días y puedes tener 3 a la vez.',
   'Habla por los mensajes de aquí: son privados entre los dos. Solo los miramos si alguien los denuncia.',
   'FDS no vende, no cobra y no interviene en el pago ni en la entrega. Quedad en persona, mirad el artículo antes de pagar y no pagues nunca por adelantado.',
-  'Si algo no cumple, pulsa «Denunciar». Lo revisamos y te decimos qué hemos hecho.',
+  // 10-11-2026 (Apple, guideline 1.2): bloquear a quien molesta, las 24 horas de las denuncias y la tolerancia cero.
+  'Si alguien te molesta, bloquéale desde su anuncio o desde la conversación: dejarás de ver sus anuncios y no podrá escribirte.',
+  'Si algo no cumple, pulsa «Denunciar». Lo revisamos en 24 horas como mucho y te decimos qué hemos hecho. No se tolera el contenido ofensivo ni el acoso: quien lo haga se queda sin mercadillo.',
 ]
 
 function Normas({ onBack }) {
@@ -176,7 +179,8 @@ function Normas({ onBack }) {
 }
 
 /* ── Denunciar (anuncio o conversación) ── */
-function Denunciar({ motivos, objetivo, onCerrar }) {
+/* `alEnviar`: quien la abre sigue con lo suyo en cuanto la denuncia está enviada (al bloquear con «Denunciar también…»). */
+function Denunciar({ motivos, objetivo, onCerrar, alEnviar }) {
   const [motivo, setMotivo] = useState('')
   const [explica, setExplica] = useState('')
   const [estado, setEstado] = useState('')
@@ -185,8 +189,8 @@ function Denunciar({ motivos, objetivo, onCerrar }) {
     setEstado('enviando'); setErr('')
     try {
       await mercDenunciar({ ...objetivo, motivo, texto: explica })
-      setEstado('hecho')
-    } catch (e) { setErr(texto(e, 'No se ha podido enviar. Inténtalo otra vez.')); setEstado('') }
+    } catch (e) { setErr(texto(e, 'No se ha podido enviar. Inténtalo otra vez.')); setEstado(''); return }
+    if (alEnviar) alEnviar(); else setEstado('hecho')
   }
   useAtras(true, onCerrar)
   return (
@@ -224,6 +228,78 @@ function Denunciar({ motivos, objetivo, onCerrar }) {
   )
 }
 
+/* ── BLOQUEAR A UNA PERSONA (10-11-2026) ─────────────────────────────────────────
+   Apple (guideline 1.2) pide a una app con contenido de sus usuarios que, además de denunciar, se pueda bloquear a quien
+   molesta. Se bloquea desde su anuncio o desde la conversación; aquí solo se pregunta y se cuenta lo que pasa, las reglas
+   son del servidor: los dos dejan de verse los anuncios, ninguno puede escribir al otro y al bloqueado no se le avisa.
+   El botón va A LA VISTA y con su texto (el revisor lo busca en el anuncio y en la conversación), junto al de denunciar.
+   Dentro de la app de iPhone es igual: es justo lo que Apple quiere ver. */
+const BLOQUEADO = 'Bloqueado. Ya no verás sus anuncios ni podrá escribirte.'
+const DENUNCIA_RECIBIDA = 'Hemos recibido tu denuncia: te diremos en tu buzón qué hemos decidido.'
+
+function Acciones({ nombre, onBloquear, onDenunciar }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <button type="button" onClick={onBloquear}
+        className="flex min-w-0 items-center gap-1.5 rounded-xl border border-red-500/40 px-3 py-2 text-[13.5px] font-bold text-red-300">
+        <Ban size={15} className="shrink-0" /> <span className="truncate">Bloquear a {nombre}</span>
+      </button>
+      <button type="button" onClick={onDenunciar}
+        className="flex items-center gap-1.5 rounded-xl border border-dark-700 px-3 py-2 text-[13.5px] font-semibold text-dark-200">
+        <Flag size={15} className="shrink-0" /> Denunciar
+      </button>
+    </div>
+  )
+}
+
+/* La confirmación. Con «Denunciar también…» marcada, la denuncia va ANTES de bloquear: después, ese anuncio (o esa
+   conversación) ya no se puede ni abrir. `onHecho` recibe lo que contesta el servidor y si se llegó a denunciar. */
+function Bloquear({ nombre, objetivo, motivos, onCerrar, onHecho }) {
+  const [tambien, setTambien] = useState(false)
+  const [paso, setPaso] = useState('')                 // '' · 'denuncia' (la hoja de denunciar, encima) · 'bloqueando'
+  const [denunciado, setDenunciado] = useState(false)
+  const [err, setErr] = useState('')
+  const bloquear = async (conDenuncia) => {
+    setPaso('bloqueando'); setErr('')
+    try {
+      const { data } = await mercBloquear(objetivo)
+      await onHecho({ ...data, denunciado: conDenuncia })
+    } catch (e) { setErr(texto(e, 'No se ha podido bloquear. Inténtalo otra vez.')); setPaso('') }
+  }
+  useAtras(true, onCerrar)
+  if (paso === 'denuncia') {
+    return <Denunciar motivos={motivos} objetivo={objetivo} onCerrar={() => setPaso('')} alEnviar={() => { setDenunciado(true); bloquear(true) }} />
+  }
+  const ocupado = paso === 'bloqueando'
+  return (
+    <div role="dialog" aria-modal="true" aria-label={`¿Bloquear a ${nombre}?`} className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 sm:items-center">
+      <div className="w-full max-w-md rounded-3xl border border-dark-700 bg-dark-950 p-4">
+        <p className="text-[17px] font-bold text-dark-50">¿Bloquear a {nombre}?</p>
+        <p className="mt-2 text-[14px] leading-snug text-dark-200">
+          Dejarás de ver sus anuncios y no podrá escribirte. Tampoco verá los tuyos. No se le avisa. Puedes desbloquearle cuando quieras en “Personas bloqueadas”.
+        </p>
+        {denunciado ? (
+          <p role="status" className="mt-3 text-[13.5px] leading-snug text-dark-200">{DENUNCIA_RECIBIDA}</p>
+        ) : (
+          <label className="mt-3 flex cursor-pointer items-center gap-2.5 text-[14px] font-semibold text-dark-100">
+            <input type="checkbox" checked={tambien} onChange={(e) => setTambien(e.target.checked)} disabled={ocupado} className="h-5 w-5 shrink-0" />
+            Denunciar también {objetivo.anuncio_id ? 'este anuncio' : 'esta conversación'}
+          </label>
+        )}
+        {err && <p role="alert" className="mt-2 text-[13px] text-red-300">{err}</p>}
+        <div className="mt-4 flex gap-2">
+          <button type="button" onClick={onCerrar} disabled={ocupado}
+            className="flex-1 rounded-2xl border border-dark-700 py-3 text-[15px] font-bold text-dark-100 disabled:opacity-50">Cancelar</button>
+          <button type="button" disabled={ocupado} onClick={() => (tambien && !denunciado ? setPaso('denuncia') : bloquear(denunciado))}
+            className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-red-600 py-3 text-[15px] font-bold text-white disabled:opacity-50">
+            {ocupado && <Loader2 size={16} className="animate-spin" />} Bloquear
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ── Una tarjeta del escaparate ── */
 function Tarjeta({ a, onAbrir }) {
   return (
@@ -248,7 +324,7 @@ function Vendedor({ v }) {
 }
 
 /* ── La ficha de un anuncio ── */
-function Ficha({ id, motivos, estados, onBack, onChat, onEditar }) {
+function Ficha({ id, motivos, estados, onBack, onChat, onEditar, onBloqueado }) {
   const [a, setA] = useState(null)
   const [err, setErr] = useState('')
   const [i, setI] = useState(0)
@@ -256,6 +332,7 @@ function Ficha({ id, motivos, estados, onBack, onChat, onEditar }) {
   const [msg, setMsg] = useState('Hola, ¿sigue disponible?')
   const [enviando, setEnviando] = useState(false)
   const [denunciar, setDenunciar] = useState(false)
+  const [bloquear, setBloquear] = useState(false)
   const carrusel = useRef(null)
   useEffect(() => {
     mercAnuncio(id).then(({ data }) => setA(data)).catch((e) => setErr(texto(e, 'No se ha podido abrir el anuncio.')))
@@ -269,6 +346,7 @@ function Ficha({ id, motivos, estados, onBack, onChat, onEditar }) {
   }
   if (!a) return <div><Cabecera titulo="Anuncio" onBack={onBack} />{err ? <p role="alert" className="text-[14px] text-red-300">{err}</p> : <Loader2 className="mx-auto mt-10 animate-spin text-dark-500" />}</div>
   const fotos = a.fotos || []
+  const quien = a.vendedor?.nombre || 'esta persona'
   return (
     <div className="pb-28">
       <Cabecera titulo={a.titulo} onBack={onBack}
@@ -290,14 +368,24 @@ function Ficha({ id, motivos, estados, onBack, onChat, onEditar }) {
           {a.zona && <span className="rounded-full bg-dark-800 px-2.5 py-1 font-semibold text-dark-200">{a.zona}</span>}
           {a.publicado_en && <span className="rounded-full bg-dark-800 px-2.5 py-1 text-dark-400">Desde el {fecha(a.publicado_en)}</span>}
         </div>
+        {/* Quien vende, ANTES de la descripción (10-11-2026): con una descripción larga quedaba muy abajo, y «Bloquear a…» y
+            «Denunciar» tienen que estar en la primera pantalla del anuncio, sin buscarlos. */}
+        <div className="mt-3 rounded-2xl border border-dark-700 bg-dark-900 p-3">
+          <Vendedor v={a.vendedor} />
+          {!a.mio && (
+            <div className="mt-3 border-t border-dark-800 pt-3">
+              <Acciones nombre={quien} onBloquear={() => setBloquear(true)} onDenunciar={() => setDenunciar(true)} />
+            </div>
+          )}
+        </div>
         {a.descripcion && <p className="mt-3 whitespace-pre-line text-[14.5px] leading-relaxed text-dark-200">{a.descripcion}</p>}
-        <div className="mt-4 rounded-2xl border border-dark-700 bg-dark-900 p-3"><Vendedor v={a.vendedor} /></div>
         <p className="mt-3 flex gap-2 rounded-2xl bg-amber-400/10 p-3 text-[12.5px] leading-snug text-amber-100">
           <Info size={16} className="mt-0.5 shrink-0" /> Quedad en persona y mira el artículo antes de pagar. No pagues nunca por adelantado: FDS no interviene en el pago.
         </p>
         {err && <p role="alert" className="mt-2 text-[13px] text-red-300">{err}</p>}
       </div>
       {denunciar && <Denunciar motivos={motivos} objetivo={{ anuncio_id: a.id }} onCerrar={() => setDenunciar(false)} />}
+      {bloquear && <Bloquear nombre={quien} objetivo={{ anuncio_id: a.id }} motivos={motivos} onCerrar={() => setBloquear(false)} onHecho={onBloqueado} />}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-dark-800 bg-dark-950/95 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
         <div className="mx-auto max-w-md">
           {a.mio ? (
@@ -479,7 +567,7 @@ function MisAnuncios({ mios, onBack, onEditar, onAbrir, recargar, onVender }) {
 }
 
 /* ── El buzón ── */
-function Buzon({ onBack, onChat, avisos, onAvisos }) {
+function Buzon({ onBack, onChat, avisos, onAvisos, hecho, bloqueados = 0, onBloqueados }) {
   const [d, setD] = useState(null)
   const [err, setErr] = useState('')
   useEffect(() => {
@@ -491,6 +579,7 @@ function Buzon({ onBack, onChat, avisos, onAvisos }) {
   return (
     <div>
       <Cabecera titulo="Mensajes" sub="Privados entre quien compra y quien vende" onBack={onBack} />
+      {hecho && <Hecho>{hecho}</Hecho>}
       <AvisosMovil activo={avisos} onCambio={onAvisos} />
       {err && <p role="alert" className="text-[13px] text-red-300">{err}</p>}
       {!d ? !err && <Loader2 className="mx-auto mt-10 animate-spin text-dark-500" /> : (
@@ -531,17 +620,83 @@ function Buzon({ onBack, onChat, avisos, onAvisos }) {
           )}
         </>
       )}
+      {/* Siempre a la vista, también sin nadie bloqueado: es donde la confirmación dice que se deshace. */}
+      <EntradaBloqueados n={bloqueados} onAbrir={onBloqueados} />
+    </div>
+  )
+}
+
+/* El aviso de lo que se acaba de hacer (bloquear, desbloquear), arriba de la pantalla a la que se vuelve. */
+function Hecho({ children }) {
+  return <p role="status" className="mb-3 rounded-2xl bg-emerald-500/15 px-3 py-2.5 text-[14px] font-semibold text-emerald-100">{children}</p>
+}
+
+function EntradaBloqueados({ n, onAbrir, margen = 'mt-5' }) {
+  return (
+    <button type="button" onClick={onAbrir} className={`mx-auto ${margen} flex items-center gap-1.5 text-[13px] font-semibold text-dark-400`}>
+      <Ban size={15} /> Personas bloqueadas{n > 0 ? ` (${n})` : ''}
+    </button>
+  )
+}
+
+/* ── Personas bloqueadas: a quién, desde cuándo y desde qué anuncio; y «Desbloquear», que lo deshace todo ── */
+function Bloqueados({ onBack, alCambiar }) {
+  const [lista, setLista] = useState(null)
+  const [err, setErr] = useState('')
+  const [ocupado, setOcupado] = useState('')
+  const [hecho, setHecho] = useState('')
+  useEffect(() => {
+    mercBloqueados().then(({ data }) => setLista(data?.bloqueados || [])).catch((e) => setErr(texto(e, 'No se ha podido abrir la lista.')))
+  }, [])
+  const desbloquear = async (b) => {
+    setOcupado(b.id); setErr(''); setHecho('')
+    try {
+      await mercDesbloquear(b.id)
+      setHecho(`Has desbloqueado a ${b.nombre}. Vuelves a ver sus anuncios y puede escribirte.`)
+    } catch (e) {
+      setErr(texto(e, 'No se ha podido desbloquear. Inténtalo otra vez.'))
+      if (e?.response?.status !== 404) { setOcupado(''); return }     // 404: ese bloqueo ya no estaba; se quita igual
+    }
+    setLista((xs) => (xs || []).filter((x) => x.id !== b.id))
+    setOcupado('')
+    alCambiar?.()
+  }
+  return (
+    <div>
+      <Cabecera titulo="Personas bloqueadas" sub="No ves sus anuncios ni pueden escribirte" onBack={onBack} />
+      {hecho && <Hecho>{hecho}</Hecho>}
+      {err && <p role="alert" className="mb-2 text-[13px] text-red-300">{err}</p>}
+      {!lista ? !err && <Loader2 className="mx-auto mt-10 animate-spin text-dark-500" /> : !lista.length ? (
+        <p className="mt-6 text-center text-[14px] leading-snug text-dark-400">No tienes a nadie bloqueado. Si alguien te molesta, bloquéale desde su anuncio o desde la conversación.</p>
+      ) : (
+        <ul className="space-y-2.5">
+          {lista.map((b) => (
+            <li key={b.id} className="flex items-center gap-3 rounded-2xl border border-dark-700 bg-dark-900 p-3">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-bold text-dark-50">{b.nombre}</span>
+                {fecha(b.desde) && <span className="block text-[12px] text-dark-400">Bloqueado el {fecha(b.desde)}</span>}
+                {b.titulo && <span className="block truncate text-[12px] text-dark-400">Desde «{b.titulo}»</span>}
+              </span>
+              <button type="button" disabled={ocupado === b.id} onClick={() => desbloquear(b)} aria-label={`Desbloquear a ${b.nombre}`}
+                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-dark-700 px-3 py-2 text-[13.5px] font-bold text-dark-100 disabled:opacity-50">
+                {ocupado === b.id && <Loader2 size={14} className="animate-spin" />} Desbloquear
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
 
 /* ── Una conversación ── */
-function Chat({ id, motivos, onBack, onAnuncio, avisos, onAvisos }) {
+function Chat({ id, motivos, onBack, onAnuncio, avisos, onAvisos, onBloqueado }) {
   const [d, setD] = useState(null)
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [denunciar, setDenunciar] = useState(false)
+  const [bloquear, setBloquear] = useState(false)
   const fin = useRef(null)
   const cargar = useCallback(() => mercConversacion(id).then(({ data }) => setD(data)).catch((e) => setErr(texto(e, 'No se ha podido abrir la conversación.'))), [id])
   useEffect(() => {
@@ -561,6 +716,7 @@ function Chat({ id, motivos, onBack, onAnuncio, avisos, onAvisos }) {
   }
   if (!d) return <div><Cabecera titulo="Mensajes" onBack={onBack} />{err ? <p role="alert" className="text-[13px] text-red-300">{err}</p> : <Loader2 className="mx-auto mt-10 animate-spin text-dark-500" />}</div>
   const a = d.anuncio || {}
+  const quien = d.con || 'esta persona'
   return (
     <div className="pb-28">
       <Cabecera titulo={d.con} sub={d.soy === 'vendedor' ? 'Le interesa tu anuncio' : 'Vende este anuncio'} onBack={onBack}
@@ -573,6 +729,7 @@ function Chat({ id, motivos, onBack, onAnuncio, avisos, onAvisos }) {
         </span>
         <ChevronRight size={16} className="text-dark-500" />
       </button>
+      <div className="mt-2.5"><Acciones nombre={quien} onBloquear={() => setBloquear(true)} onDenunciar={() => setDenunciar(true)} /></div>
       <p className="mt-2 text-center text-[11.5px] text-dark-500">Quedad en persona y no pagues por adelantado. FDS no interviene en el pago.</p>
       <ul className="mt-3 space-y-2">
         {d.mensajes.map((m) => (
@@ -586,6 +743,7 @@ function Chat({ id, motivos, onBack, onAnuncio, avisos, onAvisos }) {
       {d.mensajes.some((m) => m.mio) && <AvisosMovil activo={avisos} onCambio={onAvisos} pregunta="¿Te avisamos en el móvil cuando te contesten?" />}
       <div ref={fin} />
       {denunciar && <Denunciar motivos={motivos} objetivo={{ conversacion_id: id }} onCerrar={() => setDenunciar(false)} />}
+      {bloquear && <Bloquear nombre={quien} objetivo={{ conversacion_id: id }} motivos={motivos} onCerrar={() => setBloquear(false)} onHecho={onBloqueado} />}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-dark-800 bg-dark-950/95 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
         <div className="mx-auto max-w-md">
           {err && <p role="alert" className="mb-1 text-[12.5px] text-red-300">{err}</p>}
@@ -611,8 +769,10 @@ function Chat({ id, motivos, onBack, onAnuncio, avisos, onAvisos }) {
 export default function Mercadillo({ onBack, inicio = 'lista' }) {
   const [pila, setPila] = useState(() => [{ v: inicio }])
   const actual = pila[pila.length - 1]
-  const ir = (paso) => { setPila((p) => [...p, paso]); window.scrollTo?.(0, 0) }
-  const atras = () => { if (pila.length > 1) setPila((p) => p.slice(0, -1)); else onBack?.() }
+  // Lo que se acaba de hacer («Bloqueado…»): se dice en la pantalla a la que se vuelve y se va al moverse de ella.
+  const [hecho, setHecho] = useState('')
+  const ir = (paso) => { setHecho(''); setPila((p) => [...p, paso]); window.scrollTo?.(0, 0) }
+  const atras = () => { setHecho(''); if (pila.length > 1) setPila((p) => p.slice(0, -1)); else onBack?.() }
   const [datos, setDatos] = useState(null)
   const [estado, setEstado] = useState(null)
   const [cat, setCat] = useState('')
@@ -625,14 +785,24 @@ export default function Mercadillo({ onBack, inicio = 'lista' }) {
   }, [])
   // Al entrar y al volver a la portada se refresca (un anuncio nuevo, un mensaje leído…).
   useEffect(() => { if (actual.v === 'lista' && pila.length === 1) recargar() }, [actual.v, pila.length, recargar])
+  /* Tras bloquear: a la lista (desde un anuncio) o al buzón (desde una conversación), ya sin esa persona. Se quitan de en
+     medio las pantallas por las que se llegó: el anuncio y la conversación de esa persona ya no se pueden abrir. */
+  const alBloquear = async (r, destino) => {
+    await recargar()
+    setHecho(r?.denunciado ? `${BLOQUEADO} ${DENUNCIA_RECIBIDA}` : BLOQUEADO)
+    setPila((p) => (destino === 'buzon' ? [p[0], { v: 'buzon' }] : [p[0]]))
+    window.scrollTo?.(0, 0)
+  }
+  const bloqueados = Number(datos?.bloqueados ?? estado?.bloqueados) || 0
 
   const comun = { motivos: datos?.motivos_denuncia }
   const estadosTxt = datos?.estados_articulo
   if (actual.v === 'normas') return <Marco><Normas onBack={atras} /></Marco>
-  if (actual.v === 'anuncio') return <Marco><Ficha id={actual.id} {...comun} estados={estadosTxt} onBack={atras} onChat={(c) => ir({ v: 'chat', id: c })} onEditar={(a) => ir({ v: 'vender', previo: a })} /></Marco>
+  if (actual.v === 'bloqueados') return <Marco><Bloqueados onBack={atras} alCambiar={recargar} /></Marco>
+  if (actual.v === 'anuncio') return <Marco><Ficha id={actual.id} {...comun} estados={estadosTxt} onBack={atras} onChat={(c) => ir({ v: 'chat', id: c })} onEditar={(a) => ir({ v: 'vender', previo: a })} onBloqueado={(r) => alBloquear(r, 'lista')} /></Marco>
   const avisos = { avisos: !!estado?.avisos_movil, onAvisos: (v) => setEstado((e) => ({ ...(e || {}), avisos_movil: v })) }
-  if (actual.v === 'chat') return <Marco><Chat id={actual.id} {...comun} {...avisos} onBack={atras} onAnuncio={(a) => ir({ v: 'anuncio', id: a })} /></Marco>
-  if (actual.v === 'buzon') return <Marco><Buzon {...avisos} onBack={atras} onChat={(c) => ir({ v: 'chat', id: c })} /></Marco>
+  if (actual.v === 'chat') return <Marco><Chat id={actual.id} {...comun} {...avisos} onBack={atras} onAnuncio={(a) => ir({ v: 'anuncio', id: a })} onBloqueado={(r) => alBloquear(r, 'buzon')} /></Marco>
+  if (actual.v === 'buzon') return <Marco><Buzon {...avisos} hecho={hecho} bloqueados={bloqueados} onBloqueados={() => ir({ v: 'bloqueados' })} onBack={atras} onChat={(c) => ir({ v: 'chat', id: c })} /></Marco>
   if (actual.v === 'vender') {
     return (
       <Marco>
@@ -673,6 +843,7 @@ export default function Mercadillo({ onBack, inicio = 'lista' }) {
         </p>
       )}
       {err && <p role="alert" className="mb-2 text-[13px] text-red-300">{err}</p>}
+      {hecho && <Hecho>{hecho}</Hecho>}
       <button type="button" onClick={() => ir({ v: 'vender' })}
         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-3.5 text-[16px] font-bold text-brand-tinta shadow-lg shadow-brand-500/20">
         <Plus size={19} strokeWidth={2.6} /> Vender algo que no uses
@@ -695,6 +866,8 @@ export default function Mercadillo({ onBack, inicio = 'lista' }) {
       <button type="button" onClick={() => ir({ v: 'normas' })} className="mx-auto mt-5 flex items-center gap-1.5 text-[13px] font-semibold text-dark-400">
         <ShieldCheck size={15} /> Normas y seguridad
       </button>
+      {/* Con alguien bloqueado, también aquí: sus anuncios ya no salen en esta lista y es donde se le echa en falta. */}
+      {bloqueados > 0 && <EntradaBloqueados n={bloqueados} margen="mt-3" onAbrir={() => ir({ v: 'bloqueados' })} />}
     </Marco>
   )
 }

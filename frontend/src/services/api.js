@@ -326,3 +326,9 @@ export const mercResponder = (id, texto) => api.post(`/mercadillo/conversacion/$
 export const mercAvisosLeidos = () => api.post('/mercadillo/avisos/leidos')
 export const mercDenunciar = (d) => api.post('/mercadillo/denunciar', d)
 export const mercAvisosMovil = (activo) => api.post('/mercadillo/avisos-movil', { activo })
+/* BLOQUEAR A UNA PERSONA (10-11-2026; Apple, guideline 1.2). A quién se bloquea se dice con su anuncio ({anuncio_id}) o con
+   la conversación ({conversacion_id}), nunca con una clave: la web no sabe quién es nadie. Las reglas (los dos dejan de verse
+   los anuncios, ninguno puede escribir al otro, al bloqueado no se le avisa) las pone el servidor. */
+export const mercBloquear = (d) => api.post('/mercadillo/bloquear', d)
+export const mercBloqueados = () => api.get('/mercadillo/bloqueados')
+export const mercDesbloquear = (id) => api.delete(`/mercadillo/bloqueados/${id}`)

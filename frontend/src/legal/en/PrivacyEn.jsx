@@ -6,10 +6,11 @@ import { sinPagos } from '../../lib/plataforma'
 /* The Privacy Policy in English (30-10-2026, outside Spain): the same content as legal/Privacidad.jsx, which is the
    version that applies. Keep both in step. 02-11-2026: Meta como destinatario (lo que manda nuestro servidor).
    03-11-2026: el §5 como en Privacidad.jsx (encargados con contrato, servicios de mapas sin contrato, Telegram y los
-   avisos del navegador, con las frases de LEGAL_NOTES.en). */
+   avisos del navegador, con las frases de LEGAL_NOTES.en). 10-11-2026: bloquear a una persona en el mercadillo (§2, §3 y
+   §4) y, dentro de la app de iPhone, sin «Tax data: 6 years» (§4), como en Privacidad.jsx. */
 export default function PrivacyEn() {
   return (
-    <LegalLayout title="Privacy Policy" lastUpdate="2026-11-03">
+    <LegalLayout title="Privacy Policy" lastUpdate="2026-11-10">
       <p>At {COMPANY.brand} we process personal data in accordance with Regulation (EU) 2016/679 (GDPR) and the applicable national legislation. This policy explains what data we collect, what we use it for, who we share it with and how you can exercise your rights.</p>
 
       <h2>1. Data controller</h2>
@@ -28,7 +29,7 @@ export default function PrivacyEn() {
         <li><strong>Deliveries (if the company uses them):</strong> the data of the company’s own customers being delivered to (name, phone, address and what the order contains) and the <strong>driver’s location only during the working day</strong>, which the driver starts and ends on their own phone after reading a notice.</li>
         <li><strong>Job applications:</strong> the form data and, if you tick the optional box, the record of your consent to receive news from FDS and its date.</li>
         <li><strong>Use of the service:</strong> technical logs essential for security and operation.</li>
-        <li><strong>Couriers’ marketplace:</strong> what you post (text, price, area and photos, from which we strip the location and the other data the phone stores when you upload them), your name with the initial of your surname, which is all others see of you, the messages with whoever buys or sells, and the notices or reports. Your phone, your email and your company are never shown to anyone: the email is used only to tell you that you have a message or that your listing has been reviewed.{!sinPagos() && ' If you turn on notifications, we store that choice and your browser’s subscription to send them; the notice says who writes to you and about which listing, never the message.'}</li>
+        <li><strong>Couriers’ marketplace:</strong> what you post (text, price, area and photos, from which we strip the location and the other data the phone stores when you upload them), your name with the initial of your surname, which is all others see of you, the messages with whoever buys or sells, and the notices or reports. Your phone, your email and your company are never shown to anyone: the email is used only to tell you that you have a message or that your listing has been reviewed. If you block someone, we store who you blocked, when, and from which listing or conversation: apart from you, only whoever moderates the marketplace sees it, and the blocked person is not notified.{!sinPagos() && ' If you turn on notifications, we store that choice and your browser’s subscription to send them; the notice says who writes to you and about which listing, never the message.'}</li>
         {/* In the iPhone app (09-11-2026) the mentions of “Invite and earn”, wallet, payments and subscriptions are not shown (docs/APP_STORE.md). */}
         {!sinPagos() && <li><strong>“Invite and earn” programme:</strong> who invited whom, the wallet balance and, if you request a payout, the holder’s name and the Bizum phone number, the IBAN or the PayPal email. In the individual wallet of the driver portal we also store the driver identifier, their company email and the company linked to their link. To prevent cheating we store an encrypted fingerprint of the network from which each account is created (not the IP address), used only to compare two sign-ups.</li>}
       </ul>
@@ -42,7 +43,7 @@ export default function PrivacyEn() {
         <li><strong>Security and fraud prevention</strong>{sinPagos() ? '' : ' (also in “Invite and earn”)'}: legitimate interest (art. 6.1.f).</li>
         {!sinPagos() && <li><strong>Paying out the “Invite and earn” balance:</strong> performance of the programme terms (art. 6.1.b) and accounting and tax obligations (art. 6.1.c).</li>}
         <li><strong>Service communications</strong> (notices, support): performance of the contract.</li>
-        <li><strong>Marketplace:</strong> publishing your listings, delivering your messages and notifying you, in performance of its terms (art. 6.1.b); reviewing listings and handling reports, on the basis of legitimate interest and legal obligation (Regulation (EU) 2022/2065, the Digital Services Act; art. 6.1.c and f). Messages are reviewed only if someone reports them.</li>
+        <li><strong>Marketplace:</strong> publishing your listings, delivering your messages, applying the blocks you set and notifying you, in performance of its terms (art. 6.1.b); reviewing listings, handling reports and seeing blocks to detect abusive users, on the basis of legitimate interest and legal obligation (Regulation (EU) 2022/2065, the Digital Services Act; art. 6.1.c and f). Messages are reviewed only if someone reports them.</li>
         <li><strong>FDS news for applicants:</strong> optional consent, separate from the application and revocable at any time. Not ticking it does not affect the application.</li>
         <li><strong>Improving the AI model (anonymised / aggregated):</strong> legitimate interest; images are never published and people are never identified.</li>
         {hayPixel() && <li><strong>Measuring ads</strong> (which ads bring us visits, sign-ups and couriers), only if you accept it in the cookie notice: your consent (art. 6.1.a GDPR), which you can withdraw at any time with “Change my cookies” in the <a href="/cookies">Cookie Policy</a>, without affecting what came before. What is shared and with whom, in section 5.</li>}
@@ -53,8 +54,9 @@ export default function PrivacyEn() {
         <li>Account data: for the duration of the contract and up to 1 year after termination, to answer claims.</li>
         <li>Inspections and photos: for the duration of the contract; the customer can request their deletion at any time.</li>
         <li>Deliveries: the personal data of each order is deleted automatically after the number of days the company sets (30 by default, 90 at most); location tracks, after 30 days; the tracking links the customer receives stop working the day after the delivery and show no personal data.</li>
-        <li>Marketplace: listings and their photos are deleted automatically 60 days after they end (sold, expired, withdrawn or removed); conversations, 6 months after the last message; notices and resolved reports, after 6 months. Photos that never get published, after 2 days.</li>
-        <li>Tax data: 6 years (art. 30 of the Spanish Commercial Code).{!sinPagos() && ' “Invite and earn” payouts (holder, amount and account or Bizum) are kept for that same period.'}</li>
+        <li>Marketplace: listings and their photos are deleted automatically 60 days after they end (sold, expired, withdrawn or removed); conversations, 6 months after the last message; notices and resolved reports, after 6 months. Photos that never get published, after 2 days. Blocks are deleted when you unblock the person or when you ask for your account to be deleted.</li>
+        {/* In the iPhone app (10-11-2026) this line is not shown: nothing is charged or invoiced there (docs/APP_STORE.md). The web is unchanged. */}
+        {!sinPagos() && <li>Tax data: 6 years (art. 30 of the Spanish Commercial Code). “Invite and earn” payouts (holder, amount and account or Bizum) are kept for that same period.</li>}
         <li>Job application data: up to 12 months. The choice about news is kept with the application for that period or until consent is withdrawn and deletion is requested where applicable.</li>
       </ul>
 

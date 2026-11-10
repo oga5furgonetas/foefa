@@ -420,7 +420,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/registro" element={<Registro />} />
-              <Route path="/prueba-reparto" element={<PruebaReparto />} />
+              {/* La demo del reparto para una empresa (supermercado de prueba): un escaparate de la web; dentro del iPhone no existe (10-11-2026). */}
+              <Route path="/prueba-reparto" element={<SoloWeb><PruebaReparto /></SoloWeb>} />
               <Route path="/calculadora-repartidor" element={<SoloWeb><CalculadoraRepartidor /></SoloWeb>} />
               <Route path="/empezar" element={<Empezar />} />
               <Route path="/repartidores" element={<SoloWeb><Repartidores /></SoloWeb>} />

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Loader2, Check, AlertTriangle, RotateCcw } from 'lucide-react'
 import { analizarMoviles, aplicarMoviles } from '../api'
+import { esAppIOS } from '../../lib/plataforma'
 import SubirFichero from './SubirFichero'
 import Pasos from './Pasos'
 
@@ -77,8 +78,9 @@ export default function ImportarMoviles({ alTerminar }) {
             titulo="Suelta aquí la agenda de tu móvil"
             pie=".vcf · .csv" />
           <div className="space-y-1 text-[12px] leading-snug text-dark-500">
-            <p><b className="text-dark-400">Android:</b> Contactos → ⋮ → Ajustes → Exportar contactos → «Archivo .vcf».
-              O en contacts.google.com → Exportar → «vCard» o «CSV de Google».</p>
+            {/* Dentro de la app de iPhone no se nombra otra plataforma (10-11-2026, Apple 2.3.10): allí, solo cómo se saca del iPhone. */}
+            {!esAppIOS() && <p><b className="text-dark-400">Android:</b> Contactos → ⋮ → Ajustes → Exportar contactos → «Archivo .vcf».
+              O en contacts.google.com → Exportar → «vCard» o «CSV de Google».</p>}
             <p><b className="text-dark-400">iPhone:</b> en icloud.com/contacts → selecciona todos (⌘/Ctrl + A) → ⚙ → «Exportar vCard».</p>
             <p>El fichero <b className="text-dark-400">no se guarda</b>: se lee, se empareja por nombre con las fichas y se
               descarta. Solo se guardan los móviles que confirmes, y solo de conductores.</p>

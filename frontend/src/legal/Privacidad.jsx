@@ -11,13 +11,15 @@ import { sinPagos } from '../lib/plataforma'
    03-11-2026 (el revisor: «encargados del tratamiento bajo contrato» y «al amparo del DPF o Cláusulas Contractuales Tipo»
    no eran ciertas para todos): el §5 separa los encargados con contrato, los servicios de mapas a los que se pregunta sin
    contrato, Telegram (la integración de cada empresa, ya no un encargado nuestro) y los avisos del navegador, cada uno
-   con su frase (LEGAL_NOTES en legal/config.js, las mismas en Encargo y Seguridad). */
+   con su frase (LEGAL_NOTES en legal/config.js, las mismas en Encargo y Seguridad).
+   10-11-2026: bloquear a una persona en el mercadillo (§2, §3 y §4: a quién bloqueas y cuándo, quién lo ve y cuándo se
+   borra); y dentro de la app de iPhone no sale «Datos fiscales: 6 años» (§4): allí no se cobra ni se factura nada. */
 export default function Privacidad() {
   useIdioma()
   // Fuera de España (30-10-2026): la traducción de cortesía al inglés; el español es la versión que vale.
   if (legalEnIngles()) return <PrivacyEn />
   return (
-    <LegalLayout title="Política de Privacidad" lastUpdate="2026-11-03">
+    <LegalLayout title="Política de Privacidad" lastUpdate="2026-11-10">
       <p>En {COMPANY.brand} tratamos los datos personales conforme al Reglamento (UE) 2016/679 (RGPD) y la legislación nacional aplicable. Esta política explica qué datos recogemos, para qué los usamos, con quién los compartimos y cómo puedes ejercer tus derechos.</p>
 
       <h2>1. Responsable del tratamiento</h2>
@@ -36,7 +38,7 @@ export default function Privacidad() {
         <li><strong>Reparto (si la empresa lo usa):</strong> datos de los clientes de la empresa a los que se entrega (nombre, teléfono, dirección y qué lleva el pedido) y la <strong>ubicación del conductor solo durante la jornada</strong> que él mismo empieza y termina en su móvil, tras haber leído un aviso.</li>
         <li><strong>Candidaturas de empleo:</strong> datos del formulario y, si marcas la casilla opcional, el registro de tu autorización para recibir novedades de FDS y su fecha.</li>
         <li><strong>Uso del servicio:</strong> registros técnicos (logs) imprescindibles para la seguridad y el funcionamiento.</li>
-        <li><strong>Mercadillo de repartidores:</strong> lo que publicas (texto, precio, zona y fotos, a las que al subirlas quitamos la ubicación y los demás datos que guarda el móvil), tu nombre con la inicial del apellido, que es lo único que ven los demás de ti, los mensajes con quien compra o vende y los avisos o denuncias. Tu teléfono, tu correo y tu empresa no se enseñan a nadie: el correo lo usamos solo para avisarte de que tienes un mensaje o de que se ha revisado tu anuncio.{!sinPagos() && ' Si activas los avisos al móvil, guardamos esa elección y la suscripción de tu navegador para mandártelos; el aviso dice quién te escribe y sobre qué anuncio, nunca el mensaje.'}</li>
+        <li><strong>Mercadillo de repartidores:</strong> lo que publicas (texto, precio, zona y fotos, a las que al subirlas quitamos la ubicación y los demás datos que guarda el móvil), tu nombre con la inicial del apellido, que es lo único que ven los demás de ti, los mensajes con quien compra o vende y los avisos o denuncias. Tu teléfono, tu correo y tu empresa no se enseñan a nadie: el correo lo usamos solo para avisarte de que tienes un mensaje o de que se ha revisado tu anuncio. Si bloqueas a alguien, guardamos a quién has bloqueado, cuándo y desde qué anuncio o conversación: aparte de ti, solo lo ve quien modera el mercadillo, y a la persona bloqueada no se le avisa.{!sinPagos() && ' Si activas los avisos al móvil, guardamos esa elección y la suscripción de tu navegador para mandártelos; el aviso dice quién te escribe y sobre qué anuncio, nunca el mensaje.'}</li>
         {/* En la app de iPhone (09-11-2026) no salen las menciones a «Invita y gana», cartera, pagos ni suscripciones (docs/APP_STORE.md). */}
         {!sinPagos() && <li><strong>Programa «Invita y gana»:</strong> quién invitó a quién, el saldo de la cartera y, si pides cobrarlo, el nombre del titular y el teléfono de Bizum, el IBAN o el email de PayPal. En la cartera individual del portal guardamos también el identificador del conductor, su email de empresa y la empresa asociada a su enlace. Para evitar trampas guardamos una huella cifrada de la red desde la que se crea cada cuenta (no la dirección IP), que solo sirve para comparar dos altas.</li>}
       </ul>
@@ -50,7 +52,7 @@ export default function Privacidad() {
         <li><strong>Seguridad y prevención de fraude</strong>{sinPagos() ? '' : ' (también en «Invita y gana»)'}: interés legítimo (art. 6.1.f).</li>
         {!sinPagos() && <li><strong>Pagar el saldo de «Invita y gana»:</strong> ejecución de las condiciones del programa (art. 6.1.b) y obligaciones contables y fiscales (art. 6.1.c).</li>}
         <li><strong>Comunicaciones del servicio</strong> (avisos, soporte): ejecución del contrato.</li>
-        <li><strong>Mercadillo:</strong> publicar tus anuncios, hacerte llegar los mensajes y avisarte, en ejecución de sus condiciones (art. 6.1.b); revisar los anuncios y atender denuncias, por interés legítimo y por obligación legal (Reglamento (UE) 2022/2065 de Servicios Digitales, art. 6.1.c y f). Los mensajes solo se revisan si alguien los denuncia.</li>
+        <li><strong>Mercadillo:</strong> publicar tus anuncios, hacerte llegar los mensajes, aplicar los bloqueos que hagas y avisarte, en ejecución de sus condiciones (art. 6.1.b); revisar los anuncios, atender denuncias y ver los bloqueos para detectar a quien abusa, por interés legítimo y por obligación legal (Reglamento (UE) 2022/2065 de Servicios Digitales, art. 6.1.c y f). Los mensajes solo se revisan si alguien los denuncia.</li>
         <li><strong>Novedades de FDS para candidatos:</strong> consentimiento opcional, separado de la candidatura y revocable en cualquier momento. No marcarlo no afecta a la candidatura.</li>
         <li><strong>Mejora del modelo de IA (anonimizado / agregado):</strong> interés legítimo; nunca se publican imágenes ni se identifican personas.</li>
         {hayPixel() && <li><strong>Medir los anuncios</strong> (qué anuncios nos traen visitas, altas y repartidores), solo si lo aceptas en el aviso de cookies: tu consentimiento (art. 6.1.a RGPD), que puedes retirar cuando quieras con «Cambiar mis cookies» en la <a href="/cookies">Política de Cookies</a>, sin que afecte a lo anterior. Qué se comunica y a quién, en el apartado 5.</li>}
@@ -61,8 +63,9 @@ export default function Privacidad() {
         <li>Datos de cuenta: durante la vigencia del contrato y hasta 1 año tras la baja, para responder reclamaciones.</li>
         <li>Inspecciones y fotos: durante la vigencia del contrato; el cliente puede solicitar su eliminación en cualquier momento.</li>
         <li>Reparto: los datos personales de cada pedido se borran solos a los días que fije la empresa (por defecto 30, máximo 90); los recorridos de ubicación, a los 30 días; los enlaces de seguimiento que recibe el cliente dejan de funcionar al día siguiente del reparto y no muestran datos personales.</li>
-        <li>Mercadillo: los anuncios y sus fotos se borran solos 60 días después de acabar (vendido, caducado, quitado o retirado); las conversaciones, 6 meses después del último mensaje; los avisos y las denuncias ya resueltas, a los 6 meses. Las fotos que no llegan a publicarse, a los 2 días.</li>
-        <li>Datos fiscales: 6 años (art. 30 Código de Comercio).{!sinPagos() && ' Los pagos de «Invita y gana» (titular, importe y cuenta o Bizum) se guardan ese mismo plazo.'}</li>
+        <li>Mercadillo: los anuncios y sus fotos se borran solos 60 días después de acabar (vendido, caducado, quitado o retirado); las conversaciones, 6 meses después del último mensaje; los avisos y las denuncias ya resueltas, a los 6 meses. Las fotos que no llegan a publicarse, a los 2 días. Los bloqueos se borran cuando desbloqueas a la persona o cuando pides la baja de tu cuenta.</li>
+        {/* En la app de iPhone (10-11-2026) no sale: allí no se cobra ni se factura nada (docs/APP_STORE.md). La web, igual. */}
+        {!sinPagos() && <li>Datos fiscales: 6 años (art. 30 Código de Comercio). Los pagos de «Invita y gana» (titular, importe y cuenta o Bizum) se guardan ese mismo plazo.</li>}
         <li>Datos de candidaturas: hasta 12 meses. La elección sobre novedades se conserva junto con la candidatura durante ese plazo o hasta que se retire el consentimiento y se solicite la supresión cuando proceda.</li>
       </ul>
 

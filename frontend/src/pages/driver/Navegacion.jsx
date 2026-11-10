@@ -13,6 +13,7 @@ import {
 import { importe } from '../../lib/region'
 import { tx, useIdioma, locale, txError, idioma } from '../../lib/idioma'
 import { useAtras } from '../../lib/atras'
+import { esAppIOS } from '../../lib/plataforma'
 import { decir } from '../../lib/voz'
 import Atribucion from './piezas/Atribucion'
 import Boton from './piezas/Boton'
@@ -352,7 +353,8 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
           <div className="pointer-events-auto mt-2 max-w-sm rounded-xl bg-dark-900 p-3 text-texto text-dark-50 shadow-md" role="status">
             <b className="text-ruta-ok-texto"><Mic size={16} className="mr-1 inline-block align-text-bottom" aria-hidden="true" />{tx('Manos libres')}</b> · {tx('Di «entregado», «no entregado», «he llegado», «llamar» o «repite»')}
             {oido && <span className="mt-0.5 block text-dark-400">{tx('Entendido: «{texto}»', { texto: oido })}</span>}
-            <span className="mt-0.5 block text-sec text-dark-400">{tx('Para entenderte, el móvil usa su reconocimiento de voz (en Android, el de Google).')}</span>
+            {/* Dentro de la app de iPhone no se nombra otra plataforma (10-11-2026, Apple 2.3.10): la misma frase, sin el paréntesis. */}
+            <span className="mt-0.5 block text-sec text-dark-400">{esAppIOS() ? tx('Para entenderte, el móvil usa su reconocimiento de voz.') : tx('Para entenderte, el móvil usa su reconocimiento de voz (en Android, el de Google).')}</span>
           </div>
         ) : manos ? (
           <Pastilla className="pointer-events-auto mt-2" tono="ok" icono={Mic} role="status"

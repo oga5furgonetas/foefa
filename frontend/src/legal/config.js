@@ -23,7 +23,18 @@ export const COMPANY = {
 // Proveedores que tratan datos por encargo nuestro, con contrato (los encargados del tratamiento; en el Encargo, los
 // subencargados).
 import { hayPixel } from '../lib/metaPixel'
-import { sinPagos } from '../lib/plataforma'
+import { sinPagos, esAppIOS } from '../lib/plataforma'
+
+/* LO QUE SOLO HACE LA APP DE ANDROID (10-11-2026). Dentro de la app de iPhone estas filas no se enseñan: son tratamientos que
+   allí no existen (los avisos al instante por Firebase, el geocodificador de Android y el mapa de la guía de la app nativa) y
+   Apple no admite que una app nombre otra plataforma (guideline 2.3.10). En la web y en Android, igual que siempre. Lo vigila
+   e2e/ios-sin-pagos.spec.js («los textos legales»), con su control en la web. */
+const SOLO_ANDROID = new Set([
+  'Google (Firebase Cloud Messaging)',
+  'Google (geocodificador de Android, Google Play services)',
+  'OpenFreeMap (Hyperknot Software Kft.)',
+])
+const seEnsena = (p) => !(esAppIOS() && SOLO_ANDROID.has(p.name))
 
 // 10-10-2026: faltaban Stripe (cobra el plan Repartidor), Google Play (cobra dentro de su app),
 // Resend (manda los correos) y TikTok (su píxel); sobraba Lemon Squeezy, que no está activo.
@@ -86,6 +97,7 @@ export const PROCESSORS = [
 ]
   // En la app de iPhone (09-11-2026) no hay cobros: ni Stripe ni Google Play salen como encargados (docs/APP_STORE.md).
   .filter((p) => !(sinPagos() && ['Stripe Payments Europe, Ltd.', 'Google Ireland Ltd. (Google Play)'].includes(p.name)))
+  .filter(seEnsena)
 
 // Los servicios de mapas y de búsqueda de direcciones a los que se pregunta sin contrato, bajo sus condiciones de uso
 // (03-11-2026): sin contrato de encargo con ellos. Cada línea dice qué reciben; ninguno, nombres ni teléfonos.
@@ -110,21 +122,22 @@ export const MAP_SERVICES = [
     purpose: 'Solo si el de FOSSGIS no contesta: lo mismo que a él (solo coordenadas, sin nombres ni teléfonos)', country: 'no consta dónde está',
     purposeEn: 'Only if the FOSSGIS one does not answer: the same as it (coordinates only, no names or phones)', countryEn: 'its location is not stated' },
 ]
-  // En la app de iPhone (09-11-2026) no sale «Google Play services»: es el componente de Android que da el geocodificador, y
-  // otra tienda de apps no se nombra en la app de Apple (docs/APP_STORE.md). La web y Android, igual.
-  .map((p) => (sinPagos() && /Google Play services/.test(p.name)
-    ? { ...p, name: p.name.replace(', Google Play services', ''), nameEn: p.nameEn.replace(', Google Play services', '') } : p))
+  // En la app de iPhone no salen el geocodificador de Android (ni su «Google Play services») ni el mapa de la guía nativa: el
+  // 09-11-2026 se le quitaba solo «Google Play services» al nombre; desde el 10-11-2026 la fila entera (SOLO_ANDROID, arriba).
+  .filter(seEnsena)
 
-// Las frases que van con las listas (03-11-2026), las mismas en las tres páginas: cada una, cierta para CADA línea.
+// Las frases que van con las listas (03-11-2026), las mismas en las tres páginas: cada una, cierta para CADA línea. En la app
+// de iPhone (10-11-2026) la de los mapas no nombra a Google: allí su fila no está en la lista (SOLO_ANDROID).
+const SALVO_GOOGLE = esAppIOS() ? ['', ''] : ['Google (adherida al DPF), ', 'Google (certified under the DPF), ']
 export const LEGAL_NOTES = {
   es: {
-    mapServices: 'Para situar las direcciones, calcular los trayectos y dibujar el mapa se pregunta a estos servicios bajo sus condiciones de uso, sin contrato de encargo con ellos. Reciben solo lo que dice cada línea (la dirección buscada, la zona del mapa o una posición y, cuando les pregunta directamente el móvil o el navegador, su IP), nunca nombres ni teléfonos. Están en la UE salvo Google (adherida al DPF), la OpenStreetMap Foundation (Reino Unido, con decisión de adecuación) y el respaldo de OSRM, del que no consta dónde está.',
+    mapServices: `Para situar las direcciones, calcular los trayectos y dibujar el mapa se pregunta a estos servicios bajo sus condiciones de uso, sin contrato de encargo con ellos. Reciben solo lo que dice cada línea (la dirección buscada, la zona del mapa o una posición y, cuando les pregunta directamente el móvil o el navegador, su IP), nunca nombres ni teléfonos. Están en la UE salvo ${SALVO_GOOGLE[0]}la OpenStreetMap Foundation (Reino Unido, con decisión de adecuación) y el respaldo de OSRM, del que no consta dónde está.`,
     telegram: 'Solo si una empresa los activa en su panel con su propio bot, los avisos y resúmenes de su panel (inspecciones con enlaces a las fotos, depósito y mantenimiento, checklist, taller) van a su grupo de Telegram, y pueden llevar nombres de conductores, matrículas y lo que escribe el taller. Lo conecta la empresa, con su cuenta y bajo las condiciones de Telegram (Telegram Messenger Inc., fuera de la UE); no es un encargado nuestro. Nuestros avisos internos por Telegram no llevan datos personales.',
     browserPush: 'Solo si los activas, cada aviso llega a tu navegador a través del servicio de avisos que usa ese navegador (el de Google, Mozilla, Apple o Microsoft), cifrado de forma que ese servicio no puede leer lo que dice, y bajo sus condiciones; ese servicio lo pone el navegador, no nosotros.',
     transfers: 'Cuando alguno de los encargados trata datos fuera del Espacio Económico Europeo, la transferencia se ampara, según el caso, en el EU-US Data Privacy Framework (solo las empresas de EEUU adheridas a él, las marcadas «DPF»), en una decisión de adecuación de la Comisión Europea o en Cláusulas Contractuales Tipo.',
   },
   en: {
-    mapServices: 'To locate addresses, calculate journeys and draw the map, these services are queried under their terms of use, with no processing agreement with them. They receive only what each line says (the address searched for, the map area or a position and, when the phone or the browser asks them directly, its IP), never names or phones. They are in the EU except Google (certified under the DPF), the OpenStreetMap Foundation (United Kingdom, with an adequacy decision) and the OSRM fallback, whose location is not stated.',
+    mapServices: `To locate addresses, calculate journeys and draw the map, these services are queried under their terms of use, with no processing agreement with them. They receive only what each line says (the address searched for, the map area or a position and, when the phone or the browser asks them directly, its IP), never names or phones. They are in the EU except ${SALVO_GOOGLE[1]}the OpenStreetMap Foundation (United Kingdom, with an adequacy decision) and the OSRM fallback, whose location is not stated.`,
     telegram: 'Only if a company turns them on in its panel with its own bot, the notices and summaries from its panel (inspections with links to the photos, fuel and maintenance, checklist, workshop) go to its Telegram group, and may include drivers’ names, number plates and what the workshop writes. The company connects it, with its own account and under Telegram’s terms (Telegram Messenger Inc., outside the EU); it is not our processor. Our own internal Telegram notices carry no personal data.',
     browserPush: 'Only if you turn them on, each notice reaches your browser through the push service that browser uses (Google’s, Mozilla’s, Apple’s or Microsoft’s), encrypted so that the service cannot read what it says, and under its terms; that service is provided by the browser, not by us.',
     transfers: 'Where any of the processors processes data outside the European Economic Area, the transfer relies, as the case may be, on the EU-US Data Privacy Framework (only US companies certified under it, those marked “DPF”), on an adequacy decision of the European Commission or on Standard Contractual Clauses.',

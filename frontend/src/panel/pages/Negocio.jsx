@@ -23,7 +23,7 @@ import {
   adminMercadillo, adminMercadilloVisible, adminMercadilloAnuncio, adminMercadilloDenuncia,
 } from '../api'
 import { API_BASE } from '../../services/api'
-import { hoyLocal } from '../../lib/fecha'
+import { hoyLocal, fechaHoraLocal } from '../../lib/fecha'
 import { dominio } from '../../marca'
 
 // ST labels are now translated inside the component via t()
@@ -698,8 +698,8 @@ function MercadilloAdmin() {
       <p className="-mt-2 text-[12px] text-dark-400">
         {d.avisos?.movil ? 'Te llegan al móvil, sin gastar correos.' : d.avisos?.activo ? 'Activados, pero ningún móvil apuntado todavía: actívalos desde tu móvil. Mientras, te llegan por correo.' : 'Ahora te llegan por correo a contacto@. Actívalos desde tu móvil y dejarán de gastar correos.'}
       </p>
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-        {[['Por revisar', t.por_revisar], ['Publicados', t.publicados], ['Denuncias', t.denuncias], ['Conversaciones', t.conversaciones], ['Vendidos', t.vendidos]].map(([label, value]) =>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
+        {[['Por revisar', t.por_revisar], ['Publicados', t.publicados], ['Denuncias', t.denuncias], ['Conversaciones', t.conversaciones], ['Vendidos', t.vendidos], ['Bloqueos', t.bloqueos]].map(([label, value]) =>
           <div key={label} className="rounded-xl border border-dark-800 bg-dark-900/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-dark-500">{label}</p><p className="mt-1 text-lg font-bold text-dark-100">{value ?? 0}</p></div>)}
       </div>
 
@@ -774,6 +774,34 @@ function MercadilloAdmin() {
           </ul>
         </details>
       )}
+
+      {/* LOS BLOQUEOS (10-11-2026), solo para mirar. Apple (guideline 1.2) pide que, cuando alguien bloquea a otra persona, el
+          desarrollador se entere: aquí queda quién, a quién, cuándo y desde qué anuncio o conversación, y arriba, a quién han
+          bloqueado dos personas o más. Un bloqueo no oculta ni castiga nada por sí solo (se podría usar para ir a por alguien):
+          lo que se retire o se cierre se decide arriba, en los anuncios y en las denuncias. */}
+      <div role="group" aria-label="Bloqueos">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-dark-500">Bloqueos</p>
+        <p className="mt-1 text-[12px] text-dark-400">Quién ha bloqueado a quién. Un bloqueo no retira ni cierra nada por sí solo: si hace falta, retira el anuncio o cierra la conversación.</p>
+        {(d.bloqueados_varios || []).length > 0 && (
+          <ul className="mt-1.5 space-y-1.5">
+            {d.bloqueados_varios.map((x) => (
+              <li key={x.clave} className="rounded-xl bg-amber-500/10 px-3 py-2 text-[12.5px] font-semibold text-amber-200">
+                Bloqueado por {x.n} personas: {x.nombre} <span className="font-normal">({x.clave})</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {!(d.bloqueos || []).length ? <p className="mt-1 text-sm text-dark-500">Nadie ha bloqueado a nadie.</p> : (
+          <ul className="mt-1.5 space-y-1.5">
+            {d.bloqueos.map((b) => (
+              <li key={b.id} className="rounded-xl border border-dark-800 p-2.5 text-[12.5px]">
+                <p className="font-semibold text-dark-100">{b.de_nombre} bloqueó a {b.a_nombre}</p>
+                <p className="text-dark-400">{fechaHoraLocal(b.ts)} · desde {b.origen?.tipo === 'conversacion' ? 'la conversación sobre' : 'el anuncio'} «{b.origen?.titulo || 'sin título'}» · {b.a_clave}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </>}
   </section>
 }
