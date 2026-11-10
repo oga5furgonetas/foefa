@@ -57730,19 +57730,20 @@ _MERC_PAR_AVISADO_MAX = 5000
 
 
 async def _merc_bloqueo_a_dani(b: dict) -> None:
-    """Dani se entera de CADA bloqueo (Apple: «blocking should also notify the developer»). Uno suelto, al móvil
-    si tiene los avisos puestos (queda apuntado en Negocio → Mercadillo; un correo por cada uno quemaría la
-    cuota). Cuando a la misma persona ya la han bloqueado varias personas distintas, el aviso normal —móvil o,
-    si no, correo— cada vez que se suma una: eso sí hay que mirarlo. Un aviso por bloqueo, nunca los dos.
-    Quien ya iba contado en un aviso normal de los últimos 7 días y vuelve a bloquearla (desbloqueó y bloqueó otra
-    vez) no se ha «sumado»: su bloqueo va como uno suelto (`_MERC_PAR_AVISADO`)."""
+    """Lo que le llega a Dani de un bloqueo (Apple: «blocking should also notify the developer»). CADA bloqueo queda
+    apuntado en Negocio → Mercadillo; uno suelto, además, le salta al móvil si tiene los avisos puestos (un correo
+    por cada uno quemaría la cuota). Cuando a la misma persona la tienen bloqueada 2 o más personas distintas, el
+    aviso normal —móvil o, si no, correo—: eso sí hay que mirarlo. Un aviso por bloqueo, nunca los dos.
+    El aviso normal es para cuando SE SUMA alguien: sale si AL MENOS UNA de las que la tienen bloqueada ahora no iba
+    contada en un aviso normal de los últimos 7 días (`_MERC_PAR_AVISADO`). Si todas iban contadas (desbloquear y
+    volver a bloquear sin nadie nuevo), ese bloqueo va como uno suelto."""
     origen = b.get("origen") or {}
     desde = ("el anuncio" if origen.get("tipo") == "anuncio" else "una conversación sobre") + f" «{origen.get('titulo') or ''}»"
     hecho = f"{b['de_nombre']} ha bloqueado a {b['a_nombre']} desde {desde}."
     quienes = await global_db[_MERC_BLOQUEOS].distinct("de", {"a": b["a"]})    # las personas que la tienen bloqueada
     n, ahora = len(quienes), time.time()
-    ya_contado = ahora - _MERC_PAR_AVISADO.get((b["de"], b["a"]), 0) < _MERC_PAR_AVISADO_S
-    if n >= mercadillo.BLOQUEOS_PARA_AVISAR and not ya_contado:
+    alguna_nueva = any(ahora - _MERC_PAR_AVISADO.get((de, b["a"]), 0) >= _MERC_PAR_AVISADO_S for de in quienes)
+    if n >= mercadillo.BLOQUEOS_PARA_AVISAR and alguna_nueva:
         if len(_MERC_PAR_AVISADO) >= _MERC_PAR_AVISADO_MAX:                   # llena: fuera lo caducado y, si no basta, todo
             for par in [p for p, t in _MERC_PAR_AVISADO.items() if ahora - t >= _MERC_PAR_AVISADO_S]:
                 del _MERC_PAR_AVISADO[par]
@@ -57760,7 +57761,9 @@ async def _merc_bloqueo_a_dani(b: dict) -> None:
 @api_router.post("/mercadillo/bloquear")
 async def merc_bloquear(data: dict = Body(default={}), user: dict = Depends(require_any_auth)):
     """«Bloquear a …»: a quien vende un anuncio (`anuncio_id`) o a la otra persona de una conversación
-    (`conversacion_id`). Dos veces a la misma persona no falla (`ya`). A quien se bloquea no se le avisa; a Dani, sí."""
+    (`conversacion_id`). Dos veces a la misma persona no falla (`ya`). A quien se bloquea no se le avisa. Cada
+    bloqueo queda apuntado en Negocio → Mercadillo; a Dani le salta al móvil si tiene los avisos puestos, y con 2 o
+    más personas bloqueando a la misma, el aviso normal (móvil o, si no, correo): `_merc_bloqueo_a_dani`."""
     yo = await _merc_dentro(user)
     if yo["tipo"] == "fds":
         raise HTTPException(400, "Tú moderas el mercadillo: retira el anuncio o cierra la conversación en Negocio")

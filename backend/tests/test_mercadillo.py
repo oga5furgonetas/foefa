@@ -1107,7 +1107,33 @@ async def test_desbloquear_y_volver_a_bloquear_no_le_repite_a_dani_el_aviso_de_v
     assert [n for n, col in mundo.g.items() if any(CLAVES["pepe"] in repr(d) and CLAVES["ana"] in repr(d) for d in col.docs)] == []
 
 
-_CAMPOS_DE_CLAVE = {"clave", "a_clave", "de_clave", "de", "a", "para", "dueno", "org_id"}
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_aviso_de_varias_personas_sale_si_entre_ellas_hay_una_nueva_aunque_bloquee_una_ya_contada(mundo):
+    """No basta con mirar si QUIEN BLOQUEA AHORA ya iba contado: con 2 o más, el aviso normal sale si AL MENOS UNA de
+    las que la tienen bloqueada ahora no iba en un aviso de los últimos 7 días. Luis y Pepe la bloquean (aviso), los
+    dos desbloquean, la bloquea Oficina (sola: suelto) y vuelve Pepe: son 2, y Oficina nunca se contó → aviso."""
+    mundo.g["admin_users"] = Col([{"id": "dani", "super_admin": True}, {"id": "a9", "username": "oficina@x.es", "org_id": "empresa"}])
+    await _abrir(mundo)
+    a = await _publicado(ANA, "Soporte de móvil")
+
+    def normales() -> list:
+        return [c.subject for c in mundo.enviados if c.to == "contacto@x.es" and "han bloqueado a" in c.subject]
+    await server.merc_bloquear({"anuncio_id": a["id"]}, LUIS)
+    await server.merc_bloquear({"anuncio_id": a["id"]}, PEPE)
+    assert normales() == ["Mercadillo: 2 personas han bloqueado a Ana P."]
+    for quien in (LUIS, PEPE):
+        await server.merc_desbloquear((await server.merc_bloqueados(quien))["bloqueados"][0]["id"], quien)
+    await server.merc_bloquear({"anuncio_id": a["id"]}, OFICINA)            # una sola: queda en el panel
+    assert len(normales()) == 1
+    await server.merc_bloquear({"anuncio_id": a["id"]}, PEPE)               # Pepe ya iba contado, Oficina no
+    assert normales()[1:] == ["Mercadillo: 2 personas han bloqueado a Ana P."]
+    # Y si vuelve Luis, son 3, pero todas iban ya en un aviso de estos 7 días (Luis en el primero; Oficina y Pepe, en
+    # el segundo): ninguna nueva, sin aviso normal.
+    await server.merc_bloquear({"anuncio_id": a["id"]}, LUIS)
+    assert len(normales()) == 2
+
+
+_CAMPOS_DE_CLAVE ={"clave", "a_clave", "de_clave", "de", "a", "para", "dueno", "org_id"}
 
 
 def _claves_en(x, donde="") -> list:
