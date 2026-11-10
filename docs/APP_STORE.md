@@ -576,7 +576,8 @@ revisor va a pulsar («Acepto las normas», «Bloquear») depende de él.
 5. **Comprobar en producción antes del build** (diez minutos, con la sesión de Dani) **[COMPROBAR]**:
    - **Con las dos cuentas de prueba de Apple (la de quien reparte y la del conductor) NO se entra al mercadillo** después
      de desplegar. Si alguien pulsa «Acepto las normas» con una de ellas, el revisor ya no verá esa pantalla con esa
-     cuenta; el arreglo es cambiar otra vez `NORMAS_VERSION` y volver a desplegar el servidor.
+     cuenta; el arreglo es cambiar otra vez `NORMAS_VERSION` (y su prueba, como en el paso 1) y volver a desplegar el
+     servidor.
    - Negocio → Mercadillo: está **encendido** y hay al menos **un anuncio publicado que no es de ninguna de esas dos
      cuentas** y al que le quedan más de dos semanas. En un anuncio propio no salen ni «Bloquear a…» ni «Denunciar»: sin
      uno ajeno, el revisor no tiene a quién denunciar ni bloquear, y rechaza otra vez. Mejor que sea de Dani o de otra
@@ -1076,6 +1077,10 @@ Desde el código no se ve producción, ni App Store Connect, ni un iPhone. Antes
   bloqueos, y lo que dice la Privacidad sobre cuándo se borra cada cosa.
 - **Nada de lo nuevo se ha visto funcionar en un iPhone ni en producción**: ni la pantalla de normas, ni el filtro, ni el
   bloqueo, ni quitar el acceso. Lo que hay son sus pruebas (el servidor, y la web simulando la app de iPhone).
+- **Que el mercadillo es el único contenido de usuarios de la app.** Lo dicen las notas desde el 09-11 y lo repite la
+  respuesta de la regla 1.2. Al poner este kit al día solo se ha leído el código del mercadillo, no la app entera; de lo
+  demás que escribe la gente, lo mirado de paso (la memoria de la puerta y lo que contesta el cliente en su enlace) se queda
+  dentro de su cuenta o de su empresa.
 - **Producción:** el mercadillo encendido y con un anuncio ajeno publicado; que nadie ha aceptado las normas con las cuentas
   de prueba de Apple después de desplegar (paso 5); `REP_GRATIS_HASTA` y `REP_GRATIS_PARADAS` (el código da 2026-12-31 y 15
   si no hay variable); `PLAY_COBRO_ACTIVO` (el cobro en la app de Android); `CORREO_CONTACTO` (a dónde llegan los avisos de
