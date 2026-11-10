@@ -20,9 +20,13 @@ const HOY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' }
 const LISTAS = {
   categorias: { movil: 'Móviles y electrónica', furgoneta: 'Furgoneta y accesorios', otros: 'Otras cosas' },
   estados_articulo: { nuevo: 'Nuevo', como_nuevo: 'Como nuevo', buen_estado: 'Buen estado' },
-  motivos_denuncia: { prohibido: 'Está prohibido o es ilegal', estafa: 'Es un engaño o una posible estafa', acoso: 'Me insulta o me acosa', otro: 'Otra cosa' },
+  // Los del servidor TAL CUAL (backend/mercadillo.py, MOTIVOS_DENUNCIA). «acoso» no existe: el acoso se denuncia con «ofensivo».
+  motivos_denuncia: { prohibido: 'Está prohibido o es ilegal', estafa: 'Es un engaño o una posible estafa', robado: 'Es robado o de una empresa',
+    ofensivo: 'Es ofensivo o es acoso', otro: 'Otra cosa' },
 }
 const YO = { nombre: 'Ana P.', tipo: 'autonomo' }
+// Quien modera el mercadillo (el super-admin): el servidor le dice `tipo: 'fds'` y no le deja bloquear (400).
+const MODERA = { nombre: 'Dani · FDS', tipo: 'fds' }
 /* `persona` es cosa de esta simulación (quién es quién por dentro): NUNCA viaja a la web, como la `clave` del servidor. */
 const anuncio = (id, persona, vendedor, titulo, precio_cent, extra = {}) => ({
   id, persona, titulo, descripcion: 'Poco uso.', precio_cent, categoria: 'movil', estado_articulo: 'como_nuevo', zona: 'A Coruña',
@@ -35,6 +39,15 @@ const CARRETILLA = anuncio('a3', 'marta', { nombre: 'Marta R.', tipo: 'autonomo'
 const GORRA = anuncio('m1', 'yo', { nombre: 'Ana P.', tipo: 'autonomo' }, 'Gorra de invierno', 800, { mio: true })
 // Con un título de DOS líneas en un móvil estrecho (solo sale donde se pide, con `otros`): el detalle de la ficha del 10-11-2026.
 const NEVERA = anuncio('a4', 'luis', { nombre: 'Luis G.', tipo: 'conductor' }, 'Nevera portátil de 12 V para la furgoneta, poco uso', 4500)
+// Y con uno de TRES líneas: 80 letras (lo más que deja escribir «Qué vendes») y en mayúsculas, que es como más ocupa.
+const NEVERA_LARGA = anuncio('a5', 'luis', { nombre: 'Luis G.', tipo: 'conductor' }, 'NEVERA PORTÁTIL DE 12 V PARA LA FURGONETA, CON CABLE DE MECHERO Y ASAS DE HOMBRO', 4500)
+/* EL LADO DE QUIEN ESTÁ BLOQUEADO (solo sale donde se pide, con `conversaciones`). Pedro ha bloqueado a Ana: la conversación sigue
+   en el buzón de Ana (es su historial), pero el servidor se la da cerrada (`bloqueada: true`) y sin el anuncio de Pedro
+   (`{titulo, estado: 'borrado'}`: sin id, sin precio y sin fotos), y no le deja escribir (403). No le dice que la han bloqueado. */
+const CERRADA = { id: 'c3', persona: 'pedro', meBloquea: true, con: 'Pedro S.', soy: 'comprador', anuncio: { id: 'a9', titulo: 'Batería externa de 20.000 mAh' },
+  ultimo: '2026-11-07T10:00:00+00:00', ultimo_texto: 'Vale, te digo algo', sin_leer: false,
+  mensajes: [{ id: 'm8', mio: true, texto: '¿La batería sigue a la venta?', ts: '2026-11-07T09:00:00+00:00' }, { id: 'm9', mio: false, texto: 'Vale, te digo algo', ts: '2026-11-07T10:00:00+00:00' }] }
+const CONVERSACION_CERRADA = 'Esta conversación está cerrada'
 const CONVERSACIONES = [
   { id: 'c1', persona: 'luis', con: 'Luis G.', soy: 'vendedor', anuncio: GORRA, ultimo: '2026-11-09T18:00:00+00:00', ultimo_texto: '¿Me la dejas en 5?', sin_leer: true,
     mensajes: [{ id: 'm1', mio: false, texto: '¿Me la dejas en 5?', ts: '2026-11-09T18:00:00+00:00' }] },
@@ -45,53 +58,74 @@ const YA_BLOQUEADO = { id: '00b10c0e00000001', persona: 'fds', nombre: 'Dani · 
 const DEL_MODERADOR = 'Tú moderas el mercadillo: retira el anuncio o cierra la conversación en Negocio'
 
 /** El mercadillo del servidor, simulado y CON MEMORIA: lo que se bloquea deja de salir, como en el de verdad. Devuelve lo que
- *  ha pasado (`llamadas`, en orden, y el cuerpo de cada una) para poder decir qué mandó la web y cuándo. */
-async function mercadillo(page, { bloqueos = [], errorBloquear = null, cuentaEn = 'lista', otros = [] } = {}) {
-  const s = { bloqueos: bloqueos.map((b) => ({ ...b })), llamadas: [], bloqueo: null, denuncia: null, desbloqueo: null }
+ *  ha pasado (`llamadas`, en orden, y el cuerpo de cada una) para poder decir qué mandó la web y cuándo.
+ *  `yo`: quién entra (y `yoEn`: en qué respuesta viene, 'las dos' como el servidor, o solo 'estado' o solo 'lista');
+ *  `conversaciones`: más conversaciones en su buzón (la de quien le ha bloqueado, `meBloquea`);
+ *  `errorBloquear`: lo que contesta el bloqueo en vez de bloquear (con `veces`, solo las primeras);
+ *  `demoraDenuncia` y `demoraBloqueo`: lo que tardan en contestar (ms), para ver qué pasa mientras tanto. */
+async function mercadillo(page, { bloqueos = [], errorBloquear = null, cuentaEn = 'lista', otros = [], yo = YO, yoEn = 'las dos', conversaciones = [],
+  demoraDenuncia = 0, demoraBloqueo = 0 } = {}) {
+  const s = { bloqueos: bloqueos.map((b) => ({ ...b })), llamadas: [], bloqueo: null, denuncia: null, desbloqueo: null, denunciasContestadas: 0, pedidas: [] }
   const bloqueada = (persona) => s.bloqueos.some((b) => b.persona === persona)
   const publico = ({ persona: _persona, ...a }) => a
+  const quien = (donde) => (yoEn === 'las dos' || yoEn === donde ? { yo } : {})
+  const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
   const DE_OTROS = [IPHONE, SOPORTE, CARRETILLA, ...otros]
+  const CONVS = [...CONVERSACIONES, ...conversaciones]
   await page.route(/\/api\/mercadillo(?:\/[^?]*)?(?:\?.*)?$/, async (x) => {
     const pet = x.request()
     const metodo = pet.method()
     const ruta = new URL(pet.url()).pathname.replace(/^.*\/api\/mercadillo/, '')
     const json = (j, status = 200) => x.fulfill({ status, json: j })
     const cuerpo = () => { try { return pet.postDataJSON() || {} } catch { return {} } }
+    s.pedidas.push(`${metodo} ${ruta || '/'}`)
     if (ruta === '/estado') {
-      return json({ visible: true, abierto: true, sin_leer: CONVERSACIONES.filter((c) => c.sin_leer && !bloqueada(c.persona)).length, yo: YO, avisos_movil: false,
+      return json({ visible: true, abierto: true, sin_leer: CONVS.filter((c) => c.sin_leer && !bloqueada(c.persona)).length, ...quien('estado'), avisos_movil: false,
         ...(cuentaEn === 'estado' ? { bloqueados: s.bloqueos.length } : {}) })
     }
     if (ruta === '' && metodo === 'GET') {
       return json({ anuncios: DE_OTROS.filter((a) => !bloqueada(a.persona)).map(publico), mios: [publico(GORRA)], ...LISTAS,
-        activos_max: 3, dias: 30, yo: YO, ...(cuentaEn === 'lista' ? { bloqueados: s.bloqueos.length } : {}) })
+        activos_max: 3, dias: 30, ...quien('lista'), ...(cuentaEn === 'lista' ? { bloqueados: s.bloqueos.length } : {}) })
     }
     if (ruta.startsWith('/foto/')) return x.fulfill({ status: 200, contentType: 'image/png', body: PNG })
     if (ruta.startsWith('/anuncio/') && metodo === 'GET') {
       const a = [...DE_OTROS, GORRA].find((y) => `/anuncio/${y.id}` === ruta)
       if (!a || bloqueada(a.persona)) return json({ detail: 'Ese anuncio ya no está' }, 404)
-      return json({ ...publico(a), conversacion_id: (CONVERSACIONES.find((c) => c.anuncio.id === a.id && c.soy === 'comprador') || {}).id || null })
+      return json({ ...publico(a), conversacion_id: (CONVS.find((c) => c.anuncio.id === a.id && c.soy === 'comprador') || {}).id || null })
     }
     if (ruta === '/buzon') {
-      return json({ conversaciones: CONVERSACIONES.filter((c) => !bloqueada(c.persona)).map((c) => ({ id: c.id, anuncio_id: c.anuncio.id, titulo: c.anuncio.titulo,
-        precio_cent: c.anuncio.precio_cent, foto: c.anuncio.fotos[0], estado_anuncio: 'publicado', con: c.con, soy: c.soy, ultimo: c.ultimo, ultimo_texto: c.ultimo_texto,
-        bloqueada: false, sin_leer: c.sin_leer })),
+      return json({ conversaciones: CONVS.filter((c) => !bloqueada(c.persona)).map((c) => ({ id: c.id, anuncio_id: c.anuncio.id, titulo: c.anuncio.titulo,
+        // De quien me ha bloqueado, el servidor ya no me da su anuncio: ni precio, ni foto, y «borrado».
+        ...(c.meBloquea ? { precio_cent: null, foto: null, estado_anuncio: 'borrado' } : { precio_cent: c.anuncio.precio_cent, foto: c.anuncio.fotos[0], estado_anuncio: 'publicado' }),
+        con: c.con, soy: c.soy, ultimo: c.ultimo, ultimo_texto: c.ultimo_texto, bloqueada: !!c.meBloquea, sin_leer: c.sin_leer })),
       avisos: [{ id: 'v1', texto: 'Tu anuncio «Gorra de invierno» ya está publicado.', ts: '2026-11-08T12:00:00+00:00', leido: true }] })
     }
-    if (ruta.startsWith('/conversacion/') && metodo === 'GET') {
-      const c = CONVERSACIONES.find((y) => `/conversacion/${y.id}` === ruta)
+    if (ruta.startsWith('/conversacion/')) {
+      const c = CONVS.find((y) => `/conversacion/${y.id}` === ruta)
       if (!c || bloqueada(c.persona)) return json({ detail: 'Esa conversación no existe' }, 404)
-      return json({ id: c.id, soy: c.soy, con: c.con, bloqueada: false, anuncio: publico(c.anuncio), mensajes: c.mensajes })
+      if (metodo === 'POST') {
+        s.llamadas.push('responder')
+        if (c.meBloquea) return json({ detail: CONVERSACION_CERRADA }, 403)
+        return json({ id: `r${s.llamadas.length}`, mio: true, texto: cuerpo().texto, ts: new Date().toISOString() })
+      }
+      return json({ id: c.id, soy: c.soy, con: c.con, bloqueada: !!c.meBloquea,
+        anuncio: c.meBloquea ? { titulo: c.anuncio.titulo, estado: 'borrado' } : publico(c.anuncio), mensajes: c.mensajes })
     }
     if (ruta === '/avisos/leidos') return json({ ok: true })
     if (ruta === '/denunciar' && metodo === 'POST') {
       s.llamadas.push('denunciar'); s.denuncia = cuerpo()
-      return json({ ok: true })
+      if (demoraDenuncia) await esperar(demoraDenuncia)
+      await json({ ok: true })
+      s.denunciasContestadas += 1
+      return undefined
     }
     if (ruta === '/bloquear' && metodo === 'POST') {
       s.llamadas.push('bloquear'); s.bloqueo = cuerpo()
-      if (errorBloquear) return json({ detail: errorBloquear.detail }, errorBloquear.status)
+      if (demoraBloqueo) await esperar(demoraBloqueo)
+      const intentos = s.llamadas.filter((l) => l === 'bloquear').length
+      if (errorBloquear && (errorBloquear.veces === undefined || intentos <= errorBloquear.veces)) return json({ detail: errorBloquear.detail }, errorBloquear.status)
       const a = DE_OTROS.find((y) => y.id === s.bloqueo.anuncio_id)
-      const c = CONVERSACIONES.find((y) => y.id === s.bloqueo.conversacion_id)
+      const c = CONVS.find((y) => y.id === s.bloqueo.conversacion_id)
       if (!s.bloqueo.anuncio_id && !s.bloqueo.conversacion_id) return json({ detail: 'Falta a quién bloqueas' }, 400)
       // Como el servidor: el anuncio que no ve y la conversación que no es suya, cada uno con su texto.
       if (!a && !c) return json({ detail: s.bloqueo.anuncio_id ? 'Ese anuncio ya no está' : 'Esa conversación no existe' }, 404)
@@ -141,7 +175,8 @@ async function entrar(page, { ios = false, porLaApp = false, ...opciones } = {})
 }
 
 const BLOQUEADO = 'Bloqueado. Ya no verás sus anuncios ni podrá escribirte.'
-const LO_QUE_PASA = 'Dejarás de ver sus anuncios y no podrá escribirte. Tampoco verá los tuyos. No se le avisa. Puedes desbloquearle cuando quieras en “Personas bloqueadas”.'
+const DENUNCIA_RECIBIDA = 'Hemos recibido tu denuncia: te diremos en tu buzón qué hemos decidido.'
+const LO_QUE_PASA ='Dejarás de ver sus anuncios y no podrá escribirte. Tampoco verá los tuyos. No se le avisa. Puedes desbloquearle cuando quieras en “Personas bloqueadas”.'
 const tarjeta = (page, a) => page.getByRole('button', { name: new RegExp(a.titulo.slice(0, 12)) })
 const dialogo = (page, nombre) => page.getByRole('dialog', { name: `¿Bloquear a ${nombre}?` })
 /** «Sin buscarlo»: el botón entero en la primera pantalla (sin desplazar nada) y por encima de la barra fija de abajo
@@ -221,13 +256,15 @@ for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
 
       // Ahora sí: la denuncia se envía y, solo entonces, el bloqueo. Y la lista dice las dos cosas.
       await d.getByRole('button', { name: 'Bloquear', exact: true }).click()
-      await denuncia.getByRole('radio', { name: 'Me insulta o me acosa' }).click()
+      // Los motivos que se ofrecen son los del servidor, en su orden; el acoso se denuncia con «Es ofensivo o es acoso».
+      await expect(denuncia.getByRole('radio')).toHaveText(Object.values(LISTAS.motivos_denuncia))
+      await denuncia.getByRole('radio', { name: 'Es ofensivo o es acoso' }).click()
       await denuncia.getByLabel('Explícalo').fill('Me ha escrito con insultos')
       await denuncia.getByRole('button', { name: 'Enviar denuncia' }).click()
       await expect(page.getByRole('status').filter({ hasText: 'Bloqueado.' }))
-        .toHaveText(`${BLOQUEADO} Hemos recibido tu denuncia: te diremos en tu buzón qué hemos decidido.`)
+        .toHaveText(`${BLOQUEADO} ${DENUNCIA_RECIBIDA}`)
       expect(s.llamadas, 'primero la denuncia (después del bloqueo ese anuncio ya no se puede abrir) y luego el bloqueo').toEqual(['denunciar', 'bloquear'])
-      expect(s.denuncia).toEqual({ anuncio_id: 'a1', motivo: 'acoso', texto: 'Me ha escrito con insultos' })
+      expect(s.denuncia).toEqual({ anuncio_id: 'a1', motivo: 'ofensivo', texto: 'Me ha escrito con insultos' })
       expect(s.bloqueo).toEqual({ anuncio_id: 'a1' })
       await expect(tarjeta(page, IPHONE)).toHaveCount(0)
       await sinVocabulario(page, 'la lista tras denunciar y bloquear')
@@ -321,6 +358,167 @@ for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
       expect(fallos).toEqual([])
     })
 
+    /* QUIEN MODERA NO BLOQUEA (10-11-2026). Al super-admin (`yo.tipo === 'fds'`) el servidor le contesta 400 «Tú moderas el
+       mercadillo…»: no se le ofrece lo que no puede hacer, ni «Bloquear a…» en el anuncio y en la conversación ni «Personas
+       bloqueadas». «Denunciar» se queda. El control hace los mismos pasos con una persona normal, que sí lo ve todo. */
+    for (const [titulo, yo, puede] of [
+      ['quien modera no ve «Bloquear a…» (ni en el anuncio ni en la conversación) ni «Personas bloqueadas»; «Denunciar» se queda', MODERA, false],
+      ['control · una persona normal sí ve «Bloquear a…» (en el anuncio y en la conversación) y «Personas bloqueadas»', YO, true],
+    ]) {
+      test(titulo, async ({ page }) => {
+        const fallos = vigilar(page)
+        const n = puede ? 1 : 0
+        // Con alguien ya bloqueado, que es cuando la lista ofrece «Personas bloqueadas (n)».
+        const s = await entrar(page, { ios, yo, bloqueos: [YA_BLOQUEADO] })
+        await expect(tarjeta(page, SOPORTE)).toBeVisible()
+        await expect(page.getByRole('button', { name: /Personas bloqueadas/ }), 'en la lista').toHaveCount(n)
+
+        await tarjeta(page, SOPORTE).click()
+        await expect(page.getByRole('button', { name: 'Denunciar', exact: true })).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Denunciar anuncio' })).toBeVisible()
+        await expect(page.getByRole('button', { name: /^Bloquear a / }), 'en el anuncio').toHaveCount(n)
+        await sinVocabulario(page, `el anuncio visto por ${puede ? 'una persona normal' : 'quien modera'}`)
+        await page.getByRole('button', { name: 'Volver' }).click()
+
+        await page.getByRole('button', { name: 'Mensajes, 1 sin leer' }).click()
+        await expect(page.getByText('¿Me la dejas en 5?')).toBeVisible()
+        await expect(page.getByRole('button', { name: /Personas bloqueadas/ }), 'en el buzón').toHaveCount(n)
+        await page.getByRole('button', { name: /Luis G\./ }).click()
+        await expect(page.getByRole('button', { name: 'Denunciar', exact: true })).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Denunciar conversación' })).toBeVisible()
+        await expect(page.getByRole('button', { name: /^Bloquear a / }), 'en la conversación').toHaveCount(n)
+        await sinVocabulario(page, `la conversación vista por ${puede ? 'una persona normal' : 'quien modera'}`)
+        // «Denunciar» sigue abriendo su hoja.
+        await page.getByRole('button', { name: 'Denunciar', exact: true }).click()
+        await expect(page.getByRole('dialog', { name: 'Denunciar' })).toBeVisible()
+        expect(s.llamadas).toEqual([])
+        expect(fallos).toEqual([])
+      })
+    }
+
+    /* CERRAR LA DENUNCIA MIENTRAS SE ENVÍA NO DEJA EL BLOQUEO EN MARCHA (10-11-2026). Con «Denunciar también…», la denuncia va
+       delante y el bloqueo detrás, solo. Antes, si la hoja de la denuncia se cerraba (con su X o con el «atrás» del móvil)
+       mientras se estaba enviando, al llegar la respuesta se bloqueaba igual, con todo ya cerrado. Ahora quien cierra no ha
+       bloqueado: la denuncia sí queda enviada (se dice, y no se pide otra vez) y se puede bloquear después. */
+    const hastaEnviarLaDenuncia = async (page, opciones = {}) => {
+      const s = await entrar(page, { ios, demoraDenuncia: 2000, ...opciones })
+      await tarjeta(page, SOPORTE).click()
+      await page.getByRole('button', { name: 'Bloquear a Luis G.', exact: true }).click()
+      const d = dialogo(page, 'Luis G.')
+      const denuncia = page.getByRole('dialog', { name: 'Denunciar' })
+      await d.getByRole('checkbox', { name: 'Denunciar también este anuncio' }).check()
+      await d.getByRole('button', { name: 'Bloquear', exact: true }).click()
+      await denuncia.getByRole('radio', { name: 'Es ofensivo o es acoso' }).click()
+      await denuncia.getByRole('button', { name: 'Enviar denuncia' }).click()
+      await expect(denuncia.getByRole('button', { name: 'Enviar denuncia' }), 'la denuncia se está enviando').toBeDisabled()
+      return { s, d, denuncia }
+    }
+    for (const [como, cerrar] of [
+      ['con su X', (page, denuncia) => denuncia.getByRole('button', { name: 'Cerrar' }).click()],
+      ['con el «atrás» del móvil', (page) => page.goBack()],
+    ]) {
+      test(`cerrar la denuncia ${como} mientras se envía no deja el bloqueo en marcha; la denuncia queda enviada y después se puede bloquear`, async ({ page }) => {
+        const fallos = vigilar(page)
+        const { s, d, denuncia } = await hastaEnviarLaDenuncia(page)
+        await cerrar(page, denuncia)
+        await expect(denuncia).toHaveCount(0)
+        await expect(d, 'de vuelta en la confirmación').toBeVisible()
+        expect(s.denunciasContestadas, 'la prueba ha cerrado la hoja ANTES de que el servidor conteste').toBe(0)
+        // Llega la respuesta: la denuncia está enviada (lo dice y ya no la ofrece), pero NO se ha bloqueado a nadie.
+        await expect(d.getByRole('status')).toHaveText(DENUNCIA_RECIBIDA)
+        await expect(d.getByRole('checkbox')).toHaveCount(0)
+        await quieta(page, 500)
+        expect(s.llamadas, 'quien cierra la denuncia no ha bloqueado').toEqual(['denunciar'])
+        await expect(d, 'sigue en la confirmación, sin bloquear').toBeVisible()
+        await expect(page.getByRole('status').filter({ hasText: 'Bloqueado.' })).toHaveCount(0)
+        await sinVocabulario(page, 'la confirmación con la denuncia ya enviada')
+        // Y «Bloquear» bloquea ahora, sin denunciar otra vez.
+        await d.getByRole('button', { name: 'Bloquear', exact: true }).click()
+        await expect(page.getByRole('status').filter({ hasText: 'Bloqueado.' })).toHaveText(`${BLOQUEADO} ${DENUNCIA_RECIBIDA}`)
+        expect(s.llamadas).toEqual(['denunciar', 'bloquear'])
+        await expect(tarjeta(page, SOPORTE)).toHaveCount(0)
+        expect(fallos).toEqual([])
+      })
+    }
+
+    test('y si además se pulsa «Cancelar» mientras la denuncia se envía, tampoco se bloquea: se sigue en el anuncio, que no desaparece', async ({ page }) => {
+      const fallos = vigilar(page)
+      const { s, d, denuncia } = await hastaEnviarLaDenuncia(page)
+      await denuncia.getByRole('button', { name: 'Cerrar' }).click()
+      await d.getByRole('button', { name: 'Cancelar', exact: true }).click()
+      await expect(d).toHaveCount(0)
+      expect(s.denunciasContestadas, 'la prueba ha cancelado ANTES de que el servidor conteste').toBe(0)
+      await expect.poll(() => s.denunciasContestadas, { timeout: 6000 }).toBe(1)
+      await quieta(page, 500)
+      expect(s.llamadas, 'quien cancela no ha bloqueado').toEqual(['denunciar'])
+      await expect(page.getByRole('button', { name: 'Bloquear a Luis G.', exact: true }), 'sigue en el anuncio').toBeVisible()
+      await expect(page.getByRole('status').filter({ hasText: 'Bloqueado.' })).toHaveCount(0)
+      await page.getByRole('button', { name: 'Volver' }).click()
+      await expect(tarjeta(page, SOPORTE), 'y su anuncio sigue en la lista').toBeVisible()
+      await expect(page.getByRole('button', { name: /Personas bloqueadas/ })).toHaveCount(0)
+      expect(fallos).toEqual([])
+    })
+
+    /* EL CASO DE VERDAD (10-11-2026): la denuncia que va delante puede ser la tercera de ese anuncio, que lo deja «en revisión», y
+       el bloqueo de detrás contestaba 404 «Ese anuncio ya no está» (lo arregla el servidor). Visto desde la web, sea cual sea el
+       motivo: si la denuncia llega y el bloqueo falla, se lee el error tal cual, se sigue en la confirmación y, al reintentar,
+       bloquea SIN denunciar otra vez. */
+    test('si la denuncia llega y el bloqueo contesta 404, se lee tal cual, se sigue en la confirmación y al reintentar bloquea sin denunciar otra vez', async ({ page }) => {
+      const fallos = vigilar(page)
+      const s = await entrar(page, { ios, errorBloquear: { status: 404, detail: 'Ese anuncio ya no está', veces: 1 } })
+      await tarjeta(page, SOPORTE).click()
+      await page.getByRole('button', { name: 'Bloquear a Luis G.', exact: true }).click()
+      const d = dialogo(page, 'Luis G.')
+      const denuncia = page.getByRole('dialog', { name: 'Denunciar' })
+      await d.getByRole('checkbox', { name: 'Denunciar también este anuncio' }).check()
+      await d.getByRole('button', { name: 'Bloquear', exact: true }).click()
+      await denuncia.getByRole('radio', { name: 'Es un engaño o una posible estafa' }).click()
+      await denuncia.getByRole('button', { name: 'Enviar denuncia' }).click()
+      // La denuncia ha llegado y el bloqueo no: el error del servidor, en la confirmación, que dice además que la denuncia está hecha.
+      await expect(d.getByRole('alert')).toHaveText('Ese anuncio ya no está')
+      await expect(denuncia).toHaveCount(0)
+      await expect(d.getByRole('status')).toHaveText(DENUNCIA_RECIBIDA)
+      await expect(d.getByRole('checkbox'), 'la denuncia ya está hecha: no se ofrece otra vez').toHaveCount(0)
+      expect(s.llamadas).toEqual(['denunciar', 'bloquear'])
+      expect(s.denuncia).toEqual({ anuncio_id: 'a2', motivo: 'estafa', texto: '' })
+      await sinVocabulario(page, 'la confirmación con la denuncia enviada y el bloqueo sin hacer')
+      // Reintentar: solo el bloqueo, y de vuelta a la lista diciendo las dos cosas.
+      await d.getByRole('button', { name: 'Bloquear', exact: true }).click()
+      await expect(page.getByRole('status').filter({ hasText: 'Bloqueado.' })).toHaveText(`${BLOQUEADO} ${DENUNCIA_RECIBIDA}`)
+      expect(s.llamadas, 'al reintentar no se denuncia otra vez').toEqual(['denunciar', 'bloquear', 'bloquear'])
+      await expect(tarjeta(page, SOPORTE)).toHaveCount(0)
+      expect(fallos).toEqual([])
+    })
+
+    /* EL OTRO LADO: A QUIEN HAN BLOQUEADO. No se le avisa ni se le dice quién: su conversación sigue en el buzón (es su
+       historial), pero cerrada y sin caja de escribir, y el anuncio de la otra persona «ya no está». En la pantalla no se lee
+       nada de bloqueos, salvo el botón con el que ELLA puede bloquear a la otra persona, que lo tiene cualquier conversación. */
+    test('a quien han bloqueado: la conversación sale cerrada y sin caja de escribir, del anuncio dice «Ya no está» y nada le dice que la han bloqueado', async ({ page }) => {
+      const fallos = vigilar(page)
+      const s = await entrar(page, { ios, conversaciones: [CERRADA] })
+      await page.getByRole('button', { name: 'Mensajes, 1 sin leer' }).click()
+      await page.getByRole('button', { name: /Pedro S\./ }).click()
+      await expect(page.getByText('Vale, te digo algo')).toBeVisible()
+      await expect(page.getByText('Esta conversación está cerrada.', { exact: true })).toBeVisible()
+      await expect(page.getByLabel('Escribe un mensaje'), 'sin caja de escribir').toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Enviar' })).toHaveCount(0)
+      // Del anuncio, su título y «Ya no está» (ni precio ni foto); pulsarlo no lleva a ninguna parte ni pide nada.
+      const elAnuncio = page.getByRole('button', { name: /Batería externa de 20\.000 mAh/ })
+      await expect(elAnuncio).toContainText('· Ya no está')
+      await expect(elAnuncio).not.toContainText('€')
+      await elAnuncio.click()
+      await expect(page.getByText('Esta conversación está cerrada.', { exact: true })).toBeVisible()
+      expect(s.pedidas.filter((p) => p.includes('/anuncio/')), 'no se pide un anuncio que el servidor ya no le enseña').toEqual([])
+      // Ni «bloqueada», ni «te ha bloqueado», ni «bloqueo»: lo único que habla de bloquear es SU botón.
+      const texto = await lo(page)
+      const suBoton = 'Bloquear a Pedro S.'
+      expect(texto, 'puede bloquear ella a la otra persona, como en cualquier conversación').toContain(suBoton)
+      expect(texto.split(suBoton).join(' '), 'a quien han bloqueado no se le dice').not.toMatch(/bloque/i)
+      await sinVocabulario(page, 'la conversación de quien está bloqueado')
+      expect(s.llamadas).toEqual([])
+      expect(fallos).toEqual([])
+    })
+
     test('las normas: bloquear a quien molesta, las 24 horas de las denuncias y la tolerancia cero', async ({ page }) => {
       const fallos = vigilar(page)
       await entrar(page, { ios })
@@ -365,9 +563,94 @@ for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
         await expect(page.getByText(/^Desde el 8 nov/)).toHaveCount(1)
         expect((await etiqueta.boundingBox()).y, 'las etiquetas van debajo de «Bloquear a…»').toBeGreaterThan((await bloquear.boundingBox()).y)
       })
+
+      /* El remate (10-11-2026): con el título más largo que se puede escribir (80 letras), que en esa pantalla son TRES líneas. */
+      test('y con un título de tres líneas (80 letras, 375 × 647), «Bloquear a…» sigue entero encima de «Me interesa»', async ({ page }) => {
+        expect(NEVERA_LARGA.titulo, 'el título más largo que deja escribir «Qué vendes»').toHaveLength(80)
+        await page.setViewportSize({ width: 375, height: 647 })
+        await entrar(page, { ios, otros: [NEVERA_LARGA] })
+        await tarjeta(page, NEVERA_LARGA).click()
+        const bloquear = page.getByRole('button', { name: 'Bloquear a Luis G.', exact: true })
+        await expect(bloquear).toBeVisible()
+        await page.evaluate(() => document.fonts.ready)                 // con la letra de verdad: es la que decide cuántas líneas son
+        const lineas = await page.getByText(NEVERA_LARGA.titulo, { exact: true }).last()
+          .evaluate((el) => el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight))
+        expect(Math.round(lineas), 'el título de esta prueba tiene que ocupar tres líneas').toBe(3)
+        await enLaPrimeraPantalla(page, bloquear, page.getByRole('button', { name: 'Me interesa' }), 'la ficha con un título de tres líneas (375 × 647)')
+        // Y no por los pelos: quedan al menos 8 px entre «Bloquear a…» y la barra.
+        const caja = await bloquear.boundingBox()
+        const barra = await page.locator('div.fixed.bottom-0', { has: page.getByRole('button', { name: 'Me interesa' }) }).boundingBox()
+        expect(barra.y - (caja.y + caja.height), 'el hueco entre «Bloquear a…» y la barra de «Me interesa»').toBeGreaterThanOrEqual(8)
+        // Cómo cabe: en una pantalla tan baja la foto va más apaisada (3:2). El control: en una pantalla normal sigue como estaba (4:3).
+        const foto = page.getByRole('img', { name: NEVERA_LARGA.titulo })
+        const proporcion = async () => { const c = await foto.boundingBox(); return c.width / c.height }
+        expect(await proporcion(), 'la foto en una pantalla baja (647 de alto)').toBeCloseTo(3 / 2, 1)
+        await page.setViewportSize({ width: 375, height: 812 })
+        await expect.poll(proporcion, { message: 'la foto en una pantalla normal (812 de alto)' }).toBeCloseTo(4 / 3, 1)
+      })
     }
   })
 }
+
+/* Al servidor se le pregunta «quién soy» en dos sitios (GET /mercadillo y GET /mercadillo/estado, los dos con `yo`): a quien modera
+   se le reconoce venga de donde venga. */
+for (const [solo, de] of [['estado', '/mercadillo/estado'], ['lista', '/mercadillo']]) {
+  test(`Mercadillo · a quien modera se le reconoce aunque «quién soy» venga solo en ${de}: ni «Bloquear a…» ni «Personas bloqueadas»`, async ({ page }) => {
+    await entrar(page, { yo: MODERA, yoEn: solo, bloqueos: [YA_BLOQUEADO] })
+    await expect(tarjeta(page, SOPORTE)).toBeVisible()
+    await expect(page.getByRole('button', { name: /Personas bloqueadas/ })).toHaveCount(0)
+    await tarjeta(page, SOPORTE).click()
+    await expect(page.getByRole('button', { name: 'Denunciar', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Bloquear a / })).toHaveCount(0)
+  })
+}
+
+/* CON EL TECLADO (10-11-2026). La confirmación es un diálogo: al abrirse, el foco entra en él (a «Cancelar», que es lo que no hace
+   daño); Escape lo cierra, menos mientras se está enviando; y al cerrarse, el foco vuelve al botón que lo abrió. */
+test('Mercadillo · la confirmación con el teclado: el foco va a «Cancelar», Escape la cierra (no mientras se envía) y el foco vuelve a «Bloquear a…»', async ({ page }) => {
+  test.skip(test.info().project.name !== 'escritorio', 'el teclado es del ordenador')
+  const fallos = vigilar(page)
+  const s = await entrar(page, { demoraBloqueo: 1500 })
+  await tarjeta(page, SOPORTE).click()
+  const abrir = page.getByRole('button', { name: 'Bloquear a Luis G.', exact: true })
+  const d = dialogo(page, 'Luis G.')
+  const cancelar = d.getByRole('button', { name: 'Cancelar', exact: true })
+  await abrir.focus()
+  await page.keyboard.press('Enter')
+  await expect(d).toBeVisible()
+  await expect(cancelar, 'al abrirse, el foco está dentro: en «Cancelar»').toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(d, 'Escape la cierra').toHaveCount(0)
+  await expect(abrir, 'al cerrarse, el foco vuelve al botón que la abrió').toBeFocused()
+  expect(s.llamadas, 'Escape no bloquea').toEqual([])
+
+  // «Cancelar» (aquí, con Intro) también devuelve el foco.
+  await page.keyboard.press('Enter')
+  await expect(cancelar).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(d).toHaveCount(0)
+  await expect(abrir).toBeFocused()
+
+  // Al volver de la hoja de la denuncia sin enviarla, el foco entra otra vez en la confirmación.
+  await page.keyboard.press('Enter')
+  const tambien = d.getByRole('checkbox', { name: 'Denunciar también este anuncio' })
+  await tambien.check()
+  await d.getByRole('button', { name: 'Bloquear', exact: true }).click()
+  const denuncia = page.getByRole('dialog', { name: 'Denunciar' })
+  await denuncia.getByRole('button', { name: 'Cerrar' }).click()
+  await expect(cancelar, 'de vuelta de la denuncia, el foco entra otra vez en la confirmación').toBeFocused()
+  await tambien.uncheck()
+
+  // Mientras el bloqueo se está enviando, Escape no la cierra (ni «Cancelar» se puede pulsar).
+  await d.getByRole('button', { name: 'Bloquear', exact: true }).click()
+  await expect(cancelar).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await quieta(page, 200)
+  await expect(d, 'enviando: Escape no la cierra').toBeVisible()
+  expect(s.llamadas).toEqual(['bloquear'])
+  await expect(page.getByRole('status').filter({ hasText: 'Bloqueado.' })).toHaveText(BLOQUEADO)
+  expect(fallos).toEqual([])
+})
 
 /* El contrato dice que la lista (GET /mercadillo) trae `bloqueados: n`; de GET /mercadillo/estado dice «igual», que se puede leer de
    dos maneras. La web coge el número de donde venga: aquí, solo en el estado. */
