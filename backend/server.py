@@ -57950,8 +57950,10 @@ async def admin_mercadillo_expulsar(data: dict = Body(default={}), user: dict = 
         await _merc_avisar(clave, _merc_texto_expulsion(e), asunto="Te hemos quitado el acceso al mercadillo")
     except Exception as err:                                     # noqa: BLE001 — la expulsión ya está hecha
         logger.warning("aviso de una expulsión del mercadillo: %s", err)
-    await _audit(user, "mercadillo_expulsar", {"clave": clave, "nombre": nombre, "motivo": motivo_clave,
-                                               "nota": e["nota"], **hechos})
+    # En la auditoría, LO JUSTO: ese registro no caduca nunca, y la Privacidad dice que el motivo y la fecha se guardan
+    # «hasta que se te devuelve el acceso o hasta la baja» (eso es `mercadillo_expulsados`, que sí se borra). Aquí queda
+    # que se tomó la decisión, sobre quién (su clave) y cuándo, con la clave corta del motivo: ni su nombre ni la nota.
+    await _audit(user, "mercadillo_expulsar", {"clave": clave, "motivo": motivo_clave, **hechos})
     return {"ok": True, "expulsado": _merc_expulsado_vista(e), **hechos}
 
 

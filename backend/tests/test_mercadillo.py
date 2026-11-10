@@ -1623,11 +1623,13 @@ async def test_quitarle_el_mercadillo_a_alguien_retira_lo_suyo_cierra_sus_conver
     assert [x["texto"] for x in nuevos if x["para"] == CLAVES["ana"]] == [texto]
     a_ana = [c for c in mundo.enviados[correos:] if c.to == "ana@x.es"]
     assert len(a_ana) == 1 and a_ana[0].subject == "Te hemos quitado el acceso al mercadillo" and texto in a_ana[0].texto
-    # QUEDA APUNTADO quién lo hizo, a quién y por qué.
+    # QUEDA APUNTADO quién lo hizo, a quién y cuándo, CON LO JUSTO: el registro de auditoría no caduca nunca, y la
+    # Privacidad dice que el motivo se guarda «hasta que se te devuelve el acceso o hasta la baja». Así que allí va la
+    # clave del motivo (no su texto), y ni el nombre de la persona ni la nota de Dani.
     rastro = mundo.g["audit_log"].docs[-1]
-    assert (rastro["action"], rastro["actor_id"]) == ("mercadillo_expulsar", "dani") and rastro["detail"] == {
-        "clave": CLAVES["ana"], "nombre": "Ana P.", "motivo": "ofensivo", "nota": "Insultos en dos conversaciones.",
-        "anuncios": 2, "conversaciones": 2}
+    assert (rastro["action"], rastro["actor_id"]) == ("mercadillo_expulsar", "dani") and _es_fecha(rastro["at"])
+    assert rastro["detail"] == {"clave": CLAVES["ana"], "motivo": "ofensivo", "anuncios": 2, "conversaciones": 2}
+    assert not [trozo for trozo in ("Ana", "Insultos", MOTIVOS_EXPULSION["ofensivo"]) if trozo in repr(rastro)]
     # SUS BLOQUEOS no se tocan.
     assert sorted((b["de"], b["a"]) for b in mundo.g["mercadillo_bloqueos"].docs) == sorted([
         (CLAVES["ana"], CLAVES["luis"]), (CLAVES["oficina"], CLAVES["ana"])])
@@ -1741,6 +1743,10 @@ async def test_devolver_el_acceso_deja_entrar_otra_vez_pero_no_resucita_nada(mun
     assert len(vuelta) == 1 and READMITIDO in vuelta[0].texto
     rastros = [(x["action"], x["actor_id"], x["detail"]) for x in mundo.g["audit_log"].docs]
     assert ("mercadillo_readmitir", "dani", {"clave": CLAVES["ana"]}) in rastros
+    # (El registro de auditoría no caduca: de quitar y devolver el acceso guarda lo justo, sin nombres ni notas.)
+    assert [(accion, sorted(detalle)) for accion, _, detalle in rastros] == [
+        ("mercadillo_expulsar", ["anuncios", "clave", "conversaciones", "motivo"])] * 2 + [("mercadillo_readmitir", ["clave"])]
+    assert [detalle["motivo"] for _, _, detalle in rastros[:2]] == ["acoso", "otro"]
     # A Pepe no se le ha devuelto nada; y devolvérselo dos veces a Ana dice que ya lo tiene.
     await _falla(server.merc_lista("", PEPE), 403, _fuera("otro"))
     await _falla(server.admin_mercadillo_readmitir({"clave": CLAVES["ana"]}, DANI), 404, YA_TIENE_ACCESO)
