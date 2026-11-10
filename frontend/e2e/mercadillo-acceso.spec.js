@@ -115,14 +115,15 @@ const normas = (page) => page.locator('main').getByRole('listitem')
 const ANTES_DE_ENTRAR = 'Antes de entrar, lee las normas y acéptalas.'
 const apartadoDelMercadillo = (pagina) => pagina.getByRole('heading', { name: /Mercadillo de repartidores|Couriers’ marketplace/ })
 /** «Llega a su apartado»: la página se ha desplazado y el título del apartado del mercadillo está entero en la pantalla y ARRIBA
- *  (en su tercio de arriba: no vale que asome por abajo). */
+ *  (en su tercio de arriba: no vale que asome por abajo), con algo de aire encima: no pegado al borde, que dentro de la app de
+ *  iPhone es donde va la barra de estado (allí el hueco es ese aire MÁS la barra: `env(safe-area-inset-top)`, que aquí vale 0). */
 async function enSuApartado(pagina, donde) {
   const apartado = apartadoDelMercadillo(pagina)
   await expect(apartado, `${donde}: el apartado del mercadillo no está en la pantalla`).toBeInViewport({ ratio: 1 })
   const { desplazado, alto } = await pagina.evaluate(() => ({ desplazado: window.scrollY, alto: window.innerHeight }))
   expect(desplazado, `${donde}: la página no se ha desplazado hasta el apartado`).toBeGreaterThan(300)
   const y = (await apartado.boundingBox()).y
-  expect(y, `${donde}: el título del apartado no queda tapado por arriba`).toBeGreaterThanOrEqual(0)
+  expect(y, `${donde}: el título del apartado no queda pegado al borde de arriba`).toBeGreaterThanOrEqual(8)
   expect(y, `${donde}: el apartado queda arriba, no asomando por abajo`).toBeLessThan(alto / 3)
 }
 

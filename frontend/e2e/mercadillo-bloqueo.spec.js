@@ -368,25 +368,26 @@ for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
       test(titulo, async ({ page }) => {
         const fallos = vigilar(page)
         const n = puede ? 1 : 0
+        // Los cuatro sitios, cada uno con su comprobación «blanda»: si falla uno, la prueba sigue y dice cuáles.
         // Con alguien ya bloqueado, que es cuando la lista ofrece «Personas bloqueadas (n)».
         const s = await entrar(page, { ios, yo, bloqueos: [YA_BLOQUEADO] })
         await expect(tarjeta(page, SOPORTE)).toBeVisible()
-        await expect(page.getByRole('button', { name: /Personas bloqueadas/ }), 'en la lista').toHaveCount(n)
+        await expect.soft(page.getByRole('button', { name: /Personas bloqueadas/ }), '«Personas bloqueadas», en la lista').toHaveCount(n)
 
         await tarjeta(page, SOPORTE).click()
         await expect(page.getByRole('button', { name: 'Denunciar', exact: true })).toBeVisible()
         await expect(page.getByRole('button', { name: 'Denunciar anuncio' })).toBeVisible()
-        await expect(page.getByRole('button', { name: /^Bloquear a / }), 'en el anuncio').toHaveCount(n)
+        await expect.soft(page.getByRole('button', { name: /^Bloquear a / }), '«Bloquear a…», en el anuncio').toHaveCount(n)
         await sinVocabulario(page, `el anuncio visto por ${puede ? 'una persona normal' : 'quien modera'}`)
         await page.getByRole('button', { name: 'Volver' }).click()
 
         await page.getByRole('button', { name: 'Mensajes, 1 sin leer' }).click()
         await expect(page.getByText('¿Me la dejas en 5?')).toBeVisible()
-        await expect(page.getByRole('button', { name: /Personas bloqueadas/ }), 'en el buzón').toHaveCount(n)
+        await expect.soft(page.getByRole('button', { name: /Personas bloqueadas/ }), '«Personas bloqueadas», en el buzón').toHaveCount(n)
         await page.getByRole('button', { name: /Luis G\./ }).click()
         await expect(page.getByRole('button', { name: 'Denunciar', exact: true })).toBeVisible()
         await expect(page.getByRole('button', { name: 'Denunciar conversación' })).toBeVisible()
-        await expect(page.getByRole('button', { name: /^Bloquear a / }), 'en la conversación').toHaveCount(n)
+        await expect.soft(page.getByRole('button', { name: /^Bloquear a / }), '«Bloquear a…», en la conversación').toHaveCount(n)
         await sinVocabulario(page, `la conversación vista por ${puede ? 'una persona normal' : 'quien modera'}`)
         // «Denunciar» sigue abriendo su hoja.
         await page.getByRole('button', { name: 'Denunciar', exact: true }).click()
