@@ -128,7 +128,9 @@ export default function Refuerzos({ center, puedeAprobar, onCambio }) {
               {faltas.faltas.map((f) => (
                 <div key={f.date} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-[13px]">
                   <span className="w-28 font-semibold capitalize text-dark-100">{f.dia}</span>
-                  <span className="text-dark-400">máxima <b className="tabular-nums text-dark-200">{f.maximo}</b> · en ruta <b className="tabular-nums text-dark-200">{f.en_ruta}</b></span>
+                  <span className="text-dark-400">máxima <b className="tabular-nums text-dark-200">{f.maximo}</b> · en ruta <b className="tabular-nums text-dark-200">{f.en_ruta}</b>
+                    {/* Los de la fila «Bajan de otros centros» del Cuadrante: ya restados de lo que falta (10-11-2026). */}
+                    {f.bajan > 0 && <> <b className="tabular-nums text-dark-200">+{f.bajan}</b> de otros centros</>}</span>
                   <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[12px] font-semibold text-red-300">faltan {f.falta}</span>
                   <span className={`text-[12px] ${f.pueden ? 'text-dark-400' : 'text-amber-300'}`}>
                     {f.pueden ? `${f.pueden} ${f.pueden === 1 ? 'puede' : 'pueden'} apuntarse` : 'nadie puede (trabajan o lo impide la ley)'}

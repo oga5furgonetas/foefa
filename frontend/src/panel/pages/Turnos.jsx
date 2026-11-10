@@ -9,7 +9,7 @@ import {
 import {
   getShifts, getShiftCoverage, getDrivers, saveShiftsBulk, setShiftSettings,
   generateShiftsAuto, getRouteDemand, setRouteDemand, getShiftRequests,
-  resolveShiftRequest, importShifts, getCodigosCuadrante, setCodigosCuadrante,
+  resolveShiftRequest, resolverGrupoPeticiones, importShifts, getCodigosCuadrante, setCodigosCuadrante,
   importShiftsPegado, getShiftBlocks, createShiftBlock, deleteShiftBlock,
   setAliasNombres, updateDriver, exportarCuadrante,
 } from '../api'
@@ -267,7 +267,10 @@ function CalendarioDiasLibres({ center }) {
       .catch(() => setErr('No se pudieron cargar los días.'))
     // `r.data.bloqueos`, no `r.data`: el endpoint devuelve un objeto. Leyendo
     // mal, la lista sale vacía y los días cerrados no se pintarían — sin fallar.
-    getShiftBlocks(center).then((r) => setBloqueos(lista(r.data?.bloqueos))).catch(() => {})
+    // Con los pasados (10-11-2026): el servidor ya solo da los vigentes si no se le piden, y el calendario
+    // enseña también los meses de atrás.
+    getShiftBlocks(center, true)
+      .then((r) => setBloqueos([...lista(r.data?.bloqueos), ...lista(r.data?.pasados)])).catch(() => {})
   }, [center, ventanaDesde, ventanaHasta])
 
   const porDia = useMemo(() => {
@@ -630,6 +633,7 @@ export default function Turnos() {
   const [pegado, setPegado] = useState('')      // el cuadrante copiado de Sheets
   const [verPegar, setVerPegar] = useState(false)
   const [bloqueos, setBloqueos] = useState([])
+  const [bloqueosPasados, setBloqueosPasados] = useState([])
   const [verBloqueos, setVerBloqueos] = useState(false)
   // peticiones | refuerzos | calendario | bloqueos. El aviso de «se apunta al refuerzo» trae ?vista=refuerzos.
   const [vistaDias, setVistaDias] = useState(() => (new URLSearchParams(window.location.search).get('vista') === 'refuerzos' ? 'refuerzos' : 'peticiones'))
@@ -746,16 +750,64 @@ export default function Turnos() {
     hasta: sumaDias(dias[dias.length - 1], n),
   })
 
+  /* LAS PETICIONES, EN SU PROPIA LLAMADA (10-11-2026). Iban dentro del
+     Promise.all de la rejilla escondida: si fallaba la cobertura o las
+     máximas, la bandeja se quedaba vacía diciendo «No hay solicitudes
+     pendientes» —un cero falso justo donde hay que contestar— con un error
+     rojo que hablaba de «cobertura». Ahora tienen su error y su reintentar.
+     `pedidaPet` evita que la respuesta de la nave anterior pise a la nueva. */
+  const [errPeticiones, setErrPeticiones] = useState('')
+  const [cargandoPeticiones, setCargandoPeticiones] = useState(true)
+  const pedidaPet = useRef(0)
+  const cargarPeticiones = useCallback(async () => {
+    if (noCenter) return
+    const n = ++pedidaPet.current
+    setCargandoPeticiones(true); setErrPeticiones('')
+    try {
+      const r = await getShiftRequests(center, 'pendiente')
+      if (n === pedidaPet.current) setSolicitudes(lista(r.data?.requests))
+    } catch {
+      if (n === pedidaPet.current) setErrPeticiones(t('turns.req.load.err'))
+    } finally {
+      if (n === pedidaPet.current) setCargandoPeticiones(false)
+    }
+  }, [center, noCenter, t])
+  // Al cambiar de nave, la lista de la otra no se queda a la vista mientras llega la nueva.
+  useEffect(() => { setSolicitudes([]); cargarPeticiones() }, [cargarPeticiones])
+
   const cargar = useCallback(async () => {
     if (noCenter) return
     setCargando(true); setErr(''); setAviso('')
+    /* Con la rejilla escondida no se pide lo que solo usa ella (turnos del
+       mes, cobertura, máximas, códigos y las aprobadas de siempre, hasta mil):
+       era más lento en el móvil y cada llamada, un motivo más para fallar. Las
+       fichas sí: las usan Suspensiones y Días cerrados. Y las aprobadas de hoy
+       en adelante, para marcar en el selector de Días cerrados quién tiene ya
+       el día; si fallan, el selector sale sin marcas, no se para nada. */
+    if (!MOSTRAR_CUADRANTE) {
+      try {
+        const [rd, rapr] = await Promise.all([
+          getDrivers(center),
+          getShiftRequests(center, 'aprobado', { desde: hoyLocal() }).catch(() => null),
+        ])
+        setDrivers(lista(rd.data).filter((d) => d.active !== false).sort(porNombre))
+        setAprobados(new Set(
+          lista(rapr?.data?.requests)
+            .filter((r) => r.type === 'libre')
+            .map((r) => `${r.driver_id}|${r.date}`)))
+      } catch {
+        setErr(t('turns.drivers.err'))
+      } finally {
+        setCargando(false)
+      }
+      return
+    }
     try {
-      const [rd, rs, rc, rdem, rreq, rapr, rcod] = await Promise.all([
+      const [rd, rs, rc, rdem, rapr, rcod] = await Promise.all([
         getDrivers(center),
         getShifts(center, mesDesde, mesHasta),
         getShiftCoverage(center, primerDia, hasta),
         getRouteDemand(center, primerDia, hasta),
-        getShiftRequests(center, 'pendiente'),
         // Los días YA CONCEDIDOS. Sin esto, la rejilla te deja poner a trabajar
         // a alguien el día que le aprobaste libre y no dice nada — el peor
         // fallo posible aquí, porque se descubre el día que no aparece.
@@ -794,7 +846,6 @@ export default function Turnos() {
       }
       setDemanda(dm)
       setMaximas(mx)
-      setSolicitudes(lista(rreq.data?.requests))
     } catch {
       setErr(t('turns.error'))
     } finally {
@@ -1269,11 +1320,14 @@ export default function Turnos() {
     } finally { setOcupado('') }
   }
 
+  /* Los vigentes o futuros, los próximos primero (así los da el servidor desde
+     el 10-11-2026); los que ya pasaron, aparte y plegados. */
   const cargarBloqueos = useCallback(async () => {
     try {
-      const r = await getShiftBlocks(center)
+      const r = await getShiftBlocks(center, true)
       setBloqueos(lista(r.data?.bloqueos))
-    } catch { setBloqueos([]) }
+      setBloqueosPasados(lista(r.data?.pasados))
+    } catch { setBloqueos([]); setBloqueosPasados([]) }
   }, [center])
   useEffect(() => { cargarBloqueos() }, [cargarBloqueos])
 
@@ -1379,22 +1433,38 @@ export default function Turnos() {
        contesta 409: se sigue con los demás y se dice cuántos eran. Antes el
        bucle se paraba a la mitad, con parte aprobada y la bandeja sin
        refrescar, y al reintentar volvía a chocar con el mismo día. */
+    /* El grupo entero en UNA llamada (10-11-2026): el servidor contesta día a
+       día igual que antes, pero al conductor le llega un solo aviso con todas
+       las fechas, no uno por día. Si el servidor aún no la tiene (404/405,
+       desplegando), se hace como antes, día a día. */
     let cancelados = 0
+    let saltados = []
     try {
-      for (const id of grupo.ids) {
-        try {
-          await resolveShiftRequest(id, accion, motivo)
-        } catch (e) {
-          if (e?.response?.status !== 409) throw e
-          cancelados += 1
+      try {
+        const { data } = await resolverGrupoPeticiones(grupo.ids, accion, motivo)
+        cancelados = lista(data?.canceladas).length
+        saltados = lista(data?.saltadas)
+      } catch (e) {
+        if (![404, 405].includes(e?.response?.status)) throw e
+        for (const id of grupo.ids) {
+          try {
+            await resolveShiftRequest(id, accion, motivo)
+          } catch (e2) {
+            if (e2?.response?.status !== 409) throw e2
+            cancelados += 1
+          }
         }
       }
       setSolicitudes((s) => s.filter((x) => !grupo.ids.includes(x.id)))
-      await cargar()
+      await Promise.all([cargarPeticiones(), cargar()])
       if (cancelados) {
         setAviso(cancelados === grupo.ids.length
           ? `${grupo.driver_name} ya la había cancelado: no se ha tocado nada.`
           : `${cancelados} de esos días ya los había cancelado ${grupo.driver_name}: esos no se han tocado.`)
+      }
+      // Un día que no se ha podido contestar (suspendido, o un extra que la ley no deja) se dice con su porqué.
+      if (saltados.length) {
+        setErr(saltados.map((x) => `${x.date ? `${String(x.date).slice(8, 10)}/${String(x.date).slice(5, 7)}:` : ''} ${x.detail || ''}`.trim()).join(' · '))
       }
     } catch (e) {
       setErr(e?.response?.data?.detail || t('turns.req.err'))
@@ -1447,6 +1517,26 @@ export default function Turnos() {
   const fmtDia = (f) => new Date(f + 'T12:00:00').toLocaleDateString(lang, { weekday: 'short' })
   const fmtNum = (f) => new Date(f + 'T12:00:00').toLocaleDateString(lang, { day: '2-digit', month: '2-digit' })
   const finde = (f) => [0, 6].includes(new Date(f + 'T12:00:00').getDay())
+  // Un día cerrado, con las fechas como se leen («sáb 20/12 → mar 06/01»), no 2026-12-20 → 2027-01-06.
+  const filaBloqueo = (b) => (
+    <div key={b.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
+      <span className="text-[12.5px] font-semibold tabular-nums text-dark-100" title={`${b.desde} → ${b.hasta}`}>
+        {b.desde === b.hasta ? `${fmtDia(b.desde)} ${fmtNum(b.desde)}`
+          : `${fmtDia(b.desde)} ${fmtNum(b.desde)} → ${fmtDia(b.hasta)} ${fmtNum(b.hasta)}`}
+      </span>
+      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+        b.driver_id ? 'bg-amber-500/15 text-amber-300' : 'bg-red-500/15 text-red-300'}`}>
+        {b.driver_name || 'Todo el centro'}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[12.5px] text-dark-400">{b.motivo}</span>
+      {puedeAprobar && (
+        <button onClick={() => quitarBloqueo(b.id)}
+          className="rounded p-1 text-dark-500 hover:text-red-400" title="Quitar">
+          <Trash2 size={14} />
+        </button>
+      )}
+    </div>
+  )
 
   return (
     <div className="flex flex-col gap-4">
@@ -2186,26 +2276,21 @@ export default function Turnos() {
             <p className="text-[12.5px] text-dark-500">Solo quien puede aprobar días puede bloquearlos.</p>
           )}
 
-          <div className="mt-3 divide-y divide-white/[0.04]">
+          <div className="mt-3 divide-y divide-white/[0.04]" data-testid="dias-cerrados">
             {bloqueos.length === 0 ? (
               <p className="py-3 text-[12.5px] text-dark-500">No hay ningún día bloqueado.</p>
-            ) : bloqueos.map((b) => (
-              <div key={b.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
-                <span className="font-mono text-[12.5px] text-dark-100">{b.desde} → {b.hasta}</span>
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                  b.driver_id ? 'bg-amber-500/15 text-amber-300' : 'bg-red-500/15 text-red-300'}`}>
-                  {b.driver_name || 'Todo el centro'}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[12.5px] text-dark-400">{b.motivo}</span>
-                {puedeAprobar && (
-                  <button onClick={() => quitarBloqueo(b.id)}
-                    className="rounded p-1 text-dark-500 hover:text-red-400" title="Quitar">
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
-            ))}
+            ) : bloqueos.map(filaBloqueo)}
           </div>
+          {/* Los que ya pasaron, plegados: con el tiempo se acumulan y tapaban
+              los de verdad (10-11-2026). */}
+          {bloqueosPasados.length > 0 && (
+            <details className="mt-2 text-[12.5px]" data-testid="dias-cerrados-pasados">
+              <summary className="cursor-pointer font-semibold text-dark-400">Ver pasados ({bloqueosPasados.length})</summary>
+              <div className="mt-1 divide-y divide-white/[0.04] opacity-70">
+                {bloqueosPasados.map(filaBloqueo)}
+              </div>
+            </details>
+          )}
         </div>
       )}
 
@@ -2413,7 +2498,19 @@ export default function Turnos() {
             <History size={14} /> Historial
           </button>
         </h2>
-        {solicitudes.length === 0 ? (
+        {/* Si no se han podido leer, se dice y se puede reintentar: nunca un
+            «No hay solicitudes pendientes» que no se sabe si es verdad. */}
+        {errPeticiones ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2" data-testid="peticiones-error">
+            <p className="text-sm text-red-300">{errPeticiones}</p>
+            <button onClick={cargarPeticiones} disabled={cargandoPeticiones}
+              className="flex items-center gap-1.5 rounded-lg border border-red-500/40 px-2.5 py-1 text-[12px] font-semibold text-red-200 hover:bg-red-500/15 disabled:opacity-50">
+              {cargandoPeticiones && <Loader2 size={13} className="animate-spin" />} {t('turns.req.retry')}
+            </button>
+          </div>
+        ) : cargandoPeticiones && solicitudes.length === 0 ? (
+          <p className="flex items-center gap-2 text-sm text-dark-500"><Loader2 size={14} className="animate-spin" /> {t('turns.req.loading')}</p>
+        ) : solicitudes.length === 0 ? (
           <p className="text-sm text-dark-500">{t('turns.no.requests')}</p>
         ) : (
           <div className="divide-y divide-dark-800">

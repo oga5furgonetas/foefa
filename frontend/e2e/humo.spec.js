@@ -931,15 +931,13 @@ test.describe('Portal del conductor · tus peticiones', () => {
     await page.route(/\/api\/shift-requests\?/, (route) => json({
       requests: new URL(route.request().url()).searchParams.get('status') === 'pendiente' ? pendientes : [] })(route))
     const aprobadas = []
-    await page.route(/\/api\/shift-requests\/p\d\/resolve/, (route) => {
-      const id = route.request().url().match(/shift-requests\/(p\d)\//)[1]
-      if (id === 'p2') {
-        return route.fulfill({ status: 409, contentType: 'application/json',
-          body: JSON.stringify({ detail: 'El conductor ha cancelado esta petición' }) })
-      }
-      aprobadas.push(id)
+    /* Desde el 10-11-2026 el panel contesta el grupo entero en una llamada (un solo aviso al conductor); el día
+       cancelado vuelve en `canceladas`, que es lo que antes era el 409 de ese día. */
+    await page.route(/\/api\/shift-requests\/resolver-grupo/, (route) => {
+      const { ids } = route.request().postDataJSON()
+      aprobadas.push(...ids.filter((id) => id !== 'p2'))
       pendientes = []
-      return json({ success: true, status: 'aprobado' })(route)
+      return json({ success: true, status: 'aprobado', resueltas: ['p1'], canceladas: ['p2'], saltadas: [] })(route)
     })
     await page.goto('/panel/turnos', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('ANA PÉREZ')).toBeVisible({ timeout: 15000 })

@@ -808,6 +808,16 @@ export default function Cuadrante() {
   const [refEdit, setRefEdit] = useState({})
   const pedida = useRef(0)
 
+  /* AL CAMBIAR DE NAVE, FUERA LO DE LA OTRA (10-11-2026). La página no se
+     vuelve a montar al cambiar la nave de arriba: la tabla, la propuesta y sus
+     botones seguían siendo los de la nave anterior hasta que llegaba la
+     respuesta, y una celda tocada en ese rato se guardaba con la nave nueva
+     para un conductor de la vieja. Se vacía todo, sale «Cargando el
+     cuadrante…» y no queda nada que tocar. */
+  useEffect(() => {
+    setDatos(null); setErr(''); setAviso(''); setMenu(null); setPincel(null)
+  }, [center])
+
   const cargar = useCallback(async (silencio = false) => {
     if (noCenter) return
     const n = ++pedida.current
