@@ -8,7 +8,7 @@ import { whcAnalizar, getWhcPlan, deleteWhcPlan, getWhcEstado } from '../api'
 import { lista } from '../../lib/lista'
 import { useOrden } from '../../lib/orden'
 import ThOrden from '../components/ThOrden'
-import { fechaHoraLocal } from '../../lib/fecha'
+import { fechaHoraLocal, horaLocal, diaMesLocal, diasAtras, isoLocal } from '../../lib/fecha'
 
 /* ── HORAS DE LA SEMANA (WHC) ────────────────────────────────────────────────
    Amazon dice quién se pasó de horas en el informe de excepciones, cuando la
@@ -36,6 +36,24 @@ const signo = (m) => (m < 0 ? `−${hm(m)}` : hm(m))
    centros, o dos centros con la misma gente salen con resultados distintos. */
 const LIMITE_H = 54.5
 
+/* CUÁNDO SE PEGÓ (10-11-2026). Un plan pegado el martes y abierto el jueves se
+   veía como de ahora: el punto azul de «en ruta ahora» y el «se pasa hoy si
+   acaba» eran del martes. Se dice cuándo se pegó y, si no es de hoy, lo que habla
+   de «ahora» dice de cuándo es. */
+const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+function cuandoPegado(iso) {
+  const d = iso ? new Date(iso) : null
+  if (!d || Number.isNaN(d.getTime())) return null
+  const hace = diasAtras(isoLocal(d))
+  const hora = horaLocal(iso).replace(/^0(\d)/, '$1')
+  const corto = hace <= 6 ? DIAS_SEMANA[d.getDay()] : diaMesLocal(iso)
+  const largo = hace === 0 ? `Pegado hoy a las ${hora}`
+    : hace === 1 ? `Pegado ayer a las ${hora}`
+    : `Pegado el ${corto} a las ${hora} (hace ${hace} días)`
+  return { hace, hora, corto, largo }
+}
+const ddmm = (s) => (s ? `${s.slice(8, 10)}/${s.slice(5, 7)}` : '')
+
 export default function Horas() {
   const { center } = useOutletContext()
   const [texto, setTexto] = useState('')
@@ -54,7 +72,10 @@ export default function Horas() {
   }, [])
   useEffect(cargarEstado, [cargarEstado])
 
-  const analizar = useCallback(async (txt, exc) => {
+  /* `carga`: es el plan guardado al abrir la pantalla. Se analiza SIN volver a
+     guardarlo (antes cada apertura reescribía «guardado» con la hora de abrir).
+     `centro`: «Guardarlo en DGA1» cuando el plan es de otra nave que la elegida. */
+  const analizar = useCallback(async (txt, exc, { carga = false, centro = null } = {}) => {
     const cuerpo = txt ?? texto
     const e = exc ?? excepciones
     setCargando(true); setErr(''); setDatos(null)
@@ -62,12 +83,14 @@ export default function Horas() {
       const r = await whcAnalizar({
         texto: cuerpo, limite_horas: LIMITE_H,
         ...(e === '' || e == null ? {} : { excepciones: Number(e) }),
-        center,
+        center: centro || center,
+        ...(carga ? { guardar: false } : {}),
       })
-      setDatos(r.data)
+      setDatos({ ...r.data, esCarga: carga })
       setEditando(false)
       if (r.data?.guardado) {
-        setGuardado({ updated_at: new Date().toISOString() })
+        // Guardado en OTRA nave (con su botón): la elegida sigue sin plan.
+        if (!centro) setGuardado({ updated_at: new Date().toISOString(), pegado_en: r.data.pegado_en, week: r.data.semana_del_plan })
         cargarEstado()
       }
     } catch (x) {
@@ -78,7 +101,9 @@ export default function Horas() {
   // Al entrar se recupera el plan de ESTA semana del centro y se analiza solo.
   useEffect(() => {
     let vivo = true
-    setDatos(null); setGuardado(null); setTexto(''); setEditando(false)
+    // Las excepciones también: la cifra de una nave no puede viajar a otra
+    // (10-11-2026: con 2 en OGA5, se cambiaba a DGA1 sin plan y se guardaba con 2).
+    setDatos(null); setGuardado(null); setTexto(''); setEditando(false); setExcepciones('')
     if (!center || center === 'Todos') return undefined
     getWhcPlan(center).then(({ data }) => {
       if (!vivo || !data?.hay || !data.texto) return
@@ -86,15 +111,19 @@ export default function Horas() {
       setTexto(data.texto)
       const exc = data.excepciones == null ? '' : data.excepciones
       setExcepciones(exc)
-      analizar(data.texto, exc)
+      analizar(data.texto, exc, { carga: true })
     }).catch(() => {})
     return () => { vivo = false }
   }, [center]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* Borra el plan QUE SE ESTÁ VIENDO, con su semana (10-11-2026): antes borraba
+     siempre el de la semana en curso, aunque en pantalla estuviera el de la pasada. */
   const borrar = async () => {
     if (!center || center === 'Todos') return
-    if (!window.confirm(`¿Borrar el plan guardado de esta semana de ${center}?`)) return
-    try { await deleteWhcPlan(center) } catch { /* se ve al recargar */ }
+    const semana = datos?.semana_del_plan || guardado?.week || null
+    const deQue = semana ? `de la semana del ${ddmm(semana)}` : 'de esta semana'
+    if (!window.confirm(`¿Borrar el plan guardado ${deQue} de ${center}?`)) return
+    try { await deleteWhcPlan(center, semana) } catch { /* se ve al recargar */ }
     setGuardado(null); setTexto(''); setDatos(null); setEditando(true); cargarEstado()
   }
 
@@ -103,6 +132,14 @@ export default function Horas() {
   const r = datos?.resumen
   const propio = datos?.whc_propio
   const mostrarPegar = !guardado || editando || !datos
+  const pegado = cuandoPegado(datos?.pegado_en || guardado?.pegado_en || guardado?.updated_at)
+  // Si el servidor no lo dice (uno viejo), se decide por la fecha.
+  const deHoy = datos?.pegado_hoy != null ? datos.pegado_hoy !== false : !pegado || pegado.hace === 0
+  const semanaEnCurso = estado?.semana_en_curso
+  const otraSemana = !!(datos?.semana_del_plan && semanaEnCurso && datos.semana_del_plan !== semanaEnCurso)
+  const otraNave = datos?.otra_nave
+  const guardadoFuera = !!(datos?.guardado && datos.centro && center && center !== 'Todos'
+    && datos.centro !== String(center).toUpperCase())
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
@@ -203,12 +240,42 @@ export default function Horas() {
 
       {datos && (
         <>
-          {datos.aviso_guardado && (
+          {/* EL PLAN ES DE OTRA NAVE (10-11-2026): no se guarda en la elegida, y se
+              ofrece guardarlo en la suya con el mismo pegado. */}
+          {otraNave && (
+            <div className="card border-amber-500/30 bg-amber-500/5 p-4 text-[12.5px] leading-relaxed text-amber-200/90">
+              <p>
+                <b className="text-amber-200">Este plan es de {otraNave.centro} y tienes elegida {center}.</b>{' '}
+                {otraNave.por === 'fichas'
+                  ? `Lo dicen las fichas: ${otraNave.casan_alli} de sus conductores son de ${otraNave.centro}. `
+                  : 'Lo dice su cabecera. '}
+                No se ha guardado.
+              </p>
+              <button onClick={() => analizar(texto, excepciones, { centro: otraNave.centro })} disabled={cargando || !texto}
+                className="btn-primary mt-2 px-3 py-1.5 text-xs disabled:opacity-40">
+                Guardarlo en {otraNave.centro}
+              </button>
+            </div>
+          )}
+          {guardadoFuera && (
+            <div className="card border-emerald-500/30 bg-emerald-500/5 p-3 text-[12.5px] text-emerald-200/90">
+              Guardado en <b>{datos.centro}</b>. Para volver a verlo, elige {datos.centro} arriba.
+            </div>
+          )}
+          {/* UN PLAN QUE NO ES DE ESTA SEMANA (10-11-2026): antes solo se notaba por
+              el «semana del 01/11» pequeño del título. */}
+          {otraSemana && (
+            <div className="card border-amber-500/30 bg-amber-500/5 p-3 text-[12.5px] text-amber-200/90">
+              Este plan es de la semana del {ddmm(datos.semana_del_plan)}, no de esta.
+            </div>
+          )}
+          {datos.aviso_guardado && !otraNave && (
             <div className="card border-amber-500/30 bg-amber-500/5 p-4 text-[12.5px] leading-relaxed text-amber-200/90">
               <b className="text-amber-200">No se ha guardado este pegado.</b> {datos.aviso_guardado}
             </div>
           )}
-          {!datos.guardado && !datos.aviso_guardado && (
+          {/* Al abrir la pantalla se analiza sin guardar a propósito: no es un aviso. */}
+          {!datos.guardado && !datos.aviso_guardado && !otraNave && !datos.esCarga && (
             <div className="card border-amber-500/30 bg-amber-500/5 p-3 text-[12.5px] text-amber-200/90">
               Analizado pero <b>sin guardar</b>: el plan no dice de qué centro es. Elige el centro arriba y dale otra vez.
             </div>
@@ -223,10 +290,18 @@ export default function Horas() {
               </h2>
               {datos.ritmo && (
                 <span className="text-[11px] text-dark-500">
-                  día {datos.ritmo.dia_semana} de 7{!datos.ritmo.dia_leido_del_plan && ' (deducido de hoy)'}
+                  día {datos.ritmo.dia_semana} de 7
+                  {!datos.ritmo.dia_leido_del_plan && (deHoy ? ' (deducido de hoy)' : ' (deducido del día en que se pegó)')}
                 </span>
               )}
             </div>
+            {pegado && (
+              <p className={`mt-1.5 flex items-center gap-1.5 text-[13px] font-medium ${deHoy ? 'text-dark-300' : 'text-amber-300'}`}>
+                <Clock size={13} className="shrink-0" />
+                {pegado.largo}
+                {!deHoy && <span className="font-normal text-amber-200/80">· lo de «en ruta» es de ese momento, no de ahora</span>}
+              </p>
+            )}
             {propio && (
               <div className="mt-2 flex flex-wrap items-baseline gap-3">
                 <span className={`text-4xl font-bold tabular-nums ${propio.incumplen === 0 ? 'text-emerald-300' : 'text-red-300'}`}>
@@ -241,7 +316,8 @@ export default function Horas() {
             <div className="mt-3 flex flex-wrap gap-2">
               {[
                 ['ya pasados (horas cerradas)', r.superan, 'bg-red-500/15 text-red-300'],
-                ['se pasan hoy si acaban la ruta', r.pasaran_hoy, 'bg-orange-500/15 text-orange-300'],
+                [deHoy ? 'se pasan hoy si acaban la ruta' : `se pasaban si acababan la ruta del ${pegado?.corto || 'día en que se pegó'}`,
+                  r.pasaran_hoy, 'bg-orange-500/15 text-orange-300'],
                 ['en peligro por ritmo', datos.ritmo?.peligro, 'bg-amber-500/15 text-amber-200'],
                 ['al límite (menos de 3 h)', r.al_limite, 'bg-amber-500/10 text-amber-200'],
                 ['con una jornada de 11 h o más', r.bloque_pasado, 'bg-orange-500/10 text-orange-300'],
@@ -289,7 +365,9 @@ export default function Horas() {
           {!!datos.ritmo?.avisos?.length && (
             <section className="card p-5">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="text-[11px] font-semibold uppercase tracking-wide text-dark-500">A quién mirar hoy</h2>
+                <h2 className="text-[11px] font-semibold uppercase tracking-wide text-dark-500">
+                  {deHoy ? 'A quién mirar hoy' : `A quién mirar · plan del ${pegado?.corto || 'día en que se pegó'}`}
+                </h2>
                 <span className="text-[11px] text-dark-500">
                   a estas alturas, como mucho {datos.ritmo.bloques_ref} jornadas = {hm(datos.ritmo.horas_ref_min)}
                 </span>
@@ -299,7 +377,7 @@ export default function Horas() {
                   <li key={`${a.nombre}-${i}`}
                     className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-dark-800 py-1.5 text-xs first:border-0 first:pt-0">
                     <span className="flex min-w-0 items-center gap-1.5">
-                      {a.trabajando_ahora && (
+                      {a.trabajando_ahora && deHoy && (
                         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400"
                           title="Tiene un bloque en curso: está en ruta ahora. Todavía se le puede cortar el día." />
                       )}
@@ -319,7 +397,9 @@ export default function Horas() {
                 ))}
               </ul>
               <p className="mt-3 border-t border-dark-800 pt-2 text-[11px] text-dark-500">
-                El punto azul: está en ruta ahora. «Acabaría en» supone que trabaja los días que le quedan
+                {deHoy ? 'El punto azul: está en ruta ahora.'
+                  : `El plan se pegó el ${pegado?.corto || 'otro día'}: quien estaba en ruta entonces ya puede haber acabado.`}{' '}
+                «Acabaría en» supone que trabaja los días que le quedan
                 hasta 6 jornadas de {hm(9 * 60)}: es una proyección, no un dato.
               </p>
             </section>
@@ -357,7 +437,7 @@ export default function Horas() {
                               {largos > 0
                                 ? (abierta ? <ChevronUp size={12} className="text-dark-500" /> : <ChevronDown size={12} className="text-dark-500" />)
                                 : <span className="w-3" />}
-                              {c.trabajando_ahora && (
+                              {c.trabajando_ahora && deHoy && (
                                 <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400" title="En ruta ahora" />
                               )}
                               {c.nombre}
@@ -385,8 +465,9 @@ export default function Horas() {
                               <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-semibold text-red-300">Pasado</span>
                             ) : c.pasara_hoy ? (
                               <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[11px] font-semibold text-orange-300"
-                                title={`Lleva ${hm(c.cerrado)} cerradas; con la ruta de hoy entera pasaría del límite.`}>
-                                Se pasa hoy si acaba
+                                title={deHoy ? `Lleva ${hm(c.cerrado)} cerradas; con la ruta de hoy entera pasaría del límite.`
+                                  : `Cuando se pegó el plan (${pegado?.largo || ''}) llevaba ${hm(c.cerrado)} cerradas; con aquella ruta entera pasaba del límite.`}>
+                                {deHoy ? 'Se pasa hoy si acaba' : `Se pasaba si acababa (${pegado?.corto || 'otro día'})`}
                               </span>
                             ) : c.al_limite ? (
                               <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">Al límite</span>

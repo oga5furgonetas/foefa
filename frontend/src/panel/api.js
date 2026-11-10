@@ -753,8 +753,9 @@ export const tiendaFotoBlob = (id) =>
    queda a cada conductor antes del limite semanal. */
 export const whcAnalizar = (body) => api.post('/whc/analizar', body)
 // El plan pegado se guarda por (centro, semana) para no tener que repegarlo.
-export const getWhcPlan = (center) => api.get('/whc/plan', { params: { center } })
-export const deleteWhcPlan = (center) => api.delete('/whc/plan', { params: { center } })
+// `week` (opcional, el domingo AAAA-MM-DD): el plan de esa semana; sin ella, el de la en curso.
+export const getWhcPlan = (center, week) => api.get('/whc/plan', { params: { center, ...(week ? { week } : {}) } })
+export const deleteWhcPlan = (center, week) => api.delete('/whc/plan', { params: { center, ...(week ? { week } : {}) } })
 /* Que nave tiene plan de esta semana y cual no. Sin esto, una nave sin plan
    se ve igual que una pantalla rota: un hueco no dice si falta el dato o si
    no hay nada que contar. */

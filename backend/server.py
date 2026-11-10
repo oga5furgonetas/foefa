@@ -39223,6 +39223,21 @@ async def subir_diarios(files: List[UploadFile] = File(...),
         except HTTPException as e:
             resultados.append({"fichero": nombre, "error": e.detail})
             continue
+        # LO SIN CLASIFICAR, TAMBIÉN AL SUBIR EL .HTML (10-11-2026). El lector del
+        # fichero ya sabía que el bloque venía entero sin una sola «Y» (Amazon aún
+        # no lo ha clasificado), pero aquí no se mandaba y no salía ningún aviso:
+        # un informe recién bajado se guardaba sin que nadie supiera que había que
+        # volver a subirlo. En el pegado sí avisaba. Ahora cada fichero dice
+        # cuántos DNR vienen sin clasificar y, si su único aviso no lo explica ya
+        # (el de los reportes de antes del 13-05-2026), lleva el de volver a subirlo.
+        sin_clas = (r.get("filas_dnr") or 0) if r.get("sin_clasificar") else 0
+        avisos_f = list(r.get("avisos") or [])
+        if sin_clas and not avisos_f:
+            avisos_f.append(
+                f"Los {sin_clas} DNR del {r.get('fecha_dnr') or 'bloque'} vienen sin clasificar "
+                f"(ninguno con DSC = Y). Amazon suele tardar 2-4 días en clasificarlos: se "
+                f"guardan, no cuentan como defectos, y hay que volver a subir este reporte "
+                f"dentro de unos días.")
         resultados.append({
             "fichero": nombre, "centro": r.get("center"),
             "fecha_reporte": r.get("fecha_reporte"), "fecha_dnr": r.get("fecha_dnr"),
@@ -39230,7 +39245,8 @@ async def subir_diarios(files: List[UploadFile] = File(...),
             "pod": r.get("filas_pod"), "cc": r.get("filas_cc"),
             "conductores": r.get("conductores"),
             "descuadres": len(r.get("descuadres") or []),
-            "avisos": r.get("avisos") or [],
+            "sin_clasificar": sin_clas,
+            "avisos": avisos_f,
             "guardado": bool(r.get("guardado"))})
         total["reportes"] += 1
         total["dnr"] += r.get("dnr_guardados") or r.get("filas_dnr") or 0
@@ -40360,14 +40376,27 @@ _WHC_BLOQUES_SEMANA = 6
 _WHC_DIAS = ["dom", "lun", "mar", "mié", "mie", "jue", "vie", "sáb", "sab"]
 
 
-def _whc_dias_del_plan(texto: str):
+def _whc_dias_del_plan(texto: str, hoy=None):
     """Días que trae la cabecera del pegado ("dom., ago. 02"). Devuelve cuántos
     de esos días YA HAN PASADO (incluido hoy). Si no hay cabecera, se cae al día
-    de la semana de hoy, contando el domingo como día 1."""
+    de la semana de hoy, contando el domingo como día 1.
+
+    `hoy` es el día con el que se cuenta: el de negocio de España si no se da, o
+    el día en que SE PEGÓ el plan cuando se vuelve a abrir uno guardado (10-11-2026:
+    un plan del martes abierto el jueves salía «día 5», con la referencia del
+    ritmo en 45 h frente a unas horas que solo llegaban al martes).
+
+    EL AÑO DE CADA FECHA, COMO EN `_whc_semana_del_plan` (10-11-2026). Se ponía el
+    año de hoy a todas: en la semana del 27-12-2026 al 02-01-2027, mirada el 01-01,
+    «dic. 27…31» se leían como diciembre de 2027 (futuro) y salía «día 1 de 7»;
+    mirada el 29-12, «ene. 01/02» se leían como enero de 2026 (pasado) y salía 5.
+    Se elige, de los tres años posibles, el que deja la fecha más cerca de hoy.
+    Y el día es el de España, no el UTC (de 00:00 a 01:00/02:00 era el anterior)."""
     from datetime import date
     meses = {"ene": 1, "feb": 2, "mar": 3, "abr": 4, "may": 5, "jun": 6,
              "jul": 7, "ago": 8, "sep": 9, "oct": 10, "nov": 11, "dic": 12}
-    hoy = datetime.now(timezone.utc).date()
+    if hoy is None:
+        hoy = date.fromisoformat(_dia_negocio())
     fechas = []
     for l in (texto or "").split("\n"):
         m = re.match(r"^\s*(%s)\.?,?\s+([a-zé]{3})\.?\s+(\d{1,2})\s*$"
@@ -40375,10 +40404,15 @@ def _whc_dias_del_plan(texto: str):
         if m:
             mes = meses.get(m.group(2)[:3].lower())
             if mes:
-                try:
-                    fechas.append(date(hoy.year, mes, int(m.group(3))))
-                except ValueError:
-                    pass
+                posibles = []
+                for anio in (hoy.year, hoy.year - 1, hoy.year + 1):
+                    try:
+                        posibles.append(date(anio, mes, int(m.group(3))))
+                    except ValueError:
+                        pass
+                posibles = [f for f in posibles if abs((f - hoy).days) <= 200]
+                if posibles:
+                    fechas.append(min(posibles, key=lambda f: abs((f - hoy).days)))
     if fechas:
         pasados = sum(1 for f in sorted(set(fechas)) if f <= hoy)
         return max(1, min(pasados or len(fechas), 7)), True
@@ -40874,6 +40908,59 @@ def _whc_debe_pisar(anterior_n, nuevo_n: int) -> bool:
     return nuevo_n >= max(3, anterior_n // 2)
 
 
+def _whc_dia_local(iso):
+    """El día (de España, o de la zona de la cuenta) de una marca ISO guardada en
+    UTC. None si no se entiende. Sirve para saber de QUÉ DÍA es un plan pegado
+    (10-11-2026): la marca de las 00:30 del martes en España es del lunes en UTC."""
+    try:
+        from zoneinfo import ZoneInfo
+        d = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        return d.astimezone(ZoneInfo(_region_actual.get()[1])).date()
+    except Exception:                                            # noqa: BLE001
+        try:
+            return date_cls.fromisoformat(str(iso)[:10])
+        except ValueError:
+            return None
+
+
+def _whc_semana_pedida(week) -> str:
+    """El domingo de la semana que pide la pantalla (`week`, AAAA-MM-DD, opcional).
+    Sin ella, la semana en curso: es lo que hacían siempre GET y DELETE de
+    /whc/plan, y lo que sigue pidiendo una pantalla vieja en caché."""
+    if not week:
+        return _whc_domingo(_dia_negocio())
+    try:
+        return _whc_domingo(date_cls.fromisoformat(str(week).strip()[:10]).isoformat())
+    except ValueError:
+        raise HTTPException(400, "La semana va como AAAA-MM-DD")
+
+
+async def _whc_nave_por_fichas(conductores: list, center: str) -> Optional[dict]:
+    """¿El plan pegado es de OTRA nave, a juzgar por las fichas de sus conductores?
+
+    Para cuando el pegado no trae cabecera (10-11-2026). El plan real de DGA1
+    empezaba en «Buscar asociados», sin la nave arriba, y con OGA5 elegido se
+    habría guardado como de OGA5 sin que nada lo frenara. El código de nave de
+    DENTRO de la tabla no sirve (es donde se hizo cada bloque); las fichas sí:
+    cada nombre se casa con las fichas activas de toda la empresa y se cuenta
+    dónde tiene cada uno la suya. Solo se afirma con una mayoría clara (la misma
+    regla que la hoja del cuadrante, `_cua_centro_de_la_hoja`: cinco o más y el
+    doble que los de aquí). Si no, None, y se guarda como siempre."""
+    try:
+        fichas = await db.drivers.find(
+            {"merged_into": {"$exists": False}, "status": {"$nin": ["deleted", "fusionada"]}},
+            {"_id": 0, "id": 1, "name": 1, "active": 1, "center": 1}).to_list(20000)
+    except Exception:                                            # noqa: BLE001
+        return None
+    otro = _cua_centro_de_la_hoja([c.get("nombre") or "" for c in conductores], fichas, {}, center)
+    if not otro:
+        return None
+    return {"centro": str(otro["centro"]).strip().upper(), "por": "fichas",
+            "casan_alli": otro["casan_alli"], "casan_aqui": otro["casan_aqui"]}
+
+
 @api_router.post("/whc/analizar")
 async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
     """Analiza el plan semanal pegado del portal y devuelve el estado de WHC."""
@@ -40914,12 +41001,9 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
         bloque_limite = int(_decimal(data["limite_bloque_horas"], "limite_bloque_horas",
                                      minimo=0, maximo=24) * 60)
 
-    dia, dia_del_plan = _whc_dias_del_plan(texto)
-
     conductores = _whc_parsear(texto)
     if not conductores:
         raise HTTPException(400, "No se ha reconocido ningún conductor en ese texto")
-    ev = _whc_evaluar(conductores, limite, bloque_limite, dia)
 
     # El plan se guarda para no tener que volver a pegarlo cada vez. Se guarda
     # por (centro, semana): una semana nueva no pisa la anterior.
@@ -40931,14 +41015,55 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
     # reves —escribiendo en vez de leyendo— y no da ningun error.
     if center in ("TODOS", "TODAS", "ALL", "TODOS LOS CENTROS"):
         center = ""
+    # LA NAVE DEL PLAN SE MIRA SIEMPRE, no solo con «Todos» (10-11-2026). Con OGA5
+    # elegido, el plan de DGA1 —con «DGA1» en su cabecera— se guardaba como el de
+    # OGA5 y pisaba el bueno. Ahora: si el plan dice otra nave (por su cabecera o,
+    # si no la trae, por las fichas de sus conductores, con mayoría clara), no se
+    # guarda y se contesta `otra_nave` para que la pantalla ofrezca guardarlo
+    # allí. Si no se puede saber, como siempre: manda la elegida.
+    del_texto = await _whc_centro_del_texto(texto)
     # Si quien lo manda no dice la nave, se saca de la cabecera del propio plan.
     deducido = ""
     if not center:
-        deducido = await _whc_centro_del_texto(texto)
+        deducido = del_texto
         center = deducido
+    otra_nave = None
+    if center and del_texto and del_texto != center:
+        otra_nave = {"centro": del_texto, "por": "cabecera"}
+    elif center and not del_texto:
+        otra_nave = await _whc_nave_por_fichas(conductores, center)
+
+    # CUÁNDO SE PEGÓ (10-11-2026). Al abrir la pantalla, el plan guardado se
+    # volvía a analizar con la fecha de HOY: un plan del martes abierto el jueves
+    # salía con «día 5» y con el punto azul de «en ruta ahora» de quien estaba en
+    # ruta el martes. Si el texto es el mismo que el guardado de esa semana, el
+    # plan se pegó cuando dice `pegado_en` (o, en los guardados antes de existir
+    # ese dato, su `updated_at`); si es nuevo, se pega ahora.
+    hoy = date_cls.fromisoformat(_dia_negocio())
+    sun_plan = _whc_semana_del_plan(texto) or _whc_domingo(hoy.isoformat())
+    pegado_en = None
+    if center and not otra_nave:
+        previo = await db.whc_planes.find_one(
+            {"center": center, "week": sun_plan},
+            {"_id": 0, "texto": 1, "pegado_en": 1, "updated_at": 1})
+        if previo and previo.get("texto") == texto[:400000]:
+            pegado_en = previo.get("pegado_en") or previo.get("updated_at")
+    dia_pegado = _whc_dia_local(pegado_en) if pegado_en else None
+    if not pegado_en:
+        pegado_en = datetime.now(timezone.utc).isoformat()
+    pegado_hoy = dia_pegado is None or dia_pegado == hoy
+    # El día de la semana, con el día en que se pegó, no con el de hoy.
+    dia, dia_del_plan = _whc_dias_del_plan(texto, dia_pegado or hoy)
+    ev = _whc_evaluar(conductores, limite, bloque_limite, dia)
+
     guardado = False
     aviso_guardado = None
-    if center and data.get("guardar") is not False:
+    if otra_nave:
+        # Para la pantalla vieja en caché, que solo sabe enseñar `aviso_guardado`.
+        aviso_guardado = (
+            "Este plan es de %s y tienes elegida %s, así que no se ha guardado. "
+            "Elige %s arriba y pégalo otra vez." % (otra_nave["centro"], center, otra_nave["centro"]))
+    if center and data.get("guardar") is not False and not otra_nave:
         # La semana la dice el PLAN. Con la de hoy, pegar el de la semana
         # pasada pisaba el de esta (paso el 14-09-2026).
         sun = _whc_semana_del_plan(texto)
@@ -40956,6 +41081,7 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
                           "limite_horas": round(limite / 60, 2),
                           "limite_bloque_horas": round(bloque_limite / 60, 2),
                           "excepciones": excepciones,
+                          "pegado_en": pegado_en,
                           "updated_at": datetime.now(timezone.utc).isoformat()}},
                 upsert=True)
             guardado = True
@@ -41085,6 +41211,16 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
         "guardado": guardado,
         # Por que no se ha guardado, cuando no es simplemente que faltara la nave.
         "aviso_guardado": aviso_guardado,
+        # 10-11-2026. `otra_nave`: el plan es de otra nave que la elegida ({centro,
+        # por: "cabecera"|"fichas"}) y no se ha guardado; la pantalla ofrece
+        # mandarlo allí. `pegado_en`/`pegado_hoy`: cuándo se pegó este texto, para
+        # no presentar como de hoy lo que dice «ahora» un plan de otro día.
+        # `solo_analisis`: se pidió guardar=false (abrir la pantalla), no es un
+        # pegado nuevo que se haya quedado sin guardar.
+        "otra_nave": otra_nave,
+        "pegado_en": pegado_en,
+        "pegado_hoy": pegado_hoy,
+        "solo_analisis": data.get("guardar") is False,
         "whc": whc,
         "whc_propio": whc_propio,
         "ritmo": ritmo,
@@ -41116,23 +41252,30 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
 
 
 @api_router.get("/whc/plan")
-async def whc_plan_get(center: str, _=Depends(require_admin)):
+async def whc_plan_get(center: str, week: Optional[str] = None, _=Depends(require_admin)):
     """El plan pegado de la semana en curso, para no tener que volver a pegarlo.
 
     Se guarda por (centro, semana): al cambiar de semana no se arrastra el plan
     de la anterior, que seria el peor error posible — ver horas viejas creyendo
     que son las de esta semana.
+
+    `week` (opcional, 10-11-2026): el plan de ESA semana. Sin ella, la de hoy.
     """
-    sun = _whc_domingo(_dia_negocio())
+    sun = _whc_semana_pedida(week)
     doc = await db.whc_planes.find_one(
         {"center": (center or "").upper(), "week": sun}, {"_id": 0})
     return {"hay": bool(doc), "semana": sun, **(doc or {})}
 
 
 @api_router.delete("/whc/plan")
-async def whc_plan_delete(center: str, _=Depends(require_admin)):
-    """Borra el plan guardado de la semana en curso de ese centro."""
-    sun = _whc_domingo(_dia_negocio())
+async def whc_plan_delete(center: str, week: Optional[str] = None, _=Depends(require_admin)):
+    """Borra el plan guardado de esa semana (`week`, opcional; sin ella, la en
+    curso) de ese centro.
+
+    10-11-2026: «Borrar» borraba SIEMPRE el de la semana en curso, aunque en
+    pantalla estuviera el de la semana pasada recién pegado. La pantalla manda
+    ahora la semana del plan que se está viendo."""
+    sun = _whc_semana_pedida(week)
     r = await db.whc_planes.delete_many({"center": (center or "").upper(), "week": sun})
     return {"ok": True, "borrados": r.deleted_count, "semana": sun}
 
