@@ -159,11 +159,14 @@ const NORMAS = [
   'Prohibido: armas, medicamentos, alcohol, tabaco y vapeo, falsificaciones, cosas robadas, animales, documentos, cuentas o rutas, y cualquier cosa ilegal.',
   'Prohibido también el material de la empresa, de la plataforma para la que repartes o de los clientes: escáneres, móviles de trabajo, chalecos, paquetes…',
   'Cada anuncio lo revisamos antes de publicarlo. Dura 30 días y puedes tener 3 a la vez.',
-  'Habla por los mensajes de aquí: son privados entre los dos. Solo los miramos si alguien los denuncia.',
+  // 10-11-2026 (cuarta tanda): «solo los lee una persona» (antes «solo los miramos»): por los mensajes pasa además el filtro automático.
+  'Habla por los mensajes de aquí: son privados entre los dos. Solo los lee una persona si alguien los denuncia.',
   'FDS no vende, no cobra y no interviene en el pago ni en la entrega. Quedad en persona, mirad el artículo antes de pagar y no pagues nunca por adelantado.',
   // 10-11-2026 (Apple, guideline 1.2): bloquear a quien molesta, las 24 horas de las denuncias y la tolerancia cero.
   'Si alguien te molesta, bloquéale desde su anuncio o desde la conversación: dejarás de ver sus anuncios y no podrá escribirte.',
   'Si algo no cumple, pulsa «Denunciar». Lo revisamos en 24 horas como mucho y te decimos qué hemos hecho. No se tolera el contenido ofensivo ni el acoso: quien lo haga se queda sin mercadillo.',
+  // 10-11-2026 (cuarta tanda): lo que ya hace el servidor y las normas no decían: el filtro de palabras y qué se le dice a quien se queda sin acceso.
+  'Un filtro automático no deja enviar insultos ni amenazas. A quien se queda sin mercadillo le decimos por qué, y puede pedir que lo revisemos.',
 ]
 
 /* Las normas se ven de dos maneras. Desde «Normas y seguridad» (y desde «Vender»), para leerlas: sin nada que aceptar.

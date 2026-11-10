@@ -152,9 +152,15 @@ for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
       const s = await entrar(page, { ios, normas: false })
       await expect(cabecera(page, 'Normas del mercadillo')).toBeVisible()
       await expect(page.getByText(ANTES_DE_ENTRAR, { exact: true })).toBeVisible()
-      await expect(normas(page)).toHaveCount(9)
+      await expect(normas(page)).toHaveCount(10)
       await expect(normas(page).first()).toHaveText('Solo particulares: vende cosas tuyas que ya no usas. Nada de tiendas ni reventa.')
-      await expect(normas(page).last()).toContainText('No se tolera el contenido ofensivo ni el acoso: quien lo haga se queda sin mercadillo.')
+      /* 10-11-2026 (cuarta tanda): son 10. La de los mensajes dice que solo los lee una persona si se denuncian, y la última
+         es nueva: el filtro automático y lo que se le dice a quien se queda sin mercadillo. La de la tolerancia cero es ahora
+         la penúltima. */
+      await expect(normas(page).nth(5)).toHaveText('Habla por los mensajes de aquí: son privados entre los dos. Solo los lee una persona si alguien los denuncia.')
+      await expect(page.getByText('Solo los miramos si alguien los denuncia.'), 'la frase de antes ya no está').toHaveCount(0)
+      await expect(normas(page).nth(8)).toContainText('No se tolera el contenido ofensivo ni el acoso: quien lo haga se queda sin mercadillo.')
+      await expect(normas(page).last()).toHaveText('Un filtro automático no deja enviar insultos ni amenazas. A quien se queda sin mercadillo le decimos por qué, y puede pedir que lo revisemos.')
       await expect(page.getByRole('link', { name: 'Términos', exact: true })).toHaveAttribute('href', '/terminos#mercadillo')
       await expect(page.getByRole('link', { name: 'Privacidad', exact: true })).toHaveAttribute('href', '/privacidad')
       // En la web se abren en otra pestaña; dentro de la app de iPhone, en la misma ventana (allí un target="_blank" no abre nada).
@@ -184,7 +190,7 @@ for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
       // «Normas y seguridad», al pie de la lista, sigue igual: se leen, sin nada que aceptar.
       await page.getByRole('button', { name: 'Normas y seguridad' }).click()
       await expect(cabecera(page, 'Normas del mercadillo')).toBeVisible()
-      await expect(normas(page)).toHaveCount(9)
+      await expect(normas(page)).toHaveCount(10)
       await expect(page.getByText(ANTES_DE_ENTRAR)).toHaveCount(0)
       await expect(acepto(page)).toHaveCount(0)
       // Y al volver a la lista (que vuelve a preguntar al servidor) no se piden otra vez.
