@@ -56931,13 +56931,20 @@ async def _merc_yo(user: dict) -> dict:
         if org.get("mercadillo_off"):
             raise HTTPException(403, "Tu empresa no tiene el mercadillo")
         # CON LA FICHA DE BAJA NO ENTRA (10-11-2026). Su sesión vale hasta 30 días: sin mirar la ficha, un conductor
-        # ya borrado (`delete_driver` se lleva su mercadillo) volvía a entrar con el token de antes y abría
+        # ya borrado (`delete_driver` cierra su mercadillo) volvía a entrar con el token de antes y abría
         # conversaciones que ya no cerraba nadie. Se mira la ficha de ESTA sesión, en la base de su empresa (la de la
         # petición). `get_current_user` ya la ha llevado a su ficha activa si entró con una vieja de la misma persona
         # (lo recuerda 5 min: recién dada de baja una ficha duplicada, puede tardar eso en entrar con la otra).
         # Solo un `active: False` cierra: si la ficha no se encuentra o no trae el campo, pasa como siempre (a nadie
         # se le cierra por un dato que falta). Y no se guarda en memoria: al volver a estar en activo, entra ya.
-        ficha = await db.drivers.find_one({"id": user["sub"]}, {"_id": 0, "active": 1})
+        # Tampoco se le cierra, ni se le da un error, por una lectura que FALLA (la base de su empresa no contesta):
+        # se apunta y pasa. Esta lectura está para cerrar a quien está de baja, no para tumbar el mercadillo.
+        try:
+            ficha = await db.drivers.find_one({"id": user["sub"]}, {"_id": 0, "active": 1})
+        except Exception as e:                                   # noqa: BLE001
+            logger.warning("Mercadillo: no se ha podido leer la ficha del conductor %s (pasa como en activo): %s",
+                           user["sub"], e)
+            ficha = None
         if (ficha or {}).get("active") is False:
             raise HTTPException(403, "El mercadillo es para repartidores")
         return {"clave": f"d:{org_id}:{user['sub']}", "tipo": "conductor", "org_id": org_id,

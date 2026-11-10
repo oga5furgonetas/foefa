@@ -2653,6 +2653,51 @@ async def test_un_conductor_con_la_ficha_de_baja_no_entra_y_a_nadie_se_le_cierra
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_si_la_ficha_no_se_puede_leer_el_conductor_pasa_como_siempre(mundo, monkeypatch, caplog):
+    """La ficha se lee para cerrar a quien está de baja, no para tumbar el mercadillo: si esa lectura falla (la base de
+    su empresa no contesta), se apunta y el conductor pasa. Ni se le cierra (403) ni se le da un error (500)."""
+    fichas = mundo.t["drivers"]
+    fichas.docs = [{"id": "d1", "name": "Ana", "active": False}, {"id": "d2", "name": "Luis", "active": True}]
+    await _abrir(mundo)
+    de_pepe = await _publicado(PEPE, "Carretilla")
+    # EL CONTROL: leyendo su ficha (de baja), Ana no entra; y lo demás del mercadillo funciona.
+    await _falla(server._merc_yo(ANA), 403, SOLO_REPARTIDORES)
+    assert await server.merc_estado(ANA) == {"visible": False} and (await server._merc_yo(LUIS))["clave"] == CLAVES["luis"]
+    intentos, buscar = [], fichas.find_one
+
+    async def no_contesta(q=None, proyeccion=None, **k):
+        intentos.append((q, proyeccion))
+        raise RuntimeError("la base no contesta")
+    monkeypatch.setattr(fichas, "find_one", no_contesta)
+    # LA LECTURA FALLA: pasan los dos, con su clave de siempre, y queda apuntado (una vez por intento, con el porqué).
+    with caplog.at_level("WARNING", logger="server"):
+        yo = await server._merc_yo(ANA)
+    assert (yo["clave"], yo["tipo"], yo["driver_id"], yo["nombre"]) == (CLAVES["ana"], "conductor", "d1", "Ana P.")
+    assert intentos == [({"id": "d1"}, {"_id": 0, "active": 1})]
+    apuntado = [r for r in caplog.records if "ficha" in r.getMessage()]
+    assert [r.levelname for r in apuntado] == ["WARNING"] and "la base no contesta" in apuntado[0].getMessage()
+    assert (await server._merc_yo(LUIS))["clave"] == CLAVES["luis"]
+    # …y por las rutas de verdad: ni un 403 ni un error sin atrapar. El mercadillo sigue en pie para ellos.
+    estado = await server.merc_estado(ANA)
+    assert (estado["visible"], estado["yo"]) == (True, {"nombre": "Ana P.", "tipo": "conductor"})
+    assert "Carretilla" in await _titulos(ANA) and (await server.merc_buzon(LUIS))["conversaciones"] == []
+    cid = (await server.merc_contactar(de_pepe["id"], {"texto": "¿Sigue?"}, ANA))["conversacion_id"]
+    assert (await server.merc_conversacion(cid, ANA))["mensajes"][0]["texto"] == "¿Sigue?"
+    # A quien no es conductor ni se le lee ficha (como siempre): no hay nada que pueda fallar.
+    intentos.clear()
+    assert [(await server._merc_yo(u))["clave"] for u in (PEPE, OFICINA, DANI)] == [CLAVES["pepe"], CLAVES["oficina"], "fds"]
+    assert intentos == []
+    # Lo que NO se atrapa: lo que la puerta dice a propósito. La empresa que lo tiene apagado, o quien está expulsado.
+    await _falla(server._merc_yo({**ANA, "org_id": "apagada"}), 403, "Tu empresa no tiene el mercadillo")
+    await _expulsar("ana", "otro")
+    await _falla(server._merc_dentro(ANA), 403, _fuera("otro"))
+    # Cuando la base vuelve a contestar, la ficha de baja vuelve a cerrar (no se ha recordado nada).
+    monkeypatch.setattr(fichas, "find_one", buscar)
+    await _falla(server._merc_yo(ANA), 403, SOLO_REPARTIDORES)
+    assert await server.merc_estado(ANA) == {"visible": False}
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_la_sesion_vieja_de_un_conductor_dado_de_baja_no_entra_al_mercadillo(mundo, monkeypatch):
     """Por HTTP, con el MISMO token de antes de la baja y con `get_current_user` de verdad (que lleva la sesión de una
     ficha de baja a la ficha activa de la misma persona, y lo recuerda 5 minutos)."""
