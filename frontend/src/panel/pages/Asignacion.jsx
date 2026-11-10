@@ -284,6 +284,7 @@ function SlotRow({ slot, vehicles, drivers, usedV, usedD, onChange, onDelete, in
   const driverObj = slot.driver_id ? drivers.find(d => d.id === slot.driver_id) : null
   const photoUrl = driverObj?.photo_url || null
   const itv = estadoItv(slot.vehicle_id ? vehicles.find(v => v.id === slot.vehicle_id) : null)
+  const noOp = noOperativa(slot.vehicle_id ? vehicles.find(v => v.id === slot.vehicle_id) : null)
 
   return (
     <div className={`group flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-all duration-300 ${
@@ -311,15 +312,23 @@ function SlotRow({ slot, vehicles, drivers, usedV, usedD, onChange, onDelete, in
           }`}
         >
           <option value="">{t('asgn.plate.ph')}</option>
-          {/* Las de taller o con candado, al final y marcadas (10-11-2026). */}
+          {/* Las de taller o con candado, al final y marcadas (10-11-2026). La
+              elegida va sin la marca: el desplegable cerrado enseña el texto de
+              su opción y en 128 px «5678 DEF (Taller)» salía cortado; la marca
+              de la elegida va debajo, como la de la ITV. */}
           {vehicles.filter(v => v.status !== 'baja')
             .sort((a, b) => (noOperativa(a) ? 1 : 0) - (noOperativa(b) ? 1 : 0))
             .map(v => (
               <option key={v.id} value={v.id} disabled={usedV.has(v.id) && v.id !== slot.vehicle_id}>
-                {v.license_plate}{noOperativa(v) ? ` (${t(ETIQUETA_NO_OPERATIVA[noOperativa(v)])})` : ''}
+                {v.license_plate}{noOperativa(v) && v.id !== slot.vehicle_id ? ` (${t(ETIQUETA_NO_OPERATIVA[noOperativa(v)])})` : ''}
               </option>
             ))}
         </select>
+        {noOp && (
+          <p className="mt-1 text-center text-[10px] font-bold leading-tight text-amber-300">
+            {t(ETIQUETA_NO_OPERATIVA[noOp])}
+          </p>
+        )}
         {/* Debajo de la matrícula y no al final de la fila: el aviso tiene que
             leerse mirando la furgoneta, que es lo que se está eligiendo. */}
         {itv && (
@@ -520,6 +529,31 @@ export default function Asignacion() {
     setDate(nueva)
   }
 
+  /* FECHA TECLEADA A MANO (10-11-2026): el campo de fecha avisa en cada parte
+     que se escribe, así que con cambios pendientes la pregunta salía en la
+     primera tecla y, con «No», no se podía seguir escribiendo. Lo tecleado se
+     guarda aparte y se aplica (con la pregunta) al salir del campo o con Intro.
+     Con el calendario no hay teclas: se aplica en el acto, como antes. */
+  const [fechaEscrita, setFechaEscrita] = useState(null)
+  const escrita = useRef(null)      // la misma, sin esperar al render: Intro y salir del campo llegan seguidos
+  const tecleando = useRef(false)
+  function fechaCambiada(valor) {
+    if (cambios && tecleando.current) { escrita.current = valor; setFechaEscrita(valor); return }
+    cambiarFecha(valor)
+  }
+  function aplicarFechaEscrita() {
+    tecleando.current = false
+    const valor = escrita.current
+    if (valor === null) return
+    escrita.current = null; setFechaEscrita(null)
+    if (valor) cambiarFecha(valor)
+  }
+
+  // ↻ Recargar y «Copiar ayer» también pisan lo de pantalla (10-11-2026).
+  function puedePisar() {
+    return !cambios || window.confirm(t('asgn.unsaved.lose'))
+  }
+
   /* ── Polling cada 30s — actualización a tiempo real ── */
   useEffect(() => {
     if (noCenter) return
@@ -602,6 +636,7 @@ export default function Asignacion() {
 
   /* ── Acciones ── */
   async function copyYesterday() {
+    if (!puedePisar()) return
     try {
       const res = await getDailyAssignment(center, isoPrev(date))
       const doc = Array.isArray(res.data) ? res.data[0] : res.data
@@ -625,12 +660,19 @@ export default function Asignacion() {
   function updateSlot(i, patch) { setSlots(arr => arr.map((s, k) => k === i ? { ...s, ...patch } : s)); setCambios(true) }
   function deleteSlot(i) {
     // Una fila con furgoneta o conductor no se quita de un toque (10-11-2026).
+    // Tampoco la del roster pegado con la matrícula o el nombre sin reconocer:
+    // es justo la que hay que arreglar a mano, y lo leído se perdería.
     const s = slots[i]
-    if (s && (s.vehicle_id || s.driver_id)) {
-      const fila = [s.vehicle_plate, s.driver_name].filter(Boolean).join(' · ') || '—'
+    if (s && (s.vehicle_id || s.driver_id || s.vehicle_plate || s.driver_name || s.rawName || s.route)) {
+      const matricula = s.vehicle_plate || vehicles.find(v => v.id === s.vehicle_id)?.license_plate
+      const fila = [matricula, s.driver_name || s.rawName].filter(Boolean).join(' · ') || s.route || '—'
       if (!window.confirm(t('asgn.del.confirm').replace('{fila}', fila))) return
     }
-    setSlots(arr => arr.filter((_, k) => k !== i)); setCambios(true)
+    // Sin filas no hay nada que guardar (Guardar se apaga), así que tampoco
+    // «Cambios sin guardar»: si no, se quedaba la marca y cada cambio de día o
+    // de centro preguntaba por algo que no se podía guardar (10-11-2026).
+    const resto = slots.filter((_, k) => k !== i)
+    setSlots(resto); setCambios(resto.length > 0)
   }
   function addSlot() { setSlots(s => [...s, { vehicle_id: '', vehicle_plate: '', driver_id: '', driver_name: '' }]); setCambios(true) }
 
@@ -691,7 +733,12 @@ export default function Asignacion() {
         </div>
         <div className="flex items-center gap-2 text-dark-500">
           <Calendar size={14} />
-          <input type="date" className="input w-44 py-1.5" value={date} onChange={e => cambiarFecha(e.target.value)} />
+          <input
+            type="date" className="input w-44 py-1.5" value={fechaEscrita ?? date}
+            onKeyDown={e => { if (e.key === 'Enter') aplicarFechaEscrita(); else if (e.key !== 'Tab') tecleando.current = true }}
+            onBlur={aplicarFechaEscrita}
+            onChange={e => fechaCambiada(e.target.value)}
+          />
         </div>
       </div>
 
@@ -723,7 +770,7 @@ export default function Asignacion() {
         <button onClick={addSlot} className="btn-secondary flex items-center gap-1.5 text-sm">
           <Plus size={14} /> {t('asgn.add.row')}
         </button>
-        <button onClick={load} className="btn-ghost p-2 text-dark-400 hover:text-dark-200" title="Recargar">
+        <button onClick={() => { if (puedePisar()) load() }} className="btn-ghost p-2 text-dark-400 hover:text-dark-200" title="Recargar">
           <RotateCcw size={14} />
         </button>
         <div className="ml-auto flex items-center gap-2">

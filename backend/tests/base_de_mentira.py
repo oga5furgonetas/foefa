@@ -15,6 +15,12 @@ def _leer(d, ruta):
     """Un campo con puntos («filas.d1.nota»), como lo lee MongoDB. Dentro de una lista de objetos
     («slots.driver_id») devuelve la lista de lo que tiene cada uno, que es como compara MongoDB."""
     for trozo in ruta.split("."):
+        if isinstance(d, list) and trozo.isdigit():
+            # «state.rows.0.ruta»: un número entra en ESE elemento, como en MongoDB (10-11-2026, /celda).
+            if int(trozo) >= len(d):
+                return _FALTA
+            d = d[int(trozo)]
+            continue
         if isinstance(d, list):
             vals = [x[trozo] for x in d if isinstance(x, dict) and trozo in x]
             if not vals:
@@ -30,8 +36,12 @@ def _leer(d, ruta):
 def _poner(d, ruta, valor):
     *camino, ultimo = ruta.split(".")
     for trozo in camino:
-        d = d.setdefault(trozo, {})
-    d[ultimo] = valor
+        # Un número dentro de una lista es su elemento («state.rows.0.furgo», 10-11-2026).
+        d = d[int(trozo)] if isinstance(d, list) and trozo.isdigit() else d.setdefault(trozo, {})
+    if isinstance(d, list) and ultimo.isdigit():
+        d[int(ultimo)] = valor
+    else:
+        d[ultimo] = valor
 
 
 def _quitar(d, ruta):

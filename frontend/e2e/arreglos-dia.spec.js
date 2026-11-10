@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { simularApi, entrarComoAdmin } from './api-simulada.js'
+import { DICT } from '../src/i18nDict.js'
 
 /* Arreglos de la zona «día» (10-11-2026): Plantilla, Asignación, Checklist y la casilla del
    checklist en el Inicio. API simulada; cada caso pone encima las rutas que necesita. */
@@ -20,7 +21,8 @@ test.describe('Plantilla · borrador compartido', () => {
   const FILA = { ruta: 'CA_A1', conductor: 'ANA PÉREZ', movil: '', furgo: '', h_llegada: '', h_bajada: '', h_salida: '', observaciones: '' }
   const borrador = (fecha) => ({ id: 'b1', revision: 1, updated_by: 'María', state: { week: '46', date: fecha, rows: [FILA] } })
 
-  async function abrir(page, fecha, alBorrar) {
+  // `alLeer` (opcional): lo que contesta el servidor al sondeo de la hoja abierta (GET …/b1).
+  async function abrir(page, fecha, alBorrar, alLeer) {
     await entrarComoAdmin(page)
     await simularApi(page, 'vacio')
     const borrados = []
@@ -32,6 +34,7 @@ test.describe('Plantilla · borrador compartido', () => {
         return json(alBorrar(url))(route)
       }
       if (req.method() === 'PATCH') return json({ revision: 2, updated_by: 'Admin Test' })(route)
+      if (alLeer && new URL(req.url()).pathname.endsWith('/b1')) return json(alLeer())(route)
       return json(borrador(fecha))(route)
     })
     await page.goto('/panel/plantilla', { waitUntil: 'domcontentloaded' })
@@ -86,12 +89,50 @@ test.describe('Plantilla · borrador compartido', () => {
     expect(borrados).toEqual(['1'])
   })
 
-  test('la hoja de hoy o la de mañana no avisa', async ({ page }) => {
-    const manana = new Date(); manana.setDate(manana.getDate() + 1)
-    await abrir(page, hojaDe(manana), () => ({ ok: true }))
-    await expect(page.getByRole('button', { name: 'Nueva plantilla' })).toBeVisible()
-    await expect(page.getByText(/Esta hoja es del/)).toHaveCount(0)
+  // Una hoja de hoy, de mañana, de pasado mañana o de dentro de unos días está hecha adrede: no avisa.
+  for (const [nombre, dias] of [['hoy', 0], ['mañana', 1], ['pasado mañana', 2], ['dentro de 5 días', 5]]) {
+    test(`la hoja de ${nombre} no avisa`, async ({ page }) => {
+      const d = new Date(); d.setDate(d.getDate() + dias)
+      await abrir(page, hojaDe(d), () => ({ ok: true }))
+      await expect(page.getByRole('button', { name: 'Nueva plantilla' })).toBeVisible()
+      // El aviso sale justo después de cargar la hoja: se le da un momento para que se vea si saliera.
+      await page.waitForTimeout(500)
+      await expect(page.getByText(/Esta hoja es del/)).toHaveCount(0)
+    })
+  }
+
+  test('la hoja de ayer sí avisa', async ({ page }) => {
+    const ayer = new Date(); ayer.setDate(ayer.getDate() - 1)
+    await abrir(page, hojaDe(ayer), () => ({ ok: true }))
+    await expect(page.getByText(`Esta hoja es del ${hojaDe(ayer).slice(0, 5)}`)).toBeVisible()
   })
+
+  test('si otra persona corrige la fecha a la de hoy, el aviso se va solo', async ({ page }) => {
+    let corregida = false
+    await abrir(page, '30/09/2026', () => ({ ok: true }),
+      () => (corregida ? { ...borrador(hojaDe(new Date())), revision: 2, updated_by: 'María' } : borrador('30/09/2026')))
+    const aviso = page.getByText('Esta hoja es del 30/09')
+    await expect(aviso).toBeVisible()
+    corregida = true   // María la pone a hoy desde su equipo; llega con el sondeo de 2,5 s
+    await expect(page.getByRole('textbox', { name: 'Fecha' })).toHaveValue(hojaDe(new Date()), { timeout: 10000 })
+    await expect(aviso).toHaveCount(0)
+  })
+})
+
+/* Las traducciones nuevas (10-11-2026): la hoja, con el género de cada idioma y sin frases cortadas, y en
+   Asignación «centro», que es la palabra de esa pantalla (no «nave»). */
+test('textos nuevos de la Plantilla y la Asignación: género, frases enteras y «centro»', () => {
+  expect(DICT['pg.borrarOtro'].it).toBe('Lo sta modificando {nombre} (ultima modifica {min} min fa). Eliminarlo per tutti?')
+  expect(DICT['pg.seguirConElla'].fr).toBe('Continuer avec celle-ci')
+  expect(DICT['pg.empezarHoy'].de).toBe('Plan für heute beginnen')
+  expect(DICT['pg.empezarHoy'].en).toBe("Start today's sheet")
+  for (const clave of ['asgn.unsaved', 'asgn.unsaved.confirm', 'asgn.unsaved.lose', 'asgn.del.row', 'asgn.del.confirm', 'asgn.noop.warn']) {
+    expect(Object.keys(DICT[clave]).sort(), clave).toEqual(['de', 'en', 'es', 'fr', 'it', 'pt'])
+    expect(DICT[clave].es, clave).not.toMatch(/\bnave\b/i)
+  }
+  expect(DICT['asgn.unsaved.confirm'].es).toContain('de día o de centro')
+  expect(DICT['asgn.unsaved.confirm'].fr).toContain('de jour ou de centre')
+  expect(DICT['asgn.unsaved.confirm'].it).toContain('giorno o centro')
 })
 
 /* ── D2, D3 y D4 · Asignación ── */
@@ -136,6 +177,8 @@ test.describe('Asignación · cambios sin guardar, borrar fila y furgonetas en t
     await matriculas(page).first().selectOption('v2')
     await expect(page.getByRole('alert').filter({ hasText: 'Asignadas pero en taller o bloqueadas:' })).toContainText('5678 DEF (Taller)')
 
+    // Con el cambio de arriba sin guardar, «Copiar ayer» pregunta antes de pisarlo: se le dice que sí.
+    page.once('dialog', (d) => d.accept())
     await page.getByRole('button', { name: 'Copiar ayer' }).first().click()
     await expect(page.getByRole('alert').filter({ hasText: 'Asignadas pero en taller o bloqueadas:' })).toContainText('9012 GHI (Bloqueada)')
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
@@ -214,6 +257,100 @@ test.describe('Asignación · cambios sin guardar, borrar fila y furgonetas en t
     await expect(page.getByRole('button', { name: 'Quitar fila' })).toHaveCount(1)
     await expect(page.getByText('Cambios sin guardar')).toHaveCount(0)
   })
+
+  test('la elegida en el taller se lee entera: matrícula en el desplegable y «Taller» debajo', async ({ page }) => {
+    await abrir(page)
+    const primera = matriculas(page).first()
+    await primera.selectOption('v2')
+    // El desplegable cerrado enseña el texto de la opción elegida: solo la matrícula, que cabe.
+    expect(await primera.evaluate((el) => el.options[el.selectedIndex].text)).toBe('5678 DEF')
+    await expect(primera.locator('..').getByText('Taller', { exact: true })).toBeVisible()
+    // En la lista de otra fila sigue marcada.
+    await page.getByRole('button', { name: 'Añadir fila' }).click()
+    const otra = await matriculas(page).last().locator('option').allTextContents()
+    expect(otra).toContain('5678 DEF (Taller)')
+  })
+
+  test('una fila del roster pegado con nombre o matrícula sin reconocer pide confirmar antes de quitarla', async ({ page }) => {
+    await abrir(page)
+    await page.getByRole('button', { name: 'Pegar roster' }).click()
+    await page.getByPlaceholder(/Pega aquí el texto del roster/).fill('JUAN PEREZ\nPEPE RUIZ   7777 ZZZ')
+    await page.getByRole('button', { name: /^Aplicar/ }).click()
+    const quitar = page.getByRole('button', { name: 'Quitar fila' })
+    await expect(quitar).toHaveCount(2)
+
+    const dialogos = []
+    page.on('dialog', (d) => { dialogos.push(d.message()); d.dismiss() })
+    for (const i of [0, 1]) await quitar.nth(i).click()
+    await expect.poll(() => dialogos.length).toBe(2)
+    expect(dialogos.sort()).toEqual(['¿Quitar la fila de 7777 ZZZ · PEPE RUIZ?', '¿Quitar la fila de JUAN PEREZ?'])
+    await expect(quitar).toHaveCount(2)
+  })
+
+  test('«Recargar» y «Copiar ayer» preguntan antes de pisar los cambios sin guardar', async ({ page }) => {
+    await abrir(page)
+    await page.getByRole('button', { name: 'Añadir fila' }).click()
+    const marca = page.getByText('Cambios sin guardar')
+    await expect(marca).toBeVisible()
+    const quitar = page.getByRole('button', { name: 'Quitar fila' })
+
+    const dialogos = []
+    let respuesta = 'no'
+    page.on('dialog', (d) => { dialogos.push(d.message()); return respuesta === 'si' ? d.accept() : d.dismiss() })
+    await page.getByTitle('Recargar').click()
+    await expect.poll(() => dialogos.length).toBe(1)
+    expect(dialogos[0]).toBe('Se perderán los cambios sin guardar. ¿Seguir?')
+    await page.getByRole('button', { name: 'Copiar ayer' }).first().click()
+    await expect.poll(() => dialogos.length).toBe(2)
+    expect(dialogos[1]).toBe('Se perderán los cambios sin guardar. ¿Seguir?')
+    // Dijo que no las dos veces: siguen sus dos filas (la de hoy y la añadida) y la marca.
+    await expect(quitar).toHaveCount(2)
+    await expect(matriculas(page).first()).toHaveValue('v1')
+    await expect(marca).toBeVisible()
+
+    respuesta = 'si'
+    await page.getByTitle('Recargar').click()
+    await expect(quitar).toHaveCount(1)
+    await expect(marca).toHaveCount(0)
+  })
+
+  test('si se quitan todas las filas no se queda «Cambios sin guardar» ni pregunta al cambiar de día', async ({ page }) => {
+    await abrir(page)
+    page.once('dialog', (d) => d.accept())   // la fila tiene datos: se confirma quitarla
+    await page.getByRole('button', { name: 'Quitar fila' }).click()
+    await expect(page.getByRole('button', { name: 'Quitar fila' })).toHaveCount(0)
+    await expect(page.getByText('Cambios sin guardar')).toHaveCount(0)
+
+    let otro = false
+    page.on('dialog', (d) => { otro = true; d.accept() })
+    await page.locator('input[type="date"]').fill(ayer)
+    await expect(matriculas(page).first()).toHaveValue('v3')   // la de ayer, cargada sin preguntar
+    expect(otro).toBe(false)
+  })
+
+  test('escribir la fecha a mano con cambios pendientes no pregunta en cada tecla, sino al terminar', async ({ page }) => {
+    await abrir(page)
+    await page.getByRole('button', { name: 'Añadir fila' }).click()
+    await expect(page.getByText('Cambios sin guardar')).toBeVisible()
+    const fecha = page.locator('input[type="date"]')
+    const dialogos = []
+    page.on('dialog', (d) => { dialogos.push(d.message()); d.dismiss() })
+
+    await fecha.focus()
+    await page.keyboard.press('ArrowDown')   // baja un día (o un mes) en la parte que tiene el foco
+    await page.keyboard.press('ArrowDown')
+    await expect(fecha).not.toHaveValue(hoy)
+    await page.waitForTimeout(300)
+    expect(dialogos).toHaveLength(0)
+
+    await page.keyboard.press('Enter')   // ahora sí: se aplica, y se pregunta una vez
+    await expect.poll(() => dialogos.length).toBe(1)
+    expect(dialogos[0]).toContain('Hay cambios sin guardar')
+    await expect(fecha).toHaveValue(hoy)
+    await expect(page.getByRole('button', { name: 'Quitar fila' })).toHaveCount(2)
+    await page.waitForTimeout(300)
+    expect(dialogos).toHaveLength(1)
+  })
 })
 
 /* ── D5 · Checklist: «Enviar cierre» manda la nave ── */
@@ -240,7 +377,9 @@ test('Checklist · «Enviar cierre» pide solo el de su nave', async ({ page }) 
 /* ── D6 · Inicio: la casilla del checklist enseña el turno que toca ── */
 test.describe('Inicio · casilla del checklist', () => {
   async function abrirA(page, hora) {
-    const d = new Date(); d.setHours(hora, 0, 0, 0)
+    // AYER a esa hora, no hoy: la sesión simulada caduca una hora después de AHORA (api-simulada.js), y a
+    // las 9:00 o las 17:00 de hoy, según cuándo se lancen las pruebas, ya estaría caducada y se iría al login.
+    const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(hora, 0, 0, 0)
     await page.clock.setFixedTime(d)
     await entrarComoAdmin(page)
     await simularApi(page, 'lleno')

@@ -56,15 +56,16 @@ function fechaHoja(texto) {
   m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/)
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null
 }
-/* «dd/mm» si la hoja NO es de hoy ni de mañana (la de mañana se hace la tarde
-   antes, y reabrirla es justo lo que se quiere); null si es de esos días o no
-   lleva una fecha que se entienda. */
+/* «dd/mm» si la hoja es de un día YA PASADO; null si es de hoy o de un día
+   que viene, o si no lleva una fecha que se entienda. Una hoja de mañana, de
+   pasado mañana o del lunes está hecha adrede (la víspera, o antes de un
+   festivo) y avisar con «Empezar la de hoy» invitaba a borrarla (10-11-2026). */
 function hojaDeOtroDia(texto) {
   const d = fechaHoja(texto)
   if (!d || Number.isNaN(d.getTime())) return null
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
   const dias = Math.round((d - hoy) / 864e5)
-  if (dias === 0 || dias === 1) return null
+  if (dias >= 0) return null
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
@@ -304,6 +305,9 @@ export default function PlantillaGenerador() {
     })
     setRedSet(new Set(s.red_routes || [])); setYellowSet(new Set(s.yellow_routes || []))
     setPinkSet(new Set(s.pink_furgos || [])); setMarkedSet(new Set(s.marked_conductors || []))
+    // Si OTRA persona corrige la fecha, el aviso de hoja vieja se va solo (o
+    // cambia de día); nunca aparece aquí: solo al entrar (10-11-2026).
+    setHojaVieja(prev => prev && hojaDeOtroDia(s.date))
     setSharedDraft({ id: draft.id, revision: draft.revision, updated_by: draft.updated_by })
     setSharedNote(`${t('pg.compartida')} ${draft.updated_by || t('pg.otroUsuario')}`)
     setStep('preview')
