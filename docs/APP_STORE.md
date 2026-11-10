@@ -617,57 +617,79 @@ nuevo sirve igual a la app vieja (que no enseña ni las normas ni «Bloquear»; 
 ### Respuestas para el Centro de resolución (en inglés, listas para pegar)
 Cada párrafo va en una sola línea a propósito (así se pega sin saltos a media frase). `BUILD_N` es el número de build; lo que
 va entre `<…>` hay que rellenarlo o quitarlo. Todas caben en los 4.000 caracteres del cuadro de respuesta (medidas el 10-11
-con un build de cuatro cifras: de 800 caracteres, la de la 2.3.10, a 3.513, la de la 2.1). Se contesta **solo** a lo que
+con un build de cuatro cifras: de 800 caracteres, la de la 2.3.10, a 3.871, la de la 1.2). Se contesta **solo** a lo que
 Apple pregunte: no se pega una respuesta que no han pedido. Si el rechazo vuelve a ser 2.1(b) o 3.1.1, vale la respuesta del
 09-11 de más arriba, mirando primero en la captura qué ha visto el revisor.
 
 #### 1.2 Safety - User-Generated Content (el mercadillo)
-- **Cuándo:** el rechazo cita la regla 1.2, casi siempre con su lista de cinco precauciones.
-- **Antes de mandarla:** los pasos 1 a 7 hechos (plan B fusionado y desplegado, build adjunto, notas nuevas), el paso 4
-  comprobado y el «sí» de Dani a las 24 horas (Pendiente de Dani, 1), porque la respuesta las promete. Repasar los puntos 4 y
-  5 contra la app fusionada: nombres de los botones y dónde está «Personas bloqueadas».
+- **Cuándo:** el rechazo cita la regla 1.2, casi siempre con su lista de cinco precauciones. La respuesta sigue esa lista
+  punto por punto y dice dónde se ve cada cosa en la app, con el texto de cada botón y su traducción.
+- **Antes de mandarla:** los pasos 1 a 8 hechos (plan B fusionado y desplegado, build adjunto, notas nuevas), el paso 5
+  comprobado y el «sí» de Dani a las 24 horas (Pendiente de Dani, 1), porque la respuesta las promete. Aunque Apple solo
+  señale alguno de los cinco puntos, se dejan los cinco: es su lista, y así ve que no falta ninguno.
 - **Riesgo:**
-  - Los mensajes privados no tienen filtro automático. La respuesta no dice que lo tengan; si Apple lo exige para los
-    mensajes, no hay nada hecho.
-  - «Quitamos el acceso al mercadillo a quien incumple» lo dicen las normas y los Términos, pero **no hay botón**: el servidor
-    solo lee `mercadillo_off` en la cuenta (`_merc_yo`) y nada lo escribe. Hoy habría que tocar la base a mano, y en un
-    conductor de empresa eso apaga el mercadillo de toda su empresa. **[COMPROBAR]** antes de afirmarlo (Pendiente de
-    Dani, 5).
-  - Un conductor de empresa no marca ninguna casilla de términos (los aceptó su empresa) ni se le piden las normas al entrar
-    al mercadillo. La respuesta lo cuenta tal cual. Si Apple quiere que cada usuario las acepte, haría falta una casilla al
-    entrar por primera vez al mercadillo, que no existe.
+  - **El filtro es una lista básica de palabras**, y la respuesta lo dice así («a basic list», «does not catch everything»).
+    Las fotos no pasan por ningún filtro automático: las ve una persona antes de publicar el anuncio (los mensajes son solo
+    texto). Si Apple quiere más que eso, no hay nada hecho.
+  - **Las 24 horas son el compromiso de una persona**, no algo que haga el servidor. Lo único automático es que un anuncio
+    con denuncias de 3 personas se esconde solo; una conversación denunciada espera a que Dani la mire.
+  - **El acceso se le quita a una cuenta** (o a una ficha de conductor), no a la persona: quien vuelva con otra cuenta
+    entra, y hay que quitárselo otra vez. Por eso la respuesta dice «account».
+  - **A quien se bloquea no se le avisa**, pero puede deducirlo (su conversación sale cerrada y el anuncio «ya no está»). La
+    respuesta dice «is not notified», no que no pueda saberlo.
+  - **El revisor no puede ver el panel de moderación** (no está en la app de iPhone: es de la web y solo del super-admin).
+    Que cada bloqueo queda apuntado, los avisos a Dani y «Quitar del mercadillo» se los tiene que creer. Si pide verlo, hay
+    que mandarle capturas o un vídeo del panel de la web, que no están hechos.
+  - **La pantalla de normas la pone la app, no el servidor**: una versión vieja de la app no la enseña. La respuesta habla
+    del build nuevo. Y si alguien aceptó las normas con la cuenta de prueba, el revisor no la verá (paso 5).
   - El aviso a Dani de un bloqueo suelto llega al móvil solo si tiene puestos los avisos del mercadillo; por correo llega
-    desde el segundo bloqueo a la misma persona. Por eso la respuesta dice lo que es verdad en los dos casos.
-  - El mercadillo está solo en español: el revisor puede no leerlo. Las notas le dan los nombres exactos de los botones.
+    desde el segundo bloqueo a la misma persona. Por eso la respuesta dice lo que es verdad en los dos casos: que cada
+    bloqueo queda apuntado al momento en el panel, y que hay aviso con dos o más.
+  - «Is notified by push notification or e-mail» (las denuncias) es verdad si en producción está puesto `CORREO_CONTACTO` o
+    Dani tiene los avisos en el móvil **[COMPROBAR]**; si no, la denuncia solo queda en el panel.
+  - El mercadillo está solo en español: el revisor puede no leerlo. La respuesta y las notas le dan el texto exacto de cada
+    botón con su traducción.
 
 ```
 Hello, and thank you for the review.
 
 Guideline 1.2 – Safety – User-Generated Content
 
-The only user-generated content in the app is the optional couriers' marketplace ("Mercadillo de repartidores", in the Account tab): classified ads for second-hand items between couriers, with private one-to-one text messages about each ad. The new binary of version 2.4.1 (build BUILD_N) adds user blocking and completes the required precautions:
+The only user-generated content in the app is the optional couriers' marketplace ("Mercadillo de repartidores", in the Account tab): classified ads for second-hand items between couriers, and private one-to-one text messages about each ad. Its screens are in Spanish, so the button labels are quoted below with a translation. The new binary of version 2.4.1 (build BUILD_N) has the five precautions:
 
-1. Terms. Creating an account requires ticking the "Acepto los Términos…" (I accept the Terms) box on the sign-up screen; company drivers use access created by their company, which accepted the same Terms. Section 5 of the Terms ("Mercadillo de repartidores") and the marketplace rules (Mercadillo → "Normas y seguridad") state that objectionable content, harassment and abusive users are not tolerated, and what the consequences are. Posting an ad also requires confirming that it complies with the rules.
+1. Agreeing to terms. The first time a user opens the marketplace, the app shows its rules and the user cannot continue without tapping "Acepto las normas" (I accept the rules). We record who accepted, which version and when, and the rules are shown again if they change. They state that objectionable content and harassment are not tolerated ("No se tolera el contenido ofensivo ni el acoso") and that whoever does it loses access to the marketplace, and they link to the Terms, whose section 5 says so in full. They can be read again at any time under "Normas y seguridad" (Rules and safety). In addition, creating an account in the app requires ticking the "Acepto los Términos…" (I accept the Terms) box.
 
-2. Filtering. No ad is visible to other users until we have reviewed its text and photos and approved it; an edited ad goes back to review. An ad reported by three different users is hidden automatically until we review it.
+2. Filtering. A person reviews every ad (text and photos) before it is published; until then no other user sees it, and an edited ad goes back to review. Messages are text only. In addition, an automatic word filter refuses to send any ad or message that contains an insult, slur or threat from a basic list of Spanish and English words and phrases, and asks the user to change the text. It is a simple list and does not catch everything; reporting and blocking are there for the rest. An ad reported by three different users is hidden until we review it.
 
-3. Reporting. Every ad and every conversation has a flag button ("Denunciar") with a list of reasons, including "Es ofensivo o es acoso" (offensive content or harassment). The user receives an acknowledgement and, afterwards, our decision in the marketplace inbox.
+3. Reporting. Every ad from another user, and every conversation, has a "Denunciar" (Report) button with a list of reasons, one of them "Es ofensivo o es acoso" (It is offensive or it is harassment). The user receives an acknowledgement and, afterwards, our decision in the marketplace inbox.
 
-4. Blocking. The seller card of every ad, and every conversation, has a "Bloquear a …" (Block …) action. Once confirmed, that user's ads and conversations disappear from the blocker's marketplace immediately, neither of the two can see the other's ads or send the other a message, and the blocked user is not told. The confirmation dialog also offers to report the ad or the conversation. Every block is reported to us at once: it is recorded in our moderation panel (who blocked whom, when, and from which ad or conversation), and when two or more users block the same person the moderator receives an alert. Blocks are listed and can be undone in Mensajes → "Personas bloqueadas".
+4. Blocking. Every ad from another user (on the seller card), and every conversation, has a "Bloquear a …" (Block …) button, confirmed with "Bloquear" (Block). From that moment that user's ads and conversations are gone from the blocker's marketplace, neither of the two can see the other's ads or send the other a message, and the blocked user is not notified. The confirmation also offers "Denunciar también este anuncio" (Also report this ad). Every block is recorded at once in our moderation panel (who blocked whom, when, and from which ad or conversation), and the moderator is alerted when two or more users have blocked the same person. Blocks are listed and undone in "Personas bloqueadas" (Blocked people) → "Desbloquear" (Unblock).
 
-5. Acting on reports. A person reviews every report within 24 hours; we remove the offending content and the offending user's access to the marketplace. The marketplace rules and the Terms state this.
+5. Acting on reports within 24 hours. Every report appears in our moderation panel and the moderator, a person, is notified by push notification or e-mail. Our commitment, stated in the rules and in the Terms, is to review it within 24 hours. When a report of objectionable content or abuse is upheld, we remove the content (the ad is withdrawn or the conversation closed) and we remove the offending account's access to the marketplace ("Quitar del mercadillo", in our web moderation panel): that account can no longer open the marketplace, its ads are withdrawn and its conversations closed, and on opening it the user sees the reason and where to write to ask for a review.
 
-6. Contact. contacto@flotadsp.com is published in the Account tab, in the Terms and in the Privacy Policy.
+Contact: contacto@flotadsp.com, published in the Account tab, the Terms and the Privacy Policy.
 
-To check it with the demo account: Cuenta (Account) → "Mercadillo de repartidores" → open an ad → "Bloquear a …" → "Bloquear": the ad is no longer listed. To undo it: the messages icon at the top right → "Personas bloqueadas" → "Desbloquear".
+To check it with the demo account: Cuenta (Account) → "Mercadillo de repartidores" → "Acepto las normas" → open an ad → "Bloquear a …" → "Bloquear": the ad is no longer listed. To undo it: "Personas bloqueadas" (at the bottom of the list of ads, and in Mensajes) → "Desbloquear".
 
 Thank you for your time.
 ```
-Lo respalda: `Registro.jsx` y `AltaRapida.jsx` (la casilla); `legal/Terminos.jsx` y `en/TermsEn.jsx` (la sección 5 en el
-iPhone); `Mercadillo.jsx` (`NORMAS`, `Denunciar`, `Vender`); `backend/server.py` (`merc_crear`, `merc_cambiar`,
-`merc_denunciar`, `_merc_cerrar_denuncias`, `admin_mercadillo_anuncio`, `_merc_a_dani`) y `backend/mercadillo.py`
-(`MOTIVOS_DENUNCIA`, `DENUNCIAS_PARA_OCULTAR`); el punto 4 entero y las frases nuevas de normas y Términos, con el plan B
-fusionado.
+Lo respalda, punto por punto (todo con el plan B fusionado, menos la casilla del alta y «Denunciar», que ya están):
+- **1:** `Mercadillo.jsx` (`Normas`, `NORMAS` y, en `Mercadillo`, la guarda de `normas_ok === false`); `backend/server.py`
+  (`merc_normas`, `_merc_normas_ok`, `merc_estado`, `merc_lista`) y `NORMAS_VERSION` (`backend/mercadillo.py`);
+  `legal/Terminos.jsx` y `en/TermsEn.jsx` («Aceptar las normas» y «Tolerancia cero»; el apartado es el 5 dentro del iPhone);
+  `Registro.jsx` y `AltaRapida.jsx` (la casilla del alta).
+- **2:** `merc_crear` (el anuncio nace `pendiente`), `merc_lista` (solo sale lo `publicado`), `merc_cambiar` y
+  `admin_mercadillo_anuncio`; `OFENSIVO`, `ofensivo`, `validar` y `mensaje` (`backend/mercadillo.py`; pasan por ellas
+  `merc_crear`, `merc_cambiar`, `merc_contactar` y `merc_responder`); `DENUNCIAS_PARA_OCULTAR` en `merc_denunciar`.
+- **3:** `Ficha`, `Chat`, `Acciones` y `Denunciar` (`Mercadillo.jsx`); `MOTIVOS_DENUNCIA`; `merc_denunciar` (el acuse) y
+  `_merc_cerrar_denuncias` (la decisión).
+- **4:** `Bloquear`, `Bloqueados` y `EntradaBloqueados` (`Mercadillo.jsx`); `merc_bloquear`, `_merc_bloqueos`, `merc_lista`,
+  `merc_buzon`, `_merc_escribirle`, `merc_desbloquear` y `_merc_bloqueo_a_dani`; `admin_mercadillo` y «Bloqueos» en
+  `MercadilloAdmin` (`Negocio.jsx`).
+- **5:** `_merc_a_dani` (el aviso de cada denuncia); `admin_mercadillo_denuncia` (retirar el anuncio o cerrar la
+  conversación); `admin_mercadillo_expulsar`, `_merc_expulsar_efectos`, `_merc_dentro` y `_merc_texto_expulsion`;
+  `QuitarDelMercadillo` (`Negocio.jsx`) y `SinAcceso` (`Mercadillo.jsx`). Las 24 horas las dicen `NORMAS` y los Términos
+  («Denunciar»); cumplirlas es cosa de Dani.
 
 #### 2.3.10 Accurate Metadata (menciones a otras plataformas)
 - **Cuándo:** el rechazo dice que la app o su ficha nombran otra plataforma móvil u otra tienda (Android, Google Play).
