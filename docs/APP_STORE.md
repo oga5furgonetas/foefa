@@ -695,8 +695,10 @@ Lo respalda, punto por punto (todo con el plan B fusionado, menos la casilla del
 - **Cuándo:** el rechazo dice que la app o su ficha nombran otra plataforma móvil u otra tienda (Android, Google Play).
   Mirar en la captura DÓNDE lo ha visto: puede ser una pantalla que no sea de las legales.
 - **Antes de mandarla:** el plan B fusionado y el build nuevo adjunto. Si el revisor señala otra pantalla, arreglarla
-  primero (con `esAppIOS()`, como las demás) y nombrarla en el hueco. `frontend/e2e/ios-sin-pagos.spec.js` es el juez de lo
-  que se ve en el iPhone.
+  primero (con `esAppIOS()`, como las demás) y nombrarla en el hueco. El juez de lo que se lee en el iPhone es el
+  vocabulario prohibido de `frontend/e2e/iphone.js`, que desde el plan B lleva la regla «otra plataforma» (Android, Google
+  Play, Play Store) y lo usan `ios-sin-pagos.spec.js`, `mercadillo-bloqueo.spec.js` y `mercadillo-acceso.spec.js`: la
+  pantalla que señale el revisor tiene que quedar recorrida por alguna de las tres.
 - **Riesgo:** bajo. La ficha no nombra otra plataforma: comprobados el 10-11 los textos de los 7 idiomas de
   `frontend/ios/listing/` (ni «Android», ni «Google Play») y las 12 capturas del repositorio (es-ES y en-US). Sí aparecen
   «Google Maps» y «WhatsApp» en botones: son apps, no plataformas ni tiendas, pero si el revisor las señala no se discute:
@@ -716,9 +718,10 @@ The App Store metadata (name, subtitle, description, keywords, promotional text 
 
 Thank you for your time.
 ```
-Lo respalda: `frontend/src/legal/config.js` (las tres filas, que dentro del iPhone no se enseñan: con el plan B fusionado);
-la web que lleva dentro la app no usa esos tres servicios (sus mapas son teselas de OpenStreetMap y no lleva Firebase:
-comprobado en `frontend/src`); `frontend/ios/listing/`.
+Lo respalda: `frontend/src/legal/config.js` (`SOLO_ANDROID`: las tres filas, que dentro del iPhone no se enseñan en la
+Privacidad, el Encargo ni Seguridad; con el plan B fusionado); la web que lleva dentro la app no usa esos tres servicios
+(sus mapas son teselas de OpenStreetMap y no lleva Firebase: comprobado en `frontend/src`); `frontend/e2e/iphone.js` (la
+regla «otra plataforma»); `frontend/ios/listing/`.
 
 #### 2.1 Information Needed (el cuestionario sobre el modelo de negocio)
 - **Cuándo:** Apple no rechaza por un fallo: pide información («We need more information about your business model and your
@@ -849,6 +852,9 @@ al salirse); `pages/driver/MiRuta.jsx` (`COLA` = lo guardado sin cobertura, `COP
     Conductores) y la de empresa se da de baja escribiendo. Apple lo exige a las cuentas que se crean en la app, y en la del
     iPhone solo se crea la del repartidor; si el revisor prueba con la cuenta de conductor y lo pide igual, haría falta un
     «Pedir que borren mi acceso» en el portal, que no existe.
+  - Visto de paso el 10-11 y sin tocar: `borrar_cuenta` desactiva **solo al usuario que pide la baja**. Si esa cuenta tiene
+    más de un usuario, los demás siguen entrando hasta que Dani borra los datos: «sign-in stops working immediately» es
+    verdad para quien la pide (Pendiente de Dani, 4).
 
 ```
 Hello, and thank you for the review.
@@ -866,7 +872,8 @@ Thank you for your time.
 Lo respalda: `RutaCuenta.jsx` (`BorrarMiCuenta`, al final de la pestaña) y sus textos en inglés (`lib/textosRutaB.js`);
 `backend/server.py`, `borrar_cuenta` (`/auth/borrar-cuenta`: pide la contraseña, desactiva al momento, solo cuentas de quien
 reparte); `Registro.jsx` (en el iPhone el alta es siempre la de quien reparte); `delete_driver_account`
-(`/auth/driver-account/{id}`, lo que usa Panel → Conductores); la frase entre `<…>`, con el plan B fusionado.
+(`/auth/driver-account/{id}`, lo que usa Panel → Conductores); la frase entre `<…>` (`_merc_baja`, que llama
+`borrar_cuenta`), con el plan B fusionado.
 
 ### Las notas de revisión con el bloqueo (el punto 6 nuevo)
 Las notas que tiene Apple desde el 09-11 dicen en su punto 6 que el mercadillo tiene revisión previa, «Denunciar», ocultación
