@@ -798,12 +798,21 @@ const RESTOS_LEGALES = [
    la dicen igual la web y el iPhone. Y las frases a las que sustituyen, que no pueden quedar al lado de las nuevas. */
 const CONSERVACION_ES = 'Los bloqueos se borran cuando desbloqueas a la persona o cuando se borran los datos de tu cuenta. Cuándo aceptaste las normas se guarda hasta que se borran los datos de tu cuenta. '
   + 'Si se te quita el acceso al mercadillo, el motivo y la fecha se guardan hasta que se te devuelve o hasta que se borran los datos de tu cuenta; en los anuncios que se retiraron por eso queda el motivo hasta que se borran, 60 días después. '
+  + 'El aviso que recibiste con ese motivo se borra, como los demás avisos, a los 6 meses. '
   + 'En el registro de auditoría queda apuntado, además, que se tomó esa decisión, sobre qué cuenta, con qué motivo y cuándo.'
 const CONSERVACION_EN = 'Blocks are deleted when you unblock the person or when your account’s data is deleted. When you accepted the rules is kept until your account’s data is deleted. '
   + 'If your access to the marketplace is removed, the reason and the date are kept until it is given back or until your account’s data is deleted; the listings removed because of it keep the reason until they are deleted, 60 days later. '
+  + 'The notice you received with that reason is deleted, like the other notices, after 6 months. '
   + 'The audit log also records that the decision was taken, about which account, for which reason and when.'
 const literal = (texto) => texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const CONSERVACION_DEL_MERCADILLO = new RegExp(`${literal(CONSERVACION_ES)}|${literal(CONSERVACION_EN)}`)
+/* Para qué se usa el correo en el mercadillo (§2 de la privacidad), letra por letra (10-11-2026, quinta tanda): también se manda
+   uno al quitar y al devolver el acceso. Y la frase de antes, que no puede quedar. */
+const CORREO_ES = 'el correo lo usamos solo para avisarte de que tienes un mensaje, de que se ha revisado tu anuncio o de que se te ha quitado o devuelto el acceso al mercadillo.'
+const CORREO_EN = 'the email is used only to tell you that you have a message, that your listing has been reviewed, or that your access to the marketplace has been removed or given back.'
+const CORREO_DE_ANTES = /tienes un mensaje o de que se ha revisado tu anuncio\.|you have a message or that your listing has been reviewed\./
+/* Los Términos en inglés citan los rótulos del mercadillo como salen en la app (que solo está en español), con su traducción. */
+const ROTULOS_EN = /under “Normas y seguridad” \(Rules and safety\)[^]*“Denunciar” \(Report\) and “Bloquear” \(Block\)[^]*under “Personas bloqueadas” \(Blocked people\)[^]*the “Denunciar” \(Report\) button/
 const CONSERVACION_DE_ANTES = /pides la baja de tu cuenta|hasta la baja de tu cuenta|que se tomó esa decisión y cuándo|you ask for your account to be deleted|until your account is deleted|the decision was taken and when/
 
 // Lo que el iPhone SÍ sigue diciendo en las tres páginas con las listas de proveedores: no se han quedado vacías.
@@ -849,6 +858,9 @@ const EN_LA_WEB = [
   ['/terminos', [/Última actualización: 2026-11-10/, /Last updated: 2026-11-10/]],
   // 10-11-2026 (cuarta tanda): la conservación de lo del mercadillo, exacta, cada idioma con lo suyo.
   ['/privacidad', [new RegExp(literal(CONSERVACION_ES)), new RegExp(literal(CONSERVACION_EN))]],
+  // 10-11-2026 (quinta tanda): para qué se usa el correo en el mercadillo, y los rótulos de los Términos en inglés.
+  ['/privacidad', [new RegExp(literal(CORREO_ES)), new RegExp(literal(CORREO_EN))]],
+  ['/terminos', [/«Normas y seguridad»/, ROTULOS_EN]],
 ]
 for (const [idioma, locale] of [['es', 'es-ES'], ['en', 'en-GB']]) {
   test.describe(`iPhone · los textos legales (${locale})`, () => {
@@ -867,6 +879,12 @@ for (const [idioma, locale] of [['es', 'es-ES'], ['en', 'en-GB']]) {
         if (ruta === '/privacidad') {
           expect(texto, `${ruta} en ${locale}: la conservación del mercadillo, en su idioma`).toContain(idioma === 'es' ? CONSERVACION_ES : CONSERVACION_EN)
           expect(texto, `${ruta} en ${locale}: siguen las frases de antes sobre la conservación`).not.toMatch(CONSERVACION_DE_ANTES)
+          expect(texto, `${ruta} en ${locale}: para qué se usa el correo, en su idioma`).toContain(idioma === 'es' ? CORREO_ES : CORREO_EN)
+          expect(texto, `${ruta} en ${locale}: sigue la frase de antes sobre el correo`).not.toMatch(CORREO_DE_ANTES)
+        }
+        if (ruta === '/terminos' && idioma === 'en') {
+          expect(texto, `${ruta} en ${locale}: los rótulos del mercadillo, como salen en la app`).toMatch(ROTULOS_EN)
+          expect(texto, `${ruta} en ${locale}: un rótulo en inglés que la app no tiene`).not.toMatch(/“(?:Rules and safety|Blocked people|Report|Block)”/)
         }
         expect(fallos).toEqual([])
       })
@@ -905,6 +923,7 @@ test.describe('control · los textos legales de la web siguen con el importe pag
         const frase = idioma === 'es' ? CONSERVACION_ES : CONSERVACION_EN
         expect(texto.split(frase), 'la conservación del mercadillo sale una vez').toHaveLength(2)
         expect(texto).not.toMatch(CONSERVACION_DE_ANTES)
+        expect(texto).not.toMatch(CORREO_DE_ANTES)
       })
     })
   }
