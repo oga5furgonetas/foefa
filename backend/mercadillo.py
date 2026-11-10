@@ -20,10 +20,15 @@ Cómo queda legal (resumen; el detalle está en Términos → «Mercadillo» y e
     verse los anuncios el uno al otro y ninguno puede escribir al otro; a quien se bloquea no se le avisa y a
     quien modera sí. Un bloqueo no retira nada por sí solo. Se guarda quién bloquea a quién y cuándo, solo lo
     ve quien modera, y se borra al desbloquear o al pedir la baja de la cuenta.
+  · Lo que Apple pide además a una app con contenido de usuarios (guideline 1.2; 10-11-2026): aceptar las normas
+    la primera vez que se entra (`NORMAS_VERSION`), un filtro automático del lenguaje ofensivo en anuncios y
+    mensajes (`ofensivo`, abajo: un filtro básico de lista) y poder quitarle el mercadillo a quien incumple, con
+    su motivo y cómo reclamar (`MOTIVOS_EXPULSION`).
 
 El módulo no toca la base: valida y decide. Se prueba entero sin red (tests/test_mercadillo.py).
 """
 import re
+import unicodedata
 
 CATEGORIAS = {
     "movil": "Móviles y electrónica",
@@ -56,6 +61,18 @@ MOTIVOS_DENUNCIA = {
     "ofensivo": "Es ofensivo o es acoso",
     "otro": "Otra cosa",
 }
+# Por qué se le quita a alguien el mercadillo: lo que se le dice a esa persona, con cómo reclamar (DSA art. 17).
+MOTIVOS_EXPULSION = {
+    "ofensivo": "Has publicado o enviado contenido ofensivo.",
+    "acoso": "Has acosado o molestado a otra persona.",
+    "prohibido": "Has intentado vender algo que las normas no permiten.",
+    "estafa": "Hemos visto un engaño o un intento de estafa.",
+    "repetido": "Has incumplido las normas varias veces.",
+    "otro": "Has incumplido las normas del mercadillo.",
+}
+# Las normas que se aceptan la primera vez que se entra. Al cambiar las normas se cambia esta fecha, y la web
+# vuelve a pedirlas a todo el mundo (lo aceptado queda en `mercadillo_prefs.normas`: qué versión y cuándo).
+NORMAS_VERSION = "2026-11-10"
 
 TITULO_MIN, TITULO_MAX = 4, 80
 DESCRIPCION_MAX = 1000
@@ -86,6 +103,83 @@ class Invalido(ValueError):
 def _texto(v, maximo: int) -> str:
     s = re.sub(r"[ \t]+", " ", str(v or "")).strip()
     return s[:maximo]
+
+
+# ── EL FILTRO DEL LENGUAJE OFENSIVO (10-11-2026) ─────────────────────────────
+# Apple (guideline 1.2) pide «a method for filtering objectionable content». Cada anuncio lo sigue revisando una
+# persona antes de salir; esto es lo automático, para los anuncios y los mensajes. ES UN FILTRO BÁSICO DE LISTA:
+# compara palabras y frases enteras, sin mayúsculas ni tildes. No entiende el contexto ni las letras cambiadas
+# («h1jo de…») y no lo detecta todo: para lo demás están «Denunciar», «Bloquear» y quien modera.
+#
+# Qué entra: insultos inequívocos, insultos racistas u homófobos y amenazas; en español y en inglés, y los pocos de
+# gallego, catalán, portugués, francés, italiano y alemán que no significan otra cosa.
+# Qué NO entra, a propósito (mejor corto y sin falsos positivos que largo):
+#   · las palabrotas sueltas, que entre compañeros no van contra nadie: «puta» («está de puta madre» es un elogio),
+#     «puto», «coño», «joder», «mierda», «hostia», «cabrón» (en España también es un piropo y en México «está
+#     cabrón» es «está difícil»), y lo mismo en inglés («fuck», «shit»): entran cuando van CONTRA alguien;
+#   · lo que tiene un uso normal en un mercadillo de repartidores: «negro» (un chaleco negro), «moro», «gitano» o
+#     «chino» sin más, «marica» (en Colombia es «tío»), «bastardo» (hay limas bastardas), «retard» (en catalán
+#     es «retraso»: una palabra de repartidor), «retrasado» (un pedido), «polla», «zorra», «perra», «cerdo»…;
+#   · los insultos flojos («tonto», «idiota», «imbécil», «payaso»): «perdona, soy idiota» no ofende a nadie;
+#   · amenazas que también son frases normales: «te voy a buscar» (a la nave), «sé dónde vives» (te lo acerco).
+# Solo palabras ENTERAS: «disputa», «computadora», «mariconera» (se venden) y «Scunthorpe» pasan.
+# Cada entrada, como la compara `_palabras`: en minúsculas, sin tildes (con su ñ) y con un espacio entre palabras.
+OFENSIVO = (
+    # Insultos (español de aquí y de América).
+    "hijo de puta", "hija de puta", "hijos de puta", "hijas de puta", "hijo de la gran puta", "hija de la gran puta",
+    "hijo puta", "hijoputa", "hijaputa", "hijodeputa", "hijueputa", "joputa", "tu puta madre", "puta de tu madre",
+    "me cago en tu madre", "me cago en tus muertos", "gilipollas", "jilipollas", "subnormal", "subnormales",
+    "retrasado mental", "retrasada mental", "mongolo", "mongolos", "malnacido", "malnacida", "malparido", "malparida",
+    "soplapollas", "chupapollas", "comepollas", "comemierda", "comemierdas", "mamaguevo", "mamahuevo",
+    "eres una mierda", "eres un mierda", "chupame la polla", "comeme la polla", "chinga tu madre",
+    "hijo de la chingada", "concha de tu madre", "conchetumadre", "conchatumadre", "coño de tu madre",
+    # Racistas y homófobos (español). El color, el origen o el pueblo, solos, no: solo con el insulto pegado.
+    "negrata", "negratas", "sudaca", "sudacas",
+    "negro de mierda", "negra de mierda", "negros de mierda", "puto negro", "puta negra", "putos negros",
+    "moro de mierda", "mora de mierda", "moros de mierda", "puto moro", "puta mora", "putos moros",
+    "gitano de mierda", "gitana de mierda", "gitanos de mierda", "puto gitano", "puta gitana", "putos gitanos",
+    "maricon", "maricones", "maricona", "mariconas", "bollera", "bolleras",
+    # Amenazas (español).
+    "te voy a matar", "voy a matarte", "te vamos a matar", "os voy a matar", "te voy a rajar", "te voy a violar",
+    "voy a violarte", "te parto la cara", "te voy a partir la cara", "te rompo la cara", "te voy a romper la cara",
+    "te parto las piernas", "te voy a partir las piernas", "te rompo las piernas", "te voy a romper las piernas",
+    "ojala te mueras",
+    # Inglés: insultos, racistas y homófobos, y amenazas.
+    "fuck you", "fuck u", "fuck off", "fuck yourself", "fucker", "fuckers", "motherfucker", "motherfuckers",
+    "son of a bitch", "bitch", "bitches", "asshole", "assholes", "arsehole", "arseholes", "dickhead", "dickheads",
+    "cunt", "cunts", "cocksucker", "cocksuckers", "wanker", "wankers", "whore", "whores", "slut", "sluts",
+    "shithead", "shitheads", "suck my dick", "nigger", "niggers", "nigga", "niggas", "faggot", "faggots",
+    "kill you", "kill u", "kill yourself", "hope you die",
+    # Gallego, catalán y portugués.
+    "fillo de puta", "filla de puta", "fillo da puta", "filla da puta", "fill de puta", "fills de puta",
+    "filho da puta", "filha da puta", "vai tomar no cu", "vai se foder", "vai te foder",
+    # Francés, italiano y alemán.
+    "connard", "connards", "connasse", "salope", "salopes", "encule", "encules", "fils de pute", "nique ta mere",
+    "stronzo", "stronza", "stronzi", "vaffanculo", "figlio di puttana", "testa di cazzo", "frocio", "froci",
+    "arschloch", "arschlocher", "hurensohn", "hurensohne", "fotze", "wichser", "schlampe", "schwuchtel", "fick dich",
+)
+MENSAJE_OFENSIVO = ("Ese mensaje no se puede enviar: no se permiten insultos, amenazas ni contenido ofensivo. "
+                    "Cámbialo y vuelve a enviarlo.")
+ANUNCIO_OFENSIVO = "Ese anuncio no se puede enviar: quita los insultos o el contenido ofensivo del texto."
+
+
+def _palabras(texto) -> str:
+    """El texto como lo compara el filtro: en minúsculas, sin tildes (la ñ se queda: «año» no es «ano») y palabra a
+    palabra, con un espacio a cada lado («¡Hijo de PUTA!» → « hijo de puta »). Así una entrada de la lista solo
+    casa con palabras enteras, nunca con un trozo de otra."""
+    plano = []
+    for c in unicodedata.normalize("NFKD", unicodedata.normalize("NFC", str(texto or "")).casefold()):
+        if not unicodedata.combining(c):
+            plano.append(c)
+        elif c == "̃" and plano and plano[-1] == "n":        # la virgulilla de la ñ no es una tilde
+            plano[-1] = "ñ"
+    return " " + " ".join(re.findall(r"[^\W_]+", "".join(plano))) + " "
+
+
+def ofensivo(texto) -> bool:
+    """¿Lleva algún insulto o amenaza de `OFENSIVO`? Un filtro básico de lista, por palabras y frases enteras."""
+    palabras = _palabras(texto)
+    return any(f" {frase} " in palabras for frase in OFENSIVO)
 
 
 def precio_cent(v) -> int:
@@ -130,8 +224,12 @@ def validar(d: dict) -> dict:
     if d.get("acepto") is not True:
         raise Invalido("Confirma que es tuyo, que lo que cuentas es verdad y que cumple las normas.")
     descripcion = str(d.get("descripcion") or "").strip()[:DESCRIPCION_MAX]
+    zona = _texto(d.get("zona"), ZONA_MAX)
+    # Lo que va a leer la gente (y antes, Dani): sin insultos. Campo a campo, que una frase no se forme a caballo.
+    if ofensivo(titulo) or ofensivo(descripcion) or ofensivo(zona):
+        raise Invalido(ANUNCIO_OFENSIVO)
     return {"titulo": titulo, "categoria": categoria, "estado_articulo": estado,
-            "precio_cent": precio_cent(d.get("precio")), "zona": _texto(d.get("zona"), ZONA_MAX),
+            "precio_cent": precio_cent(d.get("precio")), "zona": zona,
             "descripcion": descripcion, "fotos": fotos}
 
 
@@ -147,10 +245,14 @@ def nombre_publico(nombre: str) -> str:
 
 
 def mensaje(texto) -> str:
-    s = str(texto or "").strip()
+    """Un mensaje de una conversación, listo para guardar. (El texto de una denuncia no pasa por aquí: quien
+    denuncia puede tener que citar lo que le han dicho.)"""
+    s = str(texto or "").strip()[:MENSAJE_MAX]
     if not s:
         raise Invalido("Escribe el mensaje.")
-    return s[:MENSAJE_MAX]
+    if ofensivo(s):
+        raise Invalido(MENSAJE_OFENSIVO)
+    return s
 
 
 def euros(cent: int) -> str:

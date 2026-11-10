@@ -1936,6 +1936,10 @@ async def create_indexes():
         # bloqueos (y dos avisos a Dani). Por `a`: quién ha bloqueado a alguien, que se mira en cada pantalla.
         await _idx(global_db[_MERC_BLOQUEOS], [("de", 1), ("a", 1)], unique=True, name="mercadillo_bloqueo_unico")
         await _idx(global_db[_MERC_BLOQUEOS], "a")
+        # Mercadillo, expulsados (10-11-2026): a una persona se le quita el mercadillo UNA vez (por su clave). Es el
+        # único que hace saltar el `except DuplicateKeyError` de `admin_mercadillo_expulsar` (dos toques a la vez
+        # dejarían dos expulsiones y dos avisos); y por `clave` se mira en cada entrada al mercadillo.
+        await _idx(global_db[_MERC_EXPULSADOS], "clave", unique=True, name="mercadillo_expulsado_unico")
         # Crear índices en BDs de DSPs ya existentes (por si arrancamos con DSPs sin índices)
         orgs = await global_db.organizations.find(
             {"account_type": "dsp", "db_name": {"$exists": True}}, {"db_name": 1}
@@ -7064,6 +7068,9 @@ async def admin_delete_org(org_id: str, user: dict = Depends(require_superadmin)
         logger.warning("drop_database falló: %s", e)
     await global_db.admin_users.delete_many({"org_id": org_id})
     await global_db.organizations.delete_one({"id": org_id})
+    # EL MERCADILLO SE VA CON LA CUENTA (10-11-2026): el de TODAS sus personas (quien reparte por su cuenta, sus
+    # conductores y su gente de oficina), que ya no pueden entrar ni contestar. Si falla, la empresa se borra igual.
+    await _merc_baja_sin_parar(_merc_de_la_cuenta(org_id), "Empresa eliminada")
     logger.info("Empresa eliminada: %s", org.get("slug"))
     await _audit(user, "org_delete", {"org_id": org_id, "org": org.get("slug")})
     return {"ok": True}
@@ -8831,6 +8838,11 @@ async def delete_admin(admin_id: str, _admin: dict = Depends(require_admin)):
         {"$set": {"deleted_at": datetime.now(timezone.utc).isoformat(),
                   "deleted_by": _admin.get("sub")}}, upsert=True)
     _ADMIN_EXISTS_CACHE.pop(admin_id, None)
+    # SU MERCADILLO SE VA CON ÉL (10-11-2026): ya no puede entrar ni contestar. Solo el de esa persona de oficina
+    # (`a:<org>:<id>`); en una cuenta de quien reparte por su cuenta el mercadillo es de la cuenta (`o:<org>`), que
+    # sigue viva con quien le borra. Si falla, el usuario se borra igual.
+    if target.get("org_id"):
+        await _merc_baja_sin_parar(f"a:{target['org_id']}:{admin_id}", "Usuario de oficina eliminado")
     return {"success": True}
 
 
@@ -27499,6 +27511,11 @@ async def delete_driver(driver_id: str, user=Depends(require_admin)):
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Conductor no encontrado")
     await _limpiar_correo_personal_conductor(driver_id, user.get("org_id"))
+    # SU MERCADILLO SE VA CON ÉL (10-11-2026): con la ficha de baja ya no puede entrar (ni con contraseña, ni con
+    # código, ni renovar la sesión), así que tampoco contestar a quien le escriba. Si falla, se le da de baja igual.
+    # (Borrar solo su CUENTA de acceso, `delete_driver_account`, no le deja fuera —vuelve a entrar con un código o
+    # con la contraseña inicial—: por eso allí el mercadillo no se toca.)
+    await _merc_baja_sin_parar(f"d:{user.get('org_id') or OWNER_ORG_ID}:{driver_id}", "Conductor eliminado")
     await _audit(user, "driver_delete", {"driver_id": driver_id})
     return {"success": True}
 
@@ -56866,6 +56883,7 @@ _MERC_MSGS = "mercadillo_mensajes"
 _MERC_DENUNCIAS = "mercadillo_denuncias"
 _MERC_AVISOS = "mercadillo_avisos"
 _MERC_BLOQUEOS = "mercadillo_bloqueos"     # quién ha bloqueado a quién: {id, de, a, de_nombre, a_nombre, ts, origen}
+_MERC_EXPULSADOS = "mercadillo_expulsados"  # a quién se le ha quitado el mercadillo: {clave, nombre, ts, motivo_clave, motivo, nota}
 _MERC_FOTO_MAX = 15 * 1024 * 1024          # lo que llega del móvil; aquí se reduce a ~200 KB
 _MERC_FOTO_LADO = 1280
 _MERC_FOTOS_DIA = 40                       # subidas por persona y día
@@ -56908,11 +56926,53 @@ async def _merc_yo(user: dict) -> dict:
 
 
 async def _merc_dentro(user: dict) -> dict:
-    """Quién es, si puede entrar: con el mercadillo apagado, solo el super-admin."""
+    """Quién es, si puede entrar: con el mercadillo apagado, solo el super-admin; y nunca aquel a quien se le ha
+    quitado (403 con su motivo y cómo reclamar). Es LA puerta de todas las rutas `/mercadillo/*` menos
+    `/mercadillo/estado`, que es la que se lo explica: la guarda de la expulsión va aquí, una sola vez."""
     yo = await _merc_yo(user)
     if yo["tipo"] != "fds" and not (await _merc_conf())["visible"]:
         raise HTTPException(404, "El mercadillo todavía no está abierto")
+    expulsion = await _merc_expulsion(yo)
+    if expulsion:
+        raise HTTPException(403, _merc_texto_expulsion(expulsion))
     return yo
+
+
+# ── QUITARLE EL MERCADILLO A UNA PERSONA (10-11-2026) ─────────────────────────
+# Apple (guideline 1.2): ante una denuncia hay que actuar en 24 horas «removing the content and ejecting the user
+# who provided the offending content». Retirar el contenido ya se podía; echar a la persona, no. Las reglas:
+#   · Solo Dani, desde Negocio → Mercadillo, y a una PERSONA (su clave), no a una empresa. A «fds» no se le puede.
+#   · Siempre con motivo (`mercadillo.MOTIVOS_EXPULSION`) y una nota opcional: es lo que se le dice, con cómo
+#     reclamar (DSA art. 17). El mismo texto en el 403, en `/mercadillo/estado`, en su aviso y en su correo.
+#   · Al instante: no entra (403 en todo lo que pasa por `_merc_dentro`), sus anuncios activos se retiran (y se
+#     cierran sus denuncias, avisando a quien denunció) y sus conversaciones abiertas quedan cerradas.
+#   · Devolverle el acceso borra la expulsión y nada más: ni resucita anuncios ni reabre conversaciones.
+#   · Sus bloqueos no se tocan. La baja de la cuenta (`_merc_baja`) se lleva también su expulsión.
+# La clave de nadie sale de `/admin/mercadillo*`: a la persona se le dice el motivo, nunca cómo se la nombra dentro.
+_MERC_CLAVE_PERSONA = re.compile(r"o:[^:\s]+|[da]:[^:\s]+:\S+")   # `o:<org>`, `d:<org>:<id>` o `a:<org>:<id>`
+_MERC_READMITIDO = ("Vuelves a tener acceso al mercadillo. Los anuncios que se retiraron no vuelven solos: si todavía "
+                    "vendes algo, publícalo otra vez. Y recuerda cumplir las normas.")
+
+
+async def _merc_expulsion(yo: dict) -> Optional[dict]:
+    """Su expulsión, si se le ha quitado el mercadillo. A quien modera («fds») no se le puede quitar."""
+    if yo["tipo"] == "fds":
+        return None
+    return await global_db[_MERC_EXPULSADOS].find_one({"clave": yo["clave"]}, {"_id": 0})
+
+
+def _merc_texto_expulsion(e: dict) -> str:
+    """Lo que se le dice a quien se le ha quitado el mercadillo: el motivo, la nota si la hay y cómo reclamar."""
+    nota = str(e.get("nota") or "").strip()
+    motivo = e.get("motivo") or mercadillo.MOTIVOS_EXPULSION["otro"]
+    return (f"Te hemos quitado el acceso al mercadillo. Motivo: {motivo}{' ' + nota if nota else ''} "
+            f"Si crees que es un error, escribe a {CORREO_CONTACTO or 'contacto'} y lo revisamos.")
+
+
+def _merc_expulsado_vista(e: dict) -> dict:
+    """Una expulsión como la ve Dani en su panel (el único sitio en el que sale)."""
+    return {"clave": e.get("clave"), "nombre": e.get("nombre") or "Repartidor", "ts": e.get("ts"),
+            "motivo_clave": e.get("motivo_clave") or "", "motivo": e.get("motivo") or "", "nota": e.get("nota") or ""}
 
 
 def _merc_estado(a: dict, ahora: datetime) -> str:
@@ -57117,6 +57177,18 @@ def _merc_k(clave: str) -> str:
     return clave.replace(".", "_")
 
 
+async def _merc_normas_ok(yo: dict) -> bool:
+    """¿Ha aceptado las normas de AHORA (`mercadillo.NORMAS_VERSION`)? A quien modera no se le piden.
+    El servidor lo apunta y lo dice (`normas_ok`); la pantalla de normas la impone la WEB, no las demás rutas: la
+    app de iPhone que está en revisión y las webs en caché no la conocen, y con un 403 aquí dejarían de poder
+    escribir. Sin el campo (un servidor antiguo) la web no enseña la pantalla: nadie se queda fuera por esto."""
+    if yo["tipo"] == "fds":
+        return True
+    p = await global_db.mercadillo_prefs.find_one({"clave": yo["clave"]}, {"_id": 0, "normas": 1}) or {}
+    normas = p.get("normas")
+    return isinstance(normas, dict) and normas.get("v") == mercadillo.NORMAS_VERSION
+
+
 @api_router.get("/mercadillo/estado")
 async def merc_estado(user: dict = Depends(require_any_auth)):
     """¿Se enseña la entrada del mercadillo? Y cuántas cosas tiene sin leer (para el globito)."""
@@ -57127,9 +57199,16 @@ async def merc_estado(user: dict = Depends(require_any_auth)):
     conf = await _merc_conf()
     if not conf["visible"] and yo["tipo"] != "fds":
         return {"visible": False}
+    expulsion = await _merc_expulsion(yo)
+    if expulsion:
+        # A quien se le ha quitado el mercadillo, esta ruta NO le da el 403 de las demás: le dice que está fuera y
+        # por qué, para que la web se lo explique en vez de dejarle una entrada que falla. Y nada más que eso.
+        return {"visible": True, "abierto": conf["visible"], "expulsado": True, "texto": _merc_texto_expulsion(expulsion),
+                "sin_leer": 0, "yo": {"nombre": yo["nombre"], "tipo": yo["tipo"]}}
     bloqueados, _ = await _merc_bloqueos(yo)
     r = {"visible": True, "abierto": conf["visible"], "sin_leer": await _merc_sin_leer(yo, bloqueados),
          "bloqueados": len(bloqueados),                           # a cuántas personas tiene bloqueadas
+         "normas_ok": await _merc_normas_ok(yo),                  # False: la web le enseña las normas antes de pasar
          "yo": {"nombre": yo["nombre"], "tipo": yo["tipo"]}, "avisos_movil": await _merc_push_activo(yo["clave"])}
     if yo["tipo"] == "fds":
         r["por_revisar"] = await global_db[_MERC_ANUNCIOS].count_documents({"estado": {"$in": ["pendiente", "en_revision"]}})
@@ -57155,6 +57234,7 @@ async def merc_lista(categoria: str = "", user: dict = Depends(require_any_auth)
     return {"anuncios": [_merc_vista(a, yo, ahora) for a in pub],
             "mios": [_merc_vista(a, yo, ahora) for a in mios],
             "bloqueados": len(bloqueados),                        # a cuántas personas tiene bloqueadas
+            "normas_ok": await _merc_normas_ok(yo),
             "categorias": mercadillo.CATEGORIAS, "estados_articulo": mercadillo.ESTADOS_ARTICULO,
             "motivos_denuncia": mercadillo.MOTIVOS_DENUNCIA, "activos_max": mercadillo.ACTIVOS_MAX,
             "dias": mercadillo.DIAS_PUBLICADO, "yo": {"nombre": yo["nombre"], "tipo": yo["tipo"]}}
@@ -57484,6 +57564,19 @@ async def merc_avisos_movil(data: dict = Body(default={}), user: dict = Depends(
     return {"avisos_movil": activo}
 
 
+@api_router.post("/mercadillo/normas")
+async def merc_normas(data: dict = Body(default={}), user: dict = Depends(require_any_auth)):
+    """«Acepto las normas» (10-11-2026; Apple, guideline 1.2: aceptar unas condiciones que dejen claro que no se
+    tolera el contenido ofensivo ni a quien abusa). Queda apuntado quién, qué versión y cuándo."""
+    yo = await _merc_dentro(user)
+    if _dict_cuerpo(data).get("acepto") is not True:
+        raise HTTPException(400, "Tienes que aceptar las normas para usar el mercadillo")
+    await global_db.mercadillo_prefs.update_one({"clave": yo["clave"]}, {"$set": {
+        "clave": yo["clave"],
+        "normas": {"v": mercadillo.NORMAS_VERSION, "ts": datetime.now(timezone.utc).isoformat()}}}, upsert=True)
+    return {"ok": True, "normas_ok": True}
+
+
 @api_router.post("/mercadillo/avisos/leidos")
 async def merc_avisos_leidos(user: dict = Depends(require_any_auth)):
     yo = await _merc_dentro(user)
@@ -57632,11 +57725,20 @@ async def merc_desbloquear(bloqueo_id: str, user: dict = Depends(require_any_aut
     return {"ok": True}
 
 
-async def _merc_baja(clave: str) -> dict:
-    """LA BAJA DE LA CUENTA SE LLEVA SU MERCADILLO (10-11-2026). Quien pide borrar su cuenta ya no puede entrar ni
-    contestar: sus anuncios en revisión o publicados se quitan (y se borran a su plazo, como cualquier anuncio
-    quitado), sus conversaciones quedan cerradas para la otra persona, y se borran sus bloqueos —los que hizo y
-    los que le hicieron— y sus preferencias. Lo llama `borrar_cuenta`, que no se para si esto falla."""
+def _merc_de_la_cuenta(org_id: str) -> dict:
+    """Todas las personas de una cuenta, como filtro de su clave: `o:<org>`, `d:<org>:…` y `a:<org>:…` (y solo las
+    de esa: «o:1» no es «o:12»). Para `_merc_baja` cuando se borra la cuenta entera."""
+    org = re.escape(str(org_id))
+    return {"$regex": f"^(o:{org}$|[da]:{org}:)"}
+
+
+async def _merc_baja(clave) -> dict:
+    """LA BAJA SE LLEVA SU MERCADILLO (10-11-2026). Quien se va ya no puede entrar ni contestar: sus anuncios en
+    revisión o publicados se quitan (y se borran a su plazo, como cualquier anuncio quitado), sus conversaciones
+    quedan cerradas para la otra persona, y se borran sus bloqueos —los que hizo y los que le hicieron—, sus
+    preferencias (con las normas que aceptó) y su expulsión si la tenía.
+    `clave`: la de una persona o, para una cuenta entera, `_merc_de_la_cuenta(org_id)`. Lo llaman la baja de la
+    cuenta y los borrados (de una empresa, de un conductor, de alguien de oficina), que no se paran si esto falla."""
     ahora = datetime.now(timezone.utc).isoformat()
     an = await global_db[_MERC_ANUNCIOS].update_many(
         {"vendedor.clave": clave, "estado": {"$in": list(mercadillo.ESTADOS_ACTIVOS)}},
@@ -57646,10 +57748,19 @@ async def _merc_baja(clave: str) -> dict:
         {"$set": {"bloqueada": True, "cerrada_por": "baja"}})
     bl = await global_db[_MERC_BLOQUEOS].delete_many({"$or": [{"de": clave}, {"a": clave}]})
     await global_db.mercadillo_prefs.delete_many({"clave": clave})
+    ex = await global_db[_MERC_EXPULSADOS].delete_many({"clave": clave})
     hechos = {"anuncios": getattr(an, "modified_count", 0) or 0, "conversaciones": getattr(cv, "modified_count", 0) or 0,
-              "bloqueos": getattr(bl, "deleted_count", 0) or 0}
-    logger.info("Baja de la cuenta: mercadillo de %s cerrado (%s)", clave, hechos)
+              "bloqueos": getattr(bl, "deleted_count", 0) or 0, "expulsiones": getattr(ex, "deleted_count", 0) or 0}
+    logger.info("Baja: mercadillo de %s cerrado (%s)", clave, hechos)
     return hechos
+
+
+async def _merc_baja_sin_parar(clave, de_que: str) -> None:
+    """`_merc_baja` para los borrados: el mercadillo se limpia, pero un fallo aquí NUNCA impide el borrado."""
+    try:
+        await _merc_baja(clave)
+    except Exception as e:                                       # noqa: BLE001
+        logger.warning("%s: no se ha podido cerrar su mercadillo (%s): %s", de_que, clave, e)
 
 
 # ── Lo de Dani: encender, revisar anuncios y resolver denuncias ──────────────
@@ -57669,6 +57780,12 @@ async def admin_mercadillo(_: dict = Depends(require_superadmin)):
     publicados = [con_vendedor(a) for a in todos if _merc_estado(a, ahora) == "publicado"]
     denuncias = await global_db[_MERC_DENUNCIAS].find({"estado": "abierta"}, {"_id": 0}).to_list(500)
     denuncias.sort(key=lambda x: str(x.get("ts") or ""))
+    por_id = {a.get("id"): a for a in todos}
+
+    def personas(*quienes) -> list:
+        """De quién es lo denunciado, con su clave: a esa persona es a la que Dani puede quitarle el mercadillo."""
+        return [{"clave": p["clave"], "nombre": p.get("nombre") or "Repartidor", "papel": papel}
+                for papel, p in quienes if (p or {}).get("clave")]
     for den in denuncias:
         if den["objetivo"]["tipo"] == "conversacion":
             # Para decidir hace falta leerla: los mensajes solo se miran cuando alguien la denuncia.
@@ -57678,6 +57795,11 @@ async def admin_mercadillo(_: dict = Depends(require_superadmin)):
                        (c.get("vendedor") or {}).get("clave"): (c.get("vendedor") or {}).get("nombre")}
             den["mensajes"] = [{"de": nombres.get(m["de"], "?"), "texto": m["texto"], "ts": m["ts"]}
                                for m in sorted(msgs, key=lambda m: m["ts"])]
+            den["personas"] = personas(("vendedor", c.get("vendedor")), ("comprador", c.get("comprador")))
+        else:
+            a = por_id.get(den["objetivo"]["id"]) or await global_db[_MERC_ANUNCIOS].find_one(
+                {"id": den["objetivo"]["id"]}, {"_id": 0}) or {}
+            den["personas"] = personas(("vendedor", a.get("vendedor")))
     # Los bloqueos (10-11-2026): quién ha bloqueado a quién, cuándo y desde dónde. Solo se ven aquí, y es el único
     # sitio en el que sale la clave de alguien. Un bloqueo no retira nada: es para que Dani mire y decida.
     bloqueos = await global_db[_MERC_BLOQUEOS].find({}, {"_id": 0}).to_list(20000)
@@ -57688,7 +57810,12 @@ async def admin_mercadillo(_: dict = Depends(require_superadmin)):
         p["n"] += 1                                              # (de, a) es único: cada uno es una persona distinta
     varios = sorted((p for p in por_persona.values() if p["n"] >= mercadillo.BLOQUEOS_PARA_AVISAR),
                     key=lambda p: (-p["n"], p["nombre"]))
+    # A quién se le ha quitado el mercadillo (10-11-2026), lo último primero: con su motivo, y para devolvérselo.
+    expulsados = await global_db[_MERC_EXPULSADOS].find({}, {"_id": 0}).to_list(5000)
+    expulsados.sort(key=lambda e: str(e.get("ts") or ""), reverse=True)
     return {"conf": await _merc_conf(), "por_revisar": por_revisar, "publicados": publicados, "denuncias": denuncias,
+            "expulsados": [_merc_expulsado_vista(e) for e in expulsados],
+            "motivos_expulsion": mercadillo.MOTIVOS_EXPULSION,
             "bloqueos": [{"id": b.get("id"), "de_nombre": b.get("de_nombre") or "", "a_nombre": b.get("a_nombre") or "",
                           "a_clave": b.get("a"), "ts": b.get("ts"),
                           "origen": {"tipo": (b.get("origen") or {}).get("tipo"),
@@ -57701,7 +57828,98 @@ async def admin_mercadillo(_: dict = Depends(require_superadmin)):
             "totales": {"publicados": len(publicados), "por_revisar": len(por_revisar), "denuncias": len(denuncias),
                         "conversaciones": await global_db[_MERC_CONVS].count_documents({}),
                         "vendidos": sum(1 for a in todos if a.get("estado") == "vendido"),
-                        "bloqueos": len(bloqueos)}}
+                        "bloqueos": len(bloqueos), "expulsados": len(expulsados)}}
+
+
+async def _merc_nombre_de(clave: str) -> Optional[str]:
+    """Con qué nombre ha pasado esa persona por el mercadillo: el de su dato más reciente (un anuncio, una
+    conversación o un bloqueo). None si no ha pasado: una clave mal copiada no deja fuera a nadie «por si acaso»."""
+    vistos = []                                                  # (cuándo, nombre)
+    for a in await global_db[_MERC_ANUNCIOS].find({"vendedor.clave": clave}, {"_id": 0}).to_list(500):
+        vistos.append((str(a.get("actualizado") or a.get("creado") or ""), (a.get("vendedor") or {}).get("nombre")))
+    for c in await global_db[_MERC_CONVS].find(
+            {"$or": [{"comprador.clave": clave}, {"vendedor.clave": clave}]}, {"_id": 0}).to_list(1000):
+        quien = c.get("comprador") if (c.get("comprador") or {}).get("clave") == clave else c.get("vendedor")
+        vistos.append((str(c.get("ultimo") or c.get("creada") or ""), (quien or {}).get("nombre")))
+    for b in await global_db[_MERC_BLOQUEOS].find({"$or": [{"de": clave}, {"a": clave}]}, {"_id": 0}).to_list(1000):
+        vistos.append((str(b.get("ts") or ""), b.get("de_nombre") if b.get("de") == clave else b.get("a_nombre")))
+    if not vistos:
+        return None
+    return max(vistos, key=lambda v: v[0])[1] or "Repartidor"
+
+
+async def _merc_expulsar_efectos(e: dict) -> dict:
+    """Lo que la expulsión se lleva por delante: sus anuncios en revisión o publicados quedan retirados, con el
+    motivo (y se cierran las denuncias que tuvieran, avisando a quien denunció), y sus conversaciones abiertas,
+    cerradas para la otra persona. Se puede repetir sin daño: si una expulsión se quedó a medias, la siguiente
+    llamada (`ya`) lo termina."""
+    ahora = datetime.now(timezone.utc).isoformat()
+    motivo = (e.get("motivo") or "") + (f" {e['nota']}" if e.get("nota") else "")
+    activos = await global_db[_MERC_ANUNCIOS].find(
+        {"vendedor.clave": e["clave"], "estado": {"$in": list(mercadillo.ESTADOS_ACTIVOS)}}, {"_id": 0}).to_list(500)
+    for a in activos:
+        await global_db[_MERC_ANUNCIOS].update_one({"id": a["id"]}, {"$set": {
+            "estado": "retirado", "motivo": motivo, "motivo_clave": "expulsion", "fin": ahora, "actualizado": ahora}})
+        await _merc_cerrar_denuncias(a["id"], "retirado")
+    cv = await global_db[_MERC_CONVS].update_many(
+        {"$or": [{"comprador.clave": e["clave"]}, {"vendedor.clave": e["clave"]}], "bloqueada": {"$ne": True}},
+        {"$set": {"bloqueada": True, "cerrada_por": "expulsion"}})
+    return {"anuncios": len(activos), "conversaciones": getattr(cv, "modified_count", 0) or 0}
+
+
+@api_router.post("/admin/mercadillo/expulsar")
+async def admin_mercadillo_expulsar(data: dict = Body(default={}), user: dict = Depends(require_superadmin)):
+    """«Quitar del mercadillo» a una persona (su clave), SIEMPRE con el motivo, que es lo que se le dice. Dos veces
+    no falla (`ya`). Las reglas, arriba: «QUITARLE EL MERCADILLO A UNA PERSONA»."""
+    d = _dict_cuerpo(data)
+    clave = str(d.get("clave") or "").strip()[:200]
+    if clave == "fds":
+        raise HTTPException(400, "A quien modera no se le puede quitar el mercadillo")
+    if not _MERC_CLAVE_PERSONA.fullmatch(clave):
+        raise HTTPException(400, "Esa clave no es de una persona del mercadillo")
+    motivo_clave = str(d.get("motivo") or "")
+    if motivo_clave not in mercadillo.MOTIVOS_EXPULSION:
+        raise HTTPException(400, "Elige el motivo: es lo que se le dice a esa persona")
+    previa = await global_db[_MERC_EXPULSADOS].find_one({"clave": clave}, {"_id": 0})
+    if previa:
+        return {"ok": True, "ya": True, "expulsado": _merc_expulsado_vista(previa), **await _merc_expulsar_efectos(previa)}
+    nombre = await _merc_nombre_de(clave)
+    if nombre is None:
+        raise HTTPException(404, "Esa persona no ha usado el mercadillo")
+    e = {"clave": clave, "nombre": nombre, "ts": datetime.now(timezone.utc).isoformat(), "motivo_clave": motivo_clave,
+         "motivo": mercadillo.MOTIVOS_EXPULSION[motivo_clave], "nota": str(d.get("nota") or "").strip()[:500]}
+    try:
+        await global_db[_MERC_EXPULSADOS].insert_one(dict(e))
+    except DuplicateKeyError:
+        # Dos toques a la vez: el índice único por `clave` deja pasar uno, y el otro contesta como si ya estuviera
+        # (sin un segundo aviso a esa persona).
+        previa = await global_db[_MERC_EXPULSADOS].find_one({"clave": clave}, {"_id": 0}) or e
+        return {"ok": True, "ya": True, "expulsado": _merc_expulsado_vista(previa), **await _merc_expulsar_efectos(previa)}
+    hechos = await _merc_expulsar_efectos(e)
+    try:
+        # A su buzón ya no entra: lo que le llega es el aviso al móvil o, si no lo tiene, el correo.
+        await _merc_avisar(clave, _merc_texto_expulsion(e), asunto="Te hemos quitado el acceso al mercadillo")
+    except Exception as err:                                     # noqa: BLE001 — la expulsión ya está hecha
+        logger.warning("aviso de una expulsión del mercadillo: %s", err)
+    await _audit(user, "mercadillo_expulsar", {"clave": clave, "nombre": nombre, "motivo": motivo_clave,
+                                               "nota": e["nota"], **hechos})
+    return {"ok": True, "expulsado": _merc_expulsado_vista(e), **hechos}
+
+
+@api_router.post("/admin/mercadillo/readmitir")
+async def admin_mercadillo_readmitir(data: dict = Body(default={}), user: dict = Depends(require_superadmin)):
+    """«Devolver el acceso»: se borra la expulsión y esa persona vuelve a entrar. No resucita sus anuncios ni reabre
+    sus conversaciones (puede volver a enviar lo que siga vendiendo). Se le avisa."""
+    clave = str(_dict_cuerpo(data).get("clave") or "").strip()[:200]
+    r = await global_db[_MERC_EXPULSADOS].delete_many({"clave": clave})
+    if not getattr(r, "deleted_count", 0):
+        raise HTTPException(404, "Esa persona ya tiene acceso al mercadillo")
+    try:
+        await _merc_avisar(clave, _MERC_READMITIDO, asunto="Vuelves a tener acceso al mercadillo")
+    except Exception as err:                                     # noqa: BLE001 — el acceso ya está devuelto
+        logger.warning("aviso de que vuelve al mercadillo: %s", err)
+    await _audit(user, "mercadillo_readmitir", {"clave": clave})
+    return {"ok": True}
 
 
 @api_router.post("/admin/mercadillo/visible")
