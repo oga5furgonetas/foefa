@@ -242,13 +242,18 @@ function SinAcceso({ texto: t, onBack }) {
 /* ── Denunciar (anuncio o conversación) ── */
 /* `alEnviar`: quien la abre sigue con lo suyo en cuanto la denuncia está enviada (al bloquear con «Denunciar también…»). Recibe
    si esta hoja SIGUE ABIERTA en ese momento (10-11-2026): se puede cerrar —con su X, con el «atrás» del móvil o porque quien la
-   abrió se ha ido— mientras la denuncia se está enviando, y lo que venía detrás no se hace a espaldas de quien la cerró. */
+   abrió se ha ido— mientras la denuncia se está enviando, y lo que venía detrás no se hace a espaldas de quien la cerró.
+   Con el teclado (10-11-2026, lib/dialogo.js), como la confirmación de bloquear: al abrirse el foco entra en la hoja (a su
+   «Cerrar», que es lo que no hace daño), Escape la cierra —menos mientras se está enviando: la X y el «atrás» sí siguen
+   cerrándola entonces— y al cerrarse el foco vuelve al «Denunciar» que la abrió. Abierta desde la confirmación de bloquear,
+   Escape cierra solo esta hoja: la confirmación no atiende al teclado mientras la tiene encima (`activo`). */
 function Denunciar({ motivos, objetivo, onCerrar, alEnviar }) {
   const [motivo, setMotivo] = useState('')
   const [explica, setExplica] = useState('')
   const [estado, setEstado] = useState('')
   const [err, setErr] = useState('')
   const abierta = useRef(true)
+  const cerrar = useRef(null)
   useEffect(() => { abierta.current = true; return () => { abierta.current = false } }, [])
   const enviar = async () => {
     setEstado('enviando'); setErr('')
@@ -258,12 +263,13 @@ function Denunciar({ motivos, objetivo, onCerrar, alEnviar }) {
     if (alEnviar) alEnviar(abierta.current); else setEstado('hecho')
   }
   useAtras(true, onCerrar)
+  useDialogo({ foco: cerrar, cerrar: onCerrar, ocupado: estado === 'enviando' })
   return (
     <div role="dialog" aria-modal="true" aria-label="Denunciar" className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 sm:items-center">
       <div className="w-full max-w-md rounded-3xl border border-dark-700 bg-dark-950 p-4">
         <div className="flex items-center justify-between">
           <p className="text-[17px] font-bold text-dark-50">Denunciar</p>
-          <button type="button" onClick={onCerrar} aria-label="Cerrar" className="p-1 text-dark-400"><X size={18} /></button>
+          <button ref={cerrar} type="button" onClick={onCerrar} aria-label="Cerrar" className="p-1 text-dark-400"><X size={18} /></button>
         </div>
         {estado === 'hecho' ? (
           <p role="status" className="mt-3 text-[14.5px] leading-snug text-dark-100">Recibido. Lo revisamos y te diremos qué hemos decidido en tu buzón.</p>

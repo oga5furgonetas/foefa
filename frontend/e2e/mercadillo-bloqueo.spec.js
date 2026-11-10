@@ -653,6 +653,58 @@ test('Mercadillo · la confirmación con el teclado: el foco va a «Cancelar», 
   expect(fallos).toEqual([])
 })
 
+/* LA HOJA «DENUNCIAR», TAMBIÉN CON EL TECLADO (10-11-2026, cuarta tanda). Como la confirmación de bloquear: al abrirse el foco entra
+   en la hoja (a su «Cerrar»), Escape la cierra —menos mientras la denuncia se está enviando— y al cerrarse el foco vuelve al
+   «Denunciar» que la abrió. Abierta desde la confirmación de bloquear («Denunciar también…»), Escape cierra SOLO la denuncia y deja
+   la confirmación, con el foco otra vez en su «Cancelar». Con su X se sigue pudiendo cerrar mientras se envía (y eso no bloquea a
+   nadie: lo prueban arriba, en la web y en el iPhone, las de «cerrar la denuncia … mientras se envía»). */
+test('Mercadillo · la hoja «Denunciar» con el teclado: el foco entra en ella, Escape la cierra (no mientras se envía) y el foco vuelve a «Denunciar»', async ({ page }) => {
+  test.skip(test.info().project.name !== 'escritorio', 'el teclado es del ordenador')
+  const fallos = vigilar(page)
+  const s = await entrar(page, { demoraDenuncia: 1500 })
+  await tarjeta(page, SOPORTE).click()
+  const abrir = page.getByRole('button', { name: 'Denunciar', exact: true })
+  const hoja = page.getByRole('dialog', { name: 'Denunciar' })
+  const cerrar = hoja.getByRole('button', { name: 'Cerrar' })
+  await abrir.focus()
+  await page.keyboard.press('Enter')
+  await expect(hoja).toBeVisible()
+  await expect(cerrar, 'al abrirse, el foco está dentro de la hoja: en «Cerrar»').toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(hoja, 'Escape la cierra').toHaveCount(0)
+  await expect(abrir, 'al cerrarse, el foco vuelve al botón que la abrió').toBeFocused()
+  expect(s.llamadas, 'Escape no denuncia').toEqual([])
+
+  // Desde la confirmación de bloquear: Escape cierra solo la denuncia, y el foco vuelve a «Cancelar».
+  await page.getByRole('button', { name: 'Bloquear a Luis G.', exact: true }).click()
+  const d = dialogo(page, 'Luis G.')
+  await d.getByRole('checkbox', { name: 'Denunciar también este anuncio' }).check()
+  await d.getByRole('button', { name: 'Bloquear', exact: true }).click()
+  await expect(cerrar, 'abierta desde la confirmación, la denuncia también recibe el foco').toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(hoja).toHaveCount(0)
+  await expect(d, 'Escape ha cerrado la denuncia, no la confirmación').toBeVisible()
+  await expect(d.getByRole('button', { name: 'Cancelar', exact: true }), 'y el foco vuelve a la confirmación').toBeFocused()
+  expect(s.llamadas, 'ni se ha denunciado ni se ha bloqueado').toEqual([])
+  await page.keyboard.press('Escape')
+  await expect(d).toHaveCount(0)
+
+  // Mientras la denuncia se envía, Escape no la cierra; ya enviada, sí.
+  await abrir.click()
+  await hoja.getByRole('radio', { name: 'Es ofensivo o es acoso' }).click()
+  await hoja.getByRole('button', { name: 'Enviar denuncia' }).click()
+  await expect(hoja.getByRole('button', { name: 'Enviar denuncia' }), 'la denuncia se está enviando').toBeDisabled()
+  await page.keyboard.press('Escape')
+  await quieta(page, 200)
+  await expect(hoja, 'enviando: Escape no la cierra').toBeVisible()
+  expect(s.denunciasContestadas, 'la prueba ha pulsado Escape ANTES de que el servidor conteste').toBe(0)
+  await expect(hoja.getByRole('status')).toHaveText('Recibido. Lo revisamos y te diremos qué hemos decidido en tu buzón.')
+  await page.keyboard.press('Escape')
+  await expect(hoja, 'ya enviada, Escape la cierra').toHaveCount(0)
+  expect(s.llamadas).toEqual(['denunciar'])
+  expect(fallos).toEqual([])
+})
+
 /* El contrato dice que la lista (GET /mercadillo) trae `bloqueados: n`; de GET /mercadillo/estado dice «igual», que se puede leer de
    dos maneras. La web coge el número de donde venga: aquí, solo en el estado. */
 test('Mercadillo · si cuántos hay bloqueados viene solo en /mercadillo/estado, «Personas bloqueadas (n)» sale igual', async ({ page }) => {
