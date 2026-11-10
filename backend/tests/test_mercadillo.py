@@ -3120,3 +3120,67 @@ async def test_a_quien_ya_no_tiene_cuenta_tampoco_le_salta_el_aviso_al_movil(mun
     await server.merc_avisos_movil({"activo": True}, DANI)
     await _anuncio(LUIS, "Guantes", "6")
     assert pushes[-1].ids == ["dani"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_socio_que_sigue_con_la_cuenta_no_se_queda_sin_avisos(mundo, monkeypatch):
+    """Una cuenta de quien reparte por su cuenta con DOS usuarios: cuando uno pide la baja, `borrar_cuenta` apunta la
+    baja en la empresa y desactiva solo a ese usuario; el otro sigue entrando como `o:<org>`. Ese sigue teniendo cuenta
+    (le llega el correo o el móvil), y al móvil del que se ha ido no le salta nada. Con un solo usuario, tras la baja
+    no sale nada, como hasta ahora."""
+    monkeypatch.setattr(server, "_merc_correo_de", _CORREO_DE_REAL)
+    pushes = []
+
+    async def push(ids, titulo, cuerpo, url="/panel"):
+        pushes.append(list(ids))
+    monkeypatch.setattr(server, "send_web_push_to_users", push)
+    monkeypatch.setattr(server, "_push_enabled", True)
+    await _abrir(mundo)
+    socio = {"sub": "a2", "role": "admin", "org_id": "o1", "name": "Socio"}
+    mundo.g["admin_users"] = Col([{"id": "a1", "username": "pepe@x.es", "org_id": "o1"},
+                                  {"id": "a2", "username": "socio@x.es", "org_id": "o1",
+                                   "hashed_password": server.hash_password("clave-del-socio")}])
+    server._public_actions.pop("borrar:a2", None)
+
+    async def escribir_a_pepe(titulo: str) -> tuple:
+        """Ana le escribe por un anuncio suyo: (a qué móviles salta, qué correos le llegan a la cuenta)."""
+        await server._merc_dentro(PEPE)
+        a = await _publicado(PEPE, titulo)
+        p, c = len(pushes), len(mundo.enviados)
+        await server.merc_contactar(a["id"], {"texto": "¿Sigue disponible?"}, ANA)
+        return pushes[p:], [m.subject for m in mundo.enviados[c:] if m.to == "pepe@x.es"]
+    # EL CONTROL, sin baja: sin los avisos puestos, por correo; con ellos, a los móviles de los dos.
+    assert await escribir_a_pepe("Carretilla") == ([], ["Tienes un mensaje en el mercadillo: Carretilla"])
+    await server.merc_avisos_movil({"activo": True}, PEPE)
+    mundo.g["push_subscriptions"] = Col([{"endpoint": "movil-pepe", "user_id": "a1"},
+                                         {"endpoint": "movil-socio", "user_id": "a2"}])
+    assert await escribir_a_pepe("Escalera") == ([["a1", "a2"]], [])
+    # El socio pide la baja: a Pepe, que sigue, le salta en SU móvil y al del socio, nada.
+    assert await server.borrar_cuenta({"password": "clave-del-socio"}, socio) == {"ok": True}
+    assert (await mundo.g["organizations"].find_one({"id": "o1"}))["baja_solicitada_en"]
+    assert await server._merc_contacto("o:o1") == {"correo": "pepe@x.es"}
+    assert await escribir_a_pepe("Cinta") == ([["a1"]], [])
+    # Sin móvil apuntado, le llega el correo.
+    mundo.g["push_subscriptions"] = Col([{"endpoint": "movil-socio", "user_id": "a2"}])
+    assert await escribir_a_pepe("Cuerda") == ([], ["Tienes un mensaje en el mercadillo: Cuerda"])
+    # Si se desactiva también Pepe (no le queda nadie), ya no tiene cuenta: ni correo ni móvil.
+    mundo.g["push_subscriptions"] = Col([{"endpoint": "movil-pepe", "user_id": "a1"}])
+    await mundo.g["admin_users"].update_one({"id": "a1"}, {"$set": {"disabled": True}})
+    assert await server._merc_contacto("o:o1") is None
+    assert await server._merc_movil_listo("o:o1") == [] and await _CORREO_DE_REAL("o:o1") == ""
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_con_un_solo_usuario_tras_la_baja_no_sale_ningun_aviso(mundo, monkeypatch):
+    monkeypatch.setattr(server, "_merc_correo_de", _CORREO_DE_REAL)
+    monkeypatch.setattr(server, "_push_enabled", True)
+    await _abrir(mundo)
+    mundo.g["admin_users"] = Col([{"id": "a1", "username": "pepe@x.es", "org_id": "o1",
+                                   "hashed_password": server.hash_password("secreta123")}])
+    mundo.g["push_subscriptions"] = Col([{"endpoint": "movil-pepe", "user_id": "a1"}])
+    await server.merc_avisos_movil({"activo": True}, PEPE)
+    assert await server._merc_movil_listo("o:o1") == ["a1"] and await _CORREO_DE_REAL("o:o1") == "pepe@x.es"
+    server._public_actions.pop("borrar:a1", None)
+    assert await server.borrar_cuenta({"password": "secreta123"}, PEPE) == {"ok": True}
+    assert await server._merc_contacto("o:o1") is None
+    assert await server._merc_movil_listo("o:o1") == [] and await _CORREO_DE_REAL("o:o1") == ""

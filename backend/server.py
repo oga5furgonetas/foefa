@@ -57056,7 +57056,9 @@ async def _merc_contacto(clave: str) -> Optional[dict]:
     Antes, expulsar a quien ya había pedido la baja le mandaba «Te hemos quitado el acceso…» a alguien que había
     pedido que se borrasen sus datos. Devuelve con qué correo se le escribe (`{"correo": …}`, que puede ir vacío) a
     quien SIGUE teniendo cuenta, y None a quien ya no:
-      · `o:<org>` (quien reparte por su cuenta): la cuenta no existe o ha pedido la baja (`baja_solicitada_en`);
+      · `o:<org>` (quien reparte por su cuenta): la cuenta no existe, o ha pedido la baja (`baja_solicitada_en`) y no
+        le queda ningún usuario sin desactivar. `borrar_cuenta` apunta la baja en la EMPRESA pero desactiva solo a quien
+        la pide: si la cuenta tiene otro usuario, ese sigue entrando como `o:<org>` y se le sigue avisando;
       · `a:<org>:<id>` (oficina): su usuario no existe o está desactivado (`disabled`);
       · `d:<org>:<id>` (conductor): su ficha está de baja (`active: False`). Sin ficha o sin el campo se le escribe
         como siempre: a nadie se le deja de avisar por un dato que falta.
@@ -57064,7 +57066,12 @@ async def _merc_contacto(clave: str) -> Optional[dict]:
     persona se sigue pudiendo (protege si vuelve); lo que no sale es el aviso. Por «fds» no se pregunta."""
     if clave.startswith("o:"):
         org = await get_org(clave[2:])
-        return None if not org or org.get("baja_solicitada_en") else {"correo": org.get("email")}
+        if not org:
+            return None
+        if org.get("baja_solicitada_en") and not await global_db.admin_users.count_documents(
+                {"org_id": org.get("id") or clave[2:], "disabled": {"$ne": True}}):
+            return None
+        return {"correo": org.get("email")}
     if clave.startswith("a:"):
         _p, _org, admin_id = clave.split(":", 2)
         u = await global_db.admin_users.find_one({"id": admin_id}, {"_id": 0, "email": 1, "username": 1, "disabled": 1})
@@ -57102,11 +57109,13 @@ async def _merc_push_activo(clave: str) -> bool:
 
 
 async def _merc_push_usuarios(clave: str) -> list:
-    """Los usuarios (como guarda el móvil su suscripción) de una persona del mercadillo."""
+    """Los usuarios (como guarda el móvil su suscripción) de una persona del mercadillo. De una cuenta `o:<org>`, solo
+    los que no están desactivados (10-11-2026): al móvil del socio que pidió la baja no le salta lo de la cuenta."""
     if clave.startswith("d:") or clave.startswith("a:"):
         return [clave.split(":", 2)[2]]
     if clave.startswith("o:"):
-        return [u["id"] for u in await global_db.admin_users.find({"org_id": clave[2:]}, {"_id": 0, "id": 1}).to_list(50) if u.get("id")]
+        return [u["id"] for u in await global_db.admin_users.find({"org_id": clave[2:], "disabled": {"$ne": True}},
+                                                                  {"_id": 0, "id": 1}).to_list(50) if u.get("id")]
     if clave == "fds":
         return [u["id"] for u in await global_db.admin_users.find({"super_admin": True}, {"_id": 0, "id": 1}).to_list(10) if u.get("id")]
     return []
