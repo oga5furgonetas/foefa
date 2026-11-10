@@ -871,14 +871,19 @@ export default function Mercadillo({ onBack, inicio = 'lista' }) {
      el estado le dice por qué (`expulsado` y su `texto`). Con Promise.all, ese 403 se llevaba el estado por delante.
      Y SI EL ESTADO NO LLEGA (sin conexión, o un 5xx) Y LA LISTA CONTESTA 403, quien entra tampoco puede pasar: se le dice lo
      que conteste ese 403 en la pantalla de quien no puede pasar, en vez de pintarle la portada («Vender», el buzón, las
-     normas…) con el error encima. Solo con el 403: si lo que falla es otra cosa, a nadie se le cierra el mercadillo. */
+     normas…) con el error encima. Solo con el 403: si lo que falla es otra cosa, a nadie se le cierra el mercadillo.
+     LO MISMO SI EL ESTADO DICE `{visible: false}` (quinta tanda): a quien el servidor no deja pasar por `_merc_yo` (la ficha
+     de baja, una empresa sin el mercadillo) el estado le contesta eso, sin `texto`, y la lista 403 con el porqué. Y con la
+     lista en 403 se vacía lo que hubiera cargado: no se quedan pintados los anuncios de antes. */
   const recargar = useCallback(async () => {
     const [l, e] = await Promise.allSettled([mercLista(), mercEstado()])
     const est = e.status === 'fulfilled' ? e.value.data : null
     if (est) setEstado(est)
+    const lista403 = l.status === 'rejected' && l.reason?.response?.status === 403
     if (l.status === 'fulfilled') setDatos(l.value.data)
+    else if (lista403) setDatos(null)
     const fallo = [l, e].find((x) => x.status === 'rejected')
-    const prohibido = !est && l.status === 'rejected' && l.reason?.response?.status === 403
+    const prohibido = lista403 && (!est || est.visible === false)
     setSinPaso(prohibido ? texto(l.reason, 'No se ha podido abrir el mercadillo.') : '')
     setErr(fallo && !est?.expulsado && !prohibido ? texto(fallo.reason, 'No se ha podido abrir el mercadillo.') : '')
     setListo(true)
