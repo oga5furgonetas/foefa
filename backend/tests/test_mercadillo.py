@@ -67,7 +67,11 @@ def mundo(monkeypatch):
 
     async def entregas(yo):
         return 7 if yo["tipo"] == "autonomo" else None
+    # La base de la EMPRESA de quien hace la petición (allí están las fichas de sus conductores), vacía: en estas
+    # pruebas los conductores no tienen ficha salvo que la prueba se la ponga (`mundo.t["drivers"]`).
+    t = Db()
     monkeypatch.setattr(server, "global_db", g)
+    monkeypatch.setattr(server, "db", t)
     monkeypatch.setattr(server, "get_org", org)
     monkeypatch.setattr(server, "_enviar_email", enviar)
     monkeypatch.setattr(server, "_merc_correo_de", correo_de)
@@ -78,7 +82,7 @@ def mundo(monkeypatch):
         del server._public_actions[cupo]
     # Y lo mismo la memoria de «de esta pareja ya se le avisó a Dani» (desbloquear y volver a bloquear no repite).
     monkeypatch.setattr(server, "_MERC_PAR_AVISADO", {})
-    return SimpleNamespace(g=g, enviados=enviados)
+    return SimpleNamespace(g=g, t=t, enviados=enviados)
 
 
 def _jpeg_con_gps() -> bytes:
@@ -2267,6 +2271,136 @@ async def test_borrar_un_conductor_se_lleva_su_mercadillo_y_borrar_solo_su_cuent
     monkeypatch.setattr(server, "_merc_baja", _roto)
     assert await server.delete_driver("d2", jefe) == {"success": True}
     assert (await tenant["drivers"].find_one({"id": "d2"}))["active"] is False and limpiados == ["d1", "d3", "d2"]
+
+
+# ── CON LA FICHA DE BAJA NO SE ENTRA (10-11-2026) ───────────────────────────
+# Borrar a un conductor se lleva su mercadillo, pero su sesión vale hasta 30 días y la puerta no miraba la ficha: con
+# el token de antes volvía a entrar y abría conversaciones que ya no cerraba nadie. Lo delicado es el revés: que por
+# mirar la ficha no se quede fuera NADIE que esté en activo (sin ficha en esa base, sin el campo, con otra ficha).
+SOLO_REPARTIDORES = "El mercadillo es para repartidores"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_un_conductor_con_la_ficha_de_baja_no_entra_y_a_nadie_se_le_cierra_por_un_dato_que_falta(mundo, monkeypatch):
+    fichas, leidas = mundo.t["drivers"], []
+    buscar = fichas.find_one
+
+    async def apuntando(q=None, proyeccion=None, **k):
+        leidas.append((q, proyeccion))
+        return await buscar(q, proyeccion, **k)
+    monkeypatch.setattr(fichas, "find_one", apuntando)
+    await _abrir(mundo)
+    # SIN FICHA en la base de su empresa (un dato que falta): pasa, como siempre. Y es UNA consulta, con lo justo.
+    assert (await server._merc_yo(ANA))["clave"] == CLAVES["ana"]
+    assert leidas == [({"id": "d1"}, {"_id": 0, "active": 1})]
+    # EN ACTIVO: con el campo a True, sin el campo (las fichas viejas) o con algo que no es un «no» claro.
+    for ficha in ({"id": "d1", "active": True}, {"id": "d1"}, {"id": "d1", "active": None}, {"id": "d1", "active": 1}):
+        fichas.docs = [{"id": "d2", "active": False}, ficha]                 # (la baja de un compañero no es la suya)
+        yo = await server._merc_yo(ANA)
+        assert (yo["clave"], yo["tipo"], yo["driver_id"], yo["nombre"]) == (CLAVES["ana"], "conductor", "d1", "Ana P."), ficha
+        assert (await server.merc_estado(ANA))["visible"] is True and (await server.merc_lista("", ANA))["yo"]["tipo"] == "conductor"
+    # DE BAJA: no entra por la puerta y la entrada del mercadillo deja de enseñársele. A su compañero, lo de siempre.
+    fichas.docs = [{"id": "d1", "name": "Ana", "active": False}, {"id": "d2", "active": True}]
+    for intento in (server._merc_yo(ANA), server._merc_dentro(ANA), server.merc_lista("", ANA), server.merc_buzon(ANA),
+                    server.merc_bloqueados(ANA), server.merc_normas({"acepto": True}, ANA)):
+        await _falla(intento, 403, SOLO_REPARTIDORES)
+    assert await server.merc_estado(ANA) == {"visible": False}
+    assert (await server._merc_yo(LUIS))["clave"] == CLAVES["luis"] and (await server.merc_estado(LUIS))["visible"] is True
+    assert mundo.g["mercadillo_prefs"].docs == []
+    # Si su empresa lo tiene apagado, se le dice eso (como siempre) y la ficha ni se mira.
+    leidas.clear()
+    await _falla(server._merc_yo({**ANA, "org_id": "apagada"}), 403, "Tu empresa no tiene el mercadillo")
+    assert leidas == []
+    # Vuelve a estar en activo (era una baja temporal): entra otra vez, al momento.
+    fichas.docs[0]["active"] = True
+    assert (await server.merc_estado(ANA))["visible"] is True and (await server.merc_normas({"acepto": True}, ANA))["ok"] is True
+    # OFICINA, AUTÓNOMOS Y DANI, igual que hoy: su entrada no depende de ninguna ficha, y ni se mira.
+    fichas.docs = [{"id": u["sub"], "active": False} for u in (PEPE, OFICINA, DANI)]
+    leidas.clear()
+    assert [(await server._merc_yo(u))["clave"] for u in (PEPE, OFICINA, DANI)] == [CLAVES["pepe"], CLAVES["oficina"], "fds"]
+    assert [(await server.merc_estado(u))["visible"] for u in (PEPE, OFICINA, DANI)] == [True] * 3 and leidas == []
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_sesion_vieja_de_un_conductor_dado_de_baja_no_entra_al_mercadillo(mundo, monkeypatch):
+    """Por HTTP, con el MISMO token de antes de la baja y con `get_current_user` de verdad (que lleva la sesión de una
+    ficha de baja a la ficha activa de la misma persona, y lo recuerda 5 minutos)."""
+    monkeypatch.setattr(server, "_ADMIN_EXISTS_CACHE", {})
+    monkeypatch.setattr(server, "_FICHA_ACTIVA_CACHE", {})
+
+    async def sin_correo_personal(driver_id, org_id):
+        return None
+    monkeypatch.setattr(server, "_limpiar_correo_personal_conductor", sin_correo_personal)
+    mundo.g["admin_users"] = Col([{"id": "a1", "username": "pepe@x.es", "org_id": "o1"}, {"id": "jefe", "username": "jefe@x.es", "org_id": "owner"},
+                                  {"id": "dani", "username": "dani", "super_admin": True}])
+    mundo.t["drivers"] = Col([{"id": "d1", "name": "Ana", "active": True, "email": "ana@x.es", "created_at": "2026-01-01"},
+                              {"id": "d2", "name": "Luis", "email": "luis@x.es"}])           # (Luis: una ficha vieja, sin el campo)
+    jefe = _sesion({"sub": "jefe", "role": "admin", "org_id": "owner", "name": "Jefe"})
+    await _abrir(mundo)
+    de_ana, de_pepe = await _publicado(ANA, "Soporte de móvil"), await _publicado(PEPE, "Carretilla")
+    cid = (await server.merc_contactar(de_ana["id"], {"texto": "¿Sigue?"}, PEPE))["conversacion_id"]
+    ana, luis, rutas = _sesion(ANA), _sesion(LUIS), _rutas_del_mercadillo()
+    async with AsyncClient(transport=ASGITransport(app=server.app), base_url="http://testserver") as web:
+        async def recorrido(sesion) -> dict:
+            return {(ruta, verbo): await _llamar(web, ruta, verbo, sesion) for ruta, verbo in rutas}
+
+        def entra(respuestas: dict) -> bool:
+            return len(respuestas) == len(rutas) >= 18 and all(r.status_code in (200, 400, 404) for r in respuestas.values())
+
+        async def no_entra(sesion) -> None:
+            for (ruta, verbo), r in (await recorrido(sesion)).items():
+                if ruta == "/api/mercadillo/estado":
+                    assert (r.status_code, r.json()) == (200, {"visible": False})
+                else:
+                    assert (r.status_code, r.json()) == (403, {"detail": SOLO_REPARTIDORES}), (verbo, ruta)
+        # EL CONTROL: en activo entran por todas las rutas (y la sesión de Ana queda recordada, como en la vida real).
+        for sesion in (ana, luis):
+            assert entra(await recorrido(sesion))
+        assert (await web.get("/api/mercadillo/estado", headers=ana)).json()["visible"] is True
+        # LA OFICINA BORRA A ANA: su ficha queda de baja y su mercadillo se va con ella.
+        r = await web.delete("/api/drivers/d1", headers=jefe)
+        assert (r.status_code, r.json()) == (200, {"success": True})
+        assert (await mundo.t["drivers"].find_one({"id": "d1"}))["active"] is False and _mercadillo_de(mundo, CLAVES["ana"]) == VACIO
+        # CON EL MISMO TOKEN ya no entra por ninguna ruta, y la entrada del mercadillo deja de enseñársele.
+        await no_entra(ana)
+        # En concreto: ni abre una conversación nueva, ni contesta en la que tenía, ni deja nada apuntado.
+        r = await web.post(f"/api/mercadillo/anuncio/{de_pepe['id']}/contactar", json={"texto": "sigo aquí"}, headers=ana)
+        assert (r.status_code, r.json()) == (403, {"detail": SOLO_REPARTIDORES})
+        r = await web.post(f"/api/mercadillo/conversacion/{cid}", json={"texto": "sigo aquí"}, headers=ana)
+        assert (r.status_code, r.json()) == (403, {"detail": SOLO_REPARTIDORES})
+        assert [c["id"] for c in mundo.g["mercadillo_conversaciones"].docs] == [cid] and len(mundo.g["mercadillo_mensajes"].docs) == 1
+        assert _mercadillo_de(mundo, CLAVES["ana"]) == VACIO and mundo.g["mercadillo_anuncios"].docs[1]["interesados"] == 0
+        # A LOS DEMÁS no les cambia nada: su compañero (con su ficha vieja, sin el campo), el autónomo y Dani.
+        for user in (LUIS, PEPE, DANI):
+            assert entra(await recorrido(_sesion(user))), user["name"]
+        # UNA BAJA TEMPORAL (la oficina pone la ficha a «no activo», sin borrar al conductor) NO limpia su mercadillo
+        # —perdería sus anuncios y sus conversaciones—, pero mientras dure no entra; y al volver, entra al momento.
+        await _publicado(LUIS, "Botas")
+        r = await web.put("/api/drivers/d2", json={"active": False}, headers=jefe)
+        assert (r.status_code, r.json()) == (200, {"success": True})
+        await no_entra(luis)
+        assert _mercadillo_de(mundo, CLAVES["luis"])["anuncios"] == 1 and "Botas" in await _titulos(PEPE)
+        assert (await web.put("/api/drivers/d2", json={"active": True}, headers=jefe)).status_code == 200
+        assert entra(await recorrido(luis))
+        # QUIEN ENTRÓ CON UNA FICHA VIEJA DE BAJA pero tiene otra en activo (la misma persona: mismo correo) sigue
+        # dentro: su sesión va a la ficha activa, y es esa la que se mira (y con la que está en el mercadillo).
+        mundo.t["drivers"].docs += [{"id": "d7", "name": "Rosa Mar", "active": False, "email": "rosa@x.es", "created_at": "2026-01-01"},
+                                    {"id": "d8", "name": "Rosa Mar", "active": True, "email": "ROSA@x.es", "created_at": "2026-06-01"}]
+        rosa = _sesion({"sub": "d7", "role": "driver", "org_id": "owner", "name": "Rosa Mar"})
+        assert entra(await recorrido(rosa))
+        r = await web.post("/api/mercadillo/normas", json={"acepto": True}, headers=rosa)
+        assert r.status_code == 200 and [p["clave"] for p in mundo.g["mercadillo_prefs"].docs if "normas" in p] == ["d:owner:d8"]
+        # Si también esa queda de baja, ya no entra.
+        await mundo.t["drivers"].update_one({"id": "d8"}, {"$set": {"active": False}})
+        await no_entra(rosa)
+        # EL LÍMITE QUE SE CONOCE: la sesión recuerda 5 minutos a qué ficha va. A Ana le dan de alta OTRA ficha (mismo
+        # correo): con su token de siempre sigue fuera hasta que pasa ese rato, y entonces entra con la nueva.
+        mundo.t["drivers"].docs.append({"id": "d9", "name": "Ana", "active": True, "email": "ana@x.es", "created_at": "2026-11-10"})
+        await no_entra(ana)
+        server._FICHA_ACTIVA_CACHE.clear()                                   # (han pasado los 5 minutos)
+        assert entra(await recorrido(ana))
+        assert (await web.post("/api/mercadillo/normas", json={"acepto": True}, headers=ana)).status_code == 200
+        assert "d:owner:d9" in [p["clave"] for p in mundo.g["mercadillo_prefs"].docs] and _mercadillo_de(mundo, CLAVES["ana"]) == VACIO
 
 
 @pytest.mark.asyncio(loop_scope="session")

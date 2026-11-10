@@ -27519,6 +27519,9 @@ async def delete_driver(driver_id: str, user=Depends(require_admin)):
     # código, ni renovar la sesión), así que tampoco contestar a quien le escriba. Si falla, se le da de baja igual.
     # (Borrar solo su CUENTA de acceso, `delete_driver_account`, no le deja fuera —vuelve a entrar con un código o
     # con la contraseña inicial—: por eso allí el mercadillo no se toca.)
+    # Las OTRAS bajas (la ficha a «no activo» con PATCH/PUT, o desde la hoja de Google) tampoco lo limpian, a
+    # propósito: una baja temporal perdería sus anuncios y sus conversaciones. Mientras dure no entra —`_merc_yo`
+    # mira la ficha, también con la sesión que ya tenía abierta— y sus anuncios caducan solos.
     await _merc_baja_sin_parar(f"d:{user.get('org_id') or OWNER_ORG_ID}:{driver_id}", "Conductor eliminado")
     await _audit(user, "driver_delete", {"driver_id": driver_id})
     return {"success": True}
@@ -56902,7 +56905,8 @@ async def _merc_conf() -> dict:
 
 async def _merc_yo(user: dict) -> dict:
     """Quién es en el mercadillo: repartidor (autónomo o conductor de empresa), gente de oficina o el super-admin
-    (que además lo prueba y lo modera). 403 para las demos y las empresas que lo han apagado."""
+    (que además lo prueba y lo modera). 403 para las demos, las empresas que lo han apagado y el conductor que
+    tiene la ficha de baja."""
     if user.get("demo") or user.get("imp"):
         raise HTTPException(403, "El mercadillo es de cada cuenta")
     if user.get("sa"):
@@ -56912,6 +56916,16 @@ async def _merc_yo(user: dict) -> dict:
         org = await get_org(org_id) or {}
         if org.get("mercadillo_off"):
             raise HTTPException(403, "Tu empresa no tiene el mercadillo")
+        # CON LA FICHA DE BAJA NO ENTRA (10-11-2026). Su sesión vale hasta 30 días: sin mirar la ficha, un conductor
+        # ya borrado (`delete_driver` se lleva su mercadillo) volvía a entrar con el token de antes y abría
+        # conversaciones que ya no cerraba nadie. Se mira la ficha de ESTA sesión, en la base de su empresa (la de la
+        # petición). `get_current_user` ya la ha llevado a su ficha activa si entró con una vieja de la misma persona
+        # (lo recuerda 5 min: recién dada de baja una ficha duplicada, puede tardar eso en entrar con la otra).
+        # Solo un `active: False` cierra: si la ficha no se encuentra o no trae el campo, pasa como siempre (a nadie
+        # se le cierra por un dato que falta). Y no se guarda en memoria: al volver a estar en activo, entra ya.
+        ficha = await db.drivers.find_one({"id": user["sub"]}, {"_id": 0, "active": 1})
+        if (ficha or {}).get("active") is False:
+            raise HTTPException(403, "El mercadillo es para repartidores")
         return {"clave": f"d:{org_id}:{user['sub']}", "tipo": "conductor", "org_id": org_id,
                 "driver_id": user["sub"], "nombre": mercadillo.nombre_publico(user.get("name") or "")}
     if user.get("role") == "admin" and org_id:
