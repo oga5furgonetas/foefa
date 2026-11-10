@@ -1,8 +1,9 @@
 import { expect } from '@playwright/test'
 
 /* LA APP DE IPHONE SIMULADA Y LO QUE EN ELLA NO SE PUEDE LEER (09-11-2026; en su fichero desde el 10-11-2026).
-   Lo comparten e2e/ios-sin-pagos.spec.js (la app de iPhone no menciona ni vende nada con pagos) y
-   e2e/mercadillo-bloqueo.spec.js (bloquear a una persona en el mercadillo, también dentro del iPhone): un solo
+   Lo comparten e2e/ios-sin-pagos.spec.js (la app de iPhone no menciona ni vende nada con pagos),
+   e2e/mercadillo-bloqueo.spec.js (bloquear a una persona en el mercadillo, también dentro del iPhone) y
+   e2e/mercadillo-acceso.spec.js (las normas que se aceptan al entrar y quien se queda sin acceso): un solo
    vocabulario prohibido y una sola forma de simular la app (window.Capacitor con getPlatform() 'ios'). */
 
 export const UA_APP = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 FDSApp/2.4.1 (iOS)'
