@@ -57205,8 +57205,9 @@ async def _merc_a_dani(asunto: str, texto: str) -> None:
 #     tenía sin leer de B); todo lo demás sale de mirar esta lista, y al borrar el bloqueo vuelve.
 #   · Dani («fds») modera: lo ve todo siempre y no bloquea. Pero se le puede bloquear como vendedor, y entonces
 #     tampoco escribe a quien le bloqueó. Sus avisos de moderación (`_merc_avisar`) no pasan por aquí: llegan.
-#   · Un bloqueo no retira ni castiga nada por sí solo (se podría usar para ir a por alguien): decide Dani, que
-#     ve cada bloqueo en Negocio y recibe un aviso.
+#   · Un bloqueo no retira ni castiga nada por sí solo (se podría usar para ir a por alguien): decide Dani. Cada
+#     bloqueo queda apuntado en Negocio → Mercadillo; a Dani le salta al móvil si tiene los avisos puestos; y con 2 o
+#     más personas bloqueando a la misma, el aviso normal (móvil o, si no, correo): `_merc_bloqueo_a_dani`.
 # Hacia la web nadie se nombra por su clave: se bloquea «a quien vende este anuncio» o «a la otra persona de esta
 # conversación», y lo que vuelve es su nombre corto.
 _MERC_CERRADA = "Esta conversación está cerrada"         # el mismo TEXTO si la cierra la moderación que con un bloqueo
