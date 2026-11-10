@@ -108,7 +108,7 @@ function normaliza(data) {
 }
 
 export default function Incorporaciones() {
-  const { center } = useOutletContext() || {}
+  const { center, centers } = useOutletContext() || {}
   const [d, setD] = useState(null)
   const [err, setErr] = useState('')
   const [q, setQ] = useState('')
@@ -204,6 +204,11 @@ export default function Incorporaciones() {
         id: k, titulo: v.titulo, icono: FileQuestion, pie: 'Se le ha pedido esto',
         tono: 'text-sky-300', borde: 'border-sky-500/30',
       })),
+      /* EN REVISIÓN (10-11-2026, revisión de la flota propia): el servidor manda a esta columna a quien tiene sus
+         papeles «en revisión» (_onb_columna), y aquí no existía: contaba en el total y no salía en ningún sitio. */
+      { id: 'revision', titulo: 'En revisión', icono: Eye,
+        pie: 'Papeles entregados, a falta de comprobarlos', tono: 'text-violet-300',
+        borde: 'border-violet-500/30' },
       { id: 'completo', titulo: 'Completos', icono: CheckCircle2,
         pie: 'Alguien ha dicho que ya está', tono: 'text-emerald-400',
         borde: 'border-emerald-500/30' },
@@ -529,7 +534,7 @@ export default function Incorporaciones() {
         <Plantilla pl={d.plantilla} onCerrar={() => setPlantilla(false)}
           onGuardado={() => { setPlantilla(false); cargar() }} />
       )}
-      {alta && <Alta onHecho={() => { setAlta(false); cargar() }} onCerrar={() => setAlta(false)} />}
+      {alta && <Alta center={center} centers={centers} onHecho={() => { setAlta(false); cargar() }} onCerrar={() => setAlta(false)} />}
       {pegar && <Pegar onHecho={() => { setPegar(false); cargar() }} onCerrar={() => setPegar(false)} />}
 
       {!ordenadas.length && (
@@ -655,6 +660,10 @@ function Ficha({ p, motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje 
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <span className="text-[13.5px] font-semibold text-dark-100">{p.nombre}</span>
+            {/* Sin nave sale en todas (10-11-2026), y marcada, como en Conductores: así se ve a quién ponérsela. */}
+            {!String(p.centro || '').trim() && (
+              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">sin nave</span>
+            )}
             {/* Sin avisar: un punto, no una frase en naranja repetida en cada
                 fila. La frase entera la lleva el título (`title`). */}
             {p.nunca_avisado && !completo && (
@@ -870,14 +879,19 @@ function Mensaje({ msg, onCerrar, onEnviado, ronda, onSaltar }) {
 }
 
 /* ── ALTA A MANO ─────────────────────────────────────────────────────────── */
-function Alta({ onHecho, onCerrar }) {
-  const [f, setF] = useState({ nombre: '', telefono: '', ett: '', dni: '', falta_texto: '' })
+/* CON SU NAVE (10-11-2026, revisión de la flota propia, equipo-4): se guardaba sin centro y, con una nave elegida
+   arriba, la persona recién añadida no salía en la lista. Ahora nace en la nave de arriba y, con «Todos», se pide. */
+function Alta({ center, centers, onHecho, onCerrar }) {
+  const naves = Array.isArray(centers) ? centers.filter(Boolean) : []
+  const fija = center && center !== 'Todos' ? center : (naves.length === 1 ? naves[0] : '')
+  const [f, setF] = useState({ nombre: '', telefono: '', ett: '', dni: '', falta_texto: '', centro: fija })
   const [err, setErr] = useState('')
   const [yendo, setYendo] = useState(false)
+  const faltaNave = !fija && naves.length > 1 && !f.centro
 
   const enviar = async () => {
     setYendo(true); setErr('')
-    try { await altaIncorporacion(f); onHecho() } catch (e) {
+    try { await altaIncorporacion(f.centro ? f : { ...f, centro: undefined }); onHecho() } catch (e) {
       setErr(e?.response?.data?.detail || 'No se ha podido dar de alta.')
     } finally { setYendo(false) }
   }
@@ -905,9 +919,20 @@ function Alta({ onHecho, onCerrar }) {
           <input className="input py-1.5 text-[12.5px]" value={f.ett}
             onChange={(e) => setF({ ...f, ett: e.target.value })} />
         </div>
+        {!fija && naves.length > 1 && (
+          <div>
+            <label className="label" htmlFor="alta-incorporacion-nave">Nave *</label>
+            <select id="alta-incorporacion-nave" className="input py-1.5 text-[12.5px]" value={f.centro}
+              onChange={(e) => setF({ ...f, centro: e.target.value })}>
+              <option value="">Elige la nave</option>
+              {naves.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+        )}
       </div>
+      {fija && <p className="mt-2 text-[12px] text-dark-500">Se añade en {fija}.</p>}
       {err && <p className="mt-2 text-[12.5px] text-red-300">{err}</p>}
-      <button onClick={enviar} disabled={yendo || !f.nombre.trim() || !f.telefono.trim()}
+      <button onClick={enviar} disabled={yendo || !f.nombre.trim() || !f.telefono.trim() || faltaNave}
         className="btn-primary mt-3 inline-flex items-center gap-2 disabled:opacity-40">
         {yendo ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />} Añadir
       </button>

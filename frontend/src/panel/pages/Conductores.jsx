@@ -17,7 +17,7 @@ import {
   getDrivers, createDriver, updateDriver, deleteDriver, uploadDriverPhoto, programarTraslado, cancelarTraslado,
   getDriversScoring, getScoringLeaderboard, getDriverAccounts, setDriverPassword,
   getDriverRecoveryEmail, setDriverRecoveryEmail, removeDriverRecoveryEmail,
-  generarAccesosConductores, getContrasenaInicial, setContrasenaInicial,
+  generarAccesosConductores, previaAccesosConductores, getContrasenaInicial, setContrasenaInicial,
   deleteDriverAccount,
   getDriversDuplicados, fusionarConductores, repasarFusiones,
 } from '../api'
@@ -623,19 +623,38 @@ function ScoringView({ center }) {
    todos los demas.
 
    La oficina establece una contraseña temporal común; cada conductor la
-   cambia obligatoriamente en su primer acceso. */
-function AvisoAccesos({ list, onHecho }) {
+   cambia obligatoriamente en su primer acceso.
+
+   SOLO LA NAVE ELEGIDA Y SOLO A QUIEN NO TIENE LA SUYA (10-11-2026, revisión de la flota propia, equipo-1): pisaba a
+   todos los conductores de todas las naves, también a los ~25 de OGA5 que ya usan la app con su contraseña. Ahora se
+   aplica a la nave de arriba («Todos» = todas) y, salvo que se marque la casilla, se respeta a quien ya se puso la
+   suya. La confirmación dice a cuántos y de qué naves con lo que cuenta el servidor (la previa), no con la lista. */
+function AvisoAccesos({ list, center, onHecho }) {
   const [dando, setDando] = useState(false)
   const [confirmar, setConfirmar] = useState(false)
   const [claveTemporal, setClaveTemporal] = useState('')
   const [hecho, setHecho] = useState(null)
   const [error, setError] = useState('')
+  const [incluirPropias, setIncluirPropias] = useState(false)
+  const [previa, setPrevia] = useState(null)   // { actualizadas, naves, respetadas, sin_email, cuentas_inactivas }
+
+  useEffect(() => {
+    let vivo = true
+    previaAccesosConductores(center, incluirPropias)
+      .then(({ data }) => { if (vivo) setPrevia(data && typeof data.actualizadas === 'number' ? data : null) })
+      .catch(() => { if (vivo) setPrevia(null) })
+    return () => { vivo = false }
+  }, [center, incluirPropias])
+
+  const deNave = center && center !== 'Todos' ? center : 'todas las naves'
+  const naves = Object.entries(previa?.naves || {}).map(([n, k]) => `${n} (${k})`).join(', ')
 
   // Plegarlo es cosa de quien mira: se recuerda en este navegador y vuelve si
   // cambia el número (hay gente nueva sin contraseña).
   const [plegado, setPlegado] = useState(false)
-  const sinCorreo = list.filter((d) => !(d.email || '').trim()).length
-  const conCorreo = list.length - sinCorreo
+  // El «sin correo» de los afectados (los de la nave, sin el buscador), que es lo que cuenta el servidor.
+  const sinCorreo = previa?.sin_email || 0
+  const conCorreo = list.filter((d) => (d.email || '').trim()).length
 
   const claveAviso = `aviso_accesos_${conCorreo}`
   useEffect(() => {
@@ -653,7 +672,7 @@ function AvisoAccesos({ list, onHecho }) {
     }
     setDando(true); setError('')
     try {
-      const r = await generarAccesosConductores(claveTemporal)
+      const r = await generarAccesosConductores(claveTemporal, center, incluirPropias)
       setClaveTemporal('')
       setHecho(r.data)
       onHecho()
@@ -670,9 +689,14 @@ function AvisoAccesos({ list, onHecho }) {
           {hecho.actualizadas} {hecho.actualizadas === 1 ? 'conductor ya tiene' : 'conductores ya tienen'} acceso temporal
         </p>
         <p className="mt-1 text-[12.5px] leading-relaxed text-amber-200">
-          Todos entran con su correo de empresa y la contraseña temporal que acabas de establecer. El portal les obligará a crear una contraseña propia antes de continuar.
+          Entran con su correo de empresa y la contraseña temporal que acabas de establecer. El portal les obligará a crear una contraseña propia antes de continuar.
         </p>
         <p className="mt-1 text-[12.5px] leading-relaxed text-dark-400">{hecho.aviso}</p>
+        {hecho.respetadas > 0 && (
+          <p className="mt-1 text-[12.5px] text-dark-300">
+            {hecho.respetadas} ya {hecho.respetadas === 1 ? 'tenía la suya y la sigue' : 'tenían la suya y la siguen'} usando.
+          </p>
+        )}
         {hecho.sin_email > 0 && (
           <p className="mt-1 text-[12.5px] text-amber-300">
             {hecho.sin_email} se han quedado fuera por no tener correo. Ponles uno en su ficha y vuelve a pulsar.
@@ -695,9 +719,41 @@ function AvisoAccesos({ list, onHecho }) {
         <p className="text-[13px] font-semibold text-amber-200">
           Antes de seguir: esto cambia cómo entran
         </p>
+        {/* A CUÁNTOS Y DE QUÉ NAVES, contado por el servidor con la misma regla con la que lo aplica. */}
+        <div data-testid="previa-temporal" className="mt-2 rounded-lg border border-amber-500/25 bg-dark-950/60 px-3 py-2 text-[12.5px] leading-relaxed">
+          {previa ? (
+            <>
+              <p className="font-semibold text-amber-100">
+                Se cambiará a {previa.actualizadas} {previa.actualizadas === 1 ? 'conductor' : 'conductores'}
+                {naves ? `: ${naves}` : ''}.
+              </p>
+              {!incluirPropias && previa.respetadas > 0 && (
+                <p className="text-dark-300">
+                  A {previa.respetadas} que ya se {previa.respetadas === 1 ? 'ha puesto la suya se le respeta' : 'han puesto la suya se les respeta'}.
+                </p>
+              )}
+              {incluirPropias && (
+                <p className="text-amber-300">Incluye a quien ya se había puesto la suya: tendrá que volver a crearla.</p>
+              )}
+              {previa.sin_email > 0 && (
+                <p className="text-dark-400">{previa.sin_email} sin correo se quedan fuera.</p>
+              )}
+              {previa.cuentas_inactivas > 0 && (
+                <p className="text-dark-400">{previa.cuentas_inactivas} con el acceso desactivado no se tocan.</p>
+              )}
+            </>
+          ) : (
+            <p className="text-dark-400">No se ha podido contar a cuántos afecta en {deNave}.</p>
+          )}
+        </div>
+        <label className="mt-2 flex items-start gap-2 text-[12.5px] text-dark-300">
+          <input type="checkbox" checked={incluirPropias} onChange={(e) => setIncluirPropias(e.target.checked)}
+            className="mt-0.5" />
+          <span>Cambiársela también a quien ya se ha puesto la suya</span>
+        </label>
         <ul className="mt-2 space-y-1 text-[12.5px] leading-relaxed text-dark-300">
-          <li>· Se asignará la misma contraseña temporal a cada conductor activo de toda la empresa que tenga correo.</li>
-          <li>· Las contraseñas actuales de las cuentas activas dejarán de funcionar. Las cuentas de acceso desactivadas no se tocarán.</li>
+          <li>· Se asignará la misma contraseña temporal a los conductores activos con correo de {deNave}{incluirPropias ? '' : ' que todavía no se han puesto la suya'}.</li>
+          <li>· Sus contraseñas actuales dejarán de funcionar. Las cuentas de acceso desactivadas no se tocarán.</li>
           <li>· Al entrar con su correo de empresa, cada conductor tendrá que cambiarla obligatoriamente. Después podrá añadir un correo personal de recuperación.</li>
           <li>· Cualquier persona que conozca la contraseña temporal podría entrar con el correo de un conductor hasta que este la cambie. Comunícala únicamente a los conductores.</li>
         </ul>
@@ -709,10 +765,10 @@ function AvisoAccesos({ list, onHecho }) {
           placeholder="Escribe la contraseña temporal" minLength={8} maxLength={128}
           className="mt-1 w-full max-w-sm rounded-lg border border-dark-700 bg-dark-950 px-3 py-2 text-sm text-dark-100 outline-none focus:border-amber-400" />
         <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={dar} disabled={dando}
+          <button onClick={dar} disabled={dando || previa?.actualizadas === 0}
             className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-2 text-[12.5px] font-semibold text-amber-100 hover:bg-amber-500/30 disabled:opacity-50">
             {dando ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />}
-            {dando ? 'Aplicando…' : 'Aplicar contraseña temporal a todos'}
+            {dando ? 'Aplicando…' : previa ? `Aplicar contraseña temporal a ${previa.actualizadas}` : 'Aplicar contraseña temporal'}
           </button>
           <button onClick={() => setConfirmar(false)}
             className="px-3 py-2 text-[12.5px] text-dark-400 hover:text-dark-200">Dejarlo como está</button>
@@ -729,10 +785,10 @@ function AvisoAccesos({ list, onHecho }) {
     <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-dark-800 bg-dark-900/60 px-3 py-2 text-[12.5px]">
       <Lock size={13} className="shrink-0 text-dark-500" />
       <span className="min-w-0 flex-1 text-dark-300">
-        La operación de claves afecta a toda la empresa
+        Contraseña temporal común: se aplica a {deNave}
         {sinCorreo > 0 && <> · <span className="text-amber-300">{sinCorreo} sin correo</span></>}
         <span className="ml-1.5 cursor-help text-dark-500"
-          title={'Las claves se generan individualmente. Al hacerlo, las contraseñas anteriores de las cuentas activas se invalidan.'
+          title={`Es una sola contraseña para todos los conductores de ${deNave}, y cada uno tiene que cambiarla al entrar. Por defecto solo se les pone a quienes todavía no se han puesto la suya; antes de aplicarla se dice a cuántos.`
             + (sinCorreo > 0 ? ` Los ${sinCorreo} sin correo no pueden entrar de ninguna forma hasta ponérselo en su ficha.` : '')}>(?)</span>
       </span>
       <button onClick={() => setConfirmar(true)}
@@ -877,7 +933,8 @@ function TablaConductores({ list, accounts, onAbrir }) {
               <Cab col="email">Correo</Cab>
               <Cab col="contrato">Contrato</Cab>
               <Cab col="nivel">Nivel</Cab>
-              <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-dark-500">PIN</th>
+              {/* «Acceso» y no «PIN» (10-11-2026): no hay ningún PIN; dice si tiene cuenta con contraseña. */}
+              <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-dark-500">Acceso</th>
             </tr>
           </thead>
           <tbody>
@@ -1142,7 +1199,7 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
               </div>
             : <>
                 <ContrasenaInicial />
-                <AvisoAccesos list={list} onHecho={load} />
+                <AvisoAccesos list={list} center={center} onHecho={load} />
                 {centers.length > 1 && list.some(sinCentro) && (
                   <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[12.5px] text-amber-200">
                     <AlertCircle size={13} className="shrink-0" />
@@ -1248,7 +1305,8 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
 
   async function handleSetPassword() {
     setPwErr(''); setPwOk('')
-    if (pwValue.length < 6) { setPwErr('La contraseña debe tener al menos 6 caracteres.'); return }
+    // 8, como la inicial y la temporal (10-11-2026); el servidor también lo pide ya.
+    if (pwValue.length < 8) { setPwErr('La contraseña debe tener al menos 8 caracteres.'); return }
     if (pwValue !== pwConfirm) { setPwErr('Las contraseñas no coinciden.'); return }
     setPwBusy(true)
     try {
@@ -1263,11 +1321,13 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
   }
 
   async function handleRemovePassword() {
-    if (!confirm(`¿Quitar la contraseña de ${driver.name}? Volverá a acceder solo con su email.`)) return
+    /* LA VERDAD DE CÓMO ENTRA (10-11-2026, equipo-12): quitarle la contraseña no le cierra el acceso. Sin cuenta
+       entra con un código a su correo o con la contraseña inicial de la empresa, si la hay (_entrar_con_la_inicial). */
+    if (!confirm(`¿Quitar la contraseña de ${driver.name}? No le cierra el acceso: podrá entrar con un código que le llega a su correo o con la contraseña inicial de la empresa, si está definida.`)) return
     setPwBusy(true); setPwErr(''); setPwOk('')
     try {
       await deleteDriverAccount(driver.id)
-      setPwOk('Contraseña eliminada. El conductor accederá solo con su email.')
+      setPwOk('Contraseña quitada. Entrará con un código a su correo o con la contraseña inicial de la empresa, si está definida.')
       onAccountChange()
     } catch (ex) {
       setPwErr(ex?.response?.data?.detail || 'Error al eliminar la cuenta.')
@@ -1454,7 +1514,7 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
                       <p className="text-xs text-dark-500">
                         {hasAccount
                           ? 'El conductor debe introducir su email y contraseña para acceder al portal. Puedes cambiarla o eliminarla aquí.'
-                          : 'Sin contraseña, el conductor accede solo con su email. Activa una contraseña para mayor seguridad.'}
+                          : 'Sin contraseña propia, el conductor entra con un código que le llega a su correo o con la contraseña inicial de la empresa, si está definida (y la app le obliga a elegir la suya). Aquí puedes ponerle una temporal.'}
                       </p>
 
                       {hasAccount && (
@@ -1475,7 +1535,7 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
                             className="input w-full pr-10"
                             value={pwValue}
                             onChange={e => setPwValue(e.target.value)}
-                            placeholder="Mínimo 6 caracteres"
+                            placeholder="Mínimo 8 caracteres"
                             autoComplete="new-password"
                           />
                           <button type="button" onClick={() => setPwShow(v => !v)}

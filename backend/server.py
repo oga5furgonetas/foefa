@@ -862,6 +862,11 @@ class SetDriverPasswordRequest(BaseModel):
 
 class DriverBulkPasswordRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
+    # 10-11-2026 (equipo-1): la nave elegida arriba (vacía o «Todos» = todas las que ve quien la aplica, como antes) y
+    # si se pisa también a quien ya eligió la suya. Por defecto NO: un panel viejo que no lo manda ya no deja a los que
+    # usan la app sin su contraseña.
+    center: Optional[str] = Field(default=None, max_length=30)
+    incluir_propias: bool = False
 
 
 class ContrasenaInicialRequest(BaseModel):
@@ -9092,6 +9097,10 @@ async def set_driver_password(
     data: SetDriverPasswordRequest,
     _admin: dict = Depends(require_admin)
 ):
+    # 8 CARACTERES, COMO LA INICIAL Y LA TEMPORAL (10-11-2026, equipo-12): la ficha pedía 6 y el servidor ninguno.
+    # Solo al PONERLA: quien ya tiene una más corta sigue entrando con ella (el login no mira la longitud).
+    if len(data.password or "") < 8:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres")
     driver = await db.drivers.find_one({"id": data.driver_id}, {"_id": 0})
     if not driver:
         raise HTTPException(status_code=404, detail="Conductor no encontrado")
@@ -9224,31 +9233,38 @@ async def poner_contrasena_inicial(data: ContrasenaInicialRequest, admin: dict =
     return {"definida": True, "desde": ahora, "por": por}
 
 
-@auth_router.post("/driver-accounts/generar")
-async def generar_accesos_conductores(data: DriverBulkPasswordRequest,
-                                      _admin: dict = Depends(require_admin)):
-    """Aplica una clave temporal indicada por la oficina a toda la empresa.
+def _ya_eligio_la_suya(cuentas: list) -> bool:
+    """¿Se puso ya su propia contraseña? El MISMO criterio que _entrar_con_la_inicial: alguna de sus cuentas (por su
+    ficha o por su correo) tiene `password_changed_at` y no está marcada como temporal."""
+    return any(c.get("password_changed_at") and not (c.get("must_change_password") or c.get("creada_en_bloque"))
+               for c in cuentas)
 
-    Nunca se guarda ni devuelve en claro. Las cuentas activas quedan obligadas
-    a elegir una clave propia en su siguiente acceso. Las cuentas desactivadas
-    permanecen desactivadas.
-    """
-    if not data.password.strip():
-        raise HTTPException(400, "La contraseña temporal no puede estar vacía")
-    conductores = await db.drivers.find(
-        {"status": {"$ne": "deleted"}, "active": {"$ne": False}},
-        {"_id": 0, "id": 1, "name": 1, "email": 1, "center": 1}
-    ).to_list(5000)
-    cuentas = {a["driver_id"]: a for a in await db.driver_accounts.find(
-        {}, {"_id": 0, "driver_id": 1, "active": 1}).to_list(5000)}
 
-    actualizadas, sin_email, omitidas_inactivas = 0, 0, 0
+async def _temporal_comun(admin: dict, center: Optional[str], incluir_propias: bool, hash_temporal: str = "") -> dict:
+    """A quién le cambia la «contraseña temporal común» y, con `hash_temporal`, se la pone.
+
+    10-11-2026 (revisión de la flota propia, equipo-1): pisaba la contraseña de TODOS los conductores activos de TODAS
+    las naves, también la de quien ya se había puesto la suya (los ~25 de OGA5 con la app de Android tendrían que volver
+    a crearla). Ahora: solo la nave elegida arriba (`_filtro_centro`: nunca más allá de las naves de quien la aplica;
+    con «Todos», todas como antes) y, salvo que se pida, solo a quien todavía no tiene la suya. Sin `hash_temporal`
+    solo cuenta (la confirmación de la pantalla dice a cuántos y de qué naves antes de aplicar)."""
+    filtro = {"status": {"$ne": "deleted"}, "active": {"$ne": False}, **_filtro_centro(admin, center)}
+    conductores = await db.drivers.find(filtro, {"_id": 0, "id": 1, "name": 1, "email": 1, "center": 1}).to_list(5000)
+    todas = await db.driver_accounts.find(
+        {}, {"_id": 0, "driver_id": 1, "email": 1, "active": 1, "password_changed_at": 1,
+             "must_change_password": 1, "creada_en_bloque": 1}).to_list(5000)
+    cuentas = {a["driver_id"]: a for a in todas if a.get("driver_id")}
+    por_correo = {}
+    for a in todas:
+        e = str(a.get("email") or "").strip().lower()
+        if e:
+            por_correo.setdefault(e, []).append(a)
+
+    actualizadas, sin_email, omitidas_inactivas, respetadas = 0, 0, 0, 0
+    naves = {}
     ahora = datetime.now(timezone.utc).isoformat()
-    hash_temporal = hash_password(data.password)
     for c in conductores:
         email = (c.get("email") or "").strip().lower()
-        if email:
-            _login_fails.pop(f"drv:{email}", None)   # que nadie siga bloqueado por lo que probó antes (02-11-2026)
         if not email:
             # Sin correo no hay con que entrar. Se cuentan y se dicen: si no,
             # el numero de altas no cuadra con la plantilla y no se sabe por que.
@@ -9258,6 +9274,15 @@ async def generar_accesos_conductores(data: DriverBulkPasswordRequest,
         if cuenta and not cuenta.get("active", True):
             omitidas_inactivas += 1
             continue
+        if not incluir_propias and _ya_eligio_la_suya(([cuenta] if cuenta else []) + por_correo.get(email, [])):
+            respetadas += 1                           # la suya sigue valiendo: ni se toca ni se desbloquea
+            continue
+        nave = str(c.get("center") or "").strip() or "sin nave"
+        if not hash_temporal:
+            actualizadas += 1
+            naves[nave] = naves.get(nave, 0) + 1
+            continue
+        _login_fails.pop(f"drv:{email}", None)   # que nadie siga bloqueado por lo que probó antes (02-11-2026)
         if cuenta:
             await db.driver_accounts.update_one({"driver_id": c["id"]}, {"$set": {
                 "email": email, "hashed_password": hash_temporal, "active": True,
@@ -9276,16 +9301,40 @@ async def generar_accesos_conductores(data: DriverBulkPasswordRequest,
                 # Otra pestaña pudo crear la cuenta; no sobrescribirla a ciegas.
                 continue
         actualizadas += 1
+        naves[nave] = naves.get(nave, 0) + 1
+    return {"actualizadas": actualizadas, "ya_tenian": len(cuentas), "sin_email": sin_email,
+            "cuentas_inactivas": omitidas_inactivas, "respetadas": respetadas,
+            "naves": dict(sorted(naves.items()))}
 
-    logger.info("Acceso temporal actualizado para %d conductores; %d sin email y %d cuentas inactivas",
-                actualizadas, sin_email, omitidas_inactivas)
+
+@auth_router.get("/driver-accounts/generar/previa")
+async def previa_accesos_conductores(center: Optional[str] = None, incluir_propias: bool = False,
+                                     _admin: dict = Depends(require_admin)):
+    """Lo que haría la «contraseña temporal común» sin hacerlo: a cuántos, de qué naves, a cuántos se les respeta
+    la suya, cuántos sin correo y cuántas cuentas desactivadas (10-11-2026, equipo-1). No escribe nada."""
+    return await _temporal_comun(_admin, center, incluir_propias)
+
+
+@auth_router.post("/driver-accounts/generar")
+async def generar_accesos_conductores(data: DriverBulkPasswordRequest,
+                                      _admin: dict = Depends(require_admin)):
+    """Aplica una clave temporal indicada por la oficina a los conductores de la nave elegida (o de todas).
+
+    Nunca se guarda ni devuelve en claro. Las cuentas activas quedan obligadas
+    a elegir una clave propia en su siguiente acceso. Las cuentas desactivadas
+    permanecen desactivadas. Quien ya eligió la suya se respeta, salvo
+    `incluir_propias` (10-11-2026, equipo-1).
+    """
+    if not data.password.strip():
+        raise HTTPException(400, "La contraseña temporal no puede estar vacía")
+    r = await _temporal_comun(_admin, data.center, data.incluir_propias, hash_password(data.password))
+    logger.info("Acceso temporal actualizado para %d conductores (%s); %d con la suya respetada, %d sin email y "
+                "%d cuentas inactivas", r["actualizadas"], data.center or "todas las naves", r["respetadas"],
+                r["sin_email"], r["cuentas_inactivas"])
     return {
-        "actualizadas": actualizadas,
-        "ya_tenian": len(cuentas),
-        "sin_email": sin_email,
-        "cuentas_inactivas": omitidas_inactivas,
-        "aviso": ("La contraseña anterior de las cuentas activas queda invalidada. "
-                  "Todos comparten la contraseña temporal hasta cambiarla. "
+        **r,
+        "aviso": ("La contraseña anterior de las cuentas cambiadas queda invalidada. "
+                  "Todos ellos comparten la contraseña temporal hasta cambiarla. "
                   "El portal obliga a elegir una contraseña personal en el siguiente acceso."),
     }
 
@@ -37012,7 +37061,11 @@ def _onb_clave(p: dict) -> str:
 async def onb_listar(center: Optional[str] = None, _=Depends(require_admin)):
     q = {"archivada": {"$ne": True}}
     if center:
-        q["centro"] = {"$regex": re.escape(_centro_norm(center) or center), "$options": "i"}
+        # Y TAMBIEN QUIEN NO TIENE NAVE (10-11-2026, revision de la flota propia, equipo-4): el alta a mano la
+        # guardaba sin centro y, con una nave elegida arriba, la persona recien anadida no salia nunca. Igual que en
+        # Conductores: sale en cualquier nave, y la pantalla la marca «sin nave».
+        q["$or"] = [{"centro": {"$regex": re.escape(_centro_norm(center) or center), "$options": "i"}},
+                    {"centro": {"$in": ["", None]}}, {"centro": {"$exists": False}}]
     # POR QUIEN LLEVA MAS ESPERANDO. Ordenar por fecha de alta ponia arriba al
     # ultimo que llego, que es justo el que menos urge.
     filas = await db[_ONB_COL].find(q, {"_id": 0}).to_list(500)
@@ -37073,11 +37126,14 @@ async def onb_alta(body: dict = Body(...), user: dict = Depends(require_admin)):
         raise HTTPException(400, "Falta el nombre")
     if len(tel) < 9:
         raise HTTPException(400, "El tel\u00e9fono no parece v\u00e1lido")
+    # LA NAVE (10-11-2026, equipo-4): la pantalla manda la elegida arriba. Si no llega (un panel viejo, o \u00abTodos\u00bb
+    # sin elegir), la unica que puede ver quien la da de alta, como en las fichas de conductor; con varias, vacia.
+    centro = _centro_norm(_texto_cuerpo(body.get("centro"), 20)) or await _centro_sin_eleccion(user) or ""
     p = {"nombre": nombre, "telefono": tel,
          "dni": _texto_cuerpo(body.get("dni"), 12).upper(),
          "idper": _texto_cuerpo(body.get("idper"), 8),
          "ett": _texto_cuerpo(body.get("ett"), 30).upper(),
-         "centro": _centro_norm(_texto_cuerpo(body.get("centro"), 20)) or "",
+         "centro": centro,
          "falta_texto": _texto_cuerpo(body.get("falta_texto"), 120),
          "email": _texto_cuerpo(body.get("email"), 80),
          "estado": "contactado"}
@@ -37087,7 +37143,14 @@ async def onb_alta(body: dict = Body(...), user: dict = Depends(require_admin)):
     try:
         await db[_ONB_COL].insert_one(dict(doc))       # copia: insert_one muta (gotcha 42)
     except DuplicateKeyError:
-        raise HTTPException(409, "Esa persona ya est\u00e1 en la lista")
+        # DICE DONDE ESTA (10-11-2026, equipo-4): \u00abya esta en la lista\u00bb a secas, sin que saliera en la lista que se
+        # miraba (otra nave, sin nave o ya marcada \u00abYa esta dentro\u00bb), era un callejon sin salida.
+        otra = await db[_ONB_COL].find_one({"clave": doc["clave"]},
+                                           {"_id": 0, "nombre": 1, "centro": 1, "archivada": 1}) or {}
+        donde = ("en %s" % otra["centro"] if otra.get("centro") else "sin nave") + (
+            ", marcada como \u00abYa est\u00e1 dentro\u00bb (por eso no sale)" if otra.get("archivada") else "")
+        raise HTTPException(409, "Esa persona ya est\u00e1 en la lista%s: %s." % (
+            " (%s)" % otra["nombre"] if otra.get("nombre") else "", donde))
     return {"ok": True, "persona": doc}
 
 

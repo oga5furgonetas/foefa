@@ -186,8 +186,12 @@ export const getDriverAccounts = () => api.get('/auth/driver-accounts')
 export const setDriverPassword = (driverId, password) => api.post('/auth/set-driver-password', { driver_id: driverId, password })
 /* Aplica una contraseña temporal común a la plantilla activa; la API solo
    devuelve recuentos y guarda el hash, nunca la contraseña en claro. */
-export const generarAccesosConductores = (password) =>
-  api.post('/auth/driver-accounts/generar', { password })
+/* 10-11-2026: solo la nave elegida arriba («Todos» = todas) y, salvo `incluirPropias`, solo a quien aún no tiene la
+   suya. La previa cuenta a cuántos y de qué naves sin cambiar nada, para decirlo en la confirmación. */
+export const generarAccesosConductores = (password, center, incluirPropias = false) =>
+  api.post('/auth/driver-accounts/generar', { password, ...centerParam(center), incluir_propias: !!incluirPropias })
+export const previaAccesosConductores = (center, incluirPropias = false) =>
+  api.get('/auth/driver-accounts/generar/previa', { params: { ...centerParam(center), incluir_propias: !!incluirPropias } })
 /* La contraseña inicial de los conductores NUEVOS (30-10-2026): la define la oficina una vez; el servidor solo
    dice si la hay (nunca cuál) y guarda el hash. Vacía = quitarla. */
 export const getContrasenaInicial = () => api.get('/auth/driver-accounts/contrasena-inicial')
