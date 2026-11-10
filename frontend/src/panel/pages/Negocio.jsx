@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useT } from '../../i18n'
 import Casilla from '../components/Casilla'
 import { Foto as FotoMerc, euros as eurosM, AvisosMovil } from '../../pages/mercadillo/Mercadillo'
+import { useDialogo } from '../../lib/dialogo'
 import { Activity,
   Loader2, Building2, CheckCircle2, Clock, Euro, Sparkles, Gift, PauseCircle,
   LogIn, Trash2, Database, BrainCircuit, ExternalLink, RefreshCw, Megaphone,
@@ -643,13 +644,17 @@ function ResumenReferidosConductores() {
 /* QUITAR A UNA PERSONA DEL MERCADILLO (10-11-2026). Apple (guideline 1.2) pide que a quien publica contenido ofensivo o abusa
    de otros se le pueda echar, no solo retirarle el contenido. Se quita a una PERSONA (su clave), nunca a una empresa, y
    siempre con motivo: es lo que se le dice, junto con dónde reclamar. Lo que pasa (sus anuncios se retiran, sus
-   conversaciones se cierran, se le avisa) lo hace el servidor; aquí se elige el motivo y se lee lo que conteste. */
+   conversaciones se cierran, se le avisa) lo hace el servidor; aquí se elige el motivo y se lee lo que conteste.
+   Con el teclado (lib/dialogo.js), como la confirmación de bloquear del mercadillo: al abrirse el foco entra en «Cancelar»,
+   Escape la cierra (no mientras se envía) y al cerrarse el foco vuelve al «Quitar del mercadillo» que la abrió. */
 const cuantos = (n, uno, varios) => `${Number(n) || 0} ${Number(n) === 1 ? uno : varios}`
 function QuitarDelMercadillo({ persona, motivos, onCerrar, onHecho }) {
   const [motivo, setMotivo] = useState('')
   const [nota, setNota] = useState('')
   const [ocupado, setOcupado] = useState(false)
   const [err, setErr] = useState('')
+  const cancelar = useRef(null)
+  useDialogo({ foco: cancelar, cerrar: onCerrar, ocupado })
   const quitar = async () => {
     setOcupado(true); setErr('')
     try {
@@ -674,7 +679,7 @@ function QuitarDelMercadillo({ persona, motivos, onCerrar, onHecho }) {
           aria-label="Algo más que decirle" className={campo} />
         {err && <p role="alert" className="text-xs text-red-300">{err}</p>}
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onCerrar} disabled={ocupado} className="btn-secondary px-3 py-1.5 text-[12.5px]">Cancelar</button>
+          <button ref={cancelar} type="button" onClick={onCerrar} disabled={ocupado} className="btn-secondary px-3 py-1.5 text-[12.5px]">Cancelar</button>
           <button type="button" onClick={quitar} disabled={ocupado || !motivo}
             className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-[12.5px] font-bold text-white disabled:opacity-50">
             {ocupado && <Loader2 size={13} className="animate-spin" />} Quitar el acceso

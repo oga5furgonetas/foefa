@@ -23,8 +23,11 @@ const HOY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' }
 const LISTAS = {
   categorias: { movil: 'Móviles y electrónica', furgoneta: 'Furgoneta y accesorios', otros: 'Otras cosas' },
   estados_articulo: { nuevo: 'Nuevo', como_nuevo: 'Como nuevo', buen_estado: 'Buen estado' },
-  motivos_denuncia: { prohibido: 'Está prohibido o es ilegal', estafa: 'Es un engaño o una posible estafa', acoso: 'Me insulta o me acosa', otro: 'Otra cosa' },
+  // Los del servidor TAL CUAL (backend/mercadillo.py, MOTIVOS_DENUNCIA). «acoso» no existe: el acoso se denuncia con «ofensivo».
+  motivos_denuncia: { prohibido: 'Está prohibido o es ilegal', estafa: 'Es un engaño o una posible estafa', robado: 'Es robado o de una empresa',
+    ofensivo: 'Es ofensivo o es acoso', otro: 'Otra cosa' },
 }
+
 const YO = { nombre: 'Ana P.', tipo: 'autonomo' }
 const SOPORTE = { id: 'a2', titulo: 'Soporte de móvil para la furgoneta', descripcion: 'Poco uso.', precio_cent: 1500, categoria: 'movil', estado_articulo: 'como_nuevo',
   zona: 'A Coruña', fotos: ['f-a2'], estado: 'publicado', mio: false, publicado_en: '2026-11-08T10:00:00+00:00', vendedor: { nombre: 'Luis G.', tipo: 'conductor' } }
@@ -382,7 +385,7 @@ async function negocio(page, { errorExpulsar = null, errorReadmitir = null, anti
     denuncias: [
       { id: 'n1', objetivo: { tipo: 'anuncio', id: 'a3', titulo: 'Carretilla plegable' }, motivo: 'estafa', de_nombre: 'Ana P.', ts: '2026-11-10T08:00:00+00:00',
         texto: 'Pide el dinero antes de quedar', ...personas([{ ...MARTA, papel: 'vendedor' }]) },
-      { id: 'n2', objetivo: { tipo: 'conversacion', id: 'c9', titulo: 'Gorra de invierno' }, motivo: 'acoso', de_nombre: 'Ana P.', ts: '2026-11-10T08:30:00+00:00', texto: '',
+      { id: 'n2', objetivo: { tipo: 'conversacion', id: 'c9', titulo: 'Gorra de invierno' }, motivo: 'ofensivo', de_nombre: 'Ana P.', ts: '2026-11-10T08:30:00+00:00', texto: '',
         mensajes: [{ de: 'Luis G.', texto: 'Te vas a enterar', ts: '2026-11-10T08:20:00+00:00' }],
         ...personas([{ clave: 'o:org5', nombre: 'Ana P.', papel: 'vendedor' }, { ...LUIS, papel: 'comprador' }]) },
     ],
@@ -436,7 +439,7 @@ test.describe('Negocio · quitar a una persona del mercadillo y devolverle el ac
     const deDani = seccion.getByRole('listitem').filter({ hasText: 'iPhone 18 Pro · 256 GB · ' })
     // (con mayúscula y su motivo: «desde la conversación sobre «Gorra de invierno»» es también una fila de los bloqueos)
     const denunciaAnuncio = seccion.getByRole('listitem').filter({ hasText: /Anuncio «Carretilla plegable» · Es un engaño/ })
-    const denunciaConversacion = seccion.getByRole('listitem').filter({ hasText: /Conversación sobre «Gorra de invierno» · Me insulta/ })
+    const denunciaConversacion = seccion.getByRole('listitem').filter({ hasText: /Conversación sobre «Gorra de invierno» · Es ofensivo o es acoso/ })
     const bloqueos = seccion.getByRole('group', { name: 'Bloqueos' })
     const variosLuis = bloqueos.getByRole('listitem').filter({ hasText: 'Bloqueado por 2 personas: Luis G.' })
     const bloqueosLuis = bloqueos.getByRole('listitem').filter({ hasText: 'bloqueó a Luis G.' })
@@ -506,6 +509,31 @@ test.describe('Negocio · quitar a una persona del mercadillo y devolverle el ac
     await expect(filas.nth(1)).toContainText('Pedro S. (a:org2:u3)')
     await expect(casilla(seccion, 'Sin acceso')).toContainText('2')
     await expect(page.getByText(/undefined|NaN/)).toHaveCount(0)
+    expect(fallos).toEqual([])
+  })
+
+  /* Con el teclado (10-11-2026), como la confirmación de bloquear: al abrirse el foco entra en la hoja (a «Cancelar»), Escape la
+     cierra y el foco vuelve al «Quitar del mercadillo» que la abrió. */
+  test('la hoja con el teclado: el foco va a «Cancelar», Escape la cierra sin quitar nada y el foco vuelve a «Quitar del mercadillo»', async ({ page }) => {
+    test.skip(test.info().project.name !== 'escritorio', 'el teclado es del ordenador')
+    test.setTimeout(60000)
+    const fallos = vigilar(page)
+    const { s, seccion } = await negocio(page)
+    const abrir = seccion.getByRole('listitem').filter({ hasText: 'Escáner de la nave · ' }).getByRole('button', QUITAR)
+    const hoja = page.getByRole('dialog', { name: 'Quitar del mercadillo a Luis G.' })
+    await abrir.focus()
+    await page.keyboard.press('Enter')
+    await expect(hoja).toBeVisible()
+    await expect(hoja.getByRole('button', { name: 'Cancelar', exact: true }), 'al abrirse, el foco está dentro: en «Cancelar»').toBeFocused()
+    await hoja.getByLabel('Por qué se le quita').selectOption('otro')
+    await page.keyboard.press('Escape')
+    await expect(hoja, 'Escape la cierra').toHaveCount(0)
+    await expect(abrir, 'al cerrarse, el foco vuelve al botón que la abrió').toBeFocused()
+    expect(s.llamadas, 'Escape no quita nada').toEqual([])
+    // Y se abre limpia otra vez, con el foco dentro.
+    await page.keyboard.press('Enter')
+    await expect(hoja.getByRole('button', { name: 'Cancelar', exact: true })).toBeFocused()
+    await expect(hoja.getByRole('button', { name: 'Quitar el acceso', exact: true })).toBeDisabled()
     expect(fallos).toEqual([])
   })
 
