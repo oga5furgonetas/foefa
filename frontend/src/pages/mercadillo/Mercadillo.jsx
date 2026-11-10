@@ -184,8 +184,9 @@ function Normas({ onBack, alAceptar }) {
   /* Los Términos y la Privacidad se abren en otra pestaña (no se pierde lo que se estaba haciendo)… menos dentro de la app de
      iPhone, donde van en la misma ventana, como los de «Cuenta». Allí un enlace con target="_blank" no abría nada: Capacitor le
      pasa la dirección al sistema (WebViewDelegationHandler, `createWebViewWith` → UIApplication.open), y `capacitor://localhost/…`
-     fuera de la app no existe. Y en la pantalla en la que se aceptan las normas, ese enlace tiene que funcionar. La página legal
-     de dentro de la app vuelve a ella con su logotipo. */
+     fuera de la app no existe. Y en la pantalla en la que se aceptan las normas, ese enlace tiene que funcionar. De la página
+     legal de dentro de la app se vuelve aquí con su «Volver» (legal/LegalLayout.jsx, que solo sale allí); su logotipo no vuelve
+     aquí: lleva a la zona de la app donde se estaba (`SoloWeb`, main.jsx). */
   const enOtraPestana = esAppIOS() ? {} : { target: '_blank', rel: 'noreferrer' }
   return (
     <div className={alAceptar ? 'pb-28' : ''}>

@@ -1,7 +1,7 @@
 import React, { Suspense, lazy, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import { escucharInstalacion, prepararModoApp } from './lib/instalar'
-import { arrancarEnLaApp, recordarZona, sinPagos } from './lib/plataforma'
+import { arrancarEnLaApp, recordarZona, sinPagos, zonaGuardada } from './lib/plataforma'
 import { BrowserRouter, Route, Routes, useLocation, Navigate } from 'react-router-dom'
 /* Tipografía self-hosted (la CSP bloquea Google Fonts). Vite las sirve desde
    el propio dominio.
@@ -369,11 +369,14 @@ function AppRedirect() {
 /* LO QUE SOLO EXISTE EN LA WEB (09-11-2026). Dentro de la app de iPhone la portada, los planes y precios, el regalo de
    suscripciones, la invitación con premio, la suscripción a avisos de empleo, la tienda de ropa y las demás páginas que
    venden o promocionan algo no existen: Apple rechazó la 2.4.1 por 2.1(b) y 3.1.1 (docs/APP_STORE.md). Quien llegue a una de
-   ellas (un enlace, el logo de una página legal) va a la app del repartidor (`a`: o a otro sitio, como el panel). Lo mismo
-   con las pantallas del dueño del producto (negocio, planes y cobros, tienda de ropa, gastos, analítica), que solo ve el
-   super-admin. En la web y en Android, todo igual. */
-function SoloWeb({ children, a = '/ruta' }) {
-  return sinPagos() ? <Navigate to={a} replace /> : children
+   ellas (un enlace, el logo de una página legal) va A SU ZONA de la app: la última donde estuvo (el panel, el portal del
+   conductor con su empresa o la ruta; `zonaGuardada`, lib/plataforma.js) y, si aún no ha estado en ninguna, a la app del
+   repartidor. Hasta el 10-11-2026 iba SIEMPRE a /ruta: un conductor de empresa, que solo tiene su sesión de conductor, acababa
+   en la entrada de oficina, y además con la zona de arranque cambiada a /ruta (la app le arrancaba ahí para siempre).
+   `a`: a un sitio fijo. Lo llevan las pantallas del dueño del producto (negocio, planes y cobros, tienda de ropa, gastos,
+   analítica), que solo ve el super-admin y dentro de la app llevan al panel. En la web y en Android, todo igual. */
+function SoloWeb({ children, a }) {
+  return sinPagos() ? <Navigate to={a || zonaGuardada() || '/ruta'} replace /> : children
 }
 
 /* Mientras se descarga el trozo de una pantalla. En la app del repartidor, con su papel (o el oscuro) y el cian

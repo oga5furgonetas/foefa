@@ -114,9 +114,14 @@ const cabecera = (page, titulo) => page.locator('main').getByText(titulo, { exac
 const normas = (page) => page.locator('main').getByRole('listitem')
 const ANTES_DE_ENTRAR = 'Antes de entrar, lee las normas y acéptalas.'
 const apartadoDelMercadillo = (pagina) => pagina.getByRole('heading', { name: /Mercadillo de repartidores|Couriers’ marketplace/ })
+// «Volver» («Back» en inglés) de una página legal: solo sale dentro de la app. Y la barra en la que va, pegada arriba.
+const volverDeLaLegal = (pagina) => pagina.getByRole('button', { name: /^(?:Volver|Back)$/ })
+const barraDeVolver = (pagina) => pagina.locator('div.sticky', { has: volverDeLaLegal(pagina) })
 /** «Llega a su apartado»: la página se ha desplazado y el título del apartado del mercadillo está entero en la pantalla y ARRIBA
  *  (en su tercio de arriba: no vale que asome por abajo), con algo de aire encima: no pegado al borde, que dentro de la app de
- *  iPhone es donde va la barra de estado (allí el hueco es ese aire MÁS la barra: `env(safe-area-inset-top)`, que aquí vale 0). */
+ *  iPhone es donde va la barra de estado (allí el hueco es ese aire MÁS la barra: `env(safe-area-inset-top)`, que aquí vale 0).
+ *  Dentro de la app, además, la página lleva arriba la barra de «Volver», que se queda pegada: el título queda DEBAJO de ella,
+ *  con su aire, no tapado. */
 async function enSuApartado(pagina, donde) {
   const apartado = apartadoDelMercadillo(pagina)
   await expect(apartado, `${donde}: el apartado del mercadillo no está en la pantalla`).toBeInViewport({ ratio: 1 })
@@ -125,6 +130,10 @@ async function enSuApartado(pagina, donde) {
   const y = (await apartado.boundingBox()).y
   expect(y, `${donde}: el título del apartado no queda pegado al borde de arriba`).toBeGreaterThanOrEqual(8)
   expect(y, `${donde}: el apartado queda arriba, no asomando por abajo`).toBeLessThan(alto / 3)
+  if (await volverDeLaLegal(pagina).count()) {
+    const barra = await barraDeVolver(pagina).boundingBox()
+    expect(y, `${donde}: la barra de «Volver» no tapa el título del apartado`).toBeGreaterThanOrEqual(barra.y + barra.height + 8)
+  }
 }
 
 for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
@@ -348,6 +357,202 @@ for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
     })
   }
 }
+
+/* ── DE UNA PÁGINA LEGAL SE VUELVE A DONDE SE ESTABA (10-11-2026, cuarta tanda) ───────────────────────────────────────────────
+   Dentro de la app de iPhone «Términos» y «Privacidad» se abren en la misma ventana, y la única salida de la página legal era su
+   logotipo, que va a «/». Allí «/» mandaba SIEMPRE a /ruta: un conductor de empresa (que solo tiene su sesión de conductor)
+   acababa en la entrada de oficina, y con la zona de arranque (`fds_app_zona`) cambiada a /ruta: la app le arrancaba ahí para
+   siempre. Ahora, dentro de la app:
+     · la página legal lleva arriba «Volver» («Back» en inglés), siempre a la vista, que vuelve a donde se estaba (y si no hay a
+       dónde volver, a la zona guardada);
+     · su logotipo, y cualquier página que allí no existe, llevan a la zona de cada uno (el portal del conductor con su empresa,
+       la ruta o el panel), no siempre a /ruta.
+   En la web no cambia nada: ni «Volver», ni zona; el logotipo va a la portada. */
+const zonaDeArranque = (pagina) => pagina.evaluate(() => localStorage.getItem('fds_app_zona'))
+const logotipo = (pagina) => pagina.locator('nav a').first()
+const HOLA = 'Hola, ANA'
+
+/** La sesión de un conductor de empresa y NADA MÁS (ni `flota_token` ni `flota_admin`): como en su móvil. `donde`: la página o,
+ *  para que valga también en las ventanas que se abran, el contexto. */
+async function sesionDeConductor(donde) {
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await donde.addInitScript((t) => {
+    localStorage.setItem('flota_driver_token', t)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA LÓPEZ', center: 'NORTE' }))
+  }, token)
+}
+/** El conductor, dentro del portal de su empresa (/conductor/oga5), con el mercadillo abierto para todos. */
+async function conductor(page, { ios = true, ...opciones } = {}) {
+  await sesionDeConductor(page)
+  await simularApi(page, 'vacio')
+  await arrancar(page, { ios })
+  const s = await mercadillo(page, opciones)
+  await page.goto('/conductor/oga5', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText(HOLA)).toBeVisible()
+  expect(await page.evaluate(() => [localStorage.getItem('flota_token'), localStorage.getItem('flota_admin')]), 'solo tiene su sesión de conductor').toEqual([null, null])
+  return s
+}
+/* Los tres que usan la app: `entrar` les deja delante de las normas del mercadillo (que aún no han aceptado), cada uno por su
+   camino; `zona`, la suya; `deVuelta`, lo que se ve al volver a donde estaban; `enSuZona`, lo que se ve en su zona. */
+const QUIENES = [
+  { nombre: 'un conductor de empresa (solo su sesión de conductor)', zona: '/conductor/oga5',
+    entrar: async (page) => { await conductor(page, { normas: false }); await page.getByRole('button', { name: /Mercadillo/ }).click() },
+    deVuelta: (page) => page.getByText(HOLA), enSuZona: (page) => page.getByText(HOLA) },
+  { nombre: 'quien reparte por su cuenta', zona: '/ruta',
+    entrar: (page) => entrar(page, { ios: true, porLaApp: true, normas: false }),
+    deVuelta: (page) => page.getByRole('button', { name: /Mercadillo de repartidores/ }), enSuZona: (page) => page.getByRole('navigation', { name: 'Secciones' }) },
+  { nombre: 'alguien de oficina', zona: '/panel',
+    entrar: async (page) => {
+      await entrarComoAdmin(page)
+      await simularApi(page, 'vacio')
+      await arrancar(page, { ios: true })
+      await mercadillo(page, { normas: false })
+      await page.goto('/panel', { waitUntil: 'domcontentloaded' })
+      await expect.poll(() => zonaDeArranque(page)).toBe('/panel')
+      await page.goto('/mercadillo', { waitUntil: 'domcontentloaded' })
+    },
+    deVuelta: acepto, enSuZona: (page) => page.locator('main h1').first() },
+]
+
+test.describe('De una página legal se vuelve a donde se estaba (iPhone)', () => {
+  test.use({ userAgent: UA_APP })
+  for (const quien of QUIENES) {
+    test(`${quien.nombre}: normas → «Términos» → «Volver» le devuelve a donde estaba, y su zona de arranque no cambia`, async ({ page }) => {
+      test.setTimeout(60000)
+      const fallos = vigilar(page)
+      await quien.entrar(page)
+      await expect(acepto(page)).toBeVisible()
+      expect(await zonaDeArranque(page), 'la zona de arranque, antes de salir a la página legal').toBe(quien.zona)
+      const estaba = page.url()
+
+      await page.getByRole('link', { name: 'Términos', exact: true }).click()
+      await expect(page).toHaveURL(/\/terminos#mercadillo$/)
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText('Términos y Condiciones de Uso')
+      await enSuApartado(page, `los términos abiertos por ${quien.nombre}`)
+      // «Volver», uno solo y a la vista SIN subir (la página ha llegado desplazada a su apartado): la barra va pegada arriba.
+      const volver = volverDeLaLegal(page)
+      await expect(volver).toHaveCount(1)
+      await expect(volver).toHaveText('Volver')
+      await expect(volver, '«Volver» está a la vista sin desplazar nada').toBeInViewport({ ratio: 1 })
+      expect((await barraDeVolver(page).boundingBox()).y, 'la barra de «Volver» está pegada arriba').toBeLessThanOrEqual(1)
+      await quieta(page, 300)
+      await limpia(page, `la página legal con «Volver» (${quien.nombre})`, { perfil: 'basico' })
+
+      await volver.click()
+      await expect(page, 'está otra vez donde estaba: ni en la entrada de oficina ni en /ruta').toHaveURL(estaba)
+      await expect(quien.deVuelta(page)).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Entra en FDS' }), 'no ha acabado en la entrada').toHaveCount(0)
+      expect(await zonaDeArranque(page), 'la zona de arranque no ha cambiado').toBe(quien.zona)
+      expect(fallos).toEqual([])
+    })
+
+    test(`${quien.nombre}: el logotipo de la página legal le lleva a su zona (${quien.zona}), no a la entrada de oficina`, async ({ page }) => {
+      test.setTimeout(60000)
+      const fallos = vigilar(page)
+      await quien.entrar(page)
+      await expect(acepto(page)).toBeVisible()
+      await page.getByRole('link', { name: 'Privacidad', exact: true }).click()
+      await expect(page).toHaveURL(/\/privacidad$/)
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText('Política de Privacidad')
+      await logotipo(page).click()
+      await expect(page, 'el logotipo lleva a su zona').toHaveURL(new RegExp(`${quien.zona}$`))
+      await expect(quien.enSuZona(page)).toBeVisible()
+      await quieta(page, 500)                                             // por si algo redirige después (la entrada de oficina)
+      expect(new URL(page.url()).pathname, 'y ahí se queda').toBe(quien.zona)
+      expect(await zonaDeArranque(page), 'la zona de arranque no ha cambiado').toBe(quien.zona)
+      expect(fallos).toEqual([])
+    })
+  }
+
+  /* Si no hay a dónde volver (la página legal es lo primero que se abre en esa ventana: su historial solo la tiene a ella),
+     «Volver» lleva a la zona guardada. Aquí, una ventana nueva que nace en la Privacidad, con la sesión de un conductor. */
+  test('si no hay a dónde volver, «Volver» lleva a la zona guardada (el portal del conductor), no a /ruta ni a la entrada', async ({ context }) => {
+    test.setTimeout(60000)
+    await sesionDeConductor(context)
+    await simularApi(context, 'vacio')
+    await arrancar(context, { ios: true })
+    await mercadillo(context, { normas: true })
+    const page = await context.newPage()
+    await page.goto('/conductor/oga5', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText(HOLA)).toBeVisible()
+    await expect.poll(() => zonaDeArranque(page)).toBe('/conductor/oga5')
+    const [legal] = await Promise.all([context.waitForEvent('page'), page.evaluate(() => { window.open('/privacidad', '_blank', 'noopener') })])
+    await expect(legal.getByRole('heading', { level: 1 })).toHaveText('Política de Privacidad')
+    expect(await legal.evaluate(() => window.history.length), 'la prueba: en esa ventana no hay nada detrás').toBe(1)
+    await volverDeLaLegal(legal).click()
+    await expect(legal).toHaveURL(/\/conductor\/oga5$/)
+    await expect(legal.getByText(HOLA)).toBeVisible()
+    expect(await zonaDeArranque(legal)).toBe('/conductor/oga5')
+  })
+
+  /* Y sin zona guardada (quien abre la app por primera vez y va derecho a una página legal desde la entrada), como hasta ahora:
+     a la app del repartidor, que sin sesión manda a entrar. El logotipo lo prueba también e2e/ios-sin-pagos.spec.js. */
+  test('sin zona guardada, «Volver» (sin historial) y el logotipo llevan a /ruta, como hasta ahora', async ({ context }) => {
+    test.setTimeout(60000)
+    await simularApi(context, 'vacio')
+    await arrancar(context, { ios: true })
+    const page = await context.newPage()
+    await page.goto('/terminos', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    expect(await zonaDeArranque(page), 'la prueba: no hay zona guardada').toBeNull()
+    const aLaRuta = async (pagina, que) => {
+      await pagina.waitForURL(/\/login\?next=/)                             // /ruta, que sin sesión manda a entrar
+      expect(decodeURIComponent(pagina.url()), `${que} lleva a /ruta`).toMatch(/\/login\?next=\/ruta$/)
+    }
+    const [legal] = await Promise.all([context.waitForEvent('page'), page.evaluate(() => { window.open('/privacidad', '_blank', 'noopener') })])
+    await expect(legal.getByRole('heading', { level: 1 })).toBeVisible()
+    expect(await legal.evaluate(() => window.history.length), 'la prueba: en esa ventana no hay nada detrás').toBe(1)
+    await volverDeLaLegal(legal).click()
+    await aLaRuta(legal, '«Volver» sin historial y sin zona')
+    await legal.close()
+    await page.evaluate(() => localStorage.removeItem('fds_app_zona'))    // la ha dejado la otra ventana al pasar por /ruta
+    await logotipo(page).click()
+    await aLaRuta(page, 'el logotipo sin zona')
+  })
+})
+
+for (const [idioma, locale, nombre] of [['es', 'es-ES', 'Volver'], ['en', 'en-GB', 'Back']]) {
+  test.describe(`Las páginas legales dentro del iPhone llevan «${nombre}» (${locale})`, () => {
+    test.use({ userAgent: UA_APP, locale })
+    test(`en todas, arriba y a la vista; y no dice nada prohibido`, async ({ page }) => {
+      const fallos = vigilar(page)
+      await simularApi(page, 'vacio')
+      await arrancar(page, { ios: true })
+      for (const ruta of ['/terminos', '/privacidad', '/cookies', '/aviso-legal', '/encargo', '/contacto', '/seguridad']) {
+        await page.goto(ruta, { waitUntil: 'domcontentloaded' })
+        await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
+        const volver = volverDeLaLegal(page)
+        await expect(volver, `${ruta}: un «${nombre}»`).toHaveCount(1)
+        await expect(volver).toHaveText(nombre)
+        await expect(volver).toBeInViewport({ ratio: 1 })
+        // Bien visible: una zona de toque de 44 px de alto como poco, y por encima de la navegación de la página.
+        const caja = await volver.boundingBox()
+        expect(caja.height, `${ruta}: «${nombre}» se puede pulsar con el dedo`).toBeGreaterThanOrEqual(44)
+        expect(caja.y + caja.height, `${ruta}: «${nombre}» va arriba, antes que el logotipo`).toBeLessThanOrEqual((await logotipo(page).boundingBox()).y)
+      }
+      await quieta(page, 300)
+      await limpia(page, `una página legal con «${nombre}» (${locale})`, { idioma, perfil: 'basico' })
+      expect(fallos).toEqual([])
+    })
+  })
+}
+
+test('control · en la web las páginas legales no llevan «Volver», y su logotipo va a la portada aunque haya una zona guardada', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('fds_app_zona', '/conductor/oga5'))
+  await simularApi(page, 'vacio')
+  await arrancar(page, { ios: false })
+  for (const ruta of ['/terminos#mercadillo', '/privacidad', '/cookies', '/aviso-legal', '/encargo', '/contacto', '/seguridad']) {
+    await page.goto(ruta, { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
+    await expect(volverDeLaLegal(page), `${ruta}: en la web no hay «Volver»`).toHaveCount(0)
+    await expect(page.locator('div.sticky'), `${ruta}: ni barra pegada arriba`).toHaveCount(0)
+  }
+  await logotipo(page).click()
+  await quieta(page, 700)
+  expect(new URL(page.url()).pathname, 'el logotipo de la web va a la portada').toBe('/')
+  expect(await zonaDeArranque(page), 'y la web no toca la zona').toBe('/conductor/oga5')
+})
 
 /* ── `normas_ok === false`, ESTRICTO ─────────────────────────────────────────────────────────────────────────────────────────
    La pantalla de normas la impone la web, no el servidor (la app de iPhone que está en revisión y las webs en caché no la

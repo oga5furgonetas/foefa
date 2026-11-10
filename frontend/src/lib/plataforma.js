@@ -56,12 +56,22 @@ export function recordarZona(pathname) {
   try { localStorage.setItem(ZONA, zona) } catch { /* sin almacenamiento: arrancará en /ruta */ }
 }
 
+/** La zona guardada (el panel, el portal del conductor con su empresa o la ruta), o null si aún no hay ninguna o no se está
+ *  dentro de la app. La leen el arranque y, desde el 10-11-2026, las dos salidas de lo que no es de ninguna zona: lo que solo
+ *  existe en la web (`SoloWeb`, main.jsx) y el «Volver» de las páginas legales (legal/LegalLayout.jsx). Antes esas dos
+ *  mandaban SIEMPRE a /ruta, y un conductor de empresa (que solo tiene su sesión de conductor) acababa en la entrada de
+ *  oficina, con la zona cambiada a /ruta: la app le arrancaba ahí para siempre. */
+export function zonaGuardada() {
+  if (!esAppNativa()) return null
+  try { return zonaDe(localStorage.getItem(ZONA)) } catch { return null }
+}
+
 /** Al arrancar dentro de la app: a la zona donde estaba (recordarZona) o, la primera vez, a la app del repartidor;
  *  nunca a la portada de la web. */
 export function arrancarEnLaApp() {
   if (!esAppNativa()) return
   try {
-    if (window.location.pathname === '/') window.history.replaceState(null, '', zonaDe(localStorage.getItem(ZONA)) || '/ruta')
+    if (window.location.pathname === '/') window.history.replaceState(null, '', zonaGuardada() || '/ruta')
   } catch { /* nada */ }
 }
 
