@@ -500,12 +500,13 @@ Primero, lo que Apple pide a una app con contenido de usuarios, en el orden de s
 
 Y lo demás:
 
-6. **Normas y textos legales** (es y en). Las normas del mercadillo y los Términos (su apartado «Mercadillo de
-   repartidores», que dentro del iPhone es el 5) dicen: que hay que aceptar las normas al entrar; que no se tolera el
-   contenido ofensivo ni a los usuarios abusivos; que hay un filtro automático «sencillo» que «no lo detecta todo»; que se
-   puede bloquear; que las denuncias las revisa una persona **en 24 horas como mucho**; y que a quien incumple se le quita
-   el acceso, se le dice por qué y puede pedir que se revise. La Privacidad cuenta los datos nuevos (a quién bloqueas y
-   cuándo, cuándo aceptaste las normas y, si se te quita el acceso, el motivo y la fecha), quién los ve y cuándo se borran.
+6. **Normas y textos legales** (es y en). Los Términos (su apartado «Mercadillo de repartidores», que dentro del iPhone es
+   el 5) dicen: que hay que aceptar las normas al entrar; que no se tolera el contenido ofensivo ni a los usuarios
+   abusivos; que hay un filtro automático «sencillo» que «no lo detecta todo»; que se puede bloquear; que las denuncias las
+   revisa una persona **en 24 horas como mucho**; y que a quien incumple se le quita el acceso, se le dice por qué y puede
+   pedir que se revise. Las normas del mercadillo, que es lo que se acepta al entrar, dicen lo mismo en corto. La Privacidad
+   cuenta los datos nuevos (a quién bloqueas y cuándo, cuándo aceptaste las normas y, si se te quita el acceso, el motivo y
+   la fecha), quién los ve y cuándo se borran.
 7. **Lo del iPhone**:
    - «Avisarme en el móvil» ya no sale dentro de la app de iPhone (`AvisosMovil`, `Mercadillo.jsx`): allí no hay avisos y
      el botón solo sabía fallar.
