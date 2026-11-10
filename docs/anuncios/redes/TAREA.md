@@ -59,6 +59,8 @@
      causa y reprográmala en un hueco libre. Y nada de PNG en TikTok: usa el `.jpg` de cada pieza (el 06-11 falló
      «funciones» por eso). Desde el 08-11, Instagram también con `.jpg` (el carrusel C en PNG dio «Fatal»; en JPEG
      salió). Si un Instagram de las 12:00 da ERROR, la ronda de las 12:51 lo reprograma ese mismo día a las 13:00.
+     Si el ERROR dice «You have reached your Metricool account limit» (10-11): el plan gratuito publica 20 posts al
+     mes; no programes más ese mes y sigue el apartado 8 ter de REDES.md.
      Si el ERROR dice «Could not refresh … accessToken» (09-11, TikTok), la red se ha desconectado de Metricool: no
      sirve reintentar; avisa a Dani (reconectar en Metricool) y, cuando vuelva, reprograma los que fallaron.
    - **Si no hay conector:** no publiques en ningún sitio ni lo simules. Prepara como mucho UNA pieza nueva

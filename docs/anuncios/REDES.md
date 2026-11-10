@@ -232,6 +232,20 @@ web ya las sirve; si no, `https://raw.githubusercontent.com/oga5furgonetas/foefa
 `bash docs/anuncios/redes/short.sh <letra>` (uno por jueves y domingo; ya hechos G y D) y las tres piezas nuevas
 de la lista de `redes/TEXTO.md`. Una pieza por ronda como mucho.
 
+## 8 ter. Límite de Metricool (descubierto el 10-11)
+
+El plan **gratuito** de Metricool publica **20 posts al mes** como mucho (cada red cuenta aparte; se reinicia el día
+1; lo programado de más no se publica: da ERROR «You have reached your Metricool account limit»). Noviembre lo agotó
+el 10-11 (TikTok, Instagram, YouTube y LinkedIn, ~2 al día). Hasta el 30-11 todo lo programado fallará.
+
+Hasta que Dani decida (plan de pago o no), el reparto con el plan gratuito, desde el 01-12, es este, por lo que
+mide la semana del 02-11 (YouTube ~1.350 visualizaciones; Instagram ~185; TikTok ~82 y casi 0 interacciones):
+- **YouTube: 3 Shorts por semana** (lunes, jueves y domingo, 19:00) → ~13 al mes.
+- **LinkedIn: 1 por semana** (miércoles 11:00) → 4-5.
+- **Instagram: lo que quede** (2-3 al mes, los mejores carruseles, en `.jpg`).
+- **TikTok: fuera de Metricool** (a mano o desde la sesión del PC con el navegador), porque es la red que menos rinde.
+Antes de programar, contar lo publicado en el mes (getScheduledPosts del 1 a hoy, estado PUBLISHED) y no pasar de 20.
+
 ## 9. Medición (semanal, lunes)
 
 - Altas por red: `tools/metricas/origen_altas.py` filtrando `utm_source` en `x`, `tiktok`, `facebook`, `linkedin` y
@@ -319,3 +333,4 @@ Lo que la tarea NO hace y por qué:
 | 09-11 19:5x | (nube) | Metricool | Ronda 3 del lunes. YouTube 19:00 publicado. **TikTok 18:00 «Invita y gana»: ERROR «Could not refresh TikTok Business accessToken»**: Metricool ha perdido el acceso a TikTok; hasta que Dani lo reconecte, fallarán todos los TikTok programados (10-11 a 20-11). Aviso al móvil enviado. Este no se reprograma (el 18-11 ya sale otro «Invita y gana» en TikTok). Cuando vuelva la conexión: reprogramar los TikTok que hayan dado ERROR en huecos libres. | Dani: reconectar TikTok en Metricool |
 | 10-11 07:5x | (nube) | Metricool | Ronda 1 del martes. Nada nuevo que programar: TikTok, Instagram, YouTube y LinkedIn cubiertos hasta el M 17-11 (Instagram hasta el X 18-11). TikTok sigue figurando enlazado en Metricool, pero no se sabrá si Dani lo ha reconectado hasta el TikTok de hoy a las 18:00 (lo mira la ronda de las 19:51). | Dani: reconectar TikTok en Metricool |
 | 10-11 12:5x | (nube) | Metricool | Ronda 2 del martes. Instagram 12:00 (carrusel D) publicado. Nada nuevo que programar: todo cubierto hasta el M 17-11. | Dani: reconectar TikTok en Metricool |
+| 10-11 19:5x | (nube) | Metricool | Ronda 3 del martes. TikTok 18:00 (trucos): ERROR «You have reached your Metricool account limit». Causa: el plan gratuito de Metricool publica 20 posts al mes y noviembre ya los gastó; lo programado hasta el 30-11 (TikTok, Instagram, YouTube y LinkedIn) fallará. Apartado 8 ter nuevo con el reparto para diciembre con 20 posts (YouTube primero). Aviso al móvil enviado. | Dani: plan de pago de Metricool o seguir con 20 al mes; TikTok sigue a reconectar si se queda en Metricool |
