@@ -778,7 +778,7 @@ FDS – information for App Review (build BUILD_N).
 - Terms: accepted at registration (by the courier, or by the company for its drivers); they and the rules ("Normas y seguridad") state zero tolerance for objectionable content and abusive users.
 - Filter: we review every ad (text and photos) before it is published; an ad reported by 3 people is hidden until we review it.
 - Report: flag button ("Denunciar") on every ad and conversation; we answer the reporter.
-- Block: open an ad → "Bloquear a …" on the seller card (also in every conversation): that user's ads and conversations leave the blocker's marketplace at once, neither can message the other, and we are notified. Undo: Mensajes → "Personas bloqueadas".
+- Block: open an ad → "Bloquear a …" on the seller card (also in every conversation): that user's ads and conversations leave the blocker's marketplace at once, neither can message the other, and it is reported to us. Undo: Mensajes → "Personas bloqueadas".
 - We review reports within 24 hours and remove the content and the offender's access.
 - Contact: contacto@flotadsp.com (Account tab, Terms).
 No other public content: a courier's stops are visible only to that courier (and to their own company for company drivers). Not a regulated industry.
@@ -802,7 +802,7 @@ Lo que cambia respecto a las actuales, además del punto 6:
 - El punto 3 pierde la línea de «no hay compras» (ahora está en el punto 0). Los puntos 4 y 5 no cambian.
 
 **La cuenta de caracteres**, como la hace `asc_notas_poner.py` (`strip()` y `BUILD_N` por el número de build). Esta orden da
-los caracteres y los bytes; el 10-11 dio `3930 3944`:
+los caracteres y los bytes; el 10-11 dio `3935 3949`:
 
 ```
 python -I -X utf8 -c "import sys; t=open(sys.argv[1],encoding='utf-8').read().strip().replace('BUILD_N',sys.argv[2]); print(len(t), len(t.encode('utf-8')))" notas-revision-planb.txt 21
@@ -810,11 +810,11 @@ python -I -X utf8 -c "import sys; t=open(sys.argv[1],encoding='utf-8').read().st
 
 | Fichero | Build | Caracteres | Bytes UTF-8 | Margen hasta 4.000 |
 | --- | --- | --- | --- | --- |
-| `notas-revision-planb.txt` (la propuesta) | 21 | 3.930 | 3.944 | 70 caracteres |
-| `notas-revision-planb.txt` | 9999 | 3.932 | 3.946 | 68 caracteres |
+| `notas-revision-planb.txt` (la propuesta) | 21 | 3.935 | 3.949 | 65 caracteres |
+| `notas-revision-planb.txt` | 9999 | 3.937 | 3.951 | 63 caracteres |
 | `notas-revision-nuevas.txt` (las actuales) | 20 | 3.911 | 3.923 | 89 caracteres |
 
-Quedan 68 caracteres libres: cualquier frase que se añada obliga a quitar otra. `asc_notas_poner.py` se niega a
+Quedan 63 caracteres libres: cualquier frase que se añada obliga a quitar otra. `asc_notas_poner.py` se niega a
 escribir si se pasan de 4.000.
 
 ### Pendiente de Dani (de este plan B)
