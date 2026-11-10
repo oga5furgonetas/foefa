@@ -14,6 +14,7 @@ Y lo que faltaba de esa misma guideline (10-11-2026): quitarle el mercadillo a q
 (`normas_ok`); el filtro básico de insultos y amenazas, con el mismo cuidado lo que entra que lo que NO entra; y
 que borrar una empresa, un conductor o alguien de oficina se lleve su mercadillo sin impedir nunca el borrado."""
 import ast
+import functools
 import inspect
 import io as _io
 import re
@@ -1028,10 +1029,16 @@ async def test_bloquear_como_lo_llama_la_web_rutas_sesion_y_json(mundo, monkeypa
         assert [x["titulo"] for x in r.json()["anuncios"]] == ["Soporte de móvil"] and r.json()["bloqueados"] == 0
 
 
+@functools.lru_cache(maxsize=1)
+def _arbol_del_servidor():
+    """server.py, leído una sola vez (son casi 60.000 líneas: cada lectura tarda segundos)."""
+    return ast.parse(Path(server.__file__).read_text(encoding="utf-8-sig"))
+
+
 def _textos_de_error(*funciones) -> list:
     """Los textos que esas funciones de server.py le dan a la persona: el de cada HTTPException y el del cupo del día
     (los f-string, con «0» en cada hueco; `_MERC_CERRADA` y demás constantes, con su valor)."""
-    arbol, fuera = ast.parse(Path(server.__file__).read_text(encoding="utf-8-sig")), []
+    arbol, fuera = _arbol_del_servidor(), []
     for fn in ast.walk(arbol):
         if not (isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)) and fn.name in funciones):
             continue
@@ -1401,6 +1408,8 @@ async def test_quitarle_el_mercadillo_a_alguien_retira_lo_suyo_cierra_sus_conver
     assert (r["ya"], r["anuncios"], r["conversaciones"]) == (True, 1, 1)
     assert (await mundo.g["mercadillo_anuncios"].find_one({"id": publicado["id"]}))["estado"] == "retirado"
     assert (await mundo.g["mercadillo_conversaciones"].find_one({"id": compra}))["cerrada_por"] == "expulsion"
+    # Un apunte viejo o roto (sin su motivo) no deja a nadie sin explicación: se le dice el motivo general.
+    assert server._merc_texto_expulsion({"clave": CLAVES["ana"]}) == _fuera("otro")
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -1431,8 +1440,9 @@ async def test_no_se_expulsa_a_quien_modera_ni_una_clave_mal_escrita_ni_sin_moti
                      "Esa persona no ha usado el mercadillo")
     assert mundo.g["mercadillo_expulsados"].docs == [] and mundo.g["audit_log"].docs == []
     assert (await server.merc_lista("", ANA))["mios"][0]["estado"] == "publicado"
-    # El control: con su clave y un motivo, sí.
-    assert (await _expulsar("ana", "repetido"))["expulsado"]["motivo"] == "Has incumplido las normas varias veces."
+    # El control: con su clave y un motivo, sí (y una nota kilométrica se queda en 500 letras).
+    hecho = (await _expulsar("ana", "repetido", nota="muy largo " * 80))["expulsado"]
+    assert hecho["motivo"] == "Has incumplido las normas varias veces." and len(hecho["nota"]) == 500
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -1538,6 +1548,15 @@ async def test_el_panel_de_dani_ensena_a_quien_ha_dejado_fuera_y_de_quien_es_cad
     await server.admin_mercadillo_readmitir({"clave": CLAVES["pepe"]}, DANI)
     panel = await server.admin_mercadillo(DANI)
     assert panel["expulsados"] == [e2] and panel["totales"]["expulsados"] == 1
+    # Con más anuncios guardados de los que el panel carga de una vez (2.000), la denuncia de uno que queda fuera de
+    # esa tanda sigue diciendo de quién es.
+    de_luis = await _publicado(LUIS, "Botas")
+    await server.merc_denunciar({"anuncio_id": de_luis["id"], "motivo": "otro"}, OFICINA)
+    mundo.g["mercadillo_anuncios"].docs[:0] = [
+        {"id": f"relleno{i}", "titulo": "Relleno", "estado": "vendido", "creado": "2026-01-01T10:00:00+00:00",
+         "vendedor": {"clave": "o:relleno", "nombre": "Relleno"}} for i in range(2000)]
+    de_las_botas = [d["personas"] for d in (await server.admin_mercadillo(DANI))["denuncias"] if d["objetivo"]["titulo"] == "Botas"]
+    assert de_las_botas == [[{"clave": CLAVES["luis"], "nombre": "Luis G.", "papel": "vendedor"}]]
 
 
 @pytest.mark.asyncio(loop_scope="session")
