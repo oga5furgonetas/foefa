@@ -1610,11 +1610,39 @@ def _sesion(user) -> dict:
                                                              super_admin=bool(user.get("sa")))}
 
 
+@functools.lru_cache(maxsize=1)
+def _rutas_declaradas() -> tuple:
+    """Las rutas `/api/mercadillo…` tal como están DECLARADAS en server.py (`@api_router.<verbo>("/mercadillo…")`), con su
+    verbo. Se leen del código con `ast`, como los comprobadores de scripts/: así no dependen de cómo guarde FastAPI las
+    rutas por dentro, que cambia de una versión a otra. Con la versión fijada en requirements.txt (la de GitHub y la de
+    producción) `app.routes` ya no trae las rutas de un router incluido, y este recorrido salía VACÍO allí aunque las rutas
+    funcionaban; en el PC, con una versión más vieja instalada, no se veía."""
+    prefijo = getattr(server.api_router, "prefix", "") or "/api"
+    arbol = ast.parse(Path(server.__file__).read_text(encoding="utf-8-sig"))
+    rutas = []
+    for nodo in ast.walk(arbol):
+        if not isinstance(nodo, (ast.AsyncFunctionDef, ast.FunctionDef)):
+            continue
+        for d in nodo.decorator_list:
+            if (isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and isinstance(d.func.value, ast.Name)
+                    and d.func.value.id == "api_router" and d.func.attr in ("get", "post", "put", "patch", "delete")
+                    and d.args and isinstance(d.args[0], ast.Constant) and isinstance(d.args[0].value, str)):
+                camino = prefijo + d.args[0].value
+                if (camino + "/").startswith("/api/mercadillo/"):
+                    rutas.append((camino, d.func.attr.upper()))
+    return tuple(sorted(rutas))
+
+
 def _rutas_del_mercadillo() -> list:
-    """Las rutas `/api/mercadillo…` QUE TIENE MONTADAS LA APP, con su verbo. Salen del router y no de una lista escrita
-    a mano: una ruta nueva entra sola en el recorrido, y sin la guarda lo hace fallar."""
-    return sorted((r.path, verbo) for r in server.app.routes if isinstance(r, APIRoute)
-                  and (r.path + "/").startswith("/api/mercadillo/") for verbo in r.methods)
+    """Las rutas `/api/mercadillo…` de la app, con su verbo. No es una lista escrita a mano: una ruta nueva entra sola en
+    el recorrido, y sin la guarda lo hace fallar. Salen de cómo están declaradas en server.py (`_rutas_declaradas`); y
+    donde FastAPI deja ver las rutas ya montadas en `app.routes` (las versiones que las traen ahí), tienen que ser
+    exactamente las mismas."""
+    declaradas = list(_rutas_declaradas())
+    montadas = sorted((r.path, verbo) for r in server.app.routes if isinstance(r, APIRoute)
+                      and (r.path + "/").startswith("/api/mercadillo/") for verbo in r.methods)
+    assert not montadas or montadas == declaradas, (montadas, declaradas)
+    return declaradas
 
 
 async def _llamar(web, ruta: str, verbo: str, sesion: dict):
