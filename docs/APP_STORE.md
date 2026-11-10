@@ -489,7 +489,8 @@ Primero, lo que Apple pide a una app con contenido de usuarios, en el orden de s
    instante esa cuenta deja de entrar al mercadillo, sus anuncios en revisión o publicados quedan retirados (y se cierran
    las denuncias que tuvieran, avisando a quien denunció) y sus conversaciones abiertas, cerradas. Al entrar solo lee «Te
    hemos quitado el acceso al mercadillo. Motivo: … Si crees que es un error, escribe a contacto@… y lo revisamos.», y se le
-   manda lo mismo al móvil o por correo. Abajo, «Sin acceso al mercadillo» dice a quién se le ha quitado, cuándo y por qué,
+   manda lo mismo al móvil o por correo (salvo que ya no tenga cuenta: a esa persona no se le escribe, pero queda sin
+   acceso por si vuelve). Abajo, «Sin acceso al mercadillo» dice a quién se le ha quitado, cuándo y por qué,
    y **«Devolver el acceso»** lo deshace (se le avisa; ni vuelven sus anuncios ni se reabren sus conversaciones). En el
    registro de auditoría queda lo justo: que se tomó la decisión, sobre qué cuenta, con qué motivo y cuándo. **Se le quita
    a una cuenta o a una ficha (su clave), no a la persona física**: si vuelve con otra cuenta o le hacen otra ficha, entra,
