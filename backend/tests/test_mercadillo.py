@@ -1455,6 +1455,12 @@ async def test_tras_la_baja_la_misma_sesion_ya_no_entra_ni_un_minuto_mas(mundo, 
     await _abrir(mundo)
     a = await _publicado(ANA, "Soporte de móvil")
     sesion = _sesion(PEPE)
+    limpiar, recordada_al_limpiar = server._merc_baja, []
+
+    async def limpiando(clave):
+        recordada_al_limpiar.append("a1" in server._ADMIN_EXISTS_CACHE)
+        return await limpiar(clave)
+    monkeypatch.setattr(server, "_merc_baja", limpiando)
     async with AsyncClient(transport=ASGITransport(app=server.app), base_url="http://testserver") as web:
         # El control: antes de la baja su sesión entra (y la memoria de los 60 s queda cargada, como en la vida real).
         for ruta in ("/api/mercadillo", "/api/mercadillo/buzon", "/api/auth/me"):
@@ -1462,6 +1468,8 @@ async def test_tras_la_baja_la_misma_sesion_ya_no_entra_ni_un_minuto_mas(mundo, 
         assert server._ADMIN_EXISTS_CACHE["a1"][1] is True
         r = await web.post("/api/auth/borrar-cuenta", json={"password": "secreta123"}, headers=sesion)
         assert (r.status_code, r.json()) == (200, {"ok": True})
+        # La sesión se olvida ANTES de limpiar su mercadillo: lo que entrara entre medias no lo cerraría nadie.
+        assert recordada_al_limpiar == [False]
         # Con el mismo token, al instante, ya no entra: ni al mercadillo ni a nada.
         for verbo, ruta, cuerpo in (("POST", f"/api/mercadillo/anuncio/{a['id']}/contactar", {"texto": "sigo aquí"}),
                                     ("GET", "/api/mercadillo", None), ("GET", "/api/mercadillo/buzon", None),
