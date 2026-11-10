@@ -7447,6 +7447,10 @@ async def borrar_cuenta(data: dict = Body(...), user: dict = Depends(get_current
         raise HTTPException(403, "Una cuenta de empresa se da de baja escribiendo a la oficina")
     ahora = datetime.now(timezone.utc).isoformat()
     await global_db.admin_users.update_one({"id": adm["id"]}, {"$set": {"disabled": True, "baja_solicitada_en": ahora}})
+    # LA SESIÓN DEJA DE VALER YA (10-11-2026). `get_current_user` recuerda 60 s que el usuario existe: sin olvidarlo
+    # aquí, con el mismo token se seguía entrando un minuto más, y la conversación que se abriera en ese minuto en el
+    # mercadillo ya no la cerraba nadie (`_merc_baja`, abajo, ya había pasado).
+    _ADMIN_EXISTS_CACHE.pop(adm["id"], None)
     await global_db.organizations.update_one({"id": org["id"]}, {"$set": {"baja_solicitada_en": ahora}})
     await global_db.bajas_cuentas.insert_one({"org_id": org["id"], "usuario": adm.get("username") or "",
                                               "nombre": org.get("name") or "", "pedida_en": ahora,

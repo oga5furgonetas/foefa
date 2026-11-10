@@ -1272,6 +1272,38 @@ async def test_la_baja_no_se_para_si_el_mercadillo_falla(mundo, monkeypatch):
     assert mundo.g["bajas_cuentas"].docs[0]["org_id"] == "o1" and "petición de borrar una cuenta" in mundo.enviados[-1].subject
 
 
+@pytest.mark.asyncio(loop_scope="session")
+async def test_tras_la_baja_la_misma_sesion_ya_no_entra_ni_un_minuto_mas(mundo, monkeypatch):
+    """`get_current_user` recuerda 60 s que un usuario existe. Sin olvidarlo al dar la baja, con el MISMO token se seguía
+    entrando un minuto más; y lo que se abriera en ese minuto (una conversación) se quedaba abierto para siempre, porque
+    `_merc_baja` ya había pasado. Va por HTTP: esa memoria vive en la sesión, no en las funciones."""
+    _por_http(mundo, monkeypatch)
+    _con_cuenta(mundo)
+    await _abrir(mundo)
+    a = await _publicado(ANA, "Soporte de móvil")
+    sesion = _sesion(PEPE)
+    async with AsyncClient(transport=ASGITransport(app=server.app), base_url="http://testserver") as web:
+        # El control: antes de la baja su sesión entra (y la memoria de los 60 s queda cargada, como en la vida real).
+        for ruta in ("/api/mercadillo", "/api/mercadillo/buzon", "/api/auth/me"):
+            assert (await web.get(ruta, headers=sesion)).status_code == 200, ruta
+        assert server._ADMIN_EXISTS_CACHE["a1"][1] is True
+        r = await web.post("/api/auth/borrar-cuenta", json={"password": "secreta123"}, headers=sesion)
+        assert (r.status_code, r.json()) == (200, {"ok": True})
+        # Con el mismo token, al instante, ya no entra: ni al mercadillo ni a nada.
+        for verbo, ruta, cuerpo in (("POST", f"/api/mercadillo/anuncio/{a['id']}/contactar", {"texto": "sigo aquí"}),
+                                    ("GET", "/api/mercadillo", None), ("GET", "/api/mercadillo/buzon", None),
+                                    ("POST", "/api/mercadillo/bloquear", {"anuncio_id": a["id"]}),
+                                    ("GET", "/api/auth/me", None), ("POST", "/api/auth/borrar-cuenta", {"password": "secreta123"})):
+            r = await web.request(verbo, ruta, json=cuerpo, headers=sesion)
+            assert (r.status_code, r.json()) == (401, {"detail": "Sesión revocada: el usuario ya no existe"}), ruta
+        assert (await web.get("/api/mercadillo/estado", headers=sesion)).status_code == 401
+        # A los demás no les cambia nada.
+        assert (await web.get("/api/mercadillo", headers=_sesion(ANA))).status_code == 200
+    # Y no ha quedado ni una conversación nueva, ni un mensaje, ni un bloqueo suyo.
+    assert mundo.g["mercadillo_conversaciones"].docs == [] and mundo.g["mercadillo_mensajes"].docs == []
+    assert mundo.g["mercadillo_bloqueos"].docs == [] and len(mundo.g["bajas_cuentas"].docs) == 1
+
+
 # ── QUITARLE EL MERCADILLO A UNA PERSONA (10-11-2026) ───────────────────────
 # Apple (guideline 1.2): ante una denuncia, «removing the content and ejecting the user». Lo que se vigila: que quien
 # está fuera no entre por NINGUNA ruta (se recorren las de verdad, sacadas del router), que se le diga el motivo y cómo
