@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import {
   Loader2, Clock, AlertTriangle, CircleCheck, Info, ChevronDown, ChevronUp,
@@ -72,12 +72,19 @@ export default function Horas() {
   }, [])
   useEffect(cargarEstado, [cargarEstado])
 
+  /* Cada análisis lleva su número (11-11-2026): la respuesta que llega después de
+     cambiar de centro, o de lanzar otro análisis, se descarta. */
+  const peticion = useRef(0)
+
   /* `carga`: es el plan guardado al abrir la pantalla. Se analiza SIN volver a
      guardarlo (antes cada apertura reescribía «guardado» con la hora de abrir).
-     `centro`: «Guardarlo en DGA1» cuando el plan es de otra nave que la elegida. */
-  const analizar = useCallback(async (txt, exc, { carga = false, centro = null } = {}) => {
+     `centro`: «Guardarlo en DGA1» cuando el plan es de otro centro que el elegido.
+     `sustituir`: false = si ese centro ya tiene otro plan de la semana, no lo pisa.
+     `ignorarFichas`: «Guardarlo aquí de todas formas» cuando lo dicen solo las fichas. */
+  const analizar = useCallback(async (txt, exc, { carga = false, centro = null, sustituir = null, ignorarFichas = false } = {}) => {
     const cuerpo = txt ?? texto
     const e = exc ?? excepciones
+    const n = ++peticion.current
     setCargando(true); setErr(''); setDatos(null)
     try {
       const r = await whcAnalizar({
@@ -85,22 +92,43 @@ export default function Horas() {
         ...(e === '' || e == null ? {} : { excepciones: Number(e) }),
         center: centro || center,
         ...(carga ? { guardar: false } : {}),
+        ...(sustituir == null ? {} : { sustituir }),
+        ...(ignorarFichas ? { ignorar_fichas: true } : {}),
       })
+      if (n !== peticion.current) return null
       setDatos({ ...r.data, esCarga: carga })
-      setEditando(false)
+      // Lo que se ve no es el plan guardado del centro elegido (es de otro centro,
+      // o se acaba de guardar en otro): sus botones («Borrar», «guardado…») no salen.
+      setEditando(!!centro || !!(r.data?.otra_nave && !r.data?.es_el_guardado))
       if (r.data?.guardado) {
-        // Guardado en OTRA nave (con su botón): la elegida sigue sin plan.
+        // Guardado en OTRO centro (con su botón): el elegido sigue sin plan.
         if (!centro) setGuardado({ updated_at: new Date().toISOString(), pegado_en: r.data.pegado_en, week: r.data.semana_del_plan })
         cargarEstado()
       }
+      return r.data
     } catch (x) {
-      setErr(x?.response?.data?.detail || 'No se ha podido leer ese texto.')
-    } finally { setCargando(false) }
+      if (n === peticion.current) setErr(x?.response?.data?.detail || 'No se ha podido leer ese texto.')
+      return null
+    } finally { if (n === peticion.current) setCargando(false) }
   }, [texto, excepciones, center, cargarEstado])
+
+  /* «Guardarlo en DGA1» (11-11-2026): sin las excepciones de la casilla (son del
+     centro elegido) y sin pisar sin preguntar otro plan que DGA1 ya tenga. */
+  const guardarEn = async (nave) => {
+    const d = await analizar(texto, '', { centro: nave, sustituir: false })
+    if (!d?.ya_hay_plan) return
+    const p = cuandoPegado(d.ya_hay_plan.pegado_en)
+    const cuantos = d.ya_hay_plan.n_conductores != null ? `, ${d.ya_hay_plan.n_conductores} conductores` : ''
+    if (window.confirm(`${nave} ya tiene otro plan de esa semana (${p ? p.largo.charAt(0).toLowerCase() + p.largo.slice(1) : 'sin fecha'}${cuantos}). ¿Sustituirlo por este?`)) {
+      await analizar(texto, '', { centro: nave, sustituir: true })
+    }
+  }
 
   // Al entrar se recupera el plan de ESTA semana del centro y se analiza solo.
   useEffect(() => {
     let vivo = true
+    peticion.current += 1
+    setCargando(false)
     // Las excepciones también: la cifra de una nave no puede viajar a otra
     // (10-11-2026: con 2 en OGA5, se cambiaba a DGA1 sin plan y se guardaba con 2).
     setDatos(null); setGuardado(null); setTexto(''); setEditando(false); setExcepciones('')
@@ -120,7 +148,9 @@ export default function Horas() {
      siempre el de la semana en curso, aunque en pantalla estuviera el de la pasada. */
   const borrar = async () => {
     if (!center || center === 'Todos') return
-    const semana = datos?.semana_del_plan || guardado?.week || null
+    // La semana del análisis, solo si lo que se ve es el plan de este centro.
+    const delElegido = datos?.centro === String(center).toUpperCase() && (!datos?.otra_nave || datos?.es_el_guardado)
+    const semana = (delElegido && datos?.semana_del_plan) || guardado?.week || guardado?.semana || null
     const deQue = semana ? `de la semana del ${ddmm(semana)}` : 'de esta semana'
     if (!window.confirm(`¿Borrar el plan guardado ${deQue} de ${center}?`)) return
     try { await deleteWhcPlan(center, semana) } catch { /* se ve al recargar */ }
@@ -244,17 +274,46 @@ export default function Horas() {
               ofrece guardarlo en la suya con el mismo pegado. */}
           {otraNave && (
             <div className="card border-amber-500/30 bg-amber-500/5 p-4 text-[12.5px] leading-relaxed text-amber-200/90">
-              <p>
-                <b className="text-amber-200">Este plan es de {otraNave.centro} y tienes elegida {center}.</b>{' '}
-                {otraNave.por === 'fichas'
-                  ? `Lo dicen las fichas: ${otraNave.casan_alli} de sus conductores son de ${otraNave.centro}. `
-                  : 'Lo dice su cabecera. '}
-                No se ha guardado.
-              </p>
-              <button onClick={() => analizar(texto, excepciones, { centro: otraNave.centro })} disabled={cargando || !texto}
-                className="btn-primary mt-2 px-3 py-1.5 text-xs disabled:opacity-40">
-                Guardarlo en {otraNave.centro}
-              </button>
+              {datos.es_el_guardado ? (
+                /* Un plan de otro centro que quedó guardado en este antes del 10-11-2026:
+                   está guardado (aquí) y se ofrece quitarlo, no copiarlo encima del otro. */
+                <p>
+                  <b className="text-amber-200">El plan guardado en {center} parece de {otraNave.centro}.</b>{' '}
+                  {otraNave.por === 'fichas'
+                    ? `Lo dicen las fichas: ${otraNave.casan_alli} de sus conductores son de ${otraNave.centro}.`
+                    : 'Lo dice su cabecera.'}
+                </p>
+              ) : (
+                <p>
+                  <b className="text-amber-200">Este plan es de {otraNave.centro} y tienes elegido el centro {center}.</b>{' '}
+                  {otraNave.por === 'fichas'
+                    ? `Lo dicen las fichas: ${otraNave.casan_alli} de sus conductores son de ${otraNave.centro}. `
+                    : 'Lo dice su cabecera. '}
+                  No se ha guardado.
+                </p>
+              )}
+              <div className="mt-2 flex flex-wrap gap-2">
+                {datos.es_el_guardado ? (
+                  <button onClick={borrar} disabled={cargando}
+                    className="rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-40">
+                    Quitarlo de {center}
+                  </button>
+                ) : (
+                  <>
+                    <button onClick={() => guardarEn(otraNave.centro)} disabled={cargando || !texto}
+                      className="btn-primary px-3 py-1.5 text-xs disabled:opacity-40">
+                      Guardarlo en {otraNave.centro}
+                    </button>
+                    {/* Las fichas pueden estar sin actualizar: no pueden impedir guardarlo aquí. */}
+                    {otraNave.por === 'fichas' && (
+                      <button onClick={() => analizar(texto, excepciones, { ignorarFichas: true })} disabled={cargando || !texto}
+                        className="rounded-lg border border-dark-700 px-3 py-1.5 text-xs text-dark-200 hover:bg-dark-800 disabled:opacity-40">
+                        Guardarlo en {center} de todas formas
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           )}
           {guardadoFuera && (
@@ -296,9 +355,10 @@ export default function Horas() {
               )}
             </div>
             {pegado && (
-              <p className={`mt-1.5 flex items-center gap-1.5 text-[13px] font-medium ${deHoy ? 'text-dark-300' : 'text-amber-300'}`}>
-                <Clock size={13} className="shrink-0" />
-                {pegado.largo}
+              <p className={`mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] font-medium ${deHoy ? 'text-dark-300' : 'text-amber-300'}`}>
+                {/* En el móvil la segunda parte baja de renglón, en vez de partirse
+                    las dos en columnas estrechas (11-11-2026). */}
+                <span className="flex items-center gap-1.5"><Clock size={13} className="shrink-0" />{pegado.largo}</span>
                 {!deHoy && <span className="font-normal text-amber-200/80">· lo de «en ruta» es de ese momento, no de ahora</span>}
               </p>
             )}

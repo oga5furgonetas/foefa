@@ -39507,10 +39507,14 @@ async def subir_diarios(files: List[UploadFile] = File(...),
         # volver a subirlo. En el pegado sí avisaba. Ahora cada fichero dice
         # cuántos DNR vienen sin clasificar y, si su único aviso no lo explica ya
         # (el de los reportes de antes del 13-05-2026), lleva el de volver a subirlo.
+        # Va en un campo APARTE, `aviso_sin_clasificar` (11-11-2026): la previa de
+        # la web vieja en caché presenta todo lo de `avisos` como «anteriores al
+        # 13-05-2026, sin la columna DSC», que aquí sería falso. La nueva lo junta.
         sin_clas = (r.get("filas_dnr") or 0) if r.get("sin_clasificar") else 0
         avisos_f = list(r.get("avisos") or [])
+        aviso_sin_clas = None
         if sin_clas and not avisos_f:
-            avisos_f.append(
+            aviso_sin_clas = (
                 f"Los {sin_clas} DNR del {r.get('fecha_dnr') or 'bloque'} vienen sin clasificar "
                 f"(ninguno con DSC = Y). Amazon suele tardar 2-4 días en clasificarlos: se "
                 f"guardan, no cuentan como defectos, y hay que volver a subir este reporte "
@@ -39524,6 +39528,7 @@ async def subir_diarios(files: List[UploadFile] = File(...),
             "descuadres": len(r.get("descuadres") or []),
             "sin_clasificar": sin_clas,
             "avisos": avisos_f,
+            "aviso_sin_clasificar": aviso_sin_clas,
             "guardado": bool(r.get("guardado"))})
         total["reportes"] += 1
         total["dnr"] += r.get("dnr_guardados") or r.get("filas_dnr") or 0
@@ -41307,7 +41312,11 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
     otra_nave = None
     if center and del_texto and del_texto != center:
         otra_nave = {"centro": del_texto, "por": "cabecera"}
-    elif center and not del_texto:
+    elif center and not del_texto and data.get("ignorar_fichas") is not True:
+        # `ignorar_fichas` (opcional, 11-11-2026): «Guardarlo aquí de todas formas».
+        # Las fichas pueden estar sin actualizar (la gente de DGA2 con la ficha aún
+        # en OGA5) y no pueden impedir que la oficina guarde su plan. La cabecera,
+        # en cambio, sí manda siempre.
         otra_nave = await _whc_nave_por_fichas(conductores, center)
 
     # CUÁNDO SE PEGÓ (10-11-2026). Al abrir la pantalla, el plan guardado se
@@ -41319,12 +41328,18 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
     hoy = date_cls.fromisoformat(_dia_negocio())
     sun_plan = _whc_semana_del_plan(texto) or _whc_domingo(hoy.isoformat())
     pegado_en = None
-    if center and not otra_nave:
+    # También con `otra_nave` (11-11-2026): un plan de DGA1 que quedó guardado en
+    # OGA5 antes del arreglo se abría como «Pegado hoy» y con «No se ha guardado».
+    # Si el texto es el guardado en la elegida, se dice (`es_el_guardado`) y se
+    # cuenta desde cuando se pegó allí.
+    es_el_guardado = False
+    if center:
         previo = await db.whc_planes.find_one(
             {"center": center, "week": sun_plan},
             {"_id": 0, "texto": 1, "pegado_en": 1, "updated_at": 1})
         if previo and previo.get("texto") == texto[:400000]:
             pegado_en = previo.get("pegado_en") or previo.get("updated_at")
+            es_el_guardado = True
     dia_pegado = _whc_dia_local(pegado_en) if pegado_en else None
     if not pegado_en:
         pegado_en = datetime.now(timezone.utc).isoformat()
@@ -41335,10 +41350,15 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
 
     guardado = False
     aviso_guardado = None
-    if otra_nave:
+    ya_hay_plan = None
+    if otra_nave and es_el_guardado:
+        aviso_guardado = (
+            "El plan guardado en el centro %s parece de %s. Bórralo y pega en %s el suyo."
+            % (center, otra_nave["centro"], center))
+    elif otra_nave:
         # Para la pantalla vieja en caché, que solo sabe enseñar `aviso_guardado`.
         aviso_guardado = (
-            "Este plan es de %s y tienes elegida %s, así que no se ha guardado. "
+            "Este plan es de %s y tienes elegido el centro %s, así que no se ha guardado. "
             "Elige %s arriba y pégalo otra vez." % (otra_nave["centro"], center, otra_nave["centro"]))
     if center and data.get("guardar") is not False and not otra_nave:
         # La semana la dice el PLAN. Con la de hoy, pegar el de la semana
@@ -41350,17 +41370,37 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
         anterior = await db.whc_planes.find_one(
             {"center": center, "week": sun}, {"_id": 0, "n_conductores": 1})
         n_anterior = (anterior or {}).get("n_conductores")
-        if _whc_debe_pisar(n_anterior, n_nuevo):
-            await db.whc_planes.update_one(
+        # `sustituir` (opcional, 11-11-2026). «Guardarlo en DGA1» manda false: si
+        # DGA1 ya tiene OTRO plan de esa semana, no se pisa sin preguntar (podía
+        # ser uno más nuevo que el que se está mandando); se contesta `ya_hay_plan`
+        # y la pantalla lo pregunta y lo reenvía con true. Sin el campo, como siempre.
+        otro_plan = None
+        if data.get("sustituir") is False and anterior:
+            otro_plan = await db.whc_planes.find_one(
                 {"center": center, "week": sun},
-                {"$set": {"center": center, "week": sun, "texto": texto[:400000],
-                          "n_conductores": n_nuevo,
-                          "limite_horas": round(limite / 60, 2),
-                          "limite_bloque_horas": round(bloque_limite / 60, 2),
-                          "excepciones": excepciones,
-                          "pegado_en": pegado_en,
-                          "updated_at": datetime.now(timezone.utc).isoformat()}},
-                upsert=True)
+                {"_id": 0, "texto": 1, "pegado_en": 1, "updated_at": 1})
+            if (otro_plan or {}).get("texto") == texto[:400000]:
+                otro_plan = None
+        if otro_plan:
+            ya_hay_plan = {"pegado_en": otro_plan.get("pegado_en") or otro_plan.get("updated_at"),
+                           "n_conductores": n_anterior}
+            aviso_guardado = (
+                "El centro %s ya tiene otro plan de esa semana (%s conductores), así que "
+                "no se ha sustituido." % (center, n_anterior if n_anterior is not None else "?"))
+        elif _whc_debe_pisar(n_anterior, n_nuevo):
+            cambios = {"center": center, "week": sun, "texto": texto[:400000],
+                       "n_conductores": n_nuevo,
+                       "limite_horas": round(limite / 60, 2),
+                       "limite_bloque_horas": round(bloque_limite / 60, 2),
+                       "pegado_en": pegado_en,
+                       "updated_at": datetime.now(timezone.utc).isoformat()}
+            # Las excepciones, solo si se saben (11-11-2026). Sin ellas (clave
+            # ausente o null) se conservan las que ya tenía ese plan: «Guardarlo en
+            # DGA1» no se lleva las de OGA5, y no se guarda un 0 que nadie ha dicho.
+            if excepciones_conocidas:
+                cambios["excepciones"] = excepciones
+            await db.whc_planes.update_one(
+                {"center": center, "week": sun}, {"$set": cambios}, upsert=True)
             guardado = True
         else:
             aviso_guardado = (
@@ -41495,6 +41535,11 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
         # `solo_analisis`: se pidió guardar=false (abrir la pantalla), no es un
         # pegado nuevo que se haya quedado sin guardar.
         "otra_nave": otra_nave,
+        # 11-11-2026. `es_el_guardado`: el texto es el que ya hay guardado en la
+        # nave pedida (con `otra_nave`, un plan mal guardado de antes). `ya_hay_plan`:
+        # con sustituir=false, el plan distinto que ya tenía ({pegado_en, n_conductores}).
+        "es_el_guardado": es_el_guardado,
+        "ya_hay_plan": ya_hay_plan,
         "pegado_en": pegado_en,
         "pegado_hoy": pegado_hoy,
         "solo_analisis": data.get("guardar") is False,

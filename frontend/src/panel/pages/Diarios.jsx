@@ -470,10 +470,12 @@ export default function Diarios() {
               salía como «anteriores al 13-05-2026», y el de un reporte recién bajado
               que viene sin clasificar (hay que volver a subirlo) ni llegaba. Se
               enseñan los dos primeros y el resto, plegados: con 92 reportes viejos
-              llenarían la pantalla. */}
+              llenarían la pantalla. El de «sin clasificar» llega aparte
+              (`aviso_sin_clasificar`, 11-11-2026) para que la web vieja no lo lea. */}
           {(() => {
             const avisos = (previaSubida.resultados || []).flatMap((r) =>
-              (r.avisos || []).map((a) => ({ fichero: r.fichero, fecha: r.fecha_reporte, texto: a })))
+              [...(r.avisos || []), ...(r.aviso_sin_clasificar ? [r.aviso_sin_clasificar] : [])]
+                .map((a) => ({ fichero: r.fichero, fecha: r.fecha_reporte, texto: a })))
             if (!avisos.length) return null
             const caja = 'mt-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2 text-[12px] leading-relaxed text-amber-200'
             const uno = (a, i) => (
