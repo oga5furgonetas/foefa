@@ -1931,6 +1931,11 @@ async def create_indexes():
         await _idx(global_db.reparto_enlaces, "token", unique=True)
         await _idx(global_db.reparto_enlaces, "caduca")
         await _idx(global_db.organizations, "ref_codigo", sparse=True)
+        # Mercadillo, bloqueos (10-11-2026): una persona bloquea a otra UNA vez. Sin este único, el
+        # `except DuplicateKeyError` de `merc_bloquear` no saltaría nunca y dos toques a la vez dejarían dos
+        # bloqueos (y dos avisos a Dani). Por `a`: quién ha bloqueado a alguien, que se mira en cada pantalla.
+        await _idx(global_db[_MERC_BLOQUEOS], [("de", 1), ("a", 1)], unique=True, name="mercadillo_bloqueo_unico")
+        await _idx(global_db[_MERC_BLOQUEOS], "a")
         # Crear índices en BDs de DSPs ya existentes (por si arrancamos con DSPs sin índices)
         orgs = await global_db.organizations.find(
             {"account_type": "dsp", "db_name": {"$exists": True}}, {"db_name": 1}
@@ -5102,8 +5107,10 @@ async def register_dsp(data: RegisterRequest, request: Request):
     # se daba de alta desde los anuncios). `PRUEBA_CON_TARJETA=1` la vuelve a pedir.
     # PRUEBA CON TARJETA (04-10-2026, Dani): quien reparte solo mete la
     # tarjeta al empezar, hoy 0 €, y el día 7 se cobra si no ha cancelado.
-    # Desde la app de Play no (Google obliga a cobrar con su sistema).
-    if (sector_alta == "autonomo" and (not data.desde_app or _play_listo())
+    # Desde la app de Play no (Google obliga a cobrar con su sistema). Desde la del iPhone, NUNCA (10-11-2026):
+    # allí no hay dónde meter la tarjeta (la app no vende ni menciona pagos, ver `alta_ios`), así que la cuenta se
+    # quedaría sin poder apuntar una parada (`_falta_tarjeta` → 402) y sin forma de arreglarlo.
+    if (sector_alta == "autonomo" and (not data.desde_app or _play_listo()) and not data.desde_ios
             and os.environ.get("PRUEBA_CON_TARJETA", "0").strip() == "1"):
         org["prueba_con_tarjeta"] = True
     # MEDICIÓN DE ANUNCIOS (02-11-2026): a Meta solo va lo de quien aceptó los píxeles en el aviso de cookies de la
@@ -7438,6 +7445,12 @@ async def borrar_cuenta(data: dict = Body(...), user: dict = Depends(get_current
                                               "nombre": org.get("name") or "", "pedida_en": ahora,
                                               "estado_pago": org.get("status") or "", "borrada": False})
     logger.info("Baja pedida desde la app: org %s", org["id"])
+    # EL MERCADILLO SE VA CON LA CUENTA (10-11-2026). Antes la cuenta quedaba desactivada pero sus anuncios seguían
+    # publicados hasta caducar (y a nombre de alguien que ya no puede contestar). Un fallo aquí no impide la baja.
+    try:
+        await _merc_baja(f"o:{org['id']}")
+    except Exception as e:                                       # noqa: BLE001
+        logger.warning("Baja de la cuenta: no se ha podido cerrar su mercadillo (org %s): %s", org["id"], e)
     if CORREO_CONTACTO:
         try:
             await _enviar_email(
@@ -56852,6 +56865,7 @@ _MERC_CONVS = "mercadillo_conversaciones"
 _MERC_MSGS = "mercadillo_mensajes"
 _MERC_DENUNCIAS = "mercadillo_denuncias"
 _MERC_AVISOS = "mercadillo_avisos"
+_MERC_BLOQUEOS = "mercadillo_bloqueos"     # quién ha bloqueado a quién: {id, de, a, de_nombre, a_nombre, ts, origen}
 _MERC_FOTO_MAX = 15 * 1024 * 1024          # lo que llega del móvil; aquí se reduce a ~200 KB
 _MERC_FOTO_LADO = 1280
 _MERC_FOTOS_DIA = 40                       # subidas por persona y día
@@ -57042,13 +57056,60 @@ async def _merc_a_dani(asunto: str, texto: str) -> None:
         logger.warning("aviso del mercadillo a Dani: %s", e)
 
 
-async def _merc_sin_leer(yo: dict) -> int:
+# ── BLOQUEAR A UNA PERSONA (10-11-2026) ──────────────────────────────────────
+# Apple (guideline 1.2) pide a toda app con contenido de usuarios que se pueda bloquear a quien abusa, que el
+# bloqueo quite su contenido al instante y que quien modera se entere. Las reglas, en un sitio:
+#   · Si A bloquea a B, ninguno ve los anuncios del otro (lista, ficha y fotos: 404) y ninguno escribe al otro.
+#   · En el buzón de A las conversaciones con B desaparecen (y no cuentan sin leer); en el de B siguen, que es
+#     su historial, pero cerradas.
+#   · A B no se le avisa ni se le dice quién: ve lo mismo que si el anuncio se hubiera quitado o la moderación
+#     hubiera cerrado la conversación.
+#   · Desbloquear lo deshace todo: bloquear no toca ni un anuncio ni una conversación (solo pone a 0 lo que A
+#     tenía sin leer de B); todo lo demás sale de mirar esta lista, y al borrar el bloqueo vuelve.
+#   · Dani («fds») modera: lo ve todo siempre y no bloquea. Pero se le puede bloquear como vendedor, y entonces
+#     tampoco escribe a quien le bloqueó. Sus avisos de moderación (`_merc_avisar`) no pasan por aquí: llegan.
+#   · Un bloqueo no retira ni castiga nada por sí solo (se podría usar para ir a por alguien): decide Dani, que
+#     ve cada bloqueo en Negocio y recibe un aviso.
+# Hacia la web nadie se nombra por su clave: se bloquea «a quien vende este anuncio» o «a la otra persona de esta
+# conversación», y lo que vuelve es su nombre corto.
+_MERC_CERRADA = "Esta conversación está cerrada"         # lo mismo si la cierra la moderación que un bloqueo
+
+
+async def _merc_bloqueos(yo: dict) -> tuple:
+    """(a quién he bloqueado, quién me ha bloqueado): dos conjuntos de claves. Es el ÚNICO sitio que lee los
+    bloqueos para decidir qué ve y a quién escribe alguien; cada pantalla aplica su regla con estos dos."""
+    docs = await global_db[_MERC_BLOQUEOS].find(
+        {"$or": [{"de": yo["clave"]}, {"a": yo["clave"]}]}, {"_id": 0, "de": 1, "a": 1}).to_list(None)
+    return ({b["a"] for b in docs if b.get("de") == yo["clave"] and b.get("a")},
+            {b["de"] for b in docs if b.get("a") == yo["clave"] and b.get("de")})
+
+
+def _merc_otro(c: dict, yo: dict) -> dict:
+    """La otra persona de una conversación suya."""
+    comprador, vendedor = c.get("comprador") or {}, c.get("vendedor") or {}
+    return vendedor if comprador.get("clave") == yo["clave"] else comprador
+
+
+async def _merc_escribirle(yo: dict, otra: str, si_me_ha_bloqueado: HTTPException) -> None:
+    """Ninguno de los dos escribe al otro con un bloqueo por medio. A quien bloqueó se le dice cómo deshacerlo;
+    a quien está bloqueado, lo que toque en cada sitio, que nunca es «te han bloqueado»."""
+    mios, a_mi = await _merc_bloqueos(yo)
+    if otra in mios:
+        raise HTTPException(400, "Has bloqueado a esta persona. Desbloquéala para escribirle.")
+    if otra in a_mi:
+        raise si_me_ha_bloqueado
+
+
+async def _merc_sin_leer(yo: dict, bloqueados: set) -> int:
+    """Lo que tiene sin leer (el globito): avisos de FDS y conversaciones. Las que tiene con alguien a quien ha
+    bloqueado (`bloqueados`) no están en su buzón, así que tampoco cuentan."""
     n = await global_db[_MERC_AVISOS].count_documents({"para": yo["clave"], "leido": False})
     convs = await global_db[_MERC_CONVS].find(
         {"$or": [{"comprador.clave": yo["clave"]}, {"vendedor.clave": yo["clave"]}]},
-        {"_id": 0, "sin_leer": 1}).to_list(500)
+        {"_id": 0, "sin_leer": 1, "comprador.clave": 1, "vendedor.clave": 1}).to_list(500)
     # Un contador por persona, no una comparación de horas: dos mensajes en el mismo instante no se pierden.
-    return n + sum(1 for c in convs if int((c.get("sin_leer") or {}).get(_merc_k(yo["clave"])) or 0) > 0)
+    return n + sum(1 for c in convs if _merc_otro(c, yo).get("clave") not in bloqueados
+                   and int((c.get("sin_leer") or {}).get(_merc_k(yo["clave"])) or 0) > 0)
 
 
 def _merc_k(clave: str) -> str:
@@ -57066,7 +57127,9 @@ async def merc_estado(user: dict = Depends(require_any_auth)):
     conf = await _merc_conf()
     if not conf["visible"] and yo["tipo"] != "fds":
         return {"visible": False}
-    r = {"visible": True, "abierto": conf["visible"], "sin_leer": await _merc_sin_leer(yo),
+    bloqueados, _ = await _merc_bloqueos(yo)
+    r = {"visible": True, "abierto": conf["visible"], "sin_leer": await _merc_sin_leer(yo, bloqueados),
+         "bloqueados": len(bloqueados),                           # a cuántas personas tiene bloqueadas
          "yo": {"nombre": yo["nombre"], "tipo": yo["tipo"]}, "avisos_movil": await _merc_push_activo(yo["clave"])}
     if yo["tipo"] == "fds":
         r["por_revisar"] = await global_db[_MERC_ANUNCIOS].count_documents({"estado": {"$in": ["pendiente", "en_revision"]}})
@@ -57081,24 +57144,36 @@ async def merc_lista(categoria: str = "", user: dict = Depends(require_any_auth)
     q = {"estado": "publicado", "caduca": {"$gt": ahora.isoformat()}}
     if categoria in mercadillo.CATEGORIAS:
         q["categoria"] = categoria
+    # Con un bloqueo por medio, en cualquiera de los dos sentidos, sus anuncios no salen. A Dani, que modera, sí.
+    bloqueados, me_bloquean = await _merc_bloqueos(yo)
+    if yo["tipo"] != "fds" and (bloqueados or me_bloquean):
+        q["vendedor.clave"] = {"$nin": sorted(bloqueados | me_bloquean)}
     pub = await global_db[_MERC_ANUNCIOS].find(q, {"_id": 0}).to_list(300)
     pub.sort(key=lambda a: str(a.get("publicado_en") or ""), reverse=True)
     mios = await global_db[_MERC_ANUNCIOS].find({"vendedor.clave": yo["clave"]}, {"_id": 0}).to_list(100)
     mios.sort(key=lambda a: str(a.get("creado") or ""), reverse=True)
     return {"anuncios": [_merc_vista(a, yo, ahora) for a in pub],
             "mios": [_merc_vista(a, yo, ahora) for a in mios],
+            "bloqueados": len(bloqueados),                        # a cuántas personas tiene bloqueadas
             "categorias": mercadillo.CATEGORIAS, "estados_articulo": mercadillo.ESTADOS_ARTICULO,
             "motivos_denuncia": mercadillo.MOTIVOS_DENUNCIA, "activos_max": mercadillo.ACTIVOS_MAX,
             "dias": mercadillo.DIAS_PUBLICADO, "yo": {"nombre": yo["nombre"], "tipo": yo["tipo"]}}
 
 
-async def _merc_anuncio_visible(anuncio_id: str, yo: dict) -> dict:
-    """El anuncio si este usuario puede verlo: publicado, suyo, de una conversación suya o el super-admin."""
+async def _merc_anuncio_visible(anuncio_id: str, yo: dict, para_bloquear: bool = False) -> dict:
+    """El anuncio si este usuario puede verlo: publicado, suyo, de una conversación suya o el super-admin.
+    Con un bloqueo por medio, en cualquiera de los dos sentidos, no está: el mismo 404 que si lo hubieran quitado
+    (por aquí pasan la ficha, sus fotos y denunciarlo). `para_bloquear`: a quien YA ha bloqueado se le encuentra
+    igual, para que bloquear dos veces a la misma persona no falle."""
     a = await global_db[_MERC_ANUNCIOS].find_one({"id": str(anuncio_id)[:64]}, {"_id": 0})
     if not a:
         raise HTTPException(404, "Ese anuncio ya no está")
-    if yo["tipo"] == "fds" or (a.get("vendedor") or {}).get("clave") == yo["clave"]:
+    vendedor = (a.get("vendedor") or {}).get("clave")
+    if yo["tipo"] == "fds" or vendedor == yo["clave"]:
         return a
+    bloqueados, me_bloquean = await _merc_bloqueos(yo)
+    if vendedor in me_bloquean or (vendedor in bloqueados and not para_bloquear):
+        raise HTTPException(404, "Ese anuncio ya no está")
     if _merc_estado(a, datetime.now(timezone.utc)) == "publicado":
         return a
     if await global_db[_MERC_CONVS].find_one({"anuncio_id": a["id"], "comprador.clave": yo["clave"]}, {"_id": 0, "id": 1}):
@@ -57238,16 +57313,32 @@ async def merc_cambiar(anuncio_id: str, data: dict = Body(default={}), user: dic
     return {"ok": True, "estado": "pendiente"}
 
 
-async def _merc_conv_mia(conv_id: str, yo: dict) -> dict:
+async def _merc_conv_mia(conv_id: str, yo: dict, con_bloqueadas: bool = False) -> tuple:
+    """(la conversación, ¿la otra persona me ha bloqueado?), si es suya. Las que tiene con alguien a quien HA
+    BLOQUEADO no están (el mismo 404 que una ajena: tampoco salen en su buzón), salvo `con_bloqueadas`, que es
+    para lo que tiene que encontrarlas igual: decirle que desbloquee si escribe y bloquear otra vez sin fallar."""
     c = await global_db[_MERC_CONVS].find_one({"id": str(conv_id)[:64]}, {"_id": 0})
     if not c or yo["clave"] not in ((c.get("comprador") or {}).get("clave"), (c.get("vendedor") or {}).get("clave")):
         raise HTTPException(404, "Esa conversación no existe")
-    return c
+    bloqueados, me_bloquean = await _merc_bloqueos(yo)
+    otra = _merc_otro(c, yo).get("clave")
+    if otra in bloqueados and not con_bloqueadas:
+        raise HTTPException(404, "Esa conversación no existe")
+    return c, otra in me_bloquean
+
+
+def _merc_sin_su_anuncio(yo: dict, soy_vendedor: bool, me_bloquea: bool) -> bool:
+    """En una conversación con quien me ha bloqueado, ¿se me tapa el anuncio? Sí cuando es el SUYO (yo compraba):
+    ya no veo sus anuncios, y aquí tampoco su foto ni su precio de hoy; queda el título con el que hablamos, como
+    con un anuncio borrado. El mío lo sigo viendo, y Dani, que modera, todos."""
+    return me_bloquea and not soy_vendedor and yo["tipo"] != "fds"
 
 
 async def _merc_escribir(c: dict, yo: dict, texto: str) -> dict:
     """Guarda el mensaje y avisa al otro por correo con el PRIMER mensaje que tiene sin leer; mientras siga sin
-    leer, como mucho uno cada 6 h por conversación (así una charla seguida no es una ráfaga de correos)."""
+    leer, como mucho uno cada 6 h por conversación (así una charla seguida no es una ráfaga de correos).
+    Quien llama ya ha mirado que la conversación no está cerrada y que no hay un bloqueo por medio
+    (`_merc_escribirle`): de aquí salen el aviso al móvil y el correo al otro."""
     hace = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
     if await global_db[_MERC_MSGS].count_documents({"de": yo["clave"], "ts": {"$gte": hace}}) >= _MERC_MENSAJES_10MIN:
         raise HTTPException(429, "Vas muy rápido. Espera un poco antes de mandar más mensajes.")
@@ -57296,6 +57387,12 @@ async def merc_contactar(anuncio_id: str, data: dict = Body(default={}), user: d
         raise HTTPException(404, "Ese anuncio ya no está a la venta")
     if (a.get("vendedor") or {}).get("clave") == yo["clave"]:
         raise HTTPException(400, "Es tu anuncio")
+    # Con un bloqueo por medio no se le escribe, y se mira ANTES de abrir la conversación (que no quede una vacía
+    # ni un interesado de más). A quien está bloqueado, lo mismo que si el anuncio se hubiera vendido; a Dani,
+    # que el anuncio sí lo ve porque modera, que está cerrada.
+    await _merc_escribirle(yo, (a.get("vendedor") or {}).get("clave"),
+                           HTTPException(403, _MERC_CERRADA) if yo["tipo"] == "fds"
+                           else HTTPException(404, "Ese anuncio ya no está a la venta"))
     c = await global_db[_MERC_CONVS].find_one({"anuncio_id": a["id"], "comprador.clave": yo["clave"]}, {"_id": 0})
     if not c:
         v = a["vendedor"]
@@ -57306,7 +57403,7 @@ async def merc_contactar(anuncio_id: str, data: dict = Body(default={}), user: d
         await global_db[_MERC_CONVS].insert_one(dict(c))
         await global_db[_MERC_ANUNCIOS].update_one({"id": a["id"]}, {"$inc": {"interesados": 1}})
     if c.get("bloqueada"):
-        raise HTTPException(403, "Esta conversación está cerrada")
+        raise HTTPException(403, _MERC_CERRADA)
     await _merc_escribir(c, yo, texto)
     return {"ok": True, "conversacion_id": c["id"]}
 
@@ -57317,6 +57414,10 @@ async def merc_buzon(user: dict = Depends(require_any_auth)):
     yo = await _merc_dentro(user)
     convs = await global_db[_MERC_CONVS].find(
         {"$or": [{"comprador.clave": yo["clave"]}, {"vendedor.clave": yo["clave"]}]}, {"_id": 0}).to_list(300)
+    # Las que tiene con alguien a quien HA bloqueado no salen (vuelven si le desbloquea). Las de quien le ha
+    # bloqueado A ÉL siguen, que es su historial, pero cerradas, y de su anuncio solo queda el título.
+    bloqueados, me_bloquean = await _merc_bloqueos(yo)
+    convs = [c for c in convs if _merc_otro(c, yo).get("clave") not in bloqueados]
     convs.sort(key=lambda c: str(c.get("ultimo") or c.get("creada") or ""), reverse=True)
     ids = list({c["anuncio_id"] for c in convs})
     anuncios = {a["id"]: a for a in await global_db[_MERC_ANUNCIOS].find(
@@ -57325,13 +57426,14 @@ async def merc_buzon(user: dict = Depends(require_any_auth)):
     lista_c = []
     for c in convs:
         soy_vendedor = c["vendedor"]["clave"] == yo["clave"]
-        a = anuncios.get(c["anuncio_id"]) or {}
+        me_bloquea = _merc_otro(c, yo).get("clave") in me_bloquean
+        a = {} if _merc_sin_su_anuncio(yo, soy_vendedor, me_bloquea) else (anuncios.get(c["anuncio_id"]) or {})
         lista_c.append({"id": c["id"], "anuncio_id": c["anuncio_id"], "titulo": a.get("titulo") or c.get("anuncio_titulo"),
                         "precio_cent": a.get("precio_cent"), "foto": (a.get("fotos") or [None])[0] if a else None,
                         "estado_anuncio": _merc_estado(a, ahora) if a else "borrado",
                         "con": (c["comprador"] if soy_vendedor else c["vendedor"]).get("nombre"),
                         "soy": "vendedor" if soy_vendedor else "comprador", "ultimo": c.get("ultimo"),
-                        "ultimo_texto": c.get("ultimo_texto") or "", "bloqueada": bool(c.get("bloqueada")),
+                        "ultimo_texto": c.get("ultimo_texto") or "", "bloqueada": bool(c.get("bloqueada")) or me_bloquea,
                         "sin_leer": int((c.get("sin_leer") or {}).get(_merc_k(yo["clave"])) or 0) > 0})
     avisos = await global_db[_MERC_AVISOS].find({"para": yo["clave"]}, {"_id": 0, "para": 0}).to_list(200)
     avisos.sort(key=lambda x: str(x.get("ts") or ""), reverse=True)
@@ -57341,14 +57443,17 @@ async def merc_buzon(user: dict = Depends(require_any_auth)):
 @api_router.get("/mercadillo/conversacion/{conv_id}")
 async def merc_conversacion(conv_id: str, user: dict = Depends(require_any_auth)):
     yo = await _merc_dentro(user)
-    c = await _merc_conv_mia(conv_id, yo)
+    c, me_bloquea = await _merc_conv_mia(conv_id, yo)            # 404 si es con alguien a quien ha bloqueado
     msgs = await global_db[_MERC_MSGS].find({"conv": c["id"]}, {"_id": 0}).to_list(2000)
     msgs.sort(key=lambda m: str(m.get("ts") or ""))
     await global_db[_MERC_CONVS].update_one({"id": c["id"]}, {"$set": {f"sin_leer.{_merc_k(yo['clave'])}": 0}})
-    a = await global_db[_MERC_ANUNCIOS].find_one({"id": c["anuncio_id"]}, {"_id": 0}) or {}
     soy_vendedor = c["vendedor"]["clave"] == yo["clave"]
+    a = {} if _merc_sin_su_anuncio(yo, soy_vendedor, me_bloquea) else (
+        await global_db[_MERC_ANUNCIOS].find_one({"id": c["anuncio_id"]}, {"_id": 0}) or {})
     return {"id": c["id"], "soy": "vendedor" if soy_vendedor else "comprador",
-            "con": (c["comprador"] if soy_vendedor else c["vendedor"]).get("nombre"), "bloqueada": bool(c.get("bloqueada")),
+            "con": (c["comprador"] if soy_vendedor else c["vendedor"]).get("nombre"),
+            # Cerrada por la moderación o porque la otra persona le ha bloqueado: se pinta igual y no se dice cuál.
+            "bloqueada": bool(c.get("bloqueada")) or me_bloquea,
             "anuncio": _merc_vista(a, yo, datetime.now(timezone.utc)) if a else {"titulo": c.get("anuncio_titulo"), "estado": "borrado"},
             "mensajes": [{"id": m["id"], "mio": m["de"] == yo["clave"], "texto": m["texto"], "ts": m["ts"]} for m in msgs]}
 
@@ -57356,9 +57461,11 @@ async def merc_conversacion(conv_id: str, user: dict = Depends(require_any_auth)
 @api_router.post("/mercadillo/conversacion/{conv_id}")
 async def merc_responder(conv_id: str, data: dict = Body(default={}), user: dict = Depends(require_any_auth)):
     yo = await _merc_dentro(user)
-    c = await _merc_conv_mia(conv_id, yo)
+    c, _ = await _merc_conv_mia(conv_id, yo, con_bloqueadas=True)
     if c.get("bloqueada"):
-        raise HTTPException(403, "Esta conversación está cerrada")
+        raise HTTPException(403, _MERC_CERRADA)
+    # Con un bloqueo por medio: quien bloqueó, que desbloquee; quien está bloqueado, «cerrada», como arriba.
+    await _merc_escribirle(yo, _merc_otro(c, yo).get("clave"), HTTPException(403, _MERC_CERRADA))
     try:
         texto = mercadillo.mensaje(_dict_cuerpo(data).get("texto"))
     except mercadillo.Invalido as e:
@@ -57399,7 +57506,7 @@ async def merc_denunciar(data: dict = Body(default={}), user: dict = Depends(req
         a = await _merc_anuncio_visible(anuncio_id, yo)
         objetivo = {"tipo": "anuncio", "id": a["id"], "titulo": a.get("titulo")}
     elif conv_id:
-        c = await _merc_conv_mia(conv_id, yo)
+        c, _ = await _merc_conv_mia(conv_id, yo)
         objetivo = {"tipo": "conversacion", "id": c["id"], "titulo": c.get("anuncio_titulo")}
     else:
         raise HTTPException(400, "Falta qué denuncias")
@@ -57422,6 +57529,127 @@ async def merc_denunciar(data: dict = Body(default={}), user: dict = Depends(req
                        f"{yo['nombre']} denuncia {('el anuncio' if objetivo['tipo'] == 'anuncio' else 'una conversación sobre')} "
                        f"«{objetivo['titulo'] or ''}»: {mercadillo.MOTIVOS_DENUNCIA[motivo]}.\n\n{texto or '(sin explicación)'}")
     return {"ok": True}
+
+
+# ── Bloquear y desbloquear (las reglas, arriba: «BLOQUEAR A UNA PERSONA») ─────
+def _merc_bloqueo_vista(b: dict) -> dict:
+    """Lo que ve de un bloqueo quien lo hizo: a quién (su nombre corto) y desde cuándo. Nunca una clave."""
+    return {"id": b.get("id"), "nombre": b.get("a_nombre") or "Repartidor", "desde": b.get("ts")}
+
+
+async def _merc_bloqueo_a_dani(b: dict) -> None:
+    """Dani se entera de CADA bloqueo (Apple: «blocking should also notify the developer»). Uno suelto, al móvil
+    si tiene los avisos puestos (queda apuntado en Negocio → Mercadillo; un correo por cada uno quemaría la
+    cuota). Cuando a la misma persona ya la han bloqueado varias personas distintas, el aviso normal —móvil o,
+    si no, correo— cada vez que se suma una: eso sí hay que mirarlo. Un aviso por bloqueo, nunca los dos."""
+    origen = b.get("origen") or {}
+    desde = ("el anuncio" if origen.get("tipo") == "anuncio" else "una conversación sobre") + f" «{origen.get('titulo') or ''}»"
+    hecho = f"{b['de_nombre']} ha bloqueado a {b['a_nombre']} desde {desde}."
+    n = await global_db[_MERC_BLOQUEOS].count_documents({"a": b["a"]})        # (de, a) es único: n personas distintas
+    if n >= mercadillo.BLOQUEOS_PARA_AVISAR:
+        await _merc_a_dani(f"Mercadillo: {n} personas han bloqueado a {b['a_nombre']}"[:140],
+                           f"{hecho} Ya son {n} personas distintas las que han bloqueado a {b['a_nombre']}.\n\n"
+                           "Un bloqueo no retira nada por sí solo: mira sus anuncios y las denuncias que tenga, y decide.")
+    else:
+        await _merc_push("fds", "Mercadillo · bloqueo", hecho[:170], "/panel/admin?s=mercadillo")
+
+
+@api_router.post("/mercadillo/bloquear")
+async def merc_bloquear(data: dict = Body(default={}), user: dict = Depends(require_any_auth)):
+    """«Bloquear a …»: a quien vende un anuncio (`anuncio_id`) o a la otra persona de una conversación
+    (`conversacion_id`). Dos veces a la misma persona no falla (`ya`). A quien se bloquea no se le avisa; a Dani, sí."""
+    yo = await _merc_dentro(user)
+    if yo["tipo"] == "fds":
+        raise HTTPException(400, "Tú moderas el mercadillo: retira el anuncio o cierra la conversación en Negocio")
+    d = _dict_cuerpo(data)
+    anuncio_id, conv_id = str(d.get("anuncio_id") or "")[:64], str(d.get("conversacion_id") or "")[:64]
+    if anuncio_id:
+        a = await _merc_anuncio_visible(anuncio_id, yo, para_bloquear=True)
+        otra = a.get("vendedor") or {}
+        if otra.get("clave") == yo["clave"]:
+            raise HTTPException(400, "Es tu anuncio")
+        origen = {"tipo": "anuncio", "id": a["id"], "titulo": a.get("titulo") or ""}
+    elif conv_id:
+        c, _ = await _merc_conv_mia(conv_id, yo, con_bloqueadas=True)
+        otra = _merc_otro(c, yo)
+        if otra.get("clave") == yo["clave"]:
+            raise HTTPException(400, "No puedes bloquearte a ti")
+        origen = {"tipo": "conversacion", "id": c["id"], "titulo": c.get("anuncio_titulo") or ""}
+    else:
+        raise HTTPException(400, "Falta a quién bloqueas")
+    clave = otra.get("clave")
+    if not clave:
+        raise HTTPException(404, "Esa persona ya no está en el mercadillo")
+    previo = await global_db[_MERC_BLOQUEOS].find_one({"de": yo["clave"], "a": clave}, {"_id": 0})
+    if previo:
+        return {"ok": True, "ya": True, "bloqueo": _merc_bloqueo_vista(previo)}
+    if await global_db[_MERC_BLOQUEOS].count_documents({"de": yo["clave"]}) >= mercadillo.BLOQUEOS_MAX:
+        # («el máximo» y no «el tope»: dentro de la app del iPhone la web cambia por un texto neutro todo error que
+        # case con HABLA_DE_PAGOS, y «tope» casa. Lo vigila test_los_textos_del_bloqueo_se_leen_tambien_en_el_iphone.)
+        raise HTTPException(400, f"Tienes {mercadillo.BLOQUEOS_MAX} personas bloqueadas, que es el máximo. "
+                                 "Desbloquea a alguna en «Personas bloqueadas» para bloquear a otra.")
+    # El cupo del día cuenta los bloqueos HECHOS (no los intentos) y no baja al desbloquear: bloquear y desbloquear
+    # en bucle no puede servir para llenarle el móvil de avisos a Dani.
+    cupo = f"merc_bloquear:{yo['clave']}"
+    _rl_public_action(cupo, mercadillo.BLOQUEOS_DIA, 86400, "Has bloqueado a mucha gente hoy. Prueba mañana.", contar=False)
+    b = {"id": uuid.uuid4().hex[:16], "de": yo["clave"], "a": clave, "de_nombre": yo["nombre"],
+         "a_nombre": otra.get("nombre") or "Repartidor", "ts": datetime.now(timezone.utc).isoformat(), "origen": origen}
+    try:
+        await global_db[_MERC_BLOQUEOS].insert_one(dict(b))
+    except DuplicateKeyError:
+        # Dos toques a la vez: el índice único (de, a) deja pasar uno, y el otro contesta como si ya estuviera.
+        previo = await global_db[_MERC_BLOQUEOS].find_one({"de": yo["clave"], "a": clave}, {"_id": 0}) or b
+        return {"ok": True, "ya": True, "bloqueo": _merc_bloqueo_vista(previo)}
+    _public_actions[cupo].append(datetime.now(timezone.utc).timestamp())
+    # Lo que tenía sin leer de esa persona deja de contar: esas conversaciones ya no están en su buzón.
+    await global_db[_MERC_CONVS].update_many(
+        {"$or": [{"comprador.clave": yo["clave"], "vendedor.clave": clave},
+                 {"comprador.clave": clave, "vendedor.clave": yo["clave"]}]},
+        {"$set": {f"sin_leer.{_merc_k(yo['clave'])}": 0}})
+    try:
+        await _merc_bloqueo_a_dani(b)
+    except Exception as e:                                       # noqa: BLE001 — el bloqueo ya está hecho
+        logger.warning("aviso a Dani de un bloqueo del mercadillo: %s", e)
+    return {"ok": True, "bloqueo": _merc_bloqueo_vista(b)}
+
+
+@api_router.get("/mercadillo/bloqueados")
+async def merc_bloqueados(user: dict = Depends(require_any_auth)):
+    """«Personas bloqueadas»: a quién, desde cuándo y desde qué anuncio o conversación (lo último primero)."""
+    yo = await _merc_dentro(user)
+    mios = await global_db[_MERC_BLOQUEOS].find({"de": yo["clave"]}, {"_id": 0}).to_list(mercadillo.BLOQUEOS_MAX + 50)
+    mios.sort(key=lambda b: str(b.get("ts") or ""), reverse=True)
+    return {"bloqueados": [{**_merc_bloqueo_vista(b), "titulo": (b.get("origen") or {}).get("titulo") or ""} for b in mios]}
+
+
+@api_router.delete("/mercadillo/bloqueados/{bloqueo_id}")
+async def merc_desbloquear(bloqueo_id: str, user: dict = Depends(require_any_auth)):
+    """«Desbloquear»: se borra el bloqueo y con él todo lo que tapaba (anuncios y conversaciones vuelven)."""
+    yo = await _merc_dentro(user)
+    r = await global_db[_MERC_BLOQUEOS].delete_one({"id": str(bloqueo_id)[:64], "de": yo["clave"]})
+    if not getattr(r, "deleted_count", 0):
+        raise HTTPException(404, "Ese bloqueo ya no está")
+    return {"ok": True}
+
+
+async def _merc_baja(clave: str) -> dict:
+    """LA BAJA DE LA CUENTA SE LLEVA SU MERCADILLO (10-11-2026). Quien pide borrar su cuenta ya no puede entrar ni
+    contestar: sus anuncios en revisión o publicados se quitan (y se borran a su plazo, como cualquier anuncio
+    quitado), sus conversaciones quedan cerradas para la otra persona, y se borran sus bloqueos —los que hizo y
+    los que le hicieron— y sus preferencias. Lo llama `borrar_cuenta`, que no se para si esto falla."""
+    ahora = datetime.now(timezone.utc).isoformat()
+    an = await global_db[_MERC_ANUNCIOS].update_many(
+        {"vendedor.clave": clave, "estado": {"$in": list(mercadillo.ESTADOS_ACTIVOS)}},
+        {"$set": {"estado": "quitado", "fin": ahora, "actualizado": ahora}})
+    cv = await global_db[_MERC_CONVS].update_many(
+        {"$or": [{"comprador.clave": clave}, {"vendedor.clave": clave}], "bloqueada": {"$ne": True}},
+        {"$set": {"bloqueada": True, "cerrada_por": "baja"}})
+    bl = await global_db[_MERC_BLOQUEOS].delete_many({"$or": [{"de": clave}, {"a": clave}]})
+    await global_db.mercadillo_prefs.delete_many({"clave": clave})
+    hechos = {"anuncios": getattr(an, "modified_count", 0) or 0, "conversaciones": getattr(cv, "modified_count", 0) or 0,
+              "bloqueos": getattr(bl, "deleted_count", 0) or 0}
+    logger.info("Baja de la cuenta: mercadillo de %s cerrado (%s)", clave, hechos)
+    return hechos
 
 
 # ── Lo de Dani: encender, revisar anuncios y resolver denuncias ──────────────
@@ -57450,14 +57678,30 @@ async def admin_mercadillo(_: dict = Depends(require_superadmin)):
                        (c.get("vendedor") or {}).get("clave"): (c.get("vendedor") or {}).get("nombre")}
             den["mensajes"] = [{"de": nombres.get(m["de"], "?"), "texto": m["texto"], "ts": m["ts"]}
                                for m in sorted(msgs, key=lambda m: m["ts"])]
+    # Los bloqueos (10-11-2026): quién ha bloqueado a quién, cuándo y desde dónde. Solo se ven aquí, y es el único
+    # sitio en el que sale la clave de alguien. Un bloqueo no retira nada: es para que Dani mire y decida.
+    bloqueos = await global_db[_MERC_BLOQUEOS].find({}, {"_id": 0}).to_list(20000)
+    bloqueos.sort(key=lambda b: str(b.get("ts") or ""), reverse=True)
+    por_persona = {}
+    for b in bloqueos:                                           # del último al primero: queda su nombre más reciente
+        p = por_persona.setdefault(b.get("a"), {"clave": b.get("a"), "nombre": b.get("a_nombre") or "", "n": 0})
+        p["n"] += 1                                              # (de, a) es único: cada uno es una persona distinta
+    varios = sorted((p for p in por_persona.values() if p["n"] >= mercadillo.BLOQUEOS_PARA_AVISAR),
+                    key=lambda p: (-p["n"], p["nombre"]))
     return {"conf": await _merc_conf(), "por_revisar": por_revisar, "publicados": publicados, "denuncias": denuncias,
+            "bloqueos": [{"id": b.get("id"), "de_nombre": b.get("de_nombre") or "", "a_nombre": b.get("a_nombre") or "",
+                          "a_clave": b.get("a"), "ts": b.get("ts"),
+                          "origen": {"tipo": (b.get("origen") or {}).get("tipo"),
+                                     "titulo": (b.get("origen") or {}).get("titulo") or ""}} for b in bloqueos[:200]],
+            "bloqueados_varios": varios,
             # ¿A Dani le llegan los avisos al móvil (puestos y con un móvil apuntado) o por correo?
             "avisos": {"activo": await _merc_push_activo("fds"), "movil": bool(await _merc_movil_listo("fds"))},
             "motivos_rechazo": mercadillo.MOTIVOS_RECHAZO, "motivos_denuncia": mercadillo.MOTIVOS_DENUNCIA,
             "categorias": mercadillo.CATEGORIAS, "estados_articulo": mercadillo.ESTADOS_ARTICULO,
             "totales": {"publicados": len(publicados), "por_revisar": len(por_revisar), "denuncias": len(denuncias),
                         "conversaciones": await global_db[_MERC_CONVS].count_documents({}),
-                        "vendidos": sum(1 for a in todos if a.get("estado") == "vendido")}}
+                        "vendidos": sum(1 for a in todos if a.get("estado") == "vendido"),
+                        "bloqueos": len(bloqueos)}}
 
 
 @api_router.post("/admin/mercadillo/visible")

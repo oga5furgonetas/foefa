@@ -16,6 +16,10 @@ Cómo queda legal (resumen; el detalle está en Términos → «Mercadillo» y e
   · Datos: se enseña nombre e inicial; las fotos pierden la ubicación (se vuelven a codificar); el contacto
     es por mensajes dentro de la app, sin teléfonos; los mensajes son privados y solo se revisan si alguien
     los denuncia; todo se borra solo (ver los plazos abajo).
+  · Bloquear (10-11-2026): cualquiera puede bloquear a quien vende un anuncio o a quien le escribe. Dejan de
+    verse los anuncios el uno al otro y ninguno puede escribir al otro; a quien se bloquea no se le avisa y a
+    quien modera sí. Un bloqueo no retira nada por sí solo. Se guarda quién bloquea a quién y cuándo, solo lo
+    ve quien modera, y se borra al desbloquear o al pedir la baja de la cuenta.
 
 El módulo no toca la base: valida y decide. Se prueba entero sin red (tests/test_mercadillo.py).
 """
@@ -62,6 +66,10 @@ ACTIVOS_MAX = 3                                           # anuncios en revisió
 DIAS_PUBLICADO = 30
 MENSAJE_MAX = 1000
 DENUNCIAS_PARA_OCULTAR = 3                                # avisos de 3 personas: se oculta hasta revisarlo
+# Bloquear a una persona (10-11-2026; lo pide Apple a toda app con contenido de usuarios, guideline 1.2):
+BLOQUEOS_MAX = 200                                        # personas que alguien puede tener bloqueadas a la vez
+BLOQUEOS_DIA = 30                                         # bloqueos nuevos por persona y día
+BLOQUEOS_PARA_AVISAR = 2                                  # bloqueada por 2 personas distintas: aviso a quien modera
 # Plazos de borrado (lo que dice la Privacidad):
 DIAS_BORRAR_ANUNCIO = 60                                  # tras acabar (vendido, caducado, quitado…)
 DIAS_BORRAR_CONVERSACION = 180                            # tras el último mensaje

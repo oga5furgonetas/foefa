@@ -2,14 +2,24 @@
 """El mercadillo de repartidores (17-10-2026). Lo que se vigila, por orden de lo que más daño haría:
 que nada salga sin que Dani lo apruebe; que esté oculto hasta que él lo encienda; que las fotos no lleven la
 ubicación del móvil; que los mensajes solo los lean sus dos personas; que quien publica sepa por qué se le
-rechaza o retira y quien denuncia reciba acuse y decisión (DSA); y que todo se borre a su tiempo."""
+rechaza o retira y quien denuncia reciba acuse y decisión (DSA); y que todo se borre a su tiempo.
+
+Y bloquear a una persona (10-11-2026; Apple, guideline 1.2): que quien bloquea deje de ver al otro AL INSTANTE
+y por todos los caminos (lista, ficha, foto, buzón, globito), que ninguno pueda escribir al otro, que al
+bloqueado no se le diga nada, que desbloquear lo devuelva todo, que Dani se entere y que la clave de nadie
+salga hacia la web."""
+import ast
+import inspect
 import io as _io
+import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 from PIL import Image
+from pymongo.errors import DuplicateKeyError
 
 import mercadillo as mc
 import server
@@ -22,6 +32,8 @@ ANA = {"sub": "d1", "role": "driver", "org_id": "owner", "name": "ANA PÉREZ LÓ
 LUIS = {"sub": "d2", "role": "driver", "org_id": "owner", "name": "Luis Gómez"}
 PEPE = {"sub": "a1", "role": "admin", "org_id": "o1", "name": "Pepe"}                        # autónomo
 OFICINA = {"sub": "a9", "role": "admin", "org_id": "empresa", "name": "Oficina"}
+# Cómo es cada uno por dentro (su clave): un autónomo, dos conductores y alguien de oficina. Dani es «fds».
+CLAVES = {"pepe": "o:o1", "ana": "d:owner:d1", "luis": "d:owner:d2", "oficina": "a:empresa:a9"}
 
 
 @pytest.fixture
@@ -53,6 +65,9 @@ def mundo(monkeypatch):
     monkeypatch.setattr(server, "_merc_correo_de", correo_de)
     monkeypatch.setattr(server, "_merc_entregas", entregas)
     monkeypatch.setattr(server, "CORREO_CONTACTO", "contacto@x.es")
+    # El cupo de bloqueos del día vive en memoria: cada prueba empieza con el suyo a cero.
+    for cupo in [k for k in server._public_actions if k.startswith("merc_bloquear:")]:
+        del server._public_actions[cupo]
     return SimpleNamespace(g=g, enviados=enviados)
 
 
@@ -426,3 +441,618 @@ async def test_fotos_que_no_llegan_a_un_anuncio_se_borran(mundo):
     await server.merc_subir_foto(_Fichero(_jpeg_con_gps()), ANA)
     h = await server.merc_limpieza(datetime.now(timezone.utc) + timedelta(days=3))
     assert h["fotos_sueltas"] == 1 and mundo.g["mercadillo_fotos"].docs == []
+
+
+# ── BLOQUEAR A UNA PERSONA (10-11-2026) ─────────────────────────────────────
+# Si A bloquea a B: ninguno ve los anuncios del otro (lista, ficha y foto: 404), ninguno escribe al otro, en el
+# buzón de A sus conversaciones desaparecen y en el de B salen cerradas, a B no se le dice nada y desbloquear lo
+# devuelve todo. Cada regla va con su control: quien no tiene un bloqueo por medio ve lo de siempre.
+HAS_BLOQUEADO = "Has bloqueado a esta persona. Desbloquéala para escribirle."
+CERRADA = "Esta conversación está cerrada"
+A_LA_VENTA = "Ese anuncio ya no está a la venta"
+
+
+async def _publicado(user, titulo, precio="15"):
+    a = await _anuncio(user, titulo, precio)
+    await server.admin_mercadillo_anuncio(a["id"], {"accion": "aprobar"}, DANI)
+    return a
+
+
+async def _falla(intento, codigo, texto=None):
+    """El intento da ese error y, si se dice, con ese texto EXACTO (es lo que lee la persona)."""
+    with pytest.raises(HTTPException) as e:
+        await intento
+    assert e.value.status_code == codigo, f"{e.value.status_code}: {e.value.detail}"
+    if texto is not None:
+        assert e.value.detail == texto
+    return e.value
+
+
+async def _titulos(user) -> set:
+    return {a["titulo"] for a in (await server.merc_lista("", user))["anuncios"]}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_bloquear_desde_un_anuncio_y_dejan_de_verse_los_dos(mundo):
+    await _abrir(mundo)
+    de_ana, de_pepe, de_luis = (await _publicado(ANA, "Soporte de móvil"), await _publicado(PEPE, "Carretilla"),
+                                await _publicado(LUIS, "Botas"))
+    todos = {"Soporte de móvil", "Carretilla", "Botas"}
+    for quien in (ANA, PEPE, LUIS, DANI):
+        assert await _titulos(quien) == todos
+    avisos, correos = len(mundo.g["mercadillo_avisos"].docs), len(mundo.enviados)
+    r = await server.merc_bloquear({"anuncio_id": de_ana["id"]}, PEPE)
+    assert set(r) == {"ok", "bloqueo"} and r["ok"] is True and set(r["bloqueo"]) == {"id", "nombre", "desde"}
+    assert r["bloqueo"]["nombre"] == "Ana P." and re.fullmatch(r"[0-9a-f]{16}", r["bloqueo"]["id"])
+    assert datetime.fromisoformat(r["bloqueo"]["desde"]).tzinfo is not None
+    guardado = mundo.g["mercadillo_bloqueos"].docs
+    assert len(guardado) == 1 and {k: guardado[0][k] for k in ("de", "a", "de_nombre", "a_nombre", "origen")} == {
+        "de": CLAVES["pepe"], "a": CLAVES["ana"], "de_nombre": "Pepe P.", "a_nombre": "Ana P.",
+        "origen": {"tipo": "anuncio", "id": de_ana["id"], "titulo": "Soporte de móvil"}}
+    # LA LISTA: Pepe ya no ve lo de Ana, ni Ana lo de Pepe (es mutuo: que no le pueda rondar). Luis y Dani, lo de siempre.
+    assert await _titulos(PEPE) == {"Carretilla", "Botas"} and await _titulos(ANA) == {"Soporte de móvil", "Botas"}
+    assert await _titulos(LUIS) == todos and await _titulos(DANI) == todos
+    assert [(await server.merc_lista("", q))["bloqueados"] for q in (PEPE, ANA, LUIS, DANI)] == [1, 0, 0, 0]
+    assert [(await server.merc_estado(q))["bloqueados"] for q in (PEPE, ANA)] == [1, 0]
+    # LA FICHA Y LA FOTO por su dirección (y denunciarlo): 404, como un anuncio que se ha quitado.
+    for intento in (server.merc_anuncio(de_ana["id"], PEPE), server.merc_ver_foto(de_ana["fotos"][0], PEPE),
+                    server.merc_anuncio(de_pepe["id"], ANA), server.merc_ver_foto(de_pepe["fotos"][0], ANA),
+                    server.merc_denunciar({"anuncio_id": de_ana["id"], "motivo": "ofensivo"}, PEPE)):
+        await _falla(intento, 404, "Ese anuncio ya no está")
+    for quien in (LUIS, DANI, ANA):                                        # los demás, y ella misma, lo siguen viendo
+        assert (await server.merc_anuncio(de_ana["id"], quien))["titulo"] == "Soporte de móvil"
+        assert (await server.merc_ver_foto(de_ana["fotos"][0], quien)).status_code == 200
+    # «ME INTERESA», en los dos sentidos: ninguno escribe al otro y no se abre ninguna conversación.
+    await _falla(server.merc_contactar(de_pepe["id"], {"texto": "hola"}, ANA), 404, A_LA_VENTA)
+    await _falla(server.merc_contactar(de_ana["id"], {"texto": "hola"}, PEPE), 400, HAS_BLOQUEADO)
+    assert mundo.g["mercadillo_conversaciones"].docs == [] and mundo.g["mercadillo_mensajes"].docs == []
+    assert all(a["interesados"] == 0 for a in mundo.g["mercadillo_anuncios"].docs)
+    # A ANA NO SE LE AVISA: ni un aviso en su buzón ni un correo (y a Dani, sin avisos al móvil, no se le gasta uno).
+    assert (len(mundo.g["mercadillo_avisos"].docs), len(mundo.enviados)) == (avisos, correos)
+    # Con quien no hay un bloqueo por medio, todo sigue igual.
+    assert (await server.merc_contactar(de_ana["id"], {"texto": "hola"}, LUIS))["ok"] is True
+    assert (await server.merc_contactar(de_luis["id"], {"texto": "hola"}, PEPE))["ok"] is True
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_bloquear_desde_una_conversacion_el_buzon_y_escribir_de_cada_lado(mundo):
+    await _abrir(mundo)
+    a = await _publicado(ANA, "Soporte de móvil")
+    cid = (await server.merc_contactar(a["id"], {"texto": "¿Sigue disponible?"}, PEPE))["conversacion_id"]
+    await server.merc_responder(cid, {"texto": "Sí"}, ANA)
+    await server.merc_responder(cid, {"texto": "un insulto feo"}, PEPE)        # Ana lo tiene sin leer
+    await server.merc_avisos_leidos(ANA)                                       # (que no cuente su aviso de «publicado»)
+    assert (await server.merc_estado(ANA))["sin_leer"] == 1
+    sin_leer_de_pepe = (await server.merc_estado(PEPE))["sin_leer"]
+    avisos, correos, mensajes = (len(mundo.g["mercadillo_avisos"].docs), len(mundo.enviados),
+                                 len(mundo.g["mercadillo_mensajes"].docs))
+    r = await server.merc_bloquear({"conversacion_id": cid}, ANA)              # la que vende bloquea a quien le escribe
+    assert r["bloqueo"]["nombre"] == "Pepe P." and "ya" not in r
+    guardado = mundo.g["mercadillo_bloqueos"].docs[0]
+    assert (guardado["de"], guardado["a"], guardado["origen"]) == (
+        CLAVES["ana"], CLAVES["pepe"], {"tipo": "conversacion", "id": cid, "titulo": "Soporte de móvil"})
+    # ANA (la que bloquea): la conversación sale de su buzón y de su globito, su contador queda a cero, por su
+    # dirección no existe (ni para denunciarla) y, si le escribe, se le dice cómo deshacerlo.
+    assert (await server.merc_buzon(ANA))["conversaciones"] == []
+    assert (await server.merc_estado(ANA))["sin_leer"] == 0
+    assert mundo.g["mercadillo_conversaciones"].docs[0]["sin_leer"][CLAVES["ana"]] == 0
+    await _falla(server.merc_conversacion(cid, ANA), 404, "Esa conversación no existe")
+    await _falla(server.merc_denunciar({"conversacion_id": cid, "motivo": "ofensivo"}, ANA), 404, "Esa conversación no existe")
+    await _falla(server.merc_responder(cid, {"texto": "y tú más"}, ANA), 400, HAS_BLOQUEADO)
+    # PEPE (el bloqueado): la conserva, que es su historial, pero cerrada; del anuncio de Ana solo le queda el título.
+    suyas = (await server.merc_buzon(PEPE))["conversaciones"]
+    assert len(suyas) == 1 and suyas[0]["bloqueada"] is True and suyas[0]["con"] == "Ana P." and suyas[0]["soy"] == "comprador"
+    assert (suyas[0]["titulo"], suyas[0]["foto"], suyas[0]["precio_cent"], suyas[0]["estado_anuncio"]) == (
+        "Soporte de móvil", None, None, "borrado")
+    conv = await server.merc_conversacion(cid, PEPE)
+    assert conv["bloqueada"] is True and conv["anuncio"] == {"titulo": "Soporte de móvil", "estado": "borrado"}
+    assert [m["texto"] for m in conv["mensajes"]] == ["¿Sigue disponible?", "Sí", "un insulto feo"]
+    await _falla(server.merc_responder(cid, {"texto": "¿hola?"}, PEPE), 403, CERRADA)      # no se le dice quién ni por qué
+    await _falla(server.merc_contactar(a["id"], {"texto": "¿hola?"}, PEPE), 404, A_LA_VENTA)
+    # Ni un mensaje nuevo, ni un aviso, ni un correo: a Pepe no le llega nada, y su globito no cambia.
+    assert (len(mundo.g["mercadillo_avisos"].docs), len(mundo.enviados), len(mundo.g["mercadillo_mensajes"].docs)) == (
+        avisos, correos, mensajes)
+    assert (await server.merc_estado(PEPE))["sin_leer"] == sin_leer_de_pepe
+    # El control: la conversación de Ana con otra persona ni se esconde ni se cierra.
+    con_luis = (await server.merc_contactar(a["id"], {"texto": "¿y a mí?"}, LUIS))["conversacion_id"]
+    assert [(c["id"], c["bloqueada"], c["foto"]) for c in (await server.merc_buzon(ANA))["conversaciones"]] == [
+        (con_luis, False, a["fotos"][0])]
+    assert (await server.merc_buzon(LUIS))["conversaciones"][0]["estado_anuncio"] == "publicado"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_si_bloquea_quien_compraba_la_que_vende_conserva_su_anuncio_y_tampoco_le_escribe(mundo):
+    await _abrir(mundo)
+    a = await _publicado(ANA, "Soporte de móvil")
+    cid = (await server.merc_contactar(a["id"], {"texto": "hola"}, PEPE))["conversacion_id"]
+    assert (await server.merc_bloquear({"conversacion_id": cid}, PEPE))["bloqueo"]["nombre"] == "Ana P."
+    assert (await server.merc_buzon(PEPE))["conversaciones"] == []
+    await _falla(server.merc_responder(cid, {"texto": "nada"}, PEPE), 400, HAS_BLOQUEADO)
+    # Ana ve la conversación cerrada, con SU anuncio entero (es suyo: eso no se le tapa).
+    suya = (await server.merc_buzon(ANA))["conversaciones"][0]
+    assert (suya["bloqueada"], suya["soy"], suya["foto"], suya["estado_anuncio"]) == (True, "vendedor", a["fotos"][0], "publicado")
+    conv = await server.merc_conversacion(cid, ANA)
+    assert conv["bloqueada"] is True and conv["anuncio"]["id"] == a["id"] and conv["anuncio"]["mio"] is True
+    await _falla(server.merc_responder(cid, {"texto": "¿hola?"}, ANA), 403, CERRADA)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_lo_bloqueado_no_cuenta_sin_leer_ni_aunque_un_mensaje_se_cruce_con_el_bloqueo(mundo):
+    await _abrir(mundo)
+    a = await _publicado(ANA, "Soporte de móvil")
+    await server.merc_avisos_leidos(ANA)
+    cid = (await server.merc_contactar(a["id"], {"texto": "hola"}, PEPE))["conversacion_id"]
+    await server.merc_contactar(a["id"], {"texto": "hola"}, LUIS)
+    assert (await server.merc_estado(ANA))["sin_leer"] == 2
+    b = (await server.merc_bloquear({"conversacion_id": cid}, ANA))["bloqueo"]
+    assert (await server.merc_estado(ANA))["sin_leer"] == 1                  # la de Luis sigue contando
+    # Un mensaje de Pepe guardado a la vez que el bloqueo (su contador ya no está a cero): tampoco cuenta.
+    await mundo.g["mercadillo_conversaciones"].update_one({"id": cid}, {"$set": {f"sin_leer.{CLAVES['ana']}": 3}})
+    assert (await server.merc_estado(ANA))["sin_leer"] == 1
+    # Al desbloquear vuelve la conversación a su buzón, y con ella lo que tenga sin leer.
+    await server.merc_desbloquear(b["id"], ANA)
+    assert (await server.merc_estado(ANA))["sin_leer"] == 2
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_desbloquear_lo_devuelve_todo_menos_lo_que_cerro_la_moderacion(mundo):
+    await _abrir(mundo)
+    a, a2, p = await _publicado(ANA, "Soporte de móvil"), await _publicado(ANA, "Cascos"), await _publicado(PEPE, "Carretilla")
+    cid = (await server.merc_contactar(a["id"], {"texto": "¿Sigue disponible?"}, PEPE))["conversacion_id"]
+    cerrada = (await server.merc_contactar(a2["id"], {"texto": "insulto feo"}, PEPE))["conversacion_id"]
+    await server.merc_denunciar({"conversacion_id": cerrada, "motivo": "ofensivo"}, ANA)
+    den = (await server.admin_mercadillo(DANI))["denuncias"][0]
+    await server.admin_mercadillo_denuncia(den["id"], {"decision": "actuar"}, DANI)      # esa la cierra la moderación
+    b = (await server.merc_bloquear({"conversacion_id": cid}, ANA))["bloqueo"]
+    assert (await server.merc_buzon(ANA))["conversaciones"] == [] and await _titulos(PEPE) == {"Carretilla"}
+    # La que cerró la moderación está cerrada para los dos, con bloqueo o sin él (no se le manda a desbloquear).
+    await _falla(server.merc_responder(cerrada, {"texto": "hola"}, ANA), 403, CERRADA)
+    # «Personas bloqueadas»: a quién, desde cuándo y desde qué. Cada uno ve y quita solo las suyas.
+    assert await server.merc_bloqueados(ANA) == {"bloqueados": [
+        {"id": b["id"], "nombre": "Pepe P.", "desde": b["desde"], "titulo": "Soporte de móvil"}]}
+    assert await server.merc_bloqueados(PEPE) == {"bloqueados": []}
+    await _falla(server.merc_desbloquear(b["id"], PEPE), 404, "Ese bloqueo ya no está")
+    assert len(mundo.g["mercadillo_bloqueos"].docs) == 1
+    assert await server.merc_desbloquear(b["id"], ANA) == {"ok": True}
+    await _falla(server.merc_desbloquear(b["id"], ANA), 404, "Ese bloqueo ya no está")
+    assert mundo.g["mercadillo_bloqueos"].docs == [] and (await server.merc_lista("", ANA))["bloqueados"] == 0
+    # Vuelven los anuncios (lista, ficha y foto), en los dos sentidos…
+    assert await _titulos(PEPE) == await _titulos(ANA) == {"Soporte de móvil", "Cascos", "Carretilla"}
+    assert (await server.merc_anuncio(a["id"], PEPE))["conversacion_id"] == cid
+    assert (await server.merc_ver_foto(a["fotos"][0], PEPE)).status_code == 200
+    assert (await server.merc_anuncio(p["id"], ANA))["titulo"] == "Carretilla"
+    # …y las conversaciones: la del bloqueo, abierta y ya leída (su contador se puso a cero al bloquear); la que
+    # cerró la moderación sigue cerrada.
+    de_ana = {c["id"]: c for c in (await server.merc_buzon(ANA))["conversaciones"]}
+    assert (de_ana[cid]["bloqueada"], de_ana[cid]["sin_leer"], de_ana[cerrada]["bloqueada"]) == (False, False, True)
+    de_pepe = {c["id"]: c for c in (await server.merc_buzon(PEPE))["conversaciones"]}
+    assert (de_pepe[cid]["bloqueada"], de_pepe[cid]["foto"], de_pepe[cid]["estado_anuncio"]) == (False, a["fotos"][0], "publicado")
+    assert de_pepe[cerrada]["bloqueada"] is True
+    assert (await server.merc_conversacion(cid, PEPE))["anuncio"]["id"] == a["id"]
+    await server.merc_responder(cid, {"texto": "perdona"}, PEPE)
+    await server.merc_responder(cid, {"texto": "vale"}, ANA)
+    for quien in (ANA, PEPE):
+        await _falla(server.merc_responder(cerrada, {"texto": "hola"}, quien), 403, CERRADA)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_bloquear_dos_veces_no_falla_y_no_se_bloquea_lo_que_no_se_ve_ni_a_uno_mismo(mundo, monkeypatch):
+    await _abrir(mundo)
+    a = await _publicado(ANA, "Soporte de móvil")
+    pendiente = await _anuncio(LUIS, "Botas", "20")                           # sin aprobar: Pepe no lo ve
+    cid = (await server.merc_contactar(a["id"], {"texto": "hola"}, PEPE))["conversacion_id"]
+    # Sin decir a quién, lo que no existe, lo que no ve, lo de otros, lo suyo: nada de eso bloquea a nadie.
+    await _falla(server.merc_bloquear({}, PEPE), 400, "Falta a quién bloqueas")
+    await _falla(server.merc_bloquear([], PEPE), 400, "Falta a quién bloqueas")
+    await _falla(server.merc_bloquear({"anuncio_id": "no-existe"}, PEPE), 404, "Ese anuncio ya no está")
+    await _falla(server.merc_bloquear({"anuncio_id": pendiente["id"]}, PEPE), 404, "Ese anuncio ya no está")
+    await _falla(server.merc_bloquear({"conversacion_id": cid}, LUIS), 404, "Esa conversación no existe")
+    await _falla(server.merc_bloquear({"anuncio_id": a["id"]}, ANA), 400, "Es tu anuncio")
+    await mundo.g["mercadillo_conversaciones"].insert_one({
+        "id": "consigo", "anuncio_id": "x", "anuncio_titulo": "Raro",
+        "comprador": {"clave": CLAVES["pepe"], "nombre": "Pepe P."}, "vendedor": {"clave": CLAVES["pepe"], "nombre": "Pepe P."}})
+    await _falla(server.merc_bloquear({"conversacion_id": "consigo"}, PEPE), 400, "No puedes bloquearte a ti")
+    # Un anuncio sin dueño conocido (un dato viejo o roto) no deja un bloqueo «a nadie».
+    await mundo.g["mercadillo_anuncios"].insert_one({
+        "id": "sindueno", "titulo": "Sin dueño", "estado": "publicado", "vendedor": {"nombre": "Fantasma"},
+        "caduca": (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()})
+    await _falla(server.merc_bloquear({"anuncio_id": "sindueno"}, PEPE), 404, "Esa persona ya no está en el mercadillo")
+    assert mundo.g["mercadillo_bloqueos"].docs == []
+    # Dos veces a la misma persona (desde el anuncio y desde la conversación): no falla, dice que ya estaba y no hay dos.
+    primero = await server.merc_bloquear({"anuncio_id": a["id"]}, PEPE)
+    for cuerpo in ({"anuncio_id": a["id"]}, {"conversacion_id": cid}):
+        assert await server.merc_bloquear(cuerpo, PEPE) == {"ok": True, "ya": True, "bloqueo": primero["bloqueo"]}
+    assert len(mundo.g["mercadillo_bloqueos"].docs) == 1
+    # Dos toques A LA VEZ: los dos pasan el «¿ya estaba?», el índice único (de, a) rechaza el segundo, y este
+    # contesta lo mismo sin dejar otro bloqueo ni avisar otra vez a Dani.
+    await server.merc_desbloquear(primero["bloqueo"]["id"], PEPE)
+    col, avisado = mundo.g["mercadillo_bloqueos"], []
+    guardar = col.insert_one
+
+    async def el_otro_toque_llego_antes(doc):
+        await guardar({**doc, "id": "0000elotrotoque0"})
+        raise DuplicateKeyError("E11000 duplicate key error collection: mercadillo_bloqueos index: mercadillo_bloqueo_unico")
+
+    async def a_dani(b):
+        avisado.append(b)
+    monkeypatch.setattr(col, "insert_one", el_otro_toque_llego_antes)
+    monkeypatch.setattr(server, "_merc_bloqueo_a_dani", a_dani)
+    r = await server.merc_bloquear({"anuncio_id": a["id"]}, PEPE)
+    assert r == {"ok": True, "ya": True, "bloqueo": {"id": "0000elotrotoque0", "nombre": "Ana P.", "desde": col.docs[0]["ts"]}}
+    assert len(col.docs) == 1 and avisado == []
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_tope_de_bloqueos_al_dia_y_de_personas_bloqueadas(mundo):
+    await _abrir(mundo)
+    a, de_luis = await _publicado(ANA, "Soporte de móvil"), await _publicado(LUIS, "Botas")
+    # 30 bloqueos al día. Cuentan los HECHOS (ni los que fallan ni los repetidos) y desbloquear no devuelve cupo:
+    # bloquear y desbloquear en bucle no puede servir para llenarle el móvil de avisos a Dani.
+    for _ in range(3):
+        await _falla(server.merc_bloquear({"anuncio_id": "no-existe"}, PEPE), 404)
+    for _ in range(mc.BLOQUEOS_DIA):
+        b = (await server.merc_bloquear({"anuncio_id": a["id"]}, PEPE))["bloqueo"]
+        assert (await server.merc_bloquear({"anuncio_id": a["id"]}, PEPE))["ya"] is True
+        await server.merc_desbloquear(b["id"], PEPE)
+    await _falla(server.merc_bloquear({"anuncio_id": a["id"]}, PEPE), 429, "Has bloqueado a mucha gente hoy. Prueba mañana.")
+    assert mundo.g["mercadillo_bloqueos"].docs == [] and "Soporte de móvil" in await _titulos(PEPE)
+    assert (await server.merc_bloquear({"anuncio_id": a["id"]}, LUIS))["ok"] is True        # el cupo es de cada uno
+    cupo = server._public_actions["merc_bloquear:" + CLAVES["pepe"]]
+    assert len(cupo) == mc.BLOQUEOS_DIA == 30
+    server._public_actions["merc_bloquear:" + CLAVES["pepe"]] = [t - 86401 for t in cupo]     # al día siguiente…
+    assert (await server.merc_bloquear({"anuncio_id": a["id"]}, PEPE))["ok"] is True          # …puede otra vez
+    # 200 personas bloqueadas a la vez como mucho. A quien ya lo estaba se le sigue contestando «ya».
+    mundo.g["mercadillo_bloqueos"].docs += [{"id": f"viejo{i}", "de": CLAVES["pepe"], "a": f"o:otra{i}", "a_nombre": "Otra",
+                                             "ts": "2026-11-01T10:00:00+00:00"} for i in range(mc.BLOQUEOS_MAX - 1)]
+    assert (await server.merc_lista("", PEPE))["bloqueados"] == mc.BLOQUEOS_MAX == 200
+    e = await _falla(server.merc_bloquear({"anuncio_id": de_luis["id"]}, PEPE), 400)
+    assert e.detail.startswith("Tienes 200 personas bloqueadas") and "Desbloquea a alguna" in e.detail
+    assert "Botas" in await _titulos(PEPE) and len(mundo.g["mercadillo_bloqueos"].docs) == mc.BLOQUEOS_MAX + 1   # (+ el de Luis a Ana)
+    assert (await server.merc_bloquear({"anuncio_id": a["id"]}, PEPE))["ya"] is True
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_a_dani_se_le_puede_bloquear_pero_el_modera_lo_ve_todo_y_no_bloquea(mundo):
+    await _abrir(mundo)
+    iphone, soporte, botas = (await _publicado(DANI, "iPhone 18 Pro · 256 GB", "1.300"), await _publicado(ANA, "Soporte de móvil"),
+                              await _publicado(LUIS, "Botas"))
+    le_compra = (await server.merc_contactar(iphone["id"], {"texto": "¿Lo tienes aún?"}, ANA))["conversacion_id"]
+    le_vende = (await server.merc_contactar(soporte["id"], {"texto": "Me lo quedo"}, DANI))["conversacion_id"]
+    # Él no bloquea: modera (retira el anuncio o cierra la conversación).
+    for cuerpo in ({"anuncio_id": soporte["id"]}, {"conversacion_id": le_vende}, {}):
+        await _falla(server.merc_bloquear(cuerpo, DANI), 400,
+                     "Tú moderas el mercadillo: retira el anuncio o cierra la conversación en Negocio")
+    assert await server.merc_bloqueados(DANI) == {"bloqueados": []} and (await server.merc_estado(DANI))["bloqueados"] == 0
+    # Cualquiera puede bloquearle como vendedor (es lo que probará el revisor de Apple: su anuncio es el publicado).
+    b = (await server.merc_bloquear({"anuncio_id": iphone["id"]}, ANA))["bloqueo"]
+    assert b["nombre"] == "Dani · FDS" and mundo.g["mercadillo_bloqueos"].docs[0]["a"] == "fds"
+    assert await _titulos(ANA) == {"Soporte de móvil", "Botas"}
+    await _falla(server.merc_anuncio(iphone["id"], ANA), 404, "Ese anuncio ya no está")
+    await _falla(server.merc_ver_foto(iphone["fotos"][0], ANA), 404, "Ese anuncio ya no está")
+    assert (await server.merc_buzon(ANA))["conversaciones"] == []
+    # A Dani no se le filtra nada: sigue viendo los anuncios de quien le bloqueó, enteros…
+    assert await _titulos(DANI) == {"iPhone 18 Pro · 256 GB", "Soporte de móvil", "Botas"}
+    assert (await server.merc_anuncio(soporte["id"], DANI))["titulo"] == "Soporte de móvil"
+    assert (await server.merc_ver_foto(soporte["fotos"][0], DANI)).status_code == 200
+    # …pero sus conversaciones con ella le salen cerradas y no puede escribirle, tampoco por otro anuncio suyo.
+    de_dani = {c["id"]: c for c in (await server.merc_buzon(DANI))["conversaciones"]}
+    assert de_dani[le_compra]["bloqueada"] is True and de_dani[le_vende]["bloqueada"] is True
+    assert (de_dani[le_vende]["foto"], de_dani[le_vende]["estado_anuncio"]) == (soporte["fotos"][0], "publicado")
+    conv = await server.merc_conversacion(le_vende, DANI)
+    assert conv["bloqueada"] is True and conv["anuncio"]["id"] == soporte["id"]
+    for cid in (le_compra, le_vende):
+        await _falla(server.merc_responder(cid, {"texto": "hola"}, DANI), 403, CERRADA)
+    cascos = await _publicado(ANA, "Cascos")
+    for anuncio in (cascos, soporte):
+        await _falla(server.merc_contactar(anuncio["id"], {"texto": "¿y esto?"}, DANI), 403, CERRADA)
+    assert len(mundo.g["mercadillo_conversaciones"].docs) == 2
+    # LOS AVISOS DE FDS son de moderación, no de una persona: a quien le bloqueó le siguen llegando (publicado,
+    # rechazado, el acuse y la respuesta a una denuncia), a su buzón y a su correo.
+    assert mundo.enviados[-1].to == "ana@x.es" and mundo.enviados[-1].subject == "Publicado en el mercadillo: Cascos"
+    escaner = await _anuncio(ANA, "Escáner de la nave", "50")
+    await server.admin_mercadillo_anuncio(escaner["id"], {"accion": "rechazar", "motivo": "empresa"}, DANI)
+    await server.merc_denunciar({"anuncio_id": botas["id"], "motivo": "estafa"}, ANA)
+    den = (await server.admin_mercadillo(DANI))["denuncias"][0]
+    await server.admin_mercadillo_denuncia(den["id"], {"decision": "no_infringe"}, DANI)
+    avisos = " | ".join(x["texto"] for x in (await server.merc_buzon(ANA))["avisos"])
+    for trozo in ("«Cascos» ya está publicado", "«Escáner de la nave» no se ha publicado. Motivo:",
+                  "Hemos recibido tu aviso sobre «Botas»", "Sobre tu aviso de «Botas»"):
+        assert trozo in avisos
+    # Y Dani lo ve en su panel.
+    panel = (await server.admin_mercadillo(DANI))["bloqueos"]
+    assert [(x["de_nombre"], x["a_nombre"], x["a_clave"], x["origen"]) for x in panel] == [
+        ("Ana P.", "Dani · FDS", "fds", {"tipo": "anuncio", "titulo": "iPhone 18 Pro · 256 GB"})]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_dani_ve_cada_bloqueo_y_se_le_avisa_sin_que_el_bloqueo_retire_nada(mundo, monkeypatch):
+    """Apple: «blocking should also notify the developer». Un bloqueo suelto, al móvil si lo tiene puesto (queda en su
+    panel); desde que a alguien le bloquean 2 personas distintas, el aviso normal (móvil o correo) cada vez."""
+    pushes = []
+
+    async def push(ids, titulo, cuerpo, url="/panel"):
+        pushes.append(SimpleNamespace(ids=ids, titulo=titulo, cuerpo=cuerpo, url=url))
+    monkeypatch.setattr(server, "send_web_push_to_users", push)
+    monkeypatch.setattr(server, "_push_enabled", True)
+    mundo.g["admin_users"] = Col([{"id": "dani", "super_admin": True}, {"id": "a9", "username": "oficina@x.es", "org_id": "empresa"}])
+    await _abrir(mundo)
+    a = await _publicado(ANA, "Soporte de móvil")
+    cid = (await server.merc_contactar(a["id"], {"texto": "hola"}, LUIS))["conversacion_id"]
+    correos = len(mundo.enviados)
+    # 1) Dani SIN los avisos al móvil: el primer bloqueo queda en su panel y no gasta un correo.
+    await server.merc_bloquear({"anuncio_id": a["id"]}, PEPE)
+    assert len(mundo.enviados) == correos and pushes == []
+    panel = await server.admin_mercadillo(DANI)
+    assert panel["totales"]["bloqueos"] == 1 and panel["bloqueados_varios"] == [] and len(panel["bloqueos"]) == 1
+    b = panel["bloqueos"][0]
+    assert set(b) == {"id", "de_nombre", "a_nombre", "a_clave", "ts", "origen"} and set(b["origen"]) == {"tipo", "titulo"}
+    assert (b["de_nombre"], b["a_nombre"], b["a_clave"], b["origen"]) == (
+        "Pepe P.", "Ana P.", CLAVES["ana"], {"tipo": "anuncio", "titulo": "Soporte de móvil"})
+    assert b["id"] == mundo.g["mercadillo_bloqueos"].docs[0]["id"] and b["ts"] == mundo.g["mercadillo_bloqueos"].docs[0]["ts"]
+    mundo.g["mercadillo_bloqueos"].docs[0]["ts"] = "2026-11-09T10:00:00+00:00"       # (ayer: para el orden de abajo)
+    # 2) La SEGUNDA persona distinta que la bloquea: el aviso normal (aquí, un correo), con quién, a quién y desde dónde.
+    await server.merc_bloquear({"conversacion_id": cid}, LUIS)
+    assert len(mundo.enviados) == correos + 1 and mundo.enviados[-1].to == "contacto@x.es"
+    assert mundo.enviados[-1].subject == "Mercadillo: 2 personas han bloqueado a Ana P."
+    assert "Luis G. ha bloqueado a Ana P. desde una conversación sobre «Soporte de móvil»." in mundo.enviados[-1].texto
+    assert "Un bloqueo no retira nada por sí solo" in mundo.enviados[-1].texto
+    panel = await server.admin_mercadillo(DANI)
+    assert panel["bloqueados_varios"] == [{"clave": CLAVES["ana"], "nombre": "Ana P.", "n": 2}] and panel["totales"]["bloqueos"] == 2
+    assert [x["de_nombre"] for x in panel["bloqueos"]] == ["Luis G.", "Pepe P."]            # lo último primero
+    # Repetir un bloqueo no vuelve a avisar.
+    assert (await server.merc_bloquear({"conversacion_id": cid}, LUIS))["ya"] is True and len(mundo.enviados) == correos + 1
+    # 3) Un bloqueo NO retira ni esconde nada por sí solo (se podría usar para ir a por alguien): decide Dani.
+    assert mundo.g["mercadillo_anuncios"].docs[0]["estado"] == "publicado" and "Soporte de móvil" in await _titulos(OFICINA)
+    # 4) Con los avisos al móvil puestos, cada bloqueo le salta: UNO por bloqueo, y sin gastar correo.
+    await server.merc_avisos_movil({"activo": True}, DANI)
+    await server.merc_avisos_movil({"activo": True}, ANA)                      # Ana también los tiene: a ella, nada
+    mundo.g["push_subscriptions"] = Col([{"endpoint": "dani-movil", "user_id": "dani"}, {"endpoint": "ana-movil", "user_id": "d1"}])
+    botas = await _publicado(LUIS, "Botas")
+    pushes.clear()
+    correos = len(mundo.enviados)
+    await server.merc_bloquear({"anuncio_id": botas["id"]}, PEPE)             # la primera persona que bloquea a Luis
+    assert len(pushes) == 1 and (pushes[0].ids, pushes[0].url) == (["dani"], "/panel/admin?s=mercadillo")
+    assert (pushes[0].titulo, pushes[0].cuerpo) == ("Mercadillo · bloqueo", "Pepe P. ha bloqueado a Luis G. desde el anuncio «Botas».")
+    await server.merc_bloquear({"anuncio_id": a["id"]}, OFICINA)              # la tercera que bloquea a Ana
+    assert len(pushes) == 2 and (pushes[1].ids, pushes[1].url) == (["dani"], "/panel/admin?s=mercadillo")
+    assert pushes[1].titulo == "Mercadillo · 3 personas han bloqueado a Ana P." and "Oficina ha bloqueado a Ana P." in pushes[1].cuerpo
+    assert len(mundo.enviados) == correos
+    # A quien bloquean no le llega nada por ningún lado: ni un aviso en su buzón ni al móvil.
+    assert not [x for x in mundo.g["mercadillo_avisos"].docs if "bloque" in x["texto"].lower()]
+    de_mas_a_menos = (await server.admin_mercadillo(DANI))["bloqueados_varios"]
+    assert [(x["nombre"], x["n"]) for x in de_mas_a_menos] == [("Ana P.", 3)]
+
+
+_CAMPOS_DE_CLAVE = {"clave", "a_clave", "de_clave", "de", "a", "para", "dueno", "org_id"}
+
+
+def _claves_en(x, donde="") -> list:
+    """Dónde lleva `x` la clave de alguien: como campo o dentro de un texto. Vacío si no la lleva."""
+    if isinstance(x, dict):
+        return [f"{donde}.{k}" for k in x if k in _CAMPOS_DE_CLAVE] + [
+            h for k, v in x.items() for h in _claves_en(v, f"{donde}.{k}")]
+    if isinstance(x, (list, tuple)):
+        return [h for i, v in enumerate(x) for h in _claves_en(v, f"{donde}[{i}]")]
+    return [donde] if isinstance(x, str) and any(c in x for c in CLAVES.values()) else []
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_clave_de_nadie_sale_hacia_la_web_solo_en_el_panel_de_dani(mundo):
+    """A quién se bloquea se dice con un anuncio o con una conversación, y lo que vuelve es su nombre corto: ninguna
+    respuesta (ni un mensaje de error) lleva la clave de nadie, ni la de quien bloquea ni la del bloqueado."""
+    await _abrir(mundo)
+    mundo.g["admin_users"] = Col([{"id": "a9", "username": "oficina@x.es", "org_id": "empresa"}])
+    de_ana, de_pepe, de_oficina = (await _publicado(ANA, "Soporte de móvil"), await _publicado(PEPE, "Carretilla"),
+                                   await _publicado(OFICINA, "Silla de oficina"))
+    cid = (await server.merc_contactar(de_ana["id"], {"texto": "hola"}, PEPE))["conversacion_id"]
+    cid2 = (await server.merc_contactar(de_oficina["id"], {"texto": "hola"}, ANA))["conversacion_id"]
+    vistas = [await server.merc_contactar(de_pepe["id"], {"texto": "¿sigue?"}, OFICINA),
+              await server.merc_responder(cid, {"texto": "sí"}, ANA),
+              await server.merc_denunciar({"conversacion_id": cid2, "motivo": "otro"}, ANA),
+              await server.merc_bloquear({"conversacion_id": cid}, ANA),            # la conductora, al autónomo
+              await server.merc_bloquear({"conversacion_id": cid}, ANA),            # (ya estaba)
+              await server.merc_bloquear({"anuncio_id": de_oficina["id"]}, PEPE),   # el autónomo, a la de oficina
+              await server.merc_bloquear({"conversacion_id": cid2}, OFICINA),       # la de oficina, a la conductora
+              await server.merc_bloquear({"anuncio_id": de_pepe["id"]}, LUIS)]      # y un segundo que bloquea al autónomo
+    errores = [await _falla(server.merc_responder(cid, {"texto": "eh"}, PEPE), 403),
+               await _falla(server.merc_responder(cid, {"texto": "eh"}, ANA), 400),
+               await _falla(server.merc_anuncio(de_ana["id"], PEPE), 404),
+               await _falla(server.merc_contactar(de_ana["id"], {"texto": "eh"}, PEPE), 404),
+               await _falla(server.merc_conversacion(cid, ANA), 404),
+               await _falla(server.merc_desbloquear("no-es-mio", PEPE), 404)]
+    for quien in (PEPE, ANA, OFICINA, LUIS, DANI):
+        vistas += [await server.merc_lista("", quien), await server.merc_estado(quien), await server.merc_buzon(quien),
+                   await server.merc_bloqueados(quien)]
+    vistas += [await server.merc_conversacion(cid, PEPE), await server.merc_conversacion(cid2, ANA),
+               await server.merc_anuncio(de_ana["id"], LUIS),
+               await server.merc_desbloquear((await server.merc_bloqueados(PEPE))["bloqueados"][0]["id"], PEPE)]
+    assert len(vistas) == 32 and [h for v in vistas for h in _claves_en(v)] == []
+    assert [h for e in errores for h in _claves_en(e.detail)] == []
+    # El control: el panel de Dani SÍ las lleva (así que el buscador de arriba las habría visto), y solo entra él.
+    en_el_panel = _claves_en(await server.admin_mercadillo(DANI))
+    assert ".bloqueos[0].a_clave" in en_el_panel and ".bloqueados_varios[0].clave" in en_el_panel
+    assert inspect.signature(server.admin_mercadillo).parameters["_"].default.dependency is server.require_superadmin
+    for quien in (PEPE, ANA, OFICINA):
+        await _falla(server.require_superadmin(quien), 403)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_se_bloquean_igual_un_autonomo_una_conductora_y_alguien_de_oficina(mundo):
+    await _abrir(mundo)
+    mundo.g["admin_users"] = Col([{"id": "a9", "username": "oficina@x.es", "org_id": "empresa"}])
+    carretilla, soporte, silla = (await _publicado(PEPE, "Carretilla"), await _publicado(ANA, "Soporte de móvil"),
+                                  await _publicado(OFICINA, "Silla de oficina"))
+    # Cada clase bloquea a otra: el autónomo a la de oficina (desde su anuncio), la de oficina a la conductora (desde
+    # una conversación) y la conductora al autónomo.
+    b1 = (await server.merc_bloquear({"anuncio_id": silla["id"]}, PEPE))["bloqueo"]
+    cid = (await server.merc_contactar(soporte["id"], {"texto": "hola"}, OFICINA))["conversacion_id"]
+    b2 = (await server.merc_bloquear({"conversacion_id": cid}, OFICINA))["bloqueo"]
+    b3 = (await server.merc_bloquear({"anuncio_id": carretilla["id"]}, ANA))["bloqueo"]
+    assert [b["nombre"] for b in (b1, b2, b3)] == ["Oficina", "Ana P.", "Pepe P."]
+    assert sorted((b["de"], b["a"]) for b in mundo.g["mercadillo_bloqueos"].docs) == [
+        (CLAVES["oficina"], CLAVES["ana"]), (CLAVES["ana"], CLAVES["pepe"]), (CLAVES["pepe"], CLAVES["oficina"])]
+    # Con un bloqueo en cada pareja, cada uno ve solo lo suyo…
+    assert [await _titulos(q) for q in (PEPE, ANA, OFICINA)] == [{"Carretilla"}, {"Soporte de móvil"}, {"Silla de oficina"}]
+    await _falla(server.merc_responder(cid, {"texto": "¿hola?"}, ANA), 403, CERRADA)
+    # …y al desbloquear vuelve, pareja a pareja.
+    await server.merc_desbloquear(b1["id"], PEPE)
+    assert [await _titulos(q) for q in (PEPE, ANA, OFICINA)] == [
+        {"Carretilla", "Silla de oficina"}, {"Soporte de móvil"}, {"Silla de oficina", "Carretilla"}]
+    await server.merc_desbloquear(b2["id"], OFICINA)
+    await server.merc_desbloquear(b3["id"], ANA)
+    assert [await _titulos(q) for q in (PEPE, ANA, OFICINA)] == [{"Carretilla", "Soporte de móvil", "Silla de oficina"}] * 3
+    await server.merc_responder(cid, {"texto": "¿hola?"}, ANA)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_bloquear_es_de_quien_esta_dentro_del_mercadillo(mundo):
+    """Las tres rutas nuevas pasan por la misma puerta que el resto: cerrado, solo entra Dani; y las demos, «entrar
+    como» y las empresas que lo han apagado, nunca."""
+    a = await _publicado(DANI, "iPhone 18 Pro · 256 GB", "1.300")            # todavía cerrado: solo lo ve él
+    for intento in (server.merc_bloquear({"anuncio_id": a["id"]}, ANA), server.merc_bloqueados(ANA),
+                    server.merc_desbloquear("x", ANA)):
+        await _falla(intento, 404, "El mercadillo todavía no está abierto")
+    await _abrir(mundo)
+    apagada = {"sub": "x", "role": "driver", "org_id": "apagada", "name": "X"}
+    for nadie in ({**ANA, "demo": True}, {**PEPE, "imp": True}, apagada):
+        for intento in (server.merc_bloquear({"anuncio_id": a["id"]}, nadie), server.merc_bloqueados(nadie),
+                        server.merc_desbloquear("x", nadie)):
+            await _falla(intento, 403)
+    assert mundo.g["mercadillo_bloqueos"].docs == []
+    assert (await server.merc_bloquear({"anuncio_id": a["id"]}, ANA))["ok"] is True
+
+
+def _textos_de_error(*funciones) -> list:
+    """Los textos que esas funciones de server.py le dan a la persona: el de cada HTTPException y el del cupo del día
+    (los f-string, con «0» en cada hueco; `_MERC_CERRADA` y demás constantes, con su valor)."""
+    arbol, fuera = ast.parse(Path(server.__file__).read_text(encoding="utf-8-sig")), []
+    for fn in ast.walk(arbol):
+        if not (isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)) and fn.name in funciones):
+            continue
+        for n in ast.walk(fn):
+            nombre = getattr(getattr(n, "func", None), "id", "") if isinstance(n, ast.Call) else ""
+            t = n.args[1] if nombre == "HTTPException" and len(n.args) > 1 else (
+                n.args[3] if nombre == "_rl_public_action" and len(n.args) > 3 else None)
+            if isinstance(t, ast.Constant):
+                fuera.append(t.value)
+            elif isinstance(t, ast.JoinedStr):
+                fuera.append("".join(v.value if isinstance(v, ast.Constant) else "0" for v in t.values))
+            elif isinstance(t, ast.Name):
+                fuera.append(getattr(server, t.id))
+    return fuera
+
+
+def test_los_textos_del_bloqueo_se_leen_tambien_en_el_iphone():
+    """Dentro de la app del iPhone la web cambia por un texto neutro («No se ha podido completar…») todo error del
+    servidor que «hable de pagos» (`HABLA_DE_PAGOS` en frontend/src/lib/plataforma.js: plan, gratis, tope, bono,
+    cartera…). Bloquear es justo lo que Apple va a mirar allí: ninguno de sus mensajes puede caer en esa red."""
+    web = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib" / "plataforma.js").read_text(encoding="utf-8")
+    red = re.search(r"HABLA_DE_PAGOS\s*=\s*/(.+)/i\s*$", web, re.M)
+    assert red, "no encuentro HABLA_DE_PAGOS en plataforma.js: ¿se ha movido?"
+    habla_de_pagos = re.compile(red.group(1), re.I)
+    # El control: la red es la de verdad (así se habría quedado sin leer «…que es el tope»).
+    assert habla_de_pagos.search("Tienes 200 personas bloqueadas, que es el tope.") and habla_de_pagos.search("Tu plan gratis")
+    textos = _textos_de_error("merc_bloquear", "merc_bloqueados", "merc_desbloquear", "_merc_escribirle", "_merc_conv_mia",
+                              "_merc_anuncio_visible", "merc_contactar", "merc_responder")
+    for esperado in (HAS_BLOQUEADO, CERRADA, A_LA_VENTA, "Falta a quién bloqueas", "Es tu anuncio", "No puedes bloquearte a ti",
+                     "Ese bloqueo ya no está", "Ese anuncio ya no está", "Esa conversación no existe",
+                     "Has bloqueado a mucha gente hoy. Prueba mañana."):
+        assert esperado in textos, f"el buscador de textos no ha visto «{esperado}»"
+    assert any(t.startswith("Tienes 0 personas bloqueadas") for t in textos) and len(set(textos)) >= 13
+    assert [t for t in textos if habla_de_pagos.search(t)] == []
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_indice_unico_de_los_bloqueos_es_por_pareja(mundo, monkeypatch):
+    """Sin un índice ÚNICO detrás, el `except DuplicateKeyError` de bloquear sería papel mojado; y si fuera único solo
+    por `a`, a cada persona solo la podría bloquear UNA (a la segunda se le contestaría un «ya» falso)."""
+    creados = []
+
+    async def idx(coleccion, *args, **kwargs):
+        creados.append((coleccion, args, kwargs))
+
+    async def nada(*a, **k):
+        return []
+    monkeypatch.setattr(server, "_idx", idx)
+    monkeypatch.setattr(server, "_ensure_tenant_indexes", nada)
+    mundo.g.list_collection_names = nada
+    await server.create_indexes()
+    de_bloqueos = [(args, kwargs) for col, args, kwargs in creados if col is mundo.g["mercadillo_bloqueos"]]
+    assert (([("de", 1), ("a", 1)],), {"unique": True, "name": "mercadillo_bloqueo_unico"}) in de_bloqueos
+    assert (("a",), {}) in de_bloqueos                                       # quién ha bloqueado a alguien
+    assert [args for args, kwargs in de_bloqueos if kwargs.get("unique")] == [([("de", 1), ("a", 1)],)]
+
+
+# ── LA BAJA DE LA CUENTA (10-11-2026) ───────────────────────────────────────
+def _es_fecha(v) -> bool:
+    return datetime.fromisoformat(v).tzinfo is not None
+
+
+def _con_cuenta(mundo):
+    """Pepe con su usuario y su contraseña, que es lo que pide borrar la cuenta."""
+    mundo.g["admin_users"] = Col([{"id": "a1", "username": "pepe@x.es", "role": "admin", "org_id": "o1",
+                                   "hashed_password": server.hash_password("secreta123")},
+                                  {"id": "a9", "username": "oficina@x.es", "org_id": "empresa"}])
+    server._public_actions.pop("borrar:a1", None)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_baja_de_la_cuenta_se_lleva_su_mercadillo(mundo):
+    """Antes la cuenta quedaba desactivada pero sus anuncios seguían publicados hasta caducar, a nombre de alguien que ya
+    no puede contestar. Al pedir la baja: anuncios activos quitados, conversaciones cerradas, y fuera sus bloqueos (los
+    que hizo y los que le hicieron) y sus preferencias. Lo de los demás no se toca."""
+    await _abrir(mundo)
+    _con_cuenta(mundo)
+    publicado, pendiente, vendido = (await _publicado(PEPE, "Carretilla"), await _anuncio(PEPE, "Mochila", "12"),
+                                     await _publicado(PEPE, "Gorra", "8"))
+    await server.merc_cambiar(vendido["id"], {"accion": "vendido"}, PEPE)
+    de_ana, de_luis = await _publicado(ANA, "Soporte de móvil"), await _publicado(LUIS, "Botas")
+    le_compran = (await server.merc_contactar(publicado["id"], {"texto": "¿Sigue?"}, ANA))["conversacion_id"]
+    compra = (await server.merc_contactar(de_ana["id"], {"texto": "Me interesa"}, PEPE))["conversacion_id"]
+    ajena = (await server.merc_contactar(de_ana["id"], {"texto": "hola"}, OFICINA))["conversacion_id"]
+    await server.merc_bloquear({"anuncio_id": de_luis["id"]}, PEPE)            # uno que hizo él
+    await server.merc_bloquear({"anuncio_id": publicado["id"]}, OFICINA)       # uno que le hicieron
+    await server.merc_bloquear({"anuncio_id": de_ana["id"]}, LUIS)             # uno que no va con él: se queda
+    await server.merc_avisos_movil({"activo": True}, PEPE)
+    await server.merc_avisos_movil({"activo": True}, ANA)
+    fin_de_la_gorra = (await mundo.g["mercadillo_anuncios"].find_one({"id": vendido["id"]}))["fin"]
+    assert await server.borrar_cuenta({"password": "secreta123"}, PEPE) == {"ok": True}
+    assert (await mundo.g["admin_users"].find_one({"id": "a1"}))["disabled"] is True
+    # Sus anuncios en revisión o publicados quedan quitados, con su fecha (se borran a su plazo); lo ya acabado y
+    # lo de los demás, como estaba.
+    por_titulo = {a["titulo"]: a for a in mundo.g["mercadillo_anuncios"].docs}
+    assert (por_titulo["Carretilla"]["estado"], por_titulo["Mochila"]["estado"]) == ("quitado", "quitado")
+    assert _es_fecha(por_titulo["Carretilla"]["fin"]) and _es_fecha(por_titulo["Mochila"]["fin"])
+    assert (por_titulo["Gorra"]["estado"], por_titulo["Gorra"]["fin"]) == ("vendido", fin_de_la_gorra)
+    assert (por_titulo["Soporte de móvil"]["estado"], por_titulo["Botas"]["estado"]) == ("publicado", "publicado")
+    assert await _titulos(DANI) == {"Soporte de móvil", "Botas"} and "Carretilla" not in await _titulos(ANA)
+    assert pendiente["titulo"] == "Mochila"                                  # (el que estaba en revisión)
+    assert (await server.merc_anuncio(publicado["id"], ANA))["estado"] == "quitado"     # ella lo tenía hablado: lo ve, quitado
+    await _falla(server.merc_contactar(publicado["id"], {"texto": "¿sigue?"}, LUIS), 404, A_LA_VENTA)
+    # Sus conversaciones quedan cerradas para la otra persona, que conserva su historial; las ajenas, abiertas.
+    convs = {c["id"]: c for c in mundo.g["mercadillo_conversaciones"].docs}
+    assert (convs[le_compran]["bloqueada"], convs[compra]["bloqueada"], convs[ajena].get("bloqueada")) == (True, True, None)
+    de_ana_ahora = {c["id"]: c["bloqueada"] for c in (await server.merc_buzon(ANA))["conversaciones"]}
+    assert de_ana_ahora == {le_compran: True, compra: True, ajena: False}
+    for cid in (le_compran, compra):
+        await _falla(server.merc_responder(cid, {"texto": "¿hola?"}, ANA), 403, CERRADA)
+    # Se borran sus bloqueos (los que hizo y los que le hicieron) y sus preferencias; los de los demás, no.
+    assert [(b["de"], b["a"]) for b in mundo.g["mercadillo_bloqueos"].docs] == [(CLAVES["luis"], CLAVES["ana"])]
+    assert [p["clave"] for p in mundo.g["mercadillo_prefs"].docs] == [CLAVES["ana"]]
+    # Y a su plazo (60 días desde que se quitaron) sus anuncios se borran, como cualquier anuncio quitado.
+    h = await server.merc_limpieza(datetime.now(timezone.utc) + timedelta(days=mc.DIAS_BORRAR_ANUNCIO + 1))
+    assert h["anuncios_borrados"] == 3 and {a["titulo"] for a in mundo.g["mercadillo_anuncios"].docs} == {"Soporte de móvil", "Botas"}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_baja_no_se_para_si_el_mercadillo_falla(mundo, monkeypatch):
+    await _abrir(mundo)
+    _con_cuenta(mundo)
+    await _publicado(PEPE, "Carretilla")
+
+    async def roto(clave):
+        raise RuntimeError("la base no contesta")
+    monkeypatch.setattr(server, "_merc_baja", roto)
+    assert await server.borrar_cuenta({"password": "secreta123"}, PEPE) == {"ok": True}
+    assert (await mundo.g["admin_users"].find_one({"id": "a1"}))["disabled"] is True
+    assert mundo.g["bajas_cuentas"].docs[0]["org_id"] == "o1" and "petición de borrar una cuenta" in mundo.enviados[-1].subject

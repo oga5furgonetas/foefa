@@ -149,6 +149,27 @@ def test_el_servidor_acepta_desde_ios_y_se_traga_los_campos_que_no_conoce():
     assert _alta(org_name="Ana", username="ana").desde_ios is None        # web y Android: no lo mandan
 
 
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("desde_app", [None, True])
+async def test_con_la_prueba_con_tarjeta_encendida_el_alta_del_iphone_no_la_pide(mundo, monkeypatch, desde_app):
+    """10-11-2026. `PRUEBA_CON_TARJETA=1` (hoy apagado) hace que quien reparte solo meta la tarjeta para EMPEZAR: hasta que
+    la mete no puede apuntar ni una parada (`_falta_tarjeta` → 402 en cada escritura del reparto). La cuenta creada en el
+    iPhone no tiene dónde meterla (allí la app no vende ni menciona pagos), así que nunca nace con eso; ni aunque el alta
+    dijera además que viene de una app con cobro. En la web, la prueba con tarjeta es la de siempre: el control."""
+    monkeypatch.setenv("PRUEBA_CON_TARJETA", "1")
+    monkeypatch.setattr(server, "_play_listo", lambda: True)
+    monkeypatch.setattr(server, "_stripe_suscripciones_listo", lambda: True)
+    _, ana = await _dar_de_alta(mundo, "ana@x.es", desde_ios=True, desde_app=desde_app)
+    _, luis = await _dar_de_alta(mundo, "luis@x.es", desde_app=desde_app)
+    assert "prueba_con_tarjeta" not in ana and ana["alta_ios"] is True and ana["status"] == "trial"
+    assert server._falta_tarjeta(ana) is False                    # puede repartir desde el primer minuto
+    assert luis["prueba_con_tarjeta"] is True and server._falta_tarjeta(luis) is True
+    # Con el interruptor apagado (como está hoy) no la pide nadie.
+    monkeypatch.setenv("PRUEBA_CON_TARJETA", "0")
+    _, rosa = await _dar_de_alta(mundo, "rosa@x.es", desde_app=desde_app)
+    assert "prueba_con_tarjeta" not in rosa and server._falta_tarjeta(rosa) is False
+
+
 # ── NINGUNA OTRA VÍA ──────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio(loop_scope="session")
