@@ -9,7 +9,10 @@ import { sinPagos } from '../../lib/plataforma'
    avisos del navegador, con las frases de LEGAL_NOTES.en). 10-11-2026: bloquear a una persona en el mercadillo (§2, §3 y
    §4) y, dentro de la app de iPhone, sin «Tax data: 6 years» (§4), como en Privacidad.jsx. 10-11-2026 (ampliación): cuándo
    se aceptaron las normas, el motivo y la fecha si se quita el acceso, y el filtro automático de palabras (§2, §3 y §4).
-   10-11-2026 (tercera tanda): el registro de auditoría guarda, además, que se tomó esa decisión y cuándo (§4). */
+   10-11-2026 (tercera tanda): el registro de auditoría guarda, además, que se tomó esa decisión y cuándo (§4).
+   10-11-2026 (cuarta tanda), §4, como en Privacidad.jsx: lo del mercadillo se guarda hasta que se borran los datos de la
+   cuenta (no hasta que se pide la baja), el motivo queda en los anuncios retirados hasta que se borran, y el registro de
+   auditoría apunta también sobre qué cuenta y con qué motivo. */
 export default function PrivacyEn() {
   return (
     <LegalLayout title="Privacy Policy" lastUpdate="2026-11-10">
@@ -56,7 +59,7 @@ export default function PrivacyEn() {
         <li>Account data: for the duration of the contract and up to 1 year after termination, to answer claims.</li>
         <li>Inspections and photos: for the duration of the contract; the customer can request their deletion at any time.</li>
         <li>Deliveries: the personal data of each order is deleted automatically after the number of days the company sets (30 by default, 90 at most); location tracks, after 30 days; the tracking links the customer receives stop working the day after the delivery and show no personal data.</li>
-        <li>Marketplace: listings and their photos are deleted automatically 60 days after they end (sold, expired, withdrawn or removed); conversations, 6 months after the last message; notices and resolved reports, after 6 months. Photos that never get published, after 2 days. Blocks are deleted when you unblock the person or when you ask for your account to be deleted. When you accepted the rules is kept until your account is deleted. If your access to the marketplace is removed, the reason and the date are kept until it is given back or until your account is deleted. The audit log also records that the decision was taken and when.</li>
+        <li>Marketplace: listings and their photos are deleted automatically 60 days after they end (sold, expired, withdrawn or removed); conversations, 6 months after the last message; notices and resolved reports, after 6 months. Photos that never get published, after 2 days. Blocks are deleted when you unblock the person or when your account’s data is deleted. When you accepted the rules is kept until your account’s data is deleted. If your access to the marketplace is removed, the reason and the date are kept until it is given back or until your account’s data is deleted; the listings removed because of it keep the reason until they are deleted, 60 days later. The audit log also records that the decision was taken, about which account, for which reason and when.</li>
         {/* In the iPhone app (10-11-2026) this line is not shown: nothing is charged or invoiced there (docs/APP_STORE.md). The web is unchanged. */}
         {!sinPagos() && <li>Tax data: 6 years (art. 30 of the Spanish Commercial Code). “Invite and earn” payouts (holder, amount and account or Bizum) are kept for that same period.</li>}
         <li>Job application data: up to 12 months. The choice about news is kept with the application for that period or until consent is withdrawn and deletion is requested where applicable.</li>

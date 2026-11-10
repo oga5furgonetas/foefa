@@ -794,13 +794,29 @@ const RESTOS_LEGALES = [
   ['Google entre los servicios de mapas (su fila es de la app de Android)', /salvo Google|except Google/i],
   ['los datos fiscales', /Datos fiscales|Tax data/i],
 ]
+/* La conservación de lo del mercadillo (§4 de la privacidad), letra por letra, en español y en inglés (10-11-2026, cuarta tanda):
+   la dicen igual la web y el iPhone. Y las frases a las que sustituyen, que no pueden quedar al lado de las nuevas. */
+const CONSERVACION_ES = 'Los bloqueos se borran cuando desbloqueas a la persona o cuando se borran los datos de tu cuenta. Cuándo aceptaste las normas se guarda hasta que se borran los datos de tu cuenta. '
+  + 'Si se te quita el acceso al mercadillo, el motivo y la fecha se guardan hasta que se te devuelve o hasta que se borran los datos de tu cuenta; en los anuncios que se retiraron por eso queda el motivo hasta que se borran, 60 días después. '
+  + 'En el registro de auditoría queda apuntado, además, que se tomó esa decisión, sobre qué cuenta, con qué motivo y cuándo.'
+const CONSERVACION_EN = 'Blocks are deleted when you unblock the person or when your account’s data is deleted. When you accepted the rules is kept until your account’s data is deleted. '
+  + 'If your access to the marketplace is removed, the reason and the date are kept until it is given back or until your account’s data is deleted; the listings removed because of it keep the reason until they are deleted, 60 days later. '
+  + 'The audit log also records that the decision was taken, about which account, for which reason and when.'
+const literal = (texto) => texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const CONSERVACION_DEL_MERCADILLO = new RegExp(`${literal(CONSERVACION_ES)}|${literal(CONSERVACION_EN)}`)
+const CONSERVACION_DE_ANTES = /pides la baja de tu cuenta|hasta la baja de tu cuenta|que se tomó esa decisión y cuándo|you ask for your account to be deleted|until your account is deleted|the decision was taken and when/
+
 // Lo que el iPhone SÍ sigue diciendo en las tres páginas con las listas de proveedores: no se han quedado vacías.
 const SIGUE_EN_EL_IPHONE = {
   /* 10-11-2026 (Apple, guideline 1.2): lo nuevo del mercadillo se lee también dentro del iPhone, en español y en inglés. En los
      términos: las normas se aceptan al entrar, el filtro automático de palabras y qué se le dice a quien se queda sin acceso.
      En la privacidad: cuándo se aceptaron las normas y, si se quita el acceso, el motivo y la fecha.
      10-11-2026 (tercera tanda): la fecha de «Última actualización» de los términos (han cambiado hoy, como la privacidad) y, en la
-     privacidad, que en el registro de auditoría queda que se tomó la decisión de quitar el acceso y cuándo. */
+     privacidad, que en el registro de auditoría queda que se tomó la decisión de quitar el acceso y cuándo.
+     10-11-2026 (cuarta tanda): la conservación del §4 de la privacidad, EXACTA (`CONSERVACION_DEL_MERCADILLO`): los bloqueos, las
+     normas aceptadas y el motivo de quitar el acceso duran hasta que se borran los datos de la cuenta (pedir la baja ya no los
+     borra: una baja se puede deshacer), el motivo queda en los anuncios retirados hasta que se borran, y el registro de auditoría
+     apunta también sobre qué cuenta y con qué motivo. Las frases de antes (`CONSERVACION_DE_ANTES`) ya no salen. */
   '/terminos': [/tienes que aceptar sus normas la primera vez que entras|you must accept its rules the first time you enter/,
     /un filtro automático de palabras no deja enviar anuncios ni mensajes con insultos o amenazas|an automatic word filter stops listings and messages containing insults or threats from being sent/,
     /Le decimos el motivo, y puede pedir que lo revisemos escribiendo a|We tell them the reason, and they can ask us to review it by writing to/,
@@ -808,7 +824,7 @@ const SIGUE_EN_EL_IPHONE = {
   '/privacidad': [/Cloudflare, Inc\./, /OpenStreetMap Foundation/, /komoot GmbH/, /Google \(Gemini \/ Vertex AI\)/, /Mercadillo|Marketplace/,
     /cuándo aceptaste las normas del mercadillo y qué versión|when you accepted the marketplace rules and which version/,
     /guardamos el motivo que te damos y la fecha|we store the reason we give you and the date/,
-    /se guardan hasta que se te devuelve o hasta la baja de tu cuenta\. En el registro de auditoría queda apuntado, además, que se tomó esa decisión y cuándo\.|are kept until it is given back or until your account is deleted\. The audit log also records that the decision was taken and when\./,
+    CONSERVACION_DEL_MERCADILLO,
     /Última actualización: 2026-11-10|Last updated: 2026-11-10/],
   '/seguridad': [/Cloudflare, Inc\./, /OpenStreetMap Foundation/, /komoot GmbH/],
   '/encargo': [/Cloudflare, Inc\./, /OpenStreetMap Foundation/, /komoot GmbH/],
@@ -831,7 +847,8 @@ const EN_LA_WEB = [
   ['/privacidad', [/Datos fiscales: 6 años \(art\. 30 Código de Comercio\)\. Los pagos de «Invita y gana»/, /Tax data: 6 years \(art\. 30 of the Spanish Commercial Code\)\. “Invite and earn” payouts/]],
   // 10-11-2026 (tercera tanda): lo que dicen igual la web y el iPhone, también en la web: la fecha de los términos y la frase del registro de auditoría.
   ['/terminos', [/Última actualización: 2026-11-10/, /Last updated: 2026-11-10/]],
-  ['/privacidad', [/En el registro de auditoría queda apuntado, además, que se tomó esa decisión y cuándo\./, /The audit log also records that the decision was taken and when\./]],
+  // 10-11-2026 (cuarta tanda): la conservación de lo del mercadillo, exacta, cada idioma con lo suyo.
+  ['/privacidad', [new RegExp(literal(CONSERVACION_ES)), new RegExp(literal(CONSERVACION_EN))]],
 ]
 for (const [idioma, locale] of [['es', 'es-ES'], ['en', 'en-GB']]) {
   test.describe(`iPhone · los textos legales (${locale})`, () => {
@@ -847,6 +864,10 @@ for (const [idioma, locale] of [['es', 'es-ES'], ['en', 'en-GB']]) {
         const texto = await limpia(page, `${ruta} en ${locale}`, { idioma, perfil: 'basico' })
         for (const [nombre, re] of RESTOS_LEGALES) expect(texto, `${ruta} en ${locale}: en el iPhone aún sale ${nombre}`).not.toMatch(re)
         for (const re of SIGUE_EN_EL_IPHONE[ruta] || []) expect(texto, `${ruta} en ${locale}: en el iPhone ya no sale ${re}`).toMatch(re)
+        if (ruta === '/privacidad') {
+          expect(texto, `${ruta} en ${locale}: la conservación del mercadillo, en su idioma`).toContain(idioma === 'es' ? CONSERVACION_ES : CONSERVACION_EN)
+          expect(texto, `${ruta} en ${locale}: siguen las frases de antes sobre la conservación`).not.toMatch(CONSERVACION_DE_ANTES)
+        }
         expect(fallos).toEqual([])
       })
     }
@@ -873,6 +894,18 @@ test.describe('control · los textos legales de la web siguen con el importe pag
           expect(await lo(page)).toMatch(esperado)
         })
       }
+      // 10-11-2026 (cuarta tanda): las frases nuevas SUSTITUYEN a las de antes; no se quedan las dos.
+      test('/privacidad: la conservación del mercadillo se dice una vez, sin las frases de antes', async ({ page }) => {
+        await simularApi(page, 'vacio')
+        await arrancar(page, { ios: false })
+        await page.goto('/privacidad', { waitUntil: 'domcontentloaded' })
+        await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
+        await quieta(page, 600)
+        const texto = await lo(page)
+        const frase = idioma === 'es' ? CONSERVACION_ES : CONSERVACION_EN
+        expect(texto.split(frase), 'la conservación del mercadillo sale una vez').toHaveLength(2)
+        expect(texto).not.toMatch(CONSERVACION_DE_ANTES)
+      })
     })
   }
 })
