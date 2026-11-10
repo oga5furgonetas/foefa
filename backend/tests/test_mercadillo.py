@@ -2371,6 +2371,10 @@ def test_los_invisibles_ni_parten_una_palabra_ni_cambian_lo_que_no_entraba():
     assert mc.ofensivo("pu​ta") is False and mc.ofensivo("está de pu​ta madre") is False
     assert mc.ofensivo("dis­puta") is False and mc._palabras("a​ño, an​o") == " año ano "
     assert mc._palabras("an‍̃o") == " año "                         # la virgulilla sigue siendo de su n
+    # Tampoco la parte una marca que se dibuja SOBRE la letra de antes (un círculo, una tecla): se lee igual de entera.
+    assert [unicodedata.category(c) for c in "⃝⃣"] == ["Me", "Me"]
+    assert mc.ofensivo("gili⃝pollas") and mc.ofensivo("h⃣i⃣j⃣o⃣ de p⃣u⃣t⃣a⃣")
+    assert mc.ofensivo("dis⃝puta") is False and mc._palabras("a⃝ño") == " año "
     # Un emoji con uniones de ancho cero (la familia) o con su selector (el corazón) no rompe nada: ni para ni se toca,
     # el mensaje se guarda TAL CUAL se escribió.
     familia = "Vendo el carrito \U0001f468‍\U0001f469‍\U0001f467 casi nuevo ❤️ 1️⃣"
