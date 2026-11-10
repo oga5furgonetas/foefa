@@ -466,11 +466,11 @@ Primero, lo que Apple pide a una app con contenido de usuarios, en el orden de s
    («está de puta madre»). El texto de una denuncia no se filtra (quien denuncia puede tener que citar lo que le han dicho),
    y las fotos no pasan por ningún filtro automático: las mira quien aprueba el anuncio. En `backend/mercadillo.py`:
    `OFENSIVO`, `ofensivo`, `validar` y `mensaje`.
-3. **Denunciar** (ya estaba; no cambia). «Denunciar» en cada anuncio ajeno (en la tarjeta de quien vende y en la banderita
-   de arriba) y en cada conversación, con motivos (uno es «Es ofensivo o es acoso»). Quien denuncia recibe acuse y, después,
-   la decisión en su buzón; con denuncias de 3 personas distintas el anuncio se esconde solo hasta que se revisa. A Dani le
-   llega cada denuncia al móvil o por correo (`merc_denunciar`, `DENUNCIAS_PARA_OCULTAR`, `_merc_cerrar_denuncias`,
-   `_merc_a_dani`).
+3. **Denunciar** (ya estaba; ahora está más a la vista). Además de la banderita de arriba, que es la que tiene la app en
+   revisión, hay un botón «Denunciar» con su texto junto a «Bloquear a…», en cada anuncio ajeno y en cada conversación. Se
+   elige un motivo (uno es «Es ofensivo o es acoso»); quien denuncia recibe acuse y, después, la decisión en su buzón; con
+   denuncias de 3 personas distintas el anuncio se esconde solo hasta que se revisa. A Dani le llega cada denuncia al móvil
+   o por correo (`merc_denunciar`, `DENUNCIAS_PARA_OCULTAR`, `_merc_cerrar_denuncias`, `_merc_a_dani`).
 4. **Bloquear a una persona** (servidor y web). Desde la ficha de un anuncio ajeno («Bloquear a {nombre}», en la tarjeta de
    quien vende) o desde una conversación; se confirma en «¿Bloquear a {nombre}?» con **«Bloquear»**, y ahí mismo se puede
    marcar «Denunciar también este anuncio». Si A bloquea a B: A deja de ver los anuncios y las conversaciones de B al
@@ -673,7 +673,8 @@ To check it with the demo account: Cuenta (Account) → "Mercadillo de repartido
 
 Thank you for your time.
 ```
-Lo respalda, punto por punto (todo con el plan B fusionado, menos la casilla del alta y «Denunciar», que ya están):
+Lo respalda, punto por punto (todo con el plan B fusionado, menos la casilla del alta, la revisión de cada anuncio y la
+banderita de «Denunciar», que ya están en la app en revisión):
 - **1:** `Mercadillo.jsx` (`Normas`, `NORMAS` y, en `Mercadillo`, la guarda de `normas_ok === false`); `backend/server.py`
   (`merc_normas`, `_merc_normas_ok`, `merc_estado`, `merc_lista`) y `NORMAS_VERSION` (`backend/mercadillo.py`);
   `legal/Terminos.jsx` y `en/TermsEn.jsx` («Aceptar las normas» y «Tolerancia cero»; el apartado es el 5 dentro del iPhone);
