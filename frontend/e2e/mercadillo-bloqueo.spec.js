@@ -1,7 +1,8 @@
 import { Buffer } from 'node:buffer'
 import { test, expect } from '@playwright/test'
 import { simularApi, entrarComoAdmin } from './api-simulada.js'
-import { UA_APP, lo, limpia, vigilar, quieta, arrancar } from './iphone.js'
+import { UA_APP, lo, limpia, prohibidas, vigilar, quieta, arrancar } from './iphone.js'
+import { hablaDePagos } from '../src/lib/plataforma.js'
 
 /* BLOQUEAR A UNA PERSONA EN EL MERCADILLO (10-11-2026; el plan B por si Apple pide la guideline 1.2).
    Apple exige a una app con contenido de sus usuarios que se pueda denunciar el contenido Y bloquear a quien molesta. Aquí se
@@ -364,6 +365,22 @@ test('Mercadillo · la web no manda ni enseña ninguna clave: a quién se bloque
   expect(s.llamadas).toEqual(['bloquear', 'desbloquear'])
   expect(cuerpos.join('\n')).not.toMatch(/clave|persona|\b[oda]:[\w-]+/)
   expect(await lo(page)).not.toMatch(/\b[oda]:[\w-]+:/)
+})
+
+/* Lo que contesta el servidor cuando no deja bloquear, desbloquear o escribir (backend/server.py, TAL CUAL el 10-11-2026). Dentro
+   de la app de iPhone, un error que hable de planes o de topes se cambia por un texto neutro (lib/plataforma.js): estos tienen
+   que leerse como son (dicen qué hacer) y no pueden llevar nada del vocabulario prohibido allí. */
+const DEL_SERVIDOR = [
+  DEL_MODERADOR, 'Es tu anuncio', 'No puedes bloquearte a ti', 'Falta a quién bloqueas', 'Esa persona ya no está en el mercadillo',
+  'Tienes 200 personas bloqueadas, que es el máximo. Desbloquea a alguna en «Personas bloqueadas» para bloquear a otra.',
+  'Has bloqueado a mucha gente hoy. Prueba mañana.', 'Ese bloqueo ya no está', 'Ese anuncio ya no está', 'Ese anuncio ya no está a la venta',
+  'Esta conversación está cerrada', 'Has bloqueado a esta persona. Desbloquéala para escribirle.',
+]
+test('Mercadillo · lo que contesta el servidor al bloquear se lee tal cual también en el iPhone', () => {
+  const neutros = DEL_SERVIDOR.filter((m) => hablaDePagos(m))
+  expect(neutros, `en el iPhone se cambiarían por el texto neutro: ${neutros.join(' | ')}`).toEqual([])
+  const faltas = DEL_SERVIDOR.flatMap((m) => prohibidas(m, 'es', 'basico'))
+  expect(faltas, `dicen algo prohibido en el iPhone: ${faltas.join(' | ')}`).toEqual([])
 })
 
 /* ── El panel de Dani (Negocio → Mercadillo): quién ha bloqueado a quién, solo para mirar ────────────────────────────────────
