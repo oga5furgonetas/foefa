@@ -138,6 +138,95 @@ async def test_con_todos_la_cabecera_sigue_mandando(mundo):
     assert r["guardado"] is True and r["centro"] == "DGA1" and r["otra_nave"] is None
 
 
+# ── Revisión del 11-11-2026 (R8/R12, R9/R10, R44) ────────────────────────────
+OTROS_DGA1 = ["ALBA RIOS MOURE", "HUGO PAZ REY", "LUCIA VAZQUEZ RUA",
+              "DIEGO NOVO SANZ", "SARA FRAGA LEIRO", "IVAN CID BAO"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_un_plan_de_otra_nave_guardado_aqui_antes_no_se_abre_como_de_hoy(mundo):
+    # R8/R12: el plan de DGA1 quedó guardado en OGA5 el martes (antes del
+    # arreglo) y se abre el jueves. Está guardado (en OGA5) y es del martes.
+    texto = _plan("DGA1").strip()
+    pegado = "2026-11-10T08:00:00+00:00"
+    mundo["whc_planes"].docs.append({"center": "OGA5", "week": "2026-11-08", "texto": texto,
+                                     "n_conductores": 6, "pegado_en": pegado, "updated_at": pegado})
+    r = await _analizar(texto=texto, center="OGA5", guardar=False)
+    assert r["otra_nave"]["centro"] == "DGA1" and r["guardado"] is False
+    assert r["es_el_guardado"] is True
+    assert r["pegado_en"] == pegado and r["pegado_hoy"] is False
+    assert r["ritmo"]["dia_semana"] == 3
+    assert "parece de DGA1" in r["aviso_guardado"] and "no se ha guardado" not in r["aviso_guardado"]
+    assert len(mundo["whc_planes"].docs) == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_guardarlo_en_otra_nave_no_pisa_sin_preguntar(mundo):
+    # R8: DGA1 ya tiene OTRO plan de esa semana (más nuevo). «Guardarlo en DGA1»
+    # manda sustituir=false: no se pisa y se dice qué hay.
+    nuevo = _plan("DGA1", OTROS_DGA1).strip()
+    mundo["whc_planes"].docs.append({"center": "DGA1", "week": "2026-11-08", "texto": nuevo,
+                                     "n_conductores": 6, "excepciones": 1,
+                                     "pegado_en": "2026-11-11T07:00:00+00:00",
+                                     "updated_at": "2026-11-11T07:00:00+00:00"})
+    viejo = _plan("DGA1").strip()
+    r = await _analizar(texto=viejo, center="DGA1", sustituir=False)
+    assert r["guardado"] is False
+    assert r["ya_hay_plan"] == {"pegado_en": "2026-11-11T07:00:00+00:00", "n_conductores": 6}
+    assert mundo["whc_planes"].docs[0]["texto"] == nuevo
+    # Confirmado en la pantalla: se sustituye.
+    r = await _analizar(texto=viejo, center="DGA1", sustituir=True)
+    assert r["guardado"] is True and r["ya_hay_plan"] is None
+    assert mundo["whc_planes"].docs[0]["texto"] == viejo
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sin_sustituir_se_pisa_como_siempre_y_el_mismo_texto_se_guarda(mundo):
+    # La web vieja (sin el campo) y el pegado normal sustituyen, como antes.
+    mundo["whc_planes"].docs.append({"center": "DGA1", "week": "2026-11-08",
+                                     "texto": _plan("DGA1", OTROS_DGA1), "n_conductores": 6})
+    r = await _analizar(texto=_plan("DGA1"), center="DGA1")
+    assert r["guardado"] is True and r["ya_hay_plan"] is None
+    # Con sustituir=false y el MISMO texto no hay nada que preguntar.
+    r = await _analizar(texto=_plan("DGA1"), center="DGA1", sustituir=False)
+    assert r["guardado"] is True and r["ya_hay_plan"] is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sin_excepciones_se_conservan_las_del_plan(mundo):
+    # R9/R10: «Guardarlo en DGA1» no manda excepciones; las de DGA1 se quedan.
+    mundo["whc_planes"].docs.append({"center": "DGA1", "week": "2026-11-08",
+                                     "texto": _plan("DGA1"), "n_conductores": 6, "excepciones": 3})
+    await _analizar(texto=_plan("DGA1", OTROS_DGA1), center="DGA1")
+    assert mundo["whc_planes"].docs[0]["excepciones"] == 3
+    await _analizar(texto=_plan("DGA1"), center="DGA1", excepciones=None)
+    assert mundo["whc_planes"].docs[0]["excepciones"] == 3
+    # Con la cifra, se guarda la cifra (como siempre).
+    await _analizar(texto=_plan("DGA1"), center="DGA1", excepciones=1)
+    assert mundo["whc_planes"].docs[0]["excepciones"] == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_un_plan_nuevo_sin_excepciones_no_guarda_un_cero(mundo):
+    await _analizar(texto=_plan("DGA1"), center="DGA1")
+    assert "excepciones" not in mundo["whc_planes"].docs[0]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_por_fichas_se_puede_guardar_en_la_elegida_de_todas_formas(mundo):
+    # R44: las fichas pueden estar sin actualizar.
+    r = await _analizar(texto=_plan(None), center="OGA5", ignorar_fichas=True)
+    assert r["guardado"] is True and r["otra_nave"] is None
+    assert mundo["whc_planes"].docs[0]["center"] == "OGA5"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_ignorar_fichas_no_salta_la_cabecera(mundo):
+    r = await _analizar(texto=_plan("DGA1"), center="OGA5", ignorar_fichas=True)
+    assert r["guardado"] is False and r["otra_nave"]["por"] == "cabecera"
+    assert mundo["whc_planes"].docs == []
+
+
 # ── H3 · un plan viejo no se ve como de ahora ────────────────────────────────
 @pytest.mark.asyncio(loop_scope="session")
 async def test_abrir_un_plan_guardado_no_lo_reescribe_y_cuenta_desde_que_se_pego(mundo):
@@ -246,14 +335,17 @@ async def test_subir_un_reporte_sin_clasificar_lo_dice(mundo):
     r = await server.subir_diarios([_Fichero("hoy.html", _html(["N", "N", "N"]))], None, "", YO)
     f = r["resultados"][0]
     assert f["sin_clasificar"] == 3
-    assert len(f["avisos"]) == 1 and "sin clasificar" in f["avisos"][0] and "volver a subir" in f["avisos"][0]
+    # R48: en un campo aparte, que la web vieja no lee (si no, lo presentaría
+    # como «anterior al 13-05-2026»).
+    assert f["avisos"] == []
+    assert "sin clasificar" in f["aviso_sin_clasificar"] and "volver a subir" in f["aviso_sin_clasificar"]
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_subir_un_reporte_clasificado_no_avisa(mundo):
     r = await server.subir_diarios([_Fichero("ok.html", _html(["Y", "N"]))], None, "", YO)
     f = r["resultados"][0]
-    assert f["sin_clasificar"] == 0 and f["avisos"] == []
+    assert f["sin_clasificar"] == 0 and f["avisos"] == [] and f["aviso_sin_clasificar"] is None
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -262,3 +354,4 @@ async def test_un_reporte_viejo_conserva_su_aviso_sin_duplicar(mundo):
     f = r["resultados"][0]
     assert f["sin_clasificar"] == 2
     assert len(f["avisos"]) == 1 and "13-05-2026" in f["avisos"][0]
+    assert f["aviso_sin_clasificar"] is None
