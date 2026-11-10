@@ -136,6 +136,76 @@ async def test_el_aviso_a_la_oficina_dice_la_nave_y_las_fechas_legibles(base):
     assert aviso.cuerpo == "Asuntos propios · 16/11, 17/11 y 18/11"
 
 
+@pytest.mark.asyncio(loop_scope="session")
+async def test_un_dia_suspendido_va_a_saltadas_con_su_porque_y_no_para_a_los_demas(base):
+    # Revisión del 10-11-2026 (R15): el 409 de un día suspendido no para el grupo; ese día vuelve con su porqué y el
+    # aviso solo lleva los que sí se aprobaron.
+    for i, f in enumerate(("2026-11-16", "2026-11-17", "2026-11-18")):
+        _peticion(base.t, f"r{i}", f)
+    base.t["suspensiones"] = Col([{"id": "s1", "estado": "activa", "driver_id": "d1",
+                                   "desde": "2026-11-17", "hasta": "2026-11-17"}])
+    r = await server.resolver_grupo_peticiones({"ids": ["r0", "r1", "r2"], "action": "aprobar"}, OFI)
+    assert r["resueltas"] == ["r0", "r2"] and r["canceladas"] == []
+    [salto] = r["saltadas"]
+    assert (salto["id"], salto["date"]) == ("r1", "2026-11-17") and "suspendido" in salto["detail"]
+    assert [q["status"] for q in base.t.shift_requests.docs] == ["aprobado", "pendiente", "aprobado"]
+    [aviso] = base.conductores
+    assert aviso.titulo == "Tus días 16/11 y 18/11: aprobados"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_varios_dias_extra_aprobados_van_en_un_aviso_en_plural(base):
+    _peticion(base.t, "e0", "2026-11-16", tipo="extra")
+    _peticion(base.t, "e1", "2026-11-17", tipo="extra")
+    r = await server.resolver_grupo_peticiones({"ids": ["e0", "e1"], "action": "aprobar"}, OFI)
+    assert r["resueltas"] == ["e0", "e1"] and r["saltadas"] == []
+    [aviso] = base.conductores
+    assert aviso.titulo == "✅ Días extra confirmados: 16/11 y 17/11"
+    assert aviso.cuerpo == "Ya están en tus turnos como EXTRA. Los tienes en «Trabajar más»."
+    assert aviso.url == "/conductor?vista=extra"
+    assert {_turno(base.t, "d1", f)["cod"] for f in ("2026-11-16", "2026-11-17")} == {"EXTRA"}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_si_para_a_la_mitad_avisa_lo_hecho_y_al_reintentar_no_lo_avisa_otra_vez(base, monkeypatch):
+    for i, f in enumerate(("2026-11-16", "2026-11-17", "2026-11-18")):
+        _peticion(base.t, f"r{i}", f)
+    de_verdad = server._turno_aprobado
+    llamadas = []
+
+    async def falla_el_segundo(req):
+        llamadas.append(req["id"])
+        if req["id"] == "r1":
+            raise RuntimeError("la base se ha caído")
+        await de_verdad(req)
+
+    monkeypatch.setattr(server, "_turno_aprobado", falla_el_segundo)
+    with pytest.raises(RuntimeError):
+        await server.resolver_grupo_peticiones({"ids": ["r0", "r1", "r2"], "action": "aprobar"}, OFI)
+    # Lo que ya se contestó se dice, y solo eso.
+    [aviso] = base.conductores
+    assert aviso.titulo == "Tu petición del 16/11: aprobada"
+    # La oficina vuelve a pulsar (la misma lista, sin refrescar): el 16 no se vuelve a avisar, y el 17, que se quedó
+    # aprobado a medias, entra en el cuadrante.
+    monkeypatch.setattr(server, "_turno_aprobado", de_verdad)
+    r = await server.resolver_grupo_peticiones({"ids": ["r0", "r1", "r2"], "action": "aprobar"}, OFI)
+    assert r["resueltas"] == ["r0", "r1", "r2"]
+    assert [a.titulo for a in base.conductores] == ["Tu petición del 16/11: aprobada", "Tu petición del 18/11: aprobada"]
+    for f in ("2026-11-16", "2026-11-17", "2026-11-18"):
+        assert _turno(base.t, "d1", f)["cod"] == "N/T APROB"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_los_avisos_de_cancelar_y_de_cambiar_tambien_dicen_la_nave(base):
+    # Revisión del 10-11-2026 (R17): la cuenta dueña recibe los de las tres naves.
+    _peticion(base.t, "r0", "2026-11-16", grupo="g1")
+    _peticion(base.t, "r1", "2026-11-17", grupo="g1")
+    _peticion(base.t, "r2", "2026-11-20", grupo="g2")
+    await server.cancelar_mis_peticiones({"ids": ["r2"]}, ANA)
+    await server.cambiar_mi_peticion({"grupo": "g1", "dates": ["2026-11-16"], "note": "boda de mi prima"}, ANA)
+    assert [a.titulo for a in base.oficina] == ["↩️ Ana cancela 1 día · OGA5", "✏️ Ana cambia su petición · OGA5"]
+
+
 def test_fechas_dias_dice_lo_que_dice_su_comentario():
     assert server._fechas_dias(["2026-10-18", "2026-10-16", "2026-10-17"]) == "16/10, 17/10 y 18/10"
 
@@ -163,15 +233,85 @@ async def test_los_que_bajan_de_otros_centros_restan_de_lo_que_falta(base):
     assert [(x["date"], x["en_ruta"], x["bajan"], x["falta"]) for x in f] == [(MAN, 1, 3, 1)]
 
 
+def _en_cuadrante(t, *ids, centro="OGA5", **extra):
+    for did in ids:
+        t["cuadrante_personas"].docs.append({"center": centro, "driver_id": did, "en_cuadrante": True, **extra})
+
+
+def _resumen_del_cuadrante(t, personas, maxima, bajan, fecha=MAN):
+    """La cuenta del Cuadrante (cuadranteComun.js, resumenDias): rutas de SUS personas en esta nave + bajan − máxima,
+    devuelta como «lo que falta» (máxima − rutas − bajan) para compararla con Refuerzos."""
+    rutas = sum(1 for s in t.shifts.docs if s["driver_id"] in personas and s["date"] == fecha
+                and s["center"] == "OGA5" and s["type"] == "trabaja")
+    return maxima - rutas - bajan
+
+
 @pytest.mark.asyncio(loop_scope="session")
 async def test_quien_ya_baja_con_su_turno_no_se_cuenta_dos_veces(base):
+    # Revisión del 10-11-2026 (R1/R18): «ya contado» es quien tiene turno de ruta aquí y NO está en el cuadrante de
+    # esta nave (lo que el Cuadrante no suma en sus rutas), no quien tiene la ficha en otra.
     _maximas(base.t, **{MAN: 5})
     base.t["cuadrante_ajustes"] = Col([])
     _bajan(base.t, 3)
-    # Diego es de DGA1 y ya tiene puesto su turno en OGA5 ese día: es uno de los 3 que bajan.
+    _en_cuadrante(base.t, "d1", "d2", "d3")
+    # Diego (ficha de DGA1) no está en el cuadrante de OGA5 y ya tiene puesto su turno aquí: es uno de los 3 que bajan.
     base.t.shifts.docs.append({"driver_id": "d9", "date": MAN, "type": "trabaja", "cod": "1", "center": "OGA5"})
     m = (await server._maximas_y_ruta("OGA5", MAN, MAN))[MAN]
     assert (m["en_ruta"], m["bajan"], m["falta"]) == (2, 2, 1)
+    assert m["falta"] == _resumen_del_cuadrante(base.t, {"d1", "d2", "d3"}, 5, 3)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_quien_esta_en_el_cuadrante_de_aqui_no_resta_de_los_que_bajan_aunque_su_ficha_sea_de_otra(base):
+    _maximas(base.t, **{MAN: 5})
+    base.t["cuadrante_ajustes"] = Col([])
+    _bajan(base.t, 3)
+    # Diego tiene la ficha en DGA1 pero la oficina de OGA5 ya lo tiene en su cuadrante (un cambio de nave
+    # programado): el Cuadrante cuenta su ruta Y los 3 que bajan. Refuerzos tiene que decir lo mismo.
+    _en_cuadrante(base.t, "d1", "d2", "d3", "d9")
+    base.t.shifts.docs.append({"driver_id": "d9", "date": MAN, "type": "trabaja", "cod": "1", "center": "OGA5"})
+    m = (await server._maximas_y_ruta("OGA5", MAN, MAN))[MAN]
+    assert (m["en_ruta"], m["bajan"], m["falta"]) == (2, 3, 0)
+    assert m["falta"] == _resumen_del_cuadrante(base.t, {"d1", "d2", "d3", "d9"}, 5, 3)
+    assert (await server.refuerzos_faltas("OGA5", 14, OFI))["faltas"] == []
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_quien_tiene_ficha_de_aqui_pero_no_esta_en_el_cuadrante_si_resta(base):
+    _maximas(base.t, **{MAN: 5})
+    base.t["cuadrante_ajustes"] = Col([])
+    _bajan(base.t, 3)
+    base.t.drivers.docs.append({"id": "d4", "name": "Nuevo", "center": "OGA5", "active": True})
+    # Rosa salió del cuadrante el día antes: su turno de ese día tampoco lo cuenta el Cuadrante.
+    base.t.drivers.docs.append({"id": "d5", "name": "Rosa", "center": "OGA5", "active": True})
+    _en_cuadrante(base.t, "d1", "d2", "d3")
+    _en_cuadrante(base.t, "d5", inactivo_desde=HOY)
+    for did in ("d4", "d5"):
+        base.t.shifts.docs.append({"driver_id": did, "date": MAN, "type": "trabaja", "cod": "1", "center": "OGA5"})
+    m = (await server._maximas_y_ruta("OGA5", MAN, MAN))[MAN]
+    assert (m["en_ruta"], m["bajan"], m["falta"]) == (3, 1, 1)
+    assert m["falta"] == _resumen_del_cuadrante(base.t, {"d1", "d2", "d3"}, 5, 3)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sin_nadie_que_baje_la_cuenta_es_la_de_antes(base):
+    _maximas(base.t, **{MAN: 5})
+    base.t["cuadrante_ajustes"] = Col([])
+    _en_cuadrante(base.t, "d1", "d2", "d3")
+    base.t.shifts.docs.append({"driver_id": "d9", "date": MAN, "type": "trabaja", "cod": "1", "center": "OGA5"})
+    m = (await server._maximas_y_ruta("OGA5", MAN, MAN))[MAN]
+    assert (m["en_ruta"], m["bajan"], m["falta"]) == (2, 0, 3)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_una_nave_sin_cuadrante_montado_cuenta_el_ajuste_entero(base):
+    # Sin nadie apuntado en su cuadrante, el Cuadrante cuenta a quien tenga turnos (_cua_personas): Diego incluido.
+    _maximas(base.t, **{MAN: 5})
+    base.t["cuadrante_ajustes"] = Col([])
+    _bajan(base.t, 3)
+    base.t.shifts.docs.append({"driver_id": "d9", "date": MAN, "type": "trabaja", "cod": "1", "center": "OGA5"})
+    m = (await server._maximas_y_ruta("OGA5", MAN, MAN))[MAN]
+    assert (m["en_ruta"], m["bajan"], m["falta"]) == (2, 3, 0)
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -218,3 +358,19 @@ async def test_dias_cerrados_por_defecto_solo_los_vigentes_y_los_proximos_primer
     assert [b["id"] for b in r["bloqueos"]] == ["b3", "b2"]
     assert [b["id"] for b in r["pasados"]] == ["b4", "b1"]          # el último primero
     assert r["pasados"][0]["driver_name"] == "Ana"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_con_muchos_dias_cerrados_viejos_los_vigentes_no_se_pierden(base):
+    # Revisión del 10-11-2026 (R19): se pedían los 500 más viejos y se filtraba después; con 600 acumulados, el
+    # cierre de Navidad de este año no salía.
+    viejos = [{"id": f"v{i}", "center": "OGA5", "desde": f"20{10 + i // 300}-01-{1 + i % 28:02d}",
+               "hasta": f"20{10 + i // 300}-01-{1 + i % 28:02d}", "motivo": "viejo", "driver_id": None}
+              for i in range(600)]
+    base.t["shift_blocks"] = Col(viejos + [
+        {"id": "nav", "center": "OGA5", "desde": "2026-12-20", "hasta": "2027-01-06", "motivo": "Navidad 26",
+         "driver_id": None}])
+    r = await server.listar_bloqueos(center="OGA5", pasados=True, admin=OFI)
+    assert [b["id"] for b in r["bloqueos"]] == ["nav"]
+    # Los pasados, los más recientes primero (los de 2011 antes que los de 2010), con su tope.
+    assert len(r["pasados"]) == 500 and r["pasados"][0]["desde"].startswith("2011")

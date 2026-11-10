@@ -650,7 +650,10 @@ function Ajustes({ center, datos, personas, onCambio }) {
         <h2 className="text-[11px] font-semibold uppercase tracking-wide text-dark-500">Reglas del centro</h2>
         <label className="flex items-center gap-3 text-dark-300">
           Rutas por encima de la máxima, cada día
-          <input type="number" min={0} max={10} defaultValue={config.colchon} aria-label="Colchón"
+          {/* Con `key`, el campo se vuelve a montar con el colchón de la nave que llega (10-11-2026): no controlado,
+              se quedaba con el valor con el que nació (el de la otra nave o el 2 por defecto) y al salir de él lo
+              guardaba en la nueva. */}
+          <input key={`${center}-${config.colchon}`} type="number" min={0} max={10} defaultValue={config.colchon} aria-label="Colchón"
             onBlur={(e) => Number(e.target.value) !== config.colchon && cambiaConfig({ colchon: Number(e.target.value) })}
             className="w-16 rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-sm text-dark-100" />
         </label>
@@ -817,9 +820,16 @@ export default function Cuadrante() {
   useEffect(() => {
     setDatos(null); setErr(''); setAviso(''); setMenu(null); setPincel(null)
   }, [center])
+  /* La nave que está arriba AHORA (revisión del 10-11-2026). Guardar una celda,
+     una máxima, aceptar… llaman al `cargar` de su render, que lleva dentro la
+     nave de entonces: si se cambia de nave mientras la llamada va por el aire,
+     ese cargar viejo pedía la otra nave con un número más alto que el de la
+     nueva, la respuesta buena se tiraba y la tabla de NORTE quedaba bajo SUR. */
+  const naveRef = useRef(center)
+  naveRef.current = center
 
   const cargar = useCallback(async (silencio = false) => {
-    if (noCenter) return
+    if (noCenter || naveRef.current !== center) return
     const n = ++pedida.current
     if (!silencio) setCargando(true)
     try {
@@ -902,9 +912,11 @@ export default function Cuadrante() {
     try {
       const r = await cuadranteCeldas(center, cambios)
       const b = lista(r.data?.bloqueadas)
+      if (naveRef.current !== center) return        // ya se está viendo otra nave: su aviso no va aquí
       if (b.length) setErr(`${b.length === 1 ? 'Una celda no se ha cambiado' : `${b.length} celdas no se han cambiado`}: ${b[0].motivo}.`)
       else if (msg) setAviso(msg)
     } catch (e) {
+      if (naveRef.current !== center) return
       setErr(e?.response?.data?.detail || 'No se ha podido guardar.')
     }
     cargar(true)
@@ -1332,7 +1344,11 @@ export default function Cuadrante() {
             </>
           )}
 
-          {pestana === 'personas' && (
+          {/* Al cambiar de nave, «Personas y notas» y «Ajustes y estudio» esperan como la tabla (10-11-2026): sin
+              esto salía «0 personas en el cuadrante» con «Añadir» activo, o el colchón 2 por defecto. */}
+          {pestana !== 'cuadrante' && cargando && !datos ? (
+            <div className="card flex items-center gap-2 p-8 text-dark-400"><Loader2 className="animate-spin" size={18} /> Cargando el cuadrante…</div>
+          ) : pestana === 'personas' && (
             <section className="card overflow-x-auto p-0">
               <div className="flex items-center gap-2 border-b border-dark-800 px-4 py-3">
                 <h2 className="text-sm font-bold text-dark-100">{personas.length} personas en el cuadrante</h2>
@@ -1371,7 +1387,7 @@ export default function Cuadrante() {
             </section>
           )}
 
-          {pestana === 'ajustes' && <Ajustes center={center} datos={datos} personas={personas} onCambio={() => cargar(true)} />}
+          {pestana === 'ajustes' && !(cargando && !datos) && <Ajustes center={center} datos={datos} personas={personas} onCambio={() => cargar(true)} />}
         </div>
 
       </div>

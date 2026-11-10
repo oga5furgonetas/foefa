@@ -33285,21 +33285,24 @@ async def listar_bloqueos(center: str = "", pasados: bool = False, admin: dict =
     q = {}
     if center and center not in ("Todos", "todos"):
         q["center"] = {"$regex": re.escape(center.strip()), "$options": "i"}
-    docs = await db.shift_blocks.find(q, {"_id": 0}).sort("desde", 1).to_list(500)
+    hoy = _dia_negocio()
+    # Cada lista con su propia consulta, ya filtrada por fecha y ordenada en la base ANTES del tope (revisión del
+    # 10-11-2026): pidiendo los 500 más viejos y filtrando después, con muchos acumulados los vigentes, que son los
+    # más nuevos, se quedaban fuera sin avisar. Los pasados, del último hacia atrás y como mucho 500.
+    vigentes = await db.shift_blocks.find({**q, "hasta": {"$gte": hoy}}, {"_id": 0}).sort("desde", 1).to_list(5000)
+    viejos = await db.shift_blocks.find({**q, "hasta": {"$lt": hoy}}, {"_id": 0}).sort("desde", -1).to_list(500)
     # Sólo los de los centros que este admin puede ver: un bloqueo de otra nave
     # no es asunto suyo, igual que sus peticiones.
-    docs = [d for d in docs if _user_can_see_center(admin, d.get("center") or "")]
-    ids = [d["driver_id"] for d in docs if d.get("driver_id")]
+    vigentes = [d for d in vigentes if _user_can_see_center(admin, d.get("center") or "")]
+    viejos = [d for d in viejos if _user_can_see_center(admin, d.get("center") or "")]
+    docs = vigentes + viejos
+    ids = sorted({d["driver_id"] for d in docs if d.get("driver_id")})
     nombres = {}
     if ids:
         nombres = {d["id"]: d.get("name", "") for d in await db.drivers.find(
-            {"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(500)}
+            {"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(len(ids))}
     for d in docs:
         d["driver_name"] = nombres.get(d.get("driver_id")) if d.get("driver_id") else None
-    hoy = _dia_negocio()
-    vigentes = sorted((d for d in docs if str(d.get("hasta") or "") >= hoy), key=lambda d: str(d.get("desde") or ""))
-    viejos = sorted((d for d in docs if str(d.get("hasta") or "") < hoy),
-                    key=lambda d: str(d.get("desde") or ""), reverse=True)
     out = {"bloqueos": vigentes, "total": len(vigentes), "n_pasados": len(viejos)}
     if pasados:
         out["pasados"] = viejos
@@ -33733,15 +33736,25 @@ async def resolver_grupo_peticiones(data: dict = Body(...), admin: dict = Depend
         raise HTTPException(status_code=400,
                             detail="Para rechazar hay que escribir el motivo: lo va a leer el conductor")
     new_status = "aprobado" if action == "aprobar" else "rechazado"
-    hechas, canceladas, saltadas = [], [], []
+    hechas, canceladas, saltadas, ya = [], [], [], []
     try:
         for rid in ids:
-            antes = await db.shift_requests.find_one({"id": rid}, {"_id": 0, "status": 1, "date": 1})
+            antes = await db.shift_requests.find_one({"id": rid}, {"_id": 0})
             if not antes:
                 saltadas.append({"id": rid, "date": None, "detail": "Esa petición ya no existe"})
                 continue
             if antes.get("status") == "cancelado":
                 canceladas.append(rid)
+                continue
+            # Ya contestado igual (revisión del 10-11-2026): si una llamada se cortó a la mitad y la oficina vuelve a
+            # pulsar, esos días ya están hechos y avisados; contestarlos otra vez le mandaba al conductor un segundo
+            # aviso. Cuentan como resueltos y no se avisan otra vez; un aprobado solo se vuelve a poner en el
+            # cuadrante (lo mismo que ya está: si el corte fue justo antes de escribirlo, así no se queda sin él).
+            # Uno de otra nave sigue parando abajo con su 403.
+            if antes.get("status") == new_status and _user_can_see_center(admin, antes.get("center") or ""):
+                if new_status == "aprobado":
+                    await _turno_aprobado(antes)
+                ya.append(rid)
                 continue
             try:
                 _st, req = await _resolver_peticion(rid, {"action": action, "motivo": motivo}, admin, avisar=False)
@@ -33755,7 +33768,8 @@ async def resolver_grupo_peticiones(data: dict = Body(...), admin: dict = Depend
         # Aunque algo pare a la mitad, lo que ya se contestó se le dice.
         if hechas:
             await _avisar_respuesta(hechas, new_status, motivo)
-    return {"success": True, "status": new_status, "resueltas": [r["id"] for r in hechas],
+    resueltas = set(ya) | {r["id"] for r in hechas}
+    return {"success": True, "status": new_status, "resueltas": [rid for rid in ids if rid in resueltas],
             "canceladas": canceladas, "saltadas": saltadas}
 
 
@@ -33809,10 +33823,14 @@ async def cancelar_mis_peticiones(data: dict = Body(...), user: dict = Depends(r
     if hechas:
         nombre = hechas[0].get("driver_name") or "Un conductor"
         aprobados = [r["date"] for r in hechas if r.get("status") == "aprobado"]
+        # Con la nave, como el aviso de petición nueva (revisión del 10-11-2026): la cuenta dueña recibe los de las
+        # tres naves y sin ella no se sabe en qué bandeja mirar.
+        _nave = (hechas[0].get("center") or "").strip()
         try:
             await push_center_event(
                 hechas[0].get("center") or "",
-                f"↩️ {nombre} cancela {len(hechas)} día{'s' if len(hechas) > 1 else ''}",
+                f"↩️ {nombre} cancela {len(hechas)} día{'s' if len(hechas) > 1 else ''}"
+                + (f" · {_nave}" if _nave else ""),
                 _fechas_dias([r["date"] for r in hechas])
                 + (f" · {len(aprobados)} ya estaba{'n' if len(aprobados) > 1 else ''} aprobado{'s' if len(aprobados) > 1 else ''}: "
                    "vuelve al cuadrante como estaba" if aprobados else ""),
@@ -33902,10 +33920,12 @@ async def cambiar_mi_peticion(data: dict = Body(...), user: dict = Depends(requi
         partes.append(f"quita {_fechas_dias(quitar)}")
     if cambia_texto:
         partes.append("cambia la explicación")
+    _nave = (viejas[0].get("center") or "").strip()      # con la nave, como al pedir (10-11-2026)
     try:
         await push_center_event(
             viejas[0].get("center") or "",
-            f"✏️ {viejas[0].get('driver_name') or 'Un conductor'} cambia su petición",
+            f"✏️ {viejas[0].get('driver_name') or 'Un conductor'} cambia su petición"
+            + (f" · {_nave}" if _nave else ""),
             f"Ahora: {_fechas_dias(nuevas_f)} · " + ", ".join(partes), "/panel/turnos")
     except Exception as e:                                       # noqa: BLE001
         logger.debug("Push cambio de petición: %s", e)
@@ -34041,26 +34061,33 @@ async def _maximas_y_ruta(center: str, desde: str, hasta: str) -> dict:
     en_ruta = {}
     bajan = {}
     if maximas:
-        # Quién sale a ruta y de qué nave es su ficha: los prestados que ya tienen el turno puesto aquí.
-        prestados_turno: dict = {}
         turnos = [s async for s in db.shifts.find({"center": pat, "date": {"$gte": desde, "$lte": hasta}, **_FILTRO_RUTA},
                                                   {"_id": 0, "date": 1, "driver_id": 1})]
         for s in turnos:
             en_ruta[s["date"]] = en_ruta.get(s["date"], 0) + 1
-        ids = sorted({s["driver_id"] for s in turnos if s.get("driver_id")})
-        if ids:
-            de_otra = {d["id"] for d in await db.drivers.find({"id": {"$in": ids}}, {"_id": 0, "id": 1, "center": 1})
-                       .to_list(5000) if d.get("center") and not re.search(pat["$regex"], str(d["center"]), re.I)}
+        # Los que tienen turno de ruta aquí y el Cuadrante NO cuenta en sus rutas: los que no están en el cuadrante
+        # de esta nave ese día (revisión del 10-11-2026). El Cuadrante suma las rutas de SUS personas más «bajan»
+        # entero; esta cuenta suma todos los turnos de ruta de la nave. Lo que separa las dos son esos turnos de
+        # gente de fuera del cuadrante, y son los únicos que pueden ser ya de los que bajan. Antes se miraba la
+        # nave de la ficha, y alguien con ficha de DGA1 apuntado en el cuadrante de OGA5 (un cambio de nave
+        # programado, un prestado todo el mes) se restaba de «bajan» sin que el Cuadrante lo hiciera: Refuerzos
+        # volvía a pedir gente. Una nave sin nadie apuntado en su cuadrante cuenta, como el Cuadrante, a quien
+        # tenga turnos: ahí no hay nadie de fuera.
+        prestados_turno: dict = {}
+        apuntados = await db[_CUA_PERSONAS].find({"center": pat, "en_cuadrante": True},
+                                                 {"_id": 0, "driver_id": 1, "inactivo_desde": 1}).to_list(5000)
+        if apuntados:
+            hasta_cuando = {p["driver_id"]: str(p.get("inactivo_desde") or "") for p in apuntados if p.get("driver_id")}
             for s in turnos:
-                if s.get("driver_id") in de_otra:
+                fuera = hasta_cuando.get(s.get("driver_id"))
+                if fuera is None or (fuera and fuera <= s["date"]):
                     prestados_turno[s["date"]] = prestados_turno.get(s["date"], 0) + 1
         # «BAJAN DE OTROS CENTROS» (10-11-2026). En el Cuadrante esa fila cuenta como rutas hechas
         # (cuadranteComun.js: dif = rutas + bajan - máxima), y aquí no se miraba: el sábado con 3 que bajan de
         # DGA1 salía a 0 en el Cuadrante y Refuerzos decía «faltan 3», y en «Trabajar más» salían vacantes que
         # no hacían falta. El ajuste se guarda con la nave tal como se escribió en el Cuadrante; se busca como el
         # resto de esta cuenta (por sus 4 primeras letras) y, si hubiera dos escrituras, manda la exacta. Los
-        # prestados que ya tienen aquí su turno ya están en `en_ruta`: se suman solo los que faltan por apuntar,
-        # para no contarlos dos veces.
+        # turnos de fuera del cuadrante ya están en `en_ruta`: se descuentan del ajuste para no contarlos dos veces.
         exacto = (center or "").strip().lower()
         elegido: dict = {}
         async for a in db[_CUA_AJUSTES].find({"tipo": "refuerzo_dia", "center": pat,
