@@ -691,7 +691,11 @@ async def test_bloquear_dos_veces_no_falla_y_no_se_bloquea_lo_que_no_se_ve_ni_a_
     await _falla(server.merc_bloquear({}, PEPE), 400, "Falta a quién bloqueas")
     await _falla(server.merc_bloquear([], PEPE), 400, "Falta a quién bloqueas")
     # Un cuerpo con los tipos cambiados (una lista o un número donde va un id) no es un 500: no encuentra nada.
-    for raro in ({"anuncio_id": ["x"]}, {"anuncio_id": {"a": 1}}, {"conversacion_id": 5}, {"conversacion_id": True}):
+    # Tampoco una consulta disfrazada de id («cualquier anuncio»): ahora que para bloquear basta con que el anuncio
+    # exista, eso bloquearía a quien fuera.
+    for raro in ({"anuncio_id": ["x"]}, {"anuncio_id": {"a": 1}}, {"conversacion_id": 5}, {"conversacion_id": True},
+                 {"anuncio_id": {"$ne": None}}, {"anuncio_id": {"$gt": ""}}, {"conversacion_id": {"$ne": None}},
+                 {"anuncio_id": a["id"] + "x" * 10000}):
         await _falla(server.merc_bloquear(raro, PEPE), 404)
     await _falla(server.merc_desbloquear("../../no-es-un-id", PEPE), 404, "Ese bloqueo ya no está")
     await _falla(server.merc_bloquear({"anuncio_id": "no-existe"}, PEPE), 404, "Ese anuncio ya no está")
