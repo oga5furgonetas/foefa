@@ -18,6 +18,7 @@ import functools
 import inspect
 import io as _io
 import re
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -2128,6 +2129,72 @@ def test_la_lista_del_filtro_es_corta_y_esta_escrita_como_se_compara():
     assert mc._palabras(None) == mc._palabras("  ¡¿?!  ") == "  "
 
 
+# UN CARÁCTER QUE NO SE VE NO SE SALTA EL FILTRO (10-11-2026). Dentro de la palabra la partía en dos («gili» y «pollas»),
+# el filtro no la reconocía y al otro le llegaba entera: no se pinta. Son los de formato (guion blando, espacios y uniones
+# de ancho cero, marcas de dirección, BOM, etiquetas) y las marcas sin anchura que no son una tilde (selectores de
+# variación, el «une grafemas»). Escritos con su código: en el fichero tampoco se verían.
+INVISIBLES = {
+    "guion blando": "­", "espacio de ancho cero": "​", "separador de ancho cero": "‌",
+    "unión de ancho cero": "‍", "unión de palabras": "⁠", "BOM": "﻿",
+    "marca de izquierda a derecha": "‎", "marca de derecha a izquierda": "‏", "marca árabe": "؜",
+    "incrustación": "‪", "inversión de derecha a izquierda": "‮", "aislante": "⁦",
+    "operador invisible": "⁢", "separador mongol": "᠎", "etiqueta": "\U000e0061",
+    "selector de variación 16": "️", "selector de variación 1": "︀", "une grafemas": "͏",
+}
+CON_INVISIBLE = ["gili­pollas", "ma‍ricon", "su⁠daca", "hijo de pu​ta", "fu​ck",
+                 "gili​pollas", "GILI­POLLAS", "eres un gili​​​pollas", "​gilipollas​",
+                 "g​i​l​i​p​o​l​l​a​s", "hi‍jo de⁠ pu﻿ta",
+                 "mari­cón", "te voy a ma​tar", "moth‌erfucker", "gili️pollas", "sub͏normal",
+                 "‮gilipollas", "hijo​de​puta"]
+
+
+@pytest.mark.parametrize("texto", CON_INVISIBLE)
+def test_un_caracter_invisible_dentro_de_la_palabra_no_se_salta_el_filtro(texto):
+    assert mc.ofensivo(texto) is True
+    with pytest.raises(mc.Invalido) as e:
+        mc.mensaje(texto)
+    assert str(e.value) == MENSAJE_OFENSIVO
+    with pytest.raises(mc.Invalido) as e:
+        mc.validar({"titulo": "Chaleco reflectante", "categoria": "ropa", "estado_articulo": "como_nuevo", "precio": "15",
+                    "descripcion": texto, "zona": "A Coruña", "fotos": ["a"], "acepto": True})
+    assert str(e.value) == ANUNCIO_OFENSIVO
+
+
+def test_los_invisibles_ni_parten_una_palabra_ni_cambian_lo_que_no_entraba():
+    # El control: cada uno es un carácter de verdad, que no se ve (ni letra, ni espacio, ni signo), y sin él la
+    # comparación es la de siempre.
+    assert len(set(INVISIBLES.values())) == len(INVISIBLES) and all(len(c) == 1 for c in INVISIBLES.values())
+    assert mc._palabras("gili pollas") == " gili pollas " and mc.ofensivo("gili pollas") is False     # un espacio SÍ parte
+    for nombre, c in INVISIBLES.items():
+        assert unicodedata.category(c) in ("Cf", "Mn") and not (c.isalnum() or c.isspace() or unicodedata.combining(c)), nombre
+        # Dentro de CUALQUIER entrada de la lista (en mitad de cada palabra, delante y detrás): sigue sin poder enviarse.
+        for frase in mc.OFENSIVO:
+            partida = " ".join(p[:len(p) // 2] + c + p[len(p) // 2:] for p in frase.split(" "))
+            assert partida != frase and mc._palabras(partida) == f" {frase} ", (nombre, frase)
+            assert mc.ofensivo(partida) and mc.ofensivo(c + frase + c) and mc.ofensivo(f"oye{c} {frase}{c}{c}, tú"), (nombre, frase)
+        # Y al revés: metido en cualquier sitio de un texto, la comparación es la misma que sin él. Lo que no entraba
+        # sigue sin entrar («disputa», «Scunthorpe», «año», «está de puta madre»…) y lo que entraba, entra.
+        for texto in [t for t in ENTRA + NO_ENTRA if isinstance(t, str) and t.strip()]:
+            for i in range(len(texto) + 1):
+                con = texto[:i] + c + texto[i:]
+                assert mc._palabras(con) == mc._palabras(texto), (nombre, texto, i)
+            assert mc.ofensivo(texto[:1] + c + texto[1:]) is (texto in ENTRA), (nombre, texto)
+    # Un espacio de ancho cero no convierte dos palabras en una palabrota que no estaba: lo que se LEE es lo que se compara.
+    assert mc.ofensivo("pu​ta") is False and mc.ofensivo("está de pu​ta madre") is False
+    assert mc.ofensivo("dis­puta") is False and mc._palabras("a​ño, an​o") == " año ano "
+    assert mc._palabras("an‍̃o") == " año "                         # la virgulilla sigue siendo de su n
+    # Un emoji con uniones de ancho cero (la familia) o con su selector (el corazón) no rompe nada: ni para ni se toca,
+    # el mensaje se guarda TAL CUAL se escribió.
+    familia = "Vendo el carrito \U0001f468‍\U0001f469‍\U0001f467 casi nuevo ❤️ 1️⃣"
+    assert mc.ofensivo(familia) is False and mc.mensaje(familia) == familia
+    assert mc._palabras(familia) == " vendo el carrito casi nuevo 1 "
+    assert mc.mensaje("Gracias \U0001f44d\U0001f3fd") == "Gracias \U0001f44d\U0001f3fd"
+    # Lo que se guarda de un anuncio tampoco se toca (el filtro compara sobre una copia).
+    limpio = mc.validar({"titulo": "Mochila​ térmica", "categoria": "otros", "estado_articulo": "nuevo", "precio": "20",
+                         "descripcion": "Dis­putada \U0001f468‍\U0001f469‍\U0001f467", "zona": "", "fotos": ["a"], "acepto": True})
+    assert (limpio["titulo"], limpio["descripcion"]) == ("Mochila​ térmica", "Dis­putada \U0001f468‍\U0001f469‍\U0001f467")
+
+
 def test_el_filtro_mira_el_titulo_la_descripcion_y_la_zona_del_anuncio_y_no_los_nombres():
     base = {"titulo": "Chaleco negro", "categoria": "ropa", "estado_articulo": "como_nuevo", "precio": "15",
             "descripcion": "Está de puta madre, casi sin usar.", "zona": "Coruña (zona del Moro)", "fotos": ["a"], "acepto": True}
@@ -2149,6 +2216,10 @@ async def test_el_filtro_en_me_interesa_al_responder_al_publicar_y_al_corregir_p
     a = await _publicado(ANA, "Soporte de móvil")
     # «ME INTERESA»: no se abre la conversación ni se le cuenta un interesado.
     await _falla(server.merc_contactar(a["id"], {"texto": "Baja el precio, hijo de puta"}, PEPE), 400, MENSAJE_OFENSIVO)
+    # Tampoco con un carácter que no se ve metido en la palabra (un guion blando, una unión de ancho cero): antes
+    # pasaba y a la otra persona le llegaba el insulto entero.
+    for disfrazado in ("eres un gili­pollas", "hijo de pu​ta", "ma‍ricon"):
+        await _falla(server.merc_contactar(a["id"], {"texto": disfrazado}, LUIS), 400, MENSAJE_OFENSIVO)
     assert mundo.g["mercadillo_conversaciones"].docs == [] and mundo.g["mercadillo_mensajes"].docs == []
     assert mundo.g["mercadillo_anuncios"].docs[0]["interesados"] == 0
     cid = (await server.merc_contactar(a["id"], {"texto": "¿Sigue disponible? Está de puta madre"}, PEPE))["conversacion_id"]

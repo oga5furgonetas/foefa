@@ -169,16 +169,24 @@ MENSAJE_OFENSIVO = ("Ese mensaje no se puede enviar: no se permiten insultos, am
 ANUNCIO_OFENSIVO = "Ese anuncio no se puede enviar: quita los insultos o el contenido ofensivo del texto."
 
 
+# Lo que no se ve ni ocupa sitio (10-11-2026): los caracteres de formato (`Cf`: guion blando, espacios y uniones de
+# ancho cero, marcas de dirección, BOM, etiquetas) y las marcas que van encima de otra letra sin ser una tilde (`Mn` y
+# `Me`: los selectores de variación de los emojis, el «une grafemas»). Metido dentro de una palabra, uno de estos la
+# partía en dos («gili» + «pollas»), el filtro no la reconocía y al otro le llegaba el insulto entero.
+_NO_SE_VE = ("Cf", "Mn", "Me")
+
+
 def _palabras(texto) -> str:
-    """El texto como lo compara el filtro: en minúsculas, sin tildes (la ñ se queda: «año» no es «ano») y palabra a
-    palabra, con un espacio a cada lado («¡Hijo de PUTA!» → « hijo de puta »). Así una entrada de la lista solo
-    casa con palabras enteras, nunca con un trozo de otra."""
+    """El texto como lo compara el filtro: en minúsculas, sin tildes (la ñ se queda: «año» no es «ano»), sin los
+    caracteres que no se ven (`_NO_SE_VE`: no parten una palabra, se quitan) y palabra a palabra, con un espacio a cada
+    lado («¡Hijo de PUTA!» → « hijo de puta »). Así una entrada de la lista solo casa con palabras enteras, nunca con
+    un trozo de otra. Es una COPIA para comparar: lo que se guarda es lo que se escribió, con sus emojis."""
     plano = []
     for c in unicodedata.normalize("NFKD", unicodedata.normalize("NFC", str(texto or "")).casefold()):
-        if not unicodedata.combining(c):
-            plano.append(c)
-        elif c == "̃" and plano and plano[-1] == "n":        # la virgulilla de la ñ no es una tilde
+        if c == "̃" and plano and plano[-1] == "n":          # la virgulilla de la ñ no es una tilde
             plano[-1] = "ñ"
+        elif not unicodedata.combining(c) and unicodedata.category(c) not in _NO_SE_VE:
+            plano.append(c)
     return " " + " ".join(re.findall(r"[^\W_]+", "".join(plano))) + " "
 
 
