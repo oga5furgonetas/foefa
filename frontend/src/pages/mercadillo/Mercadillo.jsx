@@ -180,6 +180,12 @@ function Normas({ onBack, alAceptar }) {
       alAceptar()
     } catch (e) { setErr(texto(e, 'No se ha podido guardar. Inténtalo otra vez.')) } finally { setEnviando(false) }
   }
+  /* Los Términos y la Privacidad se abren en otra pestaña (no se pierde lo que se estaba haciendo)… menos dentro de la app de
+     iPhone, donde van en la misma ventana, como los de «Cuenta». Allí un enlace con target="_blank" no abría nada: Capacitor le
+     pasa la dirección al sistema (WebViewDelegationHandler, `createWebViewWith` → UIApplication.open), y `capacitor://localhost/…`
+     fuera de la app no existe. Y en la pantalla en la que se aceptan las normas, ese enlace tiene que funcionar. La página legal
+     de dentro de la app vuelve a ella con su logotipo. */
+  const enOtraPestana = esAppIOS() ? {} : { target: '_blank', rel: 'noreferrer' }
   return (
     <div className={alAceptar ? 'pb-28' : ''}>
       <Cabecera titulo="Normas del mercadillo" onBack={onBack} />
@@ -192,8 +198,8 @@ function Normas({ onBack, alAceptar }) {
         ))}
       </ul>
       <p className="mt-4 text-[12.5px] leading-relaxed text-dark-400">
-        Las condiciones completas están en los <a href="/terminos#mercadillo" target="_blank" rel="noreferrer" className="text-brand-300 underline">Términos</a> y
-        cómo tratamos tus datos, en la <a href="/privacidad" target="_blank" rel="noreferrer" className="text-brand-300 underline">Privacidad</a>.
+        Las condiciones completas están en los <a href="/terminos#mercadillo" {...enOtraPestana} className="text-brand-300 underline">Términos</a> y
+        cómo tratamos tus datos, en la <a href="/privacidad" {...enOtraPestana} className="text-brand-300 underline">Privacidad</a>.
       </p>
       {alAceptar && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-dark-800 bg-dark-950/95 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 backdrop-blur">

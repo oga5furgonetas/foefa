@@ -128,6 +128,12 @@ for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
       await expect(normas(page).last()).toContainText('No se tolera el contenido ofensivo ni el acoso: quien lo haga se queda sin mercadillo.')
       await expect(page.getByRole('link', { name: 'Términos', exact: true })).toHaveAttribute('href', '/terminos#mercadillo')
       await expect(page.getByRole('link', { name: 'Privacidad', exact: true })).toHaveAttribute('href', '/privacidad')
+      // En la web se abren en otra pestaña; dentro de la app de iPhone, en la misma ventana (allí un target="_blank" no abre nada).
+      for (const nombre of ['Términos', 'Privacidad']) {
+        const enlace = page.getByRole('link', { name: nombre, exact: true })
+        if (ios) await expect(enlace, `en el iPhone «${nombre}» se abre en la misma ventana`).not.toHaveAttribute('target')
+        else await expect(enlace, `en la web «${nombre}» se abre en otra pestaña`).toHaveAttribute('target', '_blank')
+      }
       // «Acepto las normas», a la vista sin desplazar nada; y detrás no hay mercadillo: ni «Vender», ni anuncios, ni buzón.
       await expect(acepto(page)).toBeInViewport({ ratio: 1 })
       expect(await page.evaluate(() => window.scrollY), 'la prueba no ha desplazado la pantalla').toBe(0)
@@ -159,6 +165,25 @@ for (const [donde, ios] of [['web', false], ['iPhone', true]]) {
       expect(s.llamadas).toEqual(['normas'])
       expect(fallos).toEqual([])
     })
+
+    /* Dentro de la app de iPhone un enlace con target="_blank" a una página de la propia app no abre nada (Capacitor se lo pasa
+       al sistema, y `capacitor://localhost/…` fuera de la app no existe): desde la pantalla en la que se aceptan las normas, los
+       Términos se tienen que poder leer. Van en la misma ventana, en su versión de dentro de la app (sin nada de pagos). */
+    if (ios) {
+      test('dentro del iPhone, «Términos» se abre en la misma ventana, en la parte del mercadillo y sin nada prohibido', async ({ page, context }) => {
+        const fallos = vigilar(page)
+        await entrar(page, { ios, normas: false })
+        await page.getByRole('link', { name: 'Términos', exact: true }).click()
+        await expect(page).toHaveURL(/\/terminos#mercadillo$/)
+        await expect(page.getByRole('heading', { level: 1 })).toHaveText('Términos y Condiciones de Uso')
+        await expect(page.getByRole('heading', { name: /Mercadillo de repartidores/ })).toBeVisible()
+        await expect(page.getByText('Para usar el mercadillo tienes que aceptar sus normas la primera vez que entras', { exact: false })).toBeVisible()
+        expect(context.pages(), 'no se ha abierto otra ventana').toHaveLength(1)
+        await quieta(page, 400)
+        await limpia(page, 'los términos abiertos desde las normas del mercadillo', { perfil: 'basico' })
+        expect(fallos).toEqual([])
+      })
+    }
 
     test('volver sin aceptar es salir del mercadillo; al entrar otra vez, se vuelven a pedir', async ({ page }) => {
       const fallos = vigilar(page)
