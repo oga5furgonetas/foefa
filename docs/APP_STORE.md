@@ -411,3 +411,499 @@ The demo account in the App Review Information is unchanged. Thank you for your 
    revisión. Las cuentas de prueba (autónomo y conductor) siguen vivas; no borrarlas.
 5. Contestar en el Centro de resolución con el texto de arriba y volver a enviar. Si el envío rechazado no deja reenviar,
    como el 03-11: quitar su elemento rechazado y crear uno nuevo por la API (`enviar`).
+
+## Plan B (10-11-2026): preparado por si Apple vuelve a rechazar
+
+> La 2.4.1 (build 20) está en la cola de Apple desde el 09-11 a las 20:37. Esto NO toca nada de lo que está en revisión ni de
+> lo desplegado: es trabajo hecho por adelantado en la rama `ios/plan-b` (sale de `main` 1e1f6df) para que, si Apple vuelve a
+> rechazar, se reenvíe en un par de horas y no en un día. Si aprueba, sale en la siguiente versión. **Nada de esto se publica
+> ni se le dice a Apple sin el visto bueno de Dani.**
+>
+> Escrito el 10-11-2026 a la vez que se construía el bloqueo: lo que depende de él va marcado **«con el plan B fusionado»** y
+> está descrito según su especificación; hay que repasarlo contra el código el día que se fusione. Lo que no se ha podido
+> comprobar desde el código lleva **[COMPROBAR]** y está junto al final («Lo que no se ha podido comprobar»).
+
+### Para Dani, en corto
+- Si Apple rechaza otra vez, lo más probable es la regla **1.2 (contenido de usuarios)**, por el mercadillo: Apple exige poder
+  **bloquear** a otra persona y hoy no se puede. Eso es lo que se ha construido en esta rama.
+- Si llega el rechazo: se mira qué regla dice, se coge de aquí la respuesta de esa regla y se siguen los pasos de abajo. Tú
+  haces tres cosas: decir «sí» al despliegue, tener abierta tu sesión de App Store Connect y dar el visto bueno al texto.
+- Hay tres decisiones que son tuyas y que este trabajo no toma por ti (abajo, «Pendiente de Dani»): revisar las denuncias
+  del mercadillo en 24 horas, qué hacer con el tope de 15 paradas en el iPhone y si se cobra allí con el sistema de Apple.
+- **La regla de oro de todo lo que se le escribe a Apple:** tiene que ser verdad y poder comprobarse en la app o en el código.
+  Si preguntan si hay un plan de pago fuera del iPhone, la respuesta es que **sí** (en la web y en Android), y que la app de
+  iPhone ni lo vende, ni lo menciona, ni desbloquea nada con códigos. Nunca «es gratis para siempre».
+
+### Qué hay en la rama `ios/plan-b`
+1. **Bloquear a una persona en el mercadillo** (servidor y web; con el plan B fusionado). Desde la ficha de un anuncio ajeno
+   («Bloquear a {nombre}», en la tarjeta del vendedor) o desde una conversación. Si A bloquea a B: A deja de ver los anuncios
+   y las conversaciones de B al instante; B deja de ver los anuncios de A; ninguno puede escribir al otro; a B no se le avisa;
+   se deshace en «Personas bloqueadas» → «Desbloquear». Cada bloqueo queda en Negocio → Mercadillo (quién, a quién, cuándo y
+   desde qué anuncio o conversación) y avisa a Dani; un bloqueo no retira ni castiga nada por sí solo: decide Dani. Topes: 200
+   personas bloqueadas y 30 bloqueos al día por persona. API: `POST /mercadillo/bloquear`, `GET /mercadillo/bloqueados`,
+   `DELETE /mercadillo/bloqueados/{id}`; datos en `mercadillo_bloqueos`; constantes en `backend/mercadillo.py`.
+2. **Normas y textos legales** (con el plan B fusionado): las normas del mercadillo y los Términos (es y en) dicen que se
+   puede bloquear, que no se tolera el contenido ofensivo ni el acoso, que las denuncias se revisan **en 24 horas como mucho**
+   y que quien incumple se queda sin mercadillo; la Privacidad cuenta el dato nuevo (a quién bloqueas y cuándo; solo lo ve
+   quien modera; se borra al desbloquear o al pedir la baja).
+3. **Los flecos que dejó el segundo revisor del 09-11** (con el plan B fusionado): las legales del iPhone ya no enseñan las
+   tres filas de proveedores que solo usa la app de Android; «Datos fiscales: 6 años» no sale en el iPhone; `/prueba-reparto`
+   no existe en el iPhone; `register_dsp` exime a `desde_ios` de la prueba con tarjeta; y al pedir la baja de la cuenta sus
+   anuncios pasan a «quitado», sus conversaciones se cierran y se borran sus bloqueos.
+4. **Este kit**: las respuestas, las notas de revisión con el bloqueo y lo pendiente de Dani.
+
+**Lo que Apple exige a una app con contenido de usuarios y dónde está cada cosa** (los cinco puntos de su mensaje tipo de la
+regla 1.2, más el contacto que pide el texto de la regla):
+- *Aceptar unas condiciones que digan que no se tolera el contenido ofensivo ni a los usuarios abusivos.* La casilla «Acepto
+  los Términos…» del alta es obligatoria (`Registro.jsx`, `AltaRapida.jsx`); publicar un anuncio pide además marcar que cumple
+  las normas, y el servidor lo exige (`mercadillo.validar`, `acepto`). La frase de tolerancia cero, en los Términos (sección
+  del mercadillo) y en las normas (`NORMAS`, `Mercadillo.jsx`): con el plan B fusionado.
+- *Un filtro del contenido ofensivo.* Ningún anuncio se ve hasta que Dani lo aprueba: nace `pendiente` (`merc_crear`) y solo
+  lo publica `admin_mercadillo_anuncio`; corregir uno publicado lo devuelve a revisión (`merc_cambiar`); con denuncias de 3
+  personas distintas se esconde solo (`DENUNCIAS_PARA_OCULTAR`, `merc_denunciar`). Los mensajes son solo texto y **no llevan
+  filtro**: se miran si alguien los denuncia.
+- *Poder denunciar.* «Denunciar» (la banderita) en cada anuncio ajeno y en cada conversación, con motivos (uno es «Es ofensivo
+  o es acoso»); quien denuncia recibe acuse y la decisión en su buzón (`merc_denunciar`, `_merc_cerrar_denuncias`).
+- *Poder bloquear a un usuario abusivo; el bloqueo quita su contenido al instante y avisa al desarrollador.* No existía: es
+  el punto 1 de arriba (con el plan B fusionado).
+- *Actuar sobre las denuncias en 24 horas, retirando el contenido y expulsando a quien lo puso.* A Dani le llega cada denuncia
+  al móvil o por correo (`_merc_a_dani`) y la resuelve en Negocio → Mercadillo (retirar el anuncio, cerrar la conversación o
+  «no incumple»). Las 24 horas son un compromiso suyo (Pendiente de Dani, 1). **Expulsar a una persona no tiene botón**
+  (Pendiente de Dani, 5).
+- *Un contacto publicado.* `contacto@flotadsp.com` en la pestaña Cuenta, en los Términos y en la Privacidad (`marca.js`).
+
+### Pasos para sacarlo si Apple rechaza
+El orden es el que funcionó el 09-11, con una diferencia: **esta vez el servidor va antes que el build**, porque lo que el
+revisor va a pulsar («Bloquear») depende de él.
+
+0. **Leer el rechazo y la captura del revisor** (Chrome con la sesión de Dani, página del envío; la captura se saca como dice
+   la memoria `apple-revision-con-chrome`). Lo que Apple critica casi siempre está en esa captura. Elegir la respuesta de este
+   kit que toque; si el motivo no está aquí, no improvisar una.
+1. **Fusionar `ios/plan-b` en `main`**, con lo de «Antes de dar algo por bueno» de `CLAUDE.md` en verde. La rama la
+   escribieron tres agentes a la vez (servidor, web y este kit): repasar que el contrato de la API es el mismo en los dos
+   lados. OJO: un push a `main` que toque `.github/workflows/app-ios.yml`, `frontend/ios/` o
+   `frontend/capacitor.config.json` lanza SOLO un build del iPhone; el plan B no debería tocarlos. Esto tiene que salir vacío:
+   `git diff --stat main...ios/plan-b -- .github/workflows/app-ios.yml frontend/ios frontend/capacitor.config.json`
+2. **CI de GitHub en verde.**
+3. **Con el «sí» de Dani en el chat** (el modo auto bloquea los despliegues y no se rodea): el servidor
+   (`scripts/deploy-backend.ps1`) y la web (`scripts/deploy-frontend.ps1`). La app de iPhone habla con la API de producción:
+   con un servidor sin el bloqueo, «Bloquear» fallaría delante del revisor.
+4. **Comprobar en producción antes del build** (cinco minutos, con la sesión de Dani) **[COMPROBAR]**:
+   - Negocio → Mercadillo: está **encendido** y hay al menos **un anuncio publicado que no es de la cuenta de prueba** y al
+     que le quedan más de dos semanas. Los anuncios duran 30 días: uno publicado el 17-10 caduca hacia el 16-11; si el único
+     que hay es de entonces, volver a publicarlo. Con el mercadillo vacío el revisor no encuentra «Bloquear» y rechaza otra
+     vez.
+   - Con una cuenta de pruebas en la web: bloquear desde ese anuncio, ver que desaparece, «Personas bloqueadas», desbloquear.
+   - La cuenta de prueba de Apple no se queda con nadie bloqueado (si no, el revisor no verá el anuncio).
+   - Negocio → Mercadillo dice si a Dani le llegan los avisos al móvil o por correo.
+5. **El build del iPhone**: GitHub → Actions → «App iPhone (App Store)» → Run workflow sobre `main`. Cuándo lo ha procesado
+   Apple lo dice `python scripts/app_store_connect.py builds` (el número de build es el de la ejecución del workflow).
+6. **`python scripts/app_store_connect.py adjuntar N`**: la versión pasa de REJECTED a PREPARE_FOR_SUBMISSION.
+7. **Las notas de revisión** (abajo): `python -I -X utf8 asc_notas_poner.py <fichero> N --seco` y, si cuadra, sin `--seco`
+   (el script está en `%LOCALAPPDATA%\Temp\fds-emu`; cambia `BUILD_N` por N, se niega si pasan de 4.000 caracteres y no toca
+   la cuenta de prueba). NO usar `app_store_connect.py revision`: pisa las notas largas por las cortas.
+8. **Responder** en el envío rechazado («Responder al equipo de revisión de apps», 4.000 caracteres como máximo) con la
+   respuesta de este kit, con el número de build en lugar de `BUILD_N` y los huecos `<…>` rellenos. El texto lo ve Dani antes.
+9. **«Editar»** en el elemento → **«Actualizar revisión»** (pasa a «Listo para revisión») → **«Volver a enviar a revisión de
+   apps»**. El botón de reenviar sale gris hasta hacer lo anterior. Comprobar por la API: WAITING_FOR_REVIEW con el build N.
+   Si el envío no deja reenviar (pasó el 03-11): quitar su elemento rechazado y crear uno nuevo por la API (`enviar`).
+10. Apuntarlo en `docs/ESTADO.md` y vigilar (`fds-emu/vigilar_apple.py`).
+
+Cuánto tarda (estimado, no medido): del «sí» de Dani al reenvío, entre hora y media y dos horas si todo sale a la primera. Lo
+que más pesa es la CI de GitHub, el Mac que compila la app (15-20 minutos) y que Apple procese el build. Lo alarga una CI en
+rojo o una avería de GitHub como la del 09-11.
+
+**Si Apple aprueba el build 20**, nada de esto corre prisa: el bloqueo sale en la siguiente versión. Entonces hay que subir
+la versión (`APP_VERSION` en `app-ios.yml` y `appendUserAgent` en `capacitor.config.json`: tocarlos en `main` ya lanza el
+build), crearla en App Store Connect (`python scripts/app_store_connect.py version X.Y.Z`) y mandar las notas de abajo con
+ese build. El servidor y la web se pueden desplegar antes, con el «sí» de Dani: el servidor nuevo sirve igual a la app vieja.
+
+### Respuestas para el Centro de resolución (en inglés, listas para pegar)
+Cada párrafo va en una sola línea a propósito (así se pega sin saltos a media frase). `BUILD_N` es el número de build; lo que
+va entre `<…>` hay que rellenarlo o quitarlo. Todas caben en los 4.000 caracteres del cuadro de respuesta (medidas el 10-11
+con un build de cuatro cifras: de 800 caracteres, la de la 2.3.10, a 3.513, la de la 2.1). Se contesta **solo** a lo que
+Apple pregunte: no se pega una respuesta que no han pedido. Si el rechazo vuelve a ser 2.1(b) o 3.1.1, vale la respuesta del
+09-11 de más arriba, mirando primero en la captura qué ha visto el revisor.
+
+#### 1.2 Safety - User-Generated Content (el mercadillo)
+- **Cuándo:** el rechazo cita la regla 1.2, casi siempre con su lista de cinco precauciones.
+- **Antes de mandarla:** los pasos 1 a 7 hechos (plan B fusionado y desplegado, build adjunto, notas nuevas), el paso 4
+  comprobado y el «sí» de Dani a las 24 horas (Pendiente de Dani, 1), porque la respuesta las promete. Repasar los puntos 4 y
+  5 contra la app fusionada: nombres de los botones y dónde está «Personas bloqueadas».
+- **Riesgo:**
+  - Los mensajes privados no tienen filtro automático. La respuesta no dice que lo tengan; si Apple lo exige para los
+    mensajes, no hay nada hecho.
+  - «Quitamos el acceso al mercadillo a quien incumple» lo dicen las normas y los Términos, pero **no hay botón**: el servidor
+    solo lee `mercadillo_off` en la cuenta (`_merc_yo`) y nada lo escribe. Hoy habría que tocar la base a mano, y en un
+    conductor de empresa eso apaga el mercadillo de toda su empresa. **[COMPROBAR]** antes de afirmarlo (Pendiente de
+    Dani, 5).
+  - Un conductor de empresa no marca ninguna casilla de términos (los aceptó su empresa) ni se le piden las normas al entrar
+    al mercadillo. La respuesta lo cuenta tal cual. Si Apple quiere que cada usuario las acepte, haría falta una casilla al
+    entrar por primera vez al mercadillo, que no existe.
+  - El aviso a Dani de un bloqueo suelto llega al móvil solo si tiene puestos los avisos del mercadillo; por correo llega
+    desde el segundo bloqueo a la misma persona. Por eso la respuesta dice lo que es verdad en los dos casos.
+  - El mercadillo está solo en español: el revisor puede no leerlo. Las notas le dan los nombres exactos de los botones.
+
+```
+Hello, and thank you for the review.
+
+Guideline 1.2 – Safety – User-Generated Content
+
+The only user-generated content in the app is the optional couriers' marketplace ("Mercadillo de repartidores", in the Account tab): classified ads for second-hand items between couriers, with private one-to-one text messages about each ad. The new binary of version 2.4.1 (build BUILD_N) adds user blocking and completes the required precautions:
+
+1. Terms. Creating an account requires ticking the "Acepto los Términos…" (I accept the Terms) box on the sign-up screen; company drivers use access created by their company, which accepted the same Terms. Section 5 of the Terms ("Mercadillo de repartidores") and the marketplace rules (Mercadillo → "Normas y seguridad") state that objectionable content, harassment and abusive users are not tolerated, and what the consequences are. Posting an ad also requires confirming that it complies with the rules.
+
+2. Filtering. No ad is visible to other users until we have reviewed its text and photos and approved it; an edited ad goes back to review. An ad reported by three different users is hidden automatically until we review it.
+
+3. Reporting. Every ad and every conversation has a flag button ("Denunciar") with a list of reasons, including "Es ofensivo o es acoso" (offensive content or harassment). The user receives an acknowledgement and, afterwards, our decision in the marketplace inbox.
+
+4. Blocking. The seller card of every ad, and every conversation, has a "Bloquear a …" (Block …) action. Once confirmed, that user's ads and conversations disappear from the blocker's marketplace immediately, neither of the two can see the other's ads or send the other a message, and the blocked user is not told. The confirmation dialog also offers to report the ad or the conversation. Every block is reported to us at once: it is recorded in our moderation panel (who blocked whom, when, and from which ad or conversation), and when two or more users block the same person the moderator receives an alert. Blocks are listed and can be undone in Mensajes → "Personas bloqueadas".
+
+5. Acting on reports. A person reviews every report within 24 hours; we remove the offending content and the offending user's access to the marketplace. The marketplace rules and the Terms state this.
+
+6. Contact. contacto@flotadsp.com is published in the Account tab, in the Terms and in the Privacy Policy.
+
+To check it with the demo account: Cuenta (Account) → "Mercadillo de repartidores" → open an ad → "Bloquear a …" → "Bloquear": the ad is no longer listed. To undo it: the messages icon at the top right → "Personas bloqueadas" → "Desbloquear".
+
+Thank you for your time.
+```
+Lo respalda: `Registro.jsx` y `AltaRapida.jsx` (la casilla); `legal/Terminos.jsx` y `en/TermsEn.jsx` (la sección 5 en el
+iPhone); `Mercadillo.jsx` (`NORMAS`, `Denunciar`, `Vender`); `backend/server.py` (`merc_crear`, `merc_cambiar`,
+`merc_denunciar`, `_merc_cerrar_denuncias`, `admin_mercadillo_anuncio`, `_merc_a_dani`) y `backend/mercadillo.py`
+(`MOTIVOS_DENUNCIA`, `DENUNCIAS_PARA_OCULTAR`); el punto 4 entero y las frases nuevas de normas y Términos, con el plan B
+fusionado.
+
+#### 2.3.10 Accurate Metadata (menciones a otras plataformas)
+- **Cuándo:** el rechazo dice que la app o su ficha nombran otra plataforma móvil u otra tienda (Android, Google Play).
+  Mirar en la captura DÓNDE lo ha visto: puede ser una pantalla que no sea de las legales.
+- **Antes de mandarla:** el plan B fusionado y el build nuevo adjunto. Si el revisor señala otra pantalla, arreglarla
+  primero (con `esAppIOS()`, como las demás) y nombrarla en el hueco. `frontend/e2e/ios-sin-pagos.spec.js` es el juez de lo
+  que se ve en el iPhone.
+- **Riesgo:** bajo. La ficha no nombra otra plataforma: comprobados el 10-11 los textos de los 7 idiomas de
+  `frontend/ios/listing/` (ni «Android», ni «Google Play») y las 12 capturas del repositorio (es-ES y en-US). Sí aparecen
+  «Google Maps» y «WhatsApp» en botones: son apps, no plataformas ni tiendas, pero si el revisor las señala no se discute:
+  se cambia la captura. **[COMPROBAR]** que las capturas subidas a App Store Connect son las del repositorio.
+
+```
+Hello, and thank you for the review.
+
+Guideline 2.3.10 – Performance – Accurate Metadata
+
+We have removed the references to other mobile platforms from the iOS app in the new binary of version 2.4.1 (build BUILD_N):
+
+- Legal pages (Privacy Policy, Data Processing Agreement and Security): the lists of service providers no longer show the three entries that described data processing carried out only by our app for another platform. The iOS app does not use those services, so on iOS they are not listed.
+<- IF THE REVIEWER POINTED AT ANOTHER SCREEN: name it here and say that the reference has been removed.>
+
+The App Store metadata (name, subtitle, description, keywords, promotional text and screenshots) contains no reference to other mobile platforms or app marketplaces.
+
+Thank you for your time.
+```
+Lo respalda: `frontend/src/legal/config.js` (las tres filas, que dentro del iPhone no se enseñan: con el plan B fusionado);
+la web que lleva dentro la app no usa esos tres servicios (sus mapas son teselas de OpenStreetMap y no lleva Firebase:
+comprobado en `frontend/src`); `frontend/ios/listing/`.
+
+#### 2.1 Information Needed (el cuestionario sobre el modelo de negocio)
+- **Cuándo:** Apple no rechaza por un fallo: pide información («We need more information about your business model and your
+  users») con una lista de preguntas. Dejar solo las que hagan, con su misma numeración.
+- **Antes de mandarla:** nada de código, pero **sí la decisión de Dani sobre el tope** (Pendiente de Dani, 2): las preguntas
+  5 y 6 son justo las de los pagos, y lo que se conteste ahí es lo que Apple usará para decidir si exige su compra dentro de
+  la app. Rellenar el hueco de la pregunta 2 con lo que sea verdad ese día.
+- **Riesgo:** alto en las preguntas 5 y 6 (es la regla 3.1.3(b), ver la respuesta siguiente); bajo en el resto.
+  - La pregunta 2: un comentario del código del 03-11 dice que todas las cuentas de empresa son de Dani (`legal/config.js`).
+    **[COMPROBAR]** que sigue siendo así el día que se conteste; si ya hay empresas de fuera, quitar esa frase.
+  - Las fechas y las cifras de la 5 salen del código (`REP_GRATIS_HASTA` = 2026-12-31, `REP_GRATIS_PARADAS_DIA` = 15, 7 días
+    de prueba en `PLAN_TARIFAS`) y de los Términos de la web. **[COMPROBAR]** que producción no las cambia con variables de
+    entorno (`REP_GRATIS_HASTA`, `REP_GRATIS_PARADAS`) y que el cobro en la app de Android está encendido
+    (`PLAY_COBRO_ACTIVO`); si no lo está, quitar «and in our Android app».
+  - La pregunta 8: el micrófono está pedido en `Info.plist` para dictar y para el manos libres, pero no se ha visto en un
+    iPhone si esos botones salen. **[COMPROBAR]** (abajo, «Lo que no se ha podido comprobar»).
+
+```
+Hello, and thank you for the review. Here is the information requested.
+
+1. Who uses the app? Self-employed parcel couriers (the main audience) and the drivers and office staff of small delivery companies. A courier uses it to scan parcel labels, order the day's route, navigate stop by stop and record proof of delivery; a company driver uses it for the same route and for the daily vehicle inspection.
+
+2. Is it restricted to one company or to a specific group of companies? No. Any self-employed courier can create an account in the app, and any delivery company can become a customer by signing up on our website. <At present the company features are used by our own delivery fleets.>
+
+3. Which features are for the general public? The whole courier app (route planning, label scanning, navigation, proof of delivery, earnings and the optional marketplace) is available to anyone who creates an account in the app. The company panel and the driver portal need an account issued by a company.
+
+4. How do users obtain an account? Couriers: in the app, "Crear mi cuenta" (name, e-mail, password, accepting the Terms). Company drivers: their company registers them with their e-mail address in the company's panel, and they sign in with that e-mail (a one-time code sent by e-mail, or a password). Companies: on our website.
+
+5. Is there paid content, and who pays for it? Nothing is sold in the iOS app: it has no in-app purchases, shows no plans or subscription prices and redeems no codes. Outside the iOS app there are two paid services. (a) Companies pay a monthly fee per vehicle or per courier, contracted by the company on our website; their drivers and office staff pay nothing and sign in with the access their company gives them. (b) For self-employed couriers there is a paid plan on our website and in our Android app. Until 31 December 2026 no courier account has any limit, so nobody needs that plan. From 1 January 2027, accounts without it will be limited to 15 new stops per day once their first 7 days have passed; the plan removes that limit.
+
+6. Where are those services purchased, and can they be used in the app? They are purchased only outside the iOS app (see 5). Accounts are the same on every platform: a company's users, and a courier who holds the paid plan, sign in to the iOS app with their usual credentials. The iOS app offers no way to buy, and no link or instruction to buy elsewhere.
+
+7. Which external services does the app use? Our own API (flota-backend.fly.dev, hosted by Fly.io in Paris); OpenStreetMap map tiles; Photon, Nominatim and the Spanish CartoCiudad service for geocoding; OSRM for driving times and directions; Google Gemini, on our server, to read photographed delivery sheets; e-mail providers for account messages. Barcode reading and label OCR run on the device. There are no advertising SDKs, tracking pixels or third-party analytics in the iOS app. If the user chooses to, a stop can be opened in an external maps app and the customer contacted by phone or WhatsApp.
+
+8. Which hardware does the app use? Only the iPhone itself: the camera (scanning labels, photographing delivery sheets, proof-of-delivery photos), location while the app is in use (ordering the route from the current position, the map and turn-by-turn guidance) and the speaker (voice guidance). The microphone is requested only if the user turns on dictation or hands-free commands, where the device offers them. No external hardware or accessories are needed.
+
+Thank you for your time.
+```
+Lo respalda: `Registro.jsx` (en el iPhone solo se crea la cuenta de quien reparte); `DriverLogin.jsx` y `/auth/driver-lookup`,
+`/auth/driver-code/verify`, `/auth/driver-login` (el acceso del conductor); `backend/server.py` (`PLAN_TARIFAS`,
+`REP_GRATIS_HASTA`, `REP_GRATIS_PARADAS_DIA`, `_rep_sin_ilimitado`, `_rep_quedan_gratis`); `lib/plataforma.js` (`sinPagos`);
+`legal/config.js` (los proveedores); `backend/fly.toml` (`cdg`, París); `lib/codigos.js` y `lib/ocrRuta.js` (lectura en el
+móvil); `Info.plist` (permisos: cámara, fotos, ubicación mientras se usa, micrófono); `package.json` (solo los plugins
+`app`, `splash-screen` y `status-bar` de Capacitor: ningún accesorio ni Bluetooth).
+
+#### 3.1.3(b) Multiplatform Services (y 3.1.1 otra vez): el plan que se vende fuera
+- **Cuándo:** Apple dice que la app da acceso a algo comprado fuera sin ofrecerlo como compra dentro de la app, o pregunta
+  directamente por el plan de pago.
+- **Antes de mandarla:** **que Dani haya elegido salida** (Pendiente de Dani, 2). La parte fija cuenta lo que hay hoy y vale
+  siempre; el párrafo de cierre depende de lo que se haya hecho, y solo se pega el que sea verdad ESE día.
+- **Riesgo:** el más alto del kit. La regla dice que una app multiplataforma puede dar acceso a lo comprado en otra parte
+  **siempre que eso mismo se pueda comprar también dentro de la app con el pago de Apple**. Con el tope de 15 paradas en
+  marcha (desde el 01-01-2027) y sin compra en la app, la respuesta sincera es justo el caso que la regla no permite: lo más
+  probable es que Apple pida su compra dentro de la app o rechace. Para las empresas el argumento es mejor: sus planes se
+  venden a la empresa para sus empleados (3.1.3(c), «Enterprise Services»), y eso Apple lo permite sin su pago.
+  **[COMPROBAR]** las mismas cifras y variables que en la respuesta anterior.
+
+```
+Hello, and thank you for the review.
+
+Guideline 3.1.3(b) – Multiplatform Services
+
+FDS is a multiplatform service: the same account works in the iOS app, on our website and in our Android app.
+
+What is sold, and where. Nothing is sold in the iOS app: it has no in-app purchases, shows no plans or subscription prices, redeems no codes and contains no link or call to action to buy anywhere else. Outside the iOS app there are two paid services: (a) delivery companies contract a per-vehicle subscription for their staff directly with us on our website (an enterprise service, Guideline 3.1.3(c)); (b) a paid plan for self-employed couriers is offered on our website and in our Android app.
+
+What the courier plan does. Until 31 December 2026 every courier account is unlimited at no charge, so the plan gives nothing that a free account lacks. From 1 January 2027, accounts without the plan will be limited to 15 new stops per day once their first 7 days have passed; the plan removes that limit.
+
+<ONE CLOSING PARAGRAPH, ONLY IF IT IS TRUE THAT DAY — SEE BELOW>
+
+Thank you for your time.
+```
+Los cierres (uno, y solo si ya es verdad):
+- **Salida A hecha** (el servidor ya no aplica el tope a quien usa la app de iPhone, desplegado y probado):
+  `In the iOS app that limit does not apply: every account has the full functionality there, with or without the plan, so nothing acquired elsewhere is unlocked in the iOS app.`
+- **Salida B hecha** (la compra de Apple está en la app y sus productos van enviados con el build):
+  `The same plan is available in the iOS app as an auto-renewable subscription through In-App Purchase (products <IDS>, submitted for review with this build), as Guideline 3.1.3(b) requires.`
+- **Salida D hecha** (el tope aplazado en el servidor, en la web y en los Términos) **y** con el compromiso de Dani:
+  `We have postponed that limit to <DATE>, and it will not be applied to accounts used in the iOS app until the plan is also available there through In-App Purchase.`
+- **Salida C** (no se cambia nada): no hay cierre que valga. La parte fija es la verdad y Apple decidirá con ella.
+
+Lo respalda: `backend/server.py` (`REP_GRATIS_HASTA`, `REP_GRATIS_PARADAS_DIA`, `_rep_sin_ilimitado`, `_rep_quedan_gratis`,
+`REP_TOPE_MENSAJE`, `PLAN_TARIFAS`); los Términos de la web (sección 5, que en el iPhone no se enseña); `lib/plataforma.js`
+(`sinPagos`, `HABLA_DE_PAGOS`) y `frontend/e2e/ios-sin-pagos.spec.js`. Ninguno de los tres cierres está respaldado hoy.
+
+#### 4.2 Minimum Functionality («es una web»)
+- **Cuándo:** el rechazo dice que la app es una web empaquetada o que no aporta lo bastante como app.
+- **Antes de mandarla:** nada de código. Conviene que alguien con iPhone haya probado la guía con voz y una entrega sin
+  cobertura con ESE build (el vídeo del 03-11 solo enseña el escáner, la foto, la firma, el alta y borrar la cuenta).
+- **Riesgo:** medio. Todo lo que dice está en el código, pero la app está hecha con Capacitor (la web compilada dentro de la
+  app) y eso el revisor lo nota: la respuesta no dice que sea «nativa», dice lo que hace. De lo que cuenta, en un iPhone de
+  verdad solo se ha visto la cámara (el vídeo); la guía con voz, la ubicación y lo de sin cobertura, **[COMPROBAR]**. No
+  menciona el manos libres por voz: en el iPhone no está comprobado que exista.
+
+```
+Hello, and thank you for the review.
+
+Guideline 4.2 – Design – Minimum Functionality
+
+FDS for iPhone does not load a website. Its whole interface is packaged inside the binary and runs locally, and our server is used only as a data API. It is a working tool that a courier uses on the street all day, and it relies on the device:
+
+- Camera. It scans the barcode of each parcel label in real time and reads the address printed on the label with on-device OCR, so the stop is added without typing; it photographs paper delivery sheets, and it takes the proof-of-delivery photo. Parts 2 and 3 of the screen recording attached to the App Review Information show this on a physical iPhone.
+- Location. It orders the route from where the courier is, shows the courier and the stops on the map, gives turn-by-turn guidance to each stop with the next manoeuvre on screen and spoken aloud, and recalculates when the courier leaves the route. Location is used only while the app is in use.
+- Offline. Without coverage, a stop marked as delivered or not delivered is stored on the phone, shown as done at once and sent automatically when the connection returns. The day's route is kept on the phone and shown immediately when the app is opened.
+- Proof of delivery: photo, signature drawn on the screen, who received the parcel and cash on delivery.
+- One-tap call or message to the customer of each stop, and a tracking link that the courier can send to the customer.
+
+To see it with the demo account: log in, tap "Ver un ejemplo" (See an example) to load sample stops, scan any parcel label with the camera, order the route, open a stop and mark it delivered with a photo.
+
+Thank you for your time.
+```
+Lo respalda: `frontend/capacitor.config.json` (`webDir: dist`, sin `server.url`: la web va DENTRO de la app) y `app-ios.yml`
+(`npm run build` + `cap sync`); `lib/codigos.js` (lector de códigos en el móvil), `lib/ocrRuta.js` y Tesseract (texto de la
+etiqueta, en el móvil); `pages/driver/Navegacion.jsx` (la guía: maniobra en grande y en voz alta con `lib/voz.js`, recalcula
+al salirse); `pages/driver/MiRuta.jsx` (`COLA` = lo guardado sin cobertura, `COPIA_RUTA` = la última ruta en el móvil);
+`Info.plist` (ubicación solo «mientras se usa»).
+
+#### 5.1.1(v) Account Sign-In (borrar la cuenta)
+- **Cuándo:** Apple dice que no encuentra cómo borrar la cuenta, o que desactivarla no basta.
+- **Antes de mandarla:** con el plan B fusionado y desplegado, la frase de los anuncios del mercadillo es verdad (hoy, al
+  borrar la cuenta, sus anuncios siguen publicados hasta que caducan: quitar esa frase si el plan B no está). Y que Dani esté
+  borrando de verdad los datos de quien lo pide (Pendiente de Dani, 4).
+- **Riesgo:**
+  - El servidor **no borra nada él solo**: desactiva la cuenta al momento, apunta la petición (`bajas_cuentas`) y avisa por
+    correo; los datos los borra Dani a mano. «En 30 días» es verdad solo si él lo hace.
+  - Apple pide además **confirmar al usuario cuando el borrado termina**. Hoy no se manda nada: la respuesta no lo promete.
+  - La cuenta del conductor de empresa no se puede borrar desde su portal (la crea y la quita su empresa en Panel →
+    Conductores) y la de empresa se da de baja escribiendo. Apple lo exige a las cuentas que se crean en la app, y en la del
+    iPhone solo se crea la del repartidor; si el revisor prueba con la cuenta de conductor y lo pide igual, haría falta un
+    «Pedir que borren mi acceso» en el portal, que no existe.
+
+```
+Hello, and thank you for the review.
+
+Guideline 5.1.1(v) – Account deletion
+
+Accounts created in the app can be deleted in the app. The only accounts that can be created in the iOS app are those of self-employed couriers, and they are deleted from Cuenta (Account tab) → "Borrar mi cuenta" (Delete my account), at the bottom of the screen → enter the account password → "Sí, borrar mi cuenta" (Yes, delete my account). The screen states what happens: sign-in stops working immediately and the account's data (stops, customers, history) is erased within 30 days at most, and it cannot be undone. The account is disabled at once only so that nobody can use it while its data is being erased. <The user's marketplace ads are withdrawn and their conversations closed at the same moment.>
+
+Company accounts cannot be created in the iOS app. A company's drivers sign in with access created by their employer; the employer, as the controller of its staff's data, deletes a driver's access from its own panel, and drivers can also write to contacto@flotadsp.com.
+
+Part 4 of the screen recording attached to the App Review Information shows the deletion flow.
+
+Thank you for your time.
+```
+Lo respalda: `RutaCuenta.jsx` (`BorrarMiCuenta`, al final de la pestaña) y sus textos en inglés (`lib/textosRutaB.js`);
+`backend/server.py`, `borrar_cuenta` (`/auth/borrar-cuenta`: pide la contraseña, desactiva al momento, solo cuentas de quien
+reparte); `Registro.jsx` (en el iPhone el alta es siempre la de quien reparte); `delete_driver_account`
+(`/auth/driver-account/{id}`, lo que usa Panel → Conductores); la frase entre `<…>`, con el plan B fusionado.
+
+### Las notas de revisión con el bloqueo (el punto 6 nuevo)
+Las notas que tiene Apple desde el 09-11 dicen en su punto 6 que el mercadillo tiene revisión previa, «Denunciar», ocultación
+con 3 avisos, mensajes privados, términos y contacto; de bloquear no pueden decir nada. Estas son las notas enteras para
+cuando el bloqueo esté en la app (con el plan B fusionado). **El párrafo nuevo es el punto 6**; lo demás que cambia está en
+la lista de debajo. `BUILD_N` es la marca del número de build.
+
+```
+FDS – information for App Review (build BUILD_N).
+
+0. CHANGES IN THIS BUILD (Guideline 1.2): users can block other users in the marketplace, and its rules and the Terms now state zero tolerance for objectionable content and a 24-hour review of reports (point 6). Unchanged: the iOS app has no in-app purchases; it sells nothing, shows no plans or subscription prices and redeems no codes.
+
+1. SCREEN RECORDING: attached (FDS-iPhone-demo.mp4, 2 min 37 s, no audio), captured on a physical iPhone with an earlier build (16) from TestFlight; its Account and registration screens (parts 4 and 5) are simpler now and show no plan, price, code or bonus. English captions: (1) launch and log in; (2) scanning two parcel labels with the camera and reading a photographed label to add each stop; (3) proof of delivery with signature and photo, and a stop marked as not delivered; (4) account deletion; (5) registration. Route ordering and the marketplace are not in it: see points 3 and 6.
+
+2. PURPOSE AND AUDIENCE: FDS is a delivery-route app for self-employed parcel couriers (and the drivers of small delivery companies) in Spain, Portugal and Latin America. The courier scans the parcel labels with the camera or photographs the paper delivery sheet; the app geocodes the addresses, orders the stops by time windows and driving time, guides stop by stop with voice guidance, records proof of delivery (photo, signature, cash on delivery) and shows the day's earnings.
+
+3. HOW TO ACCESS THE MAIN FEATURES:
+- With the test account entered above (username and password): log in, then on the route screen tap "Ver un ejemplo" (See an example) to load sample stops, scan any parcel label with the camera, or add a stop by hand; order the route; open a stop and mark it delivered with a photo.
+- Registration: the sign-in screen (after Cuenta → "Cerrar sesión") has "¿No tienes cuenta? Crear mi cuenta" ("No account? Create my account"): name, e-mail, password. The test account is enough; a new one is not needed.
+- Account deletion: Cuenta → "Borrar mi cuenta" (asks for the password; the account is disabled immediately and its data erased within 30 days).
+
+4. EXTERNAL SERVICES: our own API (flota-backend.fly.dev, Fly.io, Paris); OpenStreetMap, Photon, Nominatim and CartoCiudad (geocoding, map tiles); OSRM (driving times); barcode reading and OCR run on the device; Google Gemini on our server reads photographed delivery sheets. No advertising SDKs, tracking pixels or third-party analytics in the iOS app.
+
+5. REGIONAL DIFFERENCES: none (only the earnings currency and the road-works feed, Spain: DGT, follow the route's country).
+
+6. USER-GENERATED CONTENT (Guideline 1.2): the only user-generated content is the optional "Mercadillo de repartidores" card in the Account tab (in Spanish): classified ads between couriers for second-hand goods and van equipment (physical items; the app handles no payment for them) and private one-to-one text messages about each ad. Precautions:
+- Terms: accepted at registration (by the courier, or by the company for its drivers); they and the rules ("Normas y seguridad") state zero tolerance for objectionable content and abusive users.
+- Filter: we review every ad (text and photos) before it is published; an ad reported by 3 people is hidden until we review it.
+- Report: flag button ("Denunciar") on every ad and conversation; we answer the reporter.
+- Block: open an ad → "Bloquear a …" on the seller card (also in every conversation): that user's ads and conversations leave the blocker's marketplace at once, neither can message the other, and we are notified. Undo: Mensajes → "Personas bloqueadas".
+- We review reports within 24 hours and remove the content and the offender's access.
+- Contact: contacto@flotadsp.com (Account tab, Terms).
+No other public content: a courier's stops are visible only to that courier (and to their own company for company drivers). Not a regulated industry.
+```
+
+El mismo texto está en `C:/Users/dlvie/AppData/Local/Temp/claude/34f2eefc27d3445b/9022e766-4683-4c72-a196-f839ddac5172/scratchpad/notas-revision-planb.txt`
+(junto a `notas-revision-nuevas.txt`, las actuales, que no se han tocado). Esa carpeta es de la sesión del 10-11 y puede no
+durar: lo que vale es el bloque de arriba, que sirve tal cual para `asc_notas_poner.py` (paso 7) guardado en un fichero UTF-8.
+
+Lo que cambia respecto a las actuales, además del punto 6:
+- La cabecera pierde la fecha y el resumen en español (hacía falta el sitio; el número de build ya dice de cuándo son).
+- El punto 0 pasa a contar lo nuevo de este build (bloqueo, tolerancia cero y 24 horas) y deja en una frase lo de los pagos:
+  «the iOS app has no in-app purchases; it sells nothing, shows no plans or subscription prices and redeems no codes». Está
+  escrito para un rechazo por la regla 1.2: **si el rechazo es por otra, el punto 0 se reescribe** para esa regla.
+- Ya no dice «nothing is sold, unlocked or redeemed inside the iOS app». «Unlocked» era verdad el 09-11 y lo sigue siendo hoy
+  (nadie tiene tope), pero dejará de ser exacto el 01-01-2027: quien pague el plan fuera no tendrá tope tampoco en el iPhone
+  (Pendiente de Dani, 2).
+- El punto 1 dice que el mercadillo no sale en el vídeo y manda al punto 6.
+- El punto 2 dice «with voice guidance» (como la ficha de la tienda) en vez de «hands-free voice»: el manos libres por voz no
+  está comprobado en el iPhone.
+- El punto 3 pierde la línea de «no hay compras» (ahora está en el punto 0). Los puntos 4 y 5 no cambian.
+
+**La cuenta de caracteres**, como la hace `asc_notas_poner.py` (`strip()` y `BUILD_N` por el número de build). Esta orden da
+los caracteres y los bytes; el 10-11 dio `3930 3944`:
+
+```
+python -I -X utf8 -c "import sys; t=open(sys.argv[1],encoding='utf-8').read().strip().replace('BUILD_N',sys.argv[2]); print(len(t), len(t.encode('utf-8')))" notas-revision-planb.txt 21
+```
+
+| Fichero | Build | Caracteres | Bytes UTF-8 | Margen hasta 4.000 |
+| --- | --- | --- | --- | --- |
+| `notas-revision-planb.txt` (la propuesta) | 21 | 3.930 | 3.944 | 70 caracteres |
+| `notas-revision-planb.txt` | 9999 | 3.932 | 3.946 | 68 caracteres |
+| `notas-revision-nuevas.txt` (las actuales) | 20 | 3.911 | 3.923 | 89 caracteres |
+
+Quedan 68 caracteres libres: cualquier frase que se añada obliga a quitar otra. `asc_notas_poner.py` se niega a
+escribir si se pasan de 4.000.
+
+### Pendiente de Dani (de este plan B)
+Tres decisiones que son suyas. Aquí va lo que hay, sin decidir por él.
+
+**1. Revisar las denuncias del mercadillo en 24 horas (es él quien modera).**
+Con el plan B, la propia app (las normas del mercadillo y los Términos) dirá «Lo revisamos en 24 horas como mucho», y a Apple
+se le dice lo mismo. Es un compromiso de todos los días, también fines de semana y vacaciones: cuando llega una denuncia (al
+móvil si tiene puestos los avisos del mercadillo; si no, por correo al buzón de contacto), entrar en Negocio → Mercadillo y
+resolverla: retirar el anuncio, cerrar la conversación o «no incumple». Hay una red para los anuncios (con denuncias de 3
+personas distintas el anuncio se esconde solo hasta que lo mire), pero no para las conversaciones. Si no quiere atarse a eso,
+las otras salidas son dar a otra persona su mismo acceso de dueño (hoy solo modera el super-admin) o apagar el mercadillo en
+Negocio → Mercadillo (se apaga para todos, también en la web): sin mercadillo la app no tiene contenido de usuarios y la
+regla 1.2 no aplica. Sin su «sí» a las 24 horas no se puede mandar la respuesta de la regla 1.2 ni las notas de arriba.
+
+**2. El tope de 15 paradas al día, que desde el 01-01-2027 alcanza también al iPhone.** Tal cual está en el servidor:
+- Hoy nadie tiene tope: la promoción dura hasta el 31-12-2026 incluido (`REP_GRATIS_HASTA`; lo dicen también la web y los
+  Términos). Mientras dura, la pestaña Cuenta de la web ni siquiera enseña «Suscribirte» a quien reparte.
+- Desde el 01-01-2027, a cada cuenta de repartidor sin suscripción, pasados sus 7 primeros días, el servidor le pone un tope
+  de 15 paradas nuevas al día (`REP_GRATIS_PARADAS_DIA`). También a quien use el iPhone: el servidor mira la cuenta, no el
+  aparato.
+- En el iPhone, al añadir la parada 16 saldrá «No se ha podido completar. Inténtalo de nuevo más tarde.», sin decir por qué
+  ni cómo seguir, porque allí no se puede hablar de planes.
+- Quien pague el plan en la web o en Android (9,99 € al mes o 99 € al año) no tendrá tope tampoco en el iPhone.
+- **El riesgo (regla 3.1.3(b)):** eso es dar acceso en el iPhone a algo comprado fuera, y Apple solo lo permite si lo mismo se
+  puede comprar también dentro de la app con su sistema de pago. Puede rechazar la app, o retirarla más adelante, cuando lo
+  vea o cuando se lo contemos; y si lo pregunta, hay que contárselo. Además, un revisor que llegue a la parada 16 verá un
+  error sin explicación y puede tomarlo por un fallo (regla 2.1): la cuenta de prueba de Apple es del 30-10, así que desde
+  el 01-01-2027 tendrá el tope como cualquiera si no tiene un regalo o una suscripción **[COMPROBAR]**.
+- **Las salidas:**
+  - **A. Que el tope no se aplique en la app de iPhone.** Allí todo el mundo tendría la app entera; la respuesta a Apple queda
+    limpia («en el iPhone nada depende de una compra»). Cuesta que quien no quiera pagar puede repartir desde un iPhone, y un
+    cambio en el servidor que no está hecho (quitarlo solo a las cuentas creadas en el iPhone, `alta_ios`, no basta: una
+    cuenta creada en la web y usada en el iPhone seguiría con tope).
+  - **B. Vender el plan también en el iPhone con la compra de Apple** (el punto 3). Es lo que la regla pide.
+  - **C. Dejarlo como está.** No cuesta nada ahora y es la que más riesgo tiene: lo de arriba.
+  - **D. Aplazar el tope** (la fecha está en el servidor, en la web, en los Términos y en los anuncios: hay que cambiarla en
+    todos). Da tiempo para hacer A o B; no arregla nada por sí sola.
+- Hay que decidirlo antes del 01-01-2027, y antes si Apple pregunta por los pagos.
+
+**3. Cobrar en el iPhone con el sistema de Apple.**
+Hoy la app de iPhone no lleva nada para cobrar: ni productos creados en App Store Connect (según `docs/ESTADO.md`, mirado
+por la API el 09-11: ninguna compra y ningún grupo de suscripción), ni el componente de compras (`package.json` solo lleva
+los de arranque y barra de estado). Hacerlo supone: firmar con Apple el acuerdo de apps de pago y dar los datos fiscales y
+bancarios (lo hace Dani en App Store Connect); crear la suscripción mensual y la anual; meter la compra en la app y que el
+servidor la dé por buena y la renueve o la corte; «restaurar compras»; avisar al borrar la cuenta de que la suscripción se
+cancela aparte; y enviar los productos a revisión CON el build. Apple se queda entre el 15 % y el 30 % de cada cobro. A
+cambio, la app de iPhone podría enseñar el plan (hoy no puede decir ni una palabra) y la regla 3.1.3(b) quedaría cumplida.
+No es un trabajo de horas: son varios días de trabajo y otra revisión de Apple, con sus idas y vueltas.
+
+Y tres cosas más que han salido al repasar el código para escribir esto (no estaban en la lista, pero van en lo que se le
+dice a Apple):
+
+**4. Los datos de quien borra su cuenta los borra Dani, a mano.** «Borrar mi cuenta» desactiva la cuenta al momento y manda
+un correo al buzón de contacto; el servidor no borra nada por su cuenta ni enseña la lista en ninguna pantalla (queda en
+`bajas_cuentas`). La app promete «en 30 días como mucho», y Apple pide además avisar al usuario cuando está hecho: hoy ese
+aviso no existe.
+
+**5. No hay forma de echar a una persona del mercadillo desde el panel.** Las normas dirán «quien lo haga se queda sin
+mercadillo» y Apple pide expulsar a quien publica contenido ofensivo. Hoy Dani puede retirar un anuncio y cerrar una
+conversación; para quitarle el mercadillo a una persona hay que tocar la base a mano, y a un conductor de empresa no se le
+puede quitar sin apagárselo a toda su empresa. Falta un «Quitar el mercadillo a esta persona» en Negocio → Mercadillo.
+
+**6. Que el revisor tenga algo que bloquear.** El día que se reenvíe tiene que haber un anuncio publicado que no sea de la
+cuenta de prueba (paso 4). Los anuncios caducan a los 30 días.
+
+### Con lo que el revisor puede tropezar y este plan B no arregla
+Visto en el código el 10-11; ninguna de estas cosas está en la especificación del plan B.
+- **«Avisarme en el móvil» dentro del mercadillo** (`AvisosMovil`, `Mercadillo.jsx`): sale también en la app de iPhone (en
+  «Mensajes» y tras escribir a alguien o publicar) y allí no puede funcionar: la app no tiene avisos. Al pulsarlo contesta
+  «Este navegador no permite avisos. En iPhone, primero añade la app a la pantalla de inicio y ábrela desde ahí». El revisor
+  va a pasar por esa pantalla para probar el bloqueo. Convendría esconderlo dentro de la app (`esAppIOS()`).
+- **El dictado y el manos libres** (el micro de la ficha de la parada, `MiRuta.jsx`, y el de la guía, `Navegacion.jsx`):
+  usan el reconocimiento de voz del navegador de dentro de la app, si lo ofrece. `Info.plist` lleva el permiso del micrófono
+  pero no el de reconocimiento de voz (`NSSpeechRecognitionUsageDescription`); si en un iPhone esos botones hacen algo, hay
+  que ver qué pasa al pulsarlos. **[COMPROBAR]** en un iPhone de verdad: no se ha visto.
+- **El error del tope** (Pendiente de Dani, 2): desde el 01-01-2027, un mensaje neutro al añadir la parada 16.
+
+### Lo que no se ha podido comprobar
+Desde el código no se ve producción, ni App Store Connect, ni un iPhone. Antes de afirmar cada cosa a Apple:
+- **El bloqueo tal como quede fusionado.** Este kit lo describe según su especificación; los nombres de los botones se
+  cotejaron el 10-11 con la web a medio hacer («Bloquear a {nombre}», «Personas bloqueadas», «Desbloquear»). Repasar los
+  puntos 4 y 5 de la respuesta de la regla 1.2 y el punto 6 de las notas contra la app fusionada.
+- **Producción:** el mercadillo encendido y con un anuncio ajeno publicado; `REP_GRATIS_HASTA` y `REP_GRATIS_PARADAS` (el
+  código da 2026-12-31 y 15 si no hay variable); `PLAY_COBRO_ACTIVO` (el cobro en la app de Android); `CORREO_CONTACTO` (a
+  dónde llegan los avisos de moderación por correo); que Dani tiene puestos los avisos del mercadillo en el móvil.
+- **App Store Connect:** que las capturas subidas son las 12 del repositorio; que el vídeo sigue adjunto; que las dos cuentas
+  de prueba siguen vivas y sin nadie bloqueado.
+- **En un iPhone de verdad con el build que se envíe:** la guía con voz, la ubicación, una entrega sin cobertura, y si salen
+  (y qué hacen) el dictado y el manos libres. Del vídeo del 03-11 solo se sabe que funcionan el escáner, la foto, la firma,
+  el alta y borrar la cuenta, con el build 16.
+- **Que todas las cuentas de empresa siguen siendo de Dani** (la frase entre `<…>` de la pregunta 2 del cuestionario).
