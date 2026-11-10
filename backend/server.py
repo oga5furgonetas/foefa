@@ -9248,8 +9248,20 @@ async def _temporal_comun(admin: dict, center: Optional[str], incluir_propias: b
     a crearla). Ahora: solo la nave elegida arriba (`_filtro_centro`: nunca más allá de las naves de quien la aplica;
     con «Todos», todas como antes) y, salvo que se pida, solo a quien todavía no tiene la suya. Sin `hash_temporal`
     solo cuenta (la confirmación de la pantalla dice a cuántos y de qué naves antes de aplicar)."""
-    filtro = {"status": {"$ne": "deleted"}, "active": {"$ne": False}, **_filtro_centro(admin, center)}
+    acotado = _filtro_centro(admin, center)
+    filtro = {"status": {"$ne": "deleted"}, "active": {"$ne": False}, **acotado}
     conductores = await db.drivers.find(filtro, {"_id": 0, "id": 1, "name": 1, "email": 1, "center": 1}).to_list(5000)
+    # LOS SIN CENTRO QUE SE QUEDAN FUERA (10-11-2026, revisión de la corrección, R40/R42): la lista de Conductores los
+    # enseña en cualquier centro (get_drivers), pero la temporal acotada a un centro no los toca. Se cuentan para que la
+    # confirmación lo diga y no sea una sorpresa. Con «Todos» y sin límites entran y no hay nadie fuera.
+    sin_centro_fuera = 0
+    if acotado:
+        sin_centro_fuera = len(await db.drivers.find(
+            {"status": {"$ne": "deleted"}, "active": {"$ne": False},
+             "$or": [{"center": {"$in": [None, ""]}}, {"center": {"$regex": r"^\s*$"}}]},
+            {"_id": 0, "id": 1}).to_list(5000))
+    # El desglose por centro, con el código limpio ('AMZL OGA5 SANTIAGO XPT', 'oga5' y 'OGA5 ' son OGA5; R43).
+    conocidos = await _centros_conocidos()
     todas = await db.driver_accounts.find(
         {}, {"_id": 0, "driver_id": 1, "email": 1, "active": 1, "password_changed_at": 1,
              "must_change_password": 1, "creada_en_bloque": 1}).to_list(5000)
@@ -9277,7 +9289,7 @@ async def _temporal_comun(admin: dict, center: Optional[str], incluir_propias: b
         if not incluir_propias and _ya_eligio_la_suya(([cuenta] if cuenta else []) + por_correo.get(email, [])):
             respetadas += 1                           # la suya sigue valiendo: ni se toca ni se desbloquea
             continue
-        nave = str(c.get("center") or "").strip() or "sin nave"
+        nave = _centro_norm(c.get("center"), conocidos) or "sin centro"
         if not hash_temporal:
             actualizadas += 1
             naves[nave] = naves.get(nave, 0) + 1
@@ -9304,7 +9316,7 @@ async def _temporal_comun(admin: dict, center: Optional[str], incluir_propias: b
         naves[nave] = naves.get(nave, 0) + 1
     return {"actualizadas": actualizadas, "ya_tenian": len(cuentas), "sin_email": sin_email,
             "cuentas_inactivas": omitidas_inactivas, "respetadas": respetadas,
-            "naves": dict(sorted(naves.items()))}
+            "naves": dict(sorted(naves.items())), "sin_centro_fuera": sin_centro_fuera}
 
 
 @auth_router.get("/driver-accounts/generar/previa")
@@ -37239,15 +37251,20 @@ def _onb_clave(p: dict) -> str:
     return ("dni:" + p["dni"]) if p.get("dni") else ("tel:" + (p.get("telefono") or ""))
 
 
+def _onb_filtro_centro(center: Optional[str]) -> dict:
+    """Las personas de un centro Y TAMBIEN QUIEN NO TIENE NINGUNO (10-11-2026, revision de la flota propia, equipo-4):
+    el alta a mano la guardaba sin centro y, con un centro elegido arriba, la persona recien anadida no salia nunca.
+    Igual que en Conductores: sale en cualquier centro, y la pantalla la marca «sin centro». Lo comparten la lista y
+    el CSV, para que lo que se descarga sea lo que se ve (R34)."""
+    if not center:
+        return {}
+    return {"$or": [{"centro": {"$regex": re.escape(_centro_norm(center) or center), "$options": "i"}},
+                    {"centro": {"$in": ["", None]}}, {"centro": {"$exists": False}}]}
+
+
 @api_router.get("/incorporaciones/personas")
 async def onb_listar(center: Optional[str] = None, _=Depends(require_admin)):
-    q = {"archivada": {"$ne": True}}
-    if center:
-        # Y TAMBIEN QUIEN NO TIENE NAVE (10-11-2026, revision de la flota propia, equipo-4): el alta a mano la
-        # guardaba sin centro y, con una nave elegida arriba, la persona recien anadida no salia nunca. Igual que en
-        # Conductores: sale en cualquier nave, y la pantalla la marca «sin nave».
-        q["$or"] = [{"centro": {"$regex": re.escape(_centro_norm(center) or center), "$options": "i"}},
-                    {"centro": {"$in": ["", None]}}, {"centro": {"$exists": False}}]
+    q = {"archivada": {"$ne": True}, **_onb_filtro_centro(center)}
     # POR QUIEN LLEVA MAS ESPERANDO. Ordenar por fecha de alta ponia arriba al
     # ultimo que llego, que es justo el que menos urge.
     filas = await db[_ONB_COL].find(q, {"_id": 0}).to_list(500)
@@ -37329,7 +37346,8 @@ async def onb_alta(body: dict = Body(...), user: dict = Depends(require_admin)):
         # miraba (otra nave, sin nave o ya marcada \u00abYa esta dentro\u00bb), era un callejon sin salida.
         otra = await db[_ONB_COL].find_one({"clave": doc["clave"]},
                                            {"_id": 0, "nombre": 1, "centro": 1, "archivada": 1}) or {}
-        donde = ("en %s" % otra["centro"] if otra.get("centro") else "sin nave") + (
+        # «sin centro», la palabra del panel (10-11-2026, R38).
+        donde = ("en %s" % otra["centro"] if otra.get("centro") else "sin centro") + (
             ", marcada como \u00abYa est\u00e1 dentro\u00bb (por eso no sale)" if otra.get("archivada") else "")
         raise HTTPException(409, "Esa persona ya est\u00e1 en la lista%s: %s." % (
             " (%s)" % otra["nombre"] if otra.get("nombre") else "", donde))
@@ -37413,6 +37431,10 @@ async def onb_editar(pid: str, body: dict = Body(...), _=Depends(require_admin))
     for k, tope in (("email", 80), ("clave_email", 60), ("codigo_formacion", 40)):
         if k in body:
             cambios[k] = _texto_cuerpo(body.get(k), tope)
+    if "centro" in body:
+        # PONERLE EL CENTRO A QUIEN NO LO TIENE (10-11-2026, R36): «sin centro» sale en la lista de todos los centros y
+        # solo se quitaba volviendo a pegar el listado con su Sede. Se limpia igual que en el alta (onb_alta).
+        cambios["centro"] = _centro_norm(_texto_cuerpo(body.get("centro"), 20)) or ""
     if "triaje" in body:
         # "completo" o vacio. Es una decision de una persona, no algo deducido:
         # por eso se guarda, en vez de mirar si quedan motivos marcados.
@@ -37521,9 +37543,7 @@ async def onb_export(center: Optional[str] = None, _=Depends(require_admin)):
     Y NO LLEVA CONTRASENAS. Un CSV se reenvia por correo y acaba en sitios que
     no controlamos; la cuenta se mira en la pantalla, que pide sesion.
     """
-    q = {"archivada": {"$ne": True}}
-    if center:
-        q["centro"] = {"$regex": re.escape(_centro_norm(center) or center), "$options": "i"}
+    q = {"archivada": {"$ne": True}, **_onb_filtro_centro(center)}   # lo mismo que la lista (10-11-2026, R34)
     filas = await db[_ONB_COL].find(q, {"_id": 0}).to_list(2000)
     pl = await _onb_plantilla()
     docs = list(pl["motivos"].keys())

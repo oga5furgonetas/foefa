@@ -110,13 +110,40 @@ async def test_la_lista_de_una_nave_saca_tambien_a_quien_no_tiene_nave(base):
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_ya_esta_en_la_lista_dice_donde_esta(base):
-    for tel, donde in (("600000002", "en DGA1"), ("600000003", "sin nave"),
+    # «sin centro», la palabra del panel (corrección del 10-11-2026, R38; antes decía «sin nave»).
+    for tel, donde in (("600000002", "en DGA1"), ("600000003", "sin centro"),
                        ("600000005", "«Ya está dentro»")):
         with pytest.raises(HTTPException) as e:
             await server.onb_alta({"nombre": "REPETIDA", "telefono": tel, "centro": "OGA5"}, DANI)
         assert e.value.status_code == 409
         assert e.value.detail.startswith("Esa persona ya está en la lista")
         assert donde in e.value.detail, e.value.detail
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_csv_de_un_centro_saca_lo_mismo_que_la_lista(base):
+    """R34: con un centro elegido, la lista enseña también a quien no tiene centro; el CSV de «Descargar», igual."""
+    r = await server.onb_export("OGA5", DANI)
+    csv = r.body.decode("utf-8")
+    for nombre in ("ANA OGA5", "EVA SIN NAVE", "IVAN SIN CAMPO"):
+        assert nombre in csv, nombre
+    assert "LUIS DGA1" not in csv and "OLGA DENTRO" not in csv
+    lista = {p["nombre"] for p in (await server.onb_listar("OGA5", DANI))["personas"]}
+    assert lista == {"ANA OGA5", "EVA SIN NAVE", "IVAN SIN CAMPO"}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_se_le_puede_poner_el_centro_a_quien_no_lo_tiene(base):
+    """R36: el PATCH admite `centro`, limpio como en el alta; después sale solo en su centro."""
+    r = await server.onb_editar("p-vacia", {"centro": " amzl dga1 santiago "}, DANI)
+    assert r["centro"] == "DGA1"
+    eva = next(p for p in base["incorporaciones"].docs if p["id"] == "p-vacia")
+    assert eva["centro"] == "DGA1"
+    assert "EVA SIN NAVE" not in {p["nombre"] for p in (await server.onb_listar("OGA5", DANI))["personas"]}
+    assert "EVA SIN NAVE" in {p["nombre"] for p in (await server.onb_listar("DGA1", DANI))["personas"]}
+    # Sin `centro` en el cuerpo, el centro no se toca.
+    await server.onb_editar("p-oga5", {"nota": "llamar"}, DANI)
+    assert next(p for p in base["incorporaciones"].docs if p["id"] == "p-oga5")["centro"] == "OGA5"
 
 
 # ── equipo-1: la contraseña temporal común ──────────────────────────────────
@@ -188,6 +215,36 @@ async def test_la_suya_cuenta_tambien_por_el_correo(base):
                                  "center": "OGA5", "active": True})
     r = await server.generar_accesos_conductores(_peticion(center="OGA5"), DANI)
     assert r["respetadas"] == 2 and _cuenta(base, "d-dup") is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_previa_dice_cuantos_sin_centro_se_quedan_fuera(base):
+    """R40/R42: la lista de un centro enseña a los «sin centro», pero la temporal de ese centro no los toca: la previa
+    (y el resultado) dicen cuántos se quedan fuera. Con «Todos» entran, y no queda nadie fuera."""
+    base["drivers"].docs += [
+        {"id": "d-sc1", "name": "SIN CENTRO 1", "email": "sc1@empresa.es", "center": "", "active": True},
+        {"id": "d-sc2", "name": "SIN CENTRO 2", "email": "sc2@empresa.es", "active": True},
+        {"id": "d-sc3", "name": "SIN CENTRO 3", "email": "sc3@empresa.es", "center": "  ", "active": True},
+        {"id": "d-sc-baja", "name": "SIN CENTRO BAJA", "email": "scb@empresa.es", "center": "", "active": False},
+    ]
+    p = await server.previa_accesos_conductores("OGA5", False, DANI)
+    assert p["sin_centro_fuera"] == 3 and p["actualizadas"] == 2 and p["naves"] == {"OGA5": 2}
+    p = await server.previa_accesos_conductores(None, False, DANI)
+    assert p["sin_centro_fuera"] == 0 and p["naves"] == {"OGA5": 2, "sin centro": 3}
+    r = await server.generar_accesos_conductores(_peticion(center="OGA5"), DANI)
+    assert r["sin_centro_fuera"] == 3 and _cuenta(base, "d-sc1") is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_desglose_agrupa_por_el_codigo_del_centro(base):
+    """R43: 'AMZL OGA5 SANTIAGO XPT', 'oga5' y 'OGA5 ' son OGA5, no tres centros distintos en la confirmación."""
+    base["drivers"].docs += [
+        {"id": "d-largo", "name": "LARGO", "email": "largo@empresa.es", "center": "AMZL OGA5 SANTIAGO XPT", "active": True},
+        {"id": "d-minus", "name": "MINUS", "email": "minus@empresa.es", "center": "oga5", "active": True},
+        {"id": "d-hueco", "name": "HUECO", "email": "hueco@empresa.es", "center": "OGA5 ", "active": True},
+    ]
+    p = await server.previa_accesos_conductores("OGA5", False, DANI)
+    assert p["naves"] == {"OGA5": 5} and p["actualizadas"] == 5
 
 
 # ── equipo-12: la contraseña de la ficha pide 8 ─────────────────────────────

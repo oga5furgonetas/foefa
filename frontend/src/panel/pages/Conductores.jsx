@@ -636,17 +636,30 @@ function AvisoAccesos({ list, center, onHecho }) {
   const [hecho, setHecho] = useState(null)
   const [error, setError] = useState('')
   const [incluirPropias, setIncluirPropias] = useState(false)
-  const [previa, setPrevia] = useState(null)   // { actualizadas, naves, respetadas, sin_email, cuentas_inactivas }
+  /* LA PREVIA, CON LO QUE SE PIDIÓ (corrección del 10-11-2026, R7/R39/R41). Se guarda para qué centro y casilla se
+     pidió: mientras no llega la de lo que hay en pantalla, se dice «Calculando…» y no se puede aplicar (antes enseñaba
+     la cifra de antes y dejaba aplicar). Si falla, tampoco: un panel nuevo contra un servidor viejo, sin previa, le
+     cambiaba la contraseña a todos. Que la previa responda bien es la prueba de que el servidor entiende el centro. */
+  const [reintento, setReintento] = useState(0)
+  const pedida = `${center || ''}|${incluirPropias}|${reintento}`
+  const [respuesta, setRespuesta] = useState(null)   // { pedida, data } o { pedida, error: true }
 
   useEffect(() => {
     let vivo = true
     previaAccesosConductores(center, incluirPropias)
-      .then(({ data }) => { if (vivo) setPrevia(data && typeof data.actualizadas === 'number' ? data : null) })
-      .catch(() => { if (vivo) setPrevia(null) })
+      .then(({ data }) => {
+        if (!vivo) return
+        setRespuesta(data && typeof data.actualizadas === 'number' ? { pedida, data } : { pedida, error: true })
+      })
+      .catch(() => { if (vivo) setRespuesta({ pedida, error: true }) })
     return () => { vivo = false }
-  }, [center, incluirPropias])
+  }, [center, incluirPropias, pedida])
 
-  const deNave = center && center !== 'Todos' ? center : 'todas las naves'
+  const vigente = respuesta && respuesta.pedida === pedida ? respuesta : null
+  const previa = vigente?.data || null   // { actualizadas, naves, respetadas, sin_email, cuentas_inactivas, sin_centro_fuera }
+  const previaFallo = !!vigente?.error
+
+  const deCentro = center && center !== 'Todos' ? center : 'todos los centros'
   const naves = Object.entries(previa?.naves || {}).map(([n, k]) => `${n} (${k})`).join(', ')
 
   // Plegarlo es cosa de quien mira: se recuerda en este navegador y vuelve si
@@ -741,9 +754,23 @@ function AvisoAccesos({ list, center, onHecho }) {
               {previa.cuentas_inactivas > 0 && (
                 <p className="text-dark-400">{previa.cuentas_inactivas} con el acceso desactivado no se tocan.</p>
               )}
+              {/* Los «sin centro» salen en la lista de este centro, pero no son de él: no se tocan, y se dice (R40/R42). */}
+              {previa.sin_centro_fuera > 0 && (
+                <p className="text-amber-300">
+                  {previa.sin_centro_fuera} sin centro no se incluyen: ponles su centro en la ficha o aplícala con «Todos».
+                </p>
+              )}
             </>
+          ) : previaFallo ? (
+            <p className="flex flex-wrap items-center gap-2 text-amber-300">
+              No se ha podido calcular a quién afecta.
+              <button onClick={() => setReintento((n) => n + 1)}
+                className="rounded-lg bg-dark-800 px-2.5 py-1 font-semibold text-dark-200 hover:bg-dark-700">Reintentar</button>
+            </p>
           ) : (
-            <p className="text-dark-400">No se ha podido contar a cuántos afecta en {deNave}.</p>
+            <p className="flex items-center gap-1.5 text-dark-400">
+              <Loader2 size={12} className="animate-spin" /> Calculando a quién afecta…
+            </p>
           )}
         </div>
         <label className="mt-2 flex items-start gap-2 text-[12.5px] text-dark-300">
@@ -752,7 +779,7 @@ function AvisoAccesos({ list, center, onHecho }) {
           <span>Cambiársela también a quien ya se ha puesto la suya</span>
         </label>
         <ul className="mt-2 space-y-1 text-[12.5px] leading-relaxed text-dark-300">
-          <li>· Se asignará la misma contraseña temporal a los conductores activos con correo de {deNave}{incluirPropias ? '' : ' que todavía no se han puesto la suya'}.</li>
+          <li>· Se asignará la misma contraseña temporal a los conductores activos con correo de {deCentro}{incluirPropias ? '' : ' que todavía no se han puesto la suya'}.</li>
           <li>· Sus contraseñas actuales dejarán de funcionar. Las cuentas de acceso desactivadas no se tocarán.</li>
           <li>· Al entrar con su correo de empresa, cada conductor tendrá que cambiarla obligatoriamente. Después podrá añadir un correo personal de recuperación.</li>
           <li>· Cualquier persona que conozca la contraseña temporal podría entrar con el correo de un conductor hasta que este la cambie. Comunícala únicamente a los conductores.</li>
@@ -765,7 +792,8 @@ function AvisoAccesos({ list, center, onHecho }) {
           placeholder="Escribe la contraseña temporal" minLength={8} maxLength={128}
           className="mt-1 w-full max-w-sm rounded-lg border border-dark-700 bg-dark-950 px-3 py-2 text-sm text-dark-100 outline-none focus:border-amber-400" />
         <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={dar} disabled={dando || previa?.actualizadas === 0}
+          {/* Sin la previa de lo que hay en pantalla (calculando o fallida), no se aplica: ver arriba. */}
+          <button onClick={dar} disabled={dando || !previa || previa.actualizadas === 0}
             className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-2 text-[12.5px] font-semibold text-amber-100 hover:bg-amber-500/30 disabled:opacity-50">
             {dando ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />}
             {dando ? 'Aplicando…' : previa ? `Aplicar contraseña temporal a ${previa.actualizadas}` : 'Aplicar contraseña temporal'}
@@ -785,10 +813,10 @@ function AvisoAccesos({ list, center, onHecho }) {
     <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-dark-800 bg-dark-900/60 px-3 py-2 text-[12.5px]">
       <Lock size={13} className="shrink-0 text-dark-500" />
       <span className="min-w-0 flex-1 text-dark-300">
-        Contraseña temporal común: se aplica a {deNave}
+        Contraseña temporal común: se aplica a {deCentro}
         {sinCorreo > 0 && <> · <span className="text-amber-300">{sinCorreo} sin correo</span></>}
         <span className="ml-1.5 cursor-help text-dark-500"
-          title={`Es una sola contraseña para todos los conductores de ${deNave}, y cada uno tiene que cambiarla al entrar. Por defecto solo se les pone a quienes todavía no se han puesto la suya; antes de aplicarla se dice a cuántos.`
+          title={`Es una sola contraseña para todos los conductores de ${deCentro}, y cada uno tiene que cambiarla al entrar. Por defecto solo se les pone a quienes todavía no se han puesto la suya; antes de aplicarla se dice a cuántos.`
             + (sinCorreo > 0 ? ` Los ${sinCorreo} sin correo no pueden entrar de ninguna forma hasta ponérselo en su ficha.` : '')}>(?)</span>
       </span>
       <button onClick={() => setConfirmar(true)}
