@@ -2779,7 +2779,7 @@ async def test_borrar_a_alguien_de_oficina_se_lleva_su_mercadillo_y_solo_el_suyo
 # Expulsar a quien ya pidió la baja (o a un conductor ya borrado) se sigue pudiendo —protege si vuelve—, pero le salía
 # el correo «Te hemos quitado el acceso…» a alguien que había pedido que se borrasen sus datos. Ya no tiene cuenta: la
 # cuenta de quien reparte por su cuenta no existe o ha pedido la baja; el usuario de oficina no existe o está
-# desactivado; la ficha del conductor está de baja.
+# desactivado; la ficha del conductor está de baja. Y lo que vale para el correo vale para el aviso al móvil.
 QUITADO, DEVUELTO = "Te hemos quitado el acceso al mercadillo", "Vuelves a tener acceso al mercadillo"
 CORREOS = {"pepe": "pepe@x.es", "ana": "ana@x.es", "luis": "luis@x.es", "oficina": "oficina@x.es"}
 
@@ -2911,3 +2911,56 @@ async def test_a_quien_ya_no_tiene_cuenta_no_se_le_escribe_del_mercadillo(mundo,
     await mundo.t["drivers"].update_one({"id": "d2"}, {"$set": {"active": True}})
     await server.merc_responder(cid, {"texto": "¿Hola?"}, ANA)
     assert a_luis() == ["Tienes un mensaje en el mercadillo: Botas"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_a_quien_ya_no_tiene_cuenta_tampoco_le_salta_el_aviso_al_movil(mundo, monkeypatch):
+    """Las preferencias ya no se borran con la baja de la cuenta ni con el borrado de un conductor, y con ellas se queda
+    «Avisarme en el móvil»: sin mirar si sigue teniendo cuenta, el aviso de la expulsión le saltaría al móvil a quien
+    pidió que se borrasen sus datos. Es la misma regla que su correo, y se mira al ir a avisar (no se le apaga nada:
+    si la ficha se reactiva, le vuelven a saltar)."""
+    jefe = _con_fichas(mundo, monkeypatch)
+    pushes = []
+
+    async def push(ids, titulo, cuerpo, url="/panel"):
+        pushes.append(SimpleNamespace(ids=ids, titulo=titulo, cuerpo=cuerpo))
+    monkeypatch.setattr(server, "send_web_push_to_users", push)
+    monkeypatch.setattr(server, "_push_enabled", True)
+    moviles = {"pepe": ["a1"], "ana": ["d1"], "luis": ["d2"], "oficina": ["a9"]}
+    mundo.g["push_subscriptions"] = Col([{"endpoint": f"movil-de-{q}", "user_id": ids[0]} for q, ids in moviles.items()])
+    await _abrir(mundo)
+    for quien in (PEPE, ANA, LUIS, OFICINA):
+        await _publicado(quien, f"Cosa de {quien['name']}")
+        assert (await server.merc_avisos_movil({"activo": True}, quien))["avisos_movil"] is True
+
+    async def quitar_y_devolver(quien: str) -> tuple:
+        """Dani le quita el mercadillo y se lo devuelve: (a qué móviles salta, qué correos salen)."""
+        p, c = len(pushes), len(mundo.enviados)
+        assert (await _expulsar(quien, "otro"))["ok"] is True
+        assert await server.admin_mercadillo_readmitir({"clave": CLAVES[quien]}, DANI) == {"ok": True}
+        return [x.ids for x in pushes[p:]], [m.subject for m in mundo.enviados[c:]]
+    # EL CONTROL: en activo y con los avisos puestos, les salta al móvil (y entonces no se gasta un correo).
+    for quien, ids in moviles.items():
+        assert await quitar_y_devolver(quien) == ([ids, ids], []), quien
+    assert pushes[-2].cuerpo == _fuera("otro")[:170]
+    # Pepe pide la baja de su cuenta y a Ana la borran: «Avisarme en el móvil» se queda puesto (no se borra nada)…
+    assert await server.borrar_cuenta({"password": "secreta123"}, PEPE) == {"ok": True}
+    assert await server.delete_driver("d1", jefe) == {"success": True}
+    assert {p["clave"]: p["push"] for p in mundo.g["mercadillo_prefs"].docs} == {c: True for c in CLAVES.values()}
+    # …pero ya no tienen cuenta: ni les salta al móvil ni les llega un correo.
+    assert await quitar_y_devolver("pepe") == ([], []) and await quitar_y_devolver("ana") == ([], [])
+    # Ni a quien tiene la ficha en «no activo», ni a la de oficina con el usuario desactivado.
+    await mundo.t["drivers"].update_one({"id": "d2"}, {"$set": {"active": False}})
+    await mundo.g["admin_users"].update_one({"id": "a9"}, {"$set": {"disabled": True}})
+    assert await quitar_y_devolver("luis") == ([], []) and await quitar_y_devolver("oficina") == ([], [])
+    # Al volver a estar en activo, les vuelve a saltar: no se les había apagado nada.
+    await mundo.t["drivers"].update_many({}, {"$set": {"active": True}})
+    await mundo.g["admin_users"].update_one({"id": "a9"}, {"$unset": {"disabled": ""}})
+    for quien in ("ana", "luis", "oficina"):
+        assert await quitar_y_devolver(quien) == ([moviles[quien]] * 2, []), quien
+    # A Dani, que modera, le siguen saltando los suyos (por él no se pregunta nada).
+    mundo.g["admin_users"].docs.append({"id": "dani", "super_admin": True})
+    mundo.g["push_subscriptions"].docs.append({"endpoint": "movil-de-dani", "user_id": "dani"})
+    await server.merc_avisos_movil({"activo": True}, DANI)
+    await _anuncio(LUIS, "Guantes", "6")
+    assert pushes[-1].ids == ["dani"]

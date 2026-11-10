@@ -57042,7 +57042,7 @@ async def _merc_entregas(yo: dict) -> Optional[int]:
 
 
 async def _merc_contacto(clave: str) -> Optional[dict]:
-    """A QUIEN YA NO TIENE CUENTA NO SE LE ESCRIBE DEL MERCADILLO (10-11-2026).
+    """A QUIEN YA NO TIENE CUENTA NO SE LE ESCRIBE DEL MERCADILLO (10-11-2026): ni un correo ni un aviso al móvil.
     Antes, expulsar a quien ya había pedido la baja le mandaba «Te hemos quitado el acceso…» a alguien que había
     pedido que se borrasen sus datos. Devuelve con qué correo se le escribe (`{"correo": …}`, que puede ir vacío) a
     quien SIGUE teniendo cuenta, y None a quien ya no:
@@ -57103,9 +57103,14 @@ async def _merc_movil_listo(clave: str) -> list:
     if not (clave and _push_enabled and await _merc_push_activo(clave)):
         return []
     ids = await _merc_push_usuarios(clave)
-    if ids and await global_db.push_subscriptions.count_documents({"user_id": {"$in": ids}}):
-        return ids
-    return []
+    if not (ids and await global_db.push_subscriptions.count_documents({"user_id": {"$in": ids}})):
+        return []
+    # A quien ya no tiene cuenta tampoco le salta al móvil (10-11-2026): «Avisarme en el móvil» no se borra con la baja
+    # de la cuenta ni al borrar a un conductor (`_merc_baja` sin `del_todo`), así que se mira aquí, lo último y solo
+    # cuando iba a salir. A Dani («fds») le saltan siempre.
+    if clave != "fds" and await _merc_contacto(clave) is None:
+        return []
+    return ids
 
 
 async def _merc_push(clave: str, titulo: str, cuerpo: str, ruta: str = "") -> bool:
