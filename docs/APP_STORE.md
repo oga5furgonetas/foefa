@@ -419,57 +419,132 @@ The demo account in the App Review Information is unchanged. Thank you for your 
 > rechazar, se reenvíe en un par de horas y no en un día. Si aprueba, sale en la siguiente versión. **Nada de esto se publica
 > ni se le dice a Apple sin el visto bueno de Dani.**
 >
-> Escrito el 10-11-2026 a la vez que se construía el bloqueo: lo que depende de él va marcado **«con el plan B fusionado»** y
-> está descrito según su especificación; hay que repasarlo contra el código el día que se fusione. Lo que no se ha podido
-> comprobar desde el código lleva **[COMPROBAR]** y está junto al final («Lo que no se ha podido comprobar»).
+> Puesto al día el 10-11-2026, con la rama ya construida: además del bloqueo lleva las normas que se aceptan al entrar, el
+> filtro de palabras y quitarle el mercadillo a quien incumple. Lo que se cuenta aquí se ha leído en el código de la rama,
+> pero **nada está desplegado**: lo que solo será verdad con la rama fusionada, desplegada y con el build nuevo va marcado
+> **«con el plan B fusionado»**. Lo que no se ha podido comprobar desde el código lleva **[COMPROBAR]** y está junto al final
+> («Lo que no se ha podido comprobar»).
 
 ### Para Dani, en corto
-- Si Apple rechaza otra vez, lo más probable es la regla **1.2 (contenido de usuarios)**, por el mercadillo: Apple exige poder
-  **bloquear** a otra persona y hoy no se puede. Eso es lo que se ha construido en esta rama.
+- Si Apple rechaza otra vez, lo más probable es la regla **1.2 (contenido de usuarios)**, por el mercadillo. A una app así
+  Apple le pide cinco cosas: que se acepten unas normas, un filtro, poder denunciar, poder **bloquear** a otra persona y que
+  tú actúes en 24 horas, retirando el contenido y echando a quien lo puso. La app que está en revisión solo tiene una parte
+  (denunciar, y que cada anuncio lo revisas tú antes de que salga). **En esta rama están las cinco.**
 - Si llega el rechazo: se mira qué regla dice, se coge de aquí la respuesta de esa regla y se siguen los pasos de abajo. Tú
-  haces tres cosas: decir «sí» al despliegue, tener abierta tu sesión de App Store Connect y dar el visto bueno al texto.
-- Hay tres decisiones que son tuyas y que este trabajo no toma por ti (abajo, «Pendiente de Dani»): revisar las denuncias
-  del mercadillo en 24 horas, qué hacer con el tope de 15 paradas en el iPhone y si se cobra allí con el sistema de Apple.
+  haces cuatro cosas: decir «sí» al despliegue, tener abierta tu sesión de App Store Connect, dar el visto bueno al texto y
+  **no entrar al mercadillo con las cuentas de prueba de Apple** después de desplegar (si aceptas las normas con ellas, el
+  revisor ya no ve esa pantalla).
+- Hay cuatro decisiones que son tuyas y que este trabajo no toma por ti (abajo, «Pendiente de Dani»): revisar las denuncias
+  del mercadillo en 24 horas, que las normas y el filtro le cambian el mercadillo a todo el mundo y no solo en el iPhone,
+  qué hacer con el tope de 15 paradas en el iPhone y si se cobra allí con el sistema de Apple.
 - **La regla de oro de todo lo que se le escribe a Apple:** tiene que ser verdad y poder comprobarse en la app o en el código.
   Si preguntan si hay un plan de pago fuera del iPhone, la respuesta es que **sí** (en la web y en Android), y que la app de
-  iPhone ni lo vende, ni lo menciona, ni desbloquea nada con códigos. Nunca «es gratis para siempre».
+  iPhone ni lo vende, ni lo menciona, ni desbloquea nada con códigos. Nunca «es gratis para siempre». Y del mercadillo, igual:
+  el filtro es una lista de palabras (nunca «lo detecta todo»), a quien se bloquea «no se le avisa» (nunca «no puede
+  saberlo»), el acceso se le quita a una cuenta (no a una persona) y las 24 horas las cumples tú, no una máquina.
 
 ### Qué hay en la rama `ios/plan-b`
-1. **Bloquear a una persona en el mercadillo** (servidor y web; con el plan B fusionado). Desde la ficha de un anuncio ajeno
-   («Bloquear a {nombre}», en la tarjeta del vendedor) o desde una conversación. Si A bloquea a B: A deja de ver los anuncios
-   y las conversaciones de B al instante; B deja de ver los anuncios de A; ninguno puede escribir al otro; a B no se le avisa;
-   se deshace en «Personas bloqueadas» → «Desbloquear». Cada bloqueo queda en Negocio → Mercadillo (quién, a quién, cuándo y
-   desde qué anuncio o conversación) y avisa a Dani; un bloqueo no retira ni castiga nada por sí solo: decide Dani. Topes: 200
-   personas bloqueadas y 30 bloqueos al día por persona. API: `POST /mercadillo/bloquear`, `GET /mercadillo/bloqueados`,
-   `DELETE /mercadillo/bloqueados/{id}`; datos en `mercadillo_bloqueos`; constantes en `backend/mercadillo.py`.
-2. **Normas y textos legales** (con el plan B fusionado): las normas del mercadillo y los Términos (es y en) dicen que se
-   puede bloquear, que no se tolera el contenido ofensivo ni el acoso, que las denuncias se revisan **en 24 horas como mucho**
-   y que quien incumple se queda sin mercadillo; la Privacidad cuenta el dato nuevo (a quién bloqueas y cuándo; solo lo ve
-   quien modera; se borra al desbloquear o al pedir la baja).
-3. **Los flecos que dejó el segundo revisor del 09-11** (con el plan B fusionado): las legales del iPhone ya no enseñan las
-   tres filas de proveedores que solo usa la app de Android; «Datos fiscales: 6 años» no sale en el iPhone; `/prueba-reparto`
-   no existe en el iPhone; `register_dsp` exime a `desde_ios` de la prueba con tarjeta; y al pedir la baja de la cuenta sus
-   anuncios pasan a «quitado», sus conversaciones se cierran y se borran sus bloqueos.
-4. **Este kit**: las respuestas, las notas de revisión con el bloqueo y lo pendiente de Dani.
+Primero, lo que Apple pide a una app con contenido de usuarios, en el orden de su lista (todo con el plan B fusionado):
 
-**Lo que Apple exige a una app con contenido de usuarios y dónde está cada cosa** (los cinco puntos de su mensaje tipo de la
-regla 1.2, más el contacto que pide el texto de la regla):
-- *Aceptar unas condiciones que digan que no se tolera el contenido ofensivo ni a los usuarios abusivos.* La casilla «Acepto
-  los Términos…» del alta es obligatoria (`Registro.jsx`, `AltaRapida.jsx`); publicar un anuncio pide además marcar que cumple
-  las normas, y el servidor lo exige (`mercadillo.validar`, `acepto`). La frase de tolerancia cero, en los Términos (sección
-  del mercadillo) y en las normas (`NORMAS`, `Mercadillo.jsx`): con el plan B fusionado.
-- *Un filtro del contenido ofensivo.* Ningún anuncio se ve hasta que Dani lo aprueba: nace `pendiente` (`merc_crear`) y solo
-  lo publica `admin_mercadillo_anuncio`; corregir uno publicado lo devuelve a revisión (`merc_cambiar`); con denuncias de 3
-  personas distintas se esconde solo (`DENUNCIAS_PARA_OCULTAR`, `merc_denunciar`). Los mensajes son solo texto y **no llevan
-  filtro**: se miran si alguien los denuncia.
-- *Poder denunciar.* «Denunciar» (la banderita) en cada anuncio ajeno y en cada conversación, con motivos (uno es «Es ofensivo
-  o es acoso»); quien denuncia recibe acuse y la decisión en su buzón (`merc_denunciar`, `_merc_cerrar_denuncias`).
-- *Poder bloquear a un usuario abusivo; el bloqueo quita su contenido al instante y avisa al desarrollador.* No existía: es
-  el punto 1 de arriba (con el plan B fusionado).
-- *Actuar sobre las denuncias en 24 horas, retirando el contenido y expulsando a quien lo puso.* A Dani le llega cada denuncia
-  al móvil o por correo (`_merc_a_dani`) y la resuelve en Negocio → Mercadillo (retirar el anuncio, cerrar la conversación o
-  «no incumple»). Las 24 horas son un compromiso suyo (Pendiente de Dani, 1). **Expulsar a una persona no tiene botón**
-  (Pendiente de Dani, 5).
+1. **Aceptar las normas al entrar** (servidor y web). La primera vez que alguien entra al mercadillo —y otra vez si las
+   normas cambian— ve «Normas del mercadillo» con la frase «Antes de entrar, lee las normas y acéptalas.» y, abajo, el botón
+   **«Acepto las normas»**; sin pulsarlo no pasa (volver es salir del mercadillo). El servidor apunta quién, qué versión y
+   cuándo. Vale para todos: quien reparte por su cuenta, el conductor de empresa (que nunca había marcado una casilla de
+   términos) y la gente de oficina; a quien modera no se le piden. **La pantalla la impone la web; el servidor no cierra las
+   demás rutas**, a propósito: la app de iPhone que está en revisión y las webs en caché no la conocen y dejarían de poder
+   escribir. Además, como antes, publicar un anuncio pide marcar su casilla («Es mío, lo que cuento es verdad y cumple las
+   normas…»), y esa sí la exige el servidor. API: `POST /mercadillo/normas`; `normas_ok` en `GET /mercadillo/estado` y en
+   `GET /mercadillo`; se guarda en `mercadillo_prefs.normas` (`{v, ts}`); la versión es `NORMAS_VERSION`
+   (`backend/mercadillo.py`).
+2. **Un filtro automático de palabras** (servidor). Cada anuncio lo sigue revisando una persona ANTES de publicarse. Además,
+   una lista básica de insultos, insultos racistas u homófobos y amenazas —en español y en inglés, con las palabrotas
+   inglesas también sueltas y unos pocos de gallego, catalán, portugués, francés, italiano y alemán— no deja enviar ni un
+   anuncio (título, descripción y zona) ni un mensaje que lleve alguno: «Ese mensaje no se puede enviar: no se permiten
+   insultos, amenazas ni contenido ofensivo. Cámbialo y vuelve a enviarlo.». **Es una lista, y así hay que decirlo**: compara
+   palabras y frases enteras, sin mayúsculas ni tildes; no entiende el contexto ni las letras cambiadas («h1jo de…») y **no
+   lo detecta todo**. Deja pasar a propósito las palabrotas españolas sueltas, que entre compañeros no van contra nadie
+   («está de puta madre»). El texto de una denuncia no se filtra (quien denuncia puede tener que citar lo que le han dicho),
+   y las fotos no pasan por ningún filtro automático: las mira quien aprueba el anuncio. En `backend/mercadillo.py`:
+   `OFENSIVO`, `ofensivo`, `validar` y `mensaje`.
+3. **Denunciar** (ya estaba; no cambia). «Denunciar» en cada anuncio ajeno (en la tarjeta de quien vende y en la banderita
+   de arriba) y en cada conversación, con motivos (uno es «Es ofensivo o es acoso»). Quien denuncia recibe acuse y, después,
+   la decisión en su buzón; con denuncias de 3 personas distintas el anuncio se esconde solo hasta que se revisa. A Dani le
+   llega cada denuncia al móvil o por correo (`merc_denunciar`, `DENUNCIAS_PARA_OCULTAR`, `_merc_cerrar_denuncias`,
+   `_merc_a_dani`).
+4. **Bloquear a una persona** (servidor y web). Desde la ficha de un anuncio ajeno («Bloquear a {nombre}», en la tarjeta de
+   quien vende) o desde una conversación; se confirma en «¿Bloquear a {nombre}?» con **«Bloquear»**, y ahí mismo se puede
+   marcar «Denunciar también este anuncio». Si A bloquea a B: A deja de ver los anuncios y las conversaciones de B al
+   instante; B deja de ver los anuncios de A; ninguno puede escribir al otro. **A B no se le avisa** ni se le dice que es un
+   bloqueo, pero puede deducirlo (la conversación le sale cerrada y el anuncio «ya no está»): no se promete otra cosa. Se
+   deshace en «Personas bloqueadas» → «Desbloquear» (está siempre en «Mensajes» y, con alguien bloqueado, también al pie de
+   la lista de anuncios). Cada bloqueo queda en Negocio → Mercadillo → «Bloqueos» (quién, a quién, cuándo y desde qué
+   anuncio o conversación); a Dani le salta al móvil si tiene puestos los avisos del mercadillo, y cuando a la misma persona
+   la han bloqueado dos o más le llega el aviso normal (al móvil o, si no, por correo). Un bloqueo no retira ni castiga nada
+   por sí solo: decide Dani. Quien modera no bloquea. Topes: 200 personas bloqueadas y 30 bloqueos al día por persona. API:
+   `POST /mercadillo/bloquear`, `GET /mercadillo/bloqueados`, `DELETE /mercadillo/bloqueados/{id}`; datos en
+   `mercadillo_bloqueos`; constantes en `backend/mercadillo.py`.
+5. **Quitarle el mercadillo a quien incumple, y devolvérselo** (servidor y web). En Negocio → Mercadillo, junto a cada
+   persona (quien vende cada anuncio, las personas de cada denuncia y a quien han bloqueado) hay un **«Quitar del
+   mercadillo»**: se elige el motivo (obligatorio: es lo que se le dice), una nota si hace falta, y «Quitar el acceso». Al
+   instante esa cuenta deja de entrar al mercadillo, sus anuncios en revisión o publicados quedan retirados (y se cierran
+   las denuncias que tuvieran, avisando a quien denunció) y sus conversaciones abiertas, cerradas. Al entrar solo lee «Te
+   hemos quitado el acceso al mercadillo. Motivo: … Si crees que es un error, escribe a contacto@… y lo revisamos.», y se le
+   manda lo mismo al móvil o por correo. Abajo, «Sin acceso al mercadillo» dice a quién se le ha quitado, cuándo y por qué,
+   y **«Devolver el acceso»** lo deshace (se le avisa; ni vuelven sus anuncios ni se reabren sus conversaciones). En el
+   registro de auditoría queda lo justo: que se tomó la decisión, sobre qué cuenta, con qué motivo y cuándo. **Se le quita
+   a una cuenta o a una ficha (su clave), no a la persona física**: si vuelve con otra cuenta o le hacen otra ficha, entra,
+   y hay que quitárselo otra vez. Pedir la baja de la cuenta o dar de baja a un conductor no borra ni la expulsión ni los
+   bloqueos (bastaría reactivarlo para saltárselos): se borran cuando se borran de verdad los datos de la cuenta. API:
+   `POST /admin/mercadillo/expulsar` y `POST /admin/mercadillo/readmitir` (solo el super-admin); datos en
+   `mercadillo_expulsados`; motivos en `mercadillo.MOTIVOS_EXPULSION`.
+
+Y lo demás:
+
+6. **Normas y textos legales** (es y en). Las normas del mercadillo y los Términos (su apartado «Mercadillo de
+   repartidores», que dentro del iPhone es el 5) dicen: que hay que aceptar las normas al entrar; que no se tolera el
+   contenido ofensivo ni a los usuarios abusivos; que hay un filtro automático «sencillo» que «no lo detecta todo»; que se
+   puede bloquear; que las denuncias las revisa una persona **en 24 horas como mucho**; y que a quien incumple se le quita
+   el acceso, se le dice por qué y puede pedir que se revise. La Privacidad cuenta los datos nuevos (a quién bloqueas y
+   cuándo, cuándo aceptaste las normas y, si se te quita el acceso, el motivo y la fecha), quién los ve y cuándo se borran.
+7. **Lo del iPhone**:
+   - «Avisarme en el móvil» ya no sale dentro de la app de iPhone (`AvisosMovil`, `Mercadillo.jsx`): allí no hay avisos y
+     el botón solo sabía fallar.
+   - La app de iPhone no nombra otras plataformas: las legales no enseñan allí las tres filas de proveedores que solo usa
+     la app de Android (`SOLO_ANDROID`, `legal/config.js`), y el vocabulario prohibido de las pruebas del iPhone
+     (`frontend/e2e/iphone.js`) lleva la regla «otra plataforma» (Android, Google Play, Play Store).
+   - De una página legal, dentro de la app, se vuelve con **«Volver»** («Back») a donde se estaba; antes la única salida
+     era el logo, que a un conductor de empresa lo dejaba en el login de oficina.
+   - En la ficha del anuncio, «Bloquear a…» y «Denunciar» caben en la primera pantalla también en la más pequeña (375 ×
+     647: la app de iPhone abierta en un iPad, que es donde revisó Apple).
+   - Los flecos del 09-11: «Datos fiscales: 6 años» no sale en el iPhone; `/prueba-reparto` no existe allí; y
+     `register_dsp` exime a `desde_ios` de la prueba con tarjeta.
+   - Al pedir la baja de la cuenta, y al borrar un conductor, a alguien de oficina o una empresa, sus anuncios pasan a
+     «quitado» y sus conversaciones se cierran (`_merc_baja`).
+8. **Este kit**: las respuestas, las notas de revisión y lo pendiente de Dani.
+
+Lo vigilan `backend/tests/test_mercadillo.py` (el servidor) y, simulando también la app de iPhone,
+`frontend/e2e/mercadillo-bloqueo.spec.js`, `frontend/e2e/mercadillo-acceso.spec.js` y `frontend/e2e/ios-sin-pagos.spec.js`.
+
+**Lo que Apple exige a una app con contenido de usuarios y dónde se ve cada cosa** (los cinco puntos de su mensaje tipo de
+la regla 1.2, más el contacto que pide el texto de la regla; los números son los de la lista de arriba):
+- *Aceptar unas condiciones que digan que no se tolera el contenido ofensivo ni a los usuarios abusivos* → punto 1. En la
+  app: Cuenta → «Mercadillo de repartidores» → la pantalla de normas con «Acepto las normas». Una de las normas dice «No se
+  tolera el contenido ofensivo ni el acoso: quien lo haga se queda sin mercadillo» (`NORMAS`, `Mercadillo.jsx`), y desde
+  ahí se abren los Términos, que lo dicen entero («Tolerancia cero», `legal/Terminos.jsx` y `en/TermsEn.jsx`). Además, la
+  casilla «Acepto los Términos…» del alta es obligatoria (`Registro.jsx`, `AltaRapida.jsx`).
+- *Un filtro del contenido ofensivo* → punto 2. En la app: al publicar, el anuncio queda «En revisión» en «Mis anuncios» y
+  nadie más lo ve hasta que Dani lo aprueba (nace `pendiente` en `merc_crear` y solo lo publica `admin_mercadillo_anuncio`;
+  corregir uno publicado lo devuelve a revisión, `merc_cambiar`); y un anuncio o un mensaje con un insulto de la lista no
+  se envía: sale el aviso en rojo.
+- *Poder denunciar* → punto 3. En la app: «Denunciar» junto a «Bloquear a…», y la banderita de arriba, en el anuncio y en
+  la conversación.
+- *Poder bloquear a un usuario abusivo; el bloqueo quita su contenido al instante y avisa al desarrollador* → punto 4. En
+  la app: «Bloquear a …» → «Bloquear»; después, «Personas bloqueadas» → «Desbloquear».
+- *Actuar sobre las denuncias en 24 horas, retirando el contenido y expulsando a quien lo puso* → las 24 horas son un
+  compromiso de Dani (Pendiente de Dani, 1); las herramientas están en Negocio → Mercadillo: «Retirar el anuncio», «Cerrar
+  la conversación», «No incumple» y «Quitar del mercadillo» (punto 5). **Ese panel no está en la app de iPhone** (es de la
+  web y solo lo ve el super-admin): el revisor no lo puede ver. Lo que sí se ve en la app es lo que lee quien se queda sin
+  acceso: el aviso con el motivo y a dónde escribir.
 - *Un contacto publicado.* `contacto@flotadsp.com` en la pestaña Cuenta, en los Términos y en la Privacidad (`marca.js`).
 
 ### Pasos para sacarlo si Apple rechaza
