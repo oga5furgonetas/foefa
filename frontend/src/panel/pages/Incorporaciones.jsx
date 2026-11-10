@@ -109,6 +109,7 @@ function normaliza(data) {
 
 export default function Incorporaciones() {
   const { center, centers } = useOutletContext() || {}
+  const centroElegido = center && center !== 'Todos' ? center : ''   // a quien no tiene centro se le pone este (R36)
   const [d, setD] = useState(null)
   const [err, setErr] = useState('')
   const [q, setQ] = useState('')
@@ -557,7 +558,7 @@ export default function Incorporaciones() {
       {(paso && paso !== 'papeles' && !motivo) ? (
         <div className="space-y-2">
           {deAbajo.map((p) => (
-            <Ficha key={p.id} p={p} motivosCat={d.plantilla.motivos} nombres={d.estado_nombre}
+            <Ficha key={p.id} p={p} centroElegido={centroElegido} motivosCat={d.plantilla.motivos} nombres={d.estado_nombre}
               abierta={abierta === p.id}
               onAbrir={() => setAbierta(abierta === p.id ? null : p.id)}
               onGuardar={(c) => editarIncorporacion(p.id, c).then(cargar)
@@ -586,7 +587,7 @@ export default function Incorporaciones() {
               </div>
               <div className="mt-2 space-y-2">
                 {gente.map((p) => (
-                  <Ficha key={p.id} p={p} motivosCat={d.plantilla.motivos} nombres={d.estado_nombre}
+                  <Ficha key={p.id} p={p} centroElegido={centroElegido} motivosCat={d.plantilla.motivos} nombres={d.estado_nombre}
                     abierta={abierta === p.id}
                     onAbrir={() => setAbierta(abierta === p.id ? null : p.id)}
                     onGuardar={(c) => editarIncorporacion(p.id, c).then(cargar)
@@ -612,7 +613,8 @@ export default function Incorporaciones() {
 }
 
 /* ── UNA PERSONA ─────────────────────────────────────────────────────────── */
-function Ficha({ p, motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje }) {
+function Ficha({ p, centroElegido = '', motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje }) {
+  const sinCentro = !String(p.centro || '').trim()
   /* Los estados vienen ya resueltos del servidor, con lo que dice el listado de
      la ETT traducido: si pone «falta el alta en la Seguridad Social», ese papel
      llega en «falta» sin que nadie lo marque. */
@@ -660,9 +662,11 @@ function Ficha({ p, motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje 
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <span className="text-[13.5px] font-semibold text-dark-100">{p.nombre}</span>
-            {/* Sin nave sale en todas (10-11-2026), y marcada, como en Conductores: así se ve a quién ponérsela. */}
-            {!String(p.centro || '').trim() && (
-              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">sin nave</span>
+            {/* Sin centro sale en todos (10-11-2026), y marcada, como en Conductores: así se ve a quién ponérselo.
+                Al abrirla se le puede poner el de arriba (R36). */}
+            {sinCentro && (
+              <span title={centroElegido ? `Ábrela para ponerla en ${centroElegido}` : 'Sale en la lista de todos los centros'}
+                className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">sin centro</span>
             )}
             {/* Sin avisar: un punto, no una frase en naranja repetida en cada
                 fila. La frase entera la lleva el título (`title`). */}
@@ -755,6 +759,19 @@ function Ficha({ p, motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje 
             {p.idper && <span>IDPER {p.idper}</span>}
             {p.centro && <span>{p.centro}</span>}
           </div>
+          {/* PONERLE EL CENTRO (10-11-2026, R36): sin centro sale en la lista de todos y entra en las tandas de
+              todos; solo se quitaba volviendo a pegar el listado con su Sede. Con un centro elegido arriba, ese. */}
+          {sinCentro && (
+            <p className="flex flex-wrap items-center gap-2 text-[12px] text-amber-300">
+              Sin centro: sale en la lista de todos los centros.
+              {centroElegido && (
+                <button onClick={() => onGuardar({ centro: centroElegido })}
+                  className="rounded-lg border border-amber-500/40 px-2.5 py-1 text-[12px] font-semibold text-amber-200 hover:bg-amber-500/10">
+                  Ponerla en {centroElegido}
+                </button>
+              )}
+            </p>
+          )}
 
           <Cuenta p={p} />
 
@@ -879,19 +896,22 @@ function Mensaje({ msg, onCerrar, onEnviado, ronda, onSaltar }) {
 }
 
 /* ── ALTA A MANO ─────────────────────────────────────────────────────────── */
-/* CON SU NAVE (10-11-2026, revisión de la flota propia, equipo-4): se guardaba sin centro y, con una nave elegida
-   arriba, la persona recién añadida no salía en la lista. Ahora nace en la nave de arriba y, con «Todos», se pide. */
+/* CON SU CENTRO (10-11-2026, revisión de la flota propia, equipo-4): se guardaba sin centro y, con un centro elegido
+   arriba, la persona recién añadida no salía en la lista. Ahora nace en el centro de arriba y, con «Todos», se pide.
+   EL DE ARRIBA AL ENVIAR, NO AL ABRIR (corrección, R6/R35): la tarjeta no tapa el selector de arriba y no se vuelve a
+   montar al cambiarlo; con el centro guardado al abrirla, decía «Se añade en DGA1» y lo mandaba a OGA5. */
 function Alta({ center, centers, onHecho, onCerrar }) {
   const naves = Array.isArray(centers) ? centers.filter(Boolean) : []
   const fija = center && center !== 'Todos' ? center : (naves.length === 1 ? naves[0] : '')
-  const [f, setF] = useState({ nombre: '', telefono: '', ett: '', dni: '', falta_texto: '', centro: fija })
+  const [f, setF] = useState({ nombre: '', telefono: '', ett: '', dni: '', falta_texto: '', centro: '' })
   const [err, setErr] = useState('')
   const [yendo, setYendo] = useState(false)
-  const faltaNave = !fija && naves.length > 1 && !f.centro
+  const centro = fija || f.centro          // el que se enseña es el que se manda
+  const faltaNave = !centro && naves.length > 1
 
   const enviar = async () => {
     setYendo(true); setErr('')
-    try { await altaIncorporacion(f.centro ? f : { ...f, centro: undefined }); onHecho() } catch (e) {
+    try { await altaIncorporacion({ ...f, centro: centro || undefined }); onHecho() } catch (e) {
       setErr(e?.response?.data?.detail || 'No se ha podido dar de alta.')
     } finally { setYendo(false) }
   }
@@ -921,10 +941,10 @@ function Alta({ center, centers, onHecho, onCerrar }) {
         </div>
         {!fija && naves.length > 1 && (
           <div>
-            <label className="label" htmlFor="alta-incorporacion-nave">Nave *</label>
-            <select id="alta-incorporacion-nave" className="input py-1.5 text-[12.5px]" value={f.centro}
+            <label className="label" htmlFor="alta-incorporacion-centro">Centro *</label>
+            <select id="alta-incorporacion-centro" className="input py-1.5 text-[12.5px]" value={f.centro}
               onChange={(e) => setF({ ...f, centro: e.target.value })}>
-              <option value="">Elige la nave</option>
+              <option value="">Elige el centro</option>
               {naves.map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </div>
