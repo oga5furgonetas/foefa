@@ -177,11 +177,24 @@ ANUNCIO_OFENSIVO = "Ese anuncio no se puede enviar: quita los insultos o el cont
 # `Me`: los selectores de variación de los emojis, el «une grafemas»). Metido dentro de una palabra, uno de estos la
 # partía en dos («gili» + «pollas»), el filtro no la reconocía y al otro le llegaba el insulto entero.
 _NO_SE_VE = ("Cf", "Mn", "Me")
+# Tampoco se ven (10-11-2026, sexta tanda): los rellenos de hangul, que para Unicode son «letras» (`Lo`) pero no se
+# pintan (la normalización convierte U+3164 y U+FFA0 en U+1160: están los cuatro), y los caracteres de control (`Cc`)
+# MENOS el tabulador, el salto de línea y el retorno de carro, que separan palabras como siempre.
+_RELLENOS = frozenset("ᅟᅠㅤﾠ")
+_SEPARAN = frozenset("\t\n\r")
+# Límite conocido: DOS trucos a la vez en el mismo texto (un invisible dentro de una palabra y otro entre dos) no casan
+# en ninguna lectura («hi·jo de·puta»: quitados, «hijo deputa»; como espacio, «hi jo de puta»). Eso se lee pegado igual
+# que escribirlo pegado, que este filtro de lista tampoco para; lo cubren la revisión del anuncio y «Denunciar».
+
+
+def _no_se_ve(c: str) -> bool:
+    cat = unicodedata.category(c)
+    return cat in _NO_SE_VE or c in _RELLENOS or (cat == "Cc" and c not in _SEPARAN)
 
 
 def _palabras(texto, invisible: str = "") -> str:
     """El texto como lo compara el filtro: en minúsculas, sin tildes (la ñ se queda: «año» no es «ano»), sin los
-    caracteres que no se ven (`_NO_SE_VE`: por defecto se quitan y no parten una palabra; con `invisible=" "` cada uno
+    caracteres que no se ven (`_no_se_ve`: por defecto se quitan y no parten una palabra; con `invisible=" "` cada uno
     cuenta como un espacio) y palabra a palabra, con un espacio a cada lado («¡Hijo de PUTA!» → « hijo de puta »). Así
     una entrada de la lista solo casa con palabras enteras, nunca con un trozo de otra. Es una COPIA para comparar: lo
     que se guarda es lo que se escribió, con sus emojis."""
@@ -191,7 +204,7 @@ def _palabras(texto, invisible: str = "") -> str:
             plano[-1] = "ñ"
         elif unicodedata.combining(c):                          # una tilde: se quita en las dos lecturas
             continue
-        elif unicodedata.category(c) in _NO_SE_VE:
+        elif _no_se_ve(c):
             if invisible:
                 plano.append(invisible)
         else:

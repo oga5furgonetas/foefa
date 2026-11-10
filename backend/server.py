@@ -57068,9 +57068,13 @@ async def _merc_contacto(clave: str) -> Optional[dict]:
         org = await get_org(clave[2:])
         if not org:
             return None
-        if org.get("baja_solicitada_en") and not await global_db.admin_users.count_documents(
-                {"org_id": org.get("id") or clave[2:], "disabled": {"$ne": True}}):
-            return None
+        if org.get("baja_solicitada_en"):
+            # Con la baja pedida, `organizations.email` puede ser el de quien la pidió (el que registró la cuenta):
+            # se le escribe a un usuario que SIGUE (el primero por `id`, siempre el mismo), como en la rama `a:`.
+            u = await global_db.admin_users.find_one(
+                {"org_id": org.get("id") or clave[2:], "disabled": {"$ne": True}},
+                {"_id": 0, "email": 1, "username": 1}, sort=[("id", 1)])
+            return {"correo": u.get("email") or u.get("username")} if u else None
         return {"correo": org.get("email")}
     if clave.startswith("a:"):
         _p, _org, admin_id = clave.split(":", 2)

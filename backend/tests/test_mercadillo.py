@@ -2448,6 +2448,46 @@ def test_las_dos_lecturas_de_los_invisibles_no_paran_lo_que_no_entraba():
     assert mc.ofensivo(familia) is False and mc.mensaje(familia) == familia
 
 
+# DOS CLASES MÁS QUE NO SE VEN (10-11-2026, sexta tanda): los rellenos de hangul (para Unicode son letras, `Lo`, pero no se
+# pintan; la normalización convierte unos en otros) y los caracteres de control (`Cc`) menos el tabulador, el salto de
+# línea y el retorno de carro, que separan palabras como siempre. Con las dos lecturas de siempre.
+RELLENOS = {"U+115F": "ᅟ", "U+1160": "ᅠ", "U+3164": "ㅤ", "U+FFA0": "ﾠ"}
+CONTROLES = {"U+0001": "\x01", "U+0008": "\x08", "U+000B": "\x0b", "U+001F": "\x1f", "U+007F": "\x7f",
+             "U+0085": "\x85", "U+009F": "\x9f"}
+
+
+@pytest.mark.parametrize("texto", ["hijo deㅤputa", "giliㅤpollas", "gili\u0001pollas", "hijo de\u0085puta",
+                                   "hijo\nde\nputa", "hijo\tde\tputa", "hijo\r\nde puta"])
+def test_los_rellenos_de_hangul_y_los_controles_tampoco_se_saltan_el_filtro(texto):
+    assert mc.ofensivo(texto) is True
+    with pytest.raises(mc.Invalido) as e:
+        mc.mensaje(texto)
+    assert str(e.value) == MENSAJE_OFENSIVO
+
+
+def test_los_rellenos_y_los_controles_cuentan_como_invisibles_y_el_tabulador_y_el_salto_no():
+    for nombre, c in {**RELLENOS, **CONTROLES}.items():
+        assert unicodedata.category(c) in ("Lo", "Cc"), nombre
+        for frase in mc.OFENSIVO:
+            partida = " ".join(p[:len(p) // 2] + c + p[len(p) // 2:] for p in frase.split(" "))
+            assert mc.ofensivo(partida) and mc.ofensivo(frase.replace(" ", c)), (nombre, frase)
+        # Lo que no entraba sigue sin entrar, con el invisible delante, detrás o tras la primera letra.
+        for texto in [t for t in NO_ENTRA if isinstance(t, str) and t.strip()]:
+            for i in (0, 1, len(texto)):
+                assert mc.ofensivo(texto[:i] + c + texto[i:]) is False, (nombre, texto, i)
+        assert mc._palabras(f"a{c}ño") == " año " and mc._palabras(f"a{c}ño", " ") == " a ño ", nombre
+    # La normalización convierte unos rellenos en otros: todos acaban siendo invisibles, quitados o como espacio.
+    assert {unicodedata.normalize("NFKD", c) for c in RELLENOS.values()} <= set(RELLENOS.values())
+    # El tabulador, el salto de línea y el retorno de carro separan, como siempre (no juntan nada).
+    for c in "\t\n\r":
+        assert mc._palabras(f"gili{c}pollas") == " gili pollas " and mc.ofensivo(f"gili{c}pollas") is False
+    assert mc.ofensivo("chaleco\tnegro") is False and mc._palabras("chaleco\tnegro") == " chaleco negro "
+    assert mc.ofensivo("año") is False and mc.ofensivo("aㅤño") is False
+    normal = "Hola,\nvendo el chaleco negro.\r\nEstá de puta madre, casi sin usar.\n\tUn saludo"
+    assert mc.ofensivo(normal) is False and mc.mensaje(normal) == normal
+    assert all(mc.ofensivo(t) for t in CON_INVISIBLE + ENTRE_PALABRAS)
+
+
 def test_el_filtro_mira_el_titulo_la_descripcion_y_la_zona_del_anuncio_y_no_los_nombres():
     base = {"titulo": "Chaleco negro", "categoria": "ropa", "estado_articulo": "como_nuevo", "precio": "15",
             "descripcion": "Está de puta madre, casi sin usar.", "zona": "Coruña (zona del Moro)", "fotos": ["a"], "acepto": True}
@@ -3024,7 +3064,9 @@ async def test_el_correo_de_cada_uno_solo_sale_si_sigue_teniendo_cuenta(mundo, m
     }
     assert {c: await _CORREO_DE_REAL(c) for c in casos} == casos
     # Una lectura por persona, por su id y con lo justo (nada de traerse la ficha o el usuario enteros).
-    assert de_usuarios[0] == ({"id": "a9"}, {"_id": 0, "email": 1, "username": 1, "disabled": 1}) and len(de_usuarios) == 5
+    # (La primera es la de «o:o2», con la baja pedida: busca un usuario de esa cuenta que siga, y no queda ninguno.)
+    assert de_usuarios[0] == ({"org_id": "o2", "disabled": {"$ne": True}}, {"_id": 0, "email": 1, "username": 1})
+    assert de_usuarios[1] == ({"id": "a9"}, {"_id": 0, "email": 1, "username": 1, "disabled": 1}) and len(de_usuarios) == 6
     assert de_fichas[0] == ({"id": "d1"}, {"_id": 0, "email": 1, "active": 1}) and len(de_fichas) == 6
     # Vuelve a estar en activo (o deja de estarlo): se mira cada vez, no se recuerda.
     await mundo.t["drivers"].update_one({"id": "d3"}, {"$set": {"active": True}})
@@ -3194,6 +3236,43 @@ async def test_el_socio_que_sigue_con_la_cuenta_no_se_queda_sin_avisos(mundo, mo
     await mundo.g["admin_users"].update_one({"id": "a1"}, {"$set": {"disabled": True}})
     assert await server._merc_contacto("o:o1") is None
     assert await server._merc_movil_listo("o:o1") == [] and await _CORREO_DE_REAL("o:o1") == ""
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_si_pide_la_baja_el_del_correo_de_la_cuenta_se_le_escribe_al_socio_que_sigue(mundo, monkeypatch):
+    """El correo de la cuenta (`organizations.email`) es el de quien la registró. Si es ESE quien pide la baja y el socio
+    sigue, el mercadillo le escribe al socio (el primer usuario en activo por `id`) y a quien se ha ido, nada: ni el
+    mensaje de Ana ni el «Te hemos quitado el acceso…» al expulsar la cuenta."""
+    monkeypatch.setattr(server, "_merc_correo_de", _CORREO_DE_REAL)
+    await _abrir(mundo)
+    socio = {"sub": "a2", "role": "admin", "org_id": "o1", "name": "Socio"}
+    mundo.g["admin_users"] = Col([{"id": "a3", "username": "tercero@x.es", "org_id": "o1"},
+                                  {"id": "a1", "username": "pepe@x.es", "email": "pepe@x.es", "org_id": "o1",
+                                   "hashed_password": server.hash_password("clave-de-pepe")},
+                                  {"id": "a2", "username": "socio-user", "email": "socio@x.es", "org_id": "o1"}])
+    server._public_actions.pop("borrar:a1", None)
+    await mundo.g["admin_users"].update_one({"id": "a3"}, {"$set": {"disabled": True}})
+    # EL CONTROL, sin baja: el correo de la cuenta, como siempre.
+    assert (await mundo.g["organizations"].find_one({"id": "o1"}))["email"] == "pepe@x.es"
+    assert await server._merc_contacto("o:o1") == {"correo": "pepe@x.es"}
+    assert await server.borrar_cuenta({"password": "clave-de-pepe"}, PEPE) == {"ok": True}
+    # Con la baja de Pepe: el socio (su `email`, no su usuario; a3 está desactivado y no cuenta).
+    assert await server._merc_contacto("o:o1") == {"correo": "socio@x.es"}
+    a = await _publicado(socio, "Carretilla")
+    antes = len(mundo.enviados)
+    await server.merc_contactar(a["id"], {"texto": "¿Sigue disponible?"}, ANA)
+    await _expulsar("pepe")
+    para = [m.to for m in mundo.enviados[antes:]]
+    assert "pepe@x.es" not in para and para.count("socio@x.es") == 2, para
+    # Sin `email`, su usuario (como en la rama `a:`); y el primero por `id`, siempre el mismo.
+    await mundo.g["admin_users"].update_one({"id": "a2"}, {"$unset": {"email": ""}})
+    await mundo.g["admin_users"].update_one({"id": "a3"}, {"$unset": {"disabled": ""}})
+    assert await server._merc_contacto("o:o1") == {"correo": "socio-user"}
+    await mundo.g["admin_users"].update_one({"id": "a2"}, {"$set": {"disabled": True}})
+    assert await server._merc_contacto("o:o1") == {"correo": "tercero@x.es"}
+    # Sin nadie en activo: None.
+    await mundo.g["admin_users"].update_one({"id": "a3"}, {"$set": {"disabled": True}})
+    assert await server._merc_contacto("o:o1") is None
 
 
 @pytest.mark.asyncio(loop_scope="session")
