@@ -796,6 +796,56 @@ async def test_se_bloquea_tambien_desde_un_anuncio_que_ya_no_esta_publicado(mund
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_responder_lee_los_bloqueos_una_sola_vez_y_contesta_lo_de_siempre(mundo, monkeypatch):
+    """Cada mensaje leía DOS veces la lista de bloqueos: una para encontrar la conversación y otra para ver si se le
+    puede escribir. Con una basta; y lo que se contesta en cada caso es lo mismo que antes."""
+    await _abrir(mundo)
+    a = await _publicado(ANA, "Soporte de móvil")
+    cid = (await server.merc_contactar(a["id"], {"texto": "¿Sigue?"}, PEPE))["conversacion_id"]
+    leidos, de_verdad = [], server._merc_bloqueos
+
+    async def contando(yo):
+        leidos.append(yo["clave"])
+        return await de_verdad(yo)
+    monkeypatch.setattr(server, "_merc_bloqueos", contando)
+
+    async def responder(quien, codigo=None, texto=None) -> None:
+        leidos.clear()
+        if codigo:
+            await _falla(server.merc_responder(cid, {"texto": "hola"}, quien), codigo, texto)
+        else:
+            assert (await server.merc_responder(cid, {"texto": "hola"}, quien))["texto"] == "hola"
+        assert leidos == [(await server._merc_yo(quien))["clave"]], (quien["name"], codigo, leidos)
+    # Sin bloqueos: escribe cada uno.
+    await responder(ANA)
+    await responder(PEPE)
+    # Ana bloquea a Pepe: a ella, que desbloquee; a él, «cerrada».
+    de_ana = (await server.merc_bloquear({"conversacion_id": cid}, ANA))["bloqueo"]
+    await responder(ANA, 400, HAS_BLOQUEADO)
+    await responder(PEPE, 403, CERRADA)
+    # Los dos se bloquean: a cada uno, lo suyo.
+    de_pepe = (await server.merc_bloquear({"conversacion_id": cid}, PEPE))["bloqueo"]
+    await responder(ANA, 400, HAS_BLOQUEADO)
+    await responder(PEPE, 400, HAS_BLOQUEADO)
+    # Solo queda el de Pepe: ahora la «cerrada» es para ella.
+    await server.merc_desbloquear(de_ana["id"], ANA)
+    await responder(ANA, 403, CERRADA)
+    await server.merc_desbloquear(de_pepe["id"], PEPE)
+    await responder(ANA)
+    # Dani, que modera, igual: una lectura (y a él tampoco le deja escribir a quien le ha bloqueado).
+    de_dani = await _publicado(DANI, "iPhone 18 Pro · 256 GB", "1.300")
+    cid = (await server.merc_contactar(de_dani["id"], {"texto": "¿Lo tienes?"}, ANA))["conversacion_id"]
+    await responder(DANI)
+    await server.merc_bloquear({"conversacion_id": cid}, ANA)
+    await responder(DANI, 403, CERRADA)
+    assert len(mundo.g["mercadillo_mensajes"].docs) == 6                     # el primero de cada conversación y los 4 que entraron
+    # La conversación de otros no existe para nadie más, y ahí no hace falta más de una lectura tampoco.
+    leidos.clear()
+    await _falla(server.merc_responder(cid, {"texto": "hola"}, LUIS), 404, "Esa conversación no existe")
+    assert len(leidos) <= 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_tope_de_bloqueos_al_dia_y_de_personas_bloqueadas(mundo):
     await _abrir(mundo)
     a, de_luis = await _publicado(ANA, "Soporte de móvil"), await _publicado(LUIS, "Botas")

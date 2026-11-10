@@ -57126,8 +57126,9 @@ async def _merc_a_dani(asunto: str, texto: str) -> None:
 #   · Si A bloquea a B, ninguno ve los anuncios del otro (lista, ficha y fotos: 404) y ninguno escribe al otro.
 #   · En el buzón de A las conversaciones con B desaparecen (y no cuentan sin leer); en el de B siguen, que es
 #     su historial, pero cerradas.
-#   · A B no se le avisa ni se le dice quién: ve lo mismo que si el anuncio se hubiera quitado o la moderación
-#     hubiera cerrado la conversación.
+#   · A B no se le avisa ni se le dice quién. NO ve lo mismo que cuando cierra la moderación (esa avisa a los dos y
+#     deja ver el anuncio): con un bloqueo no hay aviso, la conversación sale cerrada y el anuncio «ya no está».
+#     No se le puede ocultar del todo: quien compara lo deduce.
 #   · Desbloquear lo deshace todo: bloquear no toca ni un anuncio ni una conversación (solo pone a 0 lo que A
 #     tenía sin leer de B); todo lo demás sale de mirar esta lista, y al borrar el bloqueo vuelve.
 #   · Dani («fds») modera: lo ve todo siempre y no bloquea. Pero se le puede bloquear como vendedor, y entonces
@@ -57136,7 +57137,7 @@ async def _merc_a_dani(asunto: str, texto: str) -> None:
 #     ve cada bloqueo en Negocio y recibe un aviso.
 # Hacia la web nadie se nombra por su clave: se bloquea «a quien vende este anuncio» o «a la otra persona de esta
 # conversación», y lo que vuelve es su nombre corto.
-_MERC_CERRADA = "Esta conversación está cerrada"         # lo mismo si la cierra la moderación que un bloqueo
+_MERC_CERRADA = "Esta conversación está cerrada"         # el mismo TEXTO si la cierra la moderación que con un bloqueo
 
 
 async def _merc_bloqueos(yo: dict) -> tuple:
@@ -57154,10 +57155,12 @@ def _merc_otro(c: dict, yo: dict) -> dict:
     return vendedor if comprador.get("clave") == yo["clave"] else comprador
 
 
-async def _merc_escribirle(yo: dict, otra: str, si_me_ha_bloqueado: HTTPException) -> None:
+async def _merc_escribirle(yo: dict, otra: str, si_me_ha_bloqueado: HTTPException,
+                           bloqueos: Optional[tuple] = None) -> None:
     """Ninguno de los dos escribe al otro con un bloqueo por medio. A quien bloqueó se le dice cómo deshacerlo;
-    a quien está bloqueado, lo que toque en cada sitio, que nunca es «te han bloqueado»."""
-    mios, a_mi = await _merc_bloqueos(yo)
+    a quien está bloqueado, lo que toque en cada sitio, que nunca es «te han bloqueado».
+    `bloqueos`: lo que dio `_merc_bloqueos(yo)`, si quien llama ya lo ha leído (así no se lee dos veces)."""
+    mios, a_mi = bloqueos if bloqueos is not None else await _merc_bloqueos(yo)
     if otra in mios:
         raise HTTPException(400, "Has bloqueado a esta persona. Desbloquéala para escribirle.")
     if otra in a_mi:
@@ -57401,14 +57404,15 @@ async def merc_cambiar(anuncio_id: str, data: dict = Body(default={}), user: dic
     return {"ok": True, "estado": "pendiente"}
 
 
-async def _merc_conv_mia(conv_id: str, yo: dict, con_bloqueadas: bool = False) -> tuple:
+async def _merc_conv_mia(conv_id: str, yo: dict, con_bloqueadas: bool = False, bloqueos: Optional[tuple] = None) -> tuple:
     """(la conversación, ¿la otra persona me ha bloqueado?), si es suya. Las que tiene con alguien a quien HA
     BLOQUEADO no están (el mismo 404 que una ajena: tampoco salen en su buzón), salvo `con_bloqueadas`, que es
-    para lo que tiene que encontrarlas igual: decirle que desbloquee si escribe y bloquear otra vez sin fallar."""
+    para lo que tiene que encontrarlas igual: decirle que desbloquee si escribe y bloquear otra vez sin fallar.
+    `bloqueos`: lo que dio `_merc_bloqueos(yo)`, si quien llama ya lo ha leído (así no se lee dos veces)."""
     c = await global_db[_MERC_CONVS].find_one({"id": str(conv_id)[:64]}, {"_id": 0})
     if not c or yo["clave"] not in ((c.get("comprador") or {}).get("clave"), (c.get("vendedor") or {}).get("clave")):
         raise HTTPException(404, "Esa conversación no existe")
-    bloqueados, me_bloquean = await _merc_bloqueos(yo)
+    bloqueados, me_bloquean = bloqueos if bloqueos is not None else await _merc_bloqueos(yo)
     otra = _merc_otro(c, yo).get("clave")
     if otra in bloqueados and not con_bloqueadas:
         raise HTTPException(404, "Esa conversación no existe")
@@ -57476,8 +57480,8 @@ async def merc_contactar(anuncio_id: str, data: dict = Body(default={}), user: d
     if (a.get("vendedor") or {}).get("clave") == yo["clave"]:
         raise HTTPException(400, "Es tu anuncio")
     # Con un bloqueo por medio no se le escribe, y se mira ANTES de abrir la conversación (que no quede una vacía
-    # ni un interesado de más). A quien está bloqueado, lo mismo que si el anuncio se hubiera vendido; a Dani,
-    # que el anuncio sí lo ve porque modera, que está cerrada.
+    # ni un interesado de más). A quien está bloqueado se le contesta con el texto de un anuncio vendido (no se le
+    # dice que es un bloqueo); a Dani, que el anuncio sí lo ve porque modera, que está cerrada.
     await _merc_escribirle(yo, (a.get("vendedor") or {}).get("clave"),
                            HTTPException(403, _MERC_CERRADA) if yo["tipo"] == "fds"
                            else HTTPException(404, "Ese anuncio ya no está a la venta"))
@@ -57540,7 +57544,8 @@ async def merc_conversacion(conv_id: str, user: dict = Depends(require_any_auth)
         await global_db[_MERC_ANUNCIOS].find_one({"id": c["anuncio_id"]}, {"_id": 0}) or {})
     return {"id": c["id"], "soy": "vendedor" if soy_vendedor else "comprador",
             "con": (c["comprador"] if soy_vendedor else c["vendedor"]).get("nombre"),
-            # Cerrada por la moderación o porque la otra persona le ha bloqueado: se pinta igual y no se dice cuál.
+            # Cerrada por la moderación o porque la otra persona le ha bloqueado: el mismo campo, y no se le dice
+            # cuál (quien compara lo deduce: con un bloqueo su anuncio le sale «borrado» y no hay aviso de FDS).
             "bloqueada": bool(c.get("bloqueada")) or me_bloquea,
             "anuncio": _merc_vista(a, yo, datetime.now(timezone.utc)) if a else {"titulo": c.get("anuncio_titulo"), "estado": "borrado"},
             "mensajes": [{"id": m["id"], "mio": m["de"] == yo["clave"], "texto": m["texto"], "ts": m["ts"]} for m in msgs]}
@@ -57549,11 +57554,12 @@ async def merc_conversacion(conv_id: str, user: dict = Depends(require_any_auth)
 @api_router.post("/mercadillo/conversacion/{conv_id}")
 async def merc_responder(conv_id: str, data: dict = Body(default={}), user: dict = Depends(require_any_auth)):
     yo = await _merc_dentro(user)
-    c, _ = await _merc_conv_mia(conv_id, yo, con_bloqueadas=True)
+    bloqueos = await _merc_bloqueos(yo)                          # una lectura: vale para encontrarla y para escribirle
+    c, _ = await _merc_conv_mia(conv_id, yo, con_bloqueadas=True, bloqueos=bloqueos)
     if c.get("bloqueada"):
         raise HTTPException(403, _MERC_CERRADA)
     # Con un bloqueo por medio: quien bloqueó, que desbloquee; quien está bloqueado, «cerrada», como arriba.
-    await _merc_escribirle(yo, _merc_otro(c, yo).get("clave"), HTTPException(403, _MERC_CERRADA))
+    await _merc_escribirle(yo, _merc_otro(c, yo).get("clave"), HTTPException(403, _MERC_CERRADA), bloqueos=bloqueos)
     try:
         texto = mercadillo.mensaje(_dict_cuerpo(data).get("texto"))
     except mercadillo.Invalido as e:
