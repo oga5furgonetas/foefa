@@ -872,7 +872,7 @@ Thank you for your time.
 Lo respalda: `RutaCuenta.jsx` (`BorrarMiCuenta`, al final de la pestaña) y sus textos en inglés (`lib/textosRutaB.js`);
 `backend/server.py`, `borrar_cuenta` (`/auth/borrar-cuenta`: pide la contraseña, desactiva al momento, solo cuentas de quien
 reparte); `Registro.jsx` (en el iPhone el alta es siempre la de quien reparte); `delete_driver_account`
-(`/auth/driver-account/{id}`, lo que usa Panel → Conductores); la frase entre `<…>` (`_merc_baja`, que llama
+(`/auth/driver-account/{id}`, lo que usa Panel → Conductores); la frase entre `<…>` (`_merc_baja`, a la que llama
 `borrar_cuenta`), con el plan B fusionado.
 
 ### Las notas de revisión con el plan B (el punto 6 nuevo)
@@ -957,17 +957,19 @@ Quedan 44 caracteres libres: cualquier frase que se añada obliga a quitar otra.
 escribir si se pasan de 4.000.
 
 ### Pendiente de Dani (de este plan B)
-Tres decisiones que son suyas. Aquí va lo que hay, sin decidir por él.
+Cuatro decisiones que son suyas (la 1, la 2, la 3 y la 7). Aquí va lo que hay, sin decidir por él.
 
 **1. Revisar las denuncias del mercadillo en 24 horas (es él quien modera).**
 Con el plan B, la propia app (las normas del mercadillo y los Términos) dirá «Lo revisamos en 24 horas como mucho», y a Apple
-se le dice lo mismo. Es un compromiso de todos los días, también fines de semana y vacaciones: cuando llega una denuncia (al
-móvil si tiene puestos los avisos del mercadillo; si no, por correo al buzón de contacto), entrar en Negocio → Mercadillo y
-resolverla: retirar el anuncio, cerrar la conversación o «no incumple». Hay una red para los anuncios (con denuncias de 3
-personas distintas el anuncio se esconde solo hasta que lo mire), pero no para las conversaciones. Si no quiere atarse a eso,
-las otras salidas son dar a otra persona su mismo acceso de dueño (hoy solo modera el super-admin) o apagar el mercadillo en
-Negocio → Mercadillo (se apaga para todos, también en la web): sin mercadillo la app no tiene contenido de usuarios y la
-regla 1.2 no aplica. Sin su «sí» a las 24 horas no se puede mandar la respuesta de la regla 1.2 ni las notas de arriba.
+se le dice lo mismo. Es un compromiso de todos los días, también fines de semana y vacaciones, y es de una persona: el
+servidor no hace nada él solo cuando pasan las 24 horas. Cuando llega una denuncia (al móvil si tiene puestos los avisos del
+mercadillo; si no, por correo al buzón de contacto), entrar en Negocio → Mercadillo y resolverla: retirar el anuncio, cerrar
+la conversación o «No incumple»; y si lo denunciado es ofensivo o es acoso, además, «Quitar del mercadillo» a quien lo puso,
+que es lo que pide Apple y lo que dicen los Términos. Hay una red para los anuncios (con denuncias de 3 personas distintas el
+anuncio se esconde solo hasta que lo mire), pero no para las conversaciones. Si no quiere atarse a eso, las otras salidas
+son dar a otra persona su mismo acceso de dueño (hoy solo modera el super-admin) o apagar el mercadillo en Negocio →
+Mercadillo (se apaga para todos, también en la web): sin mercadillo la app no tiene contenido de usuarios y la regla 1.2 no
+aplica. Sin su «sí» a las 24 horas no se puede mandar la respuesta de la regla 1.2 ni las notas de arriba.
 
 **2. El tope de 15 paradas al día, que desde el 01-01-2027 alcanza también al iPhone.** Tal cual está en el servidor:
 - Hoy nadie tiene tope: la promoción dura hasta el 31-12-2026 incluido (`REP_GRATIS_HASTA`; lo dicen también la web y los
@@ -1004,28 +1006,58 @@ cancela aparte; y enviar los productos a revisión CON el build. Apple se queda 
 cambio, la app de iPhone podría enseñar el plan (hoy no puede decir ni una palabra) y la regla 3.1.3(b) quedaría cumplida.
 No es un trabajo de horas: son varios días de trabajo y otra revisión de Apple, con sus idas y vueltas.
 
-Y tres cosas más que han salido al repasar el código para escribir esto (no estaban en la lista, pero van en lo que se le
-dice a Apple):
+Y lo que ha salido al repasar el código para escribir esto (no estaba en la lista, pero va en lo que se le dice a Apple):
 
 **4. Los datos de quien borra su cuenta los borra Dani, a mano.** «Borrar mi cuenta» desactiva la cuenta al momento y manda
 un correo al buzón de contacto; el servidor no borra nada por su cuenta ni enseña la lista en ninguna pantalla (queda en
 `bajas_cuentas`). La app promete «en 30 días como mucho», y Apple pide además avisar al usuario cuando está hecho: hoy ese
-aviso no existe.
+aviso no existe. Visto de paso el 10-11, y sin tocar: `borrar_cuenta` desactiva **solo al usuario que pide la baja**; si
+esa cuenta tiene más de un usuario, los demás siguen entrando hasta que se borran los datos.
 
-**5. No hay forma de echar a una persona del mercadillo desde el panel.** Las normas dirán «quien lo haga se queda sin
-mercadillo» y Apple pide expulsar a quien publica contenido ofensivo. Hoy Dani puede retirar un anuncio y cerrar una
-conversación; para quitarle el mercadillo a una persona hay que tocar la base a mano, y a un conductor de empresa no se le
-puede quitar sin apagárselo a toda su empresa. Falta un «Quitar el mercadillo a esta persona» en Negocio → Mercadillo.
+**5. Quitarle el mercadillo a una persona: hecho.** Era lo que faltaba (las normas decían «quien lo haga se queda sin
+mercadillo» y no había botón: había que tocar la base a mano). Ya están «Quitar del mercadillo» y «Devolver el acceso» en
+Negocio → Mercadillo («Qué hay en la rama», 5). Lo que queda es usarlo: quitárselo a alguien lo decide Dani, caso a caso
+y siempre con un motivo, que es lo que se le dice a esa persona; y si ella escribe al contacto porque cree que es un error,
+hay que contestarle (se lo prometen el propio aviso y los Términos).
 
-**6. Que el revisor tenga algo que bloquear.** El día que se reenvíe tiene que haber un anuncio publicado que no sea de la
-cuenta de prueba (paso 4). Los anuncios caducan a los 30 días.
+**6. Que el revisor tenga a quién denunciar y bloquear, y que vea la pantalla de normas.** El día que se reenvíe tiene que
+haber un anuncio publicado que no sea de ninguna de las dos cuentas de prueba, y con esas dos cuentas no se entra al
+mercadillo después de desplegar (paso 5). Los anuncios caducan a los 30 días.
+
+**7. Las normas y el filtro le cambian el mercadillo a todo el mundo, no solo en el iPhone (decisión suya).**
+El mercadillo es una sola pantalla, la misma se abra desde donde se abra (la web, la app de Android o la de iPhone), y el
+filtro está en el servidor. En cuanto se despliegue:
+- Todo el que entre, también quien ya lo usaba, verá las normas y tendrá que pulsar «Acepto las normas» una vez; y otra
+  vez cada vez que se cambie `NORMAS_VERSION`.
+- Nadie podrá enviar un anuncio ni un mensaje con un insulto o una amenaza de la lista. Puede haber algún falso positivo
+  (una palabra que alguien usaba sin mala intención y que ya no pasa): la lista está en `backend/mercadillo.py` y se toca
+  ahí.
+- Cualquiera podrá bloquear a otra persona, y a Dani le llegará un aviso más por cada bloqueo si tiene los avisos del
+  mercadillo en el móvil.
+- No hay forma de dejarlo solo para el iPhone tal como está hecho: va todo junto en el despliegue. Si Dani no lo quiere
+  todavía en la web y en Android, hay que decirlo ANTES de desplegar.
+
+**8. Los límites que se conocen** (para no prometer de más, ni a Apple ni a los usuarios):
+- El acceso se le quita a una cuenta o a una ficha de conductor, no a una persona física: si vuelve con otra cuenta, o su
+  empresa le hace otra ficha, entra, y hay que quitárselo otra vez.
+- A quien se bloquea no se le avisa, pero puede deducirlo: la conversación le sale cerrada y el anuncio «ya no está».
+- El filtro es una lista básica de palabras: no entiende el contexto, no mira las fotos y se esquiva escribiendo raro. Para
+  lo demás están «Denunciar», «Bloquear» y quien modera.
+- La pantalla de normas la pone la web, no el servidor: una app o una web antigua (en caché) deja usar el mercadillo sin
+  haberlas aceptado hasta que se actualiza.
+- Las 24 horas dependen de una persona (punto 1).
+- «Borrar mi cuenta» desactiva solo al usuario que pide la baja (punto 4).
 
 ### Con lo que el revisor puede tropezar y este plan B no arregla
-Visto en el código el 10-11; ninguna de estas cosas está en la especificación del plan B.
-- **«Avisarme en el móvil» dentro del mercadillo** (`AvisosMovil`, `Mercadillo.jsx`): sale también en la app de iPhone (en
-  «Mensajes» y tras escribir a alguien o publicar) y allí no puede funcionar: la app no tiene avisos. Al pulsarlo contesta
-  «Este navegador no permite avisos. En iPhone, primero añade la app a la pantalla de inicio y ábrela desde ahí». El revisor
-  va a pasar por esa pantalla para probar el bloqueo. Convendría esconderlo dentro de la app (`esAppIOS()`).
+Visto en el código el 10-11. («Avisarme en el móvil», que estaba en esta lista, ya no sale dentro de la app de iPhone.)
+- **El mercadillo está solo en español.** La app de reparto está traducida; el mercadillo, no. Las notas y la respuesta le
+  dan al revisor el texto de cada botón con su traducción, pero las normas que tiene que aceptar las va a leer en español
+  (los Términos, que se abren desde ahí, sí salen en inglés cuando la app no está en español).
+- **El panel de moderación no está en la app de iPhone.** Las denuncias, la lista de bloqueos y «Quitar del mercadillo» están
+  en Negocio → Mercadillo, que es de la web y solo del super-admin: esa parte el revisor no la puede comprobar por sí mismo.
+  Si la pide, hacen falta capturas o un vídeo del panel, que no están hechos.
+- **Un mercadillo casi vacío.** Sin ningún anuncio ajeno publicado, el revisor no puede probar ni «Denunciar» ni «Bloquear»
+  (paso 5).
 - **El dictado y el manos libres** (el micro de la ficha de la parada, `MiRuta.jsx`, y el de la guía, `Navegacion.jsx`):
   usan el reconocimiento de voz del navegador de dentro de la app, si lo ofrece. `Info.plist` lleva el permiso del micrófono
   pero no el de reconocimiento de voz (`NSSpeechRecognitionUsageDescription`); si en un iPhone esos botones hacen algo, hay
@@ -1034,15 +1066,24 @@ Visto en el código el 10-11; ninguna de estas cosas está en la especificación
 
 ### Lo que no se ha podido comprobar
 Desde el código no se ve producción, ni App Store Connect, ni un iPhone. Antes de afirmar cada cosa a Apple:
-- **El bloqueo tal como quede fusionado.** Este kit lo describe según su especificación; los nombres de los botones se
-  cotejaron el 10-11 con la web a medio hacer («Bloquear a {nombre}», «Personas bloqueadas», «Desbloquear»). Repasar los
-  puntos 4 y 5 de la respuesta de la regla 1.2 y el punto 6 de las notas contra la app fusionada.
-- **Producción:** el mercadillo encendido y con un anuncio ajeno publicado; `REP_GRATIS_HASTA` y `REP_GRATIS_PARADAS` (el
-  código da 2026-12-31 y 15 si no hay variable); `PLAY_COBRO_ACTIVO` (el cobro en la app de Android); `CORREO_CONTACTO` (a
-  dónde llegan los avisos de moderación por correo); que Dani tiene puestos los avisos del mercadillo en el móvil.
+- **La rama, cerrada y con sus pruebas en verde.** Este kit se puso al día el 10-11 leyendo el código de la rama mientras
+  se cerraban sus últimos arreglos, y sin pasar las pruebas. Los textos de los botones y de los avisos que citan las
+  respuestas y las notas se cotejaron con `Mercadillo.jsx`, `Negocio.jsx`, `backend/mercadillo.py` y `backend/server.py`:
+  si alguno cambia después, hay que cambiarlo aquí. De lo último que entró, repasar contra el código fusionado: «Volver» en
+  las páginas legales dentro del iPhone, que la baja de la cuenta o de un conductor no borra ni la expulsión ni los
+  bloqueos, y lo que dice la Privacidad sobre cuándo se borra cada cosa.
+- **Nada de lo nuevo se ha visto funcionar en un iPhone ni en producción**: ni la pantalla de normas, ni el filtro, ni el
+  bloqueo, ni quitar el acceso. Lo que hay son sus pruebas (el servidor, y la web simulando la app de iPhone).
+- **Producción:** el mercadillo encendido y con un anuncio ajeno publicado; que nadie ha aceptado las normas con las cuentas
+  de prueba de Apple después de desplegar (paso 5); `REP_GRATIS_HASTA` y `REP_GRATIS_PARADAS` (el código da 2026-12-31 y 15
+  si no hay variable); `PLAY_COBRO_ACTIVO` (el cobro en la app de Android); `CORREO_CONTACTO` (a dónde llegan los avisos de
+  moderación por correo: sin él, y sin los avisos en el móvil, una denuncia solo queda apuntada en el panel); que Dani tiene
+  puestos los avisos del mercadillo en el móvil.
 - **App Store Connect:** que las capturas subidas son las 12 del repositorio; que el vídeo sigue adjunto; que las dos cuentas
-  de prueba siguen vivas y sin nadie bloqueado.
-- **En un iPhone de verdad con el build que se envíe:** la guía con voz, la ubicación, una entrega sin cobertura, y si salen
-  (y qué hacen) el dictado y el manos libres. Del vídeo del 03-11 solo se sabe que funcionan el escáner, la foto, la firma,
-  el alta y borrar la cuenta, con el build 16.
+  de prueba siguen vivas, sin nadie bloqueado y con acceso al mercadillo, y que la del conductor ve la casilla «Mercadillo»
+  en su portal (su empresa no lo tiene apagado).
+- **En un iPhone de verdad con el build que se envíe:** el mercadillo entero (las normas, bloquear y desbloquear, «Volver»
+  en una página legal); la guía con voz, la ubicación, una entrega sin cobertura, y si salen (y qué hacen) el dictado y el
+  manos libres. Del vídeo del 03-11 solo se sabe que funcionan el escáner, la foto, la firma, el alta y borrar la cuenta,
+  con el build 16.
 - **Que todas las cuentas de empresa siguen siendo de Dani** (la frase entre `<…>` de la pregunta 2 del cuestionario).
