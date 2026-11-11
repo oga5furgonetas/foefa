@@ -1,7 +1,8 @@
 /* diseño compacto */
 import { useEffect, useState } from 'react'
 import { ClipboardCheck, CalendarDays, CalendarClock, CalendarPlus, LogOut, Lock, Mail, Ban, ShoppingBag, RefreshCw, Route, Gift, ArrowLeft, Store, ChevronRight, Check } from 'lucide-react'
-import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, mercEstado, getTrabajarMas, DRIVER_TOKEN_KEY } from '../../services/api'
+import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, mercEstado, getTrabajarMas, getAssignedVehicle, DRIVER_TOKEN_KEY } from '../../services/api'
+import { tx } from '../../lib/idioma'
 import { lista } from '../../lib/lista'
 import { medirSeccion } from '../../lib/analitica'
 import { vigilarVersion } from '../../lib/versionApp'
@@ -139,6 +140,11 @@ export default function DriverPortal() {
   // null = apagada o todavía sin contestar. Con datos: {desde, n} para poder
   // poner el precio en la entrada del menú, que es lo que hace que se entre.
   const [tienda, setTienda] = useState(null)
+  /* LA FURGONETA DE HOY BAJO «HACER LA AUDITORÍA» (11-11-2026, tanda 2, E3 / portal_inicio-7). Decía siempre «Antes de
+     salir a ruta»: ni qué furgoneta le toca ni si ya la había mandado. El servidor ya lo sabe (/auth/me/assigned-vehicle,
+     con la asignación del día y `already_inspected`). null = sin asignación (o sin respuesta): el texto de siempre.
+     Lo de «hoy no sales» y «suspendido» ya estaba y manda sobre esto. */
+  const [hoyFurgo, setHoyFurgo] = useState(null)   // { matricula, enviada }
 
   /* LA TIENDA NO SE VE HASTA QUE SE ENCIENDE, y la decision es del servidor.
      Se pregunta al escaparate: si contesta `visible: false` no se pinta ni la
@@ -271,6 +277,12 @@ export default function DriverPortal() {
       .catch(() => setSinVer(0))
     mercEstado().then((r) => setMerc(r.data?.visible ? r.data : null)).catch(() => setMerc(null))
     getTrabajarMas().then((r) => setExtra(r.data || null)).catch(() => setExtra(null))
+    // Su furgoneta de hoy y si ya mandó la auditoría: se pide al volver al inicio, así que al terminar una sale ya
+    // «Enviada hoy». Si falla o no tiene furgoneta asignada, se queda el texto de siempre.
+    getAssignedVehicle()
+      .then((r) => setHoyFurgo(r.data?.assigned && r.data?.vehicle
+        ? { matricula: r.data.vehicle.license_plate || '', enviada: !!r.data.already_inspected } : null))
+      .catch(() => setHoyFurgo(null))
   }, [driver, vista])
 
   const login = (d) => {
@@ -407,7 +419,9 @@ export default function DriverPortal() {
           <Opcion
             icono={ClipboardCheck}
             titulo="Hacer la auditoría"
-            sub={portal?.motivo === 'suspendido' ? 'Hoy no trabajas' : noLeToca ? 'Hoy no sales a ruta' : 'Antes de salir a ruta'}
+            sub={portal?.motivo === 'suspendido' ? 'Hoy no trabajas' : noLeToca ? 'Hoy no sales a ruta'
+              : hoyFurgo?.enviada ? (hoyFurgo.matricula ? tx('Enviada hoy · {matricula}', { matricula: hoyFurgo.matricula }) : tx('Enviada hoy'))
+                : hoyFurgo?.matricula ? tx('Hoy: {matricula}', { matricula: hoyFurgo.matricula }) : 'Antes de salir a ruta'}
             principal={!esDemo}
             bloqueado={noLeToca || esDemo}
             onClick={() => setVista('auditoria')}

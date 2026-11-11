@@ -397,6 +397,17 @@ export const DICT = {
   'drv.add':          { es: 'Añadir conductor', en: 'Add driver', fr: 'Ajouter chauffeur', de: 'Fahrer hinzufügen', it: 'Aggiungi autista', pt: 'Adicionar motorista' },
   'drv.search':       { es: 'Buscar conductor…', en: 'Search driver…', fr: 'Rechercher chauffeur…', de: 'Fahrer suchen…', it: 'Cerca autista…', pt: 'Pesquisar motorista…' },
   'drv.empty':        { es: 'No hay conductores', en: 'No drivers', fr: 'Aucun chauffeur', de: 'Keine Fahrer', it: 'Nessun autista', pt: 'Sem motoristas' },
+  // Conductores en el móvil y sus filtros de un toque (11-11-2026, tanda 2, E1 y E2).
+  'drv.mas':          { es: 'Más', en: 'More', fr: 'Plus', de: 'Mehr', it: 'Altro', pt: 'Mais' },
+  'drv.moviles':      { es: 'Móviles personales', en: 'Personal phones', fr: 'Portables personnels', de: 'Private Handys', it: 'Cellulari personali', pt: 'Telemóveis pessoais' },
+  'drv.llamar':       { es: 'Llamar', en: 'Call', fr: 'Appeler', de: 'Anrufen', it: 'Chiama', pt: 'Ligar' },
+  'drv.filtros':      { es: 'Fichas incompletas', en: 'Incomplete records', fr: 'Fiches incomplètes', de: 'Unvollständige Einträge', it: 'Schede incomplete', pt: 'Fichas incompletas' },
+  'drv.f.sinCentro':  { es: 'sin centro', en: 'no centre', fr: 'sans centre', de: 'ohne Standort', it: 'senza centro', pt: 'sem centro' },
+  'drv.f.sinCorreo':  { es: 'sin correo', en: 'no email', fr: 'sans e-mail', de: 'ohne E-Mail', it: 'senza email', pt: 'sem e-mail' },
+  'drv.f.sinId':      { es: 'sin ID de reparto', en: 'no delivery ID', fr: 'sans ID de livraison', de: 'ohne Zustell-ID', it: 'senza ID consegna', pt: 'sem ID de entrega' },
+  'drv.f.sinAcceso':  { es: 'sin acceso', en: 'no access', fr: 'sans accès', de: 'ohne Zugang', it: 'senza accesso', pt: 'sem acesso' },
+  'drv.f.sinTel':     { es: 'sin teléfono', en: 'no phone', fr: 'sans téléphone', de: 'ohne Telefon', it: 'senza telefono', pt: 'sem telefone' },
+  'drv.f.quitar':     { es: 'Ver todos', en: 'Show all', fr: 'Voir tous', de: 'Alle zeigen', it: 'Vedi tutti', pt: 'Ver todos' },
 
   // ── Inspecciones ─────────────────────────────────────────────────────────
   'insp.title':       { es: 'Inspecciones',   en: 'Inspections',  fr: 'Inspections',   de: 'Inspektionen', it: 'Ispezioni',      pt: 'Inspeções' },
