@@ -16663,8 +16663,9 @@ async def _salidas_sin_auditoria(center: str, dia: str) -> dict:
     quién la llevaba, que es lo que hace falta al día siguiente para atribuir un golpe. Sale de datos propios: la
     Asignación diaria (`daily_assignments`) y las inspecciones del día (en hora de Madrid, _rango_dia_negocio).
 
-    Cada furgoneta cuenta una vez aunque esté en dos huecos (se queda el primer conductor). El conductor es el de la
-    asignación; si el hueco no lo dice, None: un nombre puesto a dedo en un parte es justo lo que no se puede hacer.
+    Cada furgoneta cuenta una vez aunque esté en dos huecos (se queda el primer conductor). Solo cuentan los huecos con
+    conductor (P37). El conductor es el de la asignación (su nombre, o el de la ficha si solo trae el id); si no se
+    encuentra, None: un nombre puesto a dedo en un parte es justo lo que no se puede hacer.
     Sin asignación ese día: total 0 (y el resumen no pinta nada, como antes).
     """
     asigs = await db.daily_assignments.find(
@@ -16673,7 +16674,10 @@ async def _salidas_sin_auditoria(center: str, dia: str) -> dict:
     salidas = {}
     for a in asigs:
         for s in (a.get("slots") or []):
-            if isinstance(s, dict) and s.get("vehicle_id") and s["vehicle_id"] not in salidas:
+            # Solo huecos con furgoneta Y conductor (11-11-2026, P37 de la revisión de la tanda 3): una furgoneta sin
+            # conductor en la asignación se quedó en la nave, y contarla era una falsa alarma en el correo de la noche.
+            if (isinstance(s, dict) and s.get("vehicle_id") and (s.get("driver_id") or s.get("driver_name"))
+                    and s["vehicle_id"] not in salidas):
                 salidas[s["vehicle_id"]] = s
     if not salidas:
         return {"total": 0, "revisadas": 0, "sin_auditoria": []}
@@ -16687,8 +16691,16 @@ async def _salidas_sin_auditoria(center: str, dia: str) -> dict:
     if sin_placa:
         placas = {v["id"]: v.get("license_plate") for v in await db.vehicles.find(
             {"id": {"$in": sin_placa}}, {"_id": 0, "id": 1, "license_plate": 1}).to_list(200)}
+    # El nombre, del hueco; si solo trae el driver_id (P37), de la ficha. Si tampoco está, None (nunca se inventa).
+    sin_nombre = [salidas[vid]["driver_id"] for vid in faltan
+                  if not salidas[vid].get("driver_name") and salidas[vid].get("driver_id")]
+    nombres = {}
+    if sin_nombre:
+        nombres = {d["id"]: d.get("name") for d in await db.drivers.find(
+            {"id": {"$in": sin_nombre}}, {"_id": 0, "id": 1, "name": 1}).to_list(200)}
     lista = [{"matricula": salidas[vid].get("vehicle_plate") or placas.get(vid) or "—",
-              "conductor": salidas[vid].get("driver_name") or None} for vid in faltan]
+              "conductor": salidas[vid].get("driver_name") or nombres.get(salidas[vid].get("driver_id")) or None}
+             for vid in faltan]
     lista.sort(key=lambda x: (x["conductor"] is None, (x["conductor"] or "").lower(), x["matricula"]))
     return {"total": len(salidas), "revisadas": len(salidas) - len(faltan), "sin_auditoria": lista}
 
@@ -16759,20 +16771,6 @@ def _texto_resumen_largo(r: dict) -> str:
     else:
         L.append("   Sin incidencias nuevas")
 
-    # Las salidas de la asignación y quién salió sin auditoría (11-11-2026, portal_inicio-5). Sin asignación ese día
-    # (total 0) o si no se pudo calcular (None), no se dice nada, como antes. Los nombres se escapan: un «<» o un «&»
-    # en un nombre haría que Telegram rechazara el mensaje entero (va con parse_mode HTML).
-    sal = r.get("salidas") or {}
-    if sal.get("total"):
-        esc = lambda s: str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        L.append(f"🚚 <b>Salidas de la asignación:</b> {sal['revisadas']} de {sal['total']} revisadas")
-        sin = sal.get("sin_auditoria") or []
-        if sin:
-            quienes = [f"{esc(x['conductor'])} ({esc(x['matricula'])})" if x.get("conductor")
-                       else f"sin conductor ({esc(x['matricula'])})" for x in sin[:15]]
-            mas = f", …y {len(sin) - 15} más" if len(sin) > 15 else ""
-            L.append(f"   Sin auditoría: {', '.join(quienes)}{mas}")
-
     L.append("")
     danos = r.get("danos") or []
     if danos:
@@ -16800,7 +16798,44 @@ def _texto_resumen_largo(r: dict) -> str:
     if not r.get("turnos"):
         L.append("")
         L.append("📝 <b>Checklist:</b> no hay ninguno creado hoy")
+
+    # Las salidas de la asignación y quién salió sin auditoría (11-11-2026, portal_inicio-5). Sin asignación ese día
+    # (total 0) o si no se pudo calcular (None), no se dice nada, como antes. Los nombres se escapan: un «<» o un «&»
+    # en un nombre haría que Telegram rechazara el mensaje entero (va con parse_mode HTML). AL FINAL del mensaje
+    # (P36 de la revisión de la tanda 3): si un día cargado no cabe en los 4.000 caracteres de Telegram, lo que se
+    # recorta es esto, nunca lo que ya llegaba antes (ver _cortar_por_lineas en enviar_resumen_diario).
+    sal = r.get("salidas") or {}
+    if sal.get("total"):
+        esc = lambda s: str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        L.append("")
+        L.append(f"🚚 <b>Salidas de la asignación:</b> {sal['revisadas']} de {sal['total']} revisadas")
+        sin = sal.get("sin_auditoria") or []
+        if sin:
+            quienes = [f"{esc(x['conductor'])} ({esc(x['matricula'])})" if x.get("conductor")
+                       else f"sin conductor ({esc(x['matricula'])})" for x in sin[:15]]
+            mas = f", …y {len(sin) - 15} más" if len(sin) > 15 else ""
+            L.append(f"   Sin auditoría: {', '.join(quienes)}{mas}")
     return "\n".join(L)
+
+
+def _cortar_por_lineas(texto: str, tope: int) -> str:
+    """El texto, recortado a `tope` caracteres por LÍNEAS ENTERAS desde el final, con «…» si se quitó algo
+    (11-11-2026, P36 de la revisión de la tanda 3).
+
+    El resumen va a Telegram con parse_mode HTML y _telegram_enviar lo corta a 4.000 caracteres a ciegas: un corte a
+    mitad de un «<b>» hace que Telegram rechace el mensaje ENTERO. Cada línea del resumen abre y cierra sus etiquetas,
+    así que cortar por líneas nunca deja una a medias. Si ya cabe, el texto no se toca."""
+    if len(texto) <= tope:
+        return texto
+    marca = "\n…"
+    out, n = [], 0
+    for linea in texto.split("\n"):
+        extra = len(linea) + (1 if out else 0)
+        if n + extra + len(marca) > tope:
+            break
+        out.append(linea)
+        n += extra
+    return "\n".join(out) + marca if out else texto[:max(tope, 0)]
 
 
 # La última configuración de Telegram vista con la base viva: el vigilante de la base la usa
@@ -16977,8 +17012,10 @@ async def enviar_resumen_diario(dia: Optional[str] = None, solo_id: Optional[str
         # Una prueba dirigida a una persona NO va al grupo: probar que algo
         # llega no puede costarle un mensaje a todo el mundo.
         if not solo_id:
-            await _telegram_aviso(_texto_resumen_largo(r)
-                                  + "\n\n<i>Para: " + ", ".join(d["nombre"] for d in quienes) + "</i>")
+            # Por líneas enteras y dejando sitio al «Para:» (11-11-2026, P36): un día cargado que antes llegaba entero
+            # sigue llegando entero; si algo no cabe, se quita del final (las salidas sin auditoría).
+            para = "\n\n<i>Para: " + ", ".join(d["nombre"] for d in quienes) + "</i>"
+            await _telegram_aviso(_cortar_por_lineas(_texto_resumen_largo(r), 4000 - len(para)) + para)
 
         # Correo: la vía que no depende de nadie. Sin plantillas que aprobar,
         # sin restricciones de cuenta de Meta y sin coste por mensaje.
@@ -17038,13 +17075,17 @@ async def enviar_resumen_diario(dia: Optional[str] = None, solo_id: Optional[str
 
 
 @api_router.post("/avisos/enviar-resumen-diario")
-async def trigger_resumen_diario(data: dict = Body(default={}), _=Depends(require_admin)):
+async def trigger_resumen_diario(data: dict = Body(default={}), user: dict = Depends(require_admin)):
     """Dispara el resumen del día ahora, para verlo sin esperar a la hora.
 
     Con `id` va SOLO a esa persona y sin copia al grupo: es la prueba de "¿le
     llega a Judyt?" sin molestar a nadie más.
     """
-    return {"enviados": await enviar_resumen_diario(data.get("date"), data.get("id"))}
+    enviados = await enviar_resumen_diario(data.get("date"), data.get("id"))
+    # Lo que se DEVUELVE a quien pulsa, solo de las naves que ve (11-11-2026, P19 de la revisión de la tanda 3): con
+    # las salidas sin auditoría, la respuesta decía quién llevó qué furgoneta en naves ajenas. El envío de arriba, a
+    # los destinatarios configurados, no cambia. Dueño, super-admin y quien no tiene naves asignadas: todas, como antes.
+    return {"enviados": [e for e in enviados if _user_can_see_center(user, e.get("center") or "")]}
 
 
 _HORARIOS_DEF = {"resumen_diario": 21, "turno_manana": 15, "turno_tarde": 22}

@@ -140,6 +140,38 @@ test.describe('historia-5 · «Mi día» avisa de los días que no llegan a la m
     expect(pedidas).toEqual([])
   })
 
+  /* P18 (11-11-2026, revisión de la tanda 3): la tarjeta manda a pedir refuerzos, y en Turnos → Refuerzos la lista
+     de días que no llegan solo la ve quien puede aprobar días. Quien ve Turnos sin «aprobar-dias» no la recibe. */
+  test('quien ve Turnos pero no puede aprobar días no lo pide ni ve la tarjeta', async ({ page }) => {
+    const pedidas = await abrir(page, {
+      permisos: ['mi-dia', 'dashboard', 'turnos'],
+      faltas: json({ faltas: [falta(1)], con_maximas: true, dias: 3 }),
+    })
+    await expect(page.getByText(/^Todo en orden/)).toBeVisible()
+    await expect(page.getByTestId('midia-faltan')).toHaveCount(0)
+    expect(pedidas).toEqual([])
+  })
+
+  test('con Turnos y «aprobar-dias» sí la ve (el control de la anterior)', async ({ page }) => {
+    const pedidas = await abrir(page, {
+      permisos: ['mi-dia', 'dashboard', 'turnos', 'aprobar-dias'],
+      faltas: json({ faltas: [falta(1)], con_maximas: true, dias: 3 }),
+    })
+    await expect(page.getByTestId('midia-faltan')).toBeVisible()
+    expect(pedidas.length).toBeGreaterThan(0)
+  })
+
+  /* P35: un refuerzo que abrieron los conductores al solicitar una vacante no lo «pidió» la oficina; se dice como en
+     Turnos → Refuerzos. */
+  test('un refuerzo abierto por los conductores no sale como «Pedido»', async ({ page }) => {
+    await abrir(page, { faltas: json({ faltas: [
+      falta(1, { refuerzo: { id: 'r1', plazas: 3, estado: 'abierto', auto: true, aprobados: 1 } }),
+    ], con_maximas: true, dias: 3 }) })
+    const fila = page.getByTestId('midia-falta').first()
+    await expect(fila).toContainText('Solicitado por conductores: 1/3 aprobados')
+    await expect(fila).not.toContainText('Pedido')
+  })
+
   test('sin asignación de hoy dice «Falta la asignación de hoy», no «cuadrante»', async ({ page }) => {
     await abrir(page, { slots: [] })
     await expect(page.getByText('Falta la asignación de hoy').first()).toBeVisible()

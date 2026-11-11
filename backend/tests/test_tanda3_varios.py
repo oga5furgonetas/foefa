@@ -50,8 +50,10 @@ def _asignacion(b, dia=DIA):
         {"center": "OGA5", "date": dia, "slots": [
             {"vehicle_id": "v1", "vehicle_plate": "1111AAA", "driver_name": "Ana"},
             {"vehicle_id": "v2", "vehicle_plate": "2222BBB", "driver_name": "Pepe"},
-            # Sin matrícula en el hueco: sale de la ficha de la furgoneta. Sin conductor: None, nunca inventado.
+            # Sin conductor: la furgoneta se quedó en la nave, no es una salida (P37, 11-11-2026).
             {"vehicle_id": "v3"},
+            # Sin matrícula en el hueco: sale de la ficha de la furgoneta.
+            {"vehicle_id": "v4", "driver_name": "Luis"},
             # La misma furgoneta en otro hueco: cuenta una vez.
             {"vehicle_id": "v1", "vehicle_plate": "1111AAA", "driver_name": "Otro"},
             # Hueco sin furgoneta: no es una salida.
@@ -73,8 +75,8 @@ async def test_salidas_dice_cuales_salieron_sin_auditoria_y_con_quien(monkeypatc
     monkeypatch.setattr(server, "db", b)
     s = await server._salidas_sin_auditoria("OGA5", DIA)
     assert s == {"total": 3, "revisadas": 1, "sin_auditoria": [
+        {"matricula": "4444DDD", "conductor": "Luis"},
         {"matricula": "2222BBB", "conductor": "Pepe"},
-        {"matricula": "3333CCC", "conductor": None},
     ]}
 
 
@@ -89,7 +91,7 @@ async def test_salidas_cuenta_la_madrugada_de_madrid_y_no_la_del_dia_siguiente(m
     monkeypatch.setattr(server, "db", b)
     s = await server._salidas_sin_auditoria("OGA5", DIA)
     assert s["revisadas"] == 1
-    assert [x["matricula"] for x in s["sin_auditoria"]] == ["2222BBB", "3333CCC"]
+    assert [x["matricula"] for x in s["sin_auditoria"]] == ["4444DDD", "2222BBB"]
 
 
 async def test_salidas_sin_asignacion_es_cero(monkeypatch):
@@ -97,6 +99,38 @@ async def test_salidas_sin_asignacion_es_cero(monkeypatch):
     _flota(b)
     monkeypatch.setattr(server, "db", b)
     assert await server._salidas_sin_auditoria("OGA5", DIA) == {"total": 0, "revisadas": 0, "sin_auditoria": []}
+
+
+async def test_p37_un_hueco_sin_conductor_no_es_una_salida(monkeypatch):
+    """P37 (11-11-2026, revisión de la tanda 3): una furgoneta en la asignación sin conductor se quedó en la nave. Solo
+    cuentan los huecos con furgoneta Y conductor (driver_id o driver_name); el nombre, del hueco o, si solo trae el id,
+    de la ficha. La misma furgoneta, primero sin conductor y luego con él, cuenta una vez y con ese conductor."""
+    b = Db()
+    _flota(b)
+    b.drivers.docs.append({"id": "d7", "name": "Marta Ficha"})
+    b.daily_assignments.docs.append({"center": "OGA5", "date": DIA, "slots": [
+        {"vehicle_id": "v1", "vehicle_plate": "1111AAA"},
+        {"vehicle_id": "v1", "vehicle_plate": "1111AAA", "driver_name": "Ana"},
+        {"vehicle_id": "v2", "vehicle_plate": "2222BBB", "driver_id": "", "driver_name": ""},
+        {"vehicle_id": "v3", "vehicle_plate": "3333CCC", "driver_id": "d7", "driver_name": ""},
+    ]})
+    monkeypatch.setattr(server, "db", b)
+    s = await server._salidas_sin_auditoria("OGA5", DIA)
+    assert s == {"total": 2, "revisadas": 0, "sin_auditoria": [
+        {"matricula": "1111AAA", "conductor": "Ana"},
+        {"matricula": "3333CCC", "conductor": "Marta Ficha"},
+    ]}
+
+
+async def test_p37_solo_furgonetas_sin_conductor_no_pinta_nada(envio):
+    envio.daily_assignments.docs.append({"center": "OGA5", "date": DIA, "slots": [
+        {"vehicle_id": "v1", "vehicle_plate": "1111AAA"}, {"vehicle_id": "v2", "vehicle_plate": "2222BBB"}]})
+    salida = await server.enviar_resumen_diario(DIA)
+    assert next(s for s in salida if s["center"] == "OGA5")["salidas"] == {"total": 0, "revisadas": 0,
+                                                                            "sin_auditoria": []}
+    oga5 = next(t for t in envio.grupo if "OGA5 —" in t)
+    assert "Salidas" not in oga5
+    assert all("SALIDAS SIN AUDITORÍA" not in h for _, _, h in envio.correos)
 
 
 async def test_los_tres_contadores_del_resumen_usan_el_dia_de_madrid(monkeypatch):
@@ -163,7 +197,7 @@ async def test_el_resumen_dice_quien_salio_sin_auditoria(envio):
 
     # Lo que vuelve al botón de probar: la clave nueva.
     assert por["OGA5"]["salidas"] == {"total": 3, "revisadas": 1, "sin_auditoria": [
-        {"matricula": "2222BBB", "conductor": "Pepe"}, {"matricula": "3333CCC", "conductor": None}]}
+        {"matricula": "4444DDD", "conductor": "Luis"}, {"matricula": "2222BBB", "conductor": "Pepe"}]}
     # DGA1 no tiene asignación: total 0.
     assert por["DGA1"]["salidas"]["total"] == 0
     # Y la madrugada cuenta como revisada en «inspecciones» (antes salía «0 de 4»).
@@ -173,7 +207,9 @@ async def test_el_resumen_dice_quien_salio_sin_auditoria(envio):
     oga5 = next(t for k, t in tg.items() if "OGA5" in k)
     dga1 = next(t for k, t in tg.items() if "DGA1" in k)
     assert "🚚 <b>Salidas de la asignación:</b> 1 de 3 revisadas" in oga5
-    assert "Sin auditoría: Pepe (2222BBB), sin conductor (3333CCC)" in oga5
+    assert "Sin auditoría: Luis (4444DDD), Pepe (2222BBB)" in oga5
+    # La furgoneta sin conductor se quedó en la nave: no sale (P37).
+    assert "3333CCC" not in oga5
     assert "Salidas" not in dga1 and "Sin auditoría" not in dga1
 
     html = {asunto: h for _, asunto, h in envio.correos}
@@ -181,7 +217,8 @@ async def test_el_resumen_dice_quien_salio_sin_auditoria(envio):
     assert set(html) == {"OGA5 — 03/11/2026 · 1 de 4 revisados", "DGA1 — 03/11/2026 · 0 de 1 revisados"}
     h_oga5 = html["OGA5 — 03/11/2026 · 1 de 4 revisados"]
     assert "SALIDAS SIN AUDITORÍA (2) · 1 de 3 revisadas" in h_oga5
-    assert "Pepe" in h_oga5 and "2222BBB" in h_oga5 and "sin conductor en la asignación" in h_oga5
+    assert "Pepe" in h_oga5 and "2222BBB" in h_oga5 and "Luis" in h_oga5 and "4444DDD" in h_oga5
+    assert "3333CCC" not in h_oga5 and "sin conductor en la asignación" not in h_oga5
     assert "SALIDAS SIN AUDITORÍA" not in html["DGA1 — 03/11/2026 · 0 de 1 revisados"]
 
     # WhatsApp: la plantilla sigue con sus cuatro parámetros de siempre.
@@ -231,12 +268,126 @@ async def test_si_las_salidas_fallan_todas_las_naves_reciben_su_resumen(envio, m
     assert all("SALIDAS SIN AUDITORÍA" not in h for _, _, h in envio.correos)
 
 
-# ── /stats/hoy ───────────────────────────────────────────────────────────────────
+# ── P36 (11-11-2026, revisión de la tanda 3): el corte de Telegram ──────────────────
+# Un día cargado (mucho checklist) que hoy llega entero tiene que seguir llegando entero: el bloque de salidas va AL
+# FINAL y, si no cabe en los 4.000 caracteres, se cortan líneas enteras de ese final (nunca a mitad de una etiqueta).
+
+def _dia_cargado(center, total_objetivo=3950):
+    """Un resumen cuyo texto de SIEMPRE (sin salidas) más el «Para:» mide entre 3.900 y 4.000 caracteres."""
+    items, r = [], None
+    while True:
+        r = {"center": center, "fecha": "03/11/2026", "inspecciones": "10 de 40", "checklist": "x", "golpes": "ninguno",
+             "placas": [], "danos": [], "incidencias": {"nuevas": 0}, "salidas": None,
+             "turnos": [{"turno": "mañana", "hechas": 0, "total": len(items), "items": list(items)}]}
+        largo = len(server._texto_resumen_largo(r)) + len("\n\n<i>Para: Judyt</i>")
+        if largo >= total_objetivo:
+            return r
+        items.append({"text": f"Tarea {len(items):02d} de la nave con un texto largo", "done": False})
+
+
+def _salidas_quince():
+    return {"total": 20, "revisadas": 5, "sin_auditoria": [
+        {"matricula": f"{i:04d}XYZ", "conductor": f"Conductor número {i:02d}"} for i in range(15)]}
+
+
+def _equilibrado(texto):
+    return all(texto.count(f"<{t}>") == texto.count(f"</{t}>") for t in ("b", "i"))
+
+
+async def test_p36_un_dia_cargado_sigue_llegando_entero_a_telegram(envio, monkeypatch):
+    sin_salidas = {}
+
+    async def resumen(center, dia):
+        r = _dia_cargado(center)
+        sin_salidas[center] = server._texto_resumen_largo(r)
+        return {**r, "salidas": _salidas_quince()}
+    monkeypatch.setattr(server, "resumen_dia_centro", resumen)
+    await server.enviar_resumen_diario(DIA)
+    assert len(envio.grupo) == 2
+    for texto in envio.grupo:
+        center = "OGA5" if "OGA5 —" in texto else "DGA1"
+        assert len(texto) <= 4000, len(texto)
+        # Lo de siempre llega entero y seguido, y el «Para:» también.
+        assert texto.startswith(sin_salidas[center])
+        assert texto.endswith("<i>Para: Judyt</i>")
+        assert _equilibrado(texto)
+
+
+async def test_p36_con_sitio_las_salidas_van_al_final_antes_del_para(envio):
+    envio.daily_assignments.docs.append(
+        {"center": "OGA5", "date": DIA, "slots": [{"vehicle_id": "v2", "vehicle_plate": "2222BBB", "driver_name": "Pepe"}]})
+    await server.enviar_resumen_diario(DIA)
+    oga5 = next(t for t in envio.grupo if "OGA5 —" in t)
+    lineas = oga5.split("\n")
+    i_sal = next(i for i, x in enumerate(lineas) if x.startswith("🚚 <b>Salidas"))
+    i_chk = next(i for i, x in enumerate(lineas) if "Checklist" in x)
+    assert i_sal > i_chk
+    assert lineas[i_sal + 1] == "   Sin auditoría: Pepe (2222BBB)"
+    assert oga5.endswith("<i>Para: Judyt</i>")
+
+
+def test_p36_el_corte_va_por_lineas_enteras():
+    texto = "\n".join(f"<b>línea {i:03d}</b> con algo de texto" for i in range(300))
+    corto = server._cortar_por_lineas(texto, 1000)
+    assert len(corto) <= 1000 and _equilibrado(corto)
+    assert corto.endswith("\n…")
+    assert all(x in texto.split("\n") for x in corto.split("\n")[:-1])
+    # Lo que ya cabe no se toca.
+    assert server._cortar_por_lineas("hola\nadiós", 1000) == "hola\nadiós"
+
 
 @pytest_asyncio.fixture(loop_scope="session")
 async def cliente():
     async with AsyncClient(transport=ASGITransport(app=server.app), base_url="http://testserver") as c:
         yield c
+
+
+# ── P19 (11-11-2026, revisión de la tanda 3): el botón de probar el resumen ─────────
+# A un usuario de oficina limitado a una nave, la respuesta de POST /avisos/enviar-resumen-diario le traía también las
+# demás naves, con quién llevó qué furgoneta sin auditoría. Ahora solo le vuelven las que ve; el envío por correo y
+# Telegram a los destinatarios configurados NO cambia (sigue yendo a todas sus naves).
+
+def _usuario(uid, centros, cuenta):
+    server._ADMIN_EXISTS_CACHE[uid] = (time.time() + 600, True, centros, None, None)
+    tok = server.create_token(uid, "admin", uid, org_id="o1", account_type=cuenta)
+    return {"Authorization": f"Bearer {tok}"}
+
+
+@pytest.fixture
+def envio_api(envio, monkeypatch):
+    g = Db()
+    g.organizations.docs.append({"id": "o1", "account_type": "dsp", "db_name": server._current_db_name.get(),
+                                 "centers": ["OGA5", "DGA1"]})
+    monkeypatch.setattr(server, "global_db", g)
+    _asignacion(envio)
+    envio.daily_assignments.docs.append(
+        {"center": "DGA1", "date": DIA, "slots": [{"vehicle_id": "v9", "vehicle_plate": "9999ZZZ",
+                                                    "driver_name": "Eva de DGA1"}]})
+    server._ADMIN_EXISTS_CACHE.clear()
+    yield envio
+    server._ADMIN_EXISTS_CACHE.clear()
+
+
+async def test_p19_probar_el_resumen_solo_devuelve_las_naves_que_ve(cliente, envio_api):
+    r = await cliente.post("/api/avisos/enviar-resumen-diario", json={"date": DIA},
+                           headers=_usuario("u-oga5", ["OGA5"], "dsp"))
+    assert r.status_code == 200, r.text
+    enviados = r.json()["enviados"]
+    assert [e["center"] for e in enviados] == ["OGA5"]
+    assert "Eva de DGA1" not in r.text and "9999ZZZ" not in r.text
+    # El envío no cambia: los destinatarios reciben las dos naves por correo y por Telegram.
+    assert len(envio_api.correos) == 2 and len(envio_api.grupo) == 2
+
+
+@pytest.mark.parametrize("centros,cuenta", [(None, "dsp"), ([], "dsp"), (["OGA5"], "owner")])
+async def test_p19_sin_limite_o_en_la_cuenta_duena_vuelven_todas(cliente, envio_api, centros, cuenta):
+    r = await cliente.post("/api/avisos/enviar-resumen-diario", json={"date": DIA},
+                           headers=_usuario("u-x", centros, cuenta))
+    assert r.status_code == 200, r.text
+    assert [e["center"] for e in r.json()["enviados"]] == ["DGA1", "OGA5"]
+
+
+# ── /stats/hoy ───────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture
