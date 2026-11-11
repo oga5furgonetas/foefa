@@ -625,6 +625,80 @@ async def test_asignacion_sin_naves_asignadas_o_dueno_igual_que_siempre(cliente,
         assert r.status_code == 200, r.text
 
 
+def _naves_de_la_empresa(monkeypatch, naves):
+    """La ficha de la organización con su lista de naves (la principal se resuelve por `account_type`)."""
+    g = Db()
+    g.organizations.docs.append({"id": "o1", "account_type": "owner", "centers": list(naves)})
+    monkeypatch.setattr(server, "global_db", g)
+
+
+async def _guardar_en(cliente, cab, centro):
+    return await cliente.put("/api/assignments/daily", headers=cab,
+                             json={"center": centro, "date": "2026-11-11", "slots": [SLOT]})
+
+
+async def test_limitado_no_guarda_una_asignacion_con_un_nombre_de_nave_inventado(cliente, base, monkeypatch):
+    """V2 (11-11-2026): quien solo ve OGA5 guardaba la Asignación de «OGA5 DGA1» (lleva OGA5 dentro y pasaba el
+    permiso), y el portal y el resumen de DGA1 la leían como suya. Ahora, para un usuario limitado, el centro tiene que
+    ser una nave de la empresa (o una de las suyas) y que él la vea; su nave, en mayúsculas o en minúsculas, como
+    siempre."""
+    _naves_de_la_empresa(monkeypatch, ["OGA5", "DGA1", "DGA2"])
+    cab = _cab("u-oga5", "Jefe OGA5", centros=["OGA5"], cuenta="dsp")
+    for inventado in ("OGA5 DGA1", "OGA5/DGA1", "DGA1 OGA5", "OGA5-DGA1", "AMZL OGA5 SANTIAGO XPT"):
+        r = await _guardar_en(cliente, cab, inventado)
+        assert r.status_code == 403, (inventado, r.text)
+        assert r.json()["detail"] == "No tienes acceso a ese centro"
+    assert base.daily_assignments.docs == []           # no se ha escrito nada
+    for suya in ("OGA5", "oga5", " Oga5 "):
+        r = await _guardar_en(cliente, cab, suya)
+        assert r.status_code == 200, (suya, r.text)
+    # Con el permiso en minúsculas, igual.
+    r = await _guardar_en(cliente, _cab("u-oga5b", "Jefe", centros=["oga5"], cuenta="dsp"), "OGA5")
+    assert r.status_code == 200, r.text
+    # Una nave suya que la ficha de la empresa no lista (datos viejos: el selector le ofrece las suyas): sigue
+    # guardando. Y lo que lleve otra nave dentro, no.
+    cab9 = _cab("u-dga9", "Jefe DGA9", centros=["DGA9"], cuenta="dsp")
+    r = await _guardar_en(cliente, cab9, "DGA9")
+    assert r.status_code == 200, r.text
+    r = await _guardar_en(cliente, cab9, "DGA9 DGA1")
+    assert r.status_code == 403, r.text
+
+
+async def test_limitado_y_empresa_sin_lista_de_naves_salen_de_las_fichas(cliente, base, monkeypatch):
+    """Sin naves en la ficha de la organización, las naves conocidas son los códigos limpios de las fichas (los de
+    `_centros_conocidos`)."""
+    base.drivers.docs += [{"id": "d1", "name": "ANA", "center": "OGA5"},
+                          {"id": "d2", "name": "PEDRO", "center": "DGA1"}]
+    cab = _cab("u-oga5", "Jefe OGA5", centros=["OGA5"], cuenta="dsp")
+    r = await _guardar_en(cliente, cab, "OGA5/DGA1")
+    assert r.status_code == 403, r.text
+    r = await _guardar_en(cliente, cab, "OGA5")
+    assert r.status_code == 200, r.text
+
+
+async def test_nombre_de_nave_inventado_igual_que_siempre_para_los_demas(cliente, base, monkeypatch):
+    """V2: el dueño y el super-admin (aunque tengan naves apuntadas) y quien no tiene naves asignadas guardan como
+    antes, con el nombre que manden. Y si la empresa no tiene ninguna lista de naves (ni en su ficha ni en las fichas
+    de los conductores), el limitado también, como antes."""
+    sa = server.create_token("u-sa", "admin", "Super", org_id="o1", account_type="dsp", super_admin=True)
+    server._ADMIN_EXISTS_CACHE["u-sa"] = (time.time() + 600, True, ["OGA5"], None, None)
+    todos = (_cab(), _cab("u-duena", "Dueña", centros=["OGA5"]), {"Authorization": f"Bearer {sa}"},
+             _cab("u-todas", "Oficina", centros=None, cuenta="dsp"),
+             _cab("u-vacio", "Oficina", centros=[], cuenta="dsp"))
+    # Sin lista de naves en ningún sitio: nadie nota nada.
+    for cab in todos + (_cab("u-oga5", "Jefe OGA5", centros=["OGA5"], cuenta="dsp"),):
+        r = await _guardar_en(cliente, cab, "OGA5 DGA1")
+        assert r.status_code == 200, r.text
+    # Con lista: los que no están limitados, igual que siempre.
+    _naves_de_la_empresa(monkeypatch, ["OGA5", "DGA1", "DGA2"])
+    base["daily_assignments"] = Col()
+    for cab in todos:
+        for centro in ("OGA5 DGA1", "NAVE NUEVA", "DGA1"):
+            r = await _guardar_en(cliente, cab, centro)
+            assert r.status_code == 200, (centro, r.text)
+    assert sorted({d["center"] for d in base.daily_assignments.docs}) == ["DGA1", "NAVE NUEVA", "OGA5 DGA1"]
+
+
 # ── dia-1-prestados · el portal ve la furgoneta de la Asignación de otra nave ─
 
 HOY_PORTAL = "2026-11-11"

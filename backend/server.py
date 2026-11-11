@@ -30233,6 +30233,17 @@ async def upsert_daily_assignment(request: Request, user: dict = Depends(require
     # naves asignadas y el asistente (`_cia_asignar`, que no pasa por aquí): igual que siempre.
     if not _user_can_see_center(user, center):
         raise HTTPException(status_code=403, detail="No tienes acceso a ese centro")
+    # El nombre de nave inventado (11-11-2026, revisión V2): «OGA5 DGA1» u «OGA5/DGA1» pasaban el permiso de quien solo
+    # ve OGA5 (lo lleva dentro), y el portal y el resumen de DGA1, que buscan la nave por trozo, la leían como suya.
+    # Para un usuario LIMITADO, el centro tiene que ser TAL CUAL (recortado y sin mirar mayúsculas) una nave de la
+    # empresa (las de su ficha y los códigos limpios de las fichas) o una de las suyas, que es lo que el selector le
+    # ofrece cuando la empresa no las lista; que la vea ya lo dice la línea de arriba. Dueño, super-admin, quien no
+    # tiene naves asignadas y la empresa sin ninguna lista de naves: igual que siempre.
+    suyas = {str(p).strip().upper() for p in (user.get("allowed_centers") or []) if str(p or "").strip()}
+    if suyas and not user.get("sa") and user.get("account_type") != "owner":
+        empresa = set(await _centros_de_la_empresa()) | await _centros_conocidos()
+        if empresa and center.strip().upper() not in (empresa | suyas):
+            raise HTTPException(status_code=403, detail="No tienes acceso a ese centro")
 
     # Limpia los slots: guarda solo los campos núcleo (descarta has_inspection,
     # inspection_severity y cualquier campo calculado que venga del GET).
