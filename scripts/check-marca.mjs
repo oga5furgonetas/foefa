@@ -73,6 +73,10 @@ const PERMITIDO = [
   ['lib/textosRutaA.js', '"amazon te la apunta como fallo."', 'texto de «Mis DNR», parte de la DNR diaria'],
   ['lib/textosRutaA.js', '"amazon la revisó y no te la apunta."', 'texto de «Mis DNR», parte de la DNR diaria'],
   ['lib/textosRutaA.js', '"amazon aún no la ha revisado;', 'texto de «Mis DNR», parte de la DNR diaria'],
+  // Revisión final (11-11-2026, R7): el día de la DNR en la tarjeta, y el recordatorio en francés («la DNR ne te sera pas
+  // comptée», para que el «elle» no se lea como la foto).
+  ['lib/textosRutaA.js', '"dnr del {dia}"', 'texto de «Mis DNR», parte de la DNR diaria'],
+  ['lib/textosRutaA.js', '"recuerda: si el cliente tiene preferencia de entrega,', 'texto de «Mis DNR», parte de la DNR diaria'],
 ]
 
 function ficheros(dir, out = []) {

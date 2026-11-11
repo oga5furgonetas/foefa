@@ -69,12 +69,25 @@ class _Col(Col):
         super().__init__(docs)
         self.cursores = []
 
+        # Lo que no es un cursor (find_one, distinct, aggregate), apuntado con su colección para la prueba de los topes
+        # (R7, 11-11-2026: «mirando TODAS las colecciones que toque la ruta»).
+        self.otras = []
+
     def find(self, q=None, proyeccion=None, **_):
         return _CursorMongo(super().find(q, proyeccion).docs, self)
+
+    async def find_one(self, *a, **k):
+        self.otras.append("find_one")
+        return await super().find_one(*a, **k)
+
+    async def distinct(self, campo, *a, **k):
+        self.otras.append(f"distinct:{campo}")
+        return await super().distinct(campo, *a, **k)
 
     def aggregate(self, pipeline, **_):
         # Lo único que agrega este camino son los votos de Amazon (route_history) y los extremos y recuentos de la
         # oficina: con la colección vacía de esos datos, nada.
+        self.otras.append("aggregate")
         return _CursorMongo([])
 
 
@@ -206,8 +219,9 @@ def _dnr(r, paquete):
     return next(x for s in r["semanas"] for x in s["dnr"] if x["paquete"] == paquete)
 
 
-CLAVES_DNR = {"dia", "paquete", "estado", "cp", "como", "lejos", "llamada", "segundos", "fallo_contacto", "foto",
-              "foto_motivo", "sin_interpretar"}
+# R7 (11-11-2026): `entrega` es nueva y `sin_interpretar` ya no sale (F22/F25).
+CLAVES_DNR = {"dia", "entrega", "paquete", "estado", "cp", "como", "lejos", "llamada", "segundos", "fallo_contacto",
+              "foto", "foto_motivo"}
 
 
 # ── Lo suyo, por semana y con su estado ────────────────────────────────────────
@@ -271,9 +285,10 @@ async def test_cada_uno_ve_solo_lo_suyo(base):
     vistos = {sub: _paquetes(await server.mis_dnr(_conductor(sub))) for sub in
               ("d-ana", "d-luis", "d-eva", "d-mar", "d-paco", "d-sin", "d-pedro", "d-diez")}
     assert vistos["d-ana"] == {"TBAANA1", "TBAANA2", "TBAANA3", "TBAANA4", "TBAANA5", "TBAANAV"}  # con la fusionada
-    assert vistos["d-luis"] == {"TBLUIS1"}
+    # R7/F11: Mar (viva) tiene en `driver_id` el ID de Luis (vivo): dos personas lo reclaman y no gana ninguna.
+    assert vistos["d-luis"] == set()
     assert vistos["d-eva"] == {"TBEVA01"}                    # por su `driver_id`, con espacios y en minúsculas
-    assert vistos["d-mar"] == set()                          # su `driver_id` lo reclama Luis en `transporter_id`
+    assert vistos["d-mar"] == set()                          # su `driver_id` lo tiene Luis en `transporter_id`
     assert vistos["d-paco"] == {"TBPACO1"}                   # dos fichas con el mismo ID: manda la activa
     assert vistos["d-sin"] == set()                          # mismo nombre que el del historial: nunca por nombre
     assert vistos["d-pedro"] == {"TBPEDR1"}                  # el mismo correo que Juan no le da lo de Juan
@@ -312,7 +327,8 @@ async def test_de_baja_o_fusionada_no_puede_usar_la_ruta(base):
 async def test_se_casan_igual_que_en_la_pantalla_de_la_oficina(base):
     """La oficina (diarios_por_conductor) pone a cada ID el `driver_id` de su ficha. Lo que ve cada persona tiene que ser
     exactamente lo que la oficina le pone a su ficha y a las fusionadas en ella, en las 4 semanas. (Además de esta
-    comparación, test_cada_uno_ve_solo_lo_suyo dice a mano qué tiene que ver cada uno.)"""
+    comparación, test_cada_uno_ve_solo_lo_suyo dice a mano qué tiene que ver cada uno.) La única excepción es la de R7/F11:
+    un ID que reclaman dos fichas vivas no se enseña a ninguna (Luis y Mar; la oficina se lo pone a Luis)."""
     de_la_oficina: dict = {}
     for centro in ("OGA5", "DGA1", "DGA10"):
         r = await server.diarios_por_conductor(centro, "2026-10-18", "2026-11-14", DANI)
@@ -321,17 +337,20 @@ async def test_se_casan_igual_que_en_la_pantalla_de_la_oficina(base):
                 de_la_oficina.setdefault(c.get("driver_id"), set()).add(d["tracking_id"])
     personas = {"d-ana": {"d-ana", "d-ana-vieja"}, "d-luis": {"d-luis"}, "d-eva": {"d-eva"}, "d-mar": {"d-mar"},
                 "d-paco": {"d-paco"}, "d-sin": {"d-sin"}, "d-pedro": {"d-pedro"}, "d-diez": {"d-diez"}}
+    en_disputa = {"TBLUIS1"}
     for sub, fichas in personas.items():
-        esperado = set().union(*(de_la_oficina.get(f, set()) for f in fichas))
+        esperado = set().union(*(de_la_oficina.get(f, set()) for f in fichas)) - en_disputa
         assert _paquetes(await server.mis_dnr(_conductor(sub))) == esperado, sub
+    assert "TBLUIS1" in de_la_oficina.get("d-luis", set())
     # El ID sin ficha, la oficina lo enseña con el nombre del historial pero sin ficha (driver_id None).
     assert "TBFANT1" in de_la_oficina.get(None, set())
 
 
 def test_no_hay_parametro_que_cambiar_para_ver_lo_de_otro(base, monkeypatch):
     """La ruta solo tiene la sesión: ni `driver_id`, ni `transporter_id`, ni `center`, ni `desde`. Lo que se mande de
-    más en la dirección se ignora y sale lo mismo."""
-    assert list(inspect.signature(server.mis_dnr).parameters) == ["user"]
+    más en la dirección se ignora y sale lo mismo. (`credentials` es el mismo token de la sesión, de la cabecera, para
+    saber su `sub` original: R7/F1.)"""
+    assert list(inspect.signature(server.mis_dnr).parameters) == ["user", "credentials"]
     ruta = next(r for r in server.api_router.routes if getattr(r, "path", "").endswith("/diarios/mias"))
     assert ruta.dependant.query_params == [] and ruta.dependant.body_params == []
     app = FastAPI()
@@ -354,28 +373,51 @@ async def test_solo_para_conductores(base):
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_si_amazon_dijera_que_el_id_es_de_otra_persona_no_se_ensena(base, monkeypatch):
-    """El «no coincide» de la oficina (_ids_veredictos). OJO: en FDS hoy ninguna de las fuentes de _amazon_nombres se
-    escribe, así que esto casi nunca salta y NO es una barrera (lo que protege es que la oficina ponga bien el ID, y la
-    pantalla lo dice: «¿Alguna no es tuya? Díselo a la oficina»). Aquí se simula lo que contestaría con datos heredados:
-    esas DNR no se enseñan, las de su otra ficha sí, y si la oficina confirma la pareja, vuelven."""
-    async def amazon(ids, dias=90):
-        return {"AANA000001": {"nombre": "JORGE BLANCO NUÑEZ", "votos": 3, "roster": True, "discrepan": False}}
-    monkeypatch.setattr(server, "_amazon_nombres", amazon)
+async def test_un_id_en_dos_fichas_vivas_no_se_ensena_a_ninguna(base, monkeypatch):
+    """R7/F11. Si dos fichas VIVAS (activas y sin fusionar), que no son la misma persona, tienen el mismo ID (en
+    `transporter_id` o en `driver_id`), sus DNR no se enseñan a ninguna: `en_revision`. Antes ganaba la que Mongo
+    devolviera primero. Las de su otro ID (la ficha fusionada de Ana) sí se ven. Y ya no se mira el «no coincide» de
+    _amazon_nombres (F14/F15): aunque dijera algo, no se le llama."""
+    async def no_se_llama(*a, **k):
+        raise AssertionError("mis_dnr ya no usa _amazon_nombres")
+    monkeypatch.setattr(server, "_amazon_nombres", no_se_llama)
+    # Otra persona, viva, con el ID de Ana en `driver_id`.
+    base["drivers"].docs.append({"id": "d-copia", "name": "OTRA PERSONA", "email": "otra@ejemplo.test",
+                                 "center": "OGA5", "active": True, "driver_id": "aana000001"})
     r = await server.mis_dnr(_conductor("d-ana"))
-    assert r["en_revision"] is True and _paquetes(r) == {"TBAANAV"}
-    base["app_meta"] = _Col([{"_id": "transporter_ids_confirmados", "mapa": {"AANA000001": "d-ana"}}])
+    assert r["tiene_id"] is True and r["en_revision"] is True
+    assert _paquetes(r) == {"TBAANAV"}
+    r = await server.mis_dnr(_conductor("d-copia"))
+    assert r["en_revision"] is True and _paquetes(r) == set()
+    # Si esa otra ficha está de baja, ya no es viva: manda la de Ana, como en la oficina.
+    base["drivers"].docs[-1]["active"] = False
     r = await server.mis_dnr(_conductor("d-ana"))
     assert r["en_revision"] is False and "TBAANA1" in _paquetes(r)
+    # Y si estuviera fusionada (en Ana o en quien sea), tampoco.
+    base["drivers"].docs[-1].update(active=True, merged_into="d-ana")
+    assert (await server.mis_dnr(_conductor("d-ana")))["en_revision"] is False
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_si_todos_sus_ids_estan_en_duda_no_ve_nada(base, monkeypatch):
-    async def amazon(ids, dias=90):
-        return {"ALUIS00001": {"nombre": "JORGE BLANCO NUÑEZ", "votos": 3, "roster": True, "discrepan": False}}
-    monkeypatch.setattr(server, "_amazon_nombres", amazon)
-    r = await server.mis_dnr(_conductor("d-luis"))
-    assert r == {"tiene_id": True, "en_revision": True, "datos_hasta": None, "semanas": []}
+async def test_dos_fichas_vivas_con_el_mismo_transporter_id_tampoco(base):
+    """El empate que más se ve: el mismo `transporter_id` en dos fichas activas. Antes lo decidía el orden."""
+    base["drivers"].docs.append({"id": "d-gemela", "name": "OTRA ANA", "email": "gemela@ejemplo.test",
+                                 "center": "OGA5", "active": True, "transporter_id": "AANA000001"})
+    for sub in ("d-ana", "d-gemela"):
+        r = await server.mis_dnr(_conductor(sub))
+        assert r["en_revision"] is True, sub
+        assert not ({"TBAANA1", "TBAANA2", "TBAANA3"} & _paquetes(r)), sub
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_si_todos_sus_ids_estan_en_duda_no_ve_nada(base):
+    """Luis (vivo, `transporter_id`) y Mar (viva, el mismo en `driver_id`): los dos en revisión y sin ninguna DNR."""
+    for sub in ("d-luis", "d-mar"):
+        r = await server.mis_dnr(_conductor(sub))
+        assert r["tiene_id"] is True and r["en_revision"] is True and r["semanas"] == [], sub
+        assert "TBLUIS1" not in json.dumps(r)
+    # datos_hasta, el de su centro (OGA5), como a cualquiera.
+    assert (await server.mis_dnr(_conductor("d-luis")))["datos_hasta"] == "2026-11-10"
 
 
 # ── Sin ID, sin módulo ─────────────────────────────────────────────────────────
@@ -402,6 +444,30 @@ async def test_sin_el_modulo_de_la_dnr_la_ruta_no_existe(base):
     assert _paquetes(await server.mis_dnr(_conductor("d-ana", org="o1")))
 
 
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sin_ningun_reporte_subido_la_ruta_no_existe(base):
+    """R7/F5: con el módulo puesto pero sin ningún reporte subido (la empresa no usa la DNR diaria), 404 como si la
+    ruta no existiera: así la casilla no le sale a nadie. Va DESPUÉS de las comprobaciones de módulo y de rol."""
+    base["daily_reports"].docs = []
+    base["dnr_rows"].docs = []
+    with pytest.raises(HTTPException) as e:
+        await server.mis_dnr(_conductor("d-ana"))
+    assert e.value.status_code == 404 and e.value.detail == "Not Found"
+    # A quien no es conductor se le sigue diciendo lo de siempre (el rol va antes).
+    with pytest.raises(HTTPException) as e:
+        await server.mis_dnr(DANI)
+    assert e.value.status_code == 403
+    # Un pegado de solo el bloque DNR (sin el resumen) guarda filas pero ningún documento en daily_reports: eso
+    # también es un reporte subido, y sus DNR se ven.
+    base["dnr_rows"].docs = [_fila("TBAANA1", "AANA000001", "2026-11-09", "Y")]
+    assert _paquetes(await server.mis_dnr(_conductor("d-ana"))) == {"TBAANA1"}
+    # Y con un reporte, aunque no tenga filas DNR, la ruta existe (otro conductor, sin ninguna: 200 y vacía).
+    base["dnr_rows"].docs = []
+    base["daily_reports"].docs = [{"center": "OGA5", "fecha": "2026-11-11", "fecha_dnr": "2026-11-09"}]
+    r = await server.mis_dnr(_conductor("d-ana"))
+    assert r["tiene_id"] is True and _paquetes(r) == set()
+
+
 # ── Hasta qué día hay reportes ─────────────────────────────────────────────────
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -423,14 +489,43 @@ async def test_el_centro_se_casa_por_el_codigo_entero(base):
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_sin_centro_reconocible_el_ultimo_de_la_empresa(base):
+    """R7/F18: si la ficha no tiene un centro reconocible (vacío, o «Santiago» sin código) y no hay filas suyas que lo
+    digan, no se puede afirmar que «no hay reportes de su centro»: va el último día con datos de toda la empresa."""
+    base["drivers"].docs += [
+        {"id": "d-santi", "name": "SANTI SIN CODIGO", "email": "santi@ejemplo.test", "center": "Santiago",
+         "active": True, "transporter_id": "ASANTI0001"},
+        {"id": "d-nada", "name": "NADA DE CENTRO", "email": "nada@ejemplo.test", "active": True,
+         "transporter_id": "ANADA00001"},
+    ]
+    for sub in ("d-santi", "d-nada"):
+        r = await server.mis_dnr(_conductor(sub))
+        assert r["tiene_id"] is True and _paquetes(r) == set(), sub
+        assert r["datos_hasta"] == "2026-11-11", sub          # el último de la empresa (DGA1)
+    # Con un centro reconocible SIN reportes, null (no el de la empresa): ver test_el_centro_se_casa_por_el_codigo_entero.
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_ninguna_consulta_lee_sin_tope(base):
-    """D7: cada consulta de la ruta lleva su tope (limit o to_list(n)): un conductor que la pida en bucle no recorre
-    colecciones enteras sin límite."""
+    """D7 y R7/F14: cada consulta de la ruta lleva su tope (limit o to_list(n)), mirando TODAS las colecciones que toca:
+    las de las fichas, las filas, la foto, el contacto, los reportes y la empresa. Lo que no es un cursor: find_one (uno),
+    y un único distinct, el de los centros de daily_reports (tantos como centros, con su índice). Y ya no toca las
+    colecciones heredadas del «no coincide» (cortex_resumen, route_history, whc_api, app_meta), que leía sin tope."""
+    tocadas: dict = {}
     await server.mis_dnr(_conductor("d-ana"))
-    for nombre in ("drivers", "dnr_rows", "pod_rows", "cc_rows", "daily_reports"):
-        cursores = base[nombre].cursores
-        assert cursores, nombre
-        assert all(c.con_tope for c in cursores), nombre
+    for nombre, col in list(base.items()):
+        if col.cursores or col.otras:
+            tocadas[nombre] = col
+    assert set(tocadas) == {"drivers", "dnr_rows", "pod_rows", "cc_rows", "daily_reports"}, set(tocadas)
+    for nombre, col in tocadas.items():
+        assert all(c.con_tope for c in col.cursores), nombre
+        assert not [o for o in col.otras if o not in ("find_one", "distinct:center")], (nombre, col.otras)
+    assert base["daily_reports"].otras.count("distinct:center") <= 1
+    for heredada in ("cortex_resumen", "route_history", "whc_api", "app_meta"):
+        assert not base[heredada].cursores and not base[heredada].otras, heredada
+    # La empresa (la base global): solo find_one.
+    org = server.global_db["organizations"]
+    assert not org.cursores and set(org.otras) <= {"find_one"}
 
 
 # ── Cómo fue la entrega (R4) ───────────────────────────────────────────────────
@@ -454,34 +549,27 @@ def test_cada_dato_interpretado_y_lo_que_no_se_entiende_a_null():
     base = {"cp": "15704", "scan": "DELIVERED_TO_DOORSTEP", "mas_25m": "Y", "contacto": "Y",
             "phr": "Y", "excepcion": "X", "simultaneas": "3"}
     r = e(base, [{"fallo": "Blurry photo", "motivo": "DELIVERED_TO_DOORSTEP"}], [{"tipo": "CALL", "segundos": 12}])
-    assert set(r) == CLAVES_DNR - {"dia", "paquete", "estado"}
+    assert set(r) == CLAVES_DNR - {"dia", "entrega", "paquete", "estado"}
     assert (r["cp"], r["como"], r["lejos"]) == ("15704", "puerta", True)
-    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("si", 12, True)
+    # Llamó 12 s: eso se dice. Un tipo «CALL» no dice ningún fallo: fallo_contacto null (R7/F7).
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("si", 12, None)
     assert (r["foto"], r["foto_motivo"]) == ("mal", "borrosa")
-    # «Contact Compliance» nunca se interpreta (una Y puede ser «cumplió» o «es un fallo»): solo va tal cual aparte.
-    # El tipo de llamada que no se conoce, también. PHR, la excepción y las simultáneas, ni eso.
-    assert r["sin_interpretar"] == {"contacto": "Y", "cc_tipo": "CALL"}
 
     # A menos de 25 m; sin filas de foto ni de contacto: de eso no se sabe nada (null, no «bien»).
     r = e({"mas_25m": "No", "scan": "DELIVERED_TO_MAIL_SLOT"}, [], [])
     assert (r["como"], r["lejos"], r["llamada"], r["segundos"], r["fallo_contacto"], r["foto"]) == (
         "buzon", False, None, None, None, None)
-    assert r["sin_interpretar"] == {}
 
-    # Un «1» en «≥ 25 m» no se traduce (como con la DSC), un escaneo raro tampoco: null y el código aparte.
+    # Un «1» en «≥ 25 m» no se traduce (como con la DSC), un escaneo raro tampoco: null.
     r = e({"mas_25m": "1", "scan": "DELIVERED_TO_MOON"}, [], [])
     assert (r["como"], r["lejos"]) == (None, None)
-    assert r["sin_interpretar"] == {"mas_25m": "1", "scan": "DELIVERED_TO_MOON"}
 
     # «No llamaste» solo si el tipo lo dice con todas las letras y sin segundos; con 0 s y un tipo desconocido, no se sabe.
     assert e({}, [], [{"tipo": "NO_CALL", "segundos": 0}])["llamada"] == "no"
     assert e({}, [], [{"tipo": "NO_CALL", "segundos": 9}])["llamada"] == "si"
     sin_saber = e({}, [], [{"tipo": "SMS", "segundos": 0}])
-    assert (sin_saber["llamada"], sin_saber["segundos"], sin_saber["fallo_contacto"]) == (None, None, True)
+    assert (sin_saber["llamada"], sin_saber["segundos"], sin_saber["fallo_contacto"]) == (None, None, None)
 
-    # La foto: un fallo que no se reconoce sigue siendo un fallo (está en la tabla de fallos), sin motivo en llano.
-    r = e({}, [{"fallo": "WEIRD_AUDIT"}], [])
-    assert (r["foto"], r["foto_motivo"], r["sin_interpretar"]) == ("mal", None, {"foto": "WEIRD_AUDIT"})
     assert e({}, [{"fallo": "PASS"}], [])["foto"] == "bien"
     assert e({}, [{"fallo": ""}, {"fallo": "-"}], [])["foto"] is None
     assert e({}, [{"fallo": "PACKAGE_NOT_CLEARLY_VISIBLE"}], [])["foto_motivo"] == "sin_paquete"
@@ -490,13 +578,121 @@ def test_cada_dato_interpretado_y_lo_que_no_se_entiende_a_null():
     assert e({"scan": ""}, [], [{"motivo": "DELIVERED_TO_NEIGHBOR", "segundos": 0}])["como"] == "vecino"
 
 
+def test_la_foto_mal_solo_con_un_motivo_conocido():
+    """R7/F7: «La foto no pasó la revisión» es decir algo malo de una persona; solo con un motivo que se reconoce. Un
+    valor que no se entiende («N», «Y», «PENDING», un código raro) no dice nada: null, nunca «mal» ni «bien»."""
+    e = server._dnr_entrega
+    for raro in ("N", "Y", "PENDING", "WEIRD_AUDIT", "OK", "Accepted"):
+        r = e({}, [{"fallo": raro}], [])
+        assert (r["foto"], r["foto_motivo"]) == (None, None), raro
+    assert (e({}, [{"fallo": "BLURRY"}], [])["foto"], e({}, [{"fallo": "TOO_DARK"}], [])["foto_motivo"]) == (
+        "mal", "oscura")
+    # «bien» solo si TODO lo que dice es PASS/PASSED; con uno que no se entiende al lado, no se sabe.
+    assert e({}, [{"fallo": "PASSED"}, {"fallo": "PASS"}], [])["foto"] == "bien"
+    assert e({}, [{"fallo": "PASS"}, {"fallo": "PENDING"}], [])["foto"] is None
+    # Un motivo conocido manda aunque haya otras filas.
+    r = e({}, [{"fallo": "PASS"}, {"fallo": "NO_PHOTO"}], [])
+    assert (r["foto"], r["foto_motivo"]) == ("mal", "sin_foto")
+
+
+def test_el_fallo_de_contacto_solo_si_el_tipo_lo_dice():
+    """R7/F7: estar en la tabla de contacto ya NO basta para «Te apuntaron un fallo de contacto». Solo un tipo que lo
+    dice con todas las letras (los NO_CALL… que dan «No llamaste»), y nunca si a la vez consta una llamada."""
+    e = server._dnr_entrega
+    for tipo, segundos in (("CALL", 12), ("SMS", 0), ("Y", 0), ("", 0), ("CONTACTED", 30)):
+        assert e({}, [], [{"tipo": tipo, "segundos": segundos}])["fallo_contacto"] is None, tipo
+    for tipo in ("NO_CALL", "no call made", "CALL_NOT_MADE", "NOT_CALLED"):
+        r = e({}, [], [{"tipo": tipo, "segundos": 0}])
+        assert (r["llamada"], r["fallo_contacto"]) == ("no", True), tipo
+    # Contradictorio (dice NO_CALL pero hay segundos de llamada): no se afirma el fallo.
+    assert e({}, [], [{"tipo": "NO_CALL", "segundos": 9}])["fallo_contacto"] is None
+    # Sin fila de contacto, no se sabe (nunca false).
+    assert e({}, [], [])["fallo_contacto"] is None
+
+
+def test_el_cp_solo_si_parece_un_codigo_postal():
+    """R7/F23/F24: al menos una cifra, de 3 a 10 caracteres y como mucho un espacio o un guion."""
+    e = server._dnr_entrega
+    for bueno in ("15704", "1000-001", "SW1A 1AA", "sw1a 1aa", " 28001 "):
+        assert e({"cp": bueno}, [], [])["cp"] == bueno.strip().upper(), bueno
+    for malo in ("SANTIAGO", "Calle Mayor 5", "C/ Mayor 5", "12", "12345678901", "1 2 3", "15-70-4", "AB-CD",
+                 "15704.0", "Rúa 5", ""):
+        assert e({"cp": malo}, [], [])["cp"] is None, malo
+
+
 def test_nada_que_parezca_texto_libre_sale_tal_cual():
-    """Lo que no se entiende solo sale si parece un código corto: un texto libre (que podría llevar algo del cliente)
-    no sale nunca. Y un CP que no parece un CP, tampoco."""
+    """R7/F22/F25: `sin_interpretar` ya no se manda: lo que no se entiende no sale de ninguna forma, ni un texto libre
+    en ASCII (un nombre, una calle, un teléfono). Y un CP que no parece un CP, tampoco."""
     r = server._dnr_entrega({"cp": "Rúa Real 50, 3ºB", "scan": "Lo dejé con la Sra. María, 3ºB",
                              "contacto": "llamar al 600 000 000 (María)"}, [], [])
     assert r["cp"] is None and r["como"] is None
-    assert r["sin_interpretar"] == {}
+    r = server._dnr_entrega({"cp": "Calle Mayor 5", "scan": "Maria Lopez", "mas_25m": "600123456",
+                             "contacto": "JUAN PEREZ"},
+                            [{"fallo": "Calle Mayor 5", "motivo": "Maria Lopez"}],
+                            [{"tipo": "600 123 456", "motivo": "JUAN PEREZ", "segundos": 0}])
+    assert "sin_interpretar" not in r
+    texto = json.dumps(r, ensure_ascii=False)
+    for libre in ("Calle", "Mayor", "Maria", "Lopez", "600", "JUAN", "PEREZ"):
+        assert libre not in texto, libre
+    assert set(r.values()) == {None}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_lo_que_no_se_entiende_no_sale_ni_en_la_respuesta_ni_en_el_log(base, caplog):
+    base["dnr_rows"].docs.append(_fila("TBAANA9", "AANA000001", "2026-11-09", "Y", scan="Maria Lopez",
+                                       mas_25m="600123456", contacto="JUAN PEREZ", cp="Calle Mayor 5"))
+    with caplog.at_level("DEBUG"):
+        r = await server.mis_dnr(_conductor("d-ana"))
+    texto = json.dumps(r, ensure_ascii=False)
+    assert "sin_interpretar" not in texto
+    for libre in ("Maria", "600123456", "JUAN", "Calle Mayor"):
+        assert libre not in texto and libre not in caplog.text, libre
+
+
+def test_el_dia_de_la_entrega_solo_si_es_una_fecha_iso_clara():
+    """R7/F8/F9: `entrega` solo si `fecha_entrega` empieza por una fecha ISO que existe, no es posterior a la DNR y no
+    es más de 60 días anterior. Nunca se adivina el día y el mes de un formato dudoso."""
+    f = server._dnr_dia_entrega
+    dia = "2026-11-09"
+    assert f("2026-11-07", dia) == "2026-11-07"
+    assert f("2026-11-09", dia) == "2026-11-09"
+    assert f("2026-11-07T10:30:00Z", dia) == "2026-11-07"
+    assert f("2026-11-07 10:30", dia) == "2026-11-07"
+    assert f(" 2026-11-07 ", dia) == "2026-11-07"
+    assert f("2026-09-10", dia) == "2026-09-10"          # 60 días antes: aún vale
+    for malo in ("2026-09-09",                            # 61 días antes
+                 "2026-11-10",                            # después de la DNR
+                 "07/11/2026", "11/07/2026", "7/11/26", "2026/11/07", "20261107", "2026-11-071",
+                 "2026-02-30", "2026-13-01", "Nov 7, 2026", "", None, "-"):
+        assert f(malo, dia) is None, malo
+    assert f("2026-11-07", "") is None and f("2026-11-07", None) is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_cada_dnr_lleva_su_dia_de_entrega_si_se_sabe(base):
+    base["dnr_rows"].docs = [d for d in base["dnr_rows"].docs if d["tracking_id"] not in ("TBAANA1", "TBAANA3")]
+    base["dnr_rows"].docs += [_fila("TBAANA1", "AANA000001", "2026-11-09", "Y", fecha_entrega="2026-11-07"),
+                              _fila("TBAANA3", "AANA000001", "2026-11-10", "N", fecha_entrega="07/11/2026")]
+    r = await server.mis_dnr(_conductor("d-ana"))
+    assert (_dnr(r, "TBAANA1")["dia"], _dnr(r, "TBAANA1")["entrega"]) == ("2026-11-09", "2026-11-07")
+    assert _dnr(r, "TBAANA3")["entrega"] is None
+    assert _dnr(r, "TBAANA2")["entrega"] == "2026-11-03"        # el mismo día que la DNR
+    # La semana y el orden siguen yendo por el día de la DNR.
+    assert [x["paquete"] for x in r["semanas"][0]["dnr"]] == ["TBAANA3", "TBAANA1"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_una_n_de_mas_de_7_dias_ya_no_cuenta_aunque_su_centro_no_tenga_ninguna_y(base):
+    """R7/F12: Amazon rellena la DSC con 2 a 4 días de retraso; una N de hace más de 7 días ya está decidida, aunque
+    ese día nadie de su centro tuviera una Y. A los 7 justos, todavía «sin clasificar». Sin DSC, sigue sin clasificar."""
+    base["dnr_rows"].docs.append(_fila("TBPACO2", "APACO00001", "2026-11-03", "N", center="DGA1"))   # 8 días
+    r = await server.mis_dnr(_conductor("d-paco"))
+    estado = {x["paquete"]: x["estado"] for s in r["semanas"] for x in s["dnr"]}
+    assert estado == {"TBPACO1": "sin_clasificar", "TBPACO2": "no_cuenta"}   # TBPACO1: el 04-11, 7 días
+    assert r["semanas"][1]["no_cuentan"] == 1 and r["semanas"][1]["sin_clasificar"] == 1
+    # Ana: la de hace 22 días sin DSC sigue «sin clasificar».
+    assert _dnr(await server.mis_dnr(_conductor("d-ana")), "TBAANA4")["estado"] == "sin_clasificar"
+    assert server._DNR_DIAS_PARA_DAR_POR_CLASIFICADA == 7
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -504,12 +700,13 @@ async def test_ana_ve_como_fue_cada_entrega_y_nada_de_las_filas_de_otro(base):
     r = await server.mis_dnr(_conductor("d-ana"))
     a1 = _dnr(r, "TBAANA1")
     assert (a1["cp"], a1["como"], a1["lejos"]) == ("15704", "puerta", True)
-    assert (a1["llamada"], a1["segundos"], a1["fallo_contacto"]) == ("si", 12, True)
+    assert (a1["llamada"], a1["segundos"], a1["fallo_contacto"]) == ("si", 12, None)
     assert (a1["foto"], a1["foto_motivo"]) == ("mal", "borrosa")
-    # TBAANA2 comparte paquete con una fila de foto y otra de contacto de LUIS: no son de Ana y no cuentan.
+    # TBAANA2 comparte paquete con una fila de foto y otra de contacto de LUIS (con NO_CALL y un motivo de foto
+    # conocido): no son de Ana y no cuentan.
     a2 = _dnr(r, "TBAANA2")
     assert (a2["cp"], a2["como"], a2["lejos"], a2["llamada"], a2["segundos"], a2["fallo_contacto"], a2["foto"],
-            a2["foto_motivo"], a2["sin_interpretar"]) == ("15701", None, None, None, None, None, None, None, {})
+            a2["foto_motivo"]) == ("15701", None, None, None, None, None, None, None)
 
 
 # ── Por la sesión de verdad: el token, get_current_user y una base por empresa (D3) ────────────────────────────
@@ -588,13 +785,32 @@ def test_por_la_sesion_la_ficha_fusionada_lleva_a_la_buena(dos_empresas):
     assert r.status_code == 200 and "TBAANA1" in _paquetes(r.json())
 
 
-@pytest.mark.xfail(strict=True, reason="FUERA DE ESTA RUTA (todo el portal, de antes): get_current_user lleva el token de "
-                                       "una ficha de baja a la ficha ACTIVA del mismo correo aunque la oficina la diera "
-                                       "de alta como «otra persona». Se arregla aparte; cuando se arregle, esta prueba "
-                                       "pasará y strict=True obligará a quitar la marca.")
 def test_por_la_sesion_el_token_de_juan_no_ve_lo_de_pedro(dos_empresas):
-    r = _pedir(dos_empresas, _token("d-juan"))
-    assert r.status_code == 403 or "TBPEDR1" not in _paquetes(r.json())
+    """R7/F1. get_current_user lleva el token de Juan (ficha de baja) a la ficha ACTIVA del mismo correo, la de Pedro,
+    aunque la oficina diera de alta a Pedro como «otra persona». ESTA ruta vuelve a leer el `sub` original del token:
+    no es la ficha de la sesión ni una fusionada en ella, así que 403 «Tu ficha está de baja».
+    OJO: el RESTO DEL PORTAL sigue con ese agujero (Juan ve los turnos, la furgoneta… de Pedro): viene de antes, es de
+    get_current_user/_ficha_activa_de y se arregla aparte. Aquí solo se cierra para las DNR."""
+    c = dos_empresas
+    r = _pedir(c, _token("d-juan"))
+    assert r.status_code == 403 and r.json()["detail"] == "Tu ficha está de baja"
+    assert "TBPEDR1" not in r.text
+    # El de Pedro, el suyo, sigue funcionando.
+    r = _pedir(c, _token("d-pedro"))
+    assert r.status_code == 200 and _paquetes(r.json()) == {"TBPEDR1"}
+
+
+def test_por_la_sesion_dos_fichas_suyas_sin_fusionar_403_hasta_que_vuelva_a_entrar(dos_empresas):
+    """El coste aceptado de F1: el token viejo de una ficha de baja que solo comparte correo con la activa (no está
+    FUSIONADA en ella) recibe 403 en esta ruta, aunque fuera la misma persona; al volver a entrar, el token ya es el de
+    la activa. Fusionarlas lo decide la oficina (test_por_la_sesion_la_ficha_fusionada_lleva_a_la_buena)."""
+    c = dos_empresas
+    server.db.bases[server._DEFAULT_DB_NAME]["drivers"].docs.append(
+        {"id": "d-eva-vieja", "name": "EVA SANZ LOPEZ", "email": "EVA@ejemplo.test", "center": "DGA1",
+         "active": False})
+    assert _pedir(c, _token("d-eva-vieja")).status_code == 403
+    r = _pedir(c, _token("d-eva"))
+    assert r.status_code == 200 and _paquetes(r.json()) == {"TBEVA01"}
 
 
 def test_por_la_sesion_caducado_401_y_sin_token_401(dos_empresas):
