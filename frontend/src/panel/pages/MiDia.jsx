@@ -28,8 +28,10 @@ export default function MiDia() {
   /* LOS PRÓXIMOS DÍAS POR DEBAJO DE LA MÁXIMA (11-11-2026, revisión de la flota propia, historia-5). Es lo que más
      preocupa al jefe de nave a primera hora y ya lo calcula el servidor para Turnos → Refuerzos; aquí solo se avisa
      (hoy, mañana y pasado) y se lleva allí: pedir refuerzo avisa a conductores y se hace allí, con su explicación.
-     Solo para quien puede ver Turnos. Un 400/403 o un servidor que no lo conozca: la pantalla sigue como antes. */
-  const verFaltas = canSee('turnos')
+     Solo para quien puede ver Turnos Y aprobar días (11-11-2026, P18 de la revisión): en Turnos → Refuerzos la lista de
+     días que no llegan solo la ve quien puede aprobar; a los demás la tarjeta los mandaba a una pantalla sin nada que
+     hacer. Un 400/403 o un servidor que no lo conozca: la pantalla sigue como antes. */
+  const verFaltas = canSee('turnos') && canSee('aprobar-dias')
 
   useEffect(() => {
     if (noCenter) return
@@ -156,7 +158,9 @@ export default function MiDia() {
                 </span>
                 <span className="text-xs opacity-80">
                   {f.refuerzo
-                    ? t('midia.short.asked').replace('{a}', f.refuerzo.aprobados ?? 0).replace('{p}', f.refuerzo.plazas ?? 0)
+                    // Abierto por los conductores al solicitar una vacante: no lo «pidió» la oficina (P35).
+                    ? t(f.refuerzo.auto ? 'midia.short.asked.auto' : 'midia.short.asked')
+                      .replace('{a}', f.refuerzo.aprobados ?? 0).replace('{p}', f.refuerzo.plazas ?? 0)
                     : !f.pueden ? t('midia.short.nobody')
                       : f.pueden === 1 ? t('midia.short.can.one') : t('midia.short.can').replace('{n}', f.pueden)}
                 </span>
