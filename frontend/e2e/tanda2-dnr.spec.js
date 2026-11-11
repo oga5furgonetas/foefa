@@ -411,6 +411,20 @@ test('en inglés, el singular y el plural cambian («1 DNR» / «5 DNRs»)', asy
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
+// F13 no depende del estado: va aparte para que se mire también con el estado en pausa (última comprobación, K4).
+test('F13: lo apuntado en el móvil no guarda ningún código de paquete', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrar(page, { mias: DATOS })
+  await casilla(page).click()
+  await expect(page.getByTestId('dnr-fila').first()).toBeVisible()
+  await page.getByRole('button', { name: 'Volver' }).click()
+  const apuntado = await page.evaluate(() => localStorage.getItem('fds_dnr_vistas_d1'))
+  expect(apuntado).toBeTruthy()
+  expect(apuntado).not.toMatch(/TBA|12345/)
+  expect(Object.keys(JSON.parse(apuntado)).length).toBeGreaterThan(0)
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
 test('F4/F16 y F13: las que solo cambiaron de estado van aparte como «actualizadas» y no suman al número rojo; lo apuntado no guarda el código', async ({ page }) => {
   test.skip(PAUSAS.estado, PAUSA_ESTADO)
   const fallos = vigilar(page)
@@ -814,8 +828,13 @@ test('V5: el recordatorio pone la CONDICIÓN arriba y con peso, y debajo llama +
   const pasos = r.getByTestId('dnr-recordatorio-pasos')
   await expect(condicion).toHaveText('Solo si el cliente tiene preferencia de entrega')
   await expect(pasos).toHaveText(/Llama\s*\+\s*Foto clara\s*No te cuenta/)
-  await expect(r.getByTestId('dnr-recordatorio-frase')).toHaveText(
-    'Recuerda: para que no te cuente, el cliente tiene que tener preferencia de entrega, y tú llamar y sacar bien la foto.')
+  const frase = 'Recuerda: para que no te cuente, el cliente tiene que tener preferencia de entrega, y tú llamar y sacar bien la foto.'
+  await expect(r.getByTestId('dnr-recordatorio-frase')).toHaveText(frase)
+  // H4 (revisión 4): lo que se ve, oculto al lector, y la frase entera leída una sola vez.
+  for (const l of [condicion, pasos]) expect(await l.evaluate((el) => !!el.closest('[aria-hidden="true"]'))).toBe(true)
+  const arbol = await r.ariaSnapshot()
+  expect(arbol.split(frase).length - 1).toBe(1)
+  expect(arbol).not.toMatch(/Solo si el cliente|Foto clara|No te cuenta/)
   // La condición, arriba y con la letra más grande del bloque.
   const tam = (l) => l.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))
   expect(await tam(condicion)).toBeGreaterThan(await tam(pasos))
@@ -893,7 +912,7 @@ for (const [idioma, nombre, entregado] of [['de', /^Meine DNRs/, 'Zugestellt am'
     }, idioma)
     const largos = conEstaSemana([
       dnr('2026-11-10', 'TBA319482771045', 'sin_clasificar', { como: 'puerta_trasera', lejos: false, llamada: 'corta', segundos: 8, fallo_contacto: true, foto: 'bien' }),
-      dnr('2026-11-09', 'TBA319400000009', 'cuenta', { entrega: '2026-11-07', como: 'conserjeria', lejos: true, llamada: 'no', foto: 'mal', foto_motivo: 'en_furgoneta' }),
+      dnr('2026-11-09', 'TBA319400000009', 'cuenta', { entrega: '2026-11-07', como: 'conserjeria', lejos: true, llamada: 'no', fallo_contacto: true, foto: 'mal', foto_motivo: 'en_furgoneta' }),
     ])
     await entrar(page, { mias: largos })
     await page.getByRole('button', { name: nombre }).click()
@@ -1209,4 +1228,122 @@ test('R9 (lo que se publica): con la preferencia en pausa no sale el recordatori
   await casilla(page).click()
   await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana, ninguna')
   await expect(page.getByTestId('dnr-recordatorio')).toHaveCount(0)
+})
+
+/* REVISIÓN 4 (11-11-2026, R10), H4: lo que se VE de cada etiqueta va oculto al lector de pantalla (aria-hidden) y su frase
+   larga se lee UNA vez; y los casos que no tenían prueba: «Foto bien», «Foto mal» sin motivo o con uno que la web no
+   conoce, «Llamaste» sin segundos y un `como` desconocido (no pinta etiqueta). Lo que lee el lector sale del árbol
+   accesible (ariaSnapshot), donde no entra lo que lleva aria-hidden. */
+const vecesEnArbol = async (l, texto) => (await l.ariaSnapshot()).split(texto).length - 1
+
+test('H4: cada etiqueta de qué pasó: lo visible, oculto al lector, y la frase larga leída una vez; foto bien, foto mal sin motivo o con uno desconocido, «Llamaste» sin segundos y un «como» desconocido', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrar(page, { mias: conEstaSemana([
+    dnr('2026-11-10', 'TBA600000000001', 'sin_clasificar', { como: 'xyz', llamada: 'si', foto: 'bien' }),
+    dnr('2026-11-10', 'TBA600000000002', 'sin_clasificar', { foto: 'mal', foto_motivo: null }),
+    dnr('2026-11-09', 'TBA600000000003', 'sin_clasificar', { foto: 'mal', foto_motivo: 'xyz' }),
+    dnr('2026-11-09', 'TBA600000000004', 'sin_clasificar', { como: 'xyz' }),
+    dnr('2026-11-08', 'TBA600000000005', 'cuenta', { como: 'familiar', lejos: true, llamada: 'corta', segundos: 12, fallo_contacto: true, foto: 'mal', foto_motivo: 'borrosa' }),
+  ]) })
+  await casilla(page).click()
+  const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+  await expect(filas).toHaveCount(5)
+  const [bien, sinMotivo, motivoRaro, comoRaro, deTodo] = [0, 1, 2, 3, 4].map((k) => filas.nth(k))
+  const esperado = [
+    [bien, 'llamada', 'Llamaste', 'bien', 'Llamaste al cliente'],
+    [bien, 'foto', 'Foto bien', 'bien', 'La foto pasó la revisión'],
+    [sinMotivo, 'foto', 'Foto mal', 'fallo', 'La foto no pasó la revisión'],
+    [motivoRaro, 'foto', 'Foto mal', 'fallo', 'La foto no pasó la revisión'],
+    [deTodo, 'como', 'Familiar', 'dato', 'Lo marcaste como entregado a alguien de la casa'],
+    [deTodo, 'lejos', 'A más de 25 m', 'fallo', 'Lo marcaste a más de 25 m del sitio'],
+    [deTodo, 'llamada', 'Llamada corta · 12 s', 'fallo', 'Tu llamada al cliente duró 12 segundos; tiene que durar 30 como mínimo'],
+    [deTodo, 'foto', 'Foto borrosa', 'fallo', 'La foto no pasó la revisión: salió borrosa'],
+  ]
+  for (const [f, k, visible, tono, frase] of esperado) {
+    const h = f.getByTestId(`dnr-hecho-${k}`)
+    await expect(corto(h)).toHaveText(visible)
+    await expect(h).toHaveAttribute('data-tono', tono)
+    await expect(h).toHaveAttribute('title', frase)
+    await expect(h.locator('.sr-only')).toHaveText(frase)
+    // Lo visible, oculto al lector; la frase, leída una sola vez (ni repetida por el title ni junto a lo visible).
+    await expect(corto(h)).toHaveAttribute('aria-hidden', 'true')
+    expect(await vecesEnArbol(h, frase)).toBe(1)
+  }
+  // En el árbol accesible de cada «Qué pasó» solo están las frases largas: ninguna etiqueta corta que no vaya dentro de su
+  // frase.
+  const arbol = await deTodo.getByTestId('dnr-que-paso').ariaSnapshot()
+  for (const visible of ['Familiar', 'A más de 25 m', 'Llamada corta · 12 s', 'Foto borrosa']) expect(arbol).not.toContain(visible)
+  expect(await bien.getByTestId('dnr-que-paso').ariaSnapshot()).not.toContain('Foto bien')
+  // La llamada de «si» no lleva el aviso de los 30 segundos.
+  await expect(bien.getByTestId('dnr-aviso-llamada')).toHaveCount(0)
+  // Un `como` que la web no conoce no pinta etiqueta: en la primera, solo la llamada y la foto; la que solo trae eso, sin
+  // «Qué pasó».
+  await expect(bien.locator('[data-testid^="dnr-hecho-"]')).toHaveCount(2)
+  await expect(bien.getByTestId('dnr-hecho-como')).toHaveCount(0)
+  await expect(comoRaro.getByTestId('dnr-que-paso')).toHaveCount(0)
+  await expect(page.getByTestId('mis-dnr')).not.toContainText('xyz')
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+/* H5: las etiquetas que en alemán, inglés o italiano no se leían bien. */
+const H5 = [
+  ['de', /^Meine DNRs/, conEstaSemana([
+    dnr('2026-11-10', 'TBA700000000001', 'sin_clasificar', { como: 'familiar', foto: 'mal', foto_motivo: 'sin_paquete' }),
+    dnr('2026-11-09', 'TBA700000000002', 'sin_clasificar', { foto: 'mal', foto_motivo: 'persona' }),
+  ], { en_revision: true }), [
+    ['dnr-hecho-como', 0, 'Haushaltsmitglied'], ['dnr-hecho-foto', 0, 'Paket nicht auf dem Foto'], ['dnr-hecho-foto', 1, 'Person auf dem Foto'],
+  ]],
+  ['en', /^My DNRs/, conEstaSemana([dnr('2026-11-10', 'TBA700000000003', 'sin_clasificar', { lejos: false })]), [['dnr-hecho-lejos', 0, 'On site']]],
+  ['it', /^Le mie DNR/, conEstaSemana([dnr('2026-11-10', 'TBA700000000004', 'sin_clasificar', { foto: 'mal', foto_motivo: 'sin_paquete' })]),
+    [['dnr-hecho-foto', 0, 'Pacco non visibile']]],
+]
+for (const [idioma, nombre, mias, esperado] of H5) {
+  test(`H5: en ${idioma}, las etiquetas corregidas por la revisión`, async ({ page }) => {
+    await page.addInitScript((l) => localStorage.setItem('fds_idioma', l), idioma)
+    await entrar(page, { mias })
+    await page.getByRole('button', { name: nombre }).click()
+    const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+    for (const [testid, k, texto] of esperado) await expect(corto(filas.nth(k).getByTestId(testid))).toHaveText(texto)
+    // En alemán, con un ID en revisión, la frase de arriba ya no se queda a medias.
+    if (idioma === 'de') await expect(page.getByTestId('dnr-frase-arriba')).toHaveText('Diese Woche, ohne die in Prüfung befindlichen')
+  })
+}
+
+/* H6: si sale de la pantalla antes de que cargue, sus DNR NO se apuntan como vistas. La respuesta, retenida; Volver; se
+   suelta; la casilla sigue con su número rojo (también al volver a pintarse) y, al entrar otra vez, siguen como «Nueva». */
+test('H6: si sale antes de que cargue, no se apuntan como vistas: la casilla sigue con su número rojo y al volver a entrar siguen como «Nueva»', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrar(page)
+  await expect(numeroRojo(page)).toHaveText('5')
+  let soltar
+  const retenida = new Promise((r) => { soltar = r })
+  let servidas = 0
+  await page.unroute(/\/api\/diarios\/mias/)
+  await page.route(/\/api\/diarios\/mias/, async (route) => {
+    await retenida
+    await json(DATOS)(route)
+    servidas++
+  })
+  await casilla(page).click()
+  await expect(page.getByText('Cargando…')).toBeVisible()
+  const respuesta = page.waitForResponse(/\/api\/diarios\/mias/)
+  await page.getByRole('button', { name: 'Volver' }).click()
+  await expect(casilla(page)).toBeVisible()
+  soltar()
+  await respuesta
+  await expect.poll(() => servidas).toBe(1)
+  // Que la página procese la respuesta antes de mirar lo apuntado.
+  await page.waitForTimeout(300)
+  expect(await page.evaluate(() => localStorage.getItem('fds_dnr_vistas_d1'))).toBeNull()
+  // La casilla se vuelve a pintar (otra pantalla y vuelta) con lo apuntado: sigue con sus 5 nuevas.
+  await page.getByRole('button', { name: /Mis turnos/ }).click()
+  await page.getByRole('button', { name: 'Volver' }).first().click()
+  await expect(casilla(page)).toBeVisible()
+  await expect(numeroRojo(page)).toHaveText('5')
+  // Y al entrar de verdad, siguen como «Nueva»; esta vez sí se apuntan.
+  await casilla(page).click()
+  await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana llevas 2 DNR')
+  await expect(page.getByTestId('dnr-esta-semana').getByTestId('dnr-nueva')).toHaveCount(2)
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('fds_dnr_vistas_d1'))).not.toBeNull()
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })

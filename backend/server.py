@@ -39945,6 +39945,15 @@ _DNR_DIAS_PARA_DAR_POR_CLASIFICADA = 7
 # vuelve a pegar, esa N no dice nada y se queda «sin clasificar» (decirle «no
 # te cuenta» seria afirmar lo que puede ser al reves). 5 = el retraso de
 # Amazon (2 a 4 dias) y uno de margen.
+# LIMITE (R10/H1, 11-11-2026; se deja escrito, la regla no cambia): `actualizado`
+# dice cuando se SUBIO el fichero, no cuando se BAJO. pegar_diario (y
+# /diarios/subir, varios .html de golpe) lo pone a «ahora» en cada guardado, asi
+# que una subida en tanda de ficheros viejos (bajados el mismo dia, con el bloque
+# DNR aun todo a N) haria pasar por «no cuenta» una N sin clasificar. Hoy no se
+# le ensena a nadie: ese estado esta en pausa en la pantalla
+# (frontend/src/pages/driver/dnrPausas.js). ANTES de encenderlo hay que cerrarlo:
+# apuntar al guardar la primera vez que se pego cada fila ($setOnInsert) y exigir
+# un segundo pegado posterior, de al menos estos dias despues del primero y del dia.
 _DNR_DIAS_PARA_DAR_POR_REPEGADA = 5
 # El dia de la entrega solo si no es de mas de estos dias antes que la DNR (R7/F8).
 _DNR_DIAS_MAX_ENTREGA = 60
@@ -40195,8 +40204,10 @@ _DNR_SEGUNDOS_MAX = 1800
 _DNR_SEGUNDOS_MIN_LLAMADA = 30
 # El paquete (R8/G11): letras y cifras, con alguna cifra (los codigos de
 # Amazon, «TBA…», siempre las llevan; un nombre pegado sin espacios no), sin
-# espacios ni signos, de 8 a 30 caracteres.
-_DNR_PAQUETE = re.compile(r"^(?=[A-Za-z0-9]*[0-9])[A-Za-z0-9]{8,30}$")
+# espacios ni signos, de 8 a 30 caracteres. Y con alguna letra (R10/H2,
+# 11-11-2026): un movil de 9 cifras sin espacios («600123456») tiene esa forma
+# y no es un paquete; los codigos de Amazon (TBA…, TBC…) empiezan por letras.
+_DNR_PAQUETE = re.compile(r"^(?=[A-Za-z0-9]*[0-9])(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{8,30}$")
 # «aaaa-mm-dd» al principio, sin una cifra pegada detras («2026-11-071» no).
 _DNR_FECHA_ISO = re.compile(r"^(\d{4}-\d{2}-\d{2})(?!\d)")
 

@@ -20,7 +20,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import server
-from base_de_mentira import _FALTA, Col, Cursor, Db, _casa, _leer, _proyecta
+from base_de_mentira import _FALTA, Col, Cursor, Db, _casa, _leer, _poner, _proyecta
 
 HOY = "2026-11-11"          # miércoles: su semana de Amazon empieza el domingo 08-11
 DANI = {"sub": "u1", "name": "Dani", "role": "admin", "account_type": "owner"}
@@ -30,15 +30,38 @@ def _conductor(sub, org="o1"):
     return {"sub": sub, "name": sub, "role": "driver", "org_id": org}
 
 
+def _proyecta_mongo(d, proyeccion):
+    """Como MongoDB también con las proyecciones de INCLUSIÓN (R10/H3, 11-11-2026): `{campo: 1}` devuelve solo esos
+    campos, más `_id` si no se excluye. La base de mentira las ignora (y devuelve el documento entero), así que quitar
+    `merged_into` o `actualizado` de una proyección del servidor no lo notaba ninguna prueba. Las de exclusión, como
+    siempre. Todo documento de MongoDB tiene `_id`: si el de mentira no lo trae, se le da uno fijo (el suyo en memoria),
+    para que `find_one({}, {"_id": 1})` siga diciendo «hay algo»."""
+    if not isinstance(proyeccion, dict) or not any(v not in (0, False) for v in proyeccion.values()):
+        return _proyecta(d, proyeccion)
+    fuera = {}
+    for campo, v in proyeccion.items():
+        if campo == "_id" or v in (0, False):
+            continue
+        valor = _leer(d, campo)
+        if valor is not _FALTA:
+            _poner(fuera, campo, valor)
+    if proyeccion.get("_id", 1) not in (0, False):
+        fuera["_id"] = d.get("_id", id(d))
+    return fuera
+
+
 class _CursorMongo(Cursor):
     """Ordena como MongoDB también con booleanos y campos que faltan (null < false < true). El de la base de mentira
     compara True con "" y revienta; aquí hace falta porque la oficina ordena las fichas por `active`. Y apunta si la
     consulta llevaba tope (`limit` o `to_list(n)`), para la prueba de los topes."""
 
-    def __init__(self, docs, col=None):
+    def __init__(self, docs, col=None, proyeccion=None):
         super().__init__(docs)
         self.col = col
         self.con_tope = False
+        # Como MongoDB, la proyección se aplica DESPUÉS de ordenar y cortar (R10/H3): se puede ordenar por un campo que
+        # no se pide.
+        self.proyeccion = proyeccion
         if col is not None:
             col.cursores.append(self)
 
@@ -61,7 +84,10 @@ class _CursorMongo(Cursor):
 
     async def to_list(self, n=None):
         self.con_tope = self.con_tope or n is not None
-        return await super().to_list(n)
+        return [_proyecta_mongo(d, self.proyeccion) for d in await super().to_list(n)]
+
+    async def __anext__(self):
+        return _proyecta_mongo(await super().__anext__(), self.proyeccion)
 
 
 class _Col(Col):
@@ -73,16 +99,17 @@ class _Col(Col):
         # (R7, 11-11-2026: «mirando TODAS las colecciones que toque la ruta»).
         self.otras = []
 
-    def find(self, q=None, proyeccion=None, **_):
+    def find(self, q=None, proyeccion=None, projection=None, **_):
         # Como MongoDB, `{campo: {"$nin": [None, …]}}` deja FUERA los documentos sin ese campo (null casa con «no
         # está»); la base de mentira los deja entrar. Con el tope bajado (R8/G1) eso cambia qué fichas caben.
         sin_campo = [k for k, v in (q or {}).items() if isinstance(v, dict) and None in (v.get("$nin") or ())]
         docs = [d for d in self.docs if all(_leer(d, k) is not _FALTA for k in sin_campo)]
-        return _CursorMongo([_proyecta(d, proyeccion) for d in docs if _casa(d, q)], self)
+        return _CursorMongo([d for d in docs if _casa(d, q)], self, proyeccion or projection)
 
-    async def find_one(self, *a, **k):
+    async def find_one(self, q=None, proyeccion=None, projection=None, sort=None, **k):
         self.otras.append("find_one")
-        return await super().find_one(*a, **k)
+        d = await super().find_one(q, None, sort=sort, **k)
+        return None if d is None else _proyecta_mongo(d, proyeccion or projection)
 
     async def distinct(self, campo, *a, **k):
         self.otras.append(f"distinct:{campo}")
@@ -1061,6 +1088,23 @@ async def test_la_disputa_con_una_ficha_fusionada_sale_igual_desde_los_dos_lados
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_la_disputa_con_una_fusionada_por_driver_id_sale_desde_los_dos_lados(base):
+    """G2 por la OTRA lectura de fichas, la de `driver_id` (R10/H3, 11-11-2026): la ficha vieja de Gil, fusionada en la
+    buena (que no tiene ningún ID), tiene el ID solo en `driver_id`, y otra persona viva también. Nadie lo tiene en
+    `transporter_id`: son dos personas en D, disputa, y las dos en revisión. Con el doble que respeta las proyecciones,
+    quitar `merged_into` de esa lectura hace fallar esta prueba (d-z dejaría de estar en revisión)."""
+    base["drivers"].docs += [
+        _ficha("d-gil"),
+        _ficha("d-gil-vieja", active=False, status="fusionada", merged_into="d-gil", driver_id="AGIL000001"),
+        _ficha("d-z", driver_id="AGIL000001"),
+    ]
+    base["dnr_rows"].docs.append(_fila("TBGIL0001", "AGIL000001", "2026-11-05", "Y"))
+    for sub in ("d-gil", "d-z"):
+        r = await server.mis_dnr(_conductor(sub))
+        assert r["en_revision"] is True and "TBGIL0001" not in _paquetes(r), sub
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_una_fusionada_en_una_ficha_de_baja_no_disputa(base):
     """G2, el otro extremo: si la cadena acaba en una ficha de BAJA (no fusionada), esa persona ya no está, y como
     cualquier ficha de baja no disputa. Lo ve la viva, como en la oficina (la activa pisa a las de baja)."""
@@ -1151,10 +1195,10 @@ def test_un_movil_no_es_un_codigo_postal():
 @pytest.mark.asyncio(loop_scope="session")
 async def test_el_paquete_solo_si_tiene_forma_de_codigo(base):
     """G11: `paquete` era el tracking_id en crudo (al guardar solo se pide que no esté vacío): con una tabla pegada
-    descuadrada, cualquier texto de esa columna llegaba al conductor. Ahora solo letras y cifras (con alguna cifra), sin
-    espacios, de 8 a 30 caracteres; si no, esa fila NO sale (ni cuenta en los totales)."""
+    descuadrada, cualquier texto de esa columna llegaba al conductor. Ahora solo letras y cifras (con alguna cifra y, desde
+    R10/H2, alguna letra), sin espacios, de 8 a 30 caracteres; si no, esa fila NO sale (ni cuenta en los totales)."""
     raros = ("TBA 1234 5678", "MARIA LOPEZ", "MARIALOPEZ", "TBA-12345678", "TB12345", "T" * 20 + "1" * 11,
-             "600 123 456")
+             "600 123 456", "600123456")         # R10/H2: un móvil de 9 cifras sin espacios tampoco es un paquete
     base["dnr_rows"].docs += [_fila(p, "AANA000001", "2026-11-09", "Y") for p in raros]
     base["dnr_rows"].docs += [_fila("TBA123456789012", "AANA000001", "2026-11-09", "Y"),
                               _fila("T" * 20 + "1" * 10, "AANA000001", "2026-11-09", "Y")]
