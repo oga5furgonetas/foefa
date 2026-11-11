@@ -202,3 +202,22 @@ async def test_no_se_puede_pedir_el_resumen_de_una_nave_que_no_ve(cliente, envio
                            json={"shift": "manana", "date": "2026-11-10", "center": "OGA5"})
     assert r.status_code == 403, r.text
     assert envios["push"] == [] and envios["telegram"] == []
+
+
+# ── S6 (11-11-2026) · vaciar un día ya guardado de la Asignación ─────────────
+# La pantalla deja ahora pulsar Guardar con la lista vacía cuando el día tenía filas.
+# El servidor ya lo admitía (no se ha tocado): esta prueba sujeta que lo siga haciendo.
+
+async def test_guardar_la_asignacion_sin_filas_deja_el_dia_vacio(cliente, base):
+    base["daily_assignments"] = Col([
+        {"id": "a1", "date": "2026-11-11", "center": "OGA5",
+         "slots": [{"vehicle_id": f"v{i}", "vehicle_plate": "", "driver_id": f"d{i}", "driver_name": "", "route": ""}
+                   for i in (1, 2, 3)]}])
+    cab = _cab("u-jefe", "Jefe OGA5")
+    r = await cliente.put("/api/assignments/daily", headers=cab,
+                          json={"center": "OGA5", "date": "2026-11-11", "slots": []})
+    assert r.status_code == 200, r.text
+    assert r.json()["action"] == "updated"
+    r = await cliente.get("/api/assignments/daily?center=OGA5&date=2026-11-11", headers=cab)
+    assert r.status_code == 200, r.text
+    assert [d["slots"] for d in r.json()] == [[]]

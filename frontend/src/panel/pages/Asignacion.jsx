@@ -444,6 +444,9 @@ export default function Asignacion() {
   const cambiosRef = useRef(false)
   useEffect(() => { cambiosRef.current = cambios }, [cambios])
   const cargado = useRef({ center, date })   // la nave y el día de lo que hay en pantalla
+  // Si lo guardado en el servidor para ese día venía sin filas (11-11-2026): quitar
+  // todas las filas de un día que SÍ las tenía es un cambio que hay que guardar.
+  const cargadoVacio = useRef(true)
   const [vehicles, setVehicles] = useState([])
   const [drivers, setDrivers] = useState([])
   const [inspMap, setInspMap] = useState({})
@@ -489,6 +492,7 @@ export default function Asignacion() {
       const doc = Array.isArray(da.data) ? da.data[0] : da.data
       const loadedSlots = Array.isArray(doc?.slots) ? doc.slots : []
       setSlots(loadedSlots)
+      cargadoVacio.current = loadedSlots.length === 0
       setCambios(false)
       const insps = Array.isArray(insp.data) ? insp.data : []
       const map = buildInspMap(loadedSlots, insps)
@@ -668,11 +672,13 @@ export default function Asignacion() {
       const fila = [matricula, s.driver_name || s.rawName].filter(Boolean).join(' · ') || s.route || '—'
       if (!window.confirm(t('asgn.del.confirm').replace('{fila}', fila))) return
     }
-    // Sin filas no hay nada que guardar (Guardar se apaga), así que tampoco
-    // «Cambios sin guardar»: si no, se quedaba la marca y cada cambio de día o
-    // de centro preguntaba por algo que no se podía guardar (10-11-2026).
+    // Sin filas, la marca «Cambios sin guardar» solo se va si el día ya venía
+    // vacío del servidor: entonces no hay nada que guardar (10-11-2026). Si
+    // tenía filas, vaciarlo SÍ es un cambio: se queda la marca, se pregunta al
+    // cambiar de día o de centro y Guardar deja el día vacío (11-11-2026; antes
+    // el servidor seguía con las filas y la pantalla parecía vacía).
     const resto = slots.filter((_, k) => k !== i)
-    setSlots(resto); setCambios(resto.length > 0)
+    setSlots(resto); setCambios(resto.length > 0 || !cargadoVacio.current)
   }
   function addSlot() { setSlots(s => [...s, { vehicle_id: '', vehicle_plate: '', driver_id: '', driver_name: '' }]); setCambios(true) }
 
@@ -687,6 +693,7 @@ export default function Asignacion() {
     try {
       await putDailyAssignment({ center, date, slots: clean })
       setSlots(clean)
+      cargadoVacio.current = clean.length === 0
       setCambios(false)
       setMsg({ ok: true, t: t('asgn.save.ok').replace('{n}', clean.length) })
     } catch { setMsg({ ok: false, t: t('asgn.save.error') }) }
@@ -777,7 +784,7 @@ export default function Asignacion() {
           {cambios && <span className="text-xs font-semibold text-amber-400">{t('asgn.unsaved')}</span>}
           <button
             onClick={save}
-            disabled={busy || slots.length === 0}
+            disabled={busy || (slots.length === 0 && !cambios)}
             className="btn-primary flex items-center gap-2 disabled:opacity-40"
           >
             {busy ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
