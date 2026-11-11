@@ -12019,6 +12019,60 @@ def _ya_tiene_ficha(otra: dict, que: str) -> dict:
     }
 
 
+async def _ceder_correo(email: str, a_id: str, ids: list, user: dict) -> list:
+    """La oficina dice que la ficha `a_id` y las de `ids` son personas DISTINTAS con el mismo correo (11-11-2026,
+    tanda 3, S1): el correo pasa a ser solo de `a_id`.
+
+    Todo el servidor da por hecho que «mismo correo = misma persona» (_ficha_activa_de lleva el token de una ficha
+    de baja a la activa del mismo correo, driver_login entra por la activa, _fichas_misma_persona las junta en la
+    furgoneta y los bloqueos). Para la misma persona dada de alta dos veces es lo que tiene que pasar; para otra
+    persona era un agujero: Juan, de baja, seguía entrando como Pedro, al que la oficina dio de alta con su mismo
+    buzón eligiendo «es otra persona». En vez de tocar esas reglas (que necesita la persona duplicada), aquí se
+    deja de cumplir su premisa: las fichas de `ids` se quedan SIN correo (guardado en `correo_cedido`, para la
+    historia) y sus cuentas, desactivadas y sin correo.
+
+    NUNCA toca una ficha activa ni la cuenta de una ficha activa: solo las de `active: False`. Devuelve los ids de
+    las fichas que ha cedido."""
+    email = (email or "").strip()
+    ids = [i for i in (ids or []) if i and i != a_id]
+    if not email or not ids:
+        return []
+    ahora = datetime.now(timezone.utc).isoformat()
+    re_correo = {"$regex": "^%s$" % re.escape(email), "$options": "i"}
+    cedidas = []
+    for f in await db.drivers.find({"id": {"$in": ids}, "active": False, "email": re_correo},
+                                   {"_id": 0, "id": 1, "email": 1}).to_list(50):
+        await db.drivers.update_one(
+            {"id": f["id"], "active": False},
+            {"$set": {"correo_cedido": {"email": f.get("email"), "a": a_id, "en": ahora,
+                                        "por": (user or {}).get("name") or (user or {}).get("sub")}},
+             "$unset": {"email": ""}})
+        cedidas.append(f["id"])
+    if not cedidas:
+        return []
+    # Las cuentas: las de esas fichas y cualquier otra con ese correo cuya ficha no esté activa (o ya no exista).
+    # Sin correo nadie llega a ellas por el login; desactivadas, tampoco por un correo de recuperación.
+    cuentas = await db.driver_accounts.find(
+        {"$or": [{"driver_id": {"$in": cedidas}}, {"email": re_correo}]},
+        {"_id": 0, "id": 1, "driver_id": 1}).to_list(50)
+    otras = [c.get("driver_id") for c in cuentas if c.get("driver_id") and c.get("driver_id") not in cedidas]
+    vivas = {f["id"] for f in await db.drivers.find(
+        {"id": {"$in": otras}, "active": {"$ne": False}}, {"_id": 0, "id": 1}).to_list(50)} if otras else set()
+    for c in cuentas:
+        did = c.get("driver_id")
+        if did == a_id or did in vivas:
+            continue
+        filtro = {"id": c["id"]} if c.get("id") else ({"driver_id": did} if did else None)
+        if not filtro:
+            continue
+        await db.driver_accounts.update_one(
+            filtro, {"$set": {"active": False, "correo_cedido": email}, "$unset": {"email": ""}})
+    _FICHA_ACTIVA_CACHE.clear()
+    await _audit(user, "driver_correo_cedido", {"email": email, "a": a_id, "cedidas": cedidas})
+    logger.info("Correo cedido a la ficha %s: %d ficha(s) de baja dejan de entrar con él", (a_id or "")[:8], len(cedidas))
+    return cedidas
+
+
 @api_router.post("/drivers", response_model=Driver)
 async def create_driver(data: DriverCreate, nueva: bool = False,
                         admin: dict = Depends(require_admin)):
@@ -12082,6 +12136,20 @@ async def create_driver(data: DriverCreate, nueva: bool = False,
         # Dos altas A LA VEZ: la comprobacion de arriba las deja pasar a las
         # dos y solo el indice `email_unico_activo` para a la segunda.
         raise HTTPException(409, "Ya hay un conductor activo con el correo %s." % email)
+
+    # «ES OTRA PERSONA» (11-11-2026, tanda 3, S1): la oficina lo ha dicho con `?nueva=true` tras el 409 de
+    # reactivar. Las fichas de baja con este correo dejan de ser «la misma persona» (_ceder_correo): si no, el
+    # token, la contraseña y la renovación de la app de quien se fue le llevaban a esta ficha nueva. Sin
+    # `nueva`, o sin fichas de baja con este correo, no cambia nada. Si falla, se apunta y el alta sigue.
+    if nueva and email:
+        try:
+            de_baja = await db.drivers.find(
+                {"email": {"$regex": "^%s$" % re.escape(email), "$options": "i"}, "active": False,
+                 "id": {"$ne": driver.id}}, {"_id": 0, "id": 1}).to_list(50)
+            if de_baja:
+                await _ceder_correo(email, driver.id, [f["id"] for f in de_baja], admin)
+        except Exception:                                        # noqa: BLE001
+            logger.exception("No se pudo ceder el correo de las fichas de baja al dar de alta a otra persona")
 
     if password and driver.email:
         await db.driver_accounts.insert_one({
@@ -12242,6 +12310,8 @@ async def drivers_duplicados(_=Depends(require_admin)):
                 "telefono": d.get("phone") or d.get("telefono"),
                 "inspecciones": insp.get(i, 0), "turnos": turnos.get(i, 0),
                 "peticiones": pets.get(i, 0), "asignaciones": asig.get(i, 0),
+                # Para el botón «No es la misma persona» (11-11-2026, tanda 3, S1): solo junto a las de baja.
+                "activa": d.get("active") is not False,
             })
             filas[-1]["total"] = sum(filas[-1][k] for k in
                                      ("inspecciones", "turnos", "peticiones", "asignaciones"))
@@ -12250,6 +12320,50 @@ async def drivers_duplicados(_=Depends(require_admin)):
         fuera.append({"email": e, "fichas": filas, "sugerida": filas[0]["id"]})
     return {"grupos": fuera, "total": len(fuera),
             "fichas_de_mas": sum(len(g["fichas"]) - 1 for g in fuera)}
+
+
+@api_router.post("/drivers/separar")
+async def drivers_separar(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """«No es la misma persona» (11-11-2026, tanda 3, S1): para las parejas que YA existen de una ficha activa y una
+    de baja con el mismo correo, que el servidor no puede distinguir de una persona dada de alta dos veces. La
+    oficina, que las ve en «Fichas duplicadas», dice cuáles son otra persona: el correo se queda solo en `queda` (la
+    activa) y las de `ceden` (de baja) dejan de entrar con él (_ceder_correo). Solo fichas de baja, nunca una activa.
+    Declarada ANTES de /drivers/{driver_id}/..., como /drivers/duplicados."""
+    queda = str((data or {}).get("queda") or "").strip()
+    ceden = (data or {}).get("ceden")
+    if not queda or not isinstance(ceden, list) or not ceden or len(ceden) > 20:
+        raise HTTPException(400, "Indica la ficha que se queda el correo y las de baja que no son la misma persona.")
+    ceden = [str(c or "").strip() for c in ceden]
+    if any(not c or c == queda for c in ceden):
+        raise HTTPException(400, "Indica la ficha que se queda el correo y las de baja que no son la misma persona.")
+    activa = await db.drivers.find_one({"id": queda}, {"_id": 0, "id": 1, "active": 1, "email": 1})
+    correo = str((activa or {}).get("email") or "").strip()
+    if not activa or activa.get("active") is False or not correo:
+        raise HTTPException(400, "La ficha que se queda el correo tiene que estar activa y tener correo.")
+    fichas = {f["id"]: f for f in await db.drivers.find(
+        {"id": {"$in": ceden}}, {"_id": 0, "id": 1, "active": 1, "email": 1, "merged_into": 1}).to_list(50)}
+    for c in ceden:
+        f = fichas.get(c)
+        if not f or f.get("active") is not False:
+            raise HTTPException(400, "Solo se puede separar una ficha dada de baja.")
+        if f.get("merged_into"):
+            # Fusionada en otra: es esa otra persona (y «Fichas duplicadas» no la enseña).
+            raise HTTPException(400, "Esa ficha está fusionada en otra: separa la otra.")
+        if str(f.get("email") or "").strip().lower() != correo.lower():
+            raise HTTPException(400, "Esa ficha no tiene el mismo correo.")
+    # Las fusionadas en las que se separan son la misma persona que ellas: se van con ellas (si no, su token
+    # seguiría llevando a `queda` por el correo).
+    todas, frontera = list(ceden), list(ceden)
+    for _ in range(5):
+        if not frontera:
+            break
+        hijas = [f["id"] for f in await db.drivers.find(
+            {"merged_into": {"$in": frontera}, "active": False}, {"_id": 0, "id": 1}).to_list(50)
+            if f.get("id") and f["id"] not in todas and f["id"] != queda]
+        todas += hijas
+        frontera = hijas
+    cedidas = await _ceder_correo(correo, queda, todas, user)
+    return {"ok": True, "cedidas": cedidas}
 
 
 # ── IMPORTAR CONDUCTORES DE GOLPE ───────────────────────────────────────────
@@ -13048,9 +13162,14 @@ async def upload_inspection_photos(
     # Los admins pueden repetir (peritajes manuales desde el panel).
     if user.get("role") == "driver":
         today = _dia_negocio()
+        # Se busca con la ficha del TOKEN, no con el `driver_id` del formulario (11-11-2026):
+        # el portal web que entraba con contraseña guardaba al conductor sin `id` y mandaba
+        # el texto "undefined"; no encontraba la de hoy, no daba el 409 y un reintento
+        # creaba una SEGUNDA inspección. Para un conductor la inspección se guarda siempre
+        # con `user["sub"]` (más abajo), así que es la única con la que tiene sentido buscar.
         dup = await db.inspections.find_one({
             "deleted": {"$ne": True}, "vehicle_id": vehicle_id,
-            "driver_id": driver_id or user.get("sub"),
+            "driver_id": user.get("sub"),
             "created_at": _rango_dia_negocio(today)
         }, {"_id": 0, "id": 1})
         if dup:
@@ -39787,21 +39906,27 @@ async def diarios_por_conductor(center: str, desde: str, hasta: str,
         {"_id": 0}).to_list(5000)
 
     nombres = {}
-    # Las de baja primero para que una activa con el mismo id la pise: si dos
-    # fichas comparten id, manda la que sigue trabajando.
+    # Si dos fichas comparten id, manda la que sigue trabajando (_reparto_ids, 11-11-2026).
+    # Antes se fiaba del orden (`sort("active", 1)`): en `driver_id` se quedaba la
+    # PRIMERA leida, que era la de baja, y en `transporter_id` una de baja pisaba a
+    # una ficha sin el campo `active` (que cuenta como activa). «Mis DNR» reparte
+    # con el mismo ayudante, asi que oficina y portal no pueden decir cosas distintas.
+    con_t = []
     async for d in db.drivers.find(
             {"transporter_id": {"$nin": [None, ""]}},
-            {"_id": 0, "name": 1, "transporter_id": 1, "id": 1, "active": 1}).sort("active", 1):
-        nombres[(d.get("transporter_id") or "").upper()] = {
-            "name": d["name"], "id": d["id"], "de_baja": d.get("active") is False}
+            {"_id": 0, "name": 1, "transporter_id": 1, "id": 1, "active": 1, "merged_into": 1, "status": 1}
+    ).sort("active", 1):
+        con_t.append(d)
     # El mismo ID vive tambien en `driver_id` («ID Amazon»): 32 fichas lo tienen
     # SOLO ahi (ver _cx_nombres). Sin esto salian como un codigo sin nombre.
+    con_d = []
     async for d in db.drivers.find(
             {"driver_id": {"$nin": [None, ""]}},
-            {"_id": 0, "name": 1, "driver_id": 1, "id": 1, "active": 1}).sort("active", 1):
-        clave = str(d.get("driver_id") or "").strip().upper()
-        if clave and clave not in nombres:
-            nombres[clave] = {"name": d["name"], "id": d["id"], "de_baja": d.get("active") is False}
+            {"_id": 0, "name": 1, "driver_id": 1, "id": 1, "active": 1, "merged_into": 1, "status": 1}
+    ).sort("active", 1):
+        con_d.append(d)
+    for clave, d in _reparto_ids(con_t, con_d).items():
+        nombres[clave] = {"name": d["name"], "id": d["id"], "de_baja": d.get("active") is False}
     # Etiquetas sueltas: gente sin ficha de conductor (oficina, o que se fue).
     doc_alias = await db.app_meta.find_one({"_id": "transporter_alias"}) or {}
     for tid, nm in (doc_alias.get("mapa") or {}).items():
@@ -40074,6 +40199,35 @@ def _dnr_viva(d: dict) -> bool:
                 or d.get("status") in ("deleted", "fusionada"))
 
 
+def _reparto_ids(con_t: list, con_d: list) -> dict:
+    """{ID: ficha} con el que la oficina (diarios_por_conductor) y «Mis DNR» (_dnr_mis_ids) casan cada ID con
+    una ficha (11-11-2026, tanda 3). Una sola regla, en un solo sitio, para que no puedan separarse: una ficha
+    de baja (no _dnr_viva) nunca le quita el ID a una viva.
+      · `transporter_id` (con_t, en el orden leido): gana la ULTIMA leida, como siempre, salvo que una de baja
+        no pisa a una viva. Antes se fiaba del orden por `active`, y una ficha SIN el campo (que todo el servidor
+        trata como activa) sale antes que las de baja: la de baja se quedaba con el ID.
+      · `driver_id` (con_d): solo los IDs que ninguna ficha tiene en `transporter_id` (R8: manda ese campo,
+        aunque sea de una de baja; no cambia). Entre las que lo tienen, la viva gana a la de baja y, entre
+        iguales, la PRIMERA leida, como siempre. Antes ganaba siempre la primera, que era la de baja.
+    Las claves, como hasta ahora: `transporter_id` en mayusculas; `driver_id` sin espacios y en mayusculas."""
+    reparto: dict = {}
+    for d in con_t:
+        clave = (d.get("transporter_id") or "").upper()
+        antes = reparto.get(clave)
+        if antes is not None and _dnr_viva(antes) and not _dnr_viva(d):
+            continue
+        reparto[clave] = d
+    claves_t = set(reparto)
+    for d in con_d:
+        clave = str(d.get("driver_id") or "").strip().upper()
+        if not clave or clave in claves_t:
+            continue
+        antes = reparto.get(clave)
+        if antes is None or (not _dnr_viva(antes) and _dnr_viva(d)):
+            reparto[clave] = d
+    return reparto
+
+
 async def _dnr_mis_ids(mis_fichas: set) -> Optional[tuple]:
     """({transporter_id: (id de la ficha, nombre)}, {IDs en disputa}), o None si
     cualquiera de las dos lecturas de fichas llega a _DNR_TOPE_FICHAS (R8/G1,
@@ -40083,9 +40237,9 @@ async def _dnr_mis_ids(mis_fichas: set) -> Optional[tuple]:
     lectura cortada no se puede repetir el reparto de la oficina: no se casa nada.
 
     Lo primero son los IDs que la oficina casa con estas fichas: mismas
-    consultas, mismo orden y mismas claves que diarios_por_conductor (las de
-    baja primero para que la activa las pise en `transporter_id`; en `driver_id`
-    solo entra lo que no reclamo nadie antes).
+    consultas, mismo orden y el MISMO reparto que diarios_por_conductor
+    (_reparto_ids, 11-11-2026: una de baja nunca le quita el ID a una viva; en
+    `driver_id` solo entra lo que nadie tiene en `transporter_id`).
 
     Lo segundo (R7/F11, afinado el 11-11-2026, S1): los IDs en disputa en los
     que esta persona queda «en revision». SOLO hay disputa cuando la regla de la
@@ -40157,21 +40311,19 @@ async def _dnr_mis_ids(mis_fichas: set) -> Optional[tuple]:
                 return destino          # la cadena sale de lo leido: la ultima a la que se llega
             d = leidas[destino]
 
-    mapa: dict = {}
+    # El reparto de la oficina, con su mismo ayudante (11-11-2026).
+    mapa: dict = {clave: (d.get("id"), d.get("name") or "") for clave, d in _reparto_ids(con_t, con_d).items()}
     en_t: dict = {}     # ID -> personas vivas con el en `transporter_id`
     en_d: dict = {}     # ID -> personas vivas con el en `driver_id`
     claves_t = set()    # los IDs que alguna ficha (viva o no) tiene en `transporter_id`
     for d in con_t:
         clave = (d.get("transporter_id") or "").upper()
-        mapa[clave] = (d.get("id"), d.get("name") or "")
         if clave:
             claves_t.add(clave)
         if clave and persona(d):
             en_t.setdefault(clave, set()).add(persona(d))
     for d in con_d:
         clave = str(d.get("driver_id") or "").strip().upper()
-        if clave and clave not in mapa:
-            mapa[clave] = (d.get("id"), d.get("name") or "")
         if clave and persona(d):
             en_d.setdefault(clave, set()).add(persona(d))
     mios = {tid: (fid, nombre) for tid, (fid, nombre) in mapa.items() if tid and fid and fid in mis_fichas}

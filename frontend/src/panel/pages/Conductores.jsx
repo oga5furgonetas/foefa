@@ -19,7 +19,7 @@ import {
   getDriverRecoveryEmail, setDriverRecoveryEmail, removeDriverRecoveryEmail,
   generarAccesosConductores, previaAccesosConductores, getContrasenaInicial, setContrasenaInicial,
   deleteDriverAccount,
-  getDriversDuplicados, fusionarConductores, repasarFusiones,
+  getDriversDuplicados, fusionarConductores, separarConductores, repasarFusiones,
 } from '../api'
 import { MARCA } from '../../marca'
 
@@ -334,6 +334,29 @@ function SaludFichas({ onCambio }) {
     } finally { setOcupado('') }
   }
 
+  /* «NO ES LA MISMA PERSONA» (11-11-2026). Una ficha de baja y una activa con el mismo correo pueden ser la misma
+     persona dada de alta dos veces… o alguien que se fue y otra persona a la que se dio de alta con su buzón. Para el
+     servidor son siempre la misma, y quien se fue seguía entrando como la nueva. Solo la oficina lo sabe: con esto, la
+     de baja deja de entrar con ese correo. Solo junto a las de baja de un grupo con UNA activa (un servidor sin
+     `activa` no enseña el botón). */
+  const separar = async (grupo, f) => {
+    const activas = grupo.fichas.filter((x) => x.activa === true)
+    if (activas.length !== 1) return
+    const queda = activas[0]
+    if (!window.confirm(`¿${f.nombre} es OTRA persona que ${queda.nombre}?
+
+Su ficha (dada de baja) dejará de entrar con el correo ${grupo.email}: el correo se queda solo en la de ${queda.nombre}.
+Aceptar: separarlas. Cancelar: no hacer nada.`)) return
+    setOcupado(`sep:${f.id}`); setErr(''); setHecho('')
+    try {
+      await separarConductores({ queda: queda.id, ceden: [f.id] })
+      setHecho(`${f.nombre} ya no entra con ${grupo.email}.`)
+      cargar(); onCambio?.()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudieron separar.')
+    } finally { setOcupado('') }
+  }
+
   if (!dups) return <div className="flex items-center gap-2 text-dark-400"><Loader2 className="animate-spin" size={18} /> …</div>
 
   return (
@@ -379,6 +402,14 @@ function SaludFichas({ onCambio }) {
                           {f.inspecciones} insp · {f.asignaciones} asign · {f.turnos} turnos · {f.peticiones} pet.
                         </span>
                         {f.id === conservar && <span className="ml-auto text-[12px] font-semibold text-emerald-400">se conserva</span>}
+                        {f.activa === false && g.fichas.filter((x) => x.activa === true).length === 1 && (
+                          <button type="button" data-testid="separar-ficha"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); separar(g, f) }}
+                            disabled={!!ocupado}
+                            className={`${f.id === conservar ? '' : 'ml-auto '}rounded-lg border border-dark-700 px-2.5 py-1 text-[12px] text-dark-300 hover:border-dark-500 disabled:opacity-50`}>
+                            {ocupado === `sep:${f.id}` ? 'Separando…' : 'No es la misma persona'}
+                          </button>
+                        )}
                       </label>
                     ))}
                   </div>
@@ -1263,14 +1294,24 @@ export default function Conductores() {
         /* Alguien que vuelve tras una baja: el servidor ofrece su ficha de
            siempre en vez de crear otra y partir su historial en dos. */
         if (e?.response?.status !== 409 || !d?.reactivar_id) throw e
+        /* «Otra persona» en un SEGUNDO paso (11-11-2026): antes el «Cancelar» del primero ya creaba la ficha nueva, y
+           mucha gente pulsa Cancelar para no hacer nada. Ahora el servidor, además, le quita el correo a la ficha de
+           baja (deja de entrar con él): pulsarlo sin querer le cerraría la cuenta a la misma persona. */
         if (window.confirm(`${d.mensaje}
 
 Aceptar: reactivar su ficha (conserva inspecciones, turnos e historial).
-Cancelar: es otra persona, crear una ficha nueva.`)) {
+Cancelar: ver otras opciones.`)) {
           const { password: _pw, ...resto } = data
           await updateDriver(d.reactivar_id, { ...resto, active: true })
-        } else {
+        } else if (window.confirm(`¿Es OTRA persona con el mismo correo?
+
+La ficha dada de baja dejará de entrar con este correo.
+Aceptar: crear una ficha nueva.
+Cancelar: no hacer nada.`)) {
           await createDriver(data, { nueva: true })
+        } else {
+          setModal(null)
+          return
         }
       }
     }
