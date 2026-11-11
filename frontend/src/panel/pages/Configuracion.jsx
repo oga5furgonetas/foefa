@@ -426,6 +426,16 @@ function Destinatarios({ centers }) {
     try {
       const r = await enviarResumenDiario(d ? { id: d.id } : {})
       const e = r.data?.enviados || []
+      // Las naves que se mandaron y no tienes asignadas (11-11-2026, V12): el servidor no las enseña, solo dice
+      // cuántas son. Sin esto, quien solo ve OGA5 leía «no se ha mandado nada» cuando sí se mandó a las demás. Un
+      // servidor viejo no lo manda: 0, y la alerta es la de siempre.
+      const otras = Number(r.data?.enviados_otras_naves) || 0
+      const nota = otras === 1 ? '1 centro que no tienes asignado no se muestra aquí'
+        : `${otras} centros que no tienes asignados no se muestran aquí`
+      if (otras && !e.length) {
+        alert(`Enviado${d ? ` a ${d.nombre}` : ''}. ${nota}.`)
+        return
+      }
       if (d && !e.length) {
         alert(`${d.nombre} no tiene ningún centro asignado, así que no hay nada que mandarle.`)
         return
@@ -442,7 +452,7 @@ function Destinatarios({ centers }) {
             ...(x.turnos || []).map((t) => `Checklist ${t.turno}: ${t.hechas}/${t.total}`),
             `Para: ${x.destinatarios.join(', ')}`,
             x.correos?.length ? `✉️ Correo enviado a: ${x.correos.join(', ')}` : '(nadie con correo configurado)',
-          ].join('\n')).join('\n\n')
+          ].join('\n')).join('\n\n') + (otras ? `\n\nEnviado también: ${nota}.` : '')
         : 'Nadie tiene centros asignados, así que no se ha mandado nada.')
     } catch (e) {
       alert(e?.response?.data?.detail || 'No se pudo enviar')

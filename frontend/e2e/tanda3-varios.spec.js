@@ -180,3 +180,74 @@ test.describe('historia-5 · «Mi día» avisa de los días que no llegan a la m
     await expect(page.getByText(/^Todo en orden/)).toHaveCount(0)
   })
 })
+
+/* V12 (11-11-2026, tercera ronda): «Enviárselo a todos» y el envío a una persona en Configuración. Al usuario limitado
+   a una nave el servidor solo le devuelve sus naves y, aparte, cuántas se mandaron y no tiene asignadas
+   (`enviados_otras_naves`). La alerta lo dice en vez de «no se ha mandado nada». Sin ese campo (dueño, super-admin,
+   o un servidor viejo), la alerta es la de siempre. */
+test.describe('V12 · probar el resumen diario desde Configuración', () => {
+  const ROSA = { id: 'a2', nombre: 'Rosa', email: 'rosa@empresa.es', centers: ['DGA1'], avisos: ['resumen_diario'], activo: true }
+  const OGA5 = {
+    center: 'OGA5', fecha: '03/11/2026', inspecciones: '3 de 4', checklist: '2/2', golpes: 'ninguno',
+    incidencias: {}, danos: [], turnos: [], destinatarios: ['Judyt'], correos: ['judyt@empresa.es'], whatsapp: [],
+  }
+
+  async function probar(page, respuesta, boton) {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page, { centros: ['OGA5'] })
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/avisos\/destinatarios(\?|$)/, json({ rows: [ROSA] }))
+    let pedido = null
+    await page.route(/\/api\/avisos\/enviar-resumen-diario/, (route) => {
+      pedido = route.request().postDataJSON()
+      return json(respuesta)(route)
+    })
+    const alertas = []
+    page.on('dialog', (d) => { alertas.push(d.message()); d.accept() })
+    await page.goto('/panel/configuracion', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Resumen diario por centro')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText('Rosa', { exact: true })).toBeVisible({ timeout: 30000 })
+    await (boton === 'rosa'
+      ? page.getByTitle('Enviarle el resumen ahora sólo a Rosa')
+      : page.getByRole('button', { name: 'Enviárselo a todos' })).click()
+    await expect.poll(() => alertas.length, { timeout: 15000 }).toBe(1)
+    expect(fallos).toEqual([])
+    return { alerta: alertas[0], pedido }
+  }
+
+  test('a todos, solo de naves que no tiene: «Enviado», no «no se ha mandado nada»', async ({ page }) => {
+    const { alerta, pedido } = await probar(page, { enviados: [], enviados_otras_naves: 2 })
+    expect(pedido).toEqual({})
+    expect(alerta).toBe('Enviado. 2 centros que no tienes asignados no se muestran aquí.')
+  })
+
+  test('a una persona de otra nave: «Enviado a Rosa», no «no tiene ningún centro asignado»', async ({ page }) => {
+    const { alerta, pedido } = await probar(page, { enviados: [], enviados_otras_naves: 1 }, 'rosa')
+    expect(pedido).toEqual({ id: 'a2' })
+    expect(alerta).toBe('Enviado a Rosa. 1 centro que no tienes asignado no se muestra aquí.')
+  })
+
+  test('con sus naves y otras: enseña las suyas y dice cuántas más se mandaron', async ({ page }) => {
+    const { alerta } = await probar(page, { enviados: [OGA5], enviados_otras_naves: 1 })
+    expect(alerta).toContain('OGA5 — 03/11/2026')
+    expect(alerta).not.toContain('DGA1')
+    expect(alerta.endsWith('\n\nEnviado también: 1 centro que no tienes asignado no se muestra aquí.')).toBe(true)
+  })
+
+  test('sin el campo nuevo (dueño, super-admin o servidor viejo): la alerta de siempre', async ({ page }) => {
+    const vacia = await probar(page, { enviados: [] })
+    expect(vacia.alerta).toBe('Nadie tiene centros asignados, así que no se ha mandado nada.')
+  })
+
+  test('sin el campo nuevo, a una persona: la alerta de siempre', async ({ page }) => {
+    const { alerta } = await probar(page, { enviados: [] }, 'rosa')
+    expect(alerta).toBe('Rosa no tiene ningún centro asignado, así que no hay nada que mandarle.')
+  })
+
+  test('sin el campo nuevo y con naves: la lista de siempre, sin la línea nueva', async ({ page }) => {
+    const { alerta } = await probar(page, { enviados: [OGA5] })
+    expect(alerta.startsWith('OGA5 — 03/11/2026\nRevisados: 3 de 4')).toBe(true)
+    expect(alerta.endsWith('✉️ Correo enviado a: judyt@empresa.es')).toBe(true)
+    expect(alerta).not.toContain('no tienes asignad')
+  })
+})

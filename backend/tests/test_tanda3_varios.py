@@ -336,6 +336,77 @@ def test_p36_el_corte_va_por_lineas_enteras():
     assert server._cortar_por_lineas("hola\nadiós", 1000) == "hola\nadiós"
 
 
+# ── V13 (11-11-2026, tercera ronda): el corte en el tamaño justo ─────────────────────
+# El texto de SIEMPRE (sin el bloque de salidas) más el «Para:» suma 3.999 o 4.000 caracteres: en main llegaba entero, y
+# tiene que seguir llegando entero aunque detrás venga el bloque de salidas, que es lo que se quita. Antes del arreglo la
+# marca «\n…» le quitaba su última línea. Si no queda sitio para la marca, va sin ella. A 4.001 el texto de siempre ya no
+# cabe: se corta por líneas enteras, con «…».
+PARA = "\n\n<i>Para: Judyt</i>"
+SALIDAS = "\n\n🚚 <b>Salidas de la asignación:</b> 5 de 20 revisadas\n   Sin auditoría: Ana (1111AAA), Pepe (2222BBB)"
+
+
+def _texto_de(largo):
+    """Un texto de líneas cortas con `largo` caracteres exactos (la última línea, de relleno)."""
+    lineas = [f"<b>línea {i:03d}</b> del resumen" for i in range(200)]
+    texto = "\n".join(lineas)
+    while len(texto) > largo - 9:
+        lineas.pop()
+        texto = "\n".join(lineas)
+    return texto + "\n<b>" + "x" * (largo - len(texto) - 8) + "</b>"
+
+
+@pytest.mark.parametrize("total", [3999, 4000, 4001])
+def test_v13_el_corte_en_el_tamaño_justo(total):
+    tope = 4000 - len(PARA)
+    siempre = _texto_de(total - len(PARA))
+    assert len(siempre) + len(PARA) == total
+    corto = server._cortar_por_lineas(siempre + SALIDAS, tope)
+    assert len(corto) <= tope and _equilibrado(corto)
+    if total <= 4000:
+        # Lo de siempre, entero; sin sitio para la marca, sin ella.
+        assert corto == siempre
+    else:
+        assert corto.endswith("\n…")
+        assert corto[:-2] == siempre[:siempre.rfind("\n")]
+    # Lo que cabe sin cortar sigue sin tocarse, y con sitio de sobra la marca sigue saliendo.
+    assert server._cortar_por_lineas(siempre, len(siempre)) == siempre
+    assert server._cortar_por_lineas(siempre + SALIDAS, len(siempre) + 2) == siempre + "\n…"
+
+
+@pytest.mark.parametrize("total", [3999, 4000, 4001])
+async def test_v13_el_telegram_del_resumen_en_el_tamaño_justo(envio, monkeypatch, total):
+    para = PARA
+    sin_salidas = {}
+
+    async def resumen(center, dia):
+        r = _dia_cargado(center, 0)
+        objetivo = total - len(para)
+        # Se crece la lista del checklist hasta quedarse cerca y la última tarea se rellena al carácter.
+        items = r["turnos"][0]["items"]
+        while len(server._texto_resumen_largo(r)) < objetivo - 100:
+            items.append({"text": f"Tarea {len(items):02d} de la nave", "done": False})
+        items.append({"text": "", "done": False})
+        r["turnos"][0]["total"] = len(items)
+        items[-1]["text"] = "y" * (objetivo - len(server._texto_resumen_largo(r)))
+        assert len(server._texto_resumen_largo(r)) == objetivo
+        sin_salidas[center] = server._texto_resumen_largo(r)
+        # Con el bloque de salidas detrás, que es lo que no cabe.
+        return {**r, "salidas": _salidas_quince()}
+    monkeypatch.setattr(server, "resumen_dia_centro", resumen)
+    await server.enviar_resumen_diario(DIA)
+    assert len(envio.grupo) == 2
+    for texto in envio.grupo:
+        center = "OGA5" if "OGA5 —" in texto else "DGA1"
+        assert len(texto) <= 4000, len(texto)
+        assert texto.endswith("<i>Para: Judyt</i>") and _equilibrado(texto)
+        siempre = sin_salidas[center]
+        if total <= 4000:
+            # Como en main: lo de siempre, entero, y el «Para:».
+            assert texto == siempre + para
+        else:
+            assert texto == siempre[:siempre.rfind("\n")] + "\n…" + para
+
+
 @pytest_asyncio.fixture(loop_scope="session")
 async def cliente():
     async with AsyncClient(transport=ASGITransport(app=server.app), base_url="http://testserver") as c:
@@ -384,6 +455,40 @@ async def test_p19_sin_limite_o_en_la_cuenta_duena_vuelven_todas(cliente, envio_
     r = await cliente.post("/api/avisos/enviar-resumen-diario", json={"date": DIA},
                            headers=_usuario("u-x", centros, cuenta))
     assert r.status_code == 200, r.text
+    assert [e["center"] for e in r.json()["enviados"]] == ["DGA1", "OGA5"]
+    # V12 (11-11-2026): para ellos la respuesta es la de siempre, sin el contador nuevo.
+    assert set(r.json()) == {"enviados"}
+
+
+# ── V12 (11-11-2026, tercera ronda): «no se ha mandado nada» cuando sí se mandó ─────
+# Al limitado le vuelven solo sus naves (P19), pero la pantalla no sabía que el envío fue también a otras. La
+# respuesta trae además `enviados_otras_naves`: cuántas naves se mandaron y no se le enseñan. Solo si hay alguna.
+
+async def test_v12_el_limitado_sabe_cuantas_naves_se_mandaron_sin_enseñarselas(cliente, envio_api):
+    r = await cliente.post("/api/avisos/enviar-resumen-diario", json={"date": DIA},
+                           headers=_usuario("u-oga5", ["OGA5"], "dsp"))
+    assert r.status_code == 200, r.text
+    assert [e["center"] for e in r.json()["enviados"]] == ["OGA5"]
+    assert r.json()["enviados_otras_naves"] == 1
+    assert "DGA1" not in r.text and "Eva de DGA1" not in r.text
+
+
+async def test_v12_un_destinatario_solo_de_otra_nave_no_sale_como_no_mandado(cliente, envio_api):
+    envio_api.aviso_destinatarios.docs.append(
+        {"id": "a2", "nombre": "Rosa", "email": "rosa@empresa.es", "centers": ["DGA1"],
+         "avisos": ["resumen_diario"], "activo": True})
+    r = await cliente.post("/api/avisos/enviar-resumen-diario", json={"date": DIA, "id": "a2"},
+                           headers=_usuario("u-oga5", ["OGA5"], "dsp"))
+    assert r.status_code == 200, r.text
+    assert r.json() == {"enviados": [], "enviados_otras_naves": 1}
+    assert [c[0] for c in envio_api.correos] == ["rosa@empresa.es"]
+
+
+async def test_v12_si_ve_todas_las_naves_enviadas_no_lleva_el_contador(cliente, envio_api):
+    r = await cliente.post("/api/avisos/enviar-resumen-diario", json={"date": DIA},
+                           headers=_usuario("u-dos", ["OGA5", "DGA1"], "dsp"))
+    assert r.status_code == 200, r.text
+    assert set(r.json()) == {"enviados"}
     assert [e["center"] for e in r.json()["enviados"]] == ["DGA1", "OGA5"]
 
 
