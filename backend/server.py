@@ -52374,11 +52374,13 @@ async def cuadrante_ver(center: str, desde: str, hasta: str, user: dict = Depend
     aprobados = await _cua_aprobados(ids, desde, hasta)
     # Las peticiones sin contestar (11-11-2026, cuadrante-1): una clave más que la web vieja ignora.
     pendientes = await _cua_pendientes(ids, desde, hasta)
+    # `avisar_activo` (11-11-2026): el interruptor de «Avisar a los conductores». El panel solo enseña el botón con
+    # True; la web vieja ignora la clave.
     return {"center": center, "desde": desde, "hasta": hasta, "hoy": _dia_negocio(),
             "personas": personas, "celdas": celdas, "maximas": maximas, "objetivos": objetivos,
             "config": {"colchon": int(cfg.get("colchon", 2)), "permitir_extra": bool(cfg.get("permitir_extra", True))},
             "ajustes": ajustes, "aprobados": sorted(aprobados), "propuesta": prop, "ultimo_cambio": ult,
-            "tipos": list(_cm.TIPOS), "pendientes": pendientes}
+            "tipos": list(_cm.TIPOS), "pendientes": pendientes, "avisar_activo": _CUA_AVISOS_ACTIVO}
 
 
 @api_router.post("/cuadrante/celdas")
@@ -52830,14 +52832,16 @@ async def cuadrante_deshacer(data: dict = Body(...), user: dict = Depends(requir
         raise HTTPException(409, "Lo último del cuadrante lo ha cambiado otra persona (%s): no se deshace para no "
                                  "pisarlo. Usa «Deshacer último cambio» si de verdad quieres." % (c.get("por") or "?"))
     # Deshacer también cambia lo que el conductor tiene ese día: lo que había JUSTO ANTES se apunta para «Avisar a los
-    # conductores» (11-11-2026). Si esta lectura falla, se deshace igual, sin apuntar.
+    # conductores» (11-11-2026). Si esta lectura falla, se deshace igual, sin apuntar. Con el aviso apagado
+    # (_CUA_AVISOS_ACTIVO), ni se lee: deshacer hace las mismas lecturas y escrituras que antes de existir el aviso.
     celdas_aviso, previo = set(), None
-    try:
-        hoy_aviso = _dia_negocio()
-        celdas_aviso = {(did, f) for did, f, _a in _cua_aviso_celdas(c) if f >= hoy_aviso}
-        previo = await _cua_turnos_de(celdas_aviso)
-    except Exception as e:                                           # noqa: BLE001
-        logger.warning("Avisos del cuadrante: no se ha podido leer lo de antes de deshacer en %s: %s", center, e)
+    if _CUA_AVISOS_ACTIVO:
+        try:
+            hoy_aviso = _dia_negocio()
+            celdas_aviso = {(did, f) for did, f, _a in _cua_aviso_celdas(c) if f >= hoy_aviso}
+            previo = await _cua_turnos_de(celdas_aviso)
+        except Exception as e:                                       # noqa: BLE001
+            logger.warning("Avisos del cuadrante: no se ha podido leer lo de antes de deshacer en %s: %s", center, e)
     # Por lotes y por colección: deshacer una hoja importada son ~2.500 turnos,
     # y de uno en uno contra Atlas eran minutos. Cada filtro sale una sola vez
     # en `snaps` (lo garantiza _CuaCambio), así que el orden no cambia nada.
@@ -52875,6 +52879,14 @@ async def cuadrante_deshacer(data: dict = Body(...), user: dict = Depends(requir
 # suspensión, la rejilla escondida de Turnos) tiene su propio camino o no se avisa por aquí.
 _CUA_AVISOS_PEND = "cuadrante_avisos_pendientes"
 _CUA_AVISO_DIAS = 14
+# EL INTERRUPTOR (11-11-2026): APAGADO. El repaso final sacó casos raros sin cerrar (un día concedido que se anula, se
+# avisa y se deshace se queda sin aviso; lo que cambia con la ventana abierta le llega a un marcado sin que la oficina
+# lo viera; fichas fusionadas que pierden lo pendiente; conductores que pasan de una nave a otra), y esto manda avisos a
+# móviles de verdad: ver docs/ESTADO.md, punto -37. Apagado, el servidor hace EXACTAMENTE lo de antes: no apunta nada
+# (_cua_avisos_apuntar vuelve sin leer ni escribir), deshacer no lee nada de más, las dos rutas de avisos dan 404 y
+# GET /cuadrante dice `avisar_activo: False`, así que el panel no enseña el botón. Para encenderlo basta ponerlo a True
+# cuando esos casos estén cerrados (lo decide Dani; test_tanda3_cuadrante.py tiene una prueba que lo vigila).
+_CUA_AVISOS_ACTIVO = False
 _CUA_AVISO_ETIQUETA = {"1": "trabajas", "T": "trabajas", "X": "trabajas", "EXTRA": "trabajas (extra)",
                        "N/T": "libras", "L": "libras", "N/T APROB": "libras", "APROBADO": "libras",
                        "V": "vacaciones", "COMP": "compensas", "BKP": "de reserva", "S": "en oficina",
@@ -52917,6 +52929,8 @@ async def _cua_avisos_apuntar(center: str, celdas) -> None:
     Se llama DESPUÉS de aplicar el cambio (11-11-2026, tercera ronda, V8): solo se apuntan las celdas que se leen
     distinto para el conductor que antes. La sincronización con la hoja pasa por aquí ~2.500 celdas cada vez; las que
     no cambian ni se crean ni se tocan (miles de escrituras inútiles, y un `tocado` movido anulaba lo descartado)."""
+    if not _CUA_AVISOS_ACTIVO:                       # apagado (11-11-2026): ni una lectura ni una escritura
+        return
     try:
         celdas = list(celdas)
         if not celdas:
@@ -53029,6 +53043,8 @@ def _cua_aviso_texto(dias: list) -> str:
 @api_router.post("/cuadrante/avisos/previa")
 async def cuadrante_avisos_previa(data: dict = Body(...), user: dict = Depends(require_admin)):
     """A quién se avisaría y de qué (no manda nada). body: {center}. De paso borra lo apuntado de días ya pasados."""
+    if not _CUA_AVISOS_ACTIVO:                       # apagado (11-11-2026): como un servidor que no la tiene
+        raise HTTPException(404, "No disponible")
     center = _cua_centro(data.get("center"))
     _cua_acceso(user, center)
     hoy, _hasta = _cua_aviso_ventana()
@@ -53047,6 +53063,8 @@ async def cuadrante_avisos_enviar(data: dict = Body(...), user: dict = Depends(r
     `descartar_ids`); a los de `descartar_ids` (los que la oficina vio y desmarcó) no se les avisa y se guarda lo que
     vieron (`visto`), para que no vuelvan a salir mientras su día siga igual; a quien no está en ninguna de las dos
     (apareció después de la previa) no se le toca nada y sale la próxima vez."""
+    if not _CUA_AVISOS_ACTIVO:                       # apagado (11-11-2026): como un servidor que no la tiene
+        raise HTTPException(404, "No disponible")
     center = _cua_centro(data.get("center"))
     _cua_acceso(user, center)
     solo = None

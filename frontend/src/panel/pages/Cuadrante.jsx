@@ -1051,6 +1051,9 @@ export default function Cuadrante() {
   const personas = useMemo(() => lista(datos?.personas), [datos])
   const hoy = datos?.hoy || hoyLocal()
   const propuesta = datos?.propuesta || null
+  // «Avisar a los conductores» lleva un interruptor en el servidor (11-11-2026): solo con `avisar_activo: true` en lo
+  // último que contestó GET /cuadrante. Sin la clave (un servidor de antes) o con false, ni botón ni ventana.
+  const avisarActivo = datos?.avisar_activo === true
   const mostrarProp = Boolean(propuesta) && verPropuesta
   const cambiosProp = useMemo(() => {
     const m = {}
@@ -1277,21 +1280,27 @@ export default function Cuadrante() {
               <Icono size={14} /> {t}
             </button>
           ))}
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          {datos?.ultimo_cambio && (
-            <button onClick={deshacer} disabled={ocupado === 'deshacer'} title={`Deshacer «${datos.ultimo_cambio.que}»`}
-              className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1.5 text-xs text-dark-300 hover:bg-dark-800 disabled:opacity-40">
-              {ocupado === 'deshacer' ? <Loader2 size={13} className="animate-spin" /> : <Undo2 size={13} />} Deshacer último cambio
-            </button>
-          )}
-          {/* Nunca solo: abre la lista de a quién y qué, y se manda al pulsar (11-11-2026, cuadrante-8). */}
-          {datos && (
+        {avisarActivo ? (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {datos?.ultimo_cambio && (
+              <button onClick={deshacer} disabled={ocupado === 'deshacer'} title={`Deshacer «${datos.ultimo_cambio.que}»`}
+                className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1.5 text-xs text-dark-300 hover:bg-dark-800 disabled:opacity-40">
+                {ocupado === 'deshacer' ? <Loader2 size={13} className="animate-spin" /> : <Undo2 size={13} />} Deshacer último cambio
+              </button>
+            )}
+            {/* Nunca solo: abre la lista de a quién y qué, y se manda al pulsar (11-11-2026, cuadrante-8). */}
             <button onClick={() => setAvisar(true)} title="Manda a cada conductor sus días cambiados de hoy a 14 días. Antes ves la lista."
               className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1.5 text-xs text-dark-300 hover:bg-dark-800">
               <Bell size={13} /> Avisar a los conductores
             </button>
-          )}
-        </div>
+          </div>
+        ) : datos?.ultimo_cambio && (
+          // Con el aviso apagado, la barra de siempre: «Deshacer» solo, sin envoltorio (11-11-2026).
+          <button onClick={deshacer} disabled={ocupado === 'deshacer'} title={`Deshacer «${datos.ultimo_cambio.que}»`}
+            className="ml-auto flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1.5 text-xs text-dark-300 hover:bg-dark-800 disabled:opacity-40">
+            {ocupado === 'deshacer' ? <Loader2 size={13} className="animate-spin" /> : <Undo2 size={13} />} Deshacer último cambio
+          </button>
+        )}
       </div>
 
       {err && (
@@ -1302,17 +1311,19 @@ export default function Cuadrante() {
       )}
       {aviso && (
         <p className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[13px] text-emerald-300">
-          <Check size={15} className="mt-0.5 shrink-0" /> <span>{aviso}
-            {trasAceptar === aviso && (
-              <>
-                {' '}
-                <button onClick={() => setAvisar(true)} data-testid="avisar-tras-aceptar"
-                  className="inline-flex items-center gap-1 font-semibold text-emerald-200 underline hover:text-emerald-100">
-                  <Bell size={12} /> Avisar a los conductores
-                </button>
-              </>
-            )}
-          </span>
+          <Check size={15} className="mt-0.5 shrink-0" /> {avisarActivo ? (
+            <span>{aviso}
+              {trasAceptar === aviso && (
+                <>
+                  {' '}
+                  <button onClick={() => setAvisar(true)} data-testid="avisar-tras-aceptar"
+                    className="inline-flex items-center gap-1 font-semibold text-emerald-200 underline hover:text-emerald-100">
+                    <Bell size={12} /> Avisar a los conductores
+                  </button>
+                </>
+              )}
+            </span>
+          ) : aviso}
           <button onClick={() => setAviso('')} aria-label="Cerrar aviso" className="ml-auto"><X size={14} /></button>
         </p>
       )}
@@ -1846,7 +1857,7 @@ export default function Cuadrante() {
           onCerrar={() => { setHojaAbierta(false); cargar(true) }} />
       )}
 
-      {avisar && (
+      {avisar && avisarActivo && (
         <AvisarConductores center={center} onCerrar={() => setAvisar(false)}
           onHecho={(r, { pedidos = 0 } = {}) => {
             setAvisar(false)
