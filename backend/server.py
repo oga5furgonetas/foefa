@@ -11214,6 +11214,15 @@ async def get_vehicles_portal(user: dict = Depends(require_any_auth)):
     hay_cuadrante = any(a.get("slots") for a in asigs)
     mis_slots = [s for a in asigs for s in (a.get("slots") or [])
                  if s.get("driver_id") in mis_ids and s.get("vehicle_id")]
+    # PRESTADO A OTRA NAVE (11-11-2026, dia-1-prestados): si no está en la Asignación de la suya, se mira si está en
+    # la de otra nave hoy. Antes la casilla le decía «Hoy: 1234ABC» (/me/assigned-vehicle mira todas las naves) y
+    # aquí le salía «Hoy no sales a ruta», o la lista de su nave sin esa furgoneta. Solo abre: a quien ya sale en
+    # la suya no le cambia nada, y el «no_en_ruta» de su nave sigue para quien no está en ninguna.
+    if not mis_slots and mis_ids:
+        async for a in db.daily_assignments.find({"date": hoy, "slots.driver_id": {"$in": list(mis_ids)}},
+                                                 {"_id": 0, "slots": 1}):
+            mis_slots += [s for s in (a.get("slots") or [])
+                          if isinstance(s, dict) and s.get("driver_id") in mis_ids and s.get("vehicle_id")]
 
     if hay_cuadrante and not mis_slots:
         # Consta el cuadrante y no está: hoy no le toca.
@@ -29374,24 +29383,38 @@ async def upsert_daily_assignment(request: Request, user: dict = Depends(require
         })
 
     now = datetime.now(timezone.utc).isoformat()
+    # «OTRO GUARDÓ MIENTRAS EDITABAS» (11-11-2026, dia-6). Con dos personas en la misma nave y día, la última que
+    # guardaba borraba sin aviso lo de la otra. La pantalla manda ahora `version` (el updated_at con el que cargó la
+    # hoja; '' si el día venía vacío) y, si no coincide con lo guardado, 409 con quién y cuándo; con `forzar`, se
+    # guarda encima. SIN `version` (la web de antes, en caché), como siempre: gana el último.
+    version = data.get("version")
+    version = str(version) if isinstance(version, str) else None
+    forzar = data.get("forzar") is True
+    por = _texto_cuerpo((user or {}).get("name"), 120)
     try:
         existing = await db.daily_assignments.find_one(
             {"date": date, "center": center}, {"_id": 0}
         )
+        if existing and version is not None and not forzar and (existing.get("updated_at") or "") != version:
+            raise HTTPException(status_code=409, detail={
+                "codigo": "otro_guardo", "por": existing.get("updated_by") or "",
+                "updated_at": existing.get("updated_at") or ""})
         if existing:
             await db.daily_assignments.update_one(
                 {"date": date, "center": center},
-                {"$set": {"slots": slots, "updated_at": now}}
+                {"$set": {"slots": slots, "updated_at": now, "updated_by": por}}
             )
-            return {"success": True, "action": "updated", "id": existing.get("id")}
+            return {"success": True, "action": "updated", "id": existing.get("id"), "updated_at": now}
         else:
             doc_id = str(uuid.uuid4())
             doc = {
                 "id": doc_id, "date": date, "center": center,
-                "slots": slots, "created_at": now, "updated_at": now
+                "slots": slots, "created_at": now, "updated_at": now, "updated_by": por
             }
             await db.daily_assignments.insert_one(doc)
-            return {"success": True, "action": "created", "id": doc_id}
+            return {"success": True, "action": "created", "id": doc_id, "updated_at": now}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Cuadrante: error guardando en BD: {e}")
         raise HTTPException(status_code=500, detail=f"Error BD: {str(e)}")
@@ -38915,7 +38938,8 @@ async def plantilla_desde_asignacion(center: str, date: Optional[str] = None,
 _HORA_RE = re.compile(r"^([01]?\d|2[0-3]):[0-5]\d$")
 
 
-def _plantilla_validar_filas(rows: list, conductores: list, matriculas: dict, asignados: dict) -> list:
+def _plantilla_validar_filas(rows: list, conductores: list, matriculas: dict, asignados: dict,
+                             itv: dict = None, dia: str = "") -> list:
     """Que cada fila de la plantilla cuadre con lo que la empresa YA sabe.
 
     La plantilla sale de leer capturas o texto con la IA, y de vez en cuando se
@@ -38923,7 +38947,12 @@ def _plantilla_validar_filas(rows: list, conductores: list, matriculas: dict, as
     existe. Eso se CAZA antes de que salga la hoja, comparando con:
       · los conductores de la empresa (nombre normalizado y por palabras),
       · los vehículos de la flota (matrícula normalizada),
-      · la Asignación del día, si está hecha: {conductor: matrícula}.
+      · la Asignación del día, si está hecha: {conductor: matrícula},
+      · la ITV de cada furgoneta (11-11-2026, dia-5): `itv` es {matrícula
+        normalizada: 'AAAA-MM-DD'} y `dia` el día DE LA HOJA (no hoy: una hoja
+        hecha por la tarde para mañana avisa de la ITV que caduca esta noche).
+        Sin los dos, como antes. Sin fecha de ITV no se avisa: en la flota hay
+        muchas sin apuntar y llenaría de ruido todas las filas.
     Devuelve avisos con sugerencia; no cambia nada solo. Pura, sin base de
     datos: `test_plantilla_validar.py`.
     """
@@ -38989,6 +39018,13 @@ def _plantilla_validar_filas(rows: list, conductores: list, matriculas: dict, as
                                "texto": "Ya va en la fila %d" % (vistos_f[furgo] + 1), "sugerencia": None})
             else:
                 vistos_f[furgo] = i
+            # La ITV caducada ANTES del día de la hoja (11-11-2026, dia-5). Es un
+            # aviso, no un bloqueo: si ya la pasó, se cambia la fecha en su ficha.
+            caduca = str((itv or {}).get(furgo) or "")
+            if dia and re.match(r"^\d{4}-\d{2}-\d{2}$", caduca) and caduca < dia:
+                avisos.append({"fila": i, "campo": "furgo", "tipo": "itv_caducada",
+                               "texto": "ITV caducada desde el %s/%s/%s" % (caduca[8:10], caduca[5:7], caduca[:4]),
+                               "sugerencia": None})
         # 4. Horas: con forma de hora, y llegada y carga antes de la salida.
         if h_salida:
             if not _HORA_RE.match(h_salida):
@@ -39023,6 +39059,21 @@ def _plantilla_validar_filas(rows: list, conductores: list, matriculas: dict, as
     return avisos
 
 
+def _plantilla_dia_iso(valor) -> Optional[str]:
+    """Una fecha de la hoja («11/11/2026») o ISO («2026-11-11», también con hora) en AAAA-MM-DD; None si no se
+    entiende. Para la ITV y el cuadrante en la Plantilla (11-11-2026, dia-5 y dia-4)."""
+    hoja = _fecha_hoja_iso(valor)
+    if hoja:
+        return hoja
+    s = str(valor or "").strip()[:10]
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", s):
+        return None
+    try:
+        return date_cls.fromisoformat(s).isoformat()
+    except ValueError:
+        return None
+
+
 @api_router.post("/tools/plantilla-validar")
 async def plantilla_validar(data: dict = Body(...), user: dict = Depends(require_admin)):
     """Avisos de la plantilla contra la empresa y la Asignación del día, con sugerencia."""
@@ -39039,22 +39090,124 @@ async def plantilla_validar(data: dict = Body(...), user: dict = Depends(require
     # hacía sugerir a otra persona con un apellido en común.
     conductores = await db.drivers.find(
         {"active": {"$ne": False}, "status": {"$nin": ["deleted", "fusionada"]},
-         "merged_into": {"$exists": False}}, {"_id": 0, "name": 1}).to_list(5000)
+         "merged_into": {"$exists": False}}, {"_id": 0, "id": 1, "name": 1}).to_list(5000)
     matriculas = {}
+    itv: dict = {}
     async for v in db.vehicles.find({"status": {"$nin": ["deleted", "baja"]}, **fc},
-                                    {"_id": 0, "license_plate": 1}):
+                                    {"_id": 0, "license_plate": 1, "itv_date": 1}):
         n = _matricula_norm(v.get("license_plate"))
         if n:
             matriculas[n] = v.get("license_plate")
+            caduca = _plantilla_dia_iso(v.get("itv_date"))
+            if caduca:
+                itv[n] = caduca
+    # El día de la hoja para la ITV (11-11-2026, dia-5); sin fecha que se entienda, hoy.
+    dia_hoja = _plantilla_dia_iso(fecha)
     asignados: dict = {}
     if center and center != "Todos" and re.match(r"^\d{4}-\d{2}-\d{2}$", dia or ""):
         doc = await db.daily_assignments.find_one({"date": dia, **fc}, {"_id": 0, "slots": 1})
         for s in (doc or {}).get("slots") or []:
             if isinstance(s, dict) and (s.get("driver_name") or "").strip() and s.get("vehicle_plate"):
                 asignados[str(s["driver_name"]).strip()] = str(s["vehicle_plate"])
-    avisos = _plantilla_validar_filas(rows, conductores, matriculas, asignados)
+    avisos = _plantilla_validar_filas(rows, conductores, matriculas, asignados,
+                                      itv=itv, dia=dia_hoja or _hoy_madrid())
+    # El cuadrante y las suspensiones de ese día (11-11-2026, dia-4): solo con un centro y una fecha de hoja que se
+    # entienda. Solo avisos: no se escribe nada.
+    faltan, con_cuadrante = [], False
+    if center and center != "Todos" and dia_hoja:
+        nuevos, faltan, con_cuadrante = await _plantilla_cuadrante(rows, conductores, center, dia_hoja)
+        if nuevos:
+            # Junto a los de su fila (el orden es estable: los de siempre no se mueven entre sí).
+            avisos = sorted(avisos + nuevos, key=lambda a: a["fila"])
     return {"avisos": avisos, "con_asignacion": bool(asignados), "dia": dia,
-            "resumen": {"filas": len(rows), "con_aviso": len({a["fila"] for a in avisos})}}
+            "resumen": {"filas": len(rows), "con_aviso": len({a["fila"] for a in avisos})},
+            "faltan": faltan, "con_cuadrante": con_cuadrante}
+
+
+def _plantilla_turno_libre(turno: dict) -> Tuple[bool, str]:
+    """¿Ese turno es un día LIBRE (vacaciones, libre, baja, no disponible…)? Y su etiqueta. BKP, Site y Ride along
+    trabajan: un backup que sale en la hoja es que lo han llamado. Un turno viejo sin código manda por su tipo."""
+    cod = str((turno or {}).get("cod") or "").strip().upper()
+    info = CODIGOS_CUADRANTE_INFO.get(cod)
+    if info:
+        return info[0] == "libre", info[1]
+    if (turno or {}).get("type") == "libre":
+        return True, cod or "Libre"
+    return False, ""
+
+
+def _plantilla_avisos_cuadrante(casados: dict, turno_de: dict, susp_de: dict, dia: str) -> list:
+    """Avisos por fila de la Plantilla contra el cuadrante (11-11-2026, dia-4). Pura.
+
+    casados: {fila: driver_id} (solo los que casan sin duda); turno_de: {driver_id: turno de ese día, de cualquier
+    nave}; susp_de: {"driver_id|dia": suspensión}. Suspendido manda (sin el motivo: la hoja la ven más personas); si
+    no, solo un turno LIBRE explícito avisa. Sin turno ese día no se dice nada: el cuadrante puede no estar cargado.
+    """
+    avisos = []
+    for i in sorted(casados):
+        did = casados[i]
+        s = susp_de.get(f"{did}|{dia}")
+        if s:
+            d, h = str(s.get("desde") or dia), str(s.get("hasta") or dia)
+            avisos.append({"fila": i, "campo": "conductor", "tipo": "suspendido",
+                           "texto": "Suspendido del %s/%s al %s/%s" % (d[8:10], d[5:7], h[8:10], h[5:7]),
+                           "sugerencia": None})
+            continue
+        libre, etiqueta = _plantilla_turno_libre(turno_de.get(did))
+        if libre:
+            avisos.append({"fila": i, "campo": "conductor", "tipo": "no_tiene_turno",
+                           "texto": "En el cuadrante ese día: %s" % etiqueta, "sugerencia": None})
+    return avisos
+
+
+async def _plantilla_cuadrante(rows: list, conductores: list, center: str, dia: str) -> Tuple[list, list, bool]:
+    """(avisos por fila, faltan, con_cuadrante) de la Plantilla contra el cuadrante de ese día (11-11-2026, dia-4).
+
+    `faltan`: quien tiene turno DE RUTA ese día en la nave y no está en la hoja, ni por su ficha ni por un nombre
+    parecido (para no acusar a una ficha duplicada); fuera los suspendidos y las fichas de baja. Sin ningún turno de
+    la nave ese día (`con_cuadrante` falso) va vacía: nunca «falta alguien» sin cuadrante.
+    """
+    pares = [(c["id"], c.get("name") or "") for c in conductores if c.get("id")]
+    nombre_de = dict(pares)
+    casados = {}
+    for i, r in enumerate(rows or []):
+        if isinstance(r, dict) and str(r.get("conductor") or "").strip():
+            cid = _afin_casar(str(r.get("conductor")), pares)
+            if cid:
+                casados[i] = cid
+    rx = _cua_rx(center)
+    con_cuadrante = bool(await db.shifts.find_one({"center": rx, "date": dia}, {"_id": 0, "date": 1}))
+    de_ruta = []
+    if con_cuadrante:
+        de_ruta = await db.shifts.find({"center": rx, "date": dia, **_FILTRO_RUTA},
+                                       {"_id": 0, "driver_id": 1, "driver_name": 1}).to_list(500)
+    ids = set(casados.values()) | {s.get("driver_id") for s in de_ruta if s.get("driver_id")}
+    susp_de = await _suspendidos(list(ids), dia, dia)
+    turno_de = {}
+    if casados:
+        async for s in db.shifts.find({"driver_id": {"$in": sorted(set(casados.values()))}, "date": dia},
+                                      {"_id": 0, "driver_id": 1, "cod": 1, "type": 1}):
+            turno_de[s.get("driver_id")] = s
+    avisos = _plantilla_avisos_cuadrante(casados, turno_de, susp_de, dia)
+    en_hoja = [str(r.get("conductor") or "").strip() for r in rows or []
+               if isinstance(r, dict) and str(r.get("conductor") or "").strip()]
+    en_hoja_norm = {_normalize_name(n).strip() for n in en_hoja}
+
+    def _esta(nombre: str) -> bool:
+        n = _normalize_name(nombre or "").strip()
+        return bool(n) and (n in en_hoja_norm or any(_match_score(nombre, h) >= 1.6 for h in en_hoja))
+
+    faltan, vistos = [], set(casados.values())
+    for s in de_ruta:
+        did = s.get("driver_id")
+        if not did or did in vistos or did not in nombre_de or susp_de.get(f"{did}|{dia}"):
+            continue
+        vistos.add(did)
+        if _esta(nombre_de[did]) or _esta(str(s.get("driver_name") or "")):
+            continue
+        faltan.append({"driver_id": did, "nombre": nombre_de[did] or str(s.get("driver_name") or "")})
+    faltan.sort(key=lambda x: _normalize_name(x["nombre"]))
+    return avisos, faltan, con_cuadrante
 
 
 @api_router.post("/tools/plantilla-excel")
@@ -49712,7 +49865,9 @@ async def _afin_datos(admin: dict, center: str) -> dict:
     furgos = await db.vehicles.find(
         {**fc, "status": {"$nin": ["deleted", "baja"]}},
         {"_id": 0, "id": 1, "license_plate": 1, "status": 1, "bloqueada": 1, "center": 1,
-         "trato": 1, "trato_desde": 1, "vuelta_taller_en": 1}).to_list(3000)
+         "trato": 1, "trato_desde": 1, "vuelta_taller_en": 1,
+         # Solo la lee «Poner furgonetas» (11-11-2026, dia-5); las demás llamadas no la miran.
+         "itv_date": 1}).to_list(3000)
     vids = [v["id"] for v in furgos]
     # Conductores: todos los activos (para casar nombres que vienen de otro
     # centro) y, aparte, los de ESTE centro o que han llevado sus furgonetas.
@@ -50111,8 +50266,17 @@ async def plantilla_furgos(data: dict = Body(...), admin: dict = Depends(require
         if furgo_txt and furgo_txt not in por_placa:
             # Una matrícula que no es del centro: la fila está servida a mano igualmente.
             filas[-1].furgo = "txt:" + furgo_txt
-    operativas = [v["id"] for v in D["furgos"] if _afin_operativa(v)]
-    no_oper = [v["id"] for v in D["furgos"] if not _afin_operativa(v)]
+    # La ITV caducada ANTES del día de la hoja (11-11-2026, dia-5): esa furgoneta no se propone sola ni sale en
+    # «para este» y, en la fila de aparcamiento, cuenta como una que se queda (igual que la del taller). Solo aquí:
+    # `_afin_operativa` no cambia, que es la que usa Furgonetas fijas. Sin `date` (la web de antes), hoy.
+    dia_hoja = _plantilla_dia_iso(data.get("date")) or _hoy_madrid()
+    itv_mal = {}
+    for v in D["furgos"]:
+        caduca = _plantilla_dia_iso(v.get("itv_date"))
+        if caduca and caduca < dia_hoja:
+            itv_mal[v["id"]] = caduca
+    operativas = [v["id"] for v in D["furgos"] if _afin_operativa(v) and v["id"] not in itv_mal]
+    no_oper = [v["id"] for v in D["furgos"] if not _afin_operativa(v) or v["id"] in itv_mal]
     doc = await db[_AFIN_FILA_COL].find_one({"center": center}, {"_id": 0, "filas": 1, "actualizado_en": 1}) or {}
     carriles, _ = _afin_placas_a_ids(doc.get("filas") or [], D["furgos"])
     carriles = [c for c in carriles if c]
@@ -50148,10 +50312,21 @@ async def plantilla_furgos(data: dict = Body(...), admin: dict = Depends(require
     # Cuántos de la hoja tienen ya furgoneta fija: con 0, «no había ninguna
     # que poner» no dice qué hacer; la pantalla manda a aplicar el reparto.
     con_fija = sum(1 for f in filas if f.conductor and (D["fijas"].get(f.conductor) or _af.Fija()).principal)
+    # Para la nota de la pantalla: a quién no se le ha puesto su principal o su secundaria por la ITV (solo las
+    # filas que siguen sin furgoneta; la web de antes no lee esta clave).
+    itv_caducada = []
+    for f in filas:
+        if not f.conductor or f.furgo:
+            continue
+        fija = D["fijas"].get(f.conductor) or _af.Fija()
+        for vid in (fija.principal, fija.secundaria):
+            if vid and vid in itv_mal:
+                itv_caducada.append({"furgo": placa.get(vid, vid), "itv_date": itv_mal[vid],
+                                     "conductor": nombre_ficha.get(f.conductor, "")})
     return {"propuestas": propuestas, "mover": mover, "sin_furgo": res["sin_furgo"], "con_fija": con_fija,
             "sin_nombre": sin_nombre, "opciones": opciones, "conflictos": conflictos,
             "fila_actualizada": doc.get("actualizado_en") if carriles else None,
-            "metodo": res["metodo"], "cuidado_activo": D["cuidado_activo"]}
+            "metodo": res["metodo"], "cuidado_activo": D["cuidado_activo"], "itv_caducada": itv_caducada}
 
 
 def _movil_para_hoja(crudo) -> str:
@@ -54246,12 +54421,15 @@ async def _cia_asignar(datos: dict, user: dict) -> dict:
                 "driver_id": s.get("driver_id", "") or "", "driver_name": s.get("driver_name", "") or "",
                 "route": str(s.get("route") or "").strip().upper()[:24]} for s in slots]
     ahora = datetime.now(timezone.utc).isoformat()
+    # Quién, para el aviso «otro guardó» de la Asignación (11-11-2026, dia-6).
+    por = "Asistente"
     if doc:
         await db.daily_assignments.update_one({"date": fecha, "center": center},
-                                              {"$set": {"slots": limpios, "updated_at": ahora}})
+                                              {"$set": {"slots": limpios, "updated_at": ahora, "updated_by": por}})
     else:
         await db.daily_assignments.insert_one({"id": str(uuid.uuid4()), "date": fecha, "center": center,
-                                               "slots": limpios, "created_at": ahora, "updated_at": ahora})
+                                               "slots": limpios, "created_at": ahora, "updated_at": ahora,
+                                               "updated_by": por})
     return {"ok": True, "furgonetas": len(datos["cambios"])}
 
 

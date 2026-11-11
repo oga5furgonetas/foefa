@@ -378,7 +378,8 @@ test.describe('Asignación · cambios sin guardar, borrar fila y furgonetas en t
     // Guardar manda el día vacío y la marca se va; ya no pregunta.
     await guardar.click()
     await expect(marca).toHaveCount(0)
-    expect(guardados).toEqual([{ center: 'NORTE', date: hoy, slots: [] }])
+    // Con la versión con la que se cargó (tanda 3, dia-6): '' porque el día simulado viene sin updated_at.
+    expect(guardados).toEqual([{ center: 'NORTE', date: hoy, slots: [], version: '' }])
     await fecha.fill(ayer)
     await expect(matriculas(page).first()).toHaveValue('v3')
     expect(dialogos).toHaveLength(2)
