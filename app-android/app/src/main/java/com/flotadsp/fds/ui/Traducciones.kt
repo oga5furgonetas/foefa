@@ -1,6 +1,6 @@
 package com.flotadsp.fds.ui
 
-/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 903 textos de la app nativa con sus
+/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 910 textos de la app nativa con sus
    traducciones (en, pt, fr, it, de), sacadas de la web (frontend/src/lib/textosRuta*.js) y de
    app-android/traducciones-nativa.json. Una fila por línea, columnas con TAB; ⏎ es un salto de línea. En bloques
    porque una constante de Kotlin no puede pasar de 64 KB. */
@@ -12,6 +12,7 @@ internal object Traducciones {
 (6 caracteres o más)	(6 characters or more)	(6 caracteres ou mais)	(6 caractères ou plus)	(6 caratteri o più)	(mindestens 6 Zeichen)
 , llegada aproximada a las {hora}	, arriving around {hora}	, chegada prevista às {hora}	, arrivée prévue vers {hora}	, arrivo previsto alle {hora}	, Ankunft gegen {hora}
 1 DNR	1 DNR	1 DNR	1 DNR	1 DNR	1 DNR
+1 actualizada	1 updated	1 atualizada	1 mise à jour	1 aggiornata	1 aktualisiert
 1 entrega pendiente	1 delivery pending	1 entrega pendente	1 livraison en attente	1 consegna in sospeso	1 Lieferung offen
 1 escaneado	1 scanned	1 digitalizado	1 scanné	1 scansionato	1 gescannt
 1 kilómetro	1 kilometre	1 quilómetro	1 kilomètre	1 chilometro	1 Kilometer
@@ -85,6 +86,7 @@ Añadir a mi ruta	Add to my route	Adicionar à minha rota	Ajouter à ma tournée
 Añadir una parada	Add a stop	Adicionar uma paragem	Ajouter un arrêt	Aggiungi una fermata	Stopp hinzufügen
 Añadir {n} paradas	Add {n} stops	Adicionar {n} paragens	Ajouter {n} arrêts	Aggiungi {n} fermate	{n} Stopps hinzufügen
 Aún no hay días con paradas.	No days with stops yet.	Ainda não há dias com paragens.	Pas encore de journées avec des arrêts.	Ancora nessun giorno con fermate.	Noch keine Tage mit Stopps.
+Aún no hay reportes de tu centro	No reports for your station yet	Ainda não há relatórios do teu centro	Pas encore de rapports pour ton centre	Ancora nessun report del tuo centro	Noch keine Berichte für deinen Standort
 Borrado.	Deleted.	Apagado.	Effacé.	Cancellato.	Gelöscht.
 Borrar	Clear	Apagar	Effacer	Cancella	Löschen
 Borrar mi cuenta	Delete my account	Eliminar a minha conta	Supprimer mon compte	Elimina il mio account	Mein Konto löschen
@@ -128,6 +130,7 @@ Compartir mi enlace	Share my link	Partilhar o meu link	Partager mon lien	Condivi
 Comprobando la dirección…	Checking the address…	A verificar a morada…	Vérification de l’adresse…	Controllo l’indirizzo…	Adresse wird geprüft…
 Comprueba lo que ha leído antes de añadirlo; lo que falte lo puedes meter después a mano.	Check what it read before adding it; anything missing can be added by hand later.	Confirma o que leu antes de adicionar; o que faltar podes meter depois à mão.	Vérifie ce qui a été lu avant d’ajouter ; ce qui manque pourra être saisi à la main après.	Controlla quello che ha letto prima di aggiungerlo; quello che manca lo puoi inserire a mano dopo.	Prüf das Gelesene, bevor du es hinzufügst; was fehlt, kannst du später von Hand eintragen.
 Confirmar	Confirm	Confirmar	Confirmer	Conferma	Bestätigen
+Contacta con el cliente antes de dejar el paquete.	Contact the customer before leaving the parcel.	Contacta o cliente antes de deixar a encomenda.	Contacte le client avant de laisser le colis.	Contatta il cliente prima di lasciare il pacco.	Kontaktiere den Kunden, bevor du das Paket abstellst.
 Continuar · checklist	Continue · checklist	Continuar · checklist	Continuer · checklist	Continua · checklist	Weiter · Checkliste
 Contraseña	Password	Palavra-passe	Mot de passe	Password	Passwort
 Contraseña (8 caracteres o más)	Password (8 characters or more)	Palavra-passe (8 caracteres ou mais)	Mot de passe (8 caractères ou plus)	Password (8 caratteri o più)	Passwort (mindestens 8 Zeichen)
@@ -147,9 +150,11 @@ Código de 6 cifras	6-digit code	Código de 6 dígitos	Code à 6 chiffres	Codice
 Código del portal	Door code	Código do portão	Code de l’immeuble	Codice del portone	Türcode
 Código: {x}	Code: {x}	Código: {x}	Code : {x}	Codice: {x}	Code: {x}
 Cómo se entra	How to get in	Como se entra	Comment entrer	Come si entra	Wie man reinkommt
+DNR del {dia}	DNR dated {dia}	DNR de {dia}	DNR du {dia}	DNR del {dia}	DNR vom {dia}
 Da la vuelta	Make a U-turn	Inverta a marcha	Faites demi-tour	Fai inversione	Wenden
 Dale permiso de ubicación a la app para que te guíe.	Allow location access so the app can guide you.	Dê permissão de localização à app para o guiar.	Autorisez la localisation pour que l’app vous guide.	Consenti la posizione all’app perché ti guidi.	Erlaube der App den Standort, damit sie dich führt.
 Daño	Damage	Dano	Dommage	Danno	Schaden
+De esta semana aún no hay reportes	No reports for this week yet	Ainda não há relatórios desta semana	Pas encore de rapports pour cette semaine	Ancora nessun report di questa settimana	Für diese Woche gibt es noch keine Berichte
 Dejar de seguirme	Stop following me	Deixar de me seguir	Arrêter de me suivre	Smetti di seguirmi	Nicht mehr folgen
 Del {desde} al {hasta}	{desde} to {hasta}	De {desde} a {hasta}	Du {desde} au {hasta}	Dal {desde} al {hasta}	{desde} bis {hasta}
 Delante · der	Front · right	Frente · dir	Avant · droite	Davanti · dx	Vorne · rechts
@@ -209,6 +214,7 @@ Entrar con un código en mi correo personal	Sign in with a code sent to my perso
 Entrega	Delivery	Entrega	Livraison	Consegna	Zustellung
 Entrega verificada por IA	Delivery verified by AI	Entrega verificada por IA	Livraison vérifiée par l’IA	Consegna verificata dall’IA	Zustellung per KI bestätigt
 Entregado	Delivered	Entregue	Livré	Consegnato	Zugestellt
+Entregado el {dia}	Delivered {dia}	Entregue a {dia}	Livré le {dia}	Consegnato il {dia}	Zugestellt am {dia}
 Entregado: {n}.	Delivered: {n}.	Entregue: {n}.	Livré : {n}.	Consegnato: {n}.	Zugestellt: {n}.
 Entregar	Deliver	Entregar	Livrer	Consegna	Zustellen
 Enviada hoy	Sent today	Enviada hoje	Envoyé aujourd’hui	Inviata oggi	Heute gesendet
@@ -227,13 +233,13 @@ Esa parada no es tuya	That stop isn’t yours	Essa paragem não é sua	Cet arrê
 Esa parada ya está cerrada	That stop is already closed	Essa paragem já está fechada	Cet arrêt est déjà clôturé	Quella fermata è già chiusa	Dieser Stopp ist schon abgeschlossen
 Esa parada ya no existe	That stop no longer exists	Essa paragem já não existe	Cet arrêt n’existe plus	Quella fermata non esiste più	Diesen Stopp gibt es nicht mehr
 Escanea los paquetes o comparte la hoja de la agencia	Scan the parcels or share the agency’s sheet	Lê as encomendas ou partilha a folha da agência	Scannez les colis ou partagez la feuille de l’agence	Scansiona i pacchi o condividi il foglio dell’agenzia	Scanne die Pakete oder teile das Blatt der Agentur
-Escanea los paquetes: la dirección entra sola.	Scan the parcels: the address fills in by itself.	Digitaliza as encomendas: a morada entra sozinha.	Scannez les colis : l’adresse se remplit toute seule.	Scansiona i pacchi: l’indirizzo entra da solo.	Scanne die Pakete: Die Adresse wird automatisch übernommen.
+""",
+        """Escanea los paquetes: la dirección entra sola.	Scan the parcels: the address fills in by itself.	Digitaliza as encomendas: a morada entra sozinha.	Scannez les colis : l’adresse se remplit toute seule.	Scansiona i pacchi: l’indirizzo entra da solo.	Scanne die Pakete: Die Adresse wird automatisch übernommen.
 Escanear	Scan	Digitalizar	Scanner	Scansiona	Scannen
 Escanear paquetes	Scan parcels	Digitalizar volumes	Scanner des colis	Scansiona pacchi	Pakete scannen
 Escanear para cargar	Scan to load	Ler para carregar	Scanner pour charger	Scansiona per caricare	Scannen zum Beladen
 Escribe el correo de tu cuenta y te mandamos un enlace para crear una contraseña nueva.	Enter your account email and we will send you a link to create a new password.	Escreve o e-mail da tua conta e enviamos-te um link para criar uma palavra-passe nova.	Saisissez l’e-mail de votre compte et nous vous envoyons un lien pour créer un nouveau mot de passe.	Scrivi l’email del tuo account e ti mandiamo un link per creare una nuova password.	Gib die E-Mail deines Kontos ein und wir schicken dir einen Link für ein neues Passwort.
-""",
-        """Escribe el código de 6 cifras del correo.	Enter the 6-digit code from the email.	Escreve o código de 6 dígitos do e-mail.	Saisissez le code à 6 chiffres reçu par e-mail.	Scrivi il codice di 6 cifre dell’e-mail.	Gib den 6-stelligen Code aus der E-Mail ein.
+Escribe el código de 6 cifras del correo.	Enter the 6-digit code from the email.	Escreve o código de 6 dígitos do e-mail.	Saisissez le code à 6 chiffres reçu par e-mail.	Scrivi il codice di 6 cifre dell’e-mail.	Gib den 6-stelligen Code aus der E-Mail ein.
 Escribe la dirección: calle, número y población.	Type the address: street, number and town.	Escreve a morada: rua, número e localidade.	Saisissez l’adresse : rue, numéro et ville.	Scrivi l’indirizzo: via, numero e città.	Gib die Adresse ein: Straße, Hausnummer und Ort.
 Escribe también tu contraseña actual.	Also type your current password.	Escreve também a tua palavra-passe atual.	Saisissez aussi votre mot de passe actuel.	Scrivi anche la tua password attuale.	Gib auch dein aktuelles Passwort ein.
 Escribe un correo válido.	Enter a valid email.	Escreve um e-mail válido.	Saisissez un e-mail valide.	Scrivi un’email valida.	Gib eine gültige E-Mail ein.
@@ -258,6 +264,7 @@ Esta red no deja llegar al servidor (¿una wifi que pide registrarse?).	This net
 Esta semana llevas {n} DNR	This week you have {n} DNRs	Esta semana tens {n} DNR	Cette semaine, tu as {n} DNR	Questa settimana hai {n} DNR	Diese Woche hast du {n} DNRs
 Esta semana llevas {uno} DNR	This week you have {uno} DNR	Esta semana tens {uno} DNR	Cette semaine, tu as {uno} DNR	Questa settimana hai {uno} DNR	Diese Woche hast du {uno} DNR
 Esta semana no llevas ninguna	No DNRs this week	Esta semana não tens nenhuma	Aucune DNR cette semaine	Nessuna DNR questa settimana	Diese Woche keine DNRs
+Esta semana: aún sin datos	This week: no data yet	Esta semana: ainda sem dados	Cette semaine : pas encore de données	Questa settimana: ancora nessun dato	Diese Woche: noch keine Daten
 Esta semana: ninguna	This week: none	Esta semana: nenhuma	Cette semaine : aucune	Questa settimana: nessuna	Diese Woche: keine
 Esta semana: {n}	This week: {n}	Esta semana: {n}	Cette semaine : {n}	Questa settimana: {n}	Diese Woche: {n}
 Esta suscripción es para el plan Repartidor	This subscription is for the Driver plan	Esta subscrição é para o plano Estafeta	Cet abonnement est pour l’offre Livreur	Questo abbonamento è per il piano Corriere	Dieses Abo ist für den Fahrer-Tarif
@@ -325,6 +332,7 @@ Has llegado	You’ve arrived	Chegou	Vous êtes arrivé	Sei arrivato	Angekommen
 Has llegado a {destino}.	You’ve arrived at {destino}.	Chegou a {destino}.	Vous êtes arrivé chez {destino}.	Sei arrivato da {destino}.	Du bist bei {destino} angekommen.
 Has llegado al tope de paradas gratis de hoy. Pasa a ilimitado en «Cuenta» o sigue mañana.	You’ve reached today’s free stop limit. Go unlimited in “Account” or continue tomorrow.	Chegou ao limite de paragens grátis de hoje. Passe a ilimitado em «Conta» ou continue amanhã.	Vous avez atteint la limite d’arrêts gratuits du jour. Passez en illimité dans « Compte » ou continuez demain.	Hai raggiunto il limite di fermate gratis di oggi. Passa a illimitato in «Account» o continua domani.	Du hast das heutige Limit an kostenlosen Stopps erreicht. Wechsle unter „Konto“ zu unbegrenzt oder mach morgen weiter.
 Hasta 14:00	Until 14:00	Até às 14:00	Jusqu’à 14:00	Fino alle 14:00	Bis 14:00
+Hay datos hasta el {fecha}	Data up to {fecha}	Há dados até {fecha}	Données jusqu’au {fecha}	Dati fino a {fecha}	Daten bis {fecha}
 Hay paradas que no son tuyas o ya están cerradas	Some stops aren’t yours or are already closed	Há paragens que não são suas ou já estão fechadas	Certains arrêts ne sont pas les vôtres ou sont déjà clôturés	Alcune fermate non sono tue o sono già chiuse	Einige Stopps gehören nicht dir oder sind schon abgeschlossen
 Hay una verificación pendiente para {c}. Revisa ese correo personal.	There is a pending verification for {c}. Check that personal email.	Há uma verificação pendente para {c}. Vê esse e-mail pessoal.	Une vérification est en attente pour {c}. Consultez cet e-mail personnel.	C’è una verifica in sospeso per {c}. Controlla quella e-mail personale.	Für {c} steht eine Bestätigung aus. Sieh in diesem privaten Postfach nach.
 Hay una versión nueva de FDS ({v}).	There is a new version of FDS ({v}).	Há uma versão nova do FDS ({v}).	Une nouvelle version de FDS est disponible ({v}).	C’è una nuova versione di FDS ({v}).	Es gibt eine neue Version von FDS ({v}).
@@ -367,7 +375,6 @@ La foto no pasó la revisión: {motivo}	The photo didn’t pass the review: {mot
 La foto pasó la revisión	The photo passed the review	A foto passou na revisão	La photo a passé le contrôle	La foto ha superato la revisione	Das Foto hat die Prüfung bestanden
 La foto se guardó; no se pudo verificar ahora.	The photo was saved; it could not be checked right now.	A foto foi guardada; não foi possível verificá-la agora.	La photo a été enregistrée ; elle n’a pas pu être vérifiée pour l’instant.	La foto è stata salvata; non è stato possibile verificarla ora.	Das Foto wurde gespeichert, konnte aber gerade nicht geprüft werden.
 La oficina aún no ha enlazado tu ID de reparto. Cuando lo haga, aquí verás tus DNR.	The office hasn’t linked your delivery ID yet. Once it does, you’ll see your DNRs here.	O escritório ainda não associou o teu ID de entrega. Quando o fizer, verás aqui as tuas DNR.	Le bureau n’a pas encore associé ton identifiant de livraison. Ensuite, tu verras tes DNR ici.	L’ufficio non ha ancora collegato il tuo ID di consegna. Quando lo farà, qui vedrai le tue DNR.	Das Büro hat deine Zusteller-ID noch nicht verknüpft. Sobald das passiert ist, siehst du hier deine DNRs.
-La oficina aún no ha subido ningún reporte.	The office hasn’t uploaded any reports yet.	O escritório ainda não carregou nenhum relatório.	Le bureau n’a encore chargé aucun rapport.	L’ufficio non ha ancora caricato nessun report.	Das Büro hat noch keinen Bericht hochgeladen.
 La oficina está revisando tu ID de reparto. Cuando lo confirme, aquí verás tus DNR.	The office is checking your delivery ID. Once it’s confirmed, you’ll see your DNRs here.	O escritório está a rever o teu ID de entrega. Quando o confirmar, verás aqui as tuas DNR.	Le bureau vérifie ton identifiant de livraison. Une fois confirmé, tu verras tes DNR ici.	L’ufficio sta verificando il tuo ID di consegna. Quando lo confermerà, qui vedrai le tue DNR.	Das Büro prüft deine Zusteller-ID. Sobald sie bestätigt ist, siehst du hier deine DNRs.
 La oficina está revisando uno de tus ID de reparto: puede que aquí falte alguna.	The office is checking one of your delivery IDs: some may be missing here.	O escritório está a rever um dos teus IDs de entrega: pode faltar alguma aqui.	Le bureau vérifie l’un de tes identifiants de livraison : il peut en manquer ici.	L’ufficio sta verificando uno dei tuoi ID di consegna: qui potrebbe mancarne qualcuna.	Das Büro prüft eine deiner Zusteller-IDs: Hier könnten welche fehlen.
 La oficina ha cambiado el cuadrante después de confirmarlo. Consúltalo antes de desplazarte.	The office changed the schedule after confirming it. Check it before you travel.	O escritório alterou a escala depois de a confirmar. Consulta-a antes de te deslocares.	Le bureau a modifié le planning après l’avoir confirmé. Vérifiez-le avant de vous déplacer.	L’ufficio ha cambiato i turni dopo averli confermati. Controllali prima di partire.	Das Büro hat den Dienstplan nach der Bestätigung geändert. Prüfe ihn, bevor du losfährst.
@@ -404,27 +411,27 @@ Lleno	Full	Cheio	Plein	Pieno	Voll
 Lleva: {x}	Contents: {x}	Leva: {x}	Contenu : {x}	Contiene: {x}	Inhalt: {x}
 Llevas {n} {e} en {d} {dd}.	You have {n} {e} in {d} {dd}.	Levas {n} {e} em {d} {dd}.	Vous avez {n} {e} en {d} {dd}.	Hai {n} {e} in {d} {dd}.	Du hast {n} {e} an {d} {dd}.
 Lo cobras en tu cartera cuando haga {n} entregas en {d} días distintos. Mándale tu enlace: se registra y empieza hoy.	It goes to your wallet once they make {n} deliveries on {d} different days. Send them your link: they sign up and start today.	Recebes na tua carteira quando fizer {n} entregas em {d} dias diferentes. Envia-lhe o teu link: regista-se e começa hoje.	Tu le reçois dans ton portefeuille quand il fait {n} livraisons sur {d} jours différents. Envoie-lui ton lien : il s’inscrit et commence aujourd’hui.	Lo ricevi nel tuo portafoglio quando fa {n} consegne in {d} giorni diversi. Mandagli il tuo link: si registra e inizia oggi.	Es landet in deiner Geldbörse, sobald er {n} Zustellungen an {d} verschiedenen Tagen macht. Schick ihm deinen Link: Er registriert sich und legt heute los.
-Lo de delante se entrega primero.	What’s at the front is delivered first.	O da frente entrega-se primeiro.	Ce qui est devant se livre en premier.	Quello davanti si consegna prima.	Was vorne liegt, wird zuerst geliefert.
+""",
+        """Lo de delante se entrega primero.	What’s at the front is delivered first.	O da frente entrega-se primeiro.	Ce qui est devant se livre en premier.	Quello davanti si consegna prima.	Was vorne liegt, wird zuerst geliefert.
 Lo de detrás se entrega primero.	What’s at the back is delivered first.	O de trás entrega-se primeiro.	Ce qui est derrière se livre en premier.	Quello dietro si consegna prima.	Was hinten liegt, wird zuerst geliefert.
 Lo estamos revisando: te avisamos en cuanto esté.	We are checking it: we will let you know as soon as it is ready.	Estamos a rever: avisamos-te assim que estiver.	Nous vérifions : nous vous prévenons dès que c’est prêt.	Lo stiamo controllando: ti avvisiamo appena è pronto.	Wir prüfen es: Wir melden uns, sobald es so weit ist.
 Lo haré más tarde	I’ll do it later	Faço-o mais tarde	Je le ferai plus tard	Lo farò più tardi	Mache ich später
 Lo marcaste a menos de 25 m del sitio	You marked it less than 25 m from the spot	Marcaste-o a menos de 25 m do local	Tu l’as marqué à moins de 25 m du lieu	L’hai segnato a meno di 25 m dal posto	Du hast es weniger als 25 m vom Ort entfernt markiert
-""",
-        """Lo marcaste a más de 25 m del sitio	You marked it more than 25 m from the spot	Marcaste-o a mais de 25 m do local	Tu l’as marqué à plus de 25 m du lieu	L’hai segnato a più di 25 m dal posto	Du hast es mehr als 25 m vom Ort entfernt markiert
+Lo marcaste a más de 25 m del sitio	You marked it more than 25 m from the spot	Marcaste-o a mais de 25 m do local	Tu l’as marqué à plus de 25 m du lieu	L’hai segnato a più di 25 m dal posto	Du hast es mehr als 25 m vom Ort entfernt markiert
 Lo marcaste como entregado a alguien de la casa	You marked it as given to someone in the household	Marcaste-o como entregue a alguém da casa	Tu l’as marqué comme remis à quelqu’un du foyer	L’hai segnato come consegnato a qualcuno di casa	Du hast es als an jemanden im Haushalt übergeben markiert
 Lo marcaste como entregado a un vecino	You marked it as given to a neighbour	Marcaste-o como entregue a um vizinho	Tu l’as marqué comme remis à un voisin	L’hai segnato come consegnato a un vicino	Du hast es als an einen Nachbarn übergeben markiert
 Lo marcaste como entregado en mano	You marked it as handed over in person	Marcaste-o como entregue em mão	Tu l’as marqué comme remis en main propre	L’hai segnato come consegnato a mano	Du hast es als persönlich übergeben markiert
-Lo marcaste en conserjería	You marked it with the concierge	Marcaste-o na portaria	Tu l’as marqué à la conciergerie	L’hai segnato in portineria	Du hast es beim Hausmeister markiert
-Lo marcaste en el buzón	You marked it in the mailbox	Marcaste-o na caixa do correio	Tu l’as marqué dans la boîte aux lettres	L’hai segnato nella cassetta della posta	Du hast es im Briefkasten markiert
-Lo marcaste en el cobertizo	You marked it in the shed	Marcaste-o no barracão	Tu l’as marqué dans l’abri de jardin	L’hai segnato nel capanno	Du hast es im Schuppen markiert
-Lo marcaste en el garaje	You marked it in the garage	Marcaste-o na garagem	Tu l’as marqué dans le garage	L’hai segnato in garage	Du hast es in der Garage markiert
-Lo marcaste en el jardín	You marked it in the garden	Marcaste-o no jardim	Tu l’as marqué dans le jardin	L’hai segnato in giardino	Du hast es im Garten markiert
-Lo marcaste en la puerta	You marked it at the door	Marcaste-o na porta	Tu l’as marqué à la porte	L’hai segnato alla porta	Du hast es an der Tür markiert
-Lo marcaste en la puerta de atrás	You marked it at the back door	Marcaste-o na porta das traseiras	Tu l’as marqué à la porte de derrière	L’hai segnato alla porta sul retro	Du hast es an der Hintertür markiert
-Lo marcaste en recepción	You marked it at reception	Marcaste-o na receção	Tu l’as marqué à l’accueil	L’hai segnato alla reception	Du hast es an der Rezeption markiert
-Lo marcaste en un comercio	You marked it at a shop	Marcaste-o numa loja	Tu l’as marqué dans un commerce	L’hai segnato in un negozio	Du hast es in einem Geschäft markiert
-Lo marcaste en un locker	You marked it in a locker	Marcaste-o num cacifo	Tu l’as marqué dans un casier	L’hai segnato in un locker	Du hast es in einem Schließfach markiert
-Lo marcaste en un lugar seguro	You marked it in a safe place	Marcaste-o num local seguro	Tu l’as marqué dans un endroit sûr	L’hai segnato in un luogo sicuro	Du hast es an einem sicheren Ort markiert
+Lo marcaste en conserjería	You marked it with the concierge	Marcaste-o na portaria	Tu l’as marqué à la conciergerie	L’hai segnato in portineria	Du hast es als „bei der Poststelle“ zugestellt gescannt
+Lo marcaste en el buzón	You marked it in the mailbox	Marcaste-o na caixa do correio	Tu l’as marqué dans la boîte aux lettres	L’hai segnato nella cassetta della posta	Du hast es als „im Briefkasten“ zugestellt gescannt
+Lo marcaste en el cobertizo	You marked it in the shed	Marcaste-o no barracão	Tu l’as marqué dans l’abri de jardin	L’hai segnato nel capanno	Du hast es als „im Schuppen“ zugestellt gescannt
+Lo marcaste en el garaje	You marked it in the garage	Marcaste-o na garagem	Tu l’as marqué dans le garage	L’hai segnato in garage	Du hast es als „in der Garage“ zugestellt gescannt
+Lo marcaste en el jardín	You marked it in the garden	Marcaste-o no jardim	Tu l’as marqué dans le jardin	L’hai segnato in giardino	Du hast es als „im Garten“ zugestellt gescannt
+Lo marcaste en la puerta	You marked it at the door	Marcaste-o na porta	Tu l’as marqué à la porte	L’hai segnato alla porta	Du hast es als „an der Tür“ zugestellt gescannt
+Lo marcaste en la puerta de atrás	You marked it at the back door	Marcaste-o na porta das traseiras	Tu l’as marqué à la porte de derrière	L’hai segnato alla porta sul retro	Du hast es als „an der Hintertür“ zugestellt gescannt
+Lo marcaste en recepción	You marked it at reception	Marcaste-o na receção	Tu l’as marqué à l’accueil	L’hai segnato alla reception	Du hast es als „an der Rezeption“ zugestellt gescannt
+Lo marcaste en un comercio	You marked it at a shop	Marcaste-o numa loja	Tu l’as marqué dans un commerce	L’hai segnato in un negozio	Du hast es als „in einem Geschäft“ zugestellt gescannt
+Lo marcaste en un locker	You marked it in a locker	Marcaste-o num cacifo	Tu l’as marqué dans un casier	L’hai segnato in un locker	Du hast es als „in einem Schließfach“ zugestellt gescannt
+Lo marcaste en un lugar seguro	You marked it in a safe place	Marcaste-o num local seguro	Tu l’as marqué dans un endroit sûr	L’hai segnato in un luogo sicuro	Du hast es als „an einem sicheren Ort“ zugestellt gescannt
 Lo que has compartido	What you shared	O que partilhaste	Ce que tu as partagé	Quello che hai condiviso	Was du geteilt hast
 Lo que puedes hacer la próxima vez	What you can do next time	O que podes fazer da próxima vez	Ce que tu peux faire la prochaine fois	Cosa puoi fare la prossima volta	Was du nächstes Mal tun kannst
 Lo verá quien venga a esta dirección, también un compañero. Se borra al año.	Whoever comes to this address will see it, a colleague too. It’s deleted after a year.	Quem vier a esta morada vai vê-lo, também um colega. Apaga-se ao fim de um ano.	Qui viendra à cette adresse le verra, un collègue aussi. Effacé au bout d’un an.	Lo vedrà chi verrà a questo indirizzo, anche un collega. Si cancella dopo un anno.	Wer an diese Adresse kommt, sieht es, auch ein Kollege. Nach einem Jahr wird es gelöscht.
@@ -575,7 +582,7 @@ Rechazado	Refused	Recusado	Refusé	Rifiutato	Abgelehnt
 Recibe ahí la verificación de tu cuenta	Receive your account verification there	Recebe aí a verificação da tua conta	Recevez-y la vérification de votre compte	Ricevi lì la verifica del tuo account	Dort erhältst du die Bestätigung deines Kontos
 Recogida	Pickup	Recolha	Enlèvement	Ritiro	Abholung
 Recogido	Picked up	Recolhido	Enlevé	Ritirato	Abgeholt
-Recuerda: si el cliente tiene preferencia de entrega, llama y saca bien la foto; así no te cuenta.	Remember: if the customer has a delivery preference, call them and take a good photo; that way it won’t count against you.	Lembra-te: se o cliente tiver preferência de entrega, liga e tira bem a foto; assim não te conta.	Rappel : si le client a une préférence de livraison, appelle-le et prends une bonne photo ; ainsi elle ne te sera pas comptée.	Ricorda: se il cliente ha una preferenza di consegna, chiamalo e scatta bene la foto; così non ti conta.	Denk dran: Wenn der Kunde eine Zustellpräferenz hat, ruf an und mach ein gutes Foto; dann zählt es nicht gegen dich.
+Recuerda: si el cliente tiene preferencia de entrega, llama y saca bien la foto; así no te cuenta.	Remember: if the customer has a delivery preference, call them and take a good photo; that way it won’t count against you.	Lembra-te: se o cliente tiver preferência de entrega, liga e tira bem a foto; assim não conta contra ti.	Rappel : si le client a une préférence de livraison, appelle-le et prends une bonne photo ; ainsi, la DNR ne te sera pas comptée.	Ricorda: se il cliente ha una preferenza di consegna, chiamalo e scatta bene la foto; così non ti viene conteggiata.	Denk dran: Wenn der Kunde eine Zustellpräferenz hat, ruf an und mach ein gutes Foto; dann zählt es nicht gegen dich.
 Recuperar la contraseña	Recover the password	Recuperar a palavra-passe	Récupérer le mot de passe	Recupera la password	Passwort wiederherstellen
 Reenviar código	Resend code	Reenviar código	Renvoyer le code	Reinvia codice	Code erneut senden
 Regular	So-so	Mais ou menos	Bof	Così così	Geht so
@@ -586,7 +593,6 @@ Reordenar desde aquí	Reorder from here	Reordenar a partir daqui	Réorganiser de
 Repetir	Retry	Repetir	Recommencer	Ripeti	Wiederholen
 Repetir la foto	Retake the photo	Repetir a foto	Reprendre la photo	Rifai la foto	Foto wiederholen
 Repite la contraseña	Repeat the password	Repita a palavra-passe	Répétez le mot de passe	Ripeti la password	Passwort wiederholen
-Reportes subidos hasta el {fecha}.	Reports uploaded up to {fecha}.	Relatórios carregados até {fecha}.	Rapports chargés jusqu’au {fecha}.	Report caricati fino a {fecha}.	Berichte hochgeladen bis {fecha}.
 Reserva	Reserve	Reserva	Réserve	Riserva	Reserve
 Retirada pendiente	Withdrawal pending	Levantamento pendente	Retrait en attente	Prelievo in sospeso	Auszahlung ausstehend
 Retirar solicitud	Withdraw request	Retirar pedido	Retirer la demande	Ritira richiesta	Anfrage zurückziehen
@@ -619,10 +625,10 @@ Seguir revisando	Keep checking	Continuar a rever	Continuer la vérification	Cont
 Seguirme	Follow me	Seguir-me	Me suivre	Seguimi	Mir folgen
 Según {f}, a {v}	According to {f}, as of {v}	Segundo {f}, a {v}	Selon {f}, au {v}	Secondo {f}, al {v}	Laut {f}, Stand {v}
 Semanas anteriores	Previous weeks	Semanas anteriores	Semaines précédentes	Settimane precedenti	Vorherige Wochen
-Si ese correo está vinculado a una cuenta, recibirás un código de 6 cifras. Puede tardar unos minutos.	If that email is linked to an account, you will receive a 6-digit code. It may take a few minutes.	Se esse e-mail estiver ligado a uma conta, vais receber um código de 6 dígitos. Pode demorar uns minutos.	Si cet e-mail est lié à un compte, vous recevrez un code à 6 chiffres. Cela peut prendre quelques minutes.	Se quell’email è collegata a un account, riceverai un codice a 6 cifre. Può volerci qualche minuto.	Wenn diese E-Mail mit einem Konto verknüpft ist, bekommst du einen 6-stelligen Code. Das kann ein paar Minuten dauern.
-Si marcas un elemento como malo o dañado, adjunta una foto para dejar constancia.	If you mark an item as bad or damaged, attach a photo as a record.	Se marcares um elemento como mau ou danificado, junta uma foto como prova.	Si vous marquez un élément comme mauvais ou endommagé, joignez une photo pour en garder la trace.	Se segni un elemento come cattivo o danneggiato, allega una foto come prova.	Wenn du etwas als schlecht oder beschädigt markierst, häng ein Foto als Nachweis an.
 """,
-        """Si te registras con mi enlace y completas 20 entregas a direcciones distintas en 2 días diferentes, repartidas durante el día y dentro de tus primeros 30 días, gano {euros}.	If you sign up through my link and complete 20 deliveries to different addresses across 2 different days, spread throughout each day and within your first 30 days, I earn {euros}.	Se te registares através do meu link e fizeres 20 entregas em moradas diferentes, em 2 dias distintos, distribuídas ao longo do dia e nos teus primeiros 30 dias, ganho {euros}.	Si vous vous inscrivez avec mon lien et effectuez 20 livraisons à des adresses différentes sur 2 jours distincts, réparties tout au long de la journée et pendant vos 30 premiers jours, je gagne {euros}.	Se ti registri con il mio link e completi 20 consegne a indirizzi diversi in 2 giorni distinti, distribuite nell’arco della giornata e nei tuoi primi 30 giorni, guadagno {euros}.	Wenn du dich über meinen Link anmeldest und innerhalb deiner ersten 30 Tage an 2 verschiedenen Tagen über den Tag verteilt 20 Zustellungen an unterschiedliche Adressen abschließt, verdiene ich {euros}.
+        """Si ese correo está vinculado a una cuenta, recibirás un código de 6 cifras. Puede tardar unos minutos.	If that email is linked to an account, you will receive a 6-digit code. It may take a few minutes.	Se esse e-mail estiver ligado a uma conta, vais receber um código de 6 dígitos. Pode demorar uns minutos.	Si cet e-mail est lié à un compte, vous recevrez un code à 6 chiffres. Cela peut prendre quelques minutes.	Se quell’email è collegata a un account, riceverai un codice a 6 cifre. Può volerci qualche minuto.	Wenn diese E-Mail mit einem Konto verknüpft ist, bekommst du einen 6-stelligen Code. Das kann ein paar Minuten dauern.
+Si marcas un elemento como malo o dañado, adjunta una foto para dejar constancia.	If you mark an item as bad or damaged, attach a photo as a record.	Se marcares um elemento como mau ou danificado, junta uma foto como prova.	Si vous marquez un élément comme mauvais ou endommagé, joignez une photo pour en garder la trace.	Se segni un elemento come cattivo o danneggiato, allega una foto come prova.	Wenn du etwas als schlecht oder beschädigt markierst, häng ein Foto als Nachweis an.
+Si te registras con mi enlace y completas 20 entregas a direcciones distintas en 2 días diferentes, repartidas durante el día y dentro de tus primeros 30 días, gano {euros}.	If you sign up through my link and complete 20 deliveries to different addresses across 2 different days, spread throughout each day and within your first 30 days, I earn {euros}.	Se te registares através do meu link e fizeres 20 entregas em moradas diferentes, em 2 dias distintos, distribuídas ao longo do dia e nos teus primeiros 30 dias, ganho {euros}.	Si vous vous inscrivez avec mon lien et effectuez 20 livraisons à des adresses différentes sur 2 jours distincts, réparties tout au long de la journée et pendant vos 30 premiers jours, je gagne {euros}.	Se ti registri con il mio link e completi 20 consegne a indirizzi diversi in 2 giorni distinti, distribuite nell’arco della giornata e nei tuoi primi 30 giorni, guadagno {euros}.	Wenn du dich über meinen Link anmeldest und innerhalb deiner ersten 30 Tage an 2 verschiedenen Tagen über den Tag verteilt 20 Zustellungen an unterschiedliche Adressen abschließt, verdiene ich {euros}.
 Si {correo} tiene una cuenta de repartidor, te hemos mandado un enlace para crear una contraseña nueva. Mira también el spam.	If {correo} has a courier account, we have sent you a link to create a new password. Check the spam folder too.	Se {correo} tiver uma conta de estafeta, enviámos-te um link para criar uma palavra-passe nova. Vê também o spam.	Si {correo} a un compte livreur, nous vous avons envoyé un lien pour créer un nouveau mot de passe. Regardez aussi les spams.	Se {correo} ha un account corriere, ti abbiamo inviato un link per creare una nuova password. Guarda anche nello spam.	Wenn {correo} ein Zustellerkonto hat, haben wir dir einen Link für ein neues Passwort geschickt. Schau auch im Spam nach.
 Sigue	Continue	Continue	Continuez	Prosegui	Weiter
 Sigue la flecha	Follow the arrow	Segue a seta	Suivez la flèche	Segui la freccia	Folge dem Pfeil
@@ -809,7 +815,8 @@ el cliente dice: {t}	the customer says: {t}	o cliente diz: {t}	le client dit : {
 el paquete estaba en la furgoneta	the parcel was in the van	a encomenda estava na carrinha	le colis était dans la camionnette	il pacco era nel furgone	das Paket war im Transporter
 el repartidor	your driver	o estafeta	le livreur	il corriere	der Fahrer
 el repartidor de {empresa}	the {empresa} driver	o estafeta da {empresa}	le livreur de {empresa}	il corriere di {empresa}	der Fahrer von {empresa}
-en la furgoneta, {s}	in the van, {s}	na carrinha, {s}	dans la camionnette, {s}	nel furgone, {s}	im Transporter {s}
+""",
+        """en la furgoneta, {s}	in the van, {s}	na carrinha, {s}	dans la camionnette, {s}	nel furgone, {s}	im Transporter {s}
 en medio	in the middle	no meio	au milieu	in mezzo	in der Mitte
 entrega	delivery	entrega	livraison	consegna	Zustellung
 entrega en 30 días	delivery in 30 days	entrega em 30 dias	livraison en 30 jours	consegna in 30 giorni	Lieferung in 30 Tagen
@@ -820,8 +827,7 @@ estaba hecha demasiado cerca	it was taken too close	foi tirada demasiado perto	e
 estado de la vía	road conditions	estado da via	état de la chaussée	condizioni della strada	Straßenzustand
 hasta las {h}	until {h}	até às {h}	jusqu’à {h}	entro le {h}	bis {h} Uhr
 incidencia	incident	incidente	incident	evento	Vorfall
-""",
-        """la parada	the stop	a paragem	l’arrêt	la fermata	dem Stopp
+la parada	the stop	a paragem	l’arrêt	la fermata	dem Stopp
 la siguiente parada	the next stop	a próxima paragem	l’arrêt suivant	la prossima fermata	dem nächsten Stopp
 límite de velocidad	speed limit	limite de velocidade	limitation de vitesse	limite di velocità	Geschwindigkeitsbegrenzung
 meteorología	weather	meteorologia	météo	meteo	Wetter
@@ -873,6 +879,7 @@ ya estaban	were already there	já estavam	étaient déjà là	c’erano già	war
 {euros} por tu primera ruta real	{euros} for your first real route	{euros} pela tua primeira rota a sério	{euros} pour votre première vraie tournée	{euros} per il tuo primo vero giro	{euros} für deine erste echte Tour
 {f}: cortes y obras declarados, no el tráfico en tiempo real.	{f}: declared closures and roadworks, not real-time traffic.	{f}: cortes e obras declarados, não o trânsito em tempo real.	{f} : fermetures et travaux déclarés, pas le trafic en temps réel.	{f}: chiusure e lavori dichiarati, non il traffico in tempo reale.	{f}: gemeldete Sperrungen und Baustellen, kein Echtzeitverkehr.
 {n} DNR	{n} DNRs	{n} DNR	{n} DNR	{n} DNR	{n} DNRs
+{n} actualizadas	{n} updated	{n} atualizadas	{n} mises à jour	{n} aggiornate	{n} aktualisiert
 {n} bultos	{n} parcels	{n} volumes	{n} colis	{n} colli	{n} Pakete
 {n} entregas en {d} días distintos	{n} deliveries on {d} different days	{n} entregas em {d} dias diferentes	{n} livraisons sur {d} jours différents	{n} consegne in {d} giorni diversi	{n} Zustellungen an {d} verschiedenen Tagen
 {n} entregas pendientes	{n} deliveries pending	{n} entregas pendentes	{n} livraisons en attente	{n} consegne in sospeso	{n} Lieferungen offen
@@ -918,7 +925,7 @@ ya estaban	were already there	já estavam	étaient déjà là	c’erano già	war
 
     /** { español -> [en, pt, fr, it, de] } */
     val MAPA: Map<String, Array<String>> by lazy {
-        val m = HashMap<String, Array<String>>(1806)
+        val m = HashMap<String, Array<String>>(1820)
         for (b in BLOQUES) for (l in b.lineSequence()) {
             if (l.isBlank()) continue
             val c = l.split('\t')

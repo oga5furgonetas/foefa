@@ -6,26 +6,30 @@ import kotlinx.serialization.Serializable
    usa el portal web (MisDnr.jsx): las DNR del conductor que llama, de las 4 últimas semanas de Amazon (domingo a sábado),
    de la más nueva a la más vieja, también las vacías. Ni cliente (salvo el código postal) ni euros ni el ID de reparto: el
    servidor no los manda y aquí no hay sitio para ellos. Los campos, como los escribe el servidor (sin @SerialName, como
-   Aviso); lo que llegue de más se ignora (Json { ignoreUnknownKeys = true }), también `sin_interpretar`, que es solo
-   para diagnóstico. */
+   Aviso); lo que llegue de más se ignora (Json { ignoreUnknownKeys = true }). Es la forma final, tras la revisión (R7). */
 
-/** Una DNR: `dia` (la fecha de concesión, AAAA-MM-DD), `paquete` (el código) y `estado`: «cuenta», «no_cuenta» o
- *  «sin_clasificar» (Amazon aún no la ha revisado).
+/** Una DNR: `dia` (la fecha de la DNR, la «concesión», AAAA-MM-DD: por ella se agrupa en semanas y se ordenan las
+ *  tarjetas), `paquete` (el código) y `estado`: «cuenta», «no_cuenta» o «sin_clasificar» (Amazon aún no la ha revisado).
+ *
+ *  `entrega` (R7, F8/F9): el día de la entrega, AAAA-MM-DD, SOLO si el servidor lo sabe con seguridad; si no, null (y la
+ *  tarjeta solo dice «DNR del …»).
  *
  *  CÓMO FUE LA ENTREGA (11-11-2026, segunda vuelta): lo que el servidor ha entendido del Daily Report, ya interpretado en
  *  una clave corta. Todo puede venir a null (no se sabe con seguridad) o no venir (un servidor de antes): entonces la
  *  pantalla no dice nada de eso. Un valor que esta versión no conozca (un servidor más nuevo) tampoco se dice: lo decide
  *  DnrConductor.quePaso, que nunca pinta un código crudo.
- *  - `cp`: el código postal del informe («15704»); la dirección no viene.
+ *  - `cp`: el código postal del informe («15704»), solo si lo parece; la dirección no viene.
  *  - `como`: cómo lo marcó (puerta, puerta_trasera, buzon, en_mano, familiar, recepcion, conserjeria, vecino, locker,
  *    comercio, jardin, lugar_seguro, garaje, cobertizo).
  *  - `lejos`: true = lo marcó a 25 m o más del sitio; false = a menos.
  *  - `llamada`: «si» (con `segundos` > 0) o «no» (el informe dice con todas las letras que no llamó).
- *  - `fallo_contacto`: true si está en la tabla de fallos de contacto (nunca false: que no esté no prueba nada).
+ *  - `fallo_contacto`: true solo si el informe dice el fallo con todas las letras (nunca false: que no lo diga no prueba
+ *    nada). Con él, y sin «no llamó», el consejo prudente «Contacta con el cliente…».
  *  - `foto`: «mal» (no pasó la revisión, con `foto_motivo` si se entiende) o «bien». */
 @Serializable
 data class UnaDnr(
     val dia: String = "",
+    val entrega: String? = null,
     val paquete: String = "",
     val estado: String = "sin_clasificar",
     val cp: String? = null,
@@ -50,7 +54,9 @@ data class SemanaDnr(
 )
 
 /** `tiene_id`: la oficina le ha casado algún ID de reparto (sin él, `semanas` va vacía). `en_revision`: alguno de sus
- *  ID está en duda y sus DNR no se enseñan. `datos_hasta`: el último día de reporte subido de su centro. */
+ *  ID está en duda y sus DNR no se enseñan (con todos en duda, `semanas` va vacía: se mira antes que las semanas).
+ *  `datos_hasta`: el último día con datos (el de la DNR, no el de la subida) de su centro; null si su centro aún no tiene
+ *  ningún reporte. */
 @Serializable
 data class MisDnr(
     val tiene_id: Boolean = false,

@@ -7,6 +7,7 @@ import com.flotadsp.fds.data.SemanaDnr
 import com.flotadsp.fds.data.UnaDnr
 import com.flotadsp.fds.data.misDnrDe
 import com.flotadsp.fds.ui.Idioma
+import com.flotadsp.fds.ui.Tono
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
@@ -18,7 +19,7 @@ import org.junit.Test
 
 /** «MIS DNR» EN LA APP (11-11-2026, tanda 2): la frase grande con su singular y su plural, el desglose, lo nuevo desde la
  *  última vez, a dónde lleva un aviso con `vista=dnr` y que con 404 (la empresa sin la DNR diaria) la app haga como si no
- *  existiera. */
+ *  existiera. Y, al final, lo de la web final tras su revisión (R7). */
 class DnrConductorTest {
     private val servidor = MockWebServer()
 
@@ -70,21 +71,24 @@ class DnrConductorTest {
         assertThat(DnrConductor.nuevas(1)).isEqualTo("1 nueva")
         assertThat(DnrConductor.nuevas(4)).isEqualTo("4 nuevas")
         // La línea del inicio habla de ESTA semana (la primera), le cuenten o no.
-        val d = MisDnr(tiene_id = true, semanas = listOf(semana(dnr("A", "no_cuenta"), dnr("B", "cuenta")), semana(dnr("C", "cuenta"))))
+        val d = MisDnr(tiene_id = true, datos_hasta = "2026-11-10",
+            semanas = listOf(semana(dnr("A", "no_cuenta"), dnr("B", "cuenta")), semana(dnr("C", "cuenta"))))
         assertThat(DnrConductor.lineaInicio(d)).isEqualTo("Esta semana: 2")
         assertThat(DnrConductor.lineaInicio(d.copy(semanas = listOf(semana())))).isEqualTo("Esta semana: ninguna")
         assertThat(DnrConductor.lineaInicio(MisDnr(tiene_id = false))).isNull()
     }
 
     @Test
-    fun las_fechas_salen_cortas_y_sin_reportes_lo_dice() {
+    fun las_fechas_salen_cortas_y_sin_reportes_no_hay_linea_de_hasta_cuando() {
         assertThat(DnrConductor.rango(semana(desde = "2026-11-08", hasta = "2026-11-14"))).isEqualTo("Del 8/11 al 14/11")
         assertThat(DnrConductor.dia("2026-11-10")).endsWith("10/11")
-        assertThat(DnrConductor.hastaCuando(null)).isEqualTo("La oficina aún no ha subido ningún reporte.")
-        assertThat(DnrConductor.hastaCuando("2026-11-10")).startsWith("Reportes subidos hasta el ")
+        // Sin `datos_hasta`, ninguna línea pequeña: lo dice la frase grande («Aún no hay reportes de tu centro»).
+        assertThat(DnrConductor.hastaCuando(null)).isNull()
+        assertThat(DnrConductor.hastaCuando("")).isNull()
+        assertThat(DnrConductor.hastaCuando("2026-11-10")).startsWith("Hay datos hasta el ")
         assertThat(DnrConductor.hastaCuando("2026-11-10")).contains("10/11")
         // Una fecha que no se entiende sale tal cual, sin romper la pantalla.
-        assertThat(DnrConductor.dia("ayer")).isEqualTo("Ayer")
+        assertThat(DnrConductor.dia("ayer")).isEqualTo("ayer")
     }
 
     @Test
@@ -95,9 +99,10 @@ class DnrConductorTest {
         ))
         // La primera vez (nada apuntado en el móvil), todas son nuevas; la que no trae paquete no cuenta.
         assertThat(DnrConductor.novedades(d, null)).containsExactly("A", MarcaDnr.NUEVA, "B", MarcaDnr.NUEVA, "C", MarcaDnr.NUEVA)
-        // Lo que se apunta es cada paquete con su estado.
+        // Lo que se apunta es la HUELLA de cada paquete con su estado.
         val vistas = DnrConductor.vistasDe(d)
-        assertThat(vistas).containsExactly("A", "cuenta", "B", "no_cuenta", "C", "sin_clasificar")
+        assertThat(vistas).containsExactly(DnrConductor.huella("A"), "cuenta", DnrConductor.huella("B"), "no_cuenta",
+            DnrConductor.huella("C"), "sin_clasificar")
         // Al volver sin cambios, ninguna nueva.
         assertThat(DnrConductor.novedades(d, vistas)).isEmpty()
         // Amazon clasifica la C y llega una D: la C, actualizada; la D, nueva.
@@ -185,21 +190,23 @@ class DnrConductorTest {
     }
 
     @Test
-    fun lee_cada_dnr_con_todos_sus_campos_y_sin_lo_de_diagnostico() = runBlocking {
+    fun lee_cada_dnr_con_sus_12_claves_como_las_manda_el_servidor() = runBlocking {
         servidor.enqueue(MockResponse().setResponseCode(200).setBody("""
             {"tiene_id": true, "en_revision": false, "datos_hasta": "2026-11-10", "semanas": [
               {"semana": "2026-11-08", "hasta": "2026-11-14", "cuentan": 1, "no_cuentan": 0, "sin_clasificar": 0,
-               "dnr": [{"dia": "2026-11-09", "paquete": "TBA319455120318", "estado": "cuenta", "cp": "15704", "como": "puerta",
-                        "lejos": true, "llamada": "no", "segundos": null, "fallo_contacto": true, "foto": "mal",
-                        "foto_motivo": "borrosa", "sin_interpretar": {"cc_tipo": "RARO", "foto": "X"}}]}
+               "dnr": [{"dia": "2026-11-09", "entrega": "2026-11-07", "paquete": "TBA319455120318", "estado": "cuenta", "cp": "15704",
+                        "como": "puerta", "lejos": true, "llamada": "no", "segundos": null, "fallo_contacto": true, "foto": "mal",
+                        "foto_motivo": "borrosa"}]}
             ]}
         """.trimIndent()))
         val x = misDnrDe(api())!!.semanas[0].dnr[0]
-        assertThat(x).isEqualTo(UnaDnr(dia = "2026-11-09", paquete = "TBA319455120318", estado = "cuenta", cp = "15704", como = "puerta",
-            lejos = true, llamada = "no", segundos = null, fallo_contacto = true, foto = "mal", foto_motivo = "borrosa"))
-        assertThat(DnrConductor.cabeceraTarjeta(x)).isEqualTo("Lun, 9/11 · CP 15704")
+        assertThat(x).isEqualTo(UnaDnr(dia = "2026-11-09", entrega = "2026-11-07", paquete = "TBA319455120318", estado = "cuenta",
+            cp = "15704", como = "puerta", lejos = true, llamada = "no", segundos = null, fallo_contacto = true, foto = "mal",
+            foto_motivo = "borrosa"))
+        assertThat(DnrConductor.cabeceraTarjeta(x)).isEqualTo("Entregado el sáb, 7/11 · CP 15704")
+        assertThat(DnrConductor.concesionTarjeta(x)).isEqualTo("DNR del lun, 9/11")
         // Como la tarjeta de la web: la puerta, a más de 25 m, no llamó (y entonces el fallo de contacto ya no se repite) y
-        // la foto con su motivo; y la próxima vez, los dos consejos.
+        // la foto con su motivo; y la próxima vez, los dos consejos (el de llamar, no el de contactar: nunca los dos).
         assertThat(DnrConductor.quePaso(x).map { it.texto }).containsExactly(
             "Lo marcaste en la puerta", "Lo marcaste a más de 25 m del sitio", "No llamaste al cliente",
             "La foto no pasó la revisión: salió borrosa").inOrder()
@@ -211,12 +218,12 @@ class DnrConductorTest {
 
     @Test
     fun todo_a_null_o_sin_los_campos_no_dice_nada_y_la_pantalla_sigue_igual() = runBlocking {
-        // Todos los campos nuevos a null (no se sabe con seguridad).
+        // Todos los campos a null (no se sabe con seguridad).
         servidor.enqueue(MockResponse().setResponseCode(200).setBody("""
             {"tiene_id": true, "en_revision": false, "datos_hasta": "2026-11-10", "semanas": [
               {"semana": "2026-11-08", "hasta": "2026-11-14", "cuentan": 0, "no_cuentan": 0, "sin_clasificar": 1,
-               "dnr": [{"dia": "2026-11-10", "paquete": "TBA1", "estado": "sin_clasificar", "cp": null, "como": null, "lejos": null,
-                        "llamada": null, "segundos": null, "fallo_contacto": null, "foto": null, "foto_motivo": null, "sin_interpretar": {}}]}
+               "dnr": [{"dia": "2026-11-10", "entrega": null, "paquete": "TBA1", "estado": "sin_clasificar", "cp": null, "como": null,
+                        "lejos": null, "llamada": null, "segundos": null, "fallo_contacto": null, "foto": null, "foto_motivo": null}]}
             ]}
         """.trimIndent()))
         val nulos = misDnrDe(api())!!.semanas[0].dnr[0]
@@ -230,10 +237,11 @@ class DnrConductorTest {
             assertThat(x).isEqualTo(UnaDnr(dia = "2026-11-10", paquete = "TBA1", estado = "sin_clasificar"))
             assertThat(DnrConductor.quePaso(x)).isEmpty()
             assertThat(DnrConductor.proximaVez(x)).isEmpty()
-            // Sin CP, solo el día.
-            assertThat(DnrConductor.cabeceraTarjeta(x)).isEqualTo("Mar, 10/11")
+            // Sin entrega ni CP, solo el día de la DNR, y nada bajo el paquete.
+            assertThat(DnrConductor.cabeceraTarjeta(x)).isEqualTo("DNR del mar, 10/11")
+            assertThat(DnrConductor.concesionTarjeta(x)).isNull()
         }
-        assertThat(DnrConductor.cabeceraTarjeta(viejo.copy(cp = "  "))).isEqualTo("Mar, 10/11")
+        assertThat(DnrConductor.cabeceraTarjeta(viejo.copy(cp = "  "))).isEqualTo("DNR del mar, 10/11")
     }
 
     @Test
@@ -280,11 +288,9 @@ class DnrConductorTest {
         assertThat(DnrConductor.quePaso(base.copy(llamada = null, segundos = 30)).map { it.texto }).isEmpty()
         assertThat(DnrConductor.quePaso(base.copy(llamada = null, fallo_contacto = true)).map { it.texto })
             .containsExactly("Te apuntaron un fallo de contacto con el cliente")
-        // Llamó y aun así le apuntaron el contacto: salen las dos (como la web); sin llamada no hay consejo de llamar.
+        // Llamó y aun así le apuntaron el contacto: salen las dos (como la web).
         assertThat(DnrConductor.quePaso(base.copy(llamada = "si", segundos = 12, fallo_contacto = true)).map { it.texto })
             .containsExactly("Llamaste al cliente (12 s)", "Te apuntaron un fallo de contacto con el cliente").inOrder()
-        assertThat(DnrConductor.proximaVez(base.copy(llamada = "si", fallo_contacto = true))).isEmpty()
-        assertThat(DnrConductor.proximaVez(base.copy(llamada = null, fallo_contacto = true))).isEmpty()
         assertThat(DnrConductor.proximaVez(base.copy(llamada = "no"))).containsExactly("Llama al cliente antes de dejar el paquete.")
         // La foto: nada si es null; «pasó» en verde; «no pasó» con cada motivo en llano.
         assertThat(DnrConductor.quePaso(base.copy(foto = null, foto_motivo = "borrosa"))).isEmpty()
@@ -302,10 +308,13 @@ class DnrConductorTest {
 
     @Test
     fun las_fechas_de_la_tarjeta_y_de_los_reportes_como_la_web() {
-        assertThat(DnrConductor.dia("2026-11-10")).isEqualTo("Mar, 10/11")
-        assertThat(DnrConductor.dia("2026-11-08")).isEqualTo("Dom, 8/11")
-        assertThat(DnrConductor.cabeceraTarjeta(dnr("TBA1", "cuenta").copy(cp = "15704"))).isEqualTo("Mar, 10/11 · CP 15704")
-        assertThat(DnrConductor.hastaCuando("2026-11-10")).isEqualTo("Reportes subidos hasta el martes, 10/11.")
+        // Dentro de su frase, en minúscula y sin el punto de la abreviatura, como la web («sáb, 7/11»).
+        assertThat(DnrConductor.dia("2026-11-10")).isEqualTo("mar, 10/11")
+        assertThat(DnrConductor.dia("2026-11-08")).isEqualTo("dom, 8/11")
+        assertThat(DnrConductor.dia("2026-11-07")).isEqualTo("sáb, 7/11")
+        assertThat(DnrConductor.cabeceraTarjeta(dnr("TBA1", "cuenta").copy(cp = "15704"))).isEqualTo("DNR del mar, 10/11 · CP 15704")
+        // Sin punto final (en alemán la fecha ya acaba en uno).
+        assertThat(DnrConductor.hastaCuando("2026-11-10")).isEqualTo("Hay datos hasta el martes, 10/11")
     }
 
     @Test
@@ -318,8 +327,172 @@ class DnrConductorTest {
                 .isEqualTo("You called the customer (8 s)")
             assertThat(DnrConductor.quePaso(dnr("TBA1", "cuenta").copy(foto = "mal", foto_motivo = "borrosa")).single().texto)
                 .isEqualTo("The photo didn’t pass the review: it was blurry")
+            // Las frases nuevas de la web final (R7), traducidas.
+            assertThat(DnrConductor.fraseSinNinguna(CasoSemana.SIN_DATOS_SEMANA)).isEqualTo("No reports for this week yet")
+            assertThat(DnrConductor.proximaVez(dnr("TBA1", "cuenta").copy(fallo_contacto = true)))
+                .containsExactly("Contact the customer before leaving the parcel.")
+            assertThat(DnrConductor.actualizadas(2)).isEqualTo("2 updated")
         } finally {
             Idioma.arrancar("es", "es")
         }
+    }
+
+    /* ── La web final tras su revisión (R7, 11-11-2026): las mismas condiciones que MisDnr.jsx y dnrVistas.js. ── */
+
+    @Test
+    fun r7_con_el_dia_de_la_entrega_la_tarjeta_dice_que_dia_es_cada_cosa() {
+        val x = UnaDnr(dia = "2026-11-09", entrega = "2026-11-07", paquete = "TBA319400000009", estado = "cuenta", cp = "15704")
+        // Con entrega: arriba el día de la entrega y el CP; bajo el paquete, más discreto, el de la DNR.
+        assertThat(DnrConductor.entregaDe(x)).isEqualTo("2026-11-07")
+        assertThat(DnrConductor.cabeceraTarjeta(x)).isEqualTo("Entregado el sáb, 7/11 · CP 15704")
+        assertThat(DnrConductor.concesionTarjeta(x)).isEqualTo("DNR del lun, 9/11")
+        // Sin entrega: arriba el de la DNR y el CP, y nada bajo el paquete.
+        val sin = x.copy(entrega = null)
+        assertThat(DnrConductor.cabeceraTarjeta(sin)).isEqualTo("DNR del lun, 9/11 · CP 15704")
+        assertThat(DnrConductor.concesionTarjeta(sin)).isNull()
+        // Con entrega y sin CP, el día solo.
+        assertThat(DnrConductor.cabeceraTarjeta(x.copy(cp = null))).isEqualTo("Entregado el sáb, 7/11")
+        // Lo que no es AAAA-MM-DD no se toma por el día de la entrega (como `esDia` de la web): la forma sin entrega.
+        for (raro in listOf("07/11/2026", "2026-11-07T10:00:00", "", "ayer")) {
+            val r = x.copy(entrega = raro)
+            assertThat(DnrConductor.entregaDe(r)).isNull()
+            assertThat(DnrConductor.cabeceraTarjeta(r)).isEqualTo("DNR del lun, 9/11 · CP 15704")
+            assertThat(DnrConductor.concesionTarjeta(r)).isNull()
+        }
+    }
+
+    @Test
+    fun r7_los_tres_casos_de_la_frase_grande_como_casoSemana_de_la_web() {
+        val vacia = semana(desde = "2026-11-08", hasta = "2026-11-14")
+        val pasada = semana(dnr("A", "cuenta", dia = "2026-11-05"), desde = "2026-11-01", hasta = "2026-11-07")
+        // 1. Su centro sin ningún reporte: neutra, sin «Hay datos…», y la semana pasada cerrada.
+        val sinReportes = MisDnr(tiene_id = true, datos_hasta = null, semanas = listOf(vacia, pasada))
+        assertThat(DnrConductor.casoSemana(sinReportes)).isEqualTo(CasoSemana.SIN_REPORTES)
+        assertThat(DnrConductor.fraseSinNinguna(CasoSemana.SIN_REPORTES)).isEqualTo("Aún no hay reportes de tu centro")
+        assertThat(DnrConductor.hastaCuando(sinReportes.datos_hasta)).isNull()
+        assertThat(DnrConductor.lineaInicio(sinReportes)).isEqualTo("Esta semana: aún sin datos")
+        assertThat(DnrConductor.abiertaSinTocar(1, CasoSemana.SIN_REPORTES)).isFalse()
+        // 2. Un lunes: los datos acaban el sábado, antes del domingo de esta semana. Neutra, con «Hay datos hasta…» y «La
+        //    semana pasada» (y solo ella) abierta sin tocarla.
+        val lunes = sinReportes.copy(datos_hasta = "2026-11-07")
+        assertThat(DnrConductor.casoSemana(lunes)).isEqualTo(CasoSemana.SIN_DATOS_SEMANA)
+        assertThat(DnrConductor.fraseSinNinguna(CasoSemana.SIN_DATOS_SEMANA)).isEqualTo("De esta semana aún no hay reportes")
+        assertThat(DnrConductor.hastaCuando(lunes.datos_hasta)).isEqualTo("Hay datos hasta el sábado, 7/11")
+        assertThat(DnrConductor.lineaInicio(lunes)).isEqualTo("Esta semana: aún sin datos")
+        assertThat(DnrConductor.abiertaSinTocar(1, CasoSemana.SIN_DATOS_SEMANA)).isTrue()
+        assertThat(DnrConductor.abiertaSinTocar(2, CasoSemana.SIN_DATOS_SEMANA)).isFalse()
+        // 3. Con datos de esta semana (el mismo domingo ya cuenta) y ninguna: «no llevas ninguna», con su ✓ verde.
+        for (hasta in listOf("2026-11-08", "2026-11-10")) {
+            val ninguna = sinReportes.copy(datos_hasta = hasta)
+            assertThat(DnrConductor.casoSemana(ninguna)).isEqualTo(CasoSemana.NINGUNA)
+            assertThat(DnrConductor.lineaInicio(ninguna)).isEqualTo("Esta semana: ninguna")
+            assertThat(DnrConductor.abiertaSinTocar(1, CasoSemana.NINGUNA)).isFalse()
+        }
+        assertThat(DnrConductor.fraseSinNinguna(CasoSemana.NINGUNA)).isEqualTo("Esta semana no llevas ninguna")
+        // Con DNR esta semana manda «llevas», aunque `datos_hasta` fuera anterior (si las hay, hay datos de esta semana).
+        val lleva = lunes.copy(semanas = listOf(semana(dnr("B", "sin_clasificar", dia = "2026-11-09")), pasada))
+        assertThat(DnrConductor.casoSemana(lleva)).isEqualTo(CasoSemana.LLEVA)
+        assertThat(DnrConductor.lineaInicio(lleva)).isEqualTo("Esta semana: 1")
+        assertThat(DnrConductor.abiertaSinTocar(1, CasoSemana.LLEVA)).isFalse()
+        // Sin semanas (sin ID o con todos sus ID en revisión), ningún caso ni línea.
+        assertThat(DnrConductor.casoSemana(MisDnr(tiene_id = true, en_revision = true, datos_hasta = "2026-11-10"))).isNull()
+    }
+
+    @Test
+    fun r7_nuevas_y_actualizadas_aparte_y_el_numero_rojo_solo_cuenta_las_nuevas() {
+        val antes = MisDnr(tiene_id = true, datos_hasta = "2026-11-10", semanas = listOf(
+            semana(dnr("A", "sin_clasificar"), dnr("B", "sin_clasificar")),
+            semana(dnr("C", "sin_clasificar", dia = "2026-11-05"), desde = "2026-11-01", hasta = "2026-11-07"),
+        ))
+        val vistas = DnrConductor.vistasDe(antes)
+        // Dos que solo cambian de estado: ninguna nueva, sin número rojo, y el subtítulo dice «2 actualizadas».
+        val clasificadas = antes.copy(semanas = listOf(semana(dnr("A", "cuenta"), dnr("B", "sin_clasificar")),
+            semana(dnr("C", "no_cuenta", dia = "2026-11-05"), desde = "2026-11-01", hasta = "2026-11-07")))
+        val marcas = DnrConductor.novedades(clasificadas, vistas)
+        assertThat(DnrConductor.contar(marcas, MarcaDnr.NUEVA)).isEqualTo(0)
+        assertThat(DnrConductor.contar(marcas, MarcaDnr.ACTUALIZADA)).isEqualTo(2)
+        assertThat(DnrConductor.filaInicio(clasificadas, vistas)).isEqualTo(FilaDnrInicio(0, "Esta semana: 2"))
+        assertThat(DnrConductor.novedadesEnCorto(marcas)).isEqualTo("2 actualizadas")
+        // Y llegan dos que no estaban: el número rojo cuenta esas dos, y la cabecera las dos cosas.
+        val conNuevas = clasificadas.copy(semanas = listOf(
+            semana(dnr("D", "cuenta"), dnr("E", "sin_clasificar"), dnr("A", "cuenta"), dnr("B", "sin_clasificar")),
+            clasificadas.semanas[1].copy(dnr = listOf(dnr("C", "sin_clasificar", dia = "2026-11-05"))),
+        ))
+        val marcas2 = DnrConductor.novedades(conNuevas, vistas)
+        assertThat(DnrConductor.filaInicio(conNuevas, vistas)).isEqualTo(FilaDnrInicio(2, "Esta semana: 4"))
+        assertThat(DnrConductor.novedadesEnCorto(marcas2)).isEqualTo("2 nuevas · 1 actualizada")
+        assertThat(DnrConductor.novedadesEnCorto(emptyMap())).isNull()
+        // La primera vez (nada apuntado), todas son nuevas y todas suman.
+        assertThat(DnrConductor.filaInicio(conNuevas, null).nuevas).isEqualTo(5)
+        // Sus singulares y plurales.
+        assertThat(DnrConductor.actualizadas(0)).isNull()
+        assertThat(DnrConductor.actualizadas(1)).isEqualTo("1 actualizada")
+        assertThat(DnrConductor.actualizadas(3)).isEqualTo("3 actualizadas")
+    }
+
+    @Test
+    fun r7_el_desglose_de_cada_semana_anterior_con_alguna_dnr() {
+        // Lo que sale bajo el rango de «La semana pasada» en la foto de la web final.
+        assertThat(DnrConductor.desglose(semana(dnr("A", "cuenta"), dnr("B", "no_cuenta"), desde = "2026-11-01", hasta = "2026-11-07")))
+            .isEqualTo("1 te cuenta · 1 no te cuenta")
+        assertThat(DnrConductor.desglose(semana(dnr("A", "no_cuenta"), desde = "2026-10-18", hasta = "2026-10-24")))
+            .isEqualTo("1 no te cuenta")
+        // La que no tuvo ninguna no lleva desglose (dice «Ninguna»).
+        assertThat(DnrConductor.desglose(semana(desde = "2026-10-25", hasta = "2026-10-31"))).isEmpty()
+    }
+
+    @Test
+    fun r7_el_fallo_de_contacto_lleva_su_consejo_prudente_y_nunca_los_dos() {
+        val base = dnr("TBA1", "cuenta")
+        // Llamó 12 s y aun así le apuntaron el fallo de contacto: el consejo prudente, que no afirma que no llamara.
+        assertThat(DnrConductor.proximaVez(base.copy(llamada = "si", segundos = 12, fallo_contacto = true)))
+            .containsExactly("Contacta con el cliente antes de dejar el paquete.")
+        assertThat(DnrConductor.proximaVez(base.copy(llamada = null, fallo_contacto = true)))
+            .containsExactly("Contacta con el cliente antes de dejar el paquete.")
+        // Con «no llamó», solo «Llama al cliente…» (y el de la foto si toca).
+        assertThat(DnrConductor.proximaVez(base.copy(llamada = "no", fallo_contacto = true, foto = "mal")))
+            .containsExactly("Llama al cliente antes de dejar el paquete.", "Saca la foto con el paquete y el sitio bien a la vista.").inOrder()
+        // Sin fallo de contacto, nada.
+        assertThat(DnrConductor.proximaVez(base.copy(llamada = "si", segundos = 12))).isEmpty()
+    }
+
+    @Test
+    fun r7_no_te_cuenta_va_en_gris_y_te_cuenta_en_rojo() {
+        assertThat(tonoEstado("cuenta").first).isEqualTo(Tono.PELIGRO)
+        assertThat(tonoEstado("no_cuenta").first).isEqualTo(Tono.NEUTRO)
+        assertThat(tonoEstado("sin_clasificar").first).isEqualTo(Tono.AVISO)
+    }
+
+    @Test
+    fun r7_en_revision_con_semanas_vacias_sigue_diciendo_su_estado() = runBlocking {
+        // Todos sus ID en revisión: el servidor manda `semanas` vacía y `datos_hasta` calculado.
+        servidor.enqueue(MockResponse().setResponseCode(200).setBody(
+            """{"tiene_id": true, "en_revision": true, "datos_hasta": "2026-11-10", "semanas": []}"""))
+        val d = misDnrDe(api())!!
+        assertThat(DnrConductor.avisoRevision(d))
+            .isEqualTo("La oficina está revisando tu ID de reparto. Cuando lo confirme, aquí verás tus DNR.")
+        assertThat(DnrConductor.casoSemana(d)).isNull()
+        assertThat(DnrConductor.lineaInicio(d)).isNull()
+        // Con alguno en revisión y semanas, el otro aviso; sin revisión, ninguno.
+        val conSemanas = d.copy(semanas = listOf(semana()))
+        assertThat(DnrConductor.avisoRevision(conSemanas))
+            .isEqualTo("La oficina está revisando uno de tus ID de reparto: puede que aquí falte alguna.")
+        assertThat(DnrConductor.avisoRevision(conSemanas.copy(en_revision = false))).isNull()
+    }
+
+    @Test
+    fun r7_lo_apuntado_guarda_una_huella_corta_la_misma_que_la_web_y_nunca_el_codigo() {
+        // Los mismos valores que da huella() de dnrVistas.js (FNV-1a de 32 bits en base 36).
+        assertThat(DnrConductor.huella("TBA319400000009")).isEqualTo("osk4e4")
+        assertThat(DnrConductor.huella("TBA318855201734")).isEqualTo("d15cx1")
+        assertThat(DnrConductor.huella("TBA1")).isEqualTo("f6oyjp")
+        assertThat(DnrConductor.huella("A")).isEqualTo("1ie980c")
+        assertThat(DnrConductor.huella("")).isEqualTo("ztntfp")
+        val d = MisDnr(tiene_id = true, semanas = listOf(semana(dnr("TBA319400000009", "cuenta"), dnr("TBA318855201734", "no_cuenta"))))
+        val vistas = DnrConductor.vistasDe(d)
+        assertThat(vistas).containsExactly("osk4e4", "cuenta", "d15cx1", "no_cuenta")
+        assertThat(vistas.keys.joinToString() + vistas.values.joinToString()).doesNotContain("TBA")
+        // Lo apuntado con el formato anterior (el código) no casa: salen como nuevas una vez, y nada se rompe.
+        assertThat(DnrConductor.novedades(d, mapOf("TBA319400000009" to "cuenta")).values).containsExactly(MarcaDnr.NUEVA, MarcaDnr.NUEVA)
     }
 }

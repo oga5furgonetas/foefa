@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -89,27 +90,40 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 /* «MIS DNR» EN LA APP (11-11-2026, tanda 2; para la próxima versión de Play, no se publica ahora). La misma pantalla que el
-   portal web (frontend/src/pages/driver/MisDnr.jsx), con la misma ruta (GET /diarios/mias), las mismas frases y en el
-   mismo orden. Dani: «que le ponga por ejemplo "esta semana llevas 1 DNR" y cuál es, o "llevas 5" o así, y que esté bien
-   montado», y después: «hazlo más bonito y mejor… entrega tipo "marcaste puerta y no llamaste ni sacaste bien la foto"… y
-   un recordatorio»:
+   portal web (frontend/src/pages/driver/MisDnr.jsx y dnrVistas.js), con la misma ruta (GET /diarios/mias), las mismas
+   frases, las mismas condiciones y en el mismo orden. Dani: «que le ponga por ejemplo "esta semana llevas 1 DNR" y cuál
+   es, o "llevas 5" o así, y que esté bien montado», y después: «hazlo más bonito y mejor… entrega tipo "marcaste puerta y
+   no llamaste ni sacaste bien la foto"… y un recordatorio»:
      1. La semana («Del 8/11 al 14/11») y, en grande, la frase de ESTA semana con su número (todas las DNR de la semana, le
-        cuenten o no), o «Esta semana no llevas ninguna» con su ✓ verde. Debajo, el desglose (solo con 2 o más) y hasta
-        qué día hay reportes: sin eso, «ninguna» no se distingue de «aún no se ha subido».
+        cuenten o no), o «Esta semana no llevas ninguna» con su ✓ verde SOLO si hay datos de esta semana. Si no los hay
+        (de domingo a martes, más o menos, la semana en curso aún no tiene ninguno) lo dice, neutra, y «La semana pasada»,
+        la que acaba de llegar, sale abierta sin tocarla (revisión final, R7: F3/F6). Debajo, el desglose (solo con 2 o
+        más) y «Hay datos hasta el …».
      2. El RECORDATORIO, siempre a la vista bajo la frase, con las palabras de Dani.
-     3. Cuáles son: una tarjeta por DNR con su día y su CP, su paquete, su estado y «Nueva»; debajo, QUÉ PASÓ en frases
-        cortas con su icono, solo lo que el servidor ha entendido con seguridad (lo que llega a null, o con un valor que
-        esta versión no conoce, no se dice) y, si se sabe que no llamó o que la foto falló, «Lo que puedes hacer la
-        próxima vez».
-     4. Las semanas anteriores, discretas: una línea por semana con su recuento, que se abre al tocarla, con las mismas
-        tarjetas.
-     5. Qué es cada estado y, siempre que tiene ID, «¿Alguna no es tuya? Díselo a la oficina.» (qué ID es de quién lo
-        decide la oficina; la app no tiene otra forma de saberlo).
+     3. Cuáles son: una tarjeta por DNR con, arriba y en su propia fila, su estado y «Nueva»/«Actualizada»; debajo, qué día
+        es cada cosa (R7, F8/F9: «Entregado el sáb, 7/11» si el servidor sabe el día de la entrega, y siempre «DNR del lun,
+        9/11», el día por el que cuenta) y su CP; el paquete, entero en su línea; y, debajo de una línea, QUÉ PASÓ en
+        frases cortas con su icono, solo lo que el servidor ha entendido con seguridad (lo que llega a null, o con un valor
+        que esta versión no conoce, no se dice) y, si toca, «Lo que puedes hacer la próxima vez».
+     4. Las semanas anteriores, discretas: una línea por semana con su recuento y, bajo su rango, su desglose (R7, F17),
+        que se abre al tocarla, con las mismas tarjetas.
+     5. Qué es cada estado (cada frase bajo su etiqueta) y, siempre que tiene ID, «¿Alguna no es tuya? Díselo a la
+        oficina.» (qué ID es de quién lo decide la oficina; la app no tiene otra forma de saberlo).
    SIN euros ni el ID, nunca (Dani, 11-11): el servidor no los manda y aquí no hay dónde ponerlos. Solo con las piezas de
    ui/Componentes.kt y los tokens de ui/Tema.kt (lo vigila scripts/check-tokens-nativa.mjs). */
 
-/** Lo nuevo desde la última vez que abrió la pantalla en este móvil: lo que no estaba, o lo que cambió de estado. */
+/** Lo nuevo desde la última vez que abrió la pantalla en este móvil: lo que no estaba (NUEVA) o lo que cambió de estado
+ *  (ACTUALIZADA). Se cuentan APARTE (R7, F4/F16): una que solo cambió de estado no es una DNR nueva y no suma al número
+ *  rojo de la fila del inicio. */
 internal enum class MarcaDnr { NUEVA, ACTUALIZADA }
+
+/** En cuál de los casos está ESTA semana, como `casoSemana` de la web (R7, F3/F6):
+ *  - LLEVA: tiene DNR esta semana (si las hay, hay datos de esta semana);
+ *  - SIN_REPORTES: `datos_hasta` es null, su centro aún no tiene ningún reporte;
+ *  - SIN_DATOS_SEMANA: los datos acaban antes del domingo de esta semana;
+ *  - NINGUNA: hay datos de esta semana y ninguna DNR suya.
+ *  Nada calcula «hoy»: la semana y `datos_hasta` los da el servidor. */
+internal enum class CasoSemana { LLEVA, SIN_REPORTES, SIN_DATOS_SEMANA, NINGUNA }
 
 /** El color de una frase de «qué pasó», como en la web: un dato sin más (gris), lo que estuvo bien (verde), lo que es
  *  para fijarse (ámbar) y lo que le hizo fallar (rojo). */
@@ -144,6 +158,37 @@ internal object DnrConductor {
         return if (n <= 0) antes else antes + n + despues
     }
 
+    /** ESTA semana, en cuál de los casos está; null si no hay semanas (sin ID, o con todos sus ID en revisión). */
+    fun casoSemana(d: MisDnr): CasoSemana? {
+        val s = d.semanas.firstOrNull() ?: return null
+        if (s.dnr.isNotEmpty()) return CasoSemana.LLEVA
+        val hasta = d.datos_hasta
+        if (hasta.isNullOrEmpty()) return CasoSemana.SIN_REPORTES
+        // Las dos son AAAA-MM-DD: se comparan como texto, igual que la web.
+        if (hasta < s.semana) return CasoSemana.SIN_DATOS_SEMANA
+        return CasoSemana.NINGUNA
+    }
+
+    /** La frase grande cuando no lleva ninguna: «no llevas ninguna» (con su ✓ verde) solo si hay datos de esta semana; si
+     *  no, lo que pasa, neutra. */
+    fun fraseSinNinguna(caso: CasoSemana?): String = when (caso) {
+        CasoSemana.SIN_REPORTES -> tx("Aún no hay reportes de tu centro")
+        CasoSemana.SIN_DATOS_SEMANA -> tx("De esta semana aún no hay reportes")
+        else -> fraseSemana(0)
+    }
+
+    /** «La semana pasada» (la primera de las anteriores, i = 1) sale abierta sin tocarla cuando de esta semana aún no hay
+     *  datos: es la que acaba de llegar. */
+    fun abiertaSinTocar(i: Int, caso: CasoSemana?): Boolean = i == 1 && caso == CasoSemana.SIN_DATOS_SEMANA
+
+    /** El aviso de la revisión de la oficina; null si no hay. Va ANTES que las semanas: con todos sus ID en revisión el
+     *  servidor manda `semanas` vacía y lo único que hay que decir es esto. */
+    fun avisoRevision(d: MisDnr): String? = when {
+        !d.en_revision -> null
+        d.semanas.isEmpty() -> tx("La oficina está revisando tu ID de reparto. Cuando lo confirme, aquí verás tus DNR.")
+        else -> tx("La oficina está revisando uno de tus ID de reparto: puede que aquí falte alguna.")
+    }
+
     /** El desglose de la semana («1 te cuenta · 1 sin clasificar»): solo lo que hay, con su singular y su plural. */
     fun desglose(s: SemanaDnr): String {
         val c = s.dnr.count { it.estado == "cuenta" }
@@ -163,18 +208,40 @@ internal object DnrConductor {
         else -> tx("{n} DNR", "n" to n)
     }
 
-    /** «1 nueva», «3 nuevas»; null si no hay ninguna (la cabecera no lleva subtítulo). */
+    /** «1 nueva», «3 nuevas»; null si no hay ninguna. */
     fun nuevas(n: Int): String? = when {
         n <= 0 -> null
         n == 1 -> tx("1 nueva")
         else -> tx("{n} nuevas", "n" to n)
     }
 
-    /** La línea de la fila del inicio, como la casilla de la web: «Esta semana: 2» o «Esta semana: ninguna». */
-    fun lineaInicio(d: MisDnr): String? {
-        val n = d.semanas.firstOrNull()?.dnr?.size ?: return null
-        return if (n == 0) tx("Esta semana: ninguna") else tx("Esta semana: {n}", "n" to n)
+    /** «1 actualizada», «3 actualizadas»; null si no hay ninguna. */
+    fun actualizadas(n: Int): String? = when {
+        n <= 0 -> null
+        n == 1 -> tx("1 actualizada")
+        else -> tx("{n} actualizadas", "n" to n)
     }
+
+    /** Cuántas marcas de un tipo hay. */
+    fun contar(marcas: Map<String, MarcaDnr>, cual: MarcaDnr): Int = marcas.values.count { it == cual }
+
+    /** El subtítulo de la cabecera: «2 nuevas · 1 actualizada», o lo que haya; null si no hay nada. */
+    fun novedadesEnCorto(marcas: Map<String, MarcaDnr>): String? =
+        listOfNotNull(nuevas(contar(marcas, MarcaDnr.NUEVA)), actualizadas(contar(marcas, MarcaDnr.ACTUALIZADA)))
+            .joinToString(" · ").ifEmpty { null }
+
+    /** La línea de la fila del inicio, como la casilla de la web: «Esta semana: 2», «Esta semana: ninguna» o, si de esta
+     *  semana aún no hay datos (o su centro no tiene ninguno), «Esta semana: aún sin datos». */
+    fun lineaInicio(d: MisDnr): String? = when (casoSemana(d)) {
+        null -> null
+        CasoSemana.LLEVA -> tx("Esta semana: {n}", "n" to d.semanas.first().dnr.size)
+        CasoSemana.NINGUNA -> tx("Esta semana: ninguna")
+        else -> tx("Esta semana: aún sin datos")
+    }
+
+    /** La fila del inicio: el número rojo cuenta SOLO las nuevas (las actualizadas no suman, R7 F4/F16). */
+    fun filaInicio(d: MisDnr, vistas: Map<String, String>?): FilaDnrInicio =
+        FilaDnrInicio(contar(novedades(d, vistas), MarcaDnr.NUEVA), lineaInicio(d))
 
     fun textoMarca(m: MarcaDnr): String = if (m == MarcaDnr.NUEVA) tx("Nueva") else tx("Actualizada")
 
@@ -252,9 +319,15 @@ internal object DnrConductor {
         return out
     }
 
-    /** Lo que puede hacer la próxima vez: solo si SE SABE que no llamó o que la foto falló. */
+    /** Lo que puede hacer la próxima vez: solo si SE SABE que no llamó, que le apuntaron un fallo de contacto o que la foto
+     *  falló. Con el fallo de contacto (y sin «no llamó»), un consejo prudente que no afirma que no llamara (R7, F30);
+     *  nunca salen los dos. */
     fun proximaVez(x: UnaDnr): List<String> = listOfNotNull(
-        if (x.llamada == "no") tx("Llama al cliente antes de dejar el paquete.") else null,
+        when {
+            x.llamada == "no" -> tx("Llama al cliente antes de dejar el paquete.")
+            x.fallo_contacto == true -> tx("Contacta con el cliente antes de dejar el paquete.")
+            else -> null
+        },
         if (x.foto == "mal") tx("Saca la foto con el paquete y el sitio bien a la vista.") else null,
     )
 
@@ -265,36 +338,64 @@ internal object DnrConductor {
     /** «Del 8/11 al 14/11» (la semana de Amazon va de domingo a sábado). */
     fun rango(s: SemanaDnr): String = tx("Del {desde} al {hasta}", "desde" to fecha(s.semana, "d/M"), "hasta" to fecha(s.hasta, "d/M"))
 
-    /** El día de una DNR, como la web: «Mar, 10/11» (sin el punto que Java pone a la abreviatura: «mar.»). Una fecha que
-     *  no se entiende sale tal cual. */
+    /** Un día, en corto y en minúscula, como la web dentro de su frase: «sáb, 7/11» (sin el punto que Java pone a la
+     *  abreviatura: «sáb.»). Una fecha que no se entiende sale tal cual. */
     fun dia(iso: String): String = runCatching {
         val d = LocalDate.parse(iso)
-        val semana = d.format(DateTimeFormatter.ofPattern("EEE", LOCALE_APP)).trimEnd('.').replaceFirstChar { it.titlecase(LOCALE_APP) }
-        "$semana, ${d.format(DateTimeFormatter.ofPattern("d/M", LOCALE_APP))}"
-    }.getOrElse { iso.replaceFirstChar { it.titlecase(LOCALE_APP) } }
+        "${d.format(DateTimeFormatter.ofPattern("EEE", LOCALE_APP)).trimEnd('.')}, ${d.format(DateTimeFormatter.ofPattern("d/M", LOCALE_APP))}"
+    }.getOrDefault(iso)
 
-    /** Lo de encima del paquete en la tarjeta: «Mar, 10/11 · CP 15704» (sin CP, solo el día). */
-    fun cabeceraTarjeta(x: UnaDnr): String =
-        listOfNotNull(dia(x.dia), x.cp?.trim()?.takeIf { it.isNotEmpty() }?.let { tx("CP {cp}", "cp" to it) }).joinToString(" · ")
+    private val ISO = Regex("^\\d{4}-\\d{2}-\\d{2}$")
 
-    /** Hasta qué día ha subido la oficina los reportes («Reportes subidos hasta el martes, 10/11.»). */
-    fun hastaCuando(datosHasta: String?): String =
-        if (datosHasta.isNullOrBlank()) tx("La oficina aún no ha subido ningún reporte.")
-        else tx("Reportes subidos hasta el {fecha}.", "fecha" to fecha(datosHasta, "EEEE, d/M"))
+    /** El día de la entrega, solo si llega como fecha AAAA-MM-DD (el servidor ya manda null lo dudoso; esto es por si
+     *  acaso, como `esDia` de la web). */
+    fun entregaDe(x: UnaDnr): String? = x.entrega?.takeIf { ISO.matches(it) }
 
-    /** Lo que se apunta al abrir la pantalla: cada paquete con su estado (de las 4 semanas). */
+    /** «DNR del lun, 9/11»: el día por el que cuenta (la concesión), el que agrupa las semanas. */
+    fun dnrDel(x: UnaDnr): String = tx("DNR del {dia}", "dia" to dia(x.dia))
+
+    /** La línea de encima del paquete (R7, F8/F9): con el día de la entrega, «Entregado el sáb, 7/11 · CP 15704»; sin él,
+     *  «DNR del lun, 9/11 · CP 15704». Sin CP, solo el día. */
+    fun cabeceraTarjeta(x: UnaDnr): String = listOfNotNull(
+        entregaDe(x)?.let { tx("Entregado el {dia}", "dia" to dia(it)) } ?: dnrDel(x),
+        x.cp?.trim()?.takeIf { it.isNotEmpty() }?.let { tx("CP {cp}", "cp" to it) },
+    ).joinToString(" · ")
+
+    /** La línea discreta de bajo el paquete: «DNR del lun, 9/11», solo si arriba va el día de la entrega. */
+    fun concesionTarjeta(x: UnaDnr): String? = if (entregaDe(x) != null) dnrDel(x) else null
+
+    /** Hasta qué día hay datos («Hay datos hasta el martes, 10/11», sin punto final: en alemán la fecha ya acaba en uno);
+     *  null si `datos_hasta` es null (entonces la frase grande ya dice que su centro no tiene reportes). */
+    fun hastaCuando(datosHasta: String?): String? =
+        if (datosHasta.isNullOrBlank()) null
+        else tx("Hay datos hasta el {fecha}", "fecha" to fecha(datosHasta, "EEEE, d/M"))
+
+    /** La huella de un paquete, la misma que la web (dnrVistas.js, R7 F13): FNV-1a de 32 bits en base 36. En un móvil
+     *  compartido, lo apuntado no dice qué paquetes eran. */
+    fun huella(paquete: String): String {
+        var h = 0x811c9dc5.toInt()
+        for (ch in paquete) {
+            h = h xor ch.code
+            h *= 0x01000193
+        }
+        return (h.toLong() and 0xffffffffL).toString(36)
+    }
+
+    /** Lo que se apunta al abrir la pantalla: la huella de cada paquete con su estado (de las 4 semanas). */
     fun vistasDe(d: MisDnr): Map<String, String> =
-        d.semanas.flatMap { it.dnr }.filter { it.paquete.isNotBlank() }.associate { it.paquete to it.estado }
+        d.semanas.flatMap { it.dnr }.filter { it.paquete.isNotBlank() }.associate { huella(it.paquete) to it.estado }
 
-    /** Lo nuevo frente a lo que vio la última vez (`vistas`; null = nunca abrió la pantalla en este móvil, y entonces
-     *  todas son nuevas, como en la web): lo que no estaba, «nueva»; lo que cambió de estado, «actualizada». */
+    /** Lo nuevo frente a lo que vio la última vez (`vistas`, por huella; null = nunca abrió la pantalla en este móvil, y
+     *  entonces todas son nuevas, como en la web), por paquete: lo que no estaba, «nueva»; lo que cambió de estado,
+     *  «actualizada». */
     fun novedades(d: MisDnr, vistas: Map<String, String>?): Map<String, MarcaDnr> {
         val out = LinkedHashMap<String, MarcaDnr>()
         for (x in d.semanas.flatMap { it.dnr }) {
             if (x.paquete.isBlank()) continue
+            val h = huella(x.paquete)
             when {
-                vistas == null || !vistas.containsKey(x.paquete) -> out[x.paquete] = MarcaDnr.NUEVA
-                vistas[x.paquete] != x.estado -> out[x.paquete] = MarcaDnr.ACTUALIZADA
+                vistas == null || !vistas.containsKey(h) -> out[x.paquete] = MarcaDnr.NUEVA
+                vistas[h] != x.estado -> out[x.paquete] = MarcaDnr.ACTUALIZADA
             }
         }
         return out
@@ -302,10 +403,11 @@ internal object DnrConductor {
 }
 
 /** El color y el icono de cada estado (el color solo no se distingue al sol ni sin ver colores): le cuenta, en peligro;
- *  no le cuenta, en ok; sin clasificar, en aviso. Como la web. */
-private fun tonoEstado(estado: String): Pair<Tono, ImageVector> = when (estado) {
+ *  no le cuenta, en gris (R7, F31: en verde relleno pesaba más a la vista que «Te cuenta», que es la que importa); sin
+ *  clasificar, en aviso. Como la web. */
+internal fun tonoEstado(estado: String): Pair<Tono, ImageVector> = when (estado) {
     "cuenta" -> Tono.PELIGRO to Icons.Default.Warning
-    "no_cuenta" -> Tono.OK to Icons.Default.Check
+    "no_cuenta" -> Tono.NEUTRO to Icons.Default.Check
     else -> Tono.AVISO to Icons.Default.Schedule
 }
 
@@ -362,7 +464,7 @@ fun DnrConductorNativo(alVolver: () -> Unit) {
         }
     }
     Scaffold(
-        topBar = { Cabecera(tx("Mis DNR"), subtitulo = DnrConductor.nuevas(marcas.size), alVolver = alVolver) },
+        topBar = { Cabecera(tx("Mis DNR"), subtitulo = DnrConductor.novedadesEnCorto(marcas), alVolver = alVolver) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { inset ->
         val d = datos
@@ -376,18 +478,19 @@ fun DnrConductorNativo(alVolver: () -> Unit) {
                     .padding(top = Esp.s, bottom = Esp.xl),
                 verticalArrangement = Arrangement.spacedBy(Esp.xl),
             ) {
+                val caso = DnrConductor.casoSemana(d)
                 if (!d.tiene_id) Aviso(tx("La oficina aún no ha enlazado tu ID de reparto. Cuando lo haga, aquí verás tus DNR."),
                     icono = Icons.Default.Inventory2, maxLineas = 4)
-                if (d.en_revision) Aviso(
-                    if (d.semanas.isEmpty()) tx("La oficina está revisando tu ID de reparto. Cuando lo confirme, aquí verás tus DNR.")
-                    else tx("La oficina está revisando uno de tus ID de reparto: puede que aquí falte alguna."),
-                    tono = Tono.AVISO, icono = Icons.Default.Schedule, maxLineas = 4)
-                d.semanas.firstOrNull()?.let { EstaSemana(it, marcas, DnrConductor.hastaCuando(d.datos_hasta)) }
+                // La revisión, antes que las semanas: con todos sus ID en revisión, `semanas` llega vacía.
+                DnrConductor.avisoRevision(d)?.let { Aviso(it, tono = Tono.AVISO, icono = Icons.Default.Schedule, maxLineas = 4) }
+                d.semanas.firstOrNull()?.let { EstaSemana(it, caso, marcas, DnrConductor.hastaCuando(d.datos_hasta)) }
                 val anteriores = d.semanas.drop(1)
                 if (anteriores.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(Esp.s)) {
                         TituloBloque(tx("Semanas anteriores"))
-                        ContenedorLista(anteriores.size, separadorDesde = 0.dp) { i -> SemanaAnterior(anteriores[i], i + 1, marcas) }
+                        ContenedorLista(anteriores.size, separadorDesde = 0.dp) { i ->
+                            SemanaAnterior(anteriores[i], i + 1, marcas, abiertaSinTocar = DnrConductor.abiertaSinTocar(i + 1, caso))
+                        }
                     }
                 }
                 if (d.semanas.isNotEmpty()) QueEsCadaEstado()
@@ -404,29 +507,40 @@ private fun TituloBloque(texto: String) {
         modifier = Modifier.padding(horizontal = Esp.xs).semantics { heading() })
 }
 
-/** ESTA semana: las fechas, la frase grande, el desglose, hasta cuándo hay reportes, el recordatorio y, debajo, cuáles
- *  son. */
+/** ESTA semana: las fechas, la frase grande, el desglose, hasta cuándo hay datos, el recordatorio y, debajo, cuáles son. */
 @Composable
-private fun EstaSemana(s: SemanaDnr, marcas: Map<String, MarcaDnr>, hasta: String) {
+private fun EstaSemana(s: SemanaDnr, caso: CasoSemana?, marcas: Map<String, MarcaDnr>, hasta: String?) {
     val c = MaterialTheme.colorScheme
     val n = s.dnr.size
     Column(verticalArrangement = Arrangement.spacedBy(Esp.l)) {
         Column(Modifier.padding(horizontal = Esp.xs), verticalArrangement = Arrangement.spacedBy(Esp.xs)) {
             Text(DnrConductor.rango(s), style = MaterialTheme.typography.bodySmall.merge(TextoNumero), color = c.onSurfaceVariant)
             if (n > 0) FraseSemana(n, cuentan = s.dnr.any { it.estado == "cuenta" })
-            else Row(verticalAlignment = Alignment.CenterVertically) {
-                // Sin ninguna, el ✓ en su círculo verde: que se vea de un vistazo que no hay nada de qué preocuparse.
-                Surface(shape = CircleShape, color = LocalExtra.current.entregado, contentColor = LocalExtra.current.enEntregado) {
-                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.padding(Esp.s).size(24.dp))
-                }
-                Spacer(Modifier.width(Esp.m))
-                Text(DnrConductor.fraseSemana(0), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
-            }
+            else SinNinguna(caso)
             if (n > 1) Text(DnrConductor.desglose(s), style = MaterialTheme.typography.bodyMedium.merge(TextoNumero), color = c.onSurfaceVariant)
-            Text(hasta, style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
+            hasta?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant) }
         }
         Recordatorio()
         if (n > 0) Tarjetas(s.dnr, marcas)
+    }
+}
+
+/** La frase grande cuando no lleva ninguna. Con el ✓ en su círculo verde SOLO si hay datos de esta semana (que se vea de
+ *  un vistazo que no hay nada de qué preocuparse); si no, neutra, con el reloj en un círculo gris (R7, F3/F6). */
+@Composable
+private fun SinNinguna(caso: CasoSemana?) {
+    val ninguna = caso == CasoSemana.NINGUNA
+    val x = LocalExtra.current
+    val c = MaterialTheme.colorScheme
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(shape = CircleShape, color = if (ninguna) x.entregado else c.surfaceVariant,
+            contentColor = if (ninguna) x.enEntregado else c.onSurfaceVariant) {
+            Icon(if (ninguna) Icons.Default.Check else Icons.Default.Schedule, contentDescription = null,
+                modifier = Modifier.padding(Esp.s).size(24.dp))
+        }
+        Spacer(Modifier.width(Esp.m))
+        Text(DnrConductor.fraseSinNinguna(caso), style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.weight(1f).semantics { heading() })
     }
 }
 
@@ -467,8 +581,10 @@ private fun Tarjetas(dnr: List<UnaDnr>, marcas: Map<String, MarcaDnr>) {
     Column(verticalArrangement = Arrangement.spacedBy(Esp.s)) { dnr.forEach { TarjetaDnr(it, marcas[it.paquete]) } }
 }
 
-/** Una DNR, en su tarjeta: arriba el día y el CP (el contexto) con el estado y «Nueva» a la derecha; el paquete entero (es
- *  lo que se busca en el reporte); y, debajo de una línea, qué pasó y, si toca, lo que puede hacer la próxima vez. */
+/** Una DNR, en su tarjeta, como la web final: arriba, en su propia fila, el estado y «Nueva»/«Actualizada» (al lado del
+ *  día, unas veces cabían y otras no, y cada tarjeta salía de una forma); debajo, qué día es y el CP; el paquete, entero
+ *  en una línea (es lo que se busca en el reporte, y partido se lee mal: R7, F27); si arriba va el día de la entrega,
+ *  «DNR del …» más discreto; y, debajo de una línea, qué pasó y, si toca, lo que puede hacer la próxima vez. */
 @Composable
 private fun TarjetaDnr(x: UnaDnr, marca: MarcaDnr?) {
     val c = MaterialTheme.colorScheme
@@ -477,15 +593,17 @@ private fun TarjetaDnr(x: UnaDnr, marca: MarcaDnr?) {
     val consejos = DnrConductor.proximaVez(x)
     Surface(color = c.surfaceContainerLow, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(Esp.m)) {
-            Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.Top) {
-                Column(Modifier.weight(1f)) {
-                    Text(DnrConductor.cabeceraTarjeta(x), style = MaterialTheme.typography.bodySmall.merge(TextoNumero), color = c.onSurfaceVariant)
-                    Text(x.paquete, style = MaterialTheme.typography.titleMedium.merge(TextoNumero).copy(fontFamily = FontFamily.Monospace))
-                }
-                Spacer(Modifier.width(Esp.s))
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Esp.xs)) {
+            Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Esp.xs), verticalArrangement = Arrangement.spacedBy(Esp.xs)) {
                     Etiqueta(DnrConductor.textoEstado(x.estado), tono = tono, icono = icono)
                     marca?.let { Etiqueta(DnrConductor.textoMarca(it), tono = Tono.MARCA) }
+                }
+                Text(DnrConductor.cabeceraTarjeta(x), style = MaterialTheme.typography.bodySmall.merge(TextoNumero), color = c.onSurfaceVariant,
+                    modifier = Modifier.padding(top = Esp.s))
+                Text(x.paquete, style = MaterialTheme.typography.titleMedium.merge(TextoNumero).copy(fontFamily = FontFamily.Monospace),
+                    maxLines = 1, softWrap = false)
+                DnrConductor.concesionTarjeta(x)?.let {
+                    Text(it, style = MaterialTheme.typography.labelSmall.merge(TextoNumero), color = c.onSurfaceVariant)
                 }
             }
             if (hechos.isNotEmpty()) {
@@ -505,8 +623,8 @@ private fun TarjetaDnr(x: UnaDnr, marca: MarcaDnr?) {
     }
 }
 
-/** «Lo que puedes hacer la próxima vez», en ámbar: el título con la bombilla y los consejos alineados con su texto (no
- *  con el icono), como la web. */
+/** «Lo que puedes hacer la próxima vez», en ámbar: el título con la bombilla, en `boton` para que mande sobre sus
+ *  consejos, que van en letra normal (R7, F29), alineados con su texto (no con el icono), como la web. */
 @Composable
 private fun ProximaVez(consejos: List<String>, modifier: Modifier = Modifier) {
     val x = LocalExtra.current
@@ -515,23 +633,29 @@ private fun ProximaVez(consejos: List<String>, modifier: Modifier = Modifier) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Lightbulb, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(Esp.s))
-                Text(tx("Lo que puedes hacer la próxima vez"), style = MaterialTheme.typography.labelMedium)
+                Text(tx("Lo que puedes hacer la próxima vez"), style = MaterialTheme.typography.labelLarge)
             }
             consejos.forEach { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 16.dp + Esp.s)) }
         }
     }
 }
 
-/** Una semana anterior: una línea con su recuento que se abre al tocarla, con las mismas tarjetas. La que no tuvo
- *  ninguna lo dice en esa línea, en verde, y no se abre (no hay nada que ver). */
+/** Una semana anterior: una línea con su recuento y, bajo su rango, su desglose (R7, F17) y sus nuevas y actualizadas,
+ *  cada una en su etiqueta (F4/F16), que se abre al tocarla, con las mismas tarjetas. La que no tuvo ninguna lo dice en
+ *  esa línea, en verde, y no se abre (no hay nada que ver). `abiertaSinTocar`: «La semana pasada» cuando de esta semana
+ *  aún no hay datos; al tocarla, se cierra. */
 @Composable
-private fun SemanaAnterior(s: SemanaDnr, i: Int, marcas: Map<String, MarcaDnr>) {
+private fun SemanaAnterior(s: SemanaDnr, i: Int, marcas: Map<String, MarcaDnr>, abiertaSinTocar: Boolean) {
     val c = MaterialTheme.colorScheme
     val x = LocalExtra.current
     val n = s.dnr.size
-    var abierta by rememberSaveable(s.semana) { mutableStateOf(false) }
-    val nuevasAqui = s.dnr.count { marcas.containsKey(it.paquete) }
-    val tocar = if (n > 0) Modifier.clickable(onClickLabel = if (abierta) tx("Cerrar") else tx("Abrir"), role = Role.Button) { abierta = !abierta } else Modifier
+    // null mientras no la toque: entonces manda `abiertaSinTocar`.
+    var tocada by rememberSaveable(s.semana) { mutableStateOf<Boolean?>(null) }
+    val abierta = tocada ?: abiertaSinTocar
+    val suyas = s.dnr.mapNotNull { marcas[it.paquete] }
+    val nuevasAqui = DnrConductor.nuevas(suyas.count { it == MarcaDnr.NUEVA })
+    val actualizadasAqui = DnrConductor.actualizadas(suyas.count { it == MarcaDnr.ACTUALIZADA })
+    val tocar = if (n > 0) Modifier.clickable(onClickLabel = if (abierta) tx("Cerrar") else tx("Abrir"), role = Role.Button) { tocada = !abierta } else Modifier
     Column {
         Row(
             Modifier.fillMaxWidth().then(tocar).semantics(mergeDescendants = true) {}.heightIn(min = Alto.boton)
@@ -541,6 +665,14 @@ private fun SemanaAnterior(s: SemanaDnr, i: Int, marcas: Map<String, MarcaDnr>) 
             Column(Modifier.weight(1f)) {
                 Text(if (i == 1) tx("La semana pasada") else DnrConductor.rango(s), style = MaterialTheme.typography.bodyMedium.merge(TextoNumero))
                 if (i == 1) Text(DnrConductor.rango(s), style = MaterialTheme.typography.bodySmall.merge(TextoNumero), color = c.onSurfaceVariant)
+                if (n > 0) Text(DnrConductor.desglose(s), style = MaterialTheme.typography.bodySmall.merge(TextoNumero), color = c.onSurfaceVariant)
+                if (nuevasAqui != null || actualizadasAqui != null) {
+                    FlowRow(Modifier.padding(top = Esp.xs), horizontalArrangement = Arrangement.spacedBy(Esp.xs),
+                        verticalArrangement = Arrangement.spacedBy(Esp.xs)) {
+                        nuevasAqui?.let { Etiqueta(it, tono = Tono.MARCA) }
+                        actualizadasAqui?.let { Etiqueta(it, tono = Tono.NEUTRO) }
+                    }
+                }
             }
             Spacer(Modifier.width(Esp.s))
             if (n == 0) {
@@ -548,7 +680,6 @@ private fun SemanaAnterior(s: SemanaDnr, i: Int, marcas: Map<String, MarcaDnr>) 
                 Spacer(Modifier.width(Esp.xs))
                 Text(DnrConductor.cuantas(0), style = MaterialTheme.typography.labelLarge, color = x.entregadoTexto)
             } else {
-                DnrConductor.nuevas(nuevasAqui)?.let { Etiqueta(it, tono = Tono.MARCA); Spacer(Modifier.width(Esp.s)) }
                 Text(DnrConductor.cuantas(n), style = MaterialTheme.typography.labelLarge.merge(TextoNumero))
                 Spacer(Modifier.width(Esp.xs))
                 Icon(if (abierta) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null,
@@ -563,18 +694,20 @@ private fun SemanaAnterior(s: SemanaDnr, i: Int, marcas: Map<String, MarcaDnr>) 
     }
 }
 
-/** Qué quiere decir cada estado: al final, con la etiqueta tal cual se ve en las tarjetas y su frase al lado. */
+/** Qué quiere decir cada estado: al final, con la etiqueta tal cual se ve en las tarjetas y su frase DEBAJO, a todo el
+ *  ancho (R7, F32: al lado, en alemán o francés la etiqueta larga dejaba a la frase una columna estrecha). */
 @Composable
 private fun QueEsCadaEstado() {
     Column(verticalArrangement = Arrangement.spacedBy(Esp.s)) {
         TituloBloque(tx("Qué es cada estado"))
-        DnrConductor.ESTADOS.forEach { e ->
-            val (tono, icono) = tonoEstado(e)
-            Row(Modifier.padding(horizontal = Esp.xs).semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically) {
-                Etiqueta(DnrConductor.textoEstado(e), tono = tono, icono = icono)
-                Spacer(Modifier.width(Esp.m))
-                Text(DnrConductor.explicaEstado(e), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f))
+        Column(verticalArrangement = Arrangement.spacedBy(Esp.m)) {
+            DnrConductor.ESTADOS.forEach { e ->
+                val (tono, icono) = tonoEstado(e)
+                Column(Modifier.fillMaxWidth().padding(horizontal = Esp.xs).semantics(mergeDescendants = true) {},
+                    verticalArrangement = Arrangement.spacedBy(Esp.xs)) {
+                    Etiqueta(DnrConductor.textoEstado(e), tono = tono, icono = icono)
+                    Text(DnrConductor.explicaEstado(e), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }

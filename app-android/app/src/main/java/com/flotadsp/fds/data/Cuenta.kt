@@ -153,10 +153,13 @@ class Cuenta(private val ctx: Context) {
     suspend fun ultimoAviso(): String? = ctx.almacen.data.first()[kUltimoAviso]
     suspend fun guardarUltimoAviso(v: String) { ctx.almacen.edit { it[kUltimoAviso] = v } }
 
-    /* «MIS DNR» (11-11-2026): qué DNR vio cada conductor la última vez que abrió la pantalla (paquete → estado), para
-       marcar las nuevas y las que Amazon ha clasificado desde entonces, como la web (dnrVistas.js). Por persona (`quien`):
-       un móvil compartido no mezcla las de dos. Solo se guarda lo de sus 4 semanas, que se pisa cada vez, así que no
-       crece. Es una comodidad del móvil: si se pierde, solo vuelven a salir como nuevas. */
+    /* «MIS DNR» (11-11-2026): qué DNR vio cada conductor la última vez que abrió la pantalla (huella del paquete → estado),
+       para marcar las nuevas y las que Amazon ha clasificado desde entonces, como la web (dnrVistas.js). Del paquete se
+       apunta su HUELLA (DnrConductor.huella, la misma FNV-1a que la web), no su código (R7, F13): en un móvil compartido,
+       lo que queda no dice qué paquetes eran. Lo apuntado antes con el código no ha salido nunca a Play: no se migra (y se
+       pisa la primera vez). Por persona (`quien`): un móvil compartido no mezcla las de dos. Solo se guarda lo de sus 4
+       semanas, que se pisa cada vez, así que no crece. Es una comodidad del móvil: si se pierde, solo vuelven a salir como
+       nuevas. */
     private val serieVistas = MapSerializer(String.serializer(), MapSerializer(String.serializer(), String.serializer()))
     private suspend fun todasDnrVistas(): Map<String, Map<String, String>> =
         ctx.almacen.data.first()[kDnrVistas]?.let { runCatching { JSON.decodeFromString(serieVistas, it) }.getOrNull() }.orEmpty()
