@@ -243,7 +243,7 @@ test.describe('Asignación · cambios sin guardar, borrar fila y furgonetas en t
     await expect(marca).toBeVisible()
 
     // Guardar quita la marca y ya no pregunta.
-    await page.getByRole('button', { name: 'Guardar cuadrante' }).click()
+    await page.getByRole('button', { name: 'Guardar asignación' }).click()
     await expect(marca).toHaveCount(0)
     expect(guardados).toHaveLength(1)
     let otro = false
@@ -340,7 +340,7 @@ test.describe('Asignación · cambios sin guardar, borrar fila y furgonetas en t
     await quitar.click()   // la fila está vacía: se quita sin preguntar
     await expect(quitar).toHaveCount(0)
     await expect(marca).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Guardar cuadrante' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Guardar asignación' })).toBeDisabled()
 
     let otro = false
     page.on('dialog', (d) => { otro = true; d.accept() })
@@ -359,7 +359,7 @@ test.describe('Asignación · cambios sin guardar, borrar fila y furgonetas en t
     await quitar.click()
     await expect(quitar).toHaveCount(0)
     await expect(marca).toBeVisible()
-    const guardar = page.getByRole('button', { name: 'Guardar cuadrante' })
+    const guardar = page.getByRole('button', { name: 'Guardar asignación' })
     await expect(guardar).toBeEnabled()
 
     // Cambiar de centro y de día pregunta; con «No» se queda todo como estaba.

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Car, Users, Wand2, Check, Loader2, ChevronLeft, ChevronRight, X, Lightbulb, Search, Rows3, Plus, Info,
-  Star, ChevronDown, ClipboardPaste, AlertTriangle,
+  Star, ChevronDown, ClipboardPaste, AlertTriangle, Ban,
 } from 'lucide-react'
 import {
   getAfinidad, guardarFijaConductor, guardarTratoFurgo, getPropuestaFijas, aplicarPropuestaFijas,
@@ -10,6 +10,7 @@ import {
 import { useT } from '../../i18n'
 import { useToast } from '../../lib/toast'
 import { lista } from '../../lib/lista'
+import ElegirNave from './ElegirNave'
 
 /* FURGONETAS FIJAS — quién lleva qué furgoneta, por centro.
 
@@ -26,6 +27,12 @@ import { lista } from '../../lib/lista'
 
 const norm = (s) => String(s || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
 const txt = (plantilla, vars) => Object.entries(vars).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, v), plantilla)
+/* «1 golpe seguro · 2 golpes posibles», sin el que vale 0 (11-11-2026): salía «0 golpes seguros · 1 posibles». */
+const cuenta1 = (t, clave, n) => t(`${clave}.${n === 1 ? 'one' : 'many'}`).replace('{n}', n)
+function golpesTxt(t, s, p) {
+  const partes = [s > 0 && cuenta1(t, 'ff.golpesSeg', s), p > 0 && cuenta1(t, 'ff.golpesPos', p)].filter(Boolean)
+  return partes.length ? partes.join(' · ') : t('ff.sinGolpes')
+}
 
 function leer(clave, porDefecto) {
   try { const v = localStorage.getItem(clave); return v === null ? porDefecto : JSON.parse(v) } catch { return porDefecto }
@@ -168,13 +175,14 @@ function Guia() {
   )
 }
 
-function SelectFurgo({ id, value, furgos, exclude, nombreDe, onChange }) {
+function SelectFurgo({ id, value, furgos, exclude, vetadas = [], nombreDe, onChange }) {
   const { t } = useT()
   const orden = [...furgos].sort((a, b) => (b.operativa - a.operativa) || a.matricula.localeCompare(b.matricula))
+  // Las vetadas no se ofrecen como su furgoneta ni como la de reserva (11-11-2026): el servidor no lo admite.
   return (
     <select id={id} value={value || ''} onChange={(e) => onChange(e.target.value || null)} className="select w-full py-1.5 text-[13px]">
       <option value="">{t('ff.ninguna')}</option>
-      {orden.filter((f) => f.id !== exclude).map((f) => {
+      {orden.filter((f) => f.id !== exclude && (f.id === value || !vetadas.includes(f.id))).map((f) => {
         const de = f.principal_de.map((c) => nombreDe[c]).filter(Boolean)
         return (
           <option key={f.id} value={f.id}>
@@ -183,6 +191,40 @@ function SelectFurgo({ id, value, furgos, exclude, nombreDe, onChange }) {
         )
       })}
     </select>
+  )
+}
+
+/* «FURGONETAS QUE NO DEBE LLEVAR» (11-11-2026, dia-12 / historia-9). El servidor y el reparto ya sabían vetar una
+   furgoneta a un conductor, pero ninguna pantalla dejaba apuntarlo. Se eligen de una en una y se quitan tocando su
+   placa. Solo frena lo automático («Poner furgonetas», sugerencias, «¿A quién se la doy?»): a mano se le puede
+   seguir poniendo, y así lo dice la ayuda. Su furgoneta y la de reserva no se ofrecen (el servidor no lo admite). */
+function Vetadas({ c, furgos, placaDe, cambiar }) {
+  const { t } = useT()
+  const f = c.fija
+  const vetadas = lista(f.vetadas)
+  const libres = [...furgos].filter((x) => !vetadas.includes(x.id) && x.id !== f.principal && x.id !== f.secundaria)
+    .sort((a, b) => a.matricula.localeCompare(b.matricula))
+  return (
+    <div>
+      <label htmlFor={`ff-v-${c.id}`} className="mb-1 block text-[12px] font-semibold uppercase tracking-wider text-dark-400">{t('ff.vetadas')}</label>
+      {vetadas.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5" data-testid={`ff-vetadas-${c.id}`}>
+          {vetadas.map((id) => (
+            <button key={id} type="button" onClick={() => cambiar(c, { vetadas: vetadas.filter((x) => x !== id) })}
+              aria-label={txt(t('ff.vetadasQuitar'), { p: placaDe[id] || id })} title={txt(t('ff.vetadasQuitar'), { p: placaDe[id] || id })}
+              className="flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/[0.06] px-1.5 py-1 text-red-300 hover:bg-red-500/15 max-sm:min-h-[44px]">
+              <Placa p={placaDe[id] || id} pequena /> <X size={13} />
+            </button>
+          ))}
+        </div>
+      )}
+      <select id={`ff-v-${c.id}`} value="" onChange={(e) => e.target.value && cambiar(c, { vetadas: [...vetadas, e.target.value] })}
+        className="select w-full py-1.5 text-[13px] max-sm:min-h-[44px]">
+        <option value="">{vetadas.length ? t('ff.vetadasOtra') : t('ff.vetadasAnadir')}</option>
+        {libres.map((x) => <option key={x.id} value={x.id}>{x.matricula}</option>)}
+      </select>
+      <p className="mt-1 text-[12px] leading-snug text-dark-400">{t('ff.vetadasAyuda')}</p>
+    </div>
   )
 }
 
@@ -206,7 +248,7 @@ function Conductor({ c, furgos, placaDe, furgoDe, nombreDe, abierto, abrir, camb
               )}
               {(c.cuidado.seguros > 0 || c.cuidado.posibles > 0) && (
                 <span title={t('ff.golpesTip')} className={c.cuidado.seguros > 0 ? 'text-red-300' : 'text-amber-300'}>
-                  {txt(t('ff.golpesCorto'), { s: c.cuidado.seguros, p: c.cuidado.posibles })}
+                  {golpesTxt(t, c.cuidado.seguros, c.cuidado.posibles)}
                 </span>
               )}
             </div>
@@ -231,6 +273,16 @@ function Conductor({ c, furgos, placaDe, furgoDe, nombreDe, abierto, abrir, camb
             </>
           ) : (
             <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[12px] font-semibold text-amber-300">{t('ff.filtro.sinFurgo')}</span>
+          )}
+          {/* La marca de las vetadas en su línea (11-11-2026): se ve sin abrir la ficha. */}
+          {lista(f.vetadas).length > 0 && (
+            <span className="flex items-center gap-1.5" data-testid={`ff-marca-vetadas-${c.id}`}
+              title={lista(f.vetadas).map((id) => placaDe[id] || id).join(' · ')}>
+              <Ban size={13} className="text-red-300" aria-hidden="true" />
+              <span className="text-[11px] uppercase tracking-wider text-dark-500">{t('ff.noLleva')}</span>
+              {lista(f.vetadas).slice(0, 2).map((id) => <Placa key={id} p={placaDe[id] || id} pequena apagada />)}
+              {lista(f.vetadas).length > 2 && <span className="text-[11px] font-semibold text-dark-400">+{lista(f.vetadas).length - 2}</span>}
+            </span>
           )}
           {guardadoEn && <span className="flex items-center gap-1 text-[12px] text-emerald-300"><Check size={13} /> {t('ff.guardado')}</span>}
           <button type="button" onClick={abrir} aria-expanded={abierto}
@@ -259,7 +311,7 @@ function Conductor({ c, furgos, placaDe, furgoDe, nombreDe, abierto, abrir, camb
           <div className="space-y-4">
             <div>
               <label htmlFor={`ff-p-${c.id}`} className="mb-1 block text-[12px] font-semibold uppercase tracking-wider text-dark-400">{t('ff.suFurgo')}</label>
-              <SelectFurgo id={`ff-p-${c.id}`} value={f.principal} furgos={furgos} exclude={f.secundaria} nombreDe={nombreDe}
+              <SelectFurgo id={`ff-p-${c.id}`} value={f.principal} furgos={furgos} exclude={f.secundaria} vetadas={lista(f.vetadas)} nombreDe={nombreDe}
                 onChange={(v) => cambiar(c, { principal: v })} />
               {comparten.length > 0 && (
                 <p className="mt-1 text-[12px] text-dark-400">{t('ff.ed.comparte')} {comparten.map((x) => nombreDe[x] || '?').join(', ')}</p>
@@ -267,9 +319,10 @@ function Conductor({ c, furgos, placaDe, furgoDe, nombreDe, abierto, abrir, camb
             </div>
             <div>
               <label htmlFor={`ff-s-${c.id}`} className="mb-1 block text-[12px] font-semibold uppercase tracking-wider text-dark-400">{t('ff.reserva')}</label>
-              <SelectFurgo id={`ff-s-${c.id}`} value={f.secundaria} furgos={furgos} exclude={f.principal} nombreDe={nombreDe}
+              <SelectFurgo id={`ff-s-${c.id}`} value={f.secundaria} furgos={furgos} exclude={f.principal} vetadas={lista(f.vetadas)} nombreDe={nombreDe}
                 onChange={(v) => cambiar(c, { secundaria: v })} />
             </div>
+            <Vetadas c={c} furgos={furgos} placaDe={placaDe} cambiar={cambiar} />
             <Interruptor id={`ff-t-${c.id}`} on={f.titular} disabled={!f.principal} onChange={(v) => cambiar(c, { titular: v })}
               titulo={t('ff.ed.titular')} ayuda={t('ff.ed.titularAyuda')} />
             <Interruptor id={`ff-a-${c.id}`} on={f.sin_auto} onChange={(v) => cambiar(c, { sin_auto: v })}
@@ -284,7 +337,7 @@ function Conductor({ c, furgos, placaDe, furgoDe, nombreDe, abierto, abrir, camb
             <div className="rounded-lg bg-white/[0.03] px-3 py-2.5">
               <div className="text-[12px] font-semibold uppercase tracking-wider text-dark-400">{t('ff.ed.datos')}</div>
               <p className="mt-1 text-[13px] text-dark-100">
-                {txt(t('ff.ed.datosTxt'), { d: c.cuidado.dias, s: c.cuidado.seguros, p: c.cuidado.posibles })}
+                {cuenta1(t, 'ff.ed.dias', c.cuidado.dias)} · {golpesTxt(t, c.cuidado.seguros, c.cuidado.posibles)}
               </p>
               <p className="mt-1 text-[11.5px] leading-snug text-dark-500">{t('ff.golpesTip')}</p>
               {c.ultima && <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-dark-400">{t('ff.col.ultima')}: <Placa p={c.ultima} pequena /></p>}
@@ -457,7 +510,7 @@ function Furgonetas({ datos, center, nombreDe, recargar }) {
                     <div className="flex flex-wrap gap-x-2 text-[12px] text-dark-400">
                       {c.responsabilidad != null && <span className={`rounded px-1.5 font-semibold ${tonoNota(c.responsabilidad)}`}>{txt(t('ff.notaN'), { n: c.responsabilidad })}</span>}
                       <span>{c.dias} {t('ff.dias')}</span>
-                      <span>{c.golpes_seguros || c.golpes_posibles ? txt(t('ff.golpesCorto'), { s: c.golpes_seguros, p: c.golpes_posibles }) : t('ff.sinGolpes')}</span>
+                      <span>{golpesTxt(t, c.golpes_seguros || 0, c.golpes_posibles || 0)}</span>
                       {c.tiene_fija && <span>· {t('ff.tieneFija')}</span>}
                     </div>
                   </div>
@@ -690,7 +743,7 @@ export default function FurgonetasFijas({ center }) {
     }
   }, [datos])
 
-  if (noCenter) return <div className="card p-10 text-center text-[14px] text-dark-300">{t('ff.elegirCentro')}</div>
+  if (noCenter) return <ElegirNave texto={t('ff.elegirCentro')} />
   if (error && !datos) return <div className="card p-10 text-center text-[14px] text-dark-300">{error}</div>
   if (!datos) return <div className="flex justify-center p-14 text-dark-400"><Loader2 className="animate-spin" /></div>
 
