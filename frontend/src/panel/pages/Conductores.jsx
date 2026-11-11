@@ -1437,7 +1437,8 @@ Cancelar: no hacer nada.`)) {
       await reactivarConductor(d.id)
     } catch (e) {
       const det = e?.response?.data?.detalle
-      if (e?.response?.status !== 409 || !det?.abrir_id) throw e
+      /* El del ID de una ficha de otra nave llega sin `abrir_id` (11-11-2026, tercera revisión, W2): se ofrece igual. */
+      if (e?.response?.status !== 409 || !det || (!det.abrir_id && det.conflicto !== 'id_reparto')) throw e
       if (det.conflicto === 'id_reparto') {
         if (!window.confirm(`${det.mensaje}\n\nAceptar: reactivar a ${d.name} SIN ese ID de reparto (pónselo bueno en su ficha).\nCancelar: no hacer nada.`)) return
         await reactivarConductor(d.id, { quitar_id: true })
@@ -2223,6 +2224,8 @@ function CambioCentro({ driver, centers, onCambio }) {
       } else {
         setTraslado(r.data?.traslado || { centro: elegido, desde })
         setAviso('')
+        /* Con fecha de hoy y sin poder aplicarlo ahora, el servidor lo dice (11-11-2026, tercera revisión, W3). */
+        if (typeof r.data?.error === 'string') setErr(r.data.error)
       }
       setAbierto(false)
       onCambio?.()

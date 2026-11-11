@@ -1029,3 +1029,191 @@ async def test_f11_el_registro_de_esta_base_gana_a_uno_sin_base_mas_reciente(app
     assert r["conductores"]["d-ana"]["app"] == "2.4.6"
     # Sin ninguno de esta base, el sin base sí cuenta (apps viejas).
     assert r["conductores"]["d-sin"]["app"] == "2.3.0"
+
+
+# ══════════════════════════════════════════════════════════════════════ W1 a W4 (tercera revisión, 11-11-2026)
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_w1_el_rodeo_de_la_baja_da_403_en_el_primer_paso(bajas):
+    """Un jefe limitado a DGA1 no puede dar de baja a Ana, ACTIVA en OGA5, para luego reactivarla en DGA1: ni con
+    «Dar de baja» (DELETE), ni con el PATCH o el PUT con active:false. Y no se escribe nada."""
+    for dar_de_baja in (lambda: server.delete_driver("d-ana", JEFE_DGA1),
+                        lambda: server.update_driver("d-ana", {"active": False}, JEFE_DGA1),
+                        lambda: server.put_driver("d-ana", {"active": False, "phone": "611"}, JEFE_DGA1)):
+        with pytest.raises(HTTPException) as e:
+            await dar_de_baja()
+        assert e.value.status_code == 403 and e.value.detail == "No tienes acceso a ese centro"
+    f = _ficha(bajas, "d-ana")
+    assert f["active"] is True and "baja_en" not in f and "baja_por" not in f and "phone" not in f
+    assert bajas["correo_personal_limpiado"].docs == [] and bajas["audit_log"].docs == []
+    # El segundo paso del rodeo ya no tiene nada que reactivar.
+    with pytest.raises(HTTPException) as e:
+        await server.reactivar_driver("d-ana", {"center": "DGA1"}, JEFE_DGA1)
+    assert e.value.status_code == 400 and _ficha(bajas, "d-ana")["center"] == "OGA5"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_w1_en_su_nave_y_sin_nave_se_da_de_baja_como_siempre(bajas):
+    bajas["drivers"].docs += [
+        {"id": "d-dga1b", "name": "OTRO DGA1", "center": "dga1 ", "active": True},
+        {"id": "d-sin-nave", "name": "SIN NAVE ACTIVO", "center": "", "active": True},
+        {"id": "d-blanco", "name": "NAVE EN BLANCO", "center": "  ", "active": True}]
+    await server.delete_driver("d-luis", JEFE_DGA1)                              # «Dar de baja» en Conductores
+    await server.update_driver("d-dga1b", {"active": False}, JEFE_DGA1)          # el cuadrante
+    await server.put_driver("d-sin-nave", {"active": False}, JEFE_DGA1)
+    await server.delete_driver("d-blanco", JEFE_DGA1)                            # sale en su lista, como las sin centro
+    for did in ("d-luis", "d-dga1b", "d-sin-nave", "d-blanco"):
+        f = _ficha(bajas, did)
+        assert f["active"] is False and f["baja_por"] == "Marta", did
+    # Una que YA está de baja en otra nave: como antes (no es dar de baja a una activa) y sin pisar la fecha.
+    await server.delete_driver("d-juan", JEFE_DGA1)
+    assert _ficha(bajas, "d-juan")["baja_en"] == "2026-11-05T10:00:00+00:00"
+    # Y la que no existe sigue dando 404.
+    with pytest.raises(HTTPException) as e:
+        await server.delete_driver("d-nadie", JEFE_DGA1)
+    assert e.value.status_code == 404
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("quien", [DANI, {**JEFE_DGA1, "allowed_centers": []}, {**JEFE_DGA1, "sa": True}])
+async def test_w1_el_duenio_el_superadmin_y_quien_no_tiene_naves_igual_que_antes(bajas, quien):
+    await server.delete_driver("d-ana", quien)
+    assert _ficha(bajas, "d-ana")["active"] is False
+    _ficha(bajas, "d-ana")["active"] = True
+    await server.update_driver("d-ana", {"active": False}, quien)
+    assert _ficha(bajas, "d-ana")["active"] is False
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_w4_el_patch_que_reactiva_mira_el_correo_como_reactivar(bajas):
+    bajas["drivers"].docs.append({"id": "d-juan2", "name": "JUAN REY", "email": "JUAN@X.test", "center": "OGA5",
+                                  "active": True})
+    with pytest.raises(HTTPException) as e:
+        await server.update_driver("d-juan", {"active": True}, DANI)              # el asistente reactiva así
+    d = e.value.detail
+    assert e.value.status_code == 409 and d["conflicto"] == "correo" and d["abrir_id"] == "d-juan2"
+    assert _ficha(bajas, "d-juan")["active"] is False and "baja_en" in _ficha(bajas, "d-juan")
+    # El correo que QUEDA es el del cuerpo si viene: uno que no tiene nadie, pasa.
+    await server.update_driver("d-juan", {"email": "juan.nuevo@x.test", "active": True}, DANI)
+    assert _ficha(bajas, "d-juan")["active"] is True and _ficha(bajas, "d-juan")["email"] == "juan.nuevo@x.test"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_w4_con_el_correo_del_cuerpo_de_otra_activa_tambien_da_409(bajas):
+    with pytest.raises(HTTPException) as e:
+        await server.update_driver("d-juan", {"email": " Ana@X.TEST ", "active": True}, DANI)
+    assert e.value.status_code == 409 and e.value.detail["abrir_id"] == "d-ana"
+    assert _ficha(bajas, "d-juan")["active"] is False and _ficha(bajas, "d-juan")["email"] == "juan@x.test"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_w4_sin_ver_la_nave_de_la_otra_el_409_va_sin_abrir_id(bajas):
+    bajas["drivers"].docs.append({"id": "d-vieja-oga5", "name": "PACO OGA5", "email": "paco@x.test", "center": "OGA5",
+                                  "active": True})
+    _ficha(bajas, "d-vieja")["email"] = "Paco@x.test"                              # de baja en DGA1
+    with pytest.raises(HTTPException) as e:
+        await server.update_driver("d-vieja", {"active": True}, JEFE_DGA1)
+    d = e.value.detail
+    assert e.value.status_code == 409 and d["conflicto"] == "correo" and d["centro"] == "OGA5"
+    assert "abrir_id" not in d and "nombre" not in d and "PACO OGA5" not in d["mensaje"]
+    assert _ficha(bajas, "d-vieja")["active"] is False
+    with pytest.raises(HTTPException) as e:
+        await server.update_driver("d-vieja", {"active": True}, DANI)
+    assert e.value.detail["abrir_id"] == "d-vieja-oga5"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_w4_el_flujo_del_alta_con_su_propio_correo_sigue_dando_200(bajas, monkeypatch):
+    """El 409 de «ya tiene una ficha de baja» y el PATCH con el formulario entero: el correo es el de la propia ficha
+    (con otras mayúsculas) y otra ficha DE BAJA con el mismo correo no cuenta."""
+    monkeypatch.setattr(server, "_dia_negocio", lambda: HOY)
+    bajas["drivers"].docs.append({"id": "d-juan-viejo", "name": "JUAN REY", "email": "juan@x.test", "center": "DGA1",
+                                  "active": False})
+    r = await server.update_driver("d-juan", {**FORM_JUAN, "email": "Juan@X.test", "active": True}, JEFE_DGA1)
+    assert r["success"] is True and _ficha(bajas, "d-juan")["active"] is True
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_w2_el_409_por_id_de_reactivar_sin_abrir_id_si_no_ve_la_nave(bajas):
+    _ficha(bajas, "d-vieja")["transporter_id"] = TID_A                          # el de Ana, viva en OGA5
+    with pytest.raises(HTTPException) as e:
+        await server.reactivar_driver("d-vieja", {}, JEFE_DGA1)
+    d = e.value.detail
+    assert e.value.status_code == 409
+    assert set(d) == {"mensaje", "centro", "conflicto", "transporter_id"}
+    assert (d["conflicto"], d["transporter_id"], d["centro"]) == ("id_reparto", TID_A, "OGA5")
+    assert "ANA" not in d["mensaje"] and TID_A in d["mensaje"]
+    assert _ficha(bajas, "d-vieja")["active"] is False
+    # Con eso el panel ofrece «sin el ID», y reactivar sin él funciona igual.
+    r = await server.reactivar_driver("d-vieja", {"quitar_id": True}, JEFE_DGA1)
+    assert r["ok"] and "transporter_id" not in _ficha(bajas, "d-vieja")
+    assert _ficha(bajas, "d-ana")["transporter_id"] == TID_A
+    # Para quien ve la nave de la otra, lo de antes.
+    _ficha(bajas, "d-juan")["transporter_id"] = TID_A
+    with pytest.raises(HTTPException) as e:
+        await server.reactivar_driver("d-juan", {}, DANI)
+    assert e.value.detail["abrir_id"] == "d-ana" and e.value.detail["nombre"] == "ANA RÍOS"
+
+
+def _con_una_rota(base, ids_rotos=("d-rota",)):
+    """Las fichas de `ids_rotos` fallan al APLICAR el traslado (el update con `$push`), no al programarlo."""
+    class _UnaRota(ColMongo):
+        async def update_one(self, q, u, upsert=False, **k):
+            if q.get("id") in ids_rotos and "$push" in u:
+                raise RuntimeError("ficha rota")
+            return await super().update_one(q, u, upsert=upsert, **k)
+    base["drivers"] = _UnaRota(base["drivers"].docs)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_w3_el_fallo_de_una_ficha_sale_en_el_latido(base, monkeypatch):
+    monkeypatch.setattr(server, "_dia_negocio", lambda: HOY)
+    traslado = {"centro": "DGA2", "desde": HOY, "por": "Fran"}
+    base["drivers"].docs += [
+        {"id": "d-rota", "name": "ROTA", "center": "OGA5", "active": True, "traslado": dict(traslado)},
+        {"id": "d-sigue", "name": "SIGUE", "center": "OGA5", "active": True, "traslado": dict(traslado)}]
+    _con_una_rota(base)
+    await _bucle_una_vuelta(monkeypatch)()
+    latido = server.global_db["app_meta"].docs[-1]
+    assert latido["aplicados"] == 1 and _ficha(base, "d-sigue")["center"] == "DGA2"
+    assert latido["error"].startswith(server._DEFAULT_DB_NAME + ": ficha d-rota")
+    assert "ficha rota" in latido["error"]
+    # La siguiente vuelta, ya sin fallos, lo limpia.
+    _ficha(base, "d-rota").pop("traslado")
+    await _bucle_una_vuelta(monkeypatch)()
+    assert server.global_db["app_meta"].docs[-1]["error"] is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_w3_aplicar_traslados_apunta_sus_fallos_y_devuelve_lo_de_siempre(base):
+    base["drivers"].docs.append({"id": "d-rota", "name": "ROTA", "center": "OGA5", "active": True,
+                                 "traslado": {"centro": "DGA2", "desde": HOY}})
+    _con_una_rota(base)
+    fallos = []
+    assert await server.aplicar_traslados(HOY, fallos=fallos) == []
+    assert [(f["id"], f["nombre"]) for f in fallos] == [("d-rota", "ROTA")] and "ficha rota" in fallos[0]["error"]
+    assert await server.aplicar_traslados(HOY) == []                            # sin la lista, como siempre
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_w3_programar_con_fecha_de_hoy_que_no_se_aplica_lo_dice(base, monkeypatch):
+    monkeypatch.setattr(server, "_dia_negocio", lambda: HOY)
+
+    async def _centros():
+        return ["OGA5", "DGA1", "DGA2"]
+    monkeypatch.setattr(server, "_centros_de_la_empresa", _centros)
+    _con_una_rota(base, ids_rotos=("d-luis",))
+    r = await server.programar_traslado("d-luis", {"centro": "OGA5", "desde": HOY}, DANI)
+    assert r["aplicado"] is False and r["traslado"]["centro"] == "OGA5"       # no se da por hecho
+    assert "no se ha podido aplicar" in r["error"] and "ficha rota" not in r["error"]
+    f = _ficha(base, "d-luis")
+    assert f["center"] == "DGA1" and f["traslado"]["centro"] == "OGA5"         # queda programado para el bucle
+    # La de otra ficha que falla no se le cuenta a esta; y la que se aplica no lleva `error`.
+    base["drivers"].docs.append({"id": "d-rota", "name": "ROTA", "center": "OGA5", "active": True,
+                                 "traslado": {"centro": "DGA2", "desde": HOY}})
+    _con_una_rota(base, ids_rotos=("d-rota",))
+    r = await server.programar_traslado("d-ana", {"centro": "DGA1", "desde": HOY}, DANI)
+    assert r == {"traslado": None, "aplicado": True}
+    # Con fecha de mañana, lo de siempre: programado, sin aplicar y sin `error`.
+    r = await server.programar_traslado("d-ana", {"centro": "DGA2", "desde": "2026-11-12"}, DANI)
+    assert r["aplicado"] is False and "error" not in r

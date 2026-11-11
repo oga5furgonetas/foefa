@@ -746,3 +746,74 @@ test.describe('F12 · el chip «Bajas» sin ningún activo o sin coincidencias',
     await expect(page.getByText('JUAN REY').first()).toBeVisible()
   })
 })
+
+/* ── Tercera revisión (11-11-2026): W2 y W3 en el panel ── */
+test.describe('W2 · reactivar con el ID de reparto en una ficha de otra nave (sin abrir_id)', () => {
+  test('pregunta igual y la reactiva sin el ID', async ({ page }) => {
+    const fallos = vigilar(page)
+    const llamadas = await conBajas(page, {
+      reactivar: (route, body) => (body.quitar_id
+        ? json({ ok: true, driver: { id: 'd-juan', active: true } })(route)
+        : json({ detail: { mensaje: 'Ese ID de reparto (AAAAA11111BB) ya lo tiene una ficha de SUR, que no tienes asignada.',
+          centro: 'SUR', conflicto: 'id_reparto', transporter_id: 'AAAAA11111BB' } }, 409)(route)),
+    })
+    const vistos = dialogos(page, [true])
+    await page.getByRole('button', { name: 'Bajas (2)' }).click()
+    await abrirFicha(page, 'JUAN REY')
+    await page.getByRole('button', { name: 'Reactivar' }).click()
+    await expect(page.getByRole('status').filter({ hasText: 'JUAN REY vuelve a estar activo' })).toBeVisible()
+    expect(vistos).toHaveLength(1)
+    expect(vistos[0]).toContain('ya lo tiene una ficha de SUR')
+    expect(vistos[0]).toContain('SIN ese ID de reparto')
+    expect(llamadas.map((l) => l.body)).toEqual([{}, { quitar_id: true }])
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('con el correo en una ficha de otra nave (sin abrir_id) lo dice y no reactiva (como antes)', async ({ page }) => {
+    const llamadas = await conBajas(page, {
+      reactivar: json({ detail: { mensaje: 'Ese correo (juan@ejemplo.es) ya lo tiene una ficha activa de SUR, que no tienes asignada.',
+        centro: 'SUR', conflicto: 'correo' } }, 409),
+    })
+    const vistos = dialogos(page)
+    await page.getByRole('button', { name: 'Bajas (2)' }).click()
+    await abrirFicha(page, 'JUAN REY')
+    await page.getByRole('button', { name: 'Reactivar' }).click()
+    await expect(page.getByText('ya lo tiene una ficha activa de SUR, que no tienes asignada.')).toBeVisible()
+    await expect(page.getByRole('status').filter({ hasText: 'vuelve a estar activo' })).toHaveCount(0)
+    expect(vistos).toHaveLength(0)
+    expect(llamadas).toHaveLength(1)
+  })
+})
+
+test.describe('W3 · «Cambio de centro» con fecha de hoy que no se pudo aplicar', () => {
+  const NO_APLICADO = 'Queda programado, pero no se ha podido aplicar ahora. Se vuelve a intentar solo cada cuarto de hora; si mañana sigue sin cambiar, avisa.'
+
+  test('lo dice en rojo y no enseña «Cambiado»', async ({ page }) => {
+    const fallos = vigilar(page)
+    let pedido = null
+    await panel(page, { antes: () => page.route(/\/api\/drivers\/d1\/traslado/, (route) => {
+      pedido = route.request().postDataJSON()
+      return json({ aplicado: false, traslado: { ...pedido, por: 'Admin Test' }, error: NO_APLICADO })(route)
+    }) })
+    await abrirFicha(page, 'ANTONIO GARCÍA')
+    await page.getByRole('button', { name: 'Programar…' }).click()
+    await page.getByRole('button', { name: 'Programar', exact: true }).click()
+    await expect(page.getByText(NO_APLICADO)).toBeVisible()
+    await expect(page.getByText(/^Pasa a SUR el /)).toBeVisible()
+    await expect(page.getByText(/^Cambiado: ya está en/)).toHaveCount(0)
+    expect(pedido.centro).toBe('SUR')
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('sin `error` (servidor de antes o fecha futura) sale como hoy, sin aviso', async ({ page }) => {
+    await panel(page, { antes: () => page.route(/\/api\/drivers\/d1\/traslado/, (route) => {
+      const pedido = route.request().postDataJSON()
+      return json({ aplicado: false, traslado: { ...pedido, por: 'Admin Test' } })(route)
+    }) })
+    await abrirFicha(page, 'ANTONIO GARCÍA')
+    await page.getByRole('button', { name: 'Programar…' }).click()
+    await page.getByRole('button', { name: 'Programar', exact: true }).click()
+    await expect(page.getByText(/^Pasa a SUR el /)).toBeVisible()
+    await expect(page.getByText('no se ha podido aplicar', { exact: false })).toHaveCount(0)
+  })
+})
