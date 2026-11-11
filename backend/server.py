@@ -33658,6 +33658,12 @@ async def _resolver_peticion(req_id: str, data: dict, admin: dict, avisar: bool 
     # Aprobar un día en el que está suspendido pisaría la suspensión en el cuadrante: primero se levanta.
     if new_status == "aprobado" and await _suspendidos([req["driver_id"]], req["date"], req["date"]):
         raise HTTPException(status_code=409, detail="Ese día está suspendido: levanta la suspensión antes de aprobarlo")
+    # El turno ANTES que el estado (segunda revisión, 11-11-2026): si algo para entre las dos escrituras (un fallo de
+    # la base, la máquina que se reinicia), el día se queda «pendiente» en la bandeja y reintentar lo contesta y lo
+    # avisa una vez. Al revés quedaba «aprobado» sin su turno: fuera de la bandeja, nadie lo volvía a mandar y el
+    # Cuadrante no tenía su candado. _turno_aprobado es idempotente.
+    if new_status == "aprobado":
+        await _turno_aprobado(req)
     await db.shift_requests.update_one(
         {"id": req_id},
         # `resolved_at` faltaba: se guardaba QUIÉN contestó pero no CUÁNDO, así
@@ -33674,9 +33680,9 @@ async def _resolver_peticion(req_id: str, data: dict, admin: dict, avisar: bool 
     # de palabra y no hemos arreglado nada.
     if avisar:
         await _avisar_respuesta([req], new_status, motivo)
-    if new_status == "aprobado":
-        await _turno_aprobado(req)
-    elif req.get("status") == "aprobado":
+    if new_status != "aprobado":
+        # También si estaba «pendiente»: un aprobado que se cortó tras escribir su turno lo tiene en el cuadrante.
+        # Sin esa marca (aprobado_req de esta petición) no toca nada.
         await _turno_desaprobado(req)
     # De un refuerzo: al cubrirse se cierra (y se da las gracias a quien esperaba); si se desaprueba, se reabre.
     if req.get("refuerzo_id"):

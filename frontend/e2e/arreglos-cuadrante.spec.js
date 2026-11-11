@@ -20,7 +20,10 @@ const dia = (n) => { const d = new Date(); d.setHours(12); d.setDate(d.getDate()
 const ddmm = (f) => `${f.slice(8, 10)}/${f.slice(5, 7)}`
 // Como lo pinta Turnos (toLocaleDateString del idioma del panel): en español el día 1 sale «1/12», no «01/12»; escrito
 // a mano con ddmm, la prueba de Días cerrados fallaba los días en que la fecha caía del 1 al 9 (visto el 11-11-2026).
-const comoPantalla = (f) => new Date(`${f}T12:00:00`).toLocaleDateString('es', { day: '2-digit', month: '2-digit' })
+// Se calcula en el propio navegador (segunda revisión, 11-11-2026): Node y Chromium pueden traer datos de idioma
+// distintos, y la pantalla usa los de Chromium.
+const comoPantalla = (page, f) => page.evaluate((x) => new Date(`${x}T12:00:00`)
+  .toLocaleDateString('es', { day: '2-digit', month: '2-digit' }), f)
 const PET = (id, n, grupo = 'g1') => ({ id, grupo, date: dia(n), status: 'pendiente', type: 'libre', motivo: 'asuntos',
   motivo_label: 'Asuntos propios', note: 'boda de mi prima', driver_id: 'd1', driver_name: 'ANA PÉREZ', center: 'NORTE',
   created_at: new Date().toISOString() })
@@ -158,7 +161,8 @@ test.describe('Días libres · peticiones', () => {
     })
     await page.goto('/panel/turnos', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('ANA PÉREZ', { exact: true })).toBeVisible({ timeout: 15000 })
-    await expect(page.getByText(`${comoPantalla(dia(5))} · ${comoPantalla(dia(6))}`)).toBeVisible()
+    const [d5, d6] = [await comoPantalla(page, dia(5)), await comoPantalla(page, dia(6))]
+    await expect(page.getByText(`${d5} · ${d6}`)).toBeVisible()
     const aprobar = page.getByRole('button', { name: 'Aprobar' })
     await aprobar.click()
     await expect(aprobar).toBeDisabled()
@@ -167,8 +171,8 @@ test.describe('Días libres · peticiones', () => {
     soltar()
     await expect(page.getByText('Error interno')).toBeVisible()
     await expect.poll(() => lecturas).toBeGreaterThan(antes)
-    await expect(page.getByText(comoPantalla(dia(6)), { exact: true })).toBeVisible()
-    await expect(page.getByText(`${comoPantalla(dia(5))} · ${comoPantalla(dia(6))}`)).toHaveCount(0)
+    await expect(page.getByText(d6, { exact: true })).toBeVisible()
+    await expect(page.getByText(`${d5} · ${d6}`)).toHaveCount(0)
     await expect(aprobar).toBeEnabled()
     expect(grupos).toHaveLength(1)
   })
@@ -241,8 +245,8 @@ test.describe('Días libres · Refuerzos y Días cerrados', () => {
     await page.getByRole('button', { name: 'Días cerrados', exact: true }).click({ timeout: 15000 })
     const vigentes = page.getByTestId('dias-cerrados')
     await expect(vigentes).toContainText('Pico de Navidad')
-    await expect(vigentes).toContainText(`${comoPantalla(dia(20))} → `)
-    await expect(vigentes).toContainText(comoPantalla(dia(30)))
+    await expect(vigentes).toContainText(`${await comoPantalla(page, dia(20))} → `)
+    await expect(vigentes).toContainText(await comoPantalla(page, dia(30)))
     await expect(vigentes).not.toContainText(dia(20))                 // nada de 2026-12-20
     await expect(vigentes).not.toContainText('Prime Day del año pasado')
     const pasados = page.getByTestId('dias-cerrados-pasados')
@@ -255,9 +259,13 @@ test.describe('Días libres · Refuerzos y Días cerrados', () => {
 })
 
 test.describe('Cuadrante · cambiar de nave', () => {
-  const lunes = (() => { const d = new Date(); d.setHours(12); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d })()
-  const dl = (n) => { const d = new Date(lunes); d.setDate(d.getDate() + n); return iso(d) }
-  const DATOS = (center, nombre) => {
+  /* Los datos salen de las fechas que pide la pantalla (segunda revisión, 11-11-2026), no de un «lunes» calculado en
+     Node al cargar el fichero: si la tanda cruzaba la noche del domingo al lunes, la pantalla pedía la semana nueva y
+     le llegaba la anterior. */
+  const masDias = (f, n) => { const d = new Date(`${f}T12:00:00`); d.setDate(d.getDate() + n); return iso(d) }
+  const desdeDe = (route) => new URL(route.request().url()).searchParams.get('desde')
+  const DATOS = (center, nombre, desde) => {
+    const dl = (n) => masDias(desde, n)
     const celdas = {}
     for (let i = 0; i < 14; i++) celdas[`p1|${dl(i)}`] = { cod: i % 7 < 5 ? '1' : 'N/T', extra: false, fijada: false }
     return {
@@ -278,8 +286,8 @@ test.describe('Cuadrante · cambiar de nave', () => {
     await page.route(/\/api\/cuadrante\/celdas/, (route) => { celdasGuardadas.push(route.request().postDataJSON()); return json({ ok: true })(route) })
     await page.route(/\/api\/cuadrante\?/, async (route) => {
       const c = new URL(route.request().url()).searchParams.get('center')
-      if (c === 'SUR') { await surListo; return json(DATOS('SUR', 'SARA VIDAL'))(route) }
-      return json(DATOS('NORTE', 'ANA PÉREZ'))(route)
+      if (c === 'SUR') { await surListo; return json(DATOS('SUR', 'SARA VIDAL', desdeDe(route)))(route) }
+      return json(DATOS('NORTE', 'ANA PÉREZ', desdeDe(route)))(route)
     })
     await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('button', { name: /ANA PÉREZ/ })).toBeVisible({ timeout: 15000 })
@@ -315,7 +323,7 @@ test.describe('Cuadrante · cambiar de nave', () => {
     await page.route(/\/api\/cuadrante\?/, (route) => {
       const c = new URL(route.request().url()).searchParams.get('center')
       pedidas.push(c)
-      return json(c === 'SUR' ? DATOS('SUR', 'SARA VIDAL') : DATOS('NORTE', 'ANA PÉREZ'))(route)
+      return json(c === 'SUR' ? DATOS('SUR', 'SARA VIDAL', desdeDe(route)) : DATOS('NORTE', 'ANA PÉREZ', desdeDe(route)))(route)
     })
     await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('button', { name: /ANA PÉREZ/ })).toBeVisible({ timeout: 15000 })
@@ -349,9 +357,9 @@ test.describe('Cuadrante · cambiar de nave', () => {
       const c = new URL(route.request().url()).searchParams.get('center')
       if (c === 'SUR') {
         await surListo
-        return json({ ...DATOS('SUR', 'SARA VIDAL'), config: { colchon: colchonSur, permitir_extra: true } })(route)
+        return json({ ...DATOS('SUR', 'SARA VIDAL', desdeDe(route)), config: { colchon: colchonSur, permitir_extra: true } })(route)
       }
-      return json({ ...DATOS('NORTE', 'ANA PÉREZ'), config: { colchon: 1, permitir_extra: true } })(route)
+      return json({ ...DATOS('NORTE', 'ANA PÉREZ', desdeDe(route)), config: { colchon: 1, permitir_extra: true } })(route)
     })
     await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('button', { name: /ANA PÉREZ/ })).toBeVisible({ timeout: 15000 })
@@ -379,5 +387,92 @@ test.describe('Cuadrante · cambiar de nave', () => {
     await colchon.blur()
     await page.waitForTimeout(300)
     expect(config).toEqual([{ center: 'SUR', permitir_extra: false }])
+  })
+
+  /* Segunda revisión (11-11-2026, S5): en la MISMA nave, con un guardado por el aire se pasa a la semana siguiente.
+     El cargar de aquel guardado es el de la semana de antes: no puede pedirla, que su respuesta ganaba a la de la
+     semana nueva y se pintaba bajo sus fechas. */
+  test('un guardado que vuelve tarde no pide ni pinta la semana anterior bajo la nueva', async ({ page }) => {
+    await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
+    await simularApi(page, 'vacio')
+    let soltar
+    const suelta = new Promise((r) => { soltar = r })
+    await page.route(/\/api\/cuadrante\/celdas/, async (route) => {
+      await suelta
+      return json({ ok: true, guardadas: 0, bloqueadas: [{ motivo: 'ya estaba así' }] })(route)
+    })
+    const pedidas = []
+    await page.route(/\/api\/cuadrante\?/, (route) => {
+      const desde = desdeDe(route)
+      pedidas.push(desde)
+      // La semana que se abre primero es la de ANA; las otras, la de EVA: así se ve cuál se está pintando.
+      return json(DATOS('NORTE', desde === pedidas[0] ? 'ANA PÉREZ' : 'EVA RÍOS', desde))(route)
+    })
+    await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('button', { name: /ANA PÉREZ/ })).toBeVisible({ timeout: 15000 })
+    const semana1 = pedidas[0]
+    await page.getByTitle('Libra', { exact: true }).first().click()
+    await page.getByTitle(/^ANA PÉREZ · /).first().click()
+    await page.getByRole('button', { name: 'Semana siguiente' }).click()
+    await expect(page.getByRole('button', { name: /EVA RÍOS/ })).toBeVisible()
+    const tras = pedidas.length
+    soltar()
+    // El aviso de la celda sí sale (es la misma nave); se pone justo antes del cargar de aquel guardado.
+    await expect(page.getByText('Una celda no se ha cambiado: ya estaba así.')).toBeVisible()
+    await expect(page.getByRole('button', { name: /EVA RÍOS/ })).toBeVisible()
+    // Barrera, sin esperas fijas: lo que se pidiera tras el guardado va antes que la semana que se pide ahora.
+    const otra = page.waitForRequest((r) => r.url().includes('/api/cuadrante?')
+      && new URL(r.url()).searchParams.get('desde') === masDias(semana1, 14))
+    await page.getByRole('button', { name: 'Semana siguiente' }).click()
+    await otra
+    expect(pedidas.slice(tras)).toEqual([masDias(semana1, 14)])
+    await expect(page.getByRole('button', { name: /EVA RÍOS/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /ANA PÉREZ/ })).toHaveCount(0)
+  })
+
+  /* Segunda revisión (11-11-2026, S5, de paso): como guardarCeldas, si guardar una máxima o «Bajan de otros
+     centros» falla cuando ya se está en otra nave, su error no sale en esa otra. */
+  test('el error de una máxima o de los que bajan de la nave anterior no sale en la nueva', async ({ page }) => {
+    await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
+    await simularApi(page, 'vacio')
+    let soltar
+    const suelta = new Promise((r) => { soltar = r })
+    const retenidas = []
+    for (const ruta of [/\/api\/cuadrante\/maximas/, /\/api\/cuadrante\/ajustes/]) {
+      await page.route(ruta, async (route) => {
+        retenidas.push(new URL(route.request().url()).pathname)
+        await suelta
+        return json({ detail: 'No se ha guardado lo de NORTE' }, 500)(route)
+      })
+    }
+    const pedidas = []
+    await page.route(/\/api\/cuadrante\?/, (route) => {
+      const u = new URL(route.request().url())
+      pedidas.push(`${u.searchParams.get('center')}|${desdeDe(route)}`)
+      return json(u.searchParams.get('center') === 'SUR'
+        ? DATOS('SUR', 'SARA VIDAL', desdeDe(route)) : DATOS('NORTE', 'ANA PÉREZ', desdeDe(route)))(route)
+    })
+    await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('button', { name: /ANA PÉREZ/ })).toBeVisible({ timeout: 15000 })
+    const maxima = page.getByLabel(/^Máxima del /).first()
+    await maxima.fill('40')
+    await maxima.press('Enter')
+    const bajan = page.getByLabel(/^Bajan de otros centros el /).first()
+    await bajan.fill('2')
+    await bajan.press('Enter')
+    await expect.poll(() => retenidas.length).toBe(2)
+    await page.getByRole('button', { name: 'SUR', exact: true }).click()
+    await expect(page.getByRole('button', { name: /SARA VIDAL/ })).toBeVisible()
+    const fallos = Promise.all([page.waitForResponse(/\/api\/cuadrante\/maximas/), page.waitForResponse(/\/api\/cuadrante\/ajustes/)])
+    soltar()
+    await fallos
+    // Barrera: la semana siguiente de SUR se pide y se pinta después de que esos fallos vuelvan.
+    const desdeSur = pedidas.filter((p) => p.startsWith('SUR|')).at(-1).split('|')[1]
+    const otra = page.waitForResponse((r) => r.url().includes('/api/cuadrante?')
+      && new URL(r.url()).searchParams.get('desde') === masDias(desdeSur, 7))
+    await page.getByRole('button', { name: 'Semana siguiente' }).click()
+    await otra
+    await expect(page.getByRole('button', { name: /SARA VIDAL/ })).toBeVisible()
+    await expect(page.getByText('No se ha guardado lo de NORTE')).toHaveCount(0)
   })
 })
