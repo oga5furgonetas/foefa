@@ -1,39 +1,54 @@
 # «¿Y Manolo?» — lo generado y montado con IA (11-11-2026)
 
-Dani: «Hazlo con IA» y, al ver el coste, «sí». Corte corto del guion (`GUION.md` §4), en vertical.
+**Resultado:** `salida/spot-manolo-9x16.mp4` (21,6 s, 1080×1920, 7 MB). Se rehace con `bash scripts/montar-spot-manolo.sh`.
 
-**Resultado:** `salida/spot-manolo-9x16.mp4` (17,0 s, 1080×1920). Se rehace con `bash scripts/montar-spot-manolo.sh`.
+Es la SEGUNDA versión. La primera (17 s: encargado hablando a cámara, la app pegada con los rótulos de otro anuncio, sin
+música) no le gustó a Dani («muy mejorable… bastante lamentable») y se rehízo con su «b»: una sola protagonista, voz en
+off, la app dentro del plano, música y los planos igualados.
 
 ## Qué lleva
 
-| Seg. | Plano | De dónde sale |
-|---|---|---|
-| 0–3,4 | El encargado: «Lucía. Hoy llevas la zona de Manolo.» | `planos/1-encargado.mp4` (IA, con su voz) |
-| 3,4–6,8 | La app: escanear y la ruta ordenada, con tres bips | `../super-anuncio/salida/spot-ruta-9x16-B.mp4` (grabación real) |
-| 6,8–8,6 | La señora: «¿Y Manolo?» | `planos/2-senora.mp4` (IA, con su voz) |
-| 8,6–10,5 | El perro ladra, subtítulo «¿Y Manolo?» | `planos/3-perro.mp4` (IA) |
-| 10,5–14,5 | Lucía al teléfono: «Manolo… ya he acabado.» y el lema encima | `planos/4-lucia.mp4` (IA, con su voz) |
-| 14,5–17 | Tarjeta de cierre B («Toca el botón de abajo») | `../super-anuncio/capas/cierre-B.png` |
+| Seg. | Plano | Voz en off | De dónde sale |
+|---|---|---|---|
+| 0–4,1 | Lucía, de espaldas, ante la furgoneta llena | «Segunda semana en la nave. Y hoy me dan la zona de Manolo.» | `planos/5-nave.mp4` |
+| 4,1–6,0 | Sus manos con la libreta de garabatos | «La que solo se sabe Manolo.» | `planos/6-libreta.mp4` |
+| 6,0–7,3 | Lucía escanea una caja | «Escaneo los paquetes…» | `planos/7-escaneo.mp4` |
+| 7,3–10,3 | La app real (escanear, «Añadida a tu ruta», ruta ordenada) sobre su plano desenfocado, con tres bips | «…y la ruta se ordena sola.» | `../super-anuncio/salida/spot-ruta-9x16-B.mp4`, recortada con `../super-anuncio/capas/marco-fondo.png` |
+| 10,3–12,1 | La señora asoma por la puerta | «En cada puerta, la misma pregunta:» | `planos/2-senora.mp4` (sin su audio) |
+| 12,1–14,0 | El perro ladra | «¿Y Manolo?» | `planos/3-perro.mp4` (con su ladrido) |
+| 14,0–18,4 | Lucía cierra la furgoneta y llama; al final, el lema | «Manolo… ya he acabado.» | `planos/4-lucia.mp4` (solo el golpe de la puerta) |
+| 18,4–21,6 | Tarjeta de cierre B | «FDS. Mañana sales con la ruta hecha.» | `../super-anuncio/capas/cierre-B.png` |
 
-## Gasto en Artlist
+- **Lucía es la misma en todos**: se sacó un fotograma del plano del teléfono (`imagenes/lucia-referencia.jpg`), con él
+  se hicieron tres imágenes (`imagenes/lucia-1..3.jpg`, Nano Banana Pro) y esas se animaron (Veo 3.1 Fast, sin audio).
+- **Voz**: `voz/l1..l6.mp3`, con edge-tts (gratis, acento de España): `es-ES-ElviraNeural` para Lucía y
+  `es-ES-AlvaroNeural` para la marca. En Artlist no hay ninguna voz de España. `planos/1-encargado.mp4` ya no se usa.
+- **Música**: `musica-lyria.mp3`, generada con Lyria 3 (instrumental). La del catálogo de Artlist sale con marca de
+  agua con el plan «AI Suite» (no incluye música), así que no vale.
+- **Acabado común**: contraste, viñeta y grano en todos los planos; el del perro, templado.
 
-3.600 créditos (aprobados por Dani): cuatro planos con Veo 3.1 Fast, 9:16, 1080p, con audio (800 + 800 + 800 por los de
-4 s y 1.200 por el de 6 s). Quedaban 8.490 antes; el plan renueva el 29-11. Carpeta «FDS Manolo» en Artlist.
-Generaciones: `01a1cbe1-8927-74a4-9921-8af524dfceff` (encargado), `01a1cbe1-896e-7275-aff4-d445ccf28cd3` (señora),
-`01a1cbe1-8926-7582-b763-688cf4874f06` (perro), `01a1cbe1-89af-7090-b40b-9a8affcb68f9` (Lucía). Los prompts están en
-el historial de Artlist de cada una.
+## Gasto en Artlist (plan «AI Suite 16500», renueva el 29-11)
+
+| Qué | Créditos |
+|---|---|
+| Versión 1: cuatro planos con voz, Veo 3.1 Fast (aprobado por Dani) | 3.600 |
+| Tres imágenes de Lucía, Nano Banana Pro | 480 |
+| Tres planos animados, Veo 3.1 Fast sin audio (aprobado por Dani) | 1.500 |
+| Música, Lyria 3 | 150 |
+| **Total** | **5.730** |
+
+Quedaban 8.490 al empezar; quedan unos 2.760. Todo está en la carpeta «FDS Manolo» de Artlist.
 
 ## Lo que NO se ha podido comprobar desde la sesión
 
-- **El sonido no se ha escuchado.** Los planos se han revisado fotograma a fotograma (sin letras ni logotipos, caras y
-  manos bien), pero las voces las tiene que oír Dani: puede que el acento no sea de España o que la frase no sea
-  exactamente la del subtítulo. Repetir un plano de 4 s son 800 créditos.
-- **Sin música ni locución de marca.** La voz de siempre (Puck) necesita la clave de Gemini, que la sesión de la nube no
-  tiene. El cierre va con rótulo y en silencio.
-- **La furgoneta vacía casi no se ve**: el plano de Lucía se corta en 0,6 s para que el anuncio no pase de 17 s.
-- La réplica de Manolo por teléfono («…¿Cómo que has acabado?») no está: en Artlist no hay voz masculina de España.
+- **El sonido no se ha escuchado**: ni la voz (entonación, la pausa de «FDS.»), ni la música, ni la mezcla. Solo se ha
+  medido el nivel (−15,5 LUFS). Lo tiene que oír Dani.
+- **La boca de Lucía** en el plano del teléfono se mueve con la frase que generó Veo, y encima va la voz de Elvira: puede
+  no casar del todo.
+- La app sigue saliendo de un anuncio ya montado (sin sus rótulos): la fecha y los datos son los de aquella grabación.
 
-## Para descargar de Artlist desde la nube
+## Red de la sesión de nube
 
-La red de la sesión bloqueaba `mcp.artlist.io` y `cms-toolkit-artifacts.artlist.io`. Se creó el entorno personal
-«foefa» (solo esos dos hosts, asociado a este repo): una sesión nueva sobre ese entorno ya puede descargar.
+El entorno personal «foefa» (asociado a este repo) permite: `mcp.artlist.io`, `cms-toolkit-artifacts.artlist.io`,
+`artlist-prod-ai-toolkit-custom-user-uploads.s3.eu-central-1.amazonaws.com` (subir referencias) y
+`speech.platform.bing.com` (edge-tts, con `--proxy "$HTTPS_PROXY"` y `SSL_CERT_FILE=/root/.ccr/ca-bundle.crt`).

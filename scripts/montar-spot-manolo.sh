@@ -69,6 +69,6 @@ ff -i $H/voz/l1.mp3 -i $H/voz/l2.mp3 -i $H/voz/l3.mp3 -i $H/voz/l4.mp3 -i $H/voz
   [voz][mus][b1][b2][b3][perro][puerta]amix=inputs=7:normalize=0:duration=longest,atrim=duration=$DUR,alimiter=limit=0.9[a]" \
   -map "[a]" -ar 48000 -ac 2 "$T/audio.wav"
 
-ff -i "$T/video.mp4" -i "$T/audio.wav" -t $DUR -c:v libx264 -preset slow -crf 19 -pix_fmt yuv420p \
+ff -i "$T/video.mp4" -i "$T/audio.wav" -t $DUR -c:v libx264 -preset medium -crf 25 -maxrate 9M -bufsize 18M -pix_fmt yuv420p \
   -c:a aac -b:a 192k -movflags +faststart $H/salida/spot-manolo-9x16.mp4
 echo "$H/salida/spot-manolo-9x16.mp4"
