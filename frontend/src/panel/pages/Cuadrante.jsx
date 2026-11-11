@@ -3,7 +3,7 @@ import { Link, useOutletContext } from 'react-router-dom'
 import {
   Loader2, ChevronLeft, ChevronRight, Sparkles, MessageSquare, Undo2, Download, Upload,
   Lock, StickyNote, X, Check, AlertTriangle, Users, SlidersHorizontal, Gift, Eraser, Plus,
-  Brush, CalendarRange, Unlock, Sheet, RefreshCw, Search, Bell,
+  Brush, CalendarRange, Unlock, Sheet, RefreshCw, Search, Bell, BellOff,
 } from 'lucide-react'
 import {
   getCuadrante, cuadranteCeldas, cuadranteMaximas, cuadranteConfig, cuadrantePersona,
@@ -186,9 +186,13 @@ function AvisarConductores({ center, onCerrar, onHecho }) {
   const enviar = async () => {
     setEnviando(true); setErr('')
     try {
-      const desmarcados = lista(previa?.personas).map((p) => p.driver_id).filter((did) => !marcados.has(did))
-      const { data } = await cuadranteAvisosEnviar(center, [...marcados], desmarcados)
-      onHecho(data)
+      const desmarcados = lista(previa?.personas).filter((p) => !marcados.has(p.driver_id))
+      // Las marcas de los días que se enseñaron de los desmarcados (11-11-2026, segunda ronda): el servidor solo
+      // descarta lo que la oficina vio; lo que cambió después vuelve a salir. Sin marcas (un servidor anterior), no van.
+      const dias = desmarcados.flatMap((p) => lista(p.dias))
+      const vistas = dias.length > 0 && dias.every((d) => d?.marca) ? dias.map((d) => d.marca) : undefined
+      const { data } = await cuadranteAvisosEnviar(center, [...marcados], desmarcados.map((p) => p.driver_id), vistas)
+      onHecho(data, { pedidos: marcados.size })
     } catch (e) {
       setErr(e?.response?.data?.detail || 'No se han podido mandar los avisos.')
       setEnviando(false)
@@ -231,14 +235,21 @@ function AvisarConductores({ center, onCerrar, onHecho }) {
             <p className="text-[11.5px] text-dark-500" data-testid="avisar-desmarcados">
               A quien desmarques no se le avisa de estos cambios; volverá a salir aquí si su cuadrante cambia otra vez.
             </p>
+            {/* Todos desmarcados (11-11-2026, segunda ronda): el botón sirve para descartarlos a todos de una vez. */}
+            {marcados.size === 0 && (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-300" data-testid="avisar-nadie">
+                No hay nadie marcado: con «No avisar a nadie» no se manda nada y salen todos de esta lista hasta que su
+                cuadrante cambie otra vez.
+              </p>
+            )}
           </>
         )}
         <div className="flex flex-wrap items-center gap-2">
           {personas.length > 0 && (
-            <button onClick={enviar} disabled={enviando || marcados.size === 0}
+            <button onClick={enviar} disabled={enviando}
               className="btn-primary flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-40">
-              {enviando ? <Loader2 size={15} className="animate-spin" /> : <Bell size={15} />}
-              {marcados.size === 1 ? 'Avisar a 1' : `Avisar a ${marcados.size}`}
+              {enviando ? <Loader2 size={15} className="animate-spin" /> : marcados.size === 0 ? <BellOff size={15} /> : <Bell size={15} />}
+              {marcados.size === 0 ? 'No avisar a nadie' : marcados.size === 1 ? 'Avisar a 1' : `Avisar a ${marcados.size}`}
             </button>
           )}
           <button onClick={onCerrar} className="rounded-lg border border-dark-700 px-3 py-2 text-sm text-dark-300 hover:bg-dark-800">
@@ -1837,11 +1848,19 @@ export default function Cuadrante() {
 
       {avisar && (
         <AvisarConductores center={center} onCerrar={() => setAvisar(false)}
-          onHecho={(r) => {
+          onHecho={(r, { pedidos = 0 } = {}) => {
             setAvisar(false)
             const n = r?.avisados ?? 0
-            setAviso(n === 0 ? 'No se ha avisado a nadie: no había cambios por avisar.'
-              : `Avisado${n === 1 ? '' : 's'} ${n === 1 ? '1 conductor' : `${n} conductores`}: ${lista(r?.personas).map((p) => p.nombre).join(', ')}.`)
+            const d = r?.descartados ?? 0
+            // Sin avisar a nadie, lo que pasó de verdad (11-11-2026, segunda ronda): se pidió avisar y no se pudo coger
+            // ningún día (otra persona acababa de avisar, o cambiaron), o se quitó a todos de la lista.
+            setAviso(n > 0
+              ? `Avisado${n === 1 ? '' : 's'} ${n === 1 ? '1 conductor' : `${n} conductores`}: ${lista(r?.personas).map((p) => p.nombre).join(', ')}.`
+              : pedidos > 0
+                ? 'No se ha avisado a nadie: otra persona acababa de avisar de estos cambios, o han cambiado mientras tanto. Abre otra vez «Avisar a los conductores» para ver lo que quede.'
+                : d > 0
+                  ? `No se ha avisado a nadie: ${d === 1 ? '1 conductor sale' : `${d} conductores salen`} de la lista hasta que su cuadrante cambie otra vez.`
+                  : 'No se ha avisado a nadie y nadie ha salido de la lista: sus días han cambiado mientras tanto. Ábrela otra vez para verlos.')
           }} />
       )}
 

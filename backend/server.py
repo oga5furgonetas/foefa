@@ -52805,6 +52805,13 @@ async def _cua_avisos_apuntar(center: str, celdas) -> None:
         logger.warning("Avisos del cuadrante: no se ha podido apuntar un cambio de %s: %s", center, e)
 
 
+def _cua_aviso_marca(pendiente: dict, ahora: str) -> str:
+    """La marca de un día tal como se enseña (11-11-2026, segunda ronda): su último cambio (`tocado`) y lo que dice
+    ahora. El panel devuelve las de lo que enseñó (`vistas`) y solo se descarta lo que la oficina vio: un cambio
+    posterior por el cuadrante cambia `tocado`, y uno por fuera (la rejilla escondida de Turnos) cambia lo que dice."""
+    return f"{pendiente.get('tocado') or ''}|{ahora}"
+
+
 async def _cua_avisos_calcular(center: str) -> Tuple[list, str, dict]:
     """(personas, hasta, leido): lo pendiente de la nave de hoy a 14 días comparado con lo que hay AHORA en los turnos.
     `leido` es {(driver_id, fecha): el documento pendiente tal como se leyó}, para «coger» cada celda al mandar."""
@@ -52836,7 +52843,8 @@ async def _cua_avisos_calcular(center: str) -> Tuple[list, str, dict]:
         if nuevo == dicho or nuevo == p.get("visto"):
             continue
         por.setdefault(did, {"driver_id": did, "nombre": ficha.get("name") or did, "dias": []})["dias"].append(
-            {"fecha": f, "antes": dicho, "ahora": nuevo, "texto": f"{_refuerzo_dia(f)}: {nuevo}"})
+            {"fecha": f, "antes": dicho, "ahora": nuevo, "texto": f"{_refuerzo_dia(f)}: {nuevo}",
+             "marca": _cua_aviso_marca(p, nuevo)})
     personas = sorted(por.values(), key=lambda p: _clave_nombre(p["nombre"]))
     return personas, hasta, leido
 
@@ -52874,6 +52882,12 @@ async def cuadrante_avisos_enviar(data: dict = Body(...), user: dict = Depends(r
     if data.get("driver_ids") is not None:
         solo = {str(x) for x in _lista_cuerpo(data.get("driver_ids"), 500) if x}
     descartar = {str(x) for x in _lista_cuerpo(data.get("descartar_ids"), 500) if x}
+    # `vistas` (11-11-2026, segunda ronda; opcional): las marcas de los días que la oficina vio en la previa. Con ellas,
+    # de un desmarcado solo se descarta el día cuya marca está ahí; lo que cambió después de la previa sigue pendiente.
+    # Sin la clave, como antes: se descarta lo que hay al enviar.
+    marcas_vistas = None
+    if data.get("vistas") is not None:
+        marcas_vistas = {str(x) for x in _lista_cuerpo(data.get("vistas"), 5000) if x}
     personas, _hasta, leido = await _cua_avisos_calcular(center)
     col = db[_CUA_AVISOS_PEND]
     ahora_iso, lote, por_quien = datetime.now(timezone.utc).isoformat(), str(uuid.uuid4()), user.get("name") or ""
@@ -52888,6 +52902,8 @@ async def cuadrante_avisos_enviar(data: dict = Body(...), user: dict = Depends(r
             # se leyó: lo que haya cambiado después no lo ha visto nadie.
             vistas = 0
             for d in p["dias"]:
+                if marcas_vistas is not None and d["marca"] not in marcas_vistas:
+                    continue
                 q = leido[(did, d["fecha"])]
                 r = await col.update_one({"_id": q["_id"], "tocado": q.get("tocado")}, {"$set": {"visto": d["ahora"]}})
                 vistas += 1 if getattr(r, "matched_count", 0) else 0

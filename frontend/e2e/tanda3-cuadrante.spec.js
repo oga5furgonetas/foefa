@@ -339,11 +339,17 @@ const previa = (dia) => ({
   hasta: dia(14),
   personas: [
     { driver_id: 'p1', nombre: 'ANTONIO GARCÍA LÓPEZ', dias: [
-      { fecha: dia(3), antes: 'trabajas', ahora: 'libras', texto: 'x' },
-      { fecha: dia(4), antes: 'libras', ahora: 'trabajas', texto: 'x' }] },
-    { driver_id: 'p2', nombre: 'LAURA SÁNCHEZ GIL', dias: [{ fecha: dia(5), antes: 'sin turno', ahora: 'vacaciones', texto: 'x' }] },
+      { fecha: dia(3), antes: 'trabajas', ahora: 'libras', texto: 'x', marca: 'm3|libras' },
+      { fecha: dia(4), antes: 'libras', ahora: 'trabajas', texto: 'x', marca: 'm4|trabajas' }] },
+    { driver_id: 'p2', nombre: 'LAURA SÁNCHEZ GIL', dias: [{ fecha: dia(5), antes: 'sin turno', ahora: 'vacaciones', texto: 'x', marca: 'm5|vacaciones' }] },
   ],
 })
+// La misma lista de un servidor sin marcas (antes de la segunda ronda): el panel no manda `vistas`.
+const previaSinMarcas = (dia) => {
+  const p = previa(dia)
+  p.personas.forEach((x) => x.dias.forEach((d) => { delete d.marca }))
+  return p
+}
 
 test('cuadrante-8: el botón enseña la lista antes de mandar; desmarcar a uno manda solo a los demás', async ({ page }) => {
   const fallos = vigilar(page)
@@ -377,9 +383,67 @@ test('cuadrante-8: el botón enseña la lista antes de mandar; desmarcar a uno m
   expect(enviado).toBeNull()
   await ventana.getByRole('button', { name: 'Avisar a 1' }).click()
   // Los marcados y los desmarcados, por separado (P8): a quien apareciera después de abrir la ventana no se le toca.
-  await expect.poll(() => enviado).toEqual({ center: 'NORTE', driver_ids: ['p2'], descartar_ids: ['p1'] })
+  // Y las marcas de lo que se vio de los desmarcados (segunda ronda, fleco 1): solo se descarta eso.
+  await expect.poll(() => enviado).toEqual({ center: 'NORTE', driver_ids: ['p2'], descartar_ids: ['p1'], vistas: ['m3|libras', 'm4|trabajas'] })
   await expect(ventana).toHaveCount(0)
   await expect(page.getByText('Avisado 1 conductor: LAURA SÁNCHEZ GIL.')).toBeVisible()
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('cuadrante-8: con todos desmarcados, el botón dice «No avisar a nadie», lo explica y los quita de la lista', async ({ page }) => {
+  const fallos = vigilar(page)
+  const { dia } = await reloj(page)
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/cuadrante\?/, json(cuadrante(dia)))
+  await page.route(/\/api\/cuadrante\/avisos\/previa/, json(previa(dia)))
+  let enviado = null
+  await page.route(/\/api\/cuadrante\/avisos\/enviar/, (route) => {
+    enviado = route.request().postDataJSON()
+    return json({ avisados: 0, personas: [], descartados: 2 })(route)
+  })
+  await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Avisar a los conductores' }).click()
+  const ventana = page.getByRole('dialog', { name: 'Avisar a los conductores' })
+  await expect(ventana.getByRole('button', { name: 'Avisar a 2' })).toBeVisible({ timeout: 15000 })
+  await expect(ventana.getByTestId('avisar-nadie')).toHaveCount(0)
+  for (const c of await ventana.getByRole('checkbox').all()) await c.uncheck()
+  // Ya no hay un «Avisar a 0» apagado: el botón sirve para descartar a todos, y la ventana dice qué pasa.
+  await expect(ventana.getByRole('button', { name: /^Avisar a/ })).toHaveCount(0)
+  await expect(ventana.getByTestId('avisar-nadie')).toContainText('no se manda nada y salen todos de esta lista')
+  const boton = ventana.getByRole('button', { name: 'No avisar a nadie' })
+  await expect(boton).toBeEnabled()
+  expect(enviado).toBeNull()
+  await boton.click()
+  await expect.poll(() => enviado).toEqual({
+    center: 'NORTE', driver_ids: [], descartar_ids: ['p1', 'p2'], vistas: ['m3|libras', 'm4|trabajas', 'm5|vacaciones'] })
+  await expect(ventana).toHaveCount(0)
+  await expect(page.getByText('No se ha avisado a nadie: 2 conductores salen de la lista hasta que su cuadrante cambie otra vez.')).toBeVisible()
+  await expect(page.getByText('no había cambios por avisar')).toHaveCount(0)
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('cuadrante-8: si al mandar no se pudo avisar a nadie (otra persona acababa de avisar), lo dice así', async ({ page }) => {
+  const fallos = vigilar(page)
+  const { dia } = await reloj(page)
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/cuadrante\?/, json(cuadrante(dia)))
+  // Un servidor sin marcas: el panel no manda `vistas` (lo de antes).
+  await page.route(/\/api\/cuadrante\/avisos\/previa/, json(previaSinMarcas(dia)))
+  let enviado = null
+  await page.route(/\/api\/cuadrante\/avisos\/enviar/, (route) => {
+    enviado = route.request().postDataJSON()
+    return json({ avisados: 0, personas: [], descartados: 1 })(route)
+  })
+  await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Avisar a los conductores' }).click()
+  const ventana = page.getByRole('dialog', { name: 'Avisar a los conductores' })
+  await ventana.getByRole('checkbox', { name: 'Avisar a ANTONIO GARCÍA LÓPEZ' }).uncheck({ timeout: 15000 })
+  await ventana.getByRole('button', { name: 'Avisar a 1' }).click()
+  await expect.poll(() => enviado).toEqual({ center: 'NORTE', driver_ids: ['p2'], descartar_ids: ['p1'] })
+  await expect(page.getByText('No se ha avisado a nadie: otra persona acababa de avisar de estos cambios, o han cambiado mientras tanto.', { exact: false })).toBeVisible()
+  await expect(page.getByText('no había cambios por avisar')).toHaveCount(0)
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
