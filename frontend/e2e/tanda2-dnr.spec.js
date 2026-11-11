@@ -14,7 +14,10 @@
    R9 (Dani, 11-11-2026): la llamada de menos de 30 s es «corta» (fallo) y cada DNR con fallo de contacto lleva el aviso de
    los 30 segundos. Y EN PAUSA (src/pages/driver/dnrPausas.js) el estado («te cuenta / no cuenta») y el recordatorio de la
    preferencia: las pruebas que los miran se saltan mientras dure la pausa y vuelven solas al quitarla; las de «R9 (lo que
-   se publica)» miran que no salgan. */
+   se publica)» miran que no salgan.
+   R11 (Dani, 11-11-2026): la preferencia VUELVE (el recordatorio y su ejemplo «¿Cómo sé si tiene preferencia?», corregido:
+   la preferencia es la PRIMERA opción de «¿Dónde vas a dejar el paquete?»; las notas no lo son) y el estado SIGUE en
+   pausa: las de «R11 (lo que se publica)» miran que encender una no encienda nada de la otra. */
 import { test, expect } from '@playwright/test'
 import { simularApi } from './api-simulada.js'
 import { PAUSAS } from '../src/pages/driver/dnrPausas.js'
@@ -820,7 +823,6 @@ test('V5: cada DNR con su estado y su día arriba, el paquete, el CP y qué pas�
 
 test('V5: el recordatorio pone la CONDICIÓN arriba y con peso, y debajo llama + foto clara → no te cuenta; el lector lee la frase entera', async ({ page }) => {
   test.skip(PAUSAS.preferencia, PAUSA_PREFERENCIA)
-  test.skip(PAUSAS.estado, PAUSA_ESTADO)   // también mira dónde queda «Qué es cada color»
   await entrar(page)
   await casilla(page).click()
   const r = page.getByTestId('dnr-recordatorio')
@@ -844,12 +846,16 @@ test('V5: el recordatorio pone la CONDICIÓN arriba y con peso, y debajo llama +
   expect(await r.evaluate((el) => parseFloat(getComputedStyle(el).borderTopWidth))).toBeGreaterThan(0)
   expect(await yDe(page.getByTestId('dnr-resumen'))).toBeLessThan(await yDe(r))
   expect(await yDe(r)).toBeLessThan(await yDe(page.getByTestId('dnr-fila').first()))
-  // La frase vieja ya no está, y el botón del ejemplo, todavía no (falta la captura de Dani).
+  // La frase vieja ya no está. El botón del ejemplo («¿Cómo sé si tiene preferencia?», R11) va dentro del recordatorio,
+  // DEBAJO de la fila de pasos (sus pruebas, abajo: «Ejemplo: …»).
   await expect(page.getByTestId('mis-dnr')).not.toContainText('así no te cuenta')
-  await expect(page.getByRole('button', { name: /entrega con preferencia/ })).toHaveCount(0)
-  // Y «díselo a la oficina», al final.
+  const ejemplo = r.getByRole('button', { name: '¿Cómo sé si tiene preferencia?' })
+  await expect(ejemplo).toBeVisible()
+  expect(await yDe(ejemplo)).toBeGreaterThan(await yDe(pasos))
+  // Y «díselo a la oficina», al final (con el estado encendido, después de «Qué es cada color»).
   await expect(page.getByTestId('dnr-no-es-mia')).toHaveText('¿Alguna no es tuya? Díselo a la oficina.')
-  expect(await yDe(page.getByTestId('dnr-estados'))).toBeLessThan(await yDe(page.getByTestId('dnr-no-es-mia')))
+  expect(await yDe(r)).toBeLessThan(await yDe(page.getByTestId('dnr-no-es-mia')))
+  if (!PAUSAS.estado) expect(await yDe(page.getByTestId('dnr-estados'))).toBeLessThan(await yDe(page.getByTestId('dnr-no-es-mia')))
 })
 
 test('G13/G18: si la entrega es el mismo día que la DNR, la fecha sale una sola vez', async ({ page }) => {
@@ -1346,4 +1352,259 @@ test('H6: si sale antes de que cargue, no se apuntan como vistas: la casilla sig
   await expect(page.getByTestId('dnr-esta-semana').getByTestId('dnr-nueva')).toHaveCount(2)
   await expect.poll(() => page.evaluate(() => localStorage.getItem('fds_dnr_vistas_d1'))).not.toBeNull()
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+/* R11 (Dani, 11-11-2026): VUELVE la preferencia, y el estado SIGUE en pausa. Lo que se publica: el recordatorio con su
+   botón del ejemplo, bajo el resumen; y en ningún sitio (ni en las tarjetas, ni en el recordatorio, ni en el ejemplo) si
+   una DNR le cuenta. El recordatorio dice «No te cuenta» porque es la regla, no el estado de una DNR. */
+test('R11 (lo que se publica): con la preferencia encendida y el estado en pausa, sale el recordatorio con su botón y ninguna DNR lleva estado, contadores ni leyenda', async ({ page }) => {
+  test.skip(PAUSAS.preferencia || !PAUSAS.estado, 'solo con la preferencia encendida y el estado en pausa (dnrPausas.js)')
+  const fallos = vigilar(page)
+  await entrar(page)
+  await casilla(page).click()
+  const pantalla = page.getByTestId('mis-dnr')
+  const r = pantalla.getByTestId('dnr-recordatorio')
+  await expect(r).toBeVisible()
+  await expect(r.getByTestId('dnr-recordatorio-condicion')).toHaveText('Solo si el cliente tiene preferencia de entrega')
+  await expect(r.getByTestId('dnr-recordatorio-pasos')).toHaveText(/Llama\s*\+\s*Foto clara\s*No te cuenta/)
+  await expect(r.getByRole('button', { name: '¿Cómo sé si tiene preferencia?' })).toBeVisible()
+  // Bajo el resumen y antes de las tarjetas.
+  const yDe = async (l) => (await l.boundingBox()).y
+  expect(await yDe(pantalla.getByTestId('dnr-resumen'))).toBeLessThan(await yDe(r))
+  expect(await yDe(r)).toBeLessThan(await yDe(pantalla.getByTestId('dnr-fila').first()))
+  // Encender la preferencia no enciende nada del estado: ni etiqueta ni banda, ni contadores, ni «Qué es cada color», y el
+  // número en el color normal.
+  const sinEstado = async () => {
+    await expect(pantalla.getByTestId('dnr-estado')).toHaveCount(0)
+    await expect(pantalla.locator('[data-testid^="dnr-contador-"], [data-testid^="dnr-mini-"]')).toHaveCount(0)
+    await expect(pantalla.getByTestId('dnr-estados')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Qué es cada color' })).toHaveCount(0)
+    await expect(pantalla.locator('[data-cuenta]')).toHaveCount(0)
+    await expect(pantalla.locator('[data-testid="dnr-numero"][class*="peligro"]')).toHaveCount(0)
+  }
+  await expect(pantalla.getByTestId('dnr-numero')).toHaveClass(/text-dark-50/)
+  await sinEstado()
+  // El recordatorio dice la regla, no el estado de ninguna DNR.
+  for (const t of ['Te cuenta', 'No cuenta', 'Pendiente', 'Actualizada']) await expect(r).not.toContainText(t)
+  // Con el ejemplo abierto, tampoco.
+  await r.getByRole('button', { name: '¿Cómo sé si tiene preferencia?' }).click()
+  const hoja = page.getByRole('dialog', { name: 'Cómo saber si tiene preferencia' })
+  await expect(hoja).toBeVisible()
+  for (const t of ['Te cuenta', 'No cuenta', 'Pendiente', 'Actualizada', 'Qué es cada color']) await expect(hoja).not.toContainText(t)
+  await sinEstado()
+  await hoja.getByRole('button', { name: 'Cerrar' }).click()
+  await expect(hoja).toHaveCount(0)
+  await sinEstado()
+  // Y sin DNR esta semana, el recordatorio sigue.
+  await page.getByRole('button', { name: 'Volver' }).click()
+  await contesta(page, conEstaSemana([]))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await casilla(page).click()
+  await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana, ninguna')
+  await expect(page.getByTestId('dnr-recordatorio')).toBeVisible()
+  await sinEstado()
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+/* EL EJEMPLO «¿CÓMO SÉ SI TIENE PREFERENCIA?» (R11, corregido). Dani: «la preferencia de entrega es buzón de correos, es lo
+   primero que aparece en la app»; «no lo de notas de entrega ni notas de cliente». Un botón discreto en el recordatorio abre
+   una hoja con la FORMA de la pantalla de entrega, DIBUJADA con las piezas de FDS y datos inventados: arriba «¿Dónde vas a
+   dejar el paquete?» con la PRIMERA opción en verde y «Sí es preferencia»; más abajo «Notas», apagadas, cada una con «No lo
+   es». Sin ninguna imagen. */
+const botonEjemplo = (page) => page.getByTestId('dnr-recordatorio').getByRole('button', { name: '¿Cómo sé si tiene preferencia?' })
+const hojaEjemplo = (page, nombre = 'Cómo saber si tiene preferencia') => page.getByRole('dialog', { name: nombre })
+// Lo que lee el lector de pantalla: el texto sin lo que va con aria-hidden.
+const leido = (l) => l.evaluate((el) => {
+  const c = el.cloneNode(true)
+  c.querySelectorAll('[aria-hidden="true"]').forEach((x) => x.remove())
+  return c.textContent.replace(/\s+/g, ' ').trim()
+})
+
+test('Ejemplo: el botón mide 44 y abre la hoja: arriba la PRIMERA opción en verde con «Sí es preferencia»; las tres notas, apagadas y con «No lo es»; ninguna imagen', async ({ page }) => {
+  test.skip(PAUSAS.preferencia, PAUSA_PREFERENCIA)
+  const fallos = vigilar(page)
+  await entrar(page)
+  await casilla(page).click()
+  const boton = botonEjemplo(page)
+  await expect(boton).toBeVisible()
+  expect((await boton.boundingBox()).height).toBeGreaterThanOrEqual(44)
+  // Discreto: con la letra de texto, no más grande que la de los pasos.
+  const tam = (l) => l.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))
+  expect(await tam(boton)).toBeLessThanOrEqual(await tam(page.getByTestId('dnr-recordatorio-pasos')))
+  await boton.click()
+
+  // La hoja se anuncia con su título; debajo, en pequeño y con las palabras de Dani, dónde mirarlo.
+  const hoja = hojaEjemplo(page)
+  await expect(hoja).toBeVisible()
+  await expect(hoja.getByRole('heading', { name: 'Cómo saber si tiene preferencia' })).toBeVisible()
+  await expect(hoja).toContainText('La preferencia de entrega es lo primero que aparece al entregar, en tu app de reparto')
+
+  // 1. Arriba, «¿Dónde vas a dejar el paquete?» y sus opciones: SOLO la primera, destacada y con «Sí es preferencia».
+  const entrega = hoja.getByTestId('ejemplo-pref-entrega')
+  await expect(entrega).toHaveAccessibleName('¿Dónde vas a dejar el paquete?')
+  const opciones = entrega.getByTestId('ejemplo-pref-opcion')
+  await expect(opciones).toHaveCount(3)
+  await expect(opciones.getByTestId('ejemplo-pref-texto')).toHaveText(['Buzón de correos', 'Caseta', 'Más opciones'])
+  await expect(opciones.nth(0)).toHaveAttribute('data-destacada', 'si')
+  await expect(opciones.nth(1)).toHaveAttribute('data-destacada', 'no')
+  await expect(opciones.nth(2)).toHaveAttribute('data-destacada', 'no')
+  await expect(entrega.getByTestId('ejemplo-pref-etiqueta')).toHaveCount(1)
+  await expect(opciones.nth(0).getByTestId('ejemplo-pref-etiqueta')).toHaveText('Sí es preferencia')
+  await expect(opciones.nth(0).getByTestId('ejemplo-pref-etiqueta')).toHaveClass(/bg-ruta-ok/)
+  await expect(hoja.getByText('Sí es preferencia', { exact: true })).toHaveCount(1)
+  // El lector la lee con su etiqueta delante.
+  expect(await leido(opciones.nth(0))).toBe('Sí es preferencia: Buzón de correos')
+  expect(await leido(opciones.nth(1))).toBe('Caseta')
+  const estilo = (l) => l.evaluate((el) => {
+    const t = el.querySelector('[data-testid="ejemplo-pref-texto"]')
+    return { borde: parseFloat(getComputedStyle(el).borderTopWidth), letra: parseFloat(getComputedStyle(t).fontSize), color: getComputedStyle(t).color, y: el.getBoundingClientRect().top }
+  })
+  const [a, b, c] = [await estilo(opciones.nth(0)), await estilo(opciones.nth(1)), await estilo(opciones.nth(2))]
+  expect(a.borde).toBeGreaterThan(0)
+  expect(b.borde).toBe(0)
+  expect(c.borde).toBe(0)
+  expect(a.letra).toBeGreaterThan(b.letra)
+  expect(a.y).toBeLessThan(b.y)
+  expect(b.y).toBeLessThan(c.y)
+  // «Más opciones», apagado.
+  expect(c.color).not.toBe(b.color)
+
+  // 2. Más abajo, «Notas», apagadas: la cabecera inventada y tres líneas, cada una con «No lo es» delante.
+  const notas = hoja.getByTestId('ejemplo-pref-notas')
+  await expect(notas).toHaveAccessibleName('Notas')
+  await expect(notas).toContainText('Calle de ejemplo, 1 · Nombre del cliente')
+  const lineas = notas.getByTestId('ejemplo-pref-nota')
+  await expect(lineas).toHaveCount(3)
+  const esperado = [
+    ['No lo es · nota de entrega', 'No lo es, nota de entrega', 'Entregar a: Cobertizo/Caseta'],
+    ['No lo es · nota del cliente', 'No lo es, nota del cliente', 'Déjenlo al lado de la puerta y cierren. Gracias'],
+    ['No lo es · clave de acceso', 'No lo es, clave de acceso', 'Código del portal: 1234'],
+  ]
+  for (const [k, [visible, frase, texto]] of esperado.entries()) {
+    const l = lineas.nth(k)
+    await expect(corto(l.getByTestId('ejemplo-pref-etiqueta'))).toHaveText(visible)
+    await expect(l.getByTestId('ejemplo-pref-texto')).toHaveText(texto)
+    expect(await leido(l)).toBe(`${frase}: ${texto}`)
+    // Ninguna nota va destacada ni en verde.
+    expect(await l.evaluate((el) => parseFloat(getComputedStyle(el).borderTopWidth))).toBe(0)
+    await expect(l.locator('[class*="ruta-ok"]')).toHaveCount(0)
+  }
+  const colorNota = await lineas.nth(0).getByTestId('ejemplo-pref-texto').evaluate((el) => getComputedStyle(el).color)
+  expect(colorNota).not.toBe(a.color)
+  await expect(notas).not.toContainText('Sí es preferencia')
+  // Arriba lo de entregar; debajo, las notas; abajo del todo, la regla.
+  const yDe = async (l) => (await l.boundingBox()).y
+  expect(await yDe(entrega)).toBeLessThan(await yDe(notas))
+  // 3. Abajo, en el tinte de marca: «Con preferencia de entrega» y la misma fila de pasos del recordatorio.
+  const regla = hoja.getByTestId('ejemplo-pref-regla')
+  expect(await yDe(notas)).toBeLessThan(await yDe(regla))
+  await expect(regla).toHaveClass(/bg-ruta-marca-tinte/)
+  await expect(regla.getByTestId('ejemplo-pref-con')).toHaveText('Con preferencia de entrega')
+  await expect(regla.getByTestId('ejemplo-pref-pasos')).toHaveText(/Llama\s*\+\s*Foto clara\s*No te cuenta/)
+
+  // Nada del ejemplo viejo (que decía que la preferencia era «Entregar a:» de las notas), ni visible ni para el lector.
+  const html = await hoja.evaluate((el) => el.outerHTML)
+  expect(html).not.toMatch(/Mira las notas|notas de la parada|Si pone|Sí es preferencia: Entregar/)
+  // Un dibujo: ninguna imagen ni captura, ni de fondo; y no nombra ninguna otra plataforma.
+  await expect(hoja.locator('img, picture, image, video, canvas, iframe, object, [role="img"]')).toHaveCount(0)
+  expect(await hoja.evaluate((el) => [el, ...el.querySelectorAll('*')].filter((x) => getComputedStyle(x).backgroundImage !== 'none').length)).toBe(0)
+  await expect(hoja).not.toContainText(/amazon|flex/i)
+  expect(fallos).toEqual([])
+})
+
+test('Ejemplo: en ningún idioma queda una frase del ejemplo viejo (la preferencia NO es «Entregar a:» de las notas)', async () => {
+  test.skip(PAUSAS.preferencia, PAUSA_PREFERENCIA)
+  const { A } = await import('../src/lib/textosRutaA.js')
+  for (const viejo of ['Mira las notas de la parada, en tu app de reparto', 'Si pone "Entregar a:"']) expect(Object.keys(A)).not.toContain(viejo)
+  // Ninguna traducción dice que haya que mirar las notas ni que «Entregar a» sea la preferencia.
+  const todo = Object.entries(A).filter(([k]) => /preferencia|Entregar a|No lo es|Notas/.test(k)).flatMap(([k, l]) => [k, ...l]).join('\n')
+  expect(todo).not.toMatch(/notas de la parada|stop’s notes|notas da paragem|notes de l’arrêt|note della fermata|Notizen zum Stopp|Si pone|If it says|Se disser|S’il y a "|Se c’è scritto|Wenn dort/)
+})
+
+test('Ejemplo: se cierra con «Cerrar» y con Escape, el foco entra en la hoja y vuelve al botón al cerrarla', async ({ page }) => {
+  test.skip(PAUSAS.preferencia, PAUSA_PREFERENCIA)
+  await entrar(page)
+  await casilla(page).click()
+  const boton = botonEjemplo(page)
+  const hoja = hojaEjemplo(page)
+  const dentroDeLaHoja = () => page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))
+  // Con «Cerrar».
+  await boton.click()
+  await expect(hoja).toBeVisible()
+  await expect.poll(dentroDeLaHoja).toBe(true)
+  await hoja.getByRole('button', { name: 'Cerrar' }).click()
+  await expect(hoja).toHaveCount(0)
+  await expect(boton).toBeFocused()
+  // Con el teclado: Intro la abre, el tabulador no se sale de la hoja y Escape la cierra.
+  await page.keyboard.press('Enter')
+  await expect(hoja).toBeVisible()
+  await expect(hoja.getByRole('button', { name: 'Cerrar' })).toBeFocused()
+  for (let k = 0; k < 3; k++) {
+    await page.keyboard.press('Tab')
+    expect(await dentroDeLaHoja()).toBe(true)
+  }
+  await page.keyboard.press('Escape')
+  await expect(hoja).toHaveCount(0)
+  await expect(boton).toBeFocused()
+  // Y sigue en «Mis DNR» (cerrar la hoja no se lleva la pantalla).
+  await expect(page.getByTestId('dnr-recordatorio')).toBeVisible()
+})
+
+test('Ejemplo: a 360 px en alemán y con «Letra más grande», nada se corta ni hay scroll de lado; lo que se lee en la app se queda en español, con lo que significa', async ({ page }) => {
+  test.skip(PAUSAS.preferencia, PAUSA_PREFERENCIA)
+  await page.setViewportSize({ width: 360, height: 780 })
+  await page.addInitScript(() => {
+    localStorage.setItem('fds_idioma', 'de')
+    localStorage.setItem('fds_letra', 'grande')
+    document.documentElement.setAttribute('data-letra', 'grande')
+  })
+  await entrar(page)
+  await page.getByRole('button', { name: /^Meine DNRs/ }).click()
+  const boton = page.getByTestId('dnr-recordatorio').getByRole('button', { name: 'Woran erkenne ich eine Zustellpräferenz?' })
+  expect((await boton.boundingBox()).height).toBeGreaterThanOrEqual(44)
+  await boton.click()
+  const hoja = hojaEjemplo(page, 'So erkennst du eine Zustellpräferenz')
+  await expect(hoja).toBeVisible()
+  const entrega = hoja.getByTestId('ejemplo-pref-entrega')
+  await expect(entrega).toHaveAccessibleName('"¿Dónde vas a dejar el paquete?" (Wo lässt du das Paket?)')
+  await expect(entrega.getByTestId('ejemplo-pref-texto')).toHaveText(['"Buzón de correos" (Briefkasten)', '"Caseta" (Gartenhaus)', '"Más opciones" (Weitere Optionen)'])
+  await expect(entrega.getByTestId('ejemplo-pref-etiqueta')).toHaveText('Das ist eine Präferenz')
+  const notas = hoja.getByTestId('ejemplo-pref-notas')
+  await expect(notas).toHaveAccessibleName('"Notas" (Notizen)')
+  const lineas = notas.getByTestId('ejemplo-pref-nota')
+  await expect(lineas.nth(0).getByTestId('ejemplo-pref-texto')).toHaveText('"Entregar a:" (Zustellen an) Schuppen/Gartenhaus')
+  await expect(corto(lineas.nth(0).getByTestId('ejemplo-pref-etiqueta'))).toHaveText('Keine Präferenz · Zustellnotiz')
+  await expect(lineas.nth(1).getByTestId('ejemplo-pref-texto')).toHaveText('Bitte neben die Tür legen und zumachen. Danke')
+  await expect(hoja.getByTestId('ejemplo-pref-con')).toHaveText('Mit Zustellpräferenz')
+  const r = await hoja.evaluate((el) => {
+    const panel = el.firstElementChild
+    const borde = panel.getBoundingClientRect()
+    const visibles = [...panel.querySelectorAll('*')].filter((x) => !x.closest('.sr-only')
+      && [...x.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()))
+    return {
+      // Nada cortado: ni el título ni el subtítulo de la Hoja (que de serie van en una línea con «…»), ni las etiquetas.
+      cortados: visibles.filter((x) => x.scrollWidth > x.clientWidth + 1 || x.scrollHeight > x.clientHeight + 1).map((x) => x.textContent.slice(0, 40)),
+      fuera: visibles.filter((x) => { const b = x.getBoundingClientRect(); return b.left < borde.left - 1 || b.right > borde.right + 1 }).map((x) => x.textContent.slice(0, 40)),
+      scrollLado: [...panel.querySelectorAll('*')].some((x) => x.scrollWidth > x.clientWidth + 1 && /auto|scroll/.test(getComputedStyle(x).overflowX)),
+      titulo: getComputedStyle(panel.querySelector('h2')).whiteSpace,
+    }
+  })
+  expect(r.cortados).toEqual([])
+  expect(r.fuera).toEqual([])
+  expect(r.scrollLado).toBe(false)
+  expect(r.titulo).not.toBe('nowrap')
+  const ancho = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, ventana: window.innerWidth }))
+  expect(ancho.doc).toBeLessThanOrEqual(ancho.ventana)
+})
+
+test('Ejemplo: en portugués, lo que es la misma palabra va entre comillas y sin paréntesis («Notas», «Entregar a:»); lo demás, con lo que significa', async ({ page }) => {
+  test.skip(PAUSAS.preferencia, PAUSA_PREFERENCIA)
+  await page.addInitScript(() => localStorage.setItem('fds_idioma', 'pt'))
+  await entrar(page)
+  await page.getByRole('button', { name: /^As minhas DNR/ }).click()
+  await page.getByTestId('dnr-recordatorio').getByRole('button', { name: 'Como sei se tem preferência?' }).click()
+  const hoja = hojaEjemplo(page, 'Como saber se tem preferência')
+  await expect(hoja.getByTestId('ejemplo-pref-notas')).toHaveAccessibleName('"Notas"')
+  await expect(hoja.getByTestId('ejemplo-pref-nota').first().getByTestId('ejemplo-pref-texto')).toHaveText('"Entregar a:" Barracão/Arrecadação')
+  await expect(hoja.getByTestId('ejemplo-pref-opcion').getByTestId('ejemplo-pref-texto')).toHaveText(['"Buzón de correos" (Caixa de correio)', '"Caseta" (Arrecadação)', '"Más opciones" (Mais opções)'])
 })

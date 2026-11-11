@@ -25,10 +25,13 @@
    y mínimo deben ser 30 segundos, aunque llames y te abra en la puerta». La llamada de menos de 30 s es «Llamada corta»
    (fallo) y cada DNR con fallo de contacto lleva, una vez, el aviso de los 30 segundos. Y dos cosas EN PAUSA
    (dnrPausas.js), sin borrarlas: el recordatorio de la entrega con preferencia (el bloque 2) y si le cuenta o no (el
-   estado, su banda, los contadores, «Qué es cada color» y «Actualizada»). En pausa, la tarjeta empieza por el día. */
+   estado, su banda, los contadores, «Qué es cada color» y «Actualizada»). En pausa, la tarjeta empieza por el día.
+
+   R11 (Dani, 11-11-2026): VUELVE el recordatorio de la preferencia, con su ejemplo corregido («¿Cómo sé si tiene
+   preferencia?»: la preferencia es lo PRIMERO que aparece al entregar, no las notas). El estado SIGUE en pausa. */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  AlertTriangle, ArrowRight, Camera, CameraOff, Check, ChevronDown, ChevronUp, Clock, ConciergeBell, DoorOpen, Hand, Info,
+  AlertTriangle, Camera, CameraOff, Check, ChevronDown, ChevronUp, CircleHelp, Clock, ConciergeBell, DoorOpen, Hand, Info,
   Loader2, Lock, Mailbox, MapPin, MapPinOff, MessageCircleQuestion, Phone, PhoneCall, PhoneOff, Store, Timer, Trees, Truck,
   UserCheck, Users,
 } from 'lucide-react'
@@ -38,6 +41,7 @@ import { tx, locale, useIdioma } from '../../lib/idioma'
 import { lista } from '../../lib/lista'
 import { Aviso, Cabecera, ContenedorLista, Etiqueta, EtiquetaHecho } from './piezas'
 import icono from './piezas/icono'
+import EjemploPreferencia, { PasosNoCuenta } from './EjemploPreferencia'
 import {
   IconoDnr, apuntarSinDnr, casoSemana, contar, cuantasActualizadas, cuantasNuevas, guardarVistas, leerVistas, novedades,
   novedadesEnCorto, recordarDnr, vaciaAnterior, yo,
@@ -192,8 +196,14 @@ function Resumen({ s, caso, hasta }) {
 }
 
 /* 2. EL RECORDATORIO, con la condición arriba y con peso, y los pasos debajo en una fila. Lo que se ve es para la vista; el
-   lector de pantalla lee la frase entera, que dice lo mismo sin flechas. */
+   lector de pantalla lee la frase entera, que dice lo mismo sin flechas. «No te cuenta» es la REGLA, no el estado de una
+   DNR: con el estado en pausa (dnrPausas.js) sigue saliendo y ninguna tarjeta dice si le cuenta. Debajo, «¿Cómo sé si
+   tiene preferencia?» abre el ejemplo de la pantalla de entrega (EjemploPreferencia.jsx, R11: la preferencia es lo
+   PRIMERO que aparece al entregar; las notas no lo son); al cerrarlo, el foco vuelve a ese botón. */
 function Recordatorio() {
+  const [ejemplo, setEjemplo] = useState(false)
+  const boton = useRef(null)
+  const cerrarEjemplo = useCallback(() => { setEjemplo(false); boton.current?.focus() }, [])
   return (
     <div data-testid="dnr-recordatorio" className="rounded-xl border border-ruta-marca bg-ruta-marca-tinte p-3 text-ruta-marca-tinte-texto">
       <p data-testid="dnr-recordatorio-frase" className="sr-only">
@@ -204,16 +214,14 @@ function Recordatorio() {
           {icono(UserCheck, 20, 'mt-0.5 shrink-0')}
           <span className="min-w-0">{tx('Solo si el cliente tiene preferencia de entrega')}</span>
         </p>
-        <p data-testid="dnr-recordatorio-pasos" className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-ruta-marca/40 pt-3 text-boton">
-          <span className="flex items-center gap-1 whitespace-nowrap">{icono(Phone, 16, 'shrink-0')} {tx('Llama')}</span>
-          <span>+</span>
-          <span className="flex items-center gap-1 whitespace-nowrap">{icono(Camera, 16, 'shrink-0')} {tx('Foto clara')}</span>
-          {/* La flecha va con lo que trae: si la fila salta (alemán, francés), no se queda sola al final. */}
-          <span className="flex items-center gap-1 whitespace-nowrap">
-            {icono(ArrowRight, 16, 'mr-1 shrink-0')}{icono(Check, 16, 'shrink-0')} {tx('No te cuenta')}
-          </span>
-        </p>
+        <PasosNoCuenta testid="dnr-recordatorio-pasos" className="mt-3 border-t border-ruta-marca/40 pt-3" />
       </div>
+      <button ref={boton} type="button" data-testid="dnr-ver-ejemplo" aria-haspopup="dialog" onClick={() => setEjemplo(true)}
+        className="mt-2 flex min-h-11 w-full items-center gap-2 rounded-lg text-left text-texto underline underline-offset-4 active:opacity-80">
+        {icono(CircleHelp, 18, 'shrink-0')}
+        <span className="min-w-0">{tx('¿Cómo sé si tiene preferencia?')}</span>
+      </button>
+      {ejemplo && <EjemploPreferencia onClose={cerrarEjemplo} />}
     </div>
   )
 }

@@ -468,4 +468,30 @@ export const A = {
   "Llamada corta · {n} s": ["Short call · {n} s", "Chamada curta · {n} s", "Appel court · {n} s", "Chiamata breve · {n} s", "Kurzer Anruf · {n} s"],
   "Tu llamada al cliente duró {n} segundos; tiene que durar 30 como mínimo": ["Your call to the customer lasted {n} seconds; it must last at least 30", "A tua chamada ao cliente durou {n} segundos; tem de durar pelo menos 30", "Ton appel au client a duré {n} secondes ; il doit durer au moins 30", "La tua chiamata al cliente è durata {n} secondi; deve durare almeno 30", "Dein Anruf beim Kunden hat {n} Sekunden gedauert; er muss mindestens 30 dauern"],
   "La llamada, mínimo 30 segundos. No cuelgues tú mientras da tono, aunque te abran la puerta.": ["Calls: 30 seconds minimum. Don’t hang up while it’s ringing, even if they open the door.", "A chamada, no mínimo 30 segundos. Não desligues enquanto estiver a tocar, mesmo que te abram a porta.", "L’appel : 30 secondes minimum. Ne raccroche pas tant que ça sonne, même si on t’ouvre la porte.", "La chiamata: almeno 30 secondi. Non riagganciare mentre squilla, anche se ti aprono la porta.", "Der Anruf: mindestens 30 Sekunden. Leg nicht auf, solange es klingelt, auch wenn man dir die Tür öffnet."],
+  // R11 (Dani, 11-11-2026): «¿Cómo sé si tiene preferencia?», el ejemplo de la pantalla de entrega (EjemploPreferencia.jsx),
+  // con datos inventados: «la preferencia de entrega es buzón de correos, es lo primero que aparece en la app»; las notas
+  // (nota de entrega, nota del cliente, clave) no lo son. «¿Dónde vas a dejar el paquete?», «Buzón de correos», «Caseta»,
+  // «Notas» y «Entregar a:» (y «Más opciones», que ya estaba arriba) son lo que el conductor lee TAL CUAL en su app, en
+  // español: la pantalla los deja en español, entre comillas, y pone al lado entre paréntesis lo que aquí se traduce (lo que
+  // SIGNIFICAN); si en portugués es la misma palabra, sin paréntesis.
+  "¿Cómo sé si tiene preferencia?": ["How do I know if there’s a preference?", "Como sei se tem preferência?", "Comment savoir s’il y a une préférence ?", "Come so se c’è una preferenza?", "Woran erkenne ich eine Zustellpräferenz?"],
+  "Cómo saber si tiene preferencia": ["How to tell if there’s a preference", "Como saber se tem preferência", "Savoir s’il y a une préférence", "Come capire se c’è una preferenza", "So erkennst du eine Zustellpräferenz"],
+  "La preferencia de entrega es lo primero que aparece al entregar, en tu app de reparto": ["The delivery preference is the first thing that appears when you deliver, in your delivery app", "A preferência de entrega é a primeira coisa que aparece ao entregar, na tua app de entregas", "La préférence de livraison est la première chose qui s’affiche quand tu livres, dans ton appli de livraison", "La preferenza di consegna è la prima cosa che compare quando consegni, nella tua app di consegna", "Die Zustellpräferenz ist das Erste, was beim Zustellen erscheint, in deiner Zustell-App"],
+  "¿Dónde vas a dejar el paquete?": ["Where will you leave the parcel?", "Onde vais deixar a encomenda?", "Où vas-tu laisser le colis ?", "Dove lascerai il pacco?", "Wo lässt du das Paket?"],
+  "Buzón de correos": ["Letterbox", "Caixa de correio", "Boîte aux lettres", "Cassetta delle lettere", "Briefkasten"],
+  "Caseta": ["Outbuilding", "Arrecadação", "Cabanon", "Casetta", "Gartenhaus"],
+  "Sí es preferencia": ["This is a preference", "É preferência", "C’est une préférence", "È una preferenza", "Das ist eine Präferenz"],
+  "Notas": ["Notes", "Notas", "Notes", "Note", "Notizen"],
+  "Calle de ejemplo, 1 · Nombre del cliente": ["1 Sample Street · Customer name", "Rua de Exemplo, 1 · Nome do cliente", "1 rue de l’Exemple · Nom du client", "Via di Esempio, 1 · Nome del cliente", "Beispielstraße 1 · Name des Kunden"],
+  "No lo es · nota de entrega": ["Not a preference · delivery note", "Não é preferência · nota de entrega", "Pas une préférence · note de livraison", "Non è una preferenza · nota di consegna", "Keine Präferenz · Zustellnotiz"],
+  "No lo es, nota de entrega": ["Not a preference, delivery note", "Não é preferência, nota de entrega", "Pas une préférence, note de livraison", "Non è una preferenza, nota di consegna", "Keine Präferenz, Zustellnotiz"],
+  "Entregar a:": ["Deliver to", "Entregar a:", "Livrer à", "Consegnare a", "Zustellen an"],
+  "Cobertizo/Caseta": ["Shed/Outbuilding", "Barracão/Arrecadação", "Abri/Cabanon", "Capanno/Casetta", "Schuppen/Gartenhaus"],
+  "No lo es · nota del cliente": ["Not a preference · customer note", "Não é preferência · nota do cliente", "Pas une préférence · note du client", "Non è una preferenza · nota del cliente", "Keine Präferenz · Notiz des Kunden"],
+  "No lo es, nota del cliente": ["Not a preference, customer note", "Não é preferência, nota do cliente", "Pas une préférence, note du client", "Non è una preferenza, nota del cliente", "Keine Präferenz, Notiz des Kunden"],
+  "Déjenlo al lado de la puerta y cierren. Gracias": ["Leave it next to the door and close up. Thanks", "Deixem-na ao lado da porta e fechem. Obrigado", "Laissez-le à côté de la porte et refermez. Merci", "Lasciatelo accanto alla porta e chiudete. Grazie", "Bitte neben die Tür legen und zumachen. Danke"],
+  "No lo es · clave de acceso": ["Not a preference · access code", "Não é preferência · código de acesso", "Pas une préférence · code d’accès", "Non è una preferenza · codice di accesso", "Keine Präferenz · Zugangscode"],
+  "No lo es, clave de acceso": ["Not a preference, access code", "Não é preferência, código de acesso", "Pas une préférence, code d’accès", "Non è una preferenza, codice di accesso", "Keine Präferenz, Zugangscode"],
+  "Código del portal: 1234": ["Door code: 1234", "Código do portão: 1234", "Code de l’immeuble : 1234", "Codice del portone: 1234", "Türcode: 1234"],
+  "Con preferencia de entrega": ["With a delivery preference", "Com preferência de entrega", "Avec une préférence de livraison", "Con una preferenza di consegna", "Mit Zustellpräferenz"],
 }
