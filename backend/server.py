@@ -34556,7 +34556,8 @@ async def apuntarme_refuerzo(rid: str, data: dict = Body(default={}), user: dict
         await push_center_event(r["center"], f"🙋 {nombre or 'Un conductor'} quiere trabajar el {_refuerzo_dia(r['date'])}" if auto
                                 else f"🙋 {nombre or 'Un conductor'} se apunta al refuerzo del {_refuerzo_dia(r['date'])}",
                                 f"{n} apuntado{'s' if n > 1 else ''} para {r['plazas']} plaza{'s' if r['plazas'] > 1 else ''}. "
-                                "Apruébalo en Turnos → Refuerzos.",
+                                # «Días libres», como el menú y el título (11-11-2026): ya no hay pantalla «Turnos».
+                                "Apruébalo en Días libres → Refuerzos.",
                                 _url_con_centro("/panel/turnos?vista=refuerzos", r["center"]))  # con su centro (11-11-2026)
     except Exception as e:                                       # noqa: BLE001
         logger.debug("Push apuntado a refuerzo: %s", e)
