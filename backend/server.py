@@ -33870,6 +33870,82 @@ async def list_shift_requests(center: Optional[str] = None, status: Optional[str
     return {"requests": reqs}
 
 
+@api_router.get("/shift-requests/cobertura")
+async def cobertura_peticiones(center: str = "", desde: Optional[str] = None, hasta: Optional[str] = None,
+                               admin: dict = Depends(require_admin)):
+    """Cómo queda la nave cada día si se concede lo que está pendiente (11-11-2026, cuadrante-2). Solo lectura.
+
+    Al aprobar desde la bandeja solo se veían las fechas: nada decía si ese día la nave se quedaba corta. La cuenta es
+    la de Refuerzos (_maximas_y_ruta: máxima, en ruta y los que bajan de otros centros), que es la fila «Diferencia»
+    del Cuadrante; el colchón, el del Cuadrante, solo para el color. `trabaja` son las celdas con turno de ruta de
+    quien tiene algo pendiente: con eso la pantalla sabe si darle el libre resta uno (o si ya libraba) y si el extra
+    suma uno. Ruta nueva: la web vieja no la llama y nada de lo que ya existe cambia."""
+    center = _texto_cuerpo(center, 60).strip()
+    if not center or center.lower() in ("todos", "all"):
+        raise HTTPException(400, "Elige un centro: las máximas son por nave")
+    if not _user_can_see_center(admin, center):
+        raise HTTPException(403, "Ese centro no es tuyo")
+    hoy = _dia_negocio()
+    ini = _cua_fecha(desde, "La fecha de inicio") if desde else hoy
+    fin = hasta or (date_cls.fromisoformat(ini) + timedelta(days=30)).isoformat()
+    desde, hasta = _cua_rango(ini, fin, tope=62)
+    pat = {"$regex": re.escape(center[:4]), "$options": "i"}
+    maximas = await _maximas_y_ruta(center, desde, hasta)
+    cfg = await db[_CUA_CONFIG].find_one({"center": center}, {"_id": 0}) \
+        or await db[_CUA_CONFIG].find_one({"center": pat}, {"_id": 0}) or {}
+    try:
+        colchon = int(cfg.get("colchon", 2))
+    except (TypeError, ValueError):
+        colchon = 2
+    exacto = center.lower()
+    colchon_dia: dict = {}
+    async for a in db[_CUA_AJUSTES].find({"tipo": "colchon_dia", "center": pat,
+                                          "fecha": {"$gte": desde, "$lte": hasta}}, {"_id": 0}):
+        f = str(a.get("fecha") or "")
+        es_exacto = str(a.get("center") or "").strip().lower() == exacto
+        if f not in colchon_dia or (es_exacto and not colchon_dia[f][0]):
+            try:
+                colchon_dia[f] = (es_exacto, int(a.get("colchon")))
+            except (TypeError, ValueError):
+                continue
+    concedidos: dict = {}
+    pend_libre: dict = {}
+    pend_extra: dict = {}
+    con_pendientes: set = set()
+    async for r in db.shift_requests.find(
+            {"center": pat, "date": {"$gte": desde, "$lte": hasta}, "status": {"$in": ["pendiente", "aprobado"]}},
+            {"_id": 0, "driver_id": 1, "date": 1, "type": 1, "status": 1}):
+        f = r.get("date")
+        if r.get("status") == "aprobado":
+            # Los días LIBRES ya concedidos ese día en esta nave (un extra concedido ya está en «en ruta»).
+            if r.get("type") == "libre":
+                concedidos[f] = concedidos.get(f, 0) + 1
+            continue
+        cuenta = pend_extra if r.get("type") == "extra" else pend_libre
+        cuenta[f] = cuenta.get(f, 0) + 1
+        if r.get("driver_id"):
+            con_pendientes.add(f"{r['driver_id']}|{f}")
+    # Solo las celdas pedidas: de cada una, si hoy tiene turno de ruta en esta nave.
+    trabaja = set()
+    if con_pendientes:
+        ids = sorted({k.split("|")[0] for k in con_pendientes})
+        async for s in db.shifts.find({"driver_id": {"$in": ids}, "center": pat,
+                                       "date": {"$gte": desde, "$lte": hasta}, **_FILTRO_RUTA},
+                                      {"_id": 0, "driver_id": 1, "date": 1}):
+            k = f"{s['driver_id']}|{s['date']}"
+            if k in con_pendientes:
+                trabaja.add(k)
+    dias = {}
+    for f in sorted(set(maximas) | set(pend_libre) | set(pend_extra)):
+        m = maximas.get(f)
+        dias[f] = {"maximo": m["maximo"] if m else None, "en_ruta": m["en_ruta"] if m else None,
+                   "bajan": m["bajan"] if m else 0,
+                   "colchon": colchon_dia[f][1] if f in colchon_dia else colchon,
+                   "concedidos": concedidos.get(f, 0),
+                   "pendientes_libre": pend_libre.get(f, 0), "pendientes_extra": pend_extra.get(f, 0)}
+    return {"center": center, "desde": desde, "hasta": hasta, "dias": dias, "trabaja": sorted(trabaja)}
+
+
 @api_router.post("/shift-requests/{req_id}/resolve")
 async def resolve_shift_request(req_id: str, data: dict = Body(...),
                                 admin: dict = Depends(require_admin)):
@@ -50654,6 +50730,21 @@ async def _cua_aprobados(ids, desde: str, hasta: str) -> dict:
     return out
 
 
+async def _cua_pendientes(ids, desde: str, hasta: str) -> dict:
+    """Días pedidos por el conductor que aún esperan respuesta (11-11-2026, cuadrante-1): {"did|fecha": {id, tipo,
+    grupo}}. Solo para VERLOS en el Cuadrante: el motor no los mira (se le pregunta a Dani si debe)."""
+    out = {}
+    if not ids:
+        return out
+    for r in await db.shift_requests.find(
+            {"status": "pendiente", "driver_id": {"$in": list(ids)}, "date": {"$gte": desde, "$lte": hasta}},
+            {"_id": 0, "id": 1, "driver_id": 1, "date": 1, "type": 1, "grupo": 1}).to_list(2000):
+        if r.get("driver_id") and r.get("date"):
+            out[f"{r['driver_id']}|{r['date']}"] = {"id": r.get("id"), "tipo": r.get("type") or "libre",
+                                                     "grupo": r.get("grupo")}
+    return out
+
+
 async def _cua_personas(center: str, desde: str, hasta: str) -> list:
     """Quién está en el cuadrante del centro entre dos fechas y cómo trabaja.
 
@@ -50889,11 +50980,13 @@ async def cuadrante_ver(center: str, desde: str, hasta: str, user: dict = Depend
                                           {"_id": 0, "id": 1, "que": 1, "en": 1, "por": 1, "n": 1},
                                           sort=[("en", -1)])
     aprobados = await _cua_aprobados(ids, desde, hasta)
+    # Las peticiones sin contestar (11-11-2026, cuadrante-1): una clave más que la web vieja ignora.
+    pendientes = await _cua_pendientes(ids, desde, hasta)
     return {"center": center, "desde": desde, "hasta": hasta, "hoy": _dia_negocio(),
             "personas": personas, "celdas": celdas, "maximas": maximas, "objetivos": objetivos,
             "config": {"colchon": int(cfg.get("colchon", 2)), "permitir_extra": bool(cfg.get("permitir_extra", True))},
             "ajustes": ajustes, "aprobados": sorted(aprobados), "propuesta": prop, "ultimo_cambio": ult,
-            "tipos": list(_cm.TIPOS)}
+            "tipos": list(_cm.TIPOS), "pendientes": pendientes}
 
 
 @api_router.post("/cuadrante/celdas")
@@ -51361,6 +51454,200 @@ async def cuadrante_deshacer(data: dict = Body(...), user: dict = Depends(requir
         "deshecho_por": user.get("name") or ""}})
     await _audit(user, "cuadrante_deshacer", {"center": center, "que": c.get("que")})
     return {"ok": True, "que": c.get("que"), "n": c.get("n")}
+
+
+# ── AVISAR A LOS CONDUCTORES DE SUS CAMBIOS (11-11-2026, cuadrante-8) ────────
+# Cuando la oficina cambia el cuadrante (propuesta, celdas, chat, Excel, Sheets) al conductor no le llegaba nada. Esto
+# es un BOTÓN, nunca automático: la oficina ve antes a quién y qué, desmarca a quien quiera y pulsa. Sale de los
+# registros de «Deshacer» (_CuaCambio), por los que pasa todo cambio del cuadrante: de cada celda tocada se mira lo
+# que había ANTES del primer cambio sin avisar y lo que hay AHORA en los turnos, y solo se avisa si cambia lo que se
+# lee («trabajas», «libras»…), de hoy a 14 días. Un cambio deshecho, o devuelto a como estaba, no avisa; un cambio
+# avisado y deshecho DESPUÉS, sí (se guarda en el registro lo que se le dijo, `avisado_ahora`). Lo que no pasa por el
+# cuadrante (un día concedido, una suspensión) tiene su propio camino y no se repite aquí. Cada registro guarda hasta
+# qué día se avisó (`avisado_hasta`): un cambio del día 20 sale cuando ese día entre en los 14. Marcarlo es la forma de
+# «coger» el envío: dos personas pulsando a la vez no mandan dos avisos.
+_CUA_AVISO_DIAS = 14
+_CUA_AVISO_ETIQUETA = {"1": "trabajas", "T": "trabajas", "X": "trabajas", "EXTRA": "trabajas (extra)",
+                       "N/T": "libras", "L": "libras", "N/T APROB": "libras", "APROBADO": "libras",
+                       "V": "vacaciones", "COMP": "compensas", "BKP": "de reserva", "S": "en oficina",
+                       "RA": "de acompañante", "RIDE": "de acompañante", "N/D": "no disponible", "BAJA": "de baja",
+                       "SUSP": "suspendido", "N/P": "no presentado"}
+
+
+def _cua_aviso_etiqueta(doc: Optional[dict]) -> str:
+    """Lo que se le dice al conductor de una celda. 1, T y X son lo mismo para él: «trabajas»."""
+    cod = _cua_cod_turno(doc) if doc else ""
+    if not cod:
+        return "sin turno"
+    if cod in ("1", "T", "X") and (doc or {}).get("extra"):
+        return "trabajas (extra)"
+    if cod in _CUA_AVISO_ETIQUETA:
+        return _CUA_AVISO_ETIQUETA[cod]
+    info = CODIGOS_CUADRANTE_INFO.get(cod)
+    return info[1].lower() if info else cod
+
+
+def _cua_aviso_celdas(cambio: dict):
+    """Las celdas de turnos que tocó un cambio: (driver_id, fecha, lo que había antes)."""
+    for s in cambio.get("snaps") or []:
+        f = s.get("filtro") if isinstance(s, dict) else None
+        if isinstance(s, dict) and s.get("col") == "shifts" and isinstance(f, dict) \
+                and isinstance(f.get("driver_id"), str) and isinstance(f.get("date"), str):
+            yield f["driver_id"], f["date"][:10], s.get("doc")
+
+
+def _cua_aviso_ventana() -> Tuple[str, str]:
+    hoy = _dia_negocio()
+    return hoy, (date_cls.fromisoformat(hoy) + timedelta(days=_CUA_AVISO_DIAS)).isoformat()
+
+
+def _cua_aviso_pendiente_b(c: dict) -> bool:
+    """Avisado y deshecho después: lo que se le dijo ya no es verdad."""
+    return bool(c.get("deshecho") and c.get("avisado_ahora") and not c.get("avisado_deshecho_en"))
+
+
+async def _cua_avisos_registros(center: str, hasta: str) -> list:
+    """Los registros de cambios de la nave de los últimos 14 días con algo por avisar."""
+    corte = (datetime.now(timezone.utc) - timedelta(days=_CUA_AVISO_DIAS)).isoformat()
+    out = []
+    for c in await db[_CUA_CAMBIOS].find({"center": center, "en": {"$gte": corte}}, {"_id": 0}).to_list(200):
+        if str(c.get("avisado_hasta") or "") < hasta or _cua_aviso_pendiente_b(c):
+            out.append(c)
+    return sorted(out, key=lambda c: str(c.get("en") or ""))
+
+
+async def _cua_avisos_calcular(registros: list, usar_a=None, usar_b=None) -> Tuple[list, str]:
+    """(personas, hasta). `usar_a`/`usar_b`: los ids de registro que cuentan por cada camino (por defecto, todos)."""
+    hoy, hasta = _cua_aviso_ventana()
+    base_a: dict = {}            # celda -> lo que se leía antes del primer cambio sin avisar
+    base_b: dict = {}            # celda -> (cuándo, lo que se le dijo) de un cambio avisado y deshecho después
+    for c in registros:
+        cid = c.get("id")
+        h = str(c.get("avisado_hasta") or "")
+        en_b = _cua_aviso_pendiente_b(c) and (usar_b is None or cid in usar_b)
+        en_a = usar_a is None or cid in usar_a
+        dicho = c.get("avisado_ahora") or {}
+        for did, f, antes in _cua_aviso_celdas(c):
+            if not (hoy <= f <= hasta):
+                continue
+            k = f"{did}|{f}"
+            if f > h:
+                if en_a:
+                    base_a.setdefault(k, _cua_aviso_etiqueta(antes))
+            elif en_b and k in dicho:
+                cuando = str(c.get("avisado_en") or "")
+                if k not in base_b or cuando > base_b[k][0]:
+                    base_b[k] = (cuando, str(dicho[k]))
+    claves = set(base_a) | set(base_b)
+    if not claves:
+        return [], hasta
+    pares = {tuple(k.split("|", 1)) for k in claves}
+    ahora = await _cua_turnos_de(pares)
+    ids = sorted({p[0] for p in pares})
+    fichas = {d["id"]: d for d in await db.drivers.find(
+        {"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1, "active": 1, "merged_into": 1}).to_list(5000)}
+    por: dict = {}
+    for did, f in sorted(pares, key=lambda p: (p[0], p[1])):
+        ficha = fichas.get(did)
+        # Fichas de baja, fusionadas o que no existen: no se avisa a nadie que ya no está.
+        if not ficha or ficha.get("active") is False or ficha.get("merged_into"):
+            continue
+        doc = ahora.get((did, f))
+        # Un día concedido o de una suspensión tiene su propio camino (y su aviso, o su conversación): aquí no.
+        if doc and (doc.get("aprobado_req") or doc.get("suspension_id")):
+            continue
+        k = f"{did}|{f}"
+        antes = base_b[k][1] if k in base_b else base_a[k]
+        nuevo = _cua_aviso_etiqueta(doc)
+        if nuevo == antes:
+            continue
+        por.setdefault(did, {"driver_id": did, "nombre": ficha.get("name") or did, "dias": []})["dias"].append(
+            {"fecha": f, "antes": antes, "ahora": nuevo, "texto": f"{_refuerzo_dia(f)}: {nuevo}"})
+    personas = sorted(por.values(), key=lambda p: _clave_nombre(p["nombre"]))
+    return personas, hasta
+
+
+def _cua_aviso_texto(dias: list) -> str:
+    """«sábado 15/11: libras · lunes 17/11: trabajas · y 2 más»."""
+    textos = [d["texto"] for d in dias]
+    return " · ".join(textos[:6]) + (f" · y {len(textos) - 6} más" if len(textos) > 6 else "")
+
+
+@api_router.post("/cuadrante/avisos/previa")
+async def cuadrante_avisos_previa(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """A quién se avisaría y de qué (no manda nada). body: {center}."""
+    center = _cua_centro(data.get("center"))
+    _cua_acceso(user, center)
+    _hoy, hasta = _cua_aviso_ventana()
+    registros = await _cua_avisos_registros(center, hasta)
+    personas, hasta = await _cua_avisos_calcular(registros)
+    return {"personas": personas, "cambios": [c.get("id") for c in registros], "hasta": hasta}
+
+
+@api_router.post("/cuadrante/avisos/enviar")
+async def cuadrante_avisos_enviar(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Manda UN aviso por persona con sus días cambiados. body: {center, driver_ids?}. Lo vuelve a calcular aquí (no se
+    fía de lo que enseñó la pantalla); sin `driver_ids`, a todos los de la previa. Los desmarcados no se avisan y sus
+    cambios quedan como vistos, igual que los que no tenían nada que avisar."""
+    center = _cua_centro(data.get("center"))
+    _cua_acceso(user, center)
+    solo = None
+    if data.get("driver_ids") is not None:
+        solo = {str(x) for x in _lista_cuerpo(data.get("driver_ids"), 500) if x}
+    _hoy, hasta = _cua_aviso_ventana()
+    registros = await _cua_avisos_registros(center, hasta)
+    if not registros:
+        return {"avisados": 0, "personas": []}
+    ahora_iso = datetime.now(timezone.utc).isoformat()
+    lote = str(uuid.uuid4())
+    por_quien = user.get("name") or ""
+    ids_a = [c["id"] for c in registros if c.get("id") and str(c.get("avisado_hasta") or "") < hasta]
+    ids_b = [c["id"] for c in registros if c.get("id") and _cua_aviso_pendiente_b(c)]
+    # Se «cogen» primero, con la condición de que nadie los haya cogido ya: si otra persona pulsa a la vez, sus
+    # registros ya no cumplen la condición y no se avisa dos veces.
+    if ids_a:
+        await db[_CUA_CAMBIOS].update_many(
+            {"id": {"$in": ids_a}, "center": center,
+             "$or": [{"avisado_hasta": {"$exists": False}}, {"avisado_hasta": None}, {"avisado_hasta": {"$lt": hasta}}]},
+            {"$set": {"avisado_hasta": hasta, "avisado_en": ahora_iso, "avisado_por": por_quien, "avisado_lote": lote}})
+    if ids_b:
+        await db[_CUA_CAMBIOS].update_many(
+            {"id": {"$in": ids_b}, "center": center, "avisado_deshecho_en": {"$exists": False}},
+            {"$set": {"avisado_deshecho_en": ahora_iso, "avisado_lote_b": lote}})
+    mios_a = {c["id"] for c in await db[_CUA_CAMBIOS].find({"center": center, "avisado_lote": lote},
+                                                          {"_id": 0, "id": 1}).to_list(200)}
+    mios_b = {c["id"] for c in await db[_CUA_CAMBIOS].find({"center": center, "avisado_lote_b": lote},
+                                                          {"_id": 0, "id": 1}).to_list(200)}
+    # La cuenta, con los registros como estaban antes de cogerlos (hasta dónde se había avisado cada uno).
+    registros = [c for c in registros if c.get("id") in mios_a or c.get("id") in mios_b]
+    personas, hasta = await _cua_avisos_calcular(registros, usar_a=mios_a, usar_b=mios_b)
+    # Lo que se le dice a cada uno queda en su registro: si luego se deshace, se sabe que hay que avisar otra vez.
+    dicho: dict = {}
+    hoy = _dia_negocio()
+    pares = {(did, f) for c in registros if c.get("id") in mios_a and not c.get("deshecho")
+             for did, f, _a in _cua_aviso_celdas(c) if hoy <= f <= hasta}
+    actuales = await _cua_turnos_de(pares)
+    for c in registros:
+        if c.get("id") not in mios_a or c.get("deshecho"):
+            continue
+        # (Un id con «.» o «$» no puede ser nombre de campo: ese no se guarda y, si se deshace, no se reavisa.)
+        campos = {f"avisado_ahora.{did}|{f}": _cua_aviso_etiqueta(actuales.get((did, f)))
+                  for did, f, _a in _cua_aviso_celdas(c) if hoy <= f <= hasta and not re.search(r"[.$]", did + f)}
+        if campos:
+            dicho[c["id"]] = campos
+    for cid, campos in dicho.items():
+        await db[_CUA_CAMBIOS].update_one({"id": cid}, {"$set": campos})
+    enviar = [p for p in personas if solo is None or p["driver_id"] in solo]
+    avisados = 0
+    for p in enviar:
+        try:
+            avisados += await _avisar_usuarios([p["driver_id"]], "Cambios en tu cuadrante", _cua_aviso_texto(p["dias"]),
+                                               "/conductor")
+        except Exception as e:                                       # noqa: BLE001
+            logger.warning("Aviso de cambios del cuadrante a %s: %s", p["driver_id"], e)
+    await _audit(user, "cuadrante_avisar", {"center": center, "avisados": avisados,
+                                            "sin_avisar": len(personas) - len(enviar)})
+    return {"avisados": avisados, "personas": enviar}
 
 
 # ── EL CHAT DEL CUADRANTE ────────────────────────────────────────────────────

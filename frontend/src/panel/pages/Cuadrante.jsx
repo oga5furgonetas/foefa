@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { Link, useOutletContext } from 'react-router-dom'
 import {
   Loader2, ChevronLeft, ChevronRight, Sparkles, MessageSquare, Undo2, Download, Upload,
   Lock, StickyNote, X, Check, AlertTriangle, Users, SlidersHorizontal, Gift, Eraser, Plus,
-  Brush, CalendarRange, Unlock, Sheet, RefreshCw, Search,
+  Brush, CalendarRange, Unlock, Sheet, RefreshCw, Search, Bell,
 } from 'lucide-react'
 import {
   getCuadrante, cuadranteCeldas, cuadranteMaximas, cuadranteConfig, cuadrantePersona,
   cuadrantePersonaNueva, cuadranteFichas, cuadranteNota, cuadranteAjuste, cuadranteAjusteBorrar,
   cuadranteProponer, cuadranteAceptar, cuadranteDescartar, cuadranteDeshacer, cuadranteEstudio,
-  cuadranteExportar, cuadranteImportar, getSyncHoja,
+  cuadranteExportar, cuadranteImportar, getSyncHoja, cuadranteAvisosPrevia, cuadranteAvisosEnviar,
 } from '../api'
 import { lista } from '../../lib/lista'
 import { hoyLocal } from '../../lib/fecha'
@@ -100,6 +100,36 @@ function nombresCortos(personas) {
   return Object.fromEntries(personas.map((p) => [p.id, fs[p.id][nivel[p.id]]]))
 }
 
+/* LAS PETICIONES SIN CONTESTAR (11-11-2026, cuadrante-1). El servidor las manda en `pendientes` ({"did|fecha": {id,
+   tipo, grupo}}); uno viejo, o el simulado, no las manda y todo sale como antes. Solo se ENSEÑAN: el motor no las mira
+   (eso se le pregunta a Dani). Los días seguidos de una persona van juntos: «16-17/11». */
+const enlaceDiasLibres = (center) => `/panel/turnos?centro=${encodeURIComponent(center)}`
+function tramosDeFechas(fechas) {
+  const out = []
+  let ini = null
+  let fin = null
+  for (const f of [...fechas].sort()) {
+    if (fin && sumaDias(fin, 1) === f) { fin = f; continue }
+    if (ini) out.push([ini, fin])
+    ini = f; fin = f
+  }
+  if (ini) out.push([ini, fin])
+  return out.map(([a, b]) => (a === b ? fmt(a) : `${a.slice(5, 7) === b.slice(5, 7) ? a.slice(8, 10) : fmt(a)}-${fmt(b)}`))
+}
+/* «Ana 15/11, Luis 16-17/11» de una lista de claves «did|fecha», con los nombres del cuadrante. */
+function quienesYCuando(claves, personas) {
+  const nombre = Object.fromEntries(lista(personas).map((p) => [p.id, p.nombre]))
+  const por = {}
+  for (const k of claves) {
+    const [did, f] = k.split('|')
+    if (!por[did]) por[did] = []
+    por[did].push(f)
+  }
+  return Object.entries(por)
+    .sort(([a], [b]) => String(nombre[a] || a).localeCompare(String(nombre[b] || b)))
+    .map(([did, fs]) => `${nombre[did] || did} ${tramosDeFechas(fs).join(' · ')}`)
+}
+
 function Modal({ titulo, onCerrar, children, ancho = 'max-w-2xl' }) {
   useEffect(() => {
     const esc = (e) => { if (e.key === 'Escape') onCerrar() }
@@ -122,6 +152,94 @@ function Modal({ titulo, onCerrar, children, ancho = 'max-w-2xl' }) {
         {children}
       </div>
     </div>
+  )
+}
+
+/* ── AVISAR A LOS CONDUCTORES (11-11-2026, cuadrante-8) ──────────────────────
+   Al cambiar el cuadrante al conductor no le llegaba nada. Un botón, nunca solo: primero se ve a quién y qué (de hoy a
+   14 días, solo lo que de verdad cambia para él), se desmarca a quien no se quiera avisar, y se manda UN aviso por
+   persona a su app. El servidor lo vuelve a calcular al mandar: no se fía de esta lista. */
+function AvisarConductores({ center, onCerrar, onHecho }) {
+  const [previa, setPrevia] = useState(null)
+  const [err, setErr] = useState('')
+  const [marcados, setMarcados] = useState(() => new Set())
+  const [enviando, setEnviando] = useState(false)
+  useEffect(() => {
+    let vivo = true
+    cuadranteAvisosPrevia(center)
+      .then(({ data }) => {
+        if (!vivo) return
+        const personas = lista(data?.personas).filter((p) => p?.driver_id)
+        setPrevia({ hasta: data?.hasta || '', personas })
+        setMarcados(new Set(personas.map((p) => p.driver_id)))
+      })
+      .catch((e) => {
+        if (!vivo) return
+        setErr([404, 405].includes(e?.response?.status) ? 'El servidor todavía no tiene esta función: prueba un poco más tarde.'
+          : e?.response?.data?.detail || 'No se ha podido preparar la lista.')
+      })
+    return () => { vivo = false }
+  }, [center])
+  const cambiar = (did) => setMarcados((s) => { const n = new Set(s); if (n.has(did)) n.delete(did); else n.add(did); return n })
+  const enviar = async () => {
+    setEnviando(true); setErr('')
+    try {
+      const { data } = await cuadranteAvisosEnviar(center, [...marcados])
+      onHecho(data)
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se han podido mandar los avisos.')
+      setEnviando(false)
+    }
+  }
+  const personas = previa?.personas || []
+  return (
+    <Modal titulo="Avisar a los conductores" onCerrar={onCerrar}>
+      <div className="space-y-3 text-[13px] text-dark-300" data-testid="avisar-previa">
+        {err && <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-red-300">{err}</p>}
+        {!previa && !err && (
+          <p className="flex items-center gap-2 text-dark-500"><Loader2 size={14} className="animate-spin" /> Mirando qué ha cambiado…</p>
+        )}
+        {previa && personas.length === 0 && (
+          <p className="text-dark-300">Nadie tiene cambios sin avisar de hoy a 14 días.</p>
+        )}
+        {personas.length > 0 && (
+          <>
+            <p>Tienen cambios sin avisar de hoy al {fmt(previa.hasta)}. A cada uno le llega un aviso a su app con sus días:</p>
+            <ul className="max-h-[50vh] space-y-1.5 overflow-y-auto">
+              {personas.map((p) => (
+                <li key={p.driver_id}>
+                  <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-dark-700 px-3 py-2 hover:bg-dark-800/60">
+                    <input type="checkbox" className="mt-0.5" checked={marcados.has(p.driver_id)} onChange={() => cambiar(p.driver_id)}
+                      aria-label={`Avisar a ${p.nombre}`} />
+                    <span className="min-w-0">
+                      <span className="block font-semibold text-dark-100">{p.nombre}</span>
+                      <span className="block text-[12px] text-dark-400">
+                        {lista(p.dias).map((d) => `${DIA[wd(d.fecha)].slice(0, 3)} ${fmt(d.fecha)}: ${d.ahora}`).join(' · ')}
+                      </span>
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[11.5px] text-dark-500">
+              A quien desmarques no se le avisa, y esos cambios no vuelven a salir aquí.
+            </p>
+          </>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {personas.length > 0 && (
+            <button onClick={enviar} disabled={enviando || marcados.size === 0}
+              className="btn-primary flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-40">
+              {enviando ? <Loader2 size={15} className="animate-spin" /> : <Bell size={15} />}
+              {marcados.size === 1 ? 'Avisar a 1' : `Avisar a ${marcados.size}`}
+            </button>
+          )}
+          <button onClick={onCerrar} className="rounded-lg border border-dark-700 px-3 py-2 text-sm text-dark-300 hover:bg-dark-800">
+            {personas.length > 0 ? 'Cancelar' : 'Cerrar'}
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -184,6 +302,9 @@ function Asistente({ center, datos, onCerrar, onHecho }) {
 
   const seVan = lista(info?.personas).filter((p) => p.inactivo_desde && p.inactivo_desde >= desde && p.inactivo_desde <= hasta)
   const entran = lista(info?.personas).filter((p) => p.alta_desde && p.alta_desde >= desde && p.alta_desde <= hasta)
+  // Las peticiones sin contestar de estas fechas (11-11-2026, cuadrante-1): el motor no las mira, así que se dicen.
+  const sinContestar = Object.keys(info?.pendientes && typeof info.pendientes === 'object' ? info.pendientes : {})
+    .filter((k) => { const f = k.split('|')[1]; return f >= desde && f <= hasta })
 
   const rellenarComoAntes = () => setMaximas((m) => {
     const n = { ...m }
@@ -309,6 +430,15 @@ function Asistente({ center, datos, onCerrar, onHecho }) {
               )}
               {entran.length > 0 && (
                 <p className="text-xs text-dark-400">Entran: {entran.map((p) => `${p.nombre} (${fmt(p.alta_desde)})`).join(' · ')}</p>
+              )}
+              {sinContestar.length > 0 && (
+                <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-200" data-testid="asistente-pendientes">
+                  Peticiones sin contestar en estas fechas: {sinContestar.length} {sinContestar.length === 1 ? 'día' : 'días'} de
+                  {' '}{new Set(sinContestar.map((k) => k.split('|')[0])).size}{' '}
+                  {new Set(sinContestar.map((k) => k.split('|')[0])).size === 1 ? 'persona' : 'personas'}
+                  {' '}({quienesYCuando(sinContestar, info?.personas).join(', ')}). El motor no las tiene en cuenta.{' '}
+                  <Link to={enlaceDiasLibres(center)} className="font-semibold text-amber-100 underline">Ver en Días libres</Link>
+                </p>
               )}
               <p className="text-[11.5px] text-dark-500">
                 ¿Alguien más de baja, que se va o que entra? Díselo al asistente o cámbialo en «Personas y notas».
@@ -844,6 +974,8 @@ export default function Cuadrante() {
   const [persona, setPersona] = useState(null)
   const [nueva, setNueva] = useState(false)
   const [importar, setImportar] = useState(false)
+  const [avisar, setAvisar] = useState(false)               // la ventana de «Avisar a los conductores»
+  const [trasAceptar, setTrasAceptar] = useState('')        // el aviso verde de aceptar (su texto) lleva el mismo botón
   const [hojaAbierta, setHojaAbierta] = useState(false)
   const [sheets, setSheets] = useState(false)
   // Si hay un borrador en la sincronización con la hoja, el botón lo dice (31-10-2026): lo que se cambia en esas
@@ -907,6 +1039,12 @@ export default function Cuadrante() {
     for (const c of lista(propuesta?.cambios)) m[`${c.driver_id}|${c.fecha}`] = c
     return m
   }, [propuesta])
+  // Las peticiones sin contestar (11-11-2026, cuadrante-1); sin la clave (servidor viejo), ninguna.
+  const pendientes = useMemo(() => (datos?.pendientes && typeof datos.pendientes === 'object' ? datos.pendientes : {}), [datos])
+  // Lo que la propuesta pone a trabajar justo el día que alguien ha pedido librar y aún no se le ha contestado.
+  const propuestaPisaPendientes = useMemo(() => Object.entries(cambiosProp)
+    .filter(([k, c]) => pendientes[k]?.tipo === 'libre' && TRABAJO.has(c.valor)).map(([k]) => k).sort(),
+  [cambiosProp, pendientes])
 
   const celda = useCallback((did, f) => {
     const k = `${did}|${f}`
@@ -1023,8 +1161,10 @@ export default function Cuadrante() {
     try {
       const r = await cuadranteAceptar(propuesta.id)
       const n = r.data?.n_saltadas || 0
-      setAviso(`Propuesta aplicada: ${r.data?.aplicadas ?? 0} celdas.` +
-        (n ? ` ${n} no se han tocado porque alguien las cambió mientras tanto.` : ''))
+      const texto = `Propuesta aplicada: ${r.data?.aplicadas ?? 0} celdas.` +
+        (n ? ` ${n} no se han tocado porque alguien las cambió mientras tanto.` : '')
+      setAviso(texto)
+      setTrasAceptar(texto)
       await cargar()
     } catch (e) { setErr(e?.response?.data?.detail || 'No se ha podido aplicar.') } finally { setOcupado('') }
   }
@@ -1119,12 +1259,21 @@ export default function Cuadrante() {
               <Icono size={14} /> {t}
             </button>
           ))}
-        {datos?.ultimo_cambio && (
-          <button onClick={deshacer} disabled={ocupado === 'deshacer'} title={`Deshacer «${datos.ultimo_cambio.que}»`}
-            className="ml-auto flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1.5 text-xs text-dark-300 hover:bg-dark-800 disabled:opacity-40">
-            {ocupado === 'deshacer' ? <Loader2 size={13} className="animate-spin" /> : <Undo2 size={13} />} Deshacer último cambio
-          </button>
-        )}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {datos?.ultimo_cambio && (
+            <button onClick={deshacer} disabled={ocupado === 'deshacer'} title={`Deshacer «${datos.ultimo_cambio.que}»`}
+              className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1.5 text-xs text-dark-300 hover:bg-dark-800 disabled:opacity-40">
+              {ocupado === 'deshacer' ? <Loader2 size={13} className="animate-spin" /> : <Undo2 size={13} />} Deshacer último cambio
+            </button>
+          )}
+          {/* Nunca solo: abre la lista de a quién y qué, y se manda al pulsar (11-11-2026, cuadrante-8). */}
+          {datos && (
+            <button onClick={() => setAvisar(true)} title="Manda a cada conductor sus días cambiados de hoy a 14 días. Antes ves la lista."
+              className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1.5 text-xs text-dark-300 hover:bg-dark-800">
+              <Bell size={13} /> Avisar a los conductores
+            </button>
+          )}
+        </div>
       </div>
 
       {err && (
@@ -1135,7 +1284,17 @@ export default function Cuadrante() {
       )}
       {aviso && (
         <p className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[13px] text-emerald-300">
-          <Check size={15} className="mt-0.5 shrink-0" /> {aviso}
+          <Check size={15} className="mt-0.5 shrink-0" /> <span>{aviso}
+            {trasAceptar === aviso && (
+              <>
+                {' '}
+                <button onClick={() => setAvisar(true)} data-testid="avisar-tras-aceptar"
+                  className="inline-flex items-center gap-1 font-semibold text-emerald-200 underline hover:text-emerald-100">
+                  <Bell size={12} /> Avisar a los conductores
+                </button>
+              </>
+            )}
+          </span>
           <button onClick={() => setAviso('')} aria-label="Cerrar aviso" className="ml-auto"><X size={14} /></button>
         </p>
       )}
@@ -1176,6 +1335,16 @@ export default function Cuadrante() {
                       </span>
                     ))}
                   </div>
+                  {propuestaPisaPendientes.length > 0 && (
+                    <p className="flex items-start gap-1.5 text-xs text-amber-300" data-testid="propuesta-pendientes">
+                      <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                      <span>
+                        La propuesta pone a trabajar {propuestaPisaPendientes.length === 1 ? 'un día' : `${propuestaPisaPendientes.length} días`} que
+                        {' '}alguien ha pedido librar (sin contestar): {quienesYCuando(propuestaPisaPendientes, personas).join(', ')}.{' '}
+                        <Link to={enlaceDiasLibres(center)} className="font-semibold underline">Ver en Días libres</Link>
+                      </span>
+                    </p>
+                  )}
                   {propuesta.faltan_conductores > 0 && (
                     <p className="text-xs text-amber-300">
                       Para no depender de días extra harían falta {propuesta.faltan_conductores === 1
@@ -1346,6 +1515,7 @@ export default function Cuadrante() {
                             const c = celda(p.id, f)
                             const cod = c?.cod || ''
                             const septimo = septimos.has(k)
+                            const pend = pendientes[k]
                             return (
                               <td key={f} className={`px-[1px] py-[1px] text-center ${
                                 wd(f) === 6 ? COLUMNA_DOMINGO : f === hoy ? 'bg-amber-400/[0.06]' : ''} ${
@@ -1354,7 +1524,8 @@ export default function Cuadrante() {
                                   style={{ scrollMarginRight: '5rem' }}
                                   title={`${p.nombre} · ${DIA[wd(f)]} ${fmt(f)} · ${cod || 'sin poner'}${c?.hora ? ` (${c.hora})` : ''}${
                                     c?.extra ? ' · DÍA EXTRA' : ''}${c?.fijada ? ' · fijada a mano' : ''}${c?.otro_centro ? ` · en ${c.otro_centro}` : ''}${
-                                    c?.propuesta ? ` · antes: ${c.antes || 'vacío'}` : ''}${septimo ? ' · 7º DÍA SEGUIDO' : ''}`}
+                                    c?.propuesta ? ` · antes: ${c.antes || 'vacío'}` : ''}${septimo ? ' · 7º DÍA SEGUIDO' : ''}${
+                                    pend ? (pend.tipo === 'extra' ? ' · pidió día extra (sin contestar)' : ' · pidió librar (sin contestar)') : ''}`}
                                   className={`relative h-6 w-8 sm:w-9 rounded-[3px] text-[10px] font-bold leading-none ${cod
                                     ? claseCodigo(cod, c?.extra, wd(f) === 6)
                                     : `border border-dashed text-dark-500 ${wd(f) === 6 ? 'border-orange-500/40' : 'border-dark-800'}`} ${
@@ -1362,6 +1533,9 @@ export default function Cuadrante() {
                                     septimo ? 'outline outline-2 outline-red-500' : ''}`}>
                                   {cod ? (ABREV[cod] || cod) : '·'}
                                   {c?.fijada && <Lock size={7} className="absolute right-[1px] top-[1px] opacity-70" />}
+                                  {/* Petición sin contestar: un punto ámbar arriba a la izquierda (el candado va a la derecha). */}
+                                  {pend && <span aria-hidden="true" data-testid="punto-pendiente"
+                                    className="absolute left-[1px] top-[1px] h-[5px] w-[5px] rounded-full bg-amber-500 ring-1 ring-black/40" />}
                                 </button>
                               </td>
                             )
@@ -1446,6 +1620,9 @@ export default function Cuadrante() {
                 <span className="flex items-center gap-1.5"><Lock size={11} /> Fijada a mano</span>
                 <span className="flex items-center gap-1.5"><i className="inline-block h-3 w-5 rounded-sm outline outline-2 outline-violet-400" /> Cambio propuesto</span>
                 <span className="flex items-center gap-1.5"><i className="inline-block h-3 w-5 rounded-sm outline outline-2 outline-red-500" /> 7º día seguido</span>
+                {Object.keys(pendientes).length > 0 && (
+                  <span className="flex items-center gap-1.5"><i className="inline-block h-[5px] w-[5px] rounded-full bg-amber-500" /> Pidió el día y aún no se le ha contestado</span>
+                )}
               </div>
             </>
           )}
@@ -1528,6 +1705,15 @@ export default function Cuadrante() {
         <div className="fixed inset-0 z-50" onMouseDown={() => setMenu(null)}>
           <div className="absolute w-60 space-y-2 rounded-xl border border-dark-700 bg-dark-900 p-2.5 shadow-xl shadow-black/30" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
             <p className="truncate text-[11.5px] text-dark-400">{menu.p.nombre} · {DIA[wd(menu.f)]} {fmt(menu.f)}</p>
+            {/* En el móvil no hay title: lo de la petición sin contestar, dicho aquí (11-11-2026, cuadrante-1). */}
+            {pendientes[`${menu.p.id}|${menu.f}`] && (
+              <p className="text-[11.5px] leading-snug text-amber-300" data-testid="menu-pendiente">
+                {pendientes[`${menu.p.id}|${menu.f}`].tipo === 'extra'
+                  ? 'Pidió trabajar este día de más y aún no se le ha contestado.'
+                  : 'Pidió librar este día y aún no se le ha contestado.'}{' '}
+                <Link to={enlaceDiasLibres(center)} className="font-semibold text-amber-200 underline">Ver en Días libres</Link>
+              </p>
+            )}
             {/* Día concedido con candado (Dani: «que si lo apruebo aparezca en el
                 cuadrante y bloqueado, aunque yo lo pueda desbloquear»). */}
             {menu.c?.aprobado && menu.c?.fijada ? (
@@ -1640,6 +1826,16 @@ export default function Cuadrante() {
       {hojaAbierta && (
         <HojaCuadrante center={center} desde={rango.desde} hasta={rango.hasta}
           onCerrar={() => { setHojaAbierta(false); cargar(true) }} />
+      )}
+
+      {avisar && (
+        <AvisarConductores center={center} onCerrar={() => setAvisar(false)}
+          onHecho={(r) => {
+            setAvisar(false)
+            const n = r?.avisados ?? 0
+            setAviso(n === 0 ? 'No se ha avisado a nadie: no había cambios por avisar.'
+              : `Avisado${n === 1 ? '' : 's'} ${n === 1 ? '1 conductor' : `${n} conductores`}: ${lista(r?.personas).map((p) => p.nombre).join(', ')}.`)
+          }} />
       )}
 
       {sheets && (
