@@ -191,7 +191,16 @@ const TONO_DATO = {
   neutro: 'border-dark-700 text-dark-300',
 }
 
+/* La DNR llega con unos dos días de retraso: hasta 4 días sin subir es lo normal; más, se pinta en ámbar (11-11-2026,
+   revisión: la de hace una semana salía en gris, igual que la de antes de ayer). El umbral lo puede afinar Dani. */
+const DNR_DIAS_NORMAL = 4
+const diasEntre = (desde, hasta) => Math.round((Date.parse(hasta) - Date.parse(desde)) / 86400000)
+
 function ComoVaCadaCentro({ centers, datos, porCentro, hoyIso, puede, ir, t }) {
+  /* En el móvil, cada centro va plegado en una línea con su resumen y sus datos se abren al tocarla (11-11-2026,
+     revisión): abiertos, con una pastilla de 44 px por dato, dos centros ocupaban una pantalla entera y «El día de
+     hoy» quedaba muy abajo. En el ordenador (sm: en adelante) se ven siempre, como antes. */
+  const [abiertos, setAbiertos] = useState({})
   const filas = centers.map((c) => ({
     c,
     d: (datos || []).find((x) => casarCentro(x.centro, [c]) === c) || null,
@@ -226,7 +235,7 @@ function ComoVaCadaCentro({ centers, datos, porCentro, hoyIso, puede, ir, t }) {
             d && puede('/panel/diarios') && {
               to: '/panel/diarios',
               texto: `${t('nav.dnr')}: ${d.dnr_ultimo ? t('centros.hoy.ultimo').replace('{f}', ddmm(d.dnr_ultimo)) : t('centros.hoy.nada')}`,
-              tono: d.dnr_ultimo ? 'neutro' : 'falta',
+              tono: d.dnr_ultimo && diasEntre(d.dnr_ultimo, hoyIso) <= DNR_DIAS_NORMAL ? 'neutro' : 'falta',
             },
             d && puede('/panel/cuadrante') && {
               to: '/panel/cuadrante',
@@ -239,16 +248,28 @@ function ComoVaCadaCentro({ centers, datos, porCentro, hoyIso, puede, ir, t }) {
               tono: viejo(d.maximas_hasta) ? 'falta' : 'ok',
             },
           ].filter(Boolean)
+          const porMirar = datosC.filter((x) => x.tono === 'falta').length
+          const abierto = !!abiertos[c]
           return (
             <div key={c} className="rounded-xl border border-dark-800 bg-dark-900/40 p-3" data-centro={c}>
-              <button type="button" onClick={() => ir(c, '/panel')} aria-label={t('centros.hoy.entrar').replace('{c}', c)}
-                className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-lg px-1 text-left font-mono text-[15px] font-bold tracking-wide text-dark-50 hover:bg-white/[0.03]">
-                {c} <ChevronRight size={16} className="shrink-0 text-dark-500" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => ir(c, '/panel')} aria-label={t('centros.hoy.entrar').replace('{c}', c)}
+                  className="flex min-h-[44px] w-full min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-1 text-left font-mono text-[15px] font-bold tracking-wide text-dark-50 hover:bg-white/[0.03]">
+                  {c} <ChevronRight size={16} className="shrink-0 text-dark-500" />
+                </button>
+                {/* Solo en el móvil: el resumen de la fila, que abre y cierra sus datos. */}
+                {datosC.length > 0 && (
+                  <button type="button" aria-expanded={abierto} onClick={() => setAbiertos((a) => ({ ...a, [c]: !a[c] }))}
+                    className={`flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[12.5px] font-medium sm:hidden ${TONO_DATO[porMirar ? 'falta' : 'ok']}`}>
+                    {porMirar ? t('centros.hoy.por.mirar').replace('{n}', porMirar) : t('centros.hoy.al.dia')}
+                    <ChevronDown size={14} aria-hidden="true" className={`transition-transform ${abierto ? 'rotate-180' : ''}`} />
+                  </button>
+                )}
+              </div>
               {datosC.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
+                <div className={`mt-2 ${abierto ? 'grid' : 'hidden'} grid-cols-2 gap-2 sm:flex sm:flex-wrap`}>
                   {datosC.map((x, i) => (
-                    <button key={i} type="button" onClick={() => ir(c, x.to)}
+                    <button key={i} type="button" onClick={() => ir(c, x.to)} data-tono={x.tono}
                       className={`min-h-[44px] rounded-lg border px-3 py-1.5 text-left text-[12.5px] font-medium leading-snug transition-colors hover:bg-white/[0.04] ${TONO_DATO[x.tono]}`}>
                       {x.texto}
                     </button>
@@ -368,12 +389,17 @@ function DashboardFlota() {
   }, [center])
 
   // Cómo va cada centro: solo con «Todos». Si falla (un servidor de antes), el bloque sale solo con las salidas.
+  /* Se vuelve a pedir cada minuto, al mismo ritmo que /stats/hoy (11-11-2026, revisión): pedido una sola vez, si María
+     guardaba la plantilla de OGA5 a las 7:20, el Inicio de Dani seguía diciendo «sin guardar hoy» hasta recargar (y
+     de un día para otro, igual). Si una vez falla, se queda lo último bueno: un fallo suelto no borra lo que se sabía. */
   const [centrosHoy, setCentrosHoy] = useState(null)
   useEffect(() => {
     if (!todos) { setCentrosHoy(null); return undefined }
     let stop = false
-    getCentrosHoy().then((r) => { if (!stop) setCentrosHoy(r.data || null) }).catch(() => { if (!stop) setCentrosHoy(null) })
-    return () => { stop = true }
+    const cargar = () => getCentrosHoy().then((r) => { if (!stop && r.data) setCentrosHoy(r.data) }).catch(() => {})
+    cargar()
+    const iv = setInterval(cargar, 60000)
+    return () => { stop = true; clearInterval(iv) }
   }, [todos])
 
   useEffect(() => {

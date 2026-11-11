@@ -146,7 +146,7 @@ function Tarjeta({ t }) {
   )
 }
 
-export default function AsistenteBurbuja({ center, centers, setCenter, escondida = false, soloOrdenador = false }) {
+export default function AsistenteBurbuja({ center, centers, setCenter, escondida = false, sobreEscribir = false }) {
   // Quien habla se ve de un vistazo: el logo cuando contesta la IA y la foto
   // de perfil cuando escribe la persona. Sin foto, sus iniciales.
   const yo = getAdmin()
@@ -262,12 +262,13 @@ export default function AsistenteBurbuja({ center, centers, setCenter, escondida
 
   return (
     // En el móvil, por ENCIMA de la barra de abajo (52 px + la zona segura): antes tapaba «Menú» (Dani, 17-10-2026).
-    // `soloOrdenador`: en el móvil no sale (el Chat, donde tapaba el botón de enviar; allí la IA ya está con @flota).
-    <div className={`fixed bottom-[calc(env(safe-area-inset-bottom,0px)_+_4.25rem)] right-4 z-[95] flex-col items-end md:bottom-4 ${
-      escondida ? 'hidden' : soloOrdenador ? 'hidden md:flex' : 'flex'}`}>
+    // `sobreEscribir` (el Chat, 11-11-2026): en el móvil tapaba el botón de enviar; allí va más arriba, por encima de la
+    // caja de escribir, y su ventana es igual de más baja para no salirse por arriba. En el ordenador, donde siempre.
+    <div className={`fixed ${sobreEscribir ? 'bottom-[calc(env(safe-area-inset-bottom,0px)_+_8.5rem)]' : 'bottom-[calc(env(safe-area-inset-bottom,0px)_+_4.25rem)]'} right-4 z-[95] flex-col items-end md:bottom-4 ${
+      escondida ? 'hidden' : 'flex'}`}>
       {abierto && (
         <div onPaste={pegarImagenes}
-          className="mb-3 flex h-[32rem] max-h-[calc(100dvh-9rem)] w-[23rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-dark-700 bg-dark-950 shadow-2xl">
+          className={`mb-3 flex h-[32rem] ${sobreEscribir ? 'max-h-[calc(100dvh-13.25rem)] md:max-h-[calc(100dvh-9rem)]' : 'max-h-[calc(100dvh-9rem)]'} w-[23rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-dark-700 bg-dark-950 shadow-2xl`}>
           <div className="flex items-center justify-between border-b border-dark-800 bg-dark-900/80 px-3.5 py-3">
             <div className="flex items-center gap-2">
               <Sparkles size={16} className="text-brand-400" />

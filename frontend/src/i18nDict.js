@@ -596,7 +596,6 @@ export const DICT = {
 
   // ── Chat (ampliado) ────────────────────────────────────────────────────────
   'chat.in.checklist':     { es: 'en checklist',       en: 'in checklist',         fr: 'dans checklist',         de: 'in Checkliste',         it: 'nella checklist',       pt: 'na checklist' },
-  'chat.center.hint':      { es: 'Elige un centro arriba para abrir su chat.', en: 'Pick a centre above to open its chat.', fr: 'Choisissez un centre ci-dessus pour ouvrir son chat.', de: 'Wähle oben ein Zentrum, um dessen Chat zu öffnen.', it: 'Scegli un centro sopra per aprire la sua chat.', pt: 'Escolhe um centro acima para abrir o chat.' },
   'chat.center.pick':      { es: 'Elige un centro para abrir su sala.', en: 'Pick a centre to open its room.', fr: 'Choisissez un centre pour ouvrir son salon.', de: 'Wähle ein Zentrum, um seinen Raum zu öffnen.', it: 'Scegli un centro per aprire la sua stanza.', pt: 'Escolhe um centro para abrir a sala.' },
   'chat.visibility':       { es: 'Solo lo ven los usuarios con acceso a {center}.', en: 'Only users with access to {center} can see this.', fr: 'Visible uniquement par les utilisateurs ayant accès à {center}.', de: 'Nur Benutzer mit Zugang zu {center} sehen dies.', it: 'Visibile solo agli utenti con accesso a {center}.', pt: 'Só os utilizadores com acesso a {center} podem ver isto.' },
 
@@ -1319,6 +1318,8 @@ export const DICT = {
   'centros.hoy.ultimo': { es: 'último día, el {f}', en: 'latest day {f}', fr: 'dernier jour le {f}', de: 'letzter Tag {f}', it: 'ultimo giorno il {f}', pt: 'último dia a {f}' },
   'centros.hoy.hasta': { es: 'hasta el {f}', en: 'until {f}', fr: "jusqu'au {f}", de: 'bis {f}', it: 'fino al {f}', pt: 'até {f}' },
   'centros.hoy.nada': { es: 'sin datos', en: 'no data', fr: 'aucune donnée', de: 'keine Daten', it: 'nessun dato', pt: 'sem dados' },
+  'centros.hoy.por.mirar': { es: '{n} por mirar', en: '{n} to check', fr: '{n} à voir', de: '{n} zu prüfen', it: '{n} da guardare', pt: '{n} por ver' },
+  'centros.hoy.al.dia': { es: 'Todo al día', en: 'All up to date', fr: 'Tout est à jour', de: 'Alles aktuell', it: 'Tutto in regola', pt: 'Tudo em dia' },
   'centros.hoy.maximas': { es: 'Máximas', en: 'Daily maximums', fr: 'Maximums', de: 'Höchstwerte', it: 'Massimi', pt: 'Máximos' },
   'hoy.salidas':       { es: 'salidas en el cuadrante', en: 'departures on the roster', fr: 'départs au planning', de: 'Einsätze im Dienstplan', it: 'uscite nel turno', pt: 'saídas na escala' },
   'hoy.sinrevisar.1': { es: 'sale sin revisar', en: 'going out uninspected', fr: 'sort sans inspection', de: 'fährt ungeprüft los', it: 'esce senza ispezione', pt: 'sai sem inspeção' },
