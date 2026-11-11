@@ -39973,6 +39973,335 @@ async def diarios_por_conductor(center: str, desde: str, hasta: str,
         "disponible": disponible,
     }
 
+# ── LAS DNR DEL PROPIO CONDUCTOR (11-11-2026) ────────────────────────────────
+# Dani: «que cuando yo suba los daily report y aparezcan las DNRs ellos puedan
+# ver la DNR que le cae a ellos». Son informes de Amazon sobre cada persona, asi
+# que aqui manda que NADIE vea lo de otro y que se enseñe lo minimo:
+#   · QUIEN (rehecho el 11-11-2026 tras la revision de seguridad). La ficha de la
+#     sesion y las que la oficina FUSIONO en ella (`merged_into`), nada mas. NO se
+#     suman las fichas del mismo correo: la oficina puede dar de alta a OTRA
+#     persona con el correo de una ficha de baja («es otra persona», nueva=true),
+#     y sumandolas cada una veia las DNR de la otra. Fusionar lo decide la
+#     oficina (y solo con el mismo correo); compartir buzon, no.
+#   · DE BAJA, NADA. El token del conductor vale 30 dias y la baja no lo revoca:
+#     con la ficha de baja (o fusionada en otra) esta ruta contesta 403.
+#   · LOS IDS se le casan EXACTAMENTE como en la pantalla de la oficina
+#     (diarios_por_conductor): el `transporter_id` de la ficha (si dos fichas lo
+#     comparten, la activa) y, si ninguna lo reclama ahi, el `driver_id`. Nunca
+#     por nombre. Que ese ID sea de verdad de esa persona lo decide la oficina al
+#     ponerlo, igual que en su pantalla: aqui NO hay otra barrera (el «no
+#     coincide» de abajo casi nunca puede saltar en FDS), y por eso la pantalla
+#     dice siempre «¿Alguna no es tuya? Díselo a la oficina».
+#   · QUE. El dia, el paquete, si cuenta y como fue la entrega (abajo). Ni la
+#     direccion (el informe no la trae), ni euros, ni el ID, ni nada de otros.
+#   · SIN PARAMETROS. La persona sale del token; no hay nada que cambiar en la
+#     peticion para pedir lo de otro.
+#   · DONDE. Solo en las empresas con el modulo de la DNR diaria («diarios»);
+#     en las demas contesta como una ruta que no existe.
+
+_DNR_SEMANAS_CONDUCTOR = 4
+# Topes (11-11-2026): ninguna consulta de esta ruta lee sin limite.
+_DNR_TOPE_FICHAS = 5000
+_DNR_TOPE_FILAS = 2000
+
+
+async def _dnr_mis_ids(mis_fichas: set) -> dict:
+    """{transporter_id: (id de la ficha, nombre)} de los IDs que la oficina casa con
+    estas fichas. Mismas consultas, mismo orden y mismas claves que
+    diarios_por_conductor: las de baja primero para que la activa las pise en
+    `transporter_id`; en `driver_id` solo entra lo que no reclamo nadie antes."""
+    mapa: dict = {}
+    async for d in db.drivers.find(
+            {"transporter_id": {"$nin": [None, ""]}},
+            {"_id": 0, "name": 1, "transporter_id": 1, "id": 1, "active": 1}
+    ).sort("active", 1).limit(_DNR_TOPE_FICHAS):
+        mapa[(d.get("transporter_id") or "").upper()] = (d.get("id"), d.get("name") or "")
+    async for d in db.drivers.find(
+            {"driver_id": {"$nin": [None, ""]}},
+            {"_id": 0, "name": 1, "driver_id": 1, "id": 1, "active": 1}
+    ).sort("active", 1).limit(_DNR_TOPE_FICHAS):
+        clave = str(d.get("driver_id") or "").strip().upper()
+        if clave and clave not in mapa:
+            mapa[clave] = (d.get("id"), d.get("name") or "")
+    return {tid: (fid, nombre) for tid, (fid, nombre) in mapa.items() if tid and fid and fid in mis_fichas}
+
+
+async def _dnr_mis_fichas(ficha_id: str) -> set:
+    """La ficha de la sesion y las que la oficina fusiono en ella (y en esas, por
+    si se fusiono dos veces). Nunca las del mismo correo sin fusionar: ver arriba."""
+    mias, frontera = {ficha_id}, [ficha_id]
+    for _ in range(5):
+        if not frontera:
+            break
+        nuevas = []
+        async for d in db.drivers.find({"merged_into": {"$in": frontera}}, {"_id": 0, "id": 1}).limit(200):
+            if d.get("id") and d["id"] not in mias:
+                mias.add(d["id"])
+                nuevas.append(d["id"])
+        frontera = nuevas
+    return mias
+
+
+# ── COMO FUE LA ENTREGA (11-11-2026) ─────────────────────────────────────────
+# Dani: «¿existiria alguna manera de ver direccion o asi? o entrega de paquete
+# tipo "marcaste puerta y no llamaste ni sacaste bien la foto"». Sale SOLO de lo
+# que el Daily Report ya trae y se guarda: la fila de la DNR (`dnr_rows`) y las
+# del MISMO paquete y el MISMO ID en `pod_rows` (la tabla de los fallos de foto)
+# y `cc_rows` (la de los fallos de contacto). La direccion no viene en el
+# informe: solo el codigo postal, y no se inventa nada mas.
+#
+# Cada dato va YA INTERPRETADO en una clave corta y estable, y SOLO si el valor
+# se entiende con seguridad; si no, null y la pantalla no lo dice (nunca se
+# adivina). Si el valor es un codigo corto que no se reconoce, va tal cual en
+# `sin_interpretar` (para poder mirarlo y ampliar la lista), y la pantalla
+# tampoco lo enseña. Lo que se sabe del vocabulario:
+#   · Delivery Scan: los DELIVERED_TO_* que FlotaDSP midio en produccion (la
+#     oficina los pinta quitando «DELIVERED_TO_»). Se aceptan con o sin el
+#     prefijo y en cualquier forma de escribirlos («Delivered to doorstep»).
+#   · Delivered ≥ 25m: es una pregunta de si o no; solo Y/Yes/True y N/No/False.
+#     Un «1» o un «0» NO (como con la DSC: no esta demostrado que sea si).
+#   · Llamada: los segundos de «Call duration (seconds)» de su fila de contacto;
+#     mas de cero es que hubo llamada y de cuanto. «No llamaste» solo si el tipo
+#     lo dice con todas las letras (NO_CALL…) y no hay segundos.
+#   · Foto: estar en la tabla de fallos de foto con su «POD audit» relleno es que
+#     la foto no paso la revision; el motivo, solo si es uno de los de la lista.
+#   · NO se interpretan, porque en el repo no hay ni un valor real y admiten dos
+#     lecturas o no se sabe que son: «Contact Compliance» (una Y puede ser
+#     «cumplio» o, como en la DSC, «es un fallo»), «PHR» (quiza la preferencia de
+#     entrega: NO se afirma de ningun paquete hasta que Dani lo confirme),
+#     «Delivery Exception» y «Simultaneous deliveries». De esos no sale nada
+#     (de «Contact Compliance», solo su codigo en `sin_interpretar`).
+
+def _dnr_token(v) -> str:
+    """'Delivered to doorstep' -> 'DELIVERED_TO_DOORSTEP'."""
+    return re.sub(r"[^A-Z0-9]+", "_", str(v or "").strip().upper()).strip("_")
+
+
+_DNR_COMO = {
+    "DOORSTEP": "puerta", "REAR_DOOR": "puerta_trasera", "MAIL_SLOT": "buzon",
+    "CUSTOMER": "en_mano", "HOUSEHOLD_MEMBER": "familiar", "RECEPTIONIST": "recepcion",
+    "MAIL_ROOM_CLERK": "conserjeria", "NEIGHBOR": "vecino", "LOCKER": "locker",
+    "EVERYWHERE_LOCKER": "locker", "STORE": "comercio", "GARDEN": "jardin",
+    "SAFE_LOCATION": "lugar_seguro", "GARAGE": "garaje", "SHED": "cobertizo",
+}
+
+_DNR_SI = {"Y", "YES", "TRUE"}
+_DNR_NO = {"N", "NO", "FALSE"}
+_DNR_SIN_LLAMADA = {"NO_CALL", "NO_CALL_MADE", "CALL_NOT_MADE", "NOT_CALLED"}
+_DNR_FOTO_BIEN = {"PASS", "PASSED"}
+_DNR_FOTO_MOTIVO = {
+    "BLURRY": "borrosa", "BLURRY_PHOTO": "borrosa", "PHOTO_BLURRY": "borrosa", "BLURRED_PHOTO": "borrosa",
+    "TOO_DARK": "oscura", "DARK_PHOTO": "oscura", "PHOTO_TOO_DARK": "oscura",
+    "PACKAGE_NOT_VISIBLE": "sin_paquete", "PACKAGE_NOT_CLEARLY_VISIBLE": "sin_paquete",
+    "NO_PACKAGE_IN_PHOTO": "sin_paquete", "PACKAGE_NOT_IN_PHOTO": "sin_paquete",
+    "PACKAGE_TOO_CLOSE": "muy_cerca", "PHOTO_TOO_CLOSE": "muy_cerca",
+    "HUMAN_IN_PHOTO": "persona", "PERSON_IN_PHOTO": "persona", "PEOPLE_IN_PHOTO": "persona",
+    "PACKAGE_IN_CAR": "en_furgoneta", "PACKAGE_IN_VEHICLE": "en_furgoneta",
+    "NO_PHOTO": "sin_foto", "MISSING_PHOTO": "sin_foto", "PHOTO_MISSING": "sin_foto",
+}
+# Lo que se manda tal cual tiene que parecer un codigo, no un texto libre: asi no
+# se cuela nada del cliente aunque una columna trajera otra cosa.
+_DNR_CODIGO = re.compile(r"^[A-Za-z0-9 _\-./]{1,40}$")
+_DNR_CP = re.compile(r"^[0-9A-Z][0-9A-Z \-]{1,8}[0-9A-Z]$")
+
+
+def _dnr_como(v):
+    t = _dnr_token(v)
+    if t.startswith("DELIVERED_TO_"):
+        t = t[len("DELIVERED_TO_"):]
+    return _DNR_COMO.get(t)
+
+
+def _dnr_si_no(v):
+    t = _dnr_token(v)
+    return True if t in _DNR_SI else False if t in _DNR_NO else None
+
+
+def _dnr_entrega(fila: dict, pods: list, ccs: list) -> dict:
+    """Como fue la entrega de UNA DNR, ya interpretado. `pods` y `ccs` son las
+    filas de foto y de contacto de ese mismo paquete y ese mismo ID."""
+    sin: dict = {}
+
+    def crudo(clave, v):
+        s = _dia_celda(v)
+        if s and _DNR_CODIGO.match(s):
+            sin[clave] = s
+
+    cp = _dia_celda(fila.get("cp")).upper()
+    como = _dnr_como(fila.get("scan"))
+    if not como:
+        crudo("scan", fila.get("scan"))
+        # Sin escaneo en la fila, el motivo de su fila de foto o de contacto, que
+        # es el mismo escaneo, si es uno de los conocidos.
+        como = next((c for c in (_dnr_como(r.get("motivo")) for r in pods + ccs) if c), None)
+    lejos = _dnr_si_no(fila.get("mas_25m"))
+    if lejos is None:
+        crudo("mas_25m", fila.get("mas_25m"))
+    crudo("contacto", fila.get("contacto"))
+
+    segundos = max((_dia_num(r.get("segundos")) for r in ccs), default=0)
+    tipos = [_dnr_token(r.get("tipo")) for r in ccs if _dia_celda(r.get("tipo"))]
+    if segundos > 0:
+        llamada = "si"
+    elif tipos and any(t in _DNR_SIN_LLAMADA for t in tipos):
+        llamada = "no"
+    else:
+        llamada = None
+    for r in ccs:
+        if _dnr_token(r.get("tipo")) not in _DNR_SIN_LLAMADA:
+            crudo("cc_tipo", r.get("tipo"))
+
+    fallos = [_dia_celda(r.get("fallo")) for r in pods if _dia_celda(r.get("fallo"))]
+    malos = [f for f in fallos if _dnr_token(f) not in _DNR_FOTO_BIEN]
+    foto = "mal" if malos else ("bien" if fallos else None)
+    motivo = next((m for m in (_DNR_FOTO_MOTIVO.get(_dnr_token(f)) for f in malos) if m), None)
+    if malos and not motivo:
+        crudo("foto", malos[0])
+
+    return {"cp": cp if _DNR_CP.match(cp) else None,
+            "como": como, "lejos": lejos,
+            "llamada": llamada, "segundos": segundos if segundos > 0 else None,
+            # Estar en la tabla de fallos de contacto: Amazon le apunto uno.
+            "fallo_contacto": True if ccs else None,
+            "foto": foto, "foto_motivo": motivo,
+            "sin_interpretar": sin}
+
+
+@api_router.get("/diarios/mias")
+async def mis_dnr(user: dict = Depends(get_current_user)):
+    """Para el portal: las DNR del conductor que llama, de las 4 ultimas semanas
+    de Amazon (domingo a sabado), por semana y de la mas nueva a la mas vieja.
+
+    Cada DNR: {dia, paquete, estado} y como fue la entrega (_dnr_entrega), con
+    estado «cuenta» (DSC = Y), «no_cuenta» (DSC = N en un dia que Amazon ya
+    clasifico) o «sin_clasificar» (sin DSC, o un dia de ese centro sin una sola
+    Y: es Amazon que aun no lo ha hecho, la misma regla que el aviso de «sin
+    clasificar» al subir el reporte).
+    """
+    mods = await _rep_modulos_de(user)
+    if isinstance(mods, list) and "diarios" not in mods:
+        raise HTTPException(status_code=404, detail="Not Found")
+    if user.get("role") != "driver":
+        raise HTTPException(status_code=403, detail="Solo para conductores")
+
+    hoy = _dia_negocio()
+    domingos = [_dia_menos(_dia_semana(hoy), 7 * i) for i in range(_DNR_SEMANAS_CONDUCTOR)]
+    desde = domingos[-1]
+    hasta = (datetime.strptime(domingos[0], "%Y-%m-%d") + timedelta(days=6)).strftime("%Y-%m-%d")
+    vacio = {"tiene_id": False, "en_revision": False, "datos_hasta": None, "semanas": []}
+
+    ficha = await db.drivers.find_one(
+        {"id": user.get("sub")},
+        {"_id": 0, "id": 1, "center": 1, "active": 1, "status": 1, "merged_into": 1})
+    if not ficha:
+        return vacio
+    # De baja o fusionada en otra: su sesion puede seguir viva hasta 30 dias, pero
+    # estos datos ya no son para ella (11-11-2026).
+    if (ficha.get("active") is False or ficha.get("merged_into")
+            or ficha.get("status") in ("deleted", "fusionada")):
+        raise HTTPException(status_code=403, detail="Tu ficha está de baja")
+    centro = (ficha.get("center") or "").strip()
+    ids = await _dnr_mis_ids(await _dnr_mis_fichas(ficha["id"]))
+    if not ids:
+        return vacio
+
+    # «NO COINCIDE»: si Amazon dijera con evidencia firme que ese ID es de OTRA
+    # persona, esas DNR no se enseñan hasta que la oficina lo confirme. OJO: en
+    # FDS hoy no se escribe ninguna de las fuentes de _amazon_nombres (whc_api,
+    # cortex_resumen, route_history: solo hay datos heredados, si los hay), asi
+    # que esto casi nunca salta y NO es una barrera: un ID mal puesto por la
+    # oficina le da a esta persona las DNR de otra, como en la pantalla de la
+    # oficina. Se queda porque no estorba y protege si hay datos heredados.
+    vs = _ids_veredictos([{"id": fid, "name": nombre, "transporter_id": tid} for tid, (fid, nombre) in ids.items()],
+                         await _amazon_nombres(set(ids)), await _ids_confirmados())
+    dudosos = {v["transporter_id"] for v in vs if v["estado"] == "no_coincide"}
+    buenos = sorted(set(ids) - dudosos)
+    if not buenos:
+        return {**vacio, "tiene_id": True, "en_revision": True}
+
+    filas = await db.dnr_rows.find(
+        {"transporter_id": {"$in": buenos}, "fecha_concesion": {"$gte": desde, "$lte": hasta}},
+        {"_id": 0, "tracking_id": 1, "transporter_id": 1, "fecha_concesion": 1, "dsc": 1, "center": 1,
+         "cp": 1, "scan": 1, "mas_25m": 1, "contacto": 1}).to_list(_DNR_TOPE_FILAS)
+
+    # Los dias (de cada centro) que Amazon ya ha clasificado: los que tienen
+    # alguna Y, sea de quien sea. Solo se guarda el par (centro, dia).
+    # LO QUE DEJA ENTREVER (revision de seguridad, 11-11-2026): que una N suya
+    # salga «no cuenta» y no «sin clasificar» le dice que ese dia, en su centro,
+    # al menos un compañero tuvo una DNR que cuenta. Ni quien ni cuantas, y no
+    # sale ningun campo de otros. Se acepta: decirle «no te cuenta» antes de que
+    # Amazon lo haya clasificado seria peor. Para cerrarlo del todo, la subida
+    # tendria que guardar una marca por (centro, dia) de «Amazon ya clasifico».
+    centros = sorted({f.get("center") for f in filas if f.get("center")})
+    dias = sorted({f.get("fecha_concesion") for f in filas if f.get("fecha_concesion")})
+    clasificados = set()
+    if centros and dias:
+        async for f in db.dnr_rows.find({"center": {"$in": centros}, "fecha_concesion": {"$in": dias}, "dsc": "Y"},
+                                        {"_id": 0, "center": 1, "fecha_concesion": 1}).limit(_DNR_TOPE_FICHAS):
+            clasificados.add((f.get("center"), f.get("fecha_concesion")))
+
+    # Sus filas de foto y de contacto: el MISMO paquete y el MISMO ID (nunca las de
+    # otro conductor, aunque compartan paquete).
+    paquetes = sorted({f.get("tracking_id") for f in filas if f.get("tracking_id")})
+    de_foto: dict = {}
+    de_contacto: dict = {}
+    if paquetes:
+        for coleccion, destino in ((db.pod_rows, de_foto), (db.cc_rows, de_contacto)):
+            async for r in coleccion.find(
+                    {"tracking_id": {"$in": paquetes}, "transporter_id": {"$in": buenos}},
+                    {"_id": 0, "tracking_id": 1, "transporter_id": 1, "motivo": 1, "fallo": 1, "tipo": 1,
+                     "segundos": 1}).limit(_DNR_TOPE_FILAS):
+                destino.setdefault((r.get("tracking_id"), r.get("transporter_id")), []).append(r)
+
+    por_semana = {d: [] for d in domingos}
+    for f in filas:
+        dia, paquete = f.get("fecha_concesion") or "", f.get("tracking_id") or ""
+        if not (dia and paquete):
+            continue
+        sem = _dia_semana(dia)
+        if sem not in por_semana:
+            continue
+        dsc = f.get("dsc")
+        if dsc == "Y":
+            estado = "cuenta"
+        elif dsc == "N" and (f.get("center"), dia) in clasificados:
+            estado = "no_cuenta"
+        else:
+            estado = "sin_clasificar"
+        clave = (paquete, f.get("transporter_id"))
+        # Escrito a mano y campo a campo: lo que no esta aqui no sale aunque la
+        # fila lleve mas (euros, el ID de reparto).
+        por_semana[sem].append({"dia": dia, "paquete": paquete, "estado": estado,
+                                **_dnr_entrega(f, de_foto.get(clave, []), de_contacto.get(clave, []))})
+
+    # Hasta que dia ha subido la oficina los reportes de su centro: sin esto,
+    # «esta semana no tienes ninguna» no se distingue de «aun no se ha subido».
+    # El centro se casa por su CODIGO entero (la ficha puede decir «AMZL OGA5
+    # …»): por trozo, «DGA1» entraba en «DGA10» (11-11-2026).
+    datos_hasta = None
+    mio = centro.upper()
+    codigos = set(_CENTRO_RE.findall(mio)) | ({mio} if mio else set())
+    suyos = set(centros)
+    if codigos:
+        suyos |= {c for c in await db.daily_reports.distinct("center") if c and _centro_norm(c) in codigos}
+    if suyos:
+        ult = await db.daily_reports.find(
+            {"center": {"$in": sorted(suyos)}, "fecha_dnr": {"$nin": [None, ""]}},
+            {"_id": 0, "fecha_dnr": 1}).sort("fecha_dnr", -1).limit(1).to_list(1)
+        datos_hasta = ult[0].get("fecha_dnr") if ult else None
+
+    semanas = []
+    for d in domingos:
+        dnr = sorted(por_semana[d], key=lambda x: (x["dia"], x["paquete"]), reverse=True)
+        semanas.append({
+            "semana": d,
+            "hasta": (datetime.strptime(d, "%Y-%m-%d") + timedelta(days=6)).strftime("%Y-%m-%d"),
+            "cuentan": sum(1 for x in dnr if x["estado"] == "cuenta"),
+            "no_cuentan": sum(1 for x in dnr if x["estado"] == "no_cuenta"),
+            "sin_clasificar": sum(1 for x in dnr if x["estado"] == "sin_clasificar"),
+            "dnr": dnr})
+    return {"tiene_id": True, "en_revision": bool(dudosos), "datos_hasta": datos_hasta, "semanas": semanas}
+
 def _dia_parece_nombre(s: str) -> bool:
     """¿Esto es el nombre de una persona, o una fila de datos con un ID dentro?
 
