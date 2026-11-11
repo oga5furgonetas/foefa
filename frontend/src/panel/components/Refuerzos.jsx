@@ -3,6 +3,7 @@ import { Megaphone, Check, X, Loader2, Users, AlertTriangle, Minus, Plus, Trendi
 import { getRefuerzos, crearRefuerzo, cambiarRefuerzo, anularRefuerzo, resolveShiftRequest, getFaltasRefuerzo } from '../api'
 import { isoLocal } from '../../lib/fecha'
 import { lista } from '../../lib/lista'
+import ElegirNave from './ElegirNave'
 
 /* REFUERZOS (18-10-2026). Dani: «para mañana nos hacen falta dos… a lo mejor tienen día libre; si quieren, que se
    postulen, sin forzar a nadie… cómo nos llegaría y cómo lo aprobaríamos». La oficina publica el día y cuántos
@@ -163,7 +164,8 @@ export default function Refuerzos({ center, puedeAprobar, onCambio }) {
             seguidos o de lo que admite su semana. Es voluntario: quien quiere se apunta y tú decides a quién apruebas.
           </p>
           {sinCentro ? (
-            <p className="text-[13px] text-amber-300">Elige un centro arriba: el refuerzo es para una nave.</p>
+            // Un botón por centro ahí mismo (11-11-2026, portal_inicio-9).
+            <ElegirNave texto="El refuerzo es para un centro: ¿cuál?" />
           ) : (
             <div className="flex flex-wrap items-end gap-2">
               <label className="text-[12px] font-semibold text-dark-300">Día

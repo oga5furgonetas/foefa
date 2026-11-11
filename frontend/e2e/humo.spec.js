@@ -728,7 +728,8 @@ test.describe('Cuadrante', () => {
     await page.getByRole('button', { name: 'Google Sheets' }).click()
     await expect(v.getByText('cambiaría 2 celdas en Flota y 1 en esta hoja')).toBeVisible()
     await expect(v.getByText('Pestaña «12 A 26» (01/10 → 02/11): 72 de 73 personas')).toBeVisible()
-    await expect(v.getByText(/1\.EXTRA \(1\)/)).toBeVisible()
+    // Desde el 11-11-2026 (tanda 2, historia-8) con sus botones para decir qué es: el código y cuántas veces sale.
+    await expect(v.getByTestId('codigos-desconocidos')).toContainText(/1\.EXTRA\s*1 vez/)
     await expect(v.getByRole('cell', { name: 'día concedido en la app' })).toBeVisible()
     const g = v.getByTestId('gente')
     await expect(g.getByText('Entrarían en el cuadrante de la app: MANUEL POMBO.')).toBeVisible()
