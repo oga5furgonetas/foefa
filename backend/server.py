@@ -41438,7 +41438,21 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
     # plan se pegó cuando dice `pegado_en` (o, en los guardados antes de existir
     # ese dato, su `updated_at`); si es nuevo, se pega ahora.
     hoy = date_cls.fromisoformat(_dia_negocio())
-    sun_plan = _whc_semana_del_plan(texto) or _whc_domingo(hoy.isoformat())
+    # LA SEMANA QUE SE ESTÁ MIRANDO (`week`, opcional, 11-11-2026). La pantalla ya
+    # deja abrir el plan de semanas anteriores (‹ semana del 01/11 ›) para meterle
+    # las excepciones. Si ese plan no trae fechas en el texto, su semana no se
+    # puede sacar de él y caía en la de HOY: «Recalcular» lo copiaba en la semana
+    # en curso. `week` solo cuenta cuando el texto no dice la suya, y nunca una
+    # semana futura. Sin ella (la web vieja y los pegados nuevos), como siempre.
+    semana_vista = None
+    if data.get("week"):
+        try:
+            semana_vista = _whc_semana_pedida(data.get("week"))
+        except HTTPException:
+            semana_vista = None
+        if semana_vista and semana_vista > _whc_domingo(hoy.isoformat()):
+            semana_vista = None
+    sun_plan = _whc_semana_del_plan(texto) or semana_vista or _whc_domingo(hoy.isoformat())
     pegado_en = None
     # También con `otra_nave` (11-11-2026): un plan de DGA1 que quedó guardado en
     # OGA5 antes del arreglo se abría como «Pegado hoy» y con «No se ha guardado».
@@ -41485,6 +41499,7 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
     ev = _whc_evaluar(conductores, limite, bloque_limite, dia)
 
     guardado = False
+    semana_guardada = None
     aviso_guardado = None
     ya_hay_plan = None
     if otra_nave and es_el_guardado:
@@ -41501,7 +41516,7 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
         # pasada pisaba el de esta (paso el 14-09-2026).
         sun = _whc_semana_del_plan(texto)
         if not sun:
-            sun = _whc_domingo(_dia_negocio())
+            sun = semana_vista or _whc_domingo(_dia_negocio())
         n_nuevo = len(conductores)
         anterior = await db.whc_planes.find_one(
             {"center": center, "week": sun}, {"_id": 0, "n_conductores": 1})
@@ -41541,6 +41556,7 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
             await db.whc_planes.update_one(
                 {"center": center, "week": sun}, orden, upsert=True)
             guardado = True
+            semana_guardada = sun
         else:
             aviso_guardado = (
                 "Este pegado trae %d conductor(es) y el plan guardado de esta semana tenía "
@@ -41674,6 +41690,10 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
         "centro_deducido": deducido or None,
         "semana_del_plan": _whc_semana_del_plan(texto) or None,
         "guardado": guardado,
+        # 11-11-2026. La semana en la que se ha guardado (None si no se ha guardado).
+        # Es `semana_del_plan` cuando el texto trae fechas; sin ellas, la que se
+        # miraba (`week`) o la de hoy: así «Borrar» borra esa y no otra.
+        "semana_guardada": semana_guardada,
         # Por que no se ha guardado, cuando no es simplemente que faltara la nave.
         "aviso_guardado": aviso_guardado,
         # 10-11-2026. `otra_nave`: el plan es de otra nave que la elegida ({centro,
