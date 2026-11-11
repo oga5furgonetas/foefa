@@ -17090,18 +17090,28 @@ def _cortar_por_lineas(texto: str, tope: int) -> str:
 
     El resumen va a Telegram con parse_mode HTML y _telegram_enviar lo corta a 4.000 caracteres a ciegas: un corte a
     mitad de un «<b>» hace que Telegram rechace el mensaje ENTERO. Cada línea del resumen abre y cierra sus etiquetas,
-    así que cortar por líneas nunca deja una a medias. Si ya cabe, el texto no se toca."""
+    así que cortar por líneas nunca deja una a medias. Si ya cabe, el texto no se toca.
+
+    La marca no le quita sitio a las líneas (11-11-2026, V13 de la tercera ronda): con el sitio de la marca reservado
+    desde el principio, un texto de siempre que llenaba el tope justo (3.999 o 4.000 con el «Para:») perdía su última
+    línea por culpa del bloque de salidas que va detrás, y en main llegaba entero. Ahora entran las líneas enteras que
+    caben; la marca va si queda sitio para ella y, si no, se manda sin ella."""
     if len(texto) <= tope:
         return texto
     marca = "\n…"
     out, n = [], 0
     for linea in texto.split("\n"):
         extra = len(linea) + (1 if out else 0)
-        if n + extra + len(marca) > tope:
+        if n + extra > tope:
             break
         out.append(linea)
         n += extra
-    return "\n".join(out) + marca if out else texto[:max(tope, 0)]
+    # Sin líneas en blanco colgando antes de la marca (la que separa el bloque de salidas).
+    while out and not out[-1].strip():
+        n -= len(out.pop()) + (1 if out else 0)
+    if not out:
+        return texto[:max(tope, 0)]
+    return "\n".join(out) + (marca if n + len(marca) <= tope else "")
 
 
 # La última configuración de Telegram vista con la base viva: el vigilante de la base la usa
@@ -17351,7 +17361,14 @@ async def trigger_resumen_diario(data: dict = Body(default={}), user: dict = Dep
     # Lo que se DEVUELVE a quien pulsa, solo de las naves que ve (11-11-2026, P19 de la revisión de la tanda 3): con
     # las salidas sin auditoría, la respuesta decía quién llevó qué furgoneta en naves ajenas. El envío de arriba, a
     # los destinatarios configurados, no cambia. Dueño, super-admin y quien no tiene naves asignadas: todas, como antes.
-    return {"enviados": [e for e in enviados if _user_can_see_center(user, e.get("center") or "")]}
+    suyos = [e for e in enviados if _user_can_see_center(user, e.get("center") or "")]
+    # Cuántas naves se mandaron y no se le enseñan (11-11-2026, V12 de la tercera ronda): sin esto la pantalla decía
+    # «no se ha mandado nada» cuando sí se mandó a otras. Solo un número, sin nombres; y solo si hay alguna, así que
+    # para quien las ve todas la respuesta es la de siempre.
+    out = {"enviados": suyos}
+    if len(enviados) > len(suyos):
+        out["enviados_otras_naves"] = len(enviados) - len(suyos)
+    return out
 
 
 _HORARIOS_DEF = {"resumen_diario": 21, "turno_manana": 15, "turno_tarde": 22}
