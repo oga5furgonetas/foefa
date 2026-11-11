@@ -455,7 +455,8 @@ export const getRefuerzos = (center) => api.get('/refuerzos', { params: centerPa
 export const crearRefuerzo = (body) => api.post('/refuerzos', body)
 export const cambiarRefuerzo = (id, body) => api.patch(`/refuerzos/${id}`, body)
 export const anularRefuerzo = (id) => api.post(`/refuerzos/${id}/anular`)
-export const getFaltasRefuerzo = (center) => api.get('/refuerzos/faltas', { params: { center } })
+// `dias` es opcional (11-11-2026, «Mi día» pide solo 3): sin él, la misma llamada de siempre (el servidor da 14).
+export const getFaltasRefuerzo = (center, dias) => api.get('/refuerzos/faltas', { params: dias ? { center, dias } : { center } })
 // Suspensiones (18-10-2026): días en SUSP en el cuadrante, con candado, de un día a otro.
 export const getSuspensiones = (center) => api.get('/suspensiones', { params: centerParam(center) })
 export const crearSuspension = (body) => api.post('/suspensiones', body)
