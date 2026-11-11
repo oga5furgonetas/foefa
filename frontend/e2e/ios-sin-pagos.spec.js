@@ -766,10 +766,11 @@ async function portal(page, ios) {
   await page.route(/\/api\/diarios\/mias/, (r) => r.fulfill({ json: {
     tiene_id: true, en_revision: false, datos_hasta: '2026-11-10',
     semanas: [{ semana: '2026-11-08', hasta: '2026-11-14', cuentan: 1, no_cuentan: 0, sin_clasificar: 1, dnr: [
-      dnr('2026-11-10', 'TBA123456789012', 'sin_clasificar'),
+      // La «corta» va en ESTA semana (la pasada sale cerrada y no se miraría): así el iPhone pinta su etiqueta y su aviso.
+      dnr('2026-11-10', 'TBA123456789012', 'sin_clasificar', { llamada: 'corta', segundos: 12, fallo_contacto: true }),
       dnr('2026-11-09', 'TBA123456789011', 'cuenta', { entrega: '2026-11-07', como: 'puerta', llamada: 'no', fallo_contacto: true, foto: 'mal', foto_motivo: 'borrosa' }),
     ] }, { semana: '2026-11-01', hasta: '2026-11-07', cuentan: 1, no_cuentan: 1, sin_clasificar: 0, dnr: [
-      dnr('2026-11-04', 'TBA123456789010', 'cuenta', { llamada: 'corta', segundos: 12, fallo_contacto: true }),
+      dnr('2026-11-04', 'TBA123456789010', 'cuenta'),
       dnr('2026-11-03', 'TBA123456789009', 'no_cuenta'),
     ] }],
   } }))

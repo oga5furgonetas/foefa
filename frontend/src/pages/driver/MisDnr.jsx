@@ -26,7 +26,7 @@
    (fallo) y cada DNR con fallo de contacto lleva, una vez, el aviso de los 30 segundos. Y dos cosas EN PAUSA
    (dnrPausas.js), sin borrarlas: el recordatorio de la entrega con preferencia (el bloque 2) y si le cuenta o no (el
    estado, su banda, los contadores, «Qué es cada color» y «Actualizada»). En pausa, la tarjeta empieza por el día. */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle, ArrowRight, Camera, CameraOff, Check, ChevronDown, ChevronUp, Clock, ConciergeBell, DoorOpen, Hand, Info,
   Loader2, Lock, Mailbox, MapPin, MapPinOff, MessageCircleQuestion, Phone, PhoneCall, PhoneOff, Store, Timer, Trees, Truck,
@@ -388,22 +388,39 @@ export default function MisDnr({ onBack, driverId }) {
   const [marcas, setMarcas] = useState({})
   const [abiertas, setAbiertas] = useState({})
 
+  /* SOLO LA ÚLTIMA PETICIÓN, Y CON LA PANTALLA ABIERTA (revisión 4, H6, 11-11-2026). Con poca cobertura el conductor ve
+     «Cargando…», pulsa Volver y la respuesta llega igual: antes se apuntaban sus DNR como vistas sin haberlas visto (al
+     volver, ni «Nueva» ni el número rojo, y lo apuntado dura 5 semanas). Y con dos peticiones a la vez («Reintentar»), la
+     más vieja, si llegaba después, calculaba las novedades contra lo que acababa de apuntar la otra. Ahora cada petición
+     lleva su número: una que ya no es la última no hace nada; si la pantalla ya se cerró, la casilla se queda con la
+     respuesta (recordarDnr no apunta nada como visto: calcula las nuevas con lo apuntado), pero ni se apunta ni se marca. */
+  const peticion = useRef(0)
+  const enPantalla = useRef(true)
+  useEffect(() => {
+    enPantalla.current = true
+    return () => { enPantalla.current = false }
+  }, [])
   const cargar = useCallback(() => {
+    const esta = ++peticion.current
     setError(false)
     getMisDnr()
       .then((r) => {
+        if (esta !== peticion.current) return
         const d = r.data || {}
+        recordarDnr(id, d)
+        if (!enPantalla.current) return
         // Lo nuevo se calcula con lo apuntado la vez anterior y, al momento, se apunta lo de hoy: la marca se ve esta vez
         // y la próxima ya no. La casilla del inicio se queda con esta misma respuesta (no vuelve a pedirla al volver).
         setMarcas(novedades(d, leerVistas(id)))
         guardarVistas(id, d)
-        recordarDnr(id, d)
         setDatos(d)
       })
       .catch((e) => {
+        if (esta !== peticion.current) return
         // 404 (su empresa no tiene la DNR diaria) o 403: aquí no hay nada para él; vuelve al inicio, que ya no enseña la
         // casilla (G8). El «Reintentar» queda para los fallos de red y del servidor.
-        if (apuntarSinDnr(id, e)) { setFuera(true); return }
+        if (apuntarSinDnr(id, e)) { if (enPantalla.current) setFuera(true); return }
+        if (!enPantalla.current) return
         setDatos(null); setError(true)
       })
   }, [id])
