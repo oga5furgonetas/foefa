@@ -777,8 +777,10 @@ function AvisoAccesos({ list, center, onHecho }) {
           ) : previaFallo ? (
             <p className="flex flex-wrap items-center gap-2 text-amber-300">
               No se ha podido calcular a quién afecta.
+              {/* 44 px en el móvil (11-11-2026, segunda revisión de la tanda 2): sin previa no se puede aplicar, así que
+                  es el botón que hay que pulsar. Igual desde `sm`. */}
               <button onClick={() => setReintento((n) => n + 1)}
-                className="rounded-lg bg-dark-800 px-2.5 py-1 font-semibold text-dark-200 hover:bg-dark-700">Reintentar</button>
+                className="min-h-[44px] rounded-lg bg-dark-800 px-2.5 py-1 font-semibold text-dark-200 hover:bg-dark-700 sm:min-h-0">Reintentar</button>
             </p>
           ) : (
             <p className="flex items-center gap-1.5 text-dark-400">
@@ -804,7 +806,7 @@ function AvisoAccesos({ list, center, onHecho }) {
         <input id="clave-temporal-conductores" type="password" autoComplete="new-password"
           value={claveTemporal} onChange={(e) => setClaveTemporal(e.target.value)}
           placeholder="Escribe la contraseña temporal" minLength={8} maxLength={128}
-          className="mt-1 w-full max-w-sm rounded-lg border border-dark-700 bg-dark-950 px-3 py-2 text-sm text-dark-100 outline-none focus:border-amber-400" />
+          className="mt-1 min-h-[44px] w-full max-w-sm rounded-lg border border-dark-700 bg-dark-950 px-3 py-2 text-sm text-dark-100 outline-none focus:border-amber-400 sm:min-h-0" />
         <div className="mt-3 flex flex-wrap gap-2">
           {/* Sin la previa de lo que hay en pantalla (calculando o fallida), no se aplica: ver arriba. */}
           <button onClick={dar} disabled={dando || !previa || previa.actualizadas === 0}
@@ -924,7 +926,7 @@ function ContrasenaInicial() {
             onKeyDown={(e) => { if (e.key === 'Enter') guardar() }}
             placeholder="Contraseña inicial (mínimo 8 caracteres)" minLength={8} maxLength={128}
             aria-label="Contraseña inicial de los conductores nuevos"
-            className="w-full max-w-xs rounded-lg border border-dark-700 bg-dark-950 px-3 py-1.5 text-sm text-dark-100 outline-none focus:border-brand-400" />
+            className="min-h-[44px] w-full max-w-xs rounded-lg border border-dark-700 bg-dark-950 px-3 py-1.5 text-sm text-dark-100 outline-none focus:border-brand-400 sm:min-h-0" />
           {/* 44 px en el móvil, como «Cambiarla» (11-11-2026, revisión de la tanda 2); igual desde `sm`. */}
           <button onClick={guardar} disabled={ocupado} className="btn-primary flex min-h-[44px] items-center gap-1.5 px-3 py-1.5 text-[12.5px] sm:min-h-0">
             {ocupado ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />} Guardar
@@ -985,9 +987,11 @@ function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, onAbrir }) {
   )
 }
 
-// Las columnas por las que ordena la cabecera de la tabla, para el selector del móvil (mismos nombres y mismo orden).
-const COLUMNAS_ORDEN = [['name', 'Nombre'], ['center', 'Centro'], ['alojamiento', 'Alojamiento'], ['phone', 'Teléfono'],
-  ['email', 'Correo'], ['contrato', 'Contrato'], ['nivel', 'Nivel']]
+// Por qué se puede ordenar en el móvil: solo lo que enseña la tarjeta (11-11-2026, segunda revisión de la tanda 2). Por
+// contrato o por nivel la lista cambiaba de orden sin ninguna pista de por qué, porque la tarjeta no lo dice. Si se viene
+// del ordenador con otra columna elegida en la cabecera (al girar una tableta), esa sigue en la lista con el nombre de su
+// cabecera, para que el selector no diga una cosa y la lista haga otra.
+const CABECERA_ORDEN = { alojamiento: 'Alojamiento', email: 'Correo', contrato: 'Contrato', nivel: 'Nivel' }
 
 // Pantalla estrecha (por debajo de `sm`, 640 px): sigue al giro del móvil y al tamaño de la ventana.
 const ESTRECHO = '(max-width: 639.98px)'
@@ -1005,8 +1009,11 @@ function useEstrecho() {
 }
 
 function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = false, onAbrir }) {
+  const { t } = useT()
   const estrecho = useEstrecho()
   const [orden, setOrden] = useState({ col: 'name', asc: true })
+  const opcionesOrden = [['name', t('drv.o.nombre')], ['center', t('drv.o.centro')], ['phone', t('drv.o.telefono')]]
+  if (CABECERA_ORDEN[orden.col]) opcionesOrden.push([orden.col, CABECERA_ORDEN[orden.col]])
 
   const filas = useMemo(() => {
     const { col, asc } = orden
@@ -1040,13 +1047,13 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
           (por centro, para tener juntos a los de cada nave con «Todos»; por contrato…); las tarjetas no tienen cabecera,
           así que lo mismo va en un selector y un botón de sentido, sobre el mismo `orden` que usa la tabla. */}
       <div className="flex items-center gap-2 border-b border-dark-800 px-3 py-1.5 text-[12.5px] text-dark-400">
-        <label htmlFor="orden-conductores">Ordenar por</label>
+        <label htmlFor="orden-conductores">{t('drv.ordenarPor')}</label>
         <select id="orden-conductores" value={orden.col} onChange={(e) => setOrden({ col: e.target.value, asc: true })}
           className="min-h-[44px] min-w-0 flex-1 rounded-lg border border-dark-700 bg-dark-950 px-2 text-[13px] text-dark-100">
-          {COLUMNAS_ORDEN.map(([col, nombre]) => <option key={col} value={col}>{nombre}</option>)}
+          {opcionesOrden.map(([col, nombre]) => <option key={col} value={col}>{nombre}</option>)}
         </select>
         <button type="button" onClick={() => setOrden((o) => ({ ...o, asc: !o.asc }))}
-          aria-label={orden.asc ? 'De la A a la Z' : 'De la Z a la A'} title="Darle la vuelta al orden"
+          aria-label={orden.asc ? t('drv.ordenAZ') : t('drv.ordenZA')} title={t('drv.ordenVuelta')}
           className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-lg border border-dark-700 text-dark-300">
           {orden.asc ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
@@ -1137,7 +1144,6 @@ export default function Conductores() {
   const [verImportar, setVerImportar] = useState(false) // null | { driver: obj|null }
   const [verMoviles, setVerMoviles] = useState(false)
   const [verMas, setVerMas] = useState(false)          // el menú «Más» del móvil
-  const estrecho = useEstrecho()                       // en el móvil, los avisos de contraseñas van debajo de la lista
   const [filtro, setFiltro] = useState(null)           // id de FALTAS o null
   // Si se sabe quién tiene cuenta: sin esa lista, «sin acceso» diría que nadie la tiene.
   const [cuentasOk, setCuentasOk] = useState(false)
@@ -1249,7 +1255,7 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
     { id: 'ranking',    label: `🏆 ${t('sc.ranking')}`, corto: `🏆 ${t('drv.tabRanking')}` },
     // Pestaña y no entrada de menú: es mantenimiento que se hace de vez en
     // cuando, no una tarea del día.
-    { id: 'fichas',     label: 'Fichas duplicadas', corto: 'Duplicadas' },
+    { id: 'fichas',     label: 'Fichas duplicadas', corto: t('drv.tabDuplicadas') },
   ]
 
   return (
@@ -1377,14 +1383,17 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
                   </button>
                 </div>
               </div>
-            : <>
+            : <div className="flex flex-col">
                 {/* EN EL MÓVIL, LOS AVISOS DE CONTRASEÑAS DEBAJO DE LA LISTA (11-11-2026, revisión de la tanda 2): son
                     ajustes de vez en cuando y, encima, ocupaban media pantalla: al abrir Conductores no se veía ningún
-                    conductor sin bajar. En el ordenador siguen arriba, como siempre. */}
-                {!estrecho && <>
+                    conductor sin bajar. En el ordenador siguen arriba, como siempre.
+                    Se pintan UNA vez y los baja el CSS (`order-last`), no dos copias según el ancho (11-11-2026, segunda
+                    revisión): al girar el móvil se desmontaba una y se montaba la otra vacía, y se perdía el resultado de
+                    aplicar la temporal o la clave a medio escribir. */}
+                <div className="order-last mt-3 sm:order-none sm:mt-0">
                   <ContrasenaInicial />
                   <AvisoAccesos list={list} center={center} onHecho={load} />
-                </>}
+                </div>
                 {centers.length > 1 && list.some(sinCentro) && (
                   <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[12.5px] text-amber-200">
                     <AlertCircle size={13} className="shrink-0" />
@@ -1416,13 +1425,7 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
                 )}
                 <TablaConductores list={vistos} accounts={accounts} cuentasOk={cuentasOk} conIdReparto={conIdReparto}
                   onAbrir={(d) => setModal({ driver: d })} />
-                {estrecho && (
-                  <div className="mt-3">
-                    <ContrasenaInicial />
-                    <AvisoAccesos list={list} center={center} onHecho={load} />
-                  </div>
-                )}
-              </>
+              </div>
       )}
 
       {/* Ranking + scoring unificado */}

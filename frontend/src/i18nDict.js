@@ -411,6 +411,16 @@ export const DICT = {
   'drv.f.quitar':     { es: 'Ver todos', en: 'Show all', fr: 'Voir tous', de: 'Alle zeigen', it: 'Vedi tutti', pt: 'Ver todos' },
   // La pestaña del ranking, corta en el móvil para que las tres quepan en una línea (11-11-2026, revisión de la tanda 2).
   'drv.tabRanking':   { es: 'Ranking', en: 'Ranking', fr: 'Classement', de: 'Ranking', it: 'Classifica', pt: 'Ranking' },
+  // La pestaña de las fichas duplicadas, corta en el móvil, y el selector de orden de las tarjetas (11-11-2026, segunda
+  // revisión de la tanda 2): solo se ordena por lo que enseña la tarjeta.
+  'drv.tabDuplicadas': { es: 'Duplicadas', en: 'Duplicates', fr: 'Doublons', de: 'Duplikate', it: 'Duplicati', pt: 'Duplicadas' },
+  'drv.ordenarPor':   { es: 'Ordenar por', en: 'Sort by', fr: 'Trier par', de: 'Sortieren nach', it: 'Ordina per', pt: 'Ordenar por' },
+  'drv.ordenAZ':      { es: 'De la A a la Z', en: 'A to Z', fr: 'De A à Z', de: 'Von A bis Z', it: 'Dalla A alla Z', pt: 'De A a Z' },
+  'drv.ordenZA':      { es: 'De la Z a la A', en: 'Z to A', fr: 'De Z à A', de: 'Von Z bis A', it: 'Dalla Z alla A', pt: 'De Z a A' },
+  'drv.ordenVuelta':  { es: 'Darle la vuelta al orden', en: 'Reverse the order', fr: "Inverser l'ordre", de: 'Reihenfolge umkehren', it: "Inverti l'ordine", pt: 'Inverter a ordem' },
+  'drv.o.nombre':     { es: 'Nombre', en: 'Name', fr: 'Nom', de: 'Name', it: 'Nome', pt: 'Nome' },
+  'drv.o.centro':     { es: 'Centro', en: 'Site', fr: 'Site', de: 'Standort', it: 'Sede', pt: 'Centro' },
+  'drv.o.telefono':   { es: 'Teléfono', en: 'Phone', fr: 'Téléphone', de: 'Telefon', it: 'Telefono', pt: 'Telefone' },
 
   // ── Inspecciones ─────────────────────────────────────────────────────────
   'insp.title':       { es: 'Inspecciones',   en: 'Inspections',  fr: 'Inspections',   de: 'Inspektionen', it: 'Ispezioni',      pt: 'Inspeções' },
