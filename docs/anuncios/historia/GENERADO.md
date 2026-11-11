@@ -52,3 +52,31 @@ Quedaban 8.490 al empezar; quedan unos 2.760. Todo está en la carpeta «FDS Man
 El entorno personal «foefa» (asociado a este repo) permite: `mcp.artlist.io`, `cms-toolkit-artifacts.artlist.io`,
 `artlist-prod-ai-toolkit-custom-user-uploads.s3.eu-central-1.amazonaws.com` (subir referencias) y
 `speech.platform.bing.com` (edge-tts, con `--proxy "$HTTPS_PROXY"` y `SSL_CERT_FILE=/root/.ccr/ca-bundle.crt`).
+
+## Versión en inglés: «Where's Tony?» (11-11-2026, noche)
+
+Dani, tras ver la versión 2 en español: «¿puedes ponerle voz que no sea IA, o tan sintetizada? Haz el vídeo en inglés,
+que deberías tener más margen».
+
+**Resultado:** `salida/spot-tony-en-9x16.mp4` (24,7 s, 1080×1920, 7 MB). Se rehace con `bash scripts/montar-spot-manolo-en.sh`.
+
+- **Voz**: `voz-en/l1..l6.mp3`, de Artlist (Eleven v3), mucho menos sintética que las de edge-tts: «Zara – The Warm,
+  Real-World Conversationalist» (americana, joven) para Lucía y «Mark – Natural Conversations» para la marca. 54 créditos.
+  Sigue siendo voz generada: una voz que no sea IA solo sale grabando a una persona.
+- **Manolo pasa a ser Tony** («Where's Tony?»): un nombre que se entiende igual en Reino Unido y en EE. UU.
+- **El final cambia**: Lucía ya no dice la frase a cámara (su boca se movía con la frase en español); lo cuenta la voz:
+  «By the time Tony called to check on me… I was done.» Así no hay nada que sincronizar.
+- **La app, grabada en inglés** con `SPOT_LOCALE=en npx playwright test spot-ruta` (fotogramas en `app-en/`): la cámara
+  leyendo la etiqueta y la ruta ordenada con la hora de cada parada («Route sorted by time: 15 stops, you finish ≈ 11:13»),
+  dentro de un móvil sobre el plano de Lucía desenfocado. Se dejaron fuera los fotogramas con el aviso «Earn €10 per
+  colleague» (promoción con fecha). La etiqueta del paquete sigue en español («ENVÍO ESTÁNDAR»): es la de la prueba.
+- **Lema y tarjeta** en inglés: `../internacional/capas/en/manana.png` y `cierre-B.png`.
+- La grabación de Playwright falló al final (paso de «Empezar a navegar», línea 356 de `spot-ruta.spec.js` en inglés),
+  después de haber grabado lo que hacía falta; no se ha investigado. En la nube hay que enlazar el navegador instalado a
+  la versión que pide el proyecto (`ln -sfn /opt/pw-browsers/chromium_headless_shell-1243 …-1234`).
+
+Texto: «Second week on the job. And today, they hand me Tony's route. · The one only Tony knows. · So I scan the
+parcels… and the route sorts itself. · At every door, the same question: where's Tony? · By the time Tony called to check
+on me… I was done. · FDS. Tomorrow, you leave with the route done.»
+
+Gasto total en Artlist con esto: 5.784 créditos; quedan unos 2.700. El sonido sigue sin haberse podido escuchar.

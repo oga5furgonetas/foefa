@@ -26,11 +26,11 @@ ff -ss 0.2 -t 1.8 -i $P/7-escaneo.mp4 -vf "scale=1080:1920,$LOOK,$(sub s3 'So I 
 RR="lte(hypot(max(abs(X-W/2)-(W/2-R),0),max(abs(Y-H/2)-(H/2-R),0)),R)"
 ff -f lavfi -i "color=c=white:s=700x1518" -vf "format=gray,geq=lum='255*${RR//R/56}'" -frames:v 1 "$T/m-pantalla.png"
 ff -f lavfi -i "color=c=white:s=728x1546" -vf "format=gray,geq=lum='255*${RR//R/68}'" -frames:v 1 "$T/m-marco.png"
-ff -framerate 6.4 -start_number 8 -i $H/app-en/%05d.jpg -frames:v 7 -vf "fps=30,scale=700:1518" -c:v libx264 -crf 12 -pix_fmt yuv420p "$T/a1.mp4"
-ff -framerate 9 -start_number 160 -i $H/app-en/%05d.jpg -frames:v 19 -vf "fps=30,scale=700:1518" -c:v libx264 -crf 12 -pix_fmt yuv420p "$T/a2.mp4"
+ff -framerate 6.4 -start_number 8 -i $H/app-en/%05d.jpg -vf "fps=30,scale=700:1518" -t 1.1 -c:v libx264 -crf 12 -pix_fmt yuv420p "$T/a1.mp4"
+ff -framerate 9 -start_number 168 -i $H/app-en/%05d.jpg -vf "fps=30,scale=700:1518" -t 1.2 -c:v libx264 -crf 12 -pix_fmt yuv420p "$T/a2.mp4"
 ff -ss 1.5 -t 2.5 -i $P/7-escaneo.mp4 -i "$T/a1.mp4" -i "$T/a2.mp4" -loop 1 -framerate 30 -t 3.2 -i "$T/m-pantalla.png" -loop 1 -framerate 30 -t 3.2 -i "$T/m-marco.png" \
   -filter_complex "[0:v]setpts=1.3*PTS,scale=1080:1920,boxblur=24:2,eq=brightness=-0.24:saturation=0.8,fps=30[bg];
-    [1:v][2:v]concat=n=2:v=1:a=0,fps=30,tpad=stop_mode=clone:stop_duration=1,format=rgba[app];[3:v]format=gray[mp];[app][mp]alphamerge[pant];
+    [1:v][2:v]concat=n=2:v=1:a=0,fps=30,tpad=stop_mode=clone:stop_duration=2,format=rgba[app];[3:v]format=gray[mp];[app][mp]alphamerge[pant];
     color=c=0x0b0f14:s=728x1546:r=30,format=rgba[neg];[4:v]format=gray[mm];[neg][mm]alphamerge[marco];
     [marco][pant]overlay=14:14[movil];
     [bg][movil]overlay=x=176:y='90+max(0,(0.35-t))*2600':shortest=0,format=yuv420p,noise=alls=3:allf=t,$(sub s4 '…and the route sorts itself.' 58 1700):enable='gte(t,1.2)'[v]" \
