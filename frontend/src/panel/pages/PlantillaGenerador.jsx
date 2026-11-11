@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom'
 import {
   Upload, FileSpreadsheet, Loader2, AlertCircle, X, CheckCircle2,
   Download, RotateCcw, Plus, ChevronDown, ChevronUp, ChevronRight, Trash2, FolderOpen,
-  Copy, ClipboardPaste, Car, Info, ClipboardCheck, Wand2, AlertTriangle, Smartphone,
+  Copy, ClipboardPaste, Car, Info, ClipboardCheck, Wand2, AlertTriangle, Smartphone, CalendarDays,
 } from 'lucide-react'
 import { getToken } from '../auth'
 import { getPlantillas, downloadPlantilla, deletePlantilla, getVehicles, plantillaDesdeAsignacion, plantillaFurgos, plantillaMoviles } from '../api'
@@ -200,6 +200,19 @@ const CAMPO_KEY = {
 }
 const TRAMOS = [0, 10, 15, 20, 30]
 
+/* El día de la hoja («11/11/2026») en AAAA-MM-DD; sin una fecha que se entienda, hoy (11-11-2026, dia-5). */
+function diaHojaIso(fecha) {
+  const m = String(fecha || '').trim().match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/)
+  const dos = (n) => String(n).padStart(2, '0')
+  if (m) {
+    const a = Number(m[3]) < 100 ? 2000 + Number(m[3]) : Number(m[3])
+    const d = new Date(a, Number(m[2]) - 1, Number(m[1]))
+    if (d.getDate() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1) return `${a}-${dos(m[2])}-${dos(m[1])}`
+  }
+  const h = new Date()
+  return `${h.getFullYear()}-${dos(h.getMonth() + 1)}-${dos(h.getDate())}`
+}
+
 /* ── Componente principal ── */
 export default function PlantillaGenerador() {
   const { center } = useOutletContext()
@@ -218,6 +231,8 @@ export default function PlantillaGenerador() {
   // no existe, hora imposible). Se recalculan solos al editar.
   const [avisos, setAvisos] = useState([])
   const [conAsignacion, setConAsignacion] = useState(false)
+  // Quien tiene turno de ruta ese día en la nave y no está en la hoja (11-11-2026, dia-4).
+  const [faltan, setFaltan] = useState([])
   const [redSet, setRedSet] = useState(new Set())
   const [yellowSet, setYellowSet] = useState(new Set())
   const [pinkSet, setPinkSet] = useState(new Set())
@@ -372,6 +387,8 @@ export default function PlantillaGenerador() {
 
   // Vehículos que pueden salir hoy en el centro
   const [furgosDisp, setFurgosDisp] = useState([])
+  // Matrícula -> fecha de la ITV, de los mismos vehículos (11-11-2026, dia-5): la marca «ITV» del desplegable.
+  const [itvDe, setItvDe] = useState({})
   useEffect(() => {
     if (noCenter) return
     getVehicles(center)
@@ -383,9 +400,23 @@ export default function PlantillaGenerador() {
           .filter(Boolean)
           .sort()
         setFurgosDisp(plates)
+        const itv = {}
+        for (const v of lista(r.data)) {
+          const m = (v.license_plate || '').replace(/\s/g, '').toUpperCase()
+          if (m && typeof v.itv_date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v.itv_date)) itv[m] = v.itv_date.slice(0, 10)
+        }
+        setItvDe(itv)
       })
       .catch(() => {})
   }, [center, noCenter])
+
+  // Las que tienen la ITV caducada ANTES del día de la hoja: matrícula -> dd/mm/aaaa (11-11-2026, dia-5).
+  const itvMal = useMemo(() => {
+    const dia = diaHojaIso(data?.date)
+    const out = {}
+    for (const [m, f] of Object.entries(itvDe)) if (f < dia) out[m] = `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}`
+    return out
+  }, [itvDe, data?.date])
 
   // Un pastel por hora de salida distinta, para ver las tandas de un vistazo.
   const waveColorMap = useMemo(() => {
@@ -593,7 +624,8 @@ export default function PlantillaGenerador() {
 
   async function pedirFurgos(completar) {
     const r = await plantillaFurgos({
-      center, completar,
+      // El día de la hoja: con él, la ITV se mide contra ese día (11-11-2026, dia-5). Un servidor viejo lo ignora.
+      center, completar, date: data?.date || '',
       rows: (data?.rows || []).map(r => ({ conductor: r.conductor, furgo: r.furgo, h_salida: r.h_salida })),
     })
     return r.data || {}
@@ -695,7 +727,7 @@ export default function PlantillaGenerador() {
       pedirFurgos(false).then(j => { if (vivo) setFurgosIA(j) }).catch(() => {})
     }, 1500)
     return () => { vivo = false; clearTimeout(tm) }
-  }, [firmaFurgos, step, center]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [firmaFurgos, step, center, data?.date]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function editMeta(field, value) {
     if (field === 'date') setHojaVieja(null)
@@ -718,6 +750,8 @@ export default function PlantillaGenerador() {
         if (!vivo) return
         setAvisos(j.avisos || [])
         setConAsignacion(!!j.con_asignacion)
+        // Sin cuadrante de la nave ese día no se dice nada (un servidor de antes no manda ninguna de las dos).
+        setFaltan(j.con_cuadrante ? lista(j.faltan) : [])
       } catch { /* sin validación no se bloquea nada */ }
     }, 600)
     return () => { vivo = false; clearTimeout(tm) }
@@ -989,6 +1023,14 @@ export default function PlantillaGenerador() {
           {avisos.length === 0 && data.rows.length > 0 && (
             <p className="mb-3 flex items-center gap-1.5 text-[12px] text-emerald-300"><CheckCircle2 size={13} /> {t('pg.avisos.ok')}</p>
           )}
+          {/* Con turno de ruta en el cuadrante ese día y sin fila en la hoja (11-11-2026, dia-4). Solo si la nave tiene
+              cuadrante ese día; dice «sin fila», no «falta»: puede estar prestado en otra nave. */}
+          {faltan.length > 0 && (
+            <p data-testid="pg-faltan" className="mb-3 flex flex-wrap items-start gap-1.5 text-[12px] text-amber-200">
+              <CalendarDays size={13} className="mt-0.5 shrink-0" />
+              <span>{t('pg.avisos.faltan')} <span className="font-semibold text-dark-100">{faltan.map(f => f.nombre).join(' · ')}</span></span>
+            </p>
+          )}
           <AvisosFurgos info={furgosIA} nota={ponerNota} filas={data.rows} />
           {/* En el móvil la hoja se apretaba al ancho de la pantalla y no se leía ni la ruta entera («CX1») ni el nombre
               (11-11-2026): ahora cada celda tiene su mínimo y la tabla se desliza de lado, con la ruta y el conductor
@@ -1043,6 +1085,7 @@ export default function PlantillaGenerador() {
                           auto={autoPuestas[i]}
                           isPink={isPink && !isRed}
                           furgosDisp={furgosDisp}
+                          itvMal={itvMal}
                           usedFurgos={data.rows.filter((_, ri) => ri !== i).map(r => (r.furgo || '').toUpperCase()).filter(Boolean)}
                           onTogglePink={() => toggle(pinkSet, setPinkSet, (row.furgo || '').toUpperCase(), 'pink_furgos')}
                           textCl={textCl}
@@ -1154,11 +1197,21 @@ function AvisosFurgos({ info, nota, filas }) {
   const sinNombre = lista(info?.sin_nombre)
   const mover = lista(info?.mover)
   const conflictos = lista(info?.conflictos)
+  // Su principal o su secundaria no se le puso por la ITV caducada (11-11-2026, dia-5; un servidor viejo no la manda).
+  const itv = lista(info?.itv_caducada)
   const vieja = !!info?.fila_actualizada && (Date.now() - new Date(info.fila_actualizada).getTime()) > 20 * 3600 * 1000
-  if (!nota && !sinNombre.length && !mover.length && !conflictos.length && !vieja) return null
+  if (!nota && !sinNombre.length && !mover.length && !conflictos.length && !vieja && !itv.length) return null
+  const ddmmaaaa = (f) => (/^\d{4}-\d{2}-\d{2}/.test(String(f || '')) ? `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}` : String(f || ''))
   return (
     <div className="mb-3 space-y-2 rounded-xl border border-sky-500/25 bg-sky-500/[0.06] p-3 text-[12.5px] text-dark-200">
       {nota && <div className="flex items-center gap-1.5 font-semibold text-sky-300"><Wand2 size={13} /> {nota}</div>}
+      {itv.map((x, k) => (
+        <div key={`itv${k}`} data-testid="pg-itv-nota" className="flex items-start gap-1.5 text-amber-200">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <span>{t('pg.ff.itvNoPuesta').replace('{furgo}', x.furgo || '').replace('{conductor}', x.conductor || '—')
+            .replace('{fecha}', ddmmaaaa(x.itv_date))}</span>
+        </div>
+      ))}
       {sinNombre.length > 0 && (
         <div>{t('pg.ff.sinNombre')} <span className="text-dark-100">{sinNombre.map(i => filas[i]?.conductor).filter(Boolean).join(' · ')}</span></div>
       )}
@@ -1192,10 +1245,25 @@ const TIPO_KEY = {
   historial: 'pg.ff.tipo.historial', libre: 'pg.ff.tipo.libre',
 }
 
-function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePink, textCl, opciones = [], auto }) {
+/* La marca roja «ITV» de una furgoneta con la ITV caducada el día de la hoja (11-11-2026, dia-5). Es un aviso: se puede
+   seguir eligiendo. */
+function MarcaItv({ fecha }) {
+  const { t } = useT()
+  if (!fecha) return null
+  const titulo = t('pg.ff.itvTitle').replace('{fecha}', fecha)
+  return (
+    <span title={titulo} aria-label={titulo} data-testid="pg-itv"
+      className="shrink-0 rounded bg-red-600 px-1 text-[9.5px] font-bold uppercase leading-4 text-white">
+      {t('pg.ff.itvMarca')}
+    </span>
+  )
+}
+
+function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePink, textCl, opciones = [], auto, itvMal = {} }) {
   const { t } = useT()
   const [open, setOpen] = useState(false)
   const ref = useRef()
+  const itvDe = (m) => itvMal[String(m || '').replace(/\s/g, '').toUpperCase()]
 
   useEffect(() => {
     if (!open) return
@@ -1220,6 +1288,7 @@ function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePi
       )}
       <input value={value || ''} onChange={e => onChange(e.target.value)} aria-label={t('pg.col.furgo')}
         className={`w-20 rounded bg-transparent px-1 py-0.5 text-center font-mono transition focus:bg-yellow-50 focus:outline-none focus:ring-1 focus:ring-yellow-400/60 ${isPink ? 'text-pink-900' : textCl}`} />
+      <MarcaItv fecha={itvDe(value)} />
       <div className="flex shrink-0 items-center gap-0.5">
         {furgosDisp.length > 0 && (
           <button onClick={() => setOpen(v => !v)} title={t('pg.tVerFurgos')} aria-label={t('pg.tVerFurgos')}
@@ -1242,7 +1311,7 @@ function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePi
                 <button key={`p${o.furgo}`} onClick={() => { onChange(o.furgo); setOpen(false) }}
                   className="flex w-full flex-col px-3 py-1.5 text-left transition hover:bg-brand-500/10">
                   <span className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-dark-100">{o.furgo}</span>
+                    <span className="flex items-center gap-1.5 font-mono text-dark-100">{o.furgo} <MarcaItv fecha={itvDe(o.furgo)} /></span>
                     {o.puntos != null && <span className="text-[10px] tabular-nums text-brand-300">{Math.round(o.puntos)} {t('pg.ff.pts')}</span>}
                   </span>
                   {o.motivo && <span className="text-[10.5px] leading-snug text-dark-400">{o.motivo}</span>}
@@ -1258,7 +1327,7 @@ function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePi
               {available.map(f => (
                 <button key={f} onClick={() => { onChange(f); setOpen(false) }}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-dark-100 transition hover:bg-emerald-500/10 hover:text-emerald-300">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" /> {f}
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" /> {f} <MarcaItv fecha={itvDe(f)} />
                 </button>
               ))}
             </>
@@ -1271,7 +1340,7 @@ function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePi
               {occupied.map(f => (
                 <button key={f} onClick={() => { onChange(f); setOpen(false) }}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-dark-500 transition hover:bg-amber-500/10 hover:text-amber-300">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" /> {f}
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" /> {f} <MarcaItv fecha={itvDe(f)} />
                 </button>
               ))}
             </>
