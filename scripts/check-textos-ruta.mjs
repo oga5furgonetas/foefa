@@ -36,6 +36,8 @@ const FICHEROS = [
   'lib/dejar.js',
   // «Mis DNR» del portal del conductor (11-11-2026, tanda 2): la pantalla y lo que comparte con su casilla del inicio.
   'pages/driver/MisDnr.jsx', 'pages/driver/dnrVistas.js',
+  // Su ejemplo de la pantalla de entrega, «¿Cómo sé si tiene preferencia?» (11-11-2026, R11).
+  'pages/driver/EjemploPreferencia.jsx',
 ]
 // Las piezas de la app de reparto (06-11-2026, diseño compacto): todo pages/driver/piezas/, sin nombrarlas una a una; si
 // no, sus textos no se comprueban y las claves que se mudan a ellas se dan por muertas.

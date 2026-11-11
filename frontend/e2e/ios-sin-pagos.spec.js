@@ -789,6 +789,8 @@ const PORTAL = [
   { nombre: 'Correo de recuperación', ruta: '/conductor', ancla: HOLA, clic: 'Correo de recuperación' },
   { nombre: 'Mercadillo (portal)', ruta: '/conductor?vista=mercadillo', perfil: 'basico' },
   { nombre: 'Mis DNR', ruta: '/conductor?vista=dnr', ancla: (p) => p.getByTestId('dnr-fila') },
+  // La hoja del ejemplo de la preferencia (11-11-2026): se abre desde el recordatorio y también se mira en el iPhone.
+  { nombre: 'Mis DNR · el ejemplo de la preferencia', ruta: '/conductor?vista=dnr', ancla: (p) => p.getByTestId('dnr-fila'), clic: 'Cómo sé si tiene preferencia' },
 ]
 test.describe('iPhone · el portal del conductor de empresa', () => {
   test.use({ userAgent: UA_APP })
