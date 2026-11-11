@@ -115,8 +115,11 @@ internal fun fechaDeAviso(iso: String): String = runCatching {
         .format(DateTimeFormatter.ofPattern("d MMM, HH:mm", LOCALE_APP))
 }.getOrDefault(iso)
 
-/** A qué pantalla del portal lleva un aviso, por su título o por su enlace (el mismo que usa la web). */
+/** A qué pantalla del portal lleva un aviso, por su título o por su enlace (el mismo que usa la web).
+ *  «Mis DNR» (11-11-2026) va la primera y solo por el enlace (`/conductor?vista=dnr`, el mismo que abre la web): el
+ *  título de un aviso de DNR puede decir cualquier cosa. Una versión anterior de la app lo deja en la bandeja. */
 internal fun destinoDeAviso(url: String, titulo: String = ""): String = when {
+    url.contains("vista=dnr") -> "dnr"
     titulo.contains("Inspecci", ignoreCase = true) -> "auditoria"
     titulo.contains("Refuerzo", ignoreCase = true) || titulo.contains("Día extra", ignoreCase = true) || url.contains("vista=extra") -> "extras"
     url.contains("vista=ruta") || url.startsWith("/ruta") -> "ruta"

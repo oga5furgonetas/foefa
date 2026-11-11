@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Phone
@@ -115,6 +116,18 @@ fun PortalConductorNativo(alCerrar: () -> Unit, abrir: String? = null, alAbierto
         app.repo.registrarMovil(Fcm.token())
     }
     LaunchedEffect(pantalla) { if (pantalla == "inicio") runCatching { app.repo.avisos() }.onSuccess { sinLeer = it.sin_leer } }
+    // «MIS DNR» (11-11-2026): la fila sale solo si la ruta contesta 200 (con 404 la empresa no tiene la DNR diaria y no
+    // existe; con 403 su ficha está de baja: misDnr() da null en los dos y la fila se quita), con cuántas hay nuevas desde la última vez que la abrió en este móvil y, debajo, las de esta semana
+    // («Esta semana: 2»), como la casilla de la web. Se pregunta al volver al inicio, como los avisos; un fallo de red
+    // deja la fila como estaba (null hasta el primer 200: no sale).
+    var filaDnr by remember { mutableStateOf<FilaDnrInicio?>(null) }
+    LaunchedEffect(pantalla) {
+        if (pantalla == "inicio") runCatching { app.repo.misDnr() }.onSuccess { d ->
+            filaDnr = d?.let {
+                FilaDnrInicio(DnrConductor.novedades(it, runCatching { app.cuenta.dnrVistas() }.getOrNull()).size, DnrConductor.lineaInicio(it))
+            }
+        }
+    }
     // Un aviso tocado en la barra de notificaciones abre lo que toca.
     LaunchedEffect(abrir) { if (abrir != null) { pantalla = destinoDeAviso(abrir); alAbierto() } }
     if (confirmarSalir) AlertDialog(
@@ -139,6 +152,7 @@ fun PortalConductorNativo(alCerrar: () -> Unit, abrir: String? = null, alAbierto
         )
         "avisos" -> AvisosConductorNativo(alVolver = { pantalla = "inicio" }, alAbrir = { a -> pantalla = destinoDeAviso(a.url, a.titulo).takeIf { it != "avisos" } ?: "avisos" })
         "turnos" -> TurnosConductorNativo(alVolver = { pantalla = "inicio" })
+        "dnr" -> DnrConductorNativo(alVolver = { pantalla = "inicio" })
         "extras" -> ExtrasConductorNativos(alVolver = { pantalla = "inicio" })
         "referidos" -> ReferidosConductorNativo(alVolver = { pantalla = "inicio" })
         "ruta" -> {
@@ -165,6 +179,8 @@ fun PortalConductorNativo(alCerrar: () -> Unit, abrir: String? = null, alAbierto
                 alAuditoria = { aviso = null; pantalla = "auditoria" },
                 alTurnos = { pantalla = "turnos" },
                 alExtras = { pantalla = "extras" },
+                filaDnr = filaDnr,
+                alDnr = { pantalla = "dnr" },
                 alReferidos = { pantalla = "referidos" },
                 alCuenta = { pantalla = "cuenta" },
                 alAvisos = { pantalla = "avisos" },
@@ -185,6 +201,9 @@ private fun InicioConductorNativo(
     alAuditoria: () -> Unit,
     alTurnos: () -> Unit,
     alExtras: () -> Unit,
+    /** null: la empresa no tiene la DNR diaria (o aún no ha contestado) y la fila no sale. */
+    filaDnr: FilaDnrInicio?,
+    alDnr: () -> Unit,
     alReferidos: () -> Unit,
     alCuenta: () -> Unit,
     alAvisos: () -> Unit,
@@ -210,11 +229,13 @@ private fun InicioConductorNativo(
             // lado y esta tarjeta solo confundía (Dani, 29-10-2026, probando la 2.2.3 en su móvil).
             if (estadoRuta.ruta?.activo == true) TarjetaMiRuta(pendientes, alRuta)
             // La bandeja de avisos (29-10-2026): turnos aprobados, vacantes para trabajar más, inspección pendiente.
-            val filas = listOf<@Composable () -> Unit>(
+            val filas = listOfNotNull<@Composable () -> Unit>(
                 { FilaOpcion(Icons.Default.Notifications, if (sinLeer == 1) tx("Tienes 1 aviso nuevo") else if (sinLeer > 1) tx("Tienes {n} avisos nuevos", "n" to sinLeer) else tx("Avisos"), flecha = true, insignia = sinLeer, alTocar = alAvisos) },
                 { FilaOpcion(Icons.Default.CheckCircle, tx("Auditoría del vehículo"), flecha = true, alTocar = alAuditoria) },
                 { FilaOpcion(Icons.Default.CalendarMonth, tx("Mis turnos y días libres"), flecha = true, alTocar = alTurnos) },
                 { FilaOpcion(Icons.Default.CalendarMonth, tx("Trabajar más"), flecha = true, alTocar = alExtras) },
+                // «Mis DNR» tras «Trabajar más», como la casilla de la web; con el número de las nuevas.
+                filaDnr?.let { f -> @Composable { FilaOpcion(Icons.Default.Inventory2, tx("Mis DNR"), detalle = f.linea, flecha = true, insignia = f.nuevas, alTocar = alDnr) } },
                 { FilaOpcion(Icons.Default.CardGiftcard, tx("Invita y gana"), flecha = true, alTocar = alReferidos) },
                 { FilaOpcion(Icons.Default.Lock, tx("Mi cuenta"), flecha = true, alTocar = alCuenta) },
             )
@@ -222,6 +243,9 @@ private fun InicioConductorNativo(
         }
     }
 }
+
+/** La fila «Mis DNR» del inicio (11-11-2026): cuántas hay nuevas (el número rojo) y la línea de esta semana. */
+internal data class FilaDnrInicio(val nuevas: Int, val linea: String?)
 
 /** «Mi ruta» (§5.11): una tarjeta de 72 con tinte de marca, sin botón dentro; toda ella abre la ruta. */
 @Composable
