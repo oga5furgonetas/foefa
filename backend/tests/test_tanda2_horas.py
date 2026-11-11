@@ -87,12 +87,22 @@ async def test_sin_week_un_plan_sin_fechas_va_a_la_semana_de_hoy_como_siempre(mu
     assert _semanas(mundo) == [("DGA1", SEMANA)]
 
 
+_MESES = {1: "ene", 2: "feb", 3: "mar", 4: "abr", 5: "may", 6: "jun",
+          7: "jul", 8: "ago", 9: "sep", 10: "oct", 11: "nov", 12: "dic"}
+
+
 @pytest.mark.asyncio(loop_scope="session")
 async def test_las_fechas_del_texto_mandan_sobre_week(mundo):
-    dias = "".join("%s., nov. %02d\n\n" % (d, n) for d, n in [("dom", 1), ("lun", 2), ("mar", 3)])
+    # Los días del texto, de una semana que NUNCA es la que se manda en `week`
+    # (11-11-2026): con «nov. 01» escrito a mano, la semana después del 1 de
+    # noviembre las dos coincidían y la prueba pasaba aunque mandara `week`.
+    otra = DOM - timedelta(days=21)
+    dias = "".join("%s., %s. %02d\n\n" % (d, _MESES[f.month], f.day)
+                   for d, f in zip(("dom", "lun", "mar"), (otra + timedelta(days=k) for k in range(3))))
     plan = "Buscar asociados\n" + dias + "".join(_conductor(n) for n in NOMBRES)
     semana_texto = server._whc_semana_del_plan(plan)
-    assert semana_texto
+    assert semana_texto == otra.isoformat()
+    assert semana_texto != PASADA
     r = await _analizar(texto=plan, center="DGA1", week=PASADA)
     assert r["semana_guardada"] == semana_texto
     assert _semanas(mundo) == [("DGA1", semana_texto)]
