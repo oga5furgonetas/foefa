@@ -236,6 +236,38 @@ async def test_la_previa_dice_cuantos_sin_centro_se_quedan_fuera(base):
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_los_sin_centro_fuera_son_solo_los_que_todos_si_tocaria(base):
+    """Segunda revisión S7: los «sin centro» sin correo, con el acceso desactivado o con la suya (salvo la casilla)
+    tampoco los tocaría «Todos»: no cuentan como «fuera». Y `con_todos_entran` dice si «Todos» los incluiría: a un
+    usuario limitado a sus centros, no, ni con «Todos»."""
+    base["drivers"].docs += [
+        {"id": "d-sc-ok", "name": "SIN CENTRO SIN CUENTA", "email": "scok@empresa.es", "center": "", "active": True},
+        {"id": "d-sc-nomail", "name": "SIN CENTRO SIN CORREO", "email": "", "active": True},
+        {"id": "d-sc-off", "name": "SIN CENTRO DESACTIVADA", "email": "scoff@empresa.es", "center": "", "active": True},
+        {"id": "d-sc-suya", "name": "SIN CENTRO CON LA SUYA", "email": "scsuya@empresa.es", "active": True},
+    ]
+    base["driver_accounts"].docs += [
+        {"id": "c-sc-off", "driver_id": "d-sc-off", "email": "scoff@empresa.es", "hashed_password": "h",
+         "active": False, "created_at": "2026-10-28T10:00:00+00:00"},
+        {"id": "c-sc-suya", "driver_id": "d-sc-suya", "email": "scsuya@empresa.es", "hashed_password": "h",
+         "active": True, "password_changed_at": "2026-10-29T10:00:00+00:00", "created_at": "2026-10-28T10:00:00+00:00"},
+    ]
+    p = await server.previa_accesos_conductores("OGA5", False, DANI)
+    assert p["sin_centro_fuera"] == 1 and p["con_todos_entran"] is True
+    # Lo que dice coincide con lo que «Todos» les cambiaría de verdad.
+    assert (await server.previa_accesos_conductores(None, False, DANI))["naves"].get("sin centro") == 1
+    p = await server.previa_accesos_conductores("OGA5", True, DANI)
+    assert p["sin_centro_fuera"] == 2
+    assert (await server.previa_accesos_conductores(None, True, DANI))["naves"].get("sin centro") == 2
+    # Un usuario limitado a DGA1, ya en «Todos»: siguen fuera y «Todos» no los incluiría.
+    p = await server.previa_accesos_conductores("Todos", False, MERY)
+    assert p["sin_centro_fuera"] == 1 and p["con_todos_entran"] is False
+    # Con «Todos» y sin límites no hay nadie fuera.
+    p = await server.previa_accesos_conductores(None, False, DANI)
+    assert p["sin_centro_fuera"] == 0 and p["con_todos_entran"] is True
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_el_desglose_agrupa_por_el_codigo_del_centro(base):
     """R43: 'AMZL OGA5 SANTIAGO XPT', 'oga5' y 'OGA5 ' son OGA5, no tres centros distintos en la confirmación."""
     base["drivers"].docs += [

@@ -754,10 +754,13 @@ function AvisoAccesos({ list, center, onHecho }) {
               {previa.cuentas_inactivas > 0 && (
                 <p className="text-dark-400">{previa.cuentas_inactivas} con el acceso desactivado no se tocan.</p>
               )}
-              {/* Los «sin centro» salen en la lista de este centro, pero no son de él: no se tocan, y se dice (R40/R42). */}
+              {/* Los «sin centro» salen en la lista de este centro, pero no son de él: no se tocan, y se dice (R40/R42).
+                 Lo de «aplícala con «Todos»» solo si no se está ya en «Todos» y «Todos» de verdad los incluiría (un
+                 usuario limitado a sus centros no puede); un servidor viejo no manda `con_todos_entran` (S7, 10-11-2026). */}
               {previa.sin_centro_fuera > 0 && (
                 <p className="text-amber-300">
-                  {previa.sin_centro_fuera} sin centro no se incluyen: ponles su centro en la ficha o aplícala con «Todos».
+                  {previa.sin_centro_fuera} sin centro no se incluyen: ponles su centro en la ficha
+                  {center && center !== 'Todos' && previa.con_todos_entran !== false ? ' o aplícala con «Todos»' : ''}.
                 </p>
               )}
             </>
