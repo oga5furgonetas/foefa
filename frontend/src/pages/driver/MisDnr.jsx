@@ -7,16 +7,19 @@
    Cómo se monta (Dani, 11-11-2026: «que le ponga "esta semana llevas 1 DNR" y cuál es, o "llevas 5"», y después: «hazlo
    más bonito y mejor… entrega tipo "marcaste puerta y no llamaste ni sacaste bien la foto"… y un recordatorio»):
      1. Arriba y en grande, la frase de ESTA semana con su número (todas las DNR de la semana, cuenten o no), o «Esta semana
-        no llevas ninguna» con su marca verde. Debajo, en pequeño, el desglose (solo con 2 o más) y hasta qué día hay
-        reportes subidos: sin eso, «ninguna» no se distingue de «aún no se ha subido».
+        no llevas ninguna» con su marca verde SOLO si hay datos de esta semana (revisión final, F3/F6: de domingo a
+        martes, más o menos, aún no hay ninguno; entonces lo dice, sin marca verde, y abre «La semana pasada», que es la
+        que acaba de llegar). Debajo, en pequeño, el desglose (solo con 2 o más) y hasta qué día hay datos.
      2. El recordatorio, siempre a la vista bajo la frase, con las palabras de Dani.
-     3. Cuáles son: una tarjeta por DNR con su día, su CP, su paquete, su estado y, debajo, QUÉ PASÓ en frases cortas con
-        su icono, solo lo que el servidor ha entendido con seguridad (lo que llega a null no se dice). Si se sabe que no
-        llamó o que la foto falló, la tarjeta lo destaca como «lo que puedes hacer la próxima vez».
-     4. Las semanas anteriores, discretas: una línea por semana con su recuento, que se abre al tocarla.
+     3. Cuáles son: una tarjeta por DNR con qué día es cada cosa (revisión final, F8/F9: «Entregado el sáb, 7/11» si el
+        servidor sabe el día de la entrega, y siempre «DNR del lun, 9/11», el día por el que cuenta), su CP, su paquete
+        (entero en su línea), su estado y, debajo, QUÉ PASÓ en frases cortas con su icono, solo lo que el servidor ha
+        entendido con seguridad (lo que llega a null no se dice). Si se sabe que no llamó, que la foto falló o que le
+        apuntaron un fallo de contacto, la tarjeta lo destaca como «lo que puedes hacer la próxima vez».
+     4. Las semanas anteriores, discretas: una línea por semana con su recuento y su desglose, que se abre al tocarla.
      5. Qué es cada estado y, siempre, «¿Alguna no es tuya? Díselo a la oficina.»: qué ID es de quién lo decide la oficina
         (revisión de seguridad, 11-11-2026); la app no tiene otra forma de saberlo. */
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   AlertTriangle, Camera, CameraOff, Check, ChevronDown, ChevronUp, Clock, ConciergeBell, DoorOpen, Hand, Lightbulb,
   Loader2, Lock, Mailbox, MapPin, MapPinOff, MessageCircleQuestion, Phone, PhoneCall, PhoneOff, Store, Trees, Users,
@@ -26,12 +29,17 @@ import { tx, locale, useIdioma } from '../../lib/idioma'
 import { lista } from '../../lib/lista'
 import { Aviso, Cabecera, ContenedorLista, Etiqueta } from './piezas'
 import icono from './piezas/icono'
-import { IconoDnr, leerVistas, guardarVistas, novedades, recordarDnr } from './dnrVistas'
+import {
+  IconoDnr, casoSemana, contar, cuantasActualizadas, cuantasNuevas, guardarVistas, leerVistas, novedades, novedadesEnCorto,
+  recordarDnr, yo,
+} from './dnrVistas'
 
 // Cada estado con su color Y su icono (el color solo no se distingue al sol ni sin ver colores), y lo que quiere decir.
+// «No te cuenta» va en gris (revisión final, F31): en verde relleno pesaba más a la vista que «Te cuenta», que es la que
+// importa. Con las piezas que hay, la de peligro (tinte rojo) destaca sobre la neutra.
 const ESTADO = {
   cuenta: { texto: 'Te cuenta', tono: 'peligro', icono: AlertTriangle, explica: 'Amazon te la apunta como fallo.' },
-  no_cuenta: { texto: 'No te cuenta', tono: 'ok', icono: Check, explica: 'Amazon la revisó y no te la apunta.' },
+  no_cuenta: { texto: 'No te cuenta', tono: 'neutro', icono: Check, explica: 'Amazon la revisó y no te la apunta.' },
   sin_clasificar: { texto: 'Sin clasificar', tono: 'aviso', icono: Clock, explica: 'Amazon aún no la ha revisado; suele tardar unos días.' },
 }
 
@@ -86,10 +94,12 @@ function quePaso(x) {
   return out
 }
 
-// Lo que puede hacer la próxima vez: solo si SE SABE que no llamó o que la foto falló.
+// Lo que puede hacer la próxima vez: solo si SE SABE que no llamó, que le apuntaron un fallo de contacto o que la foto
+// falló. Con el fallo de contacto, un consejo prudente que no afirma que no llamara (revisión final, F30).
 function proximaVez(x) {
   const out = []
   if (x.llamada === 'no') out.push(tx('Llama al cliente antes de dejar el paquete.'))
+  else if (x.fallo_contacto === true) out.push(tx('Contacta con el cliente antes de dejar el paquete.'))
   if (x.foto === 'mal') out.push(tx('Saca la foto con el paquete y el sitio bien a la vista.'))
   return out
 }
@@ -99,6 +109,9 @@ const fecha = (iso, op) => {
   return isNaN(d) ? iso : d.toLocaleDateString(locale(), op)
 }
 const corta = (iso) => fecha(iso, { day: 'numeric', month: 'numeric' })
+const diaCorto = (iso) => fecha(iso, { weekday: 'short', day: 'numeric', month: 'numeric' })
+// El día de la entrega solo si llega como fecha ISO (el servidor ya manda null lo dudoso; esto es por si acaso).
+const esDia = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
 const rango = (s) => tx('Del {desde} al {hasta}', { desde: corta(s.semana), hasta: corta(s.hasta) })
 
 // La frase grande con su número destacado: se traduce con un hueco en el sitio del número y el número se pinta aparte,
@@ -128,29 +141,30 @@ function desglose(s) {
   return partes.join(' · ')
 }
 
-const cuantasNuevas = (n) => (n === 1 ? tx('1 nueva') : tx('{n} nuevas', { n }))
-
-// Una DNR, en su tarjeta: arriba el día y el CP (el contexto) con el estado a la derecha; el paquete; y, debajo de una
-// línea, qué pasó y, si toca, lo que puede hacer la próxima vez.
+// Una DNR, en su tarjeta: arriba su estado, en su propia fila (al lado del día, en el móvil unas veces cabía y otras no, y
+// cada tarjeta salía de una forma); qué día es (y el CP); el paquete, entero en su propia línea (revisión final, F27: se
+// compara con la etiqueta y partido se lee mal); y, debajo de una línea, qué pasó
+// y, si toca, lo que puede hacer la próxima vez. Con el día de la entrega, ese arriba y el de la DNR, más discreto, bajo el
+// paquete; sin él, solo el de la DNR (revisión final, F8/F9: era la fecha de concesión sin decirlo, y se leía como el día
+// del reparto).
 function Tarjeta({ x, marca }) {
   const e = ESTADO[x.estado] || ESTADO.sin_clasificar
   const hechos = quePaso(x)
   const consejos = proximaVez(x)
+  const entrega = esDia(x.entrega) ? x.entrega : null
+  const dnrDel = tx('DNR del {dia}', { dia: diaCorto(x.dia) })
   return (
     <li data-testid="dnr-fila" className="rounded-xl bg-dark-900 p-3">
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-sec text-dark-400">
-            <span className="capitalize">{fecha(x.dia, { weekday: 'short', day: 'numeric', month: 'numeric' })}</span>
-            {x.cp && <> · <span data-testid="dnr-cp">{tx('CP {cp}', { cp: x.cp })}</span></>}
-          </p>
-          <p className="break-all font-mono text-nombre text-dark-50">{x.paquete}</p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <Etiqueta testid="dnr-estado" tono={e.tono} icono={e.icono} texto={tx(e.texto)} />
-          {marca && <Etiqueta testid="dnr-nueva" tono="marca" texto={marca === 'nueva' ? tx('Nueva') : tx('Actualizada')} />}
-        </div>
+      <div className="flex flex-wrap items-center gap-1">
+        <Etiqueta testid="dnr-estado" tono={e.tono} icono={e.icono} texto={tx(e.texto)} />
+        {marca && <Etiqueta testid="dnr-nueva" tono="marca" texto={marca === 'nueva' ? tx('Nueva') : tx('Actualizada')} />}
       </div>
+      <p data-testid="dnr-dia" className="mt-2 text-sec text-dark-400">
+        <span className="whitespace-nowrap">{entrega ? tx('Entregado el {dia}', { dia: diaCorto(entrega) }) : dnrDel}</span>
+        {x.cp && <> · <span data-testid="dnr-cp" className="whitespace-nowrap">{tx('CP {cp}', { cp: x.cp })}</span></>}
+      </p>
+      <p data-testid="dnr-paquete" className="whitespace-nowrap font-mono text-nombre text-dark-50">{x.paquete}</p>
+      {entrega && <p data-testid="dnr-concesion" className="text-pie text-dark-400">{dnrDel}</p>}
       {hechos.length > 0 && (
         <ul data-testid="dnr-que-paso" aria-label={tx('Qué pasó')} className="mt-3 flex flex-col gap-2 border-t border-dark-800 pt-3">
           {hechos.map((h) => (
@@ -163,11 +177,12 @@ function Tarjeta({ x, marca }) {
       )}
       {consejos.length > 0 && (
         <div data-testid="dnr-proxima" className="mt-3 rounded-lg bg-ruta-aviso p-3 text-ruta-aviso-texto">
-          <p className="flex items-center gap-2 text-etiqueta">
+          {/* El título manda sobre sus consejos (revisión final, F29): con peso, y ellos en letra normal. */}
+          <p data-testid="dnr-proxima-titulo" className="flex items-center gap-2 text-boton">
             {icono(Lightbulb, 16, 'shrink-0')} {tx('Lo que puedes hacer la próxima vez')}
           </p>
           {/* Alineados con el texto del título, no con su icono. */}
-          {consejos.map((c) => <p key={c} className="mt-1 pl-6 text-texto">{c}</p>)}
+          {consejos.map((c) => <p key={c} data-testid="dnr-consejo" className="mt-1 pl-6 text-texto">{c}</p>)}
         </div>
       )}
     </li>
@@ -190,24 +205,35 @@ function Recordatorio() {
   )
 }
 
-// ESTA semana: la frase grande, el desglose, hasta cuándo hay reportes, el recordatorio y, debajo, cuáles son.
-function EstaSemana({ s, marcas, hasta }) {
+// La frase grande cuando no lleva ninguna. Verde y con su marca SOLO si hay datos de esta semana; si no, neutra y diciendo
+// lo que pasa (revisión final, F3/F6).
+function SinNinguna({ caso }) {
+  const ninguna = caso === 'ninguna'
+  return (
+    <div className="mt-1 flex items-center gap-3">
+      <span data-testid={ninguna ? 'dnr-marca-verde' : undefined} aria-hidden="true"
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${ninguna ? 'bg-ruta-ok text-white' : 'bg-dark-800 text-dark-400'}`}>
+        {ninguna ? <Check size={24} /> : <Clock size={22} />}
+      </span>
+      <h2 data-testid="dnr-frase" className="text-cifra text-dark-50">
+        {ninguna ? tx('Esta semana no llevas ninguna')
+          : caso === 'sin_reportes' ? tx('Aún no hay reportes de tu centro') : tx('De esta semana aún no hay reportes')}
+      </h2>
+    </div>
+  )
+}
+
+// ESTA semana: la frase grande, el desglose, hasta cuándo hay datos, el recordatorio y, debajo, cuáles son.
+function EstaSemana({ s, caso, marcas, hasta }) {
   const dnr = lista(s.dnr)
   const n = dnr.length
   return (
     <section data-testid="dnr-esta-semana" aria-label={tx('Esta semana')} className="flex flex-col gap-4">
       <div className="px-1">
         <p className="text-sec text-dark-400">{rango(s)}</p>
-        {n > 0 ? <FraseSemana n={n} cuentan={s.cuentan || 0} /> : (
-          <div className="mt-1 flex items-center gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ruta-ok text-white" aria-hidden="true">
-              <Check size={24} />
-            </span>
-            <h2 data-testid="dnr-frase" className="text-cifra text-dark-50">{tx('Esta semana no llevas ninguna')}</h2>
-          </div>
-        )}
+        {n > 0 ? <FraseSemana n={n} cuentan={s.cuentan || 0} /> : <SinNinguna caso={caso} />}
         {n > 1 && <p data-testid="dnr-desglose" className="mt-1 text-texto text-dark-400">{desglose(s)}</p>}
-        <p data-testid="dnr-hasta" className="mt-1 text-sec text-dark-400">{hasta}</p>
+        {hasta && <p data-testid="dnr-hasta" className="mt-1 text-sec text-dark-400">{hasta}</p>}
       </div>
       <Recordatorio />
       {n > 0 && <Tarjetas dnr={dnr} marcas={marcas} nombre={tx('Esta semana')} />}
@@ -215,17 +241,27 @@ function EstaSemana({ s, marcas, hasta }) {
   )
 }
 
-// Una semana anterior: una línea con su recuento que se abre al tocarla. La que no tuvo ninguna lo dice en esa línea y
-// no se abre (no hay nada que ver).
+// Una semana anterior: una línea con su recuento y, bajo su rango, su desglose (revisión final, F17), que se abre al
+// tocarla. La que no tuvo ninguna lo dice en esa línea y no se abre (no hay nada que ver). Las nuevas y las actualizadas,
+// cada una en su etiqueta y aparte (F4/F16).
 function SemanaAnterior({ s, i, marcas, abierta, onTocar }) {
   const dnr = lista(s.dnr)
   const n = dnr.length
   const titulo = i === 1 ? tx('La semana pasada') : rango(s)
-  const nuevas = dnr.filter((x) => marcas[x.paquete]).length
+  const suyas = Object.fromEntries(dnr.filter((x) => marcas[x.paquete]).map((x) => [x.paquete, marcas[x.paquete]]))
+  const nuevas = contar(suyas, 'nueva')
+  const actualizadas = contar(suyas, 'actualizada')
   const izquierda = (
     <span className="min-w-0 flex-1">
       <span className="block text-texto text-dark-50">{titulo}</span>
       {i === 1 && <span className="block text-sec text-dark-400">{rango(s)}</span>}
+      {n > 0 && <span data-testid="dnr-semana-desglose" className="block text-sec text-dark-400">{desglose(s)}</span>}
+      {(nuevas > 0 || actualizadas > 0) && (
+        <span className="mt-1 flex flex-wrap gap-1">
+          {nuevas > 0 && <Etiqueta testid="dnr-semana-nuevas" tono="marca" texto={cuantasNuevas(nuevas)} />}
+          {actualizadas > 0 && <Etiqueta testid="dnr-semana-actualizadas" tono="neutro" texto={cuantasActualizadas(actualizadas)} />}
+        </span>
+      )}
     </span>
   )
   if (!n) {
@@ -238,12 +274,13 @@ function SemanaAnterior({ s, i, marcas, abierta, onTocar }) {
       </li>
     )
   }
+  // El foco del teclado, por dentro (revisión final, F28): la lista recorta lo que sale de sus bordes y el anillo de
+  // fuera no se veía.
   return (
     <li data-testid="dnr-semana">
       <button type="button" onClick={onTocar} aria-expanded={abierta}
-        className="flex min-h-12 w-full items-center gap-2 px-3 py-2 text-left active:opacity-80">
+        className="flex min-h-12 w-full items-center gap-2 px-3 py-2 text-left ring-inset active:opacity-80">
         {izquierda}
-        {nuevas > 0 && <Etiqueta tono="marca" texto={cuantasNuevas(nuevas)} />}
         <span data-testid="dnr-recuento" className="shrink-0 text-boton text-dark-50">
           {n === 1 ? tx('1 DNR') : tx('{n} DNR', { n })}
         </span>
@@ -258,18 +295,18 @@ function SemanaAnterior({ s, i, marcas, abierta, onTocar }) {
   )
 }
 
-// Qué quiere decir cada estado: al final, con la etiqueta tal cual se ve en las tarjetas.
+// Qué quiere decir cada estado: al final, con la etiqueta tal cual se ve en las tarjetas y su frase DEBAJO (revisión
+// final, F32: en dos columnas, a 360 px en alemán o francés la etiqueta larga dejaba a la frase una columna estrecha).
 function QueEsCadaEstado() {
   return (
     <section data-testid="dnr-estados" aria-label={tx('Qué es cada estado')} className="flex flex-col gap-2 px-1">
       <h2 className="text-etiqueta text-dark-400">{tx('Qué es cada estado')}</h2>
-      {/* En dos columnas: las etiquetas a la izquierda y las frases alineadas a su derecha. */}
-      <dl className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2">
+      <dl className="flex flex-col gap-3">
         {Object.entries(ESTADO).map(([k, e]) => (
-          <Fragment key={k}>
-            <dt className="justify-self-start"><Etiqueta tono={e.tono} icono={e.icono} texto={tx(e.texto)} /></dt>
-            <dd className="min-w-0 text-sec text-dark-400">{tx(e.explica)}</dd>
-          </Fragment>
+          <div key={k} className="flex flex-col items-start gap-1">
+            <dt><Etiqueta tono={e.tono} icono={e.icono} texto={tx(e.texto)} /></dt>
+            <dd data-testid="dnr-estado-explica" className="text-sec text-dark-400">{tx(e.explica)}</dd>
+          </div>
         ))}
       </dl>
     </section>
@@ -278,6 +315,7 @@ function QueEsCadaEstado() {
 
 export default function MisDnr({ onBack, driverId }) {
   useIdioma()
+  const id = yo(driverId)
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(false)
   const [marcas, setMarcas] = useState({})
@@ -290,27 +328,30 @@ export default function MisDnr({ onBack, driverId }) {
         const d = r.data || {}
         // Lo nuevo se calcula con lo apuntado la vez anterior y, al momento, se apunta lo de hoy: la marca se ve esta vez
         // y la próxima ya no. La casilla del inicio se queda con esta misma respuesta (no vuelve a pedirla al volver).
-        setMarcas(novedades(d, leerVistas(driverId)))
-        guardarVistas(driverId, d)
-        recordarDnr(driverId, d)
+        setMarcas(novedades(d, leerVistas(id)))
+        guardarVistas(id, d)
+        recordarDnr(id, d)
         setDatos(d)
       })
       .catch(() => { setDatos(null); setError(true) })
-  }, [driverId])
+  }, [id])
   useEffect(() => { cargar() }, [cargar])
 
   const semanas = lista(datos?.semanas)
-  const nuevas = Object.keys(marcas).length
   const [estaSemana, ...anteriores] = semanas
+  const caso = casoSemana(datos)
+  // Sin punto final: en alemán la fecha ya acaba en uno («10.11.»; revisión final, F19).
   const hasta = datos?.datos_hasta
-    ? tx('Reportes subidos hasta el {fecha}.', { fecha: fecha(datos.datos_hasta, { weekday: 'long', day: 'numeric', month: 'numeric' }) })
-    : tx('La oficina aún no ha subido ningún reporte.')
+    ? tx('Hay datos hasta el {fecha}', { fecha: fecha(datos.datos_hasta, { weekday: 'long', day: 'numeric', month: 'numeric' }) })
+    : null
+  // De esta semana aún no hay datos: «La semana pasada», la que acaba de llegar, sale abierta sin tocarla (F3/F6).
+  const abiertaSinTocar = (k) => k === 0 && caso === 'sin_datos_semana'
 
   return (
     <div className="min-h-[100dvh] bg-dark-950"
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
       <div className="mx-auto max-w-md" data-testid="mis-dnr">
-        <Cabecera titulo={tx('Mis DNR')} onVolver={onBack} subtitulo={nuevas ? cuantasNuevas(nuevas) : undefined} />
+        <Cabecera titulo={tx('Mis DNR')} onVolver={onBack} subtitulo={novedadesEnCorto(marcas) || undefined} />
         <div className="flex flex-col gap-6 px-4 pt-2">
           {error && (
             <Aviso tono="peligro" texto={tx('No se han podido cargar tus DNR.')} accion={tx('Reintentar')} onAccion={cargar} />
@@ -332,16 +373,19 @@ export default function MisDnr({ onBack, driverId }) {
                 : tx('La oficina está revisando tu ID de reparto. Cuando lo confirme, aquí verás tus DNR.')} />
           )}
 
-          {estaSemana && <EstaSemana s={estaSemana} marcas={marcas} hasta={hasta} />}
+          {estaSemana && <EstaSemana s={estaSemana} caso={caso} marcas={marcas} hasta={hasta} />}
 
           {anteriores.length > 0 && (
             <section data-testid="dnr-anteriores" aria-label={tx('Semanas anteriores')} className="flex flex-col gap-2">
               <h2 className="px-1 text-etiqueta text-dark-400">{tx('Semanas anteriores')}</h2>
               <ContenedorLista nombre={tx('Semanas anteriores')}>
-                {anteriores.map((s, k) => (
-                  <SemanaAnterior key={s.semana} s={s} i={k + 1} marcas={marcas} abierta={!!abiertas[s.semana]}
-                    onTocar={() => setAbiertas((a) => ({ ...a, [s.semana]: !a[s.semana] }))} />
-                ))}
+                {anteriores.map((s, k) => {
+                  const abierta = s.semana in abiertas ? abiertas[s.semana] : abiertaSinTocar(k)
+                  return (
+                    <SemanaAnterior key={s.semana} s={s} i={k + 1} marcas={marcas} abierta={abierta}
+                      onTocar={() => setAbiertas((a) => ({ ...a, [s.semana]: !abierta }))} />
+                  )
+                })}
               </ContenedorLista>
             </section>
           )}
