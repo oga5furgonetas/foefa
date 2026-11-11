@@ -245,7 +245,7 @@ function QuienVe({ users, onEditar }) {
                     <span className="block truncate text-[10px] font-normal text-dark-500">
                       {sup ? 'todo' : (u.allowed_centers?.length ? u.allowed_centers.join(' · ') : 'todos los centros')}
                     </span>
-                    {!sup && (
+                    {!sup && u.puede_gestionar !== false && (
                       <button type="button" onClick={() => onEditar(u)}
                         className="mt-1 rounded-md border border-dark-700 px-2 py-0.5 text-[10.5px] font-semibold text-dark-300 hover:border-dark-500 hover:text-dark-100">
                         Editar
@@ -280,11 +280,13 @@ function QuienVe({ users, onEditar }) {
    los centros» (el servidor lo rechaza), así que a él no se le ofrece. */
 function CenterPicker({ centers, value, onChange, t, todas = true }) {
   if (!centers.length) return null
+  /* Sin ninguna marcada ([]) el servidor también lo guarda como «todos» (11-11-2026, corrección P34): se resalta igual. */
+  const todosMarcado = value === null || (Array.isArray(value) && value.length === 0)
   return (
     <div className="flex flex-wrap gap-1.5">
       {todas && (
-        <button type="button" onClick={() => onChange(null)}
-          className={`rounded-lg px-2.5 py-1 text-xs font-medium ${value === null ? 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40' : 'bg-dark-800 text-dark-300 hover:text-dark-300'}`}>
+        <button type="button" onClick={() => onChange(null)} aria-pressed={todosMarcado}
+          className={`rounded-lg px-2.5 py-1 text-xs font-medium ${todosMarcado ? 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40' : 'bg-dark-800 text-dark-300 hover:text-dark-300'}`}>
           {t('usr.all.centers')}
         </button>
       )}
@@ -379,10 +381,16 @@ export default function Usuarios() {
     } finally { setSubiendoFotoId(null) }
   }
 
+  /* Sin ninguna nave marcada el servidor guarda «todos» (11-11-2026, corrección P34). Un jefe con naves no puede dar
+     «todos»: tiene que marcar al menos una. */
+  const sinNaves = !form.centers?.length
+  const faltaNave = jefeLimitado && sinNaves
+
   async function create() {
     if (!form.name || !form.username || form.password.length < 6) {
       return setMsg({ ok: false, t: t('usr.form.req') })
     }
+    if (faltaNave) return setMsg({ ok: false, t: t('usr.centers.pick.one') })
     setBusy(true); setMsg(null)
     try {
       await createAdmin({ name: form.name.trim(), username: form.username.trim(), password: form.password, permissions: form.perms, allowed_centers: form.centers, admin_role: form.admin_role })
@@ -480,13 +488,13 @@ export default function Usuarios() {
           {allOrgCenters.length > 0 && (
             <Section title={t('usr.centers')}>
               <CenterPicker centers={allOrgCenters} value={form.centers} onChange={(centers) => setForm({ ...form, centers })} t={t} todas={!jefeLimitado} />
-              {form.centers === null && (
-                <p className="mt-1.5 text-[11px] text-amber-300">{t('usr.all.centers.warn')}</p>
+              {sinNaves && (
+                <p className="mt-1.5 text-[11px] text-amber-300">{t(faltaNave ? 'usr.centers.pick.one' : 'usr.all.centers.warn')}</p>
               )}
             </Section>
           )}
 
-          <button onClick={create} disabled={busy} className="btn-primary flex items-center gap-2 disabled:opacity-50">
+          <button onClick={create} disabled={busy || faltaNave} className="btn-primary flex items-center gap-2 disabled:opacity-50">
             {busy ? <Loader2 size={15} className="animate-spin" /> : <UserPlus size={15} />} {t('usr.create')}
           </button>
         </div>
@@ -512,6 +520,9 @@ export default function Usuarios() {
         <div className="overflow-hidden rounded-2xl border border-dark-800">
           {users.map((u, i) => {
             const isSuper = u.super_admin || u.account_type === 'owner'
+            /* A un jefe de centro el servidor le dice a quién NO puede gestionar (11-11-2026, corrección P16/P17):
+               esa fila se ve, pero sin «Editar» ni la papelera. Sin el campo (super-admin, servidor viejo), como antes. */
+            const gestionable = !isSuper && u.puede_gestionar !== false
             const perms = Array.isArray(u.permissions) ? u.permissions : null
             const isEd = editing?.id === u.id
             return (
@@ -519,7 +530,7 @@ export default function Usuarios() {
                 {/* Fila */}
                 <div className="flex items-center gap-3 px-4 py-3">
                   <Avatar name={u.name || u.username} photo={u.photo_url}
-                    onUpload={isSuper ? undefined : (file) => subirFoto(u.id, file)}
+                    onUpload={isSuper || (!gestionable && u.id !== me?.id) ? undefined : (file) => subirFoto(u.id, file)}
                     subiendo={subiendoFotoId === u.id} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -533,7 +544,7 @@ export default function Usuarios() {
                       {!isSuper && <span className="text-dark-400">{permsSummary(perms)}</span>}
                     </div>
                   </div>
-                  {!isSuper && (
+                  {gestionable && (
                     <div className="flex shrink-0 items-center gap-1">
                       <button
                         onClick={() => (isEd ? setEditing(null) : abrirEditor(u))}

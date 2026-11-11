@@ -190,3 +190,98 @@ test.describe('Importaciones · añadir una nave del fichero', () => {
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })
+
+/* ══ CORRECCIONES de la primera revisión (11-11-2026) ══ */
+
+/* P34: sin ninguna nave marcada ([]) el servidor guarda «todos»; la pantalla lo dice y resalta «Todos». Un jefe con
+   naves no puede crear así: «Marca al menos un centro». */
+test.describe('Usuarios · sin ninguna nave marcada (P34)', () => {
+  const USUARIOS = [
+    { id: 'a1', name: 'Jefe DGA1', username: 'jefe', admin_role: 'center_manager', allowed_centers: ['DGA1'] },
+    { id: 'a2', name: 'Mery', username: 'mery', admin_role: 'dispatcher', allowed_centers: ['DGA1'], permissions: ['chat'] },
+  ]
+
+  async function abrir(page, opciones) {
+    await entrarCon(page, opciones)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/auth\/admins/, json(USUARIOS))
+    await page.goto('/panel/usuarios', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Mery', { exact: true })).toBeVisible({ timeout: 45000 })
+    await page.getByRole('button', { name: 'Crear usuario' }).first().click()
+  }
+
+  test('el super-admin desmarca la nave de arriba: «Todos» resaltado y el aviso', async ({ page }) => {
+    const fallos = vigilar(page)
+    await abrir(page, { superAdmin: true, arriba: 'OGA5' })
+    const todos = page.getByRole('button', { name: 'Todos los centros', exact: true })
+    await expect(todos).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.getByText('Verá todos los centros', { exact: false })).toHaveCount(0)
+    await page.getByRole('main').getByRole('button', { name: 'OGA5', exact: true }).click()
+    await expect(page.getByText('Verá todos los centros', { exact: false })).toBeVisible()
+    await expect(todos).toHaveAttribute('aria-pressed', 'true')
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('el jefe con naves no puede crear sin ninguna marcada', async ({ page }) => {
+    const fallos = vigilar(page)
+    let pedidas = 0
+    await page.route(/\/api\/auth\/create-admin/, (route) => { pedidas += 1; return json({ success: true, id: 'n1' })(route) })
+    await abrir(page, { rol: 'center_manager', mias: ['DGA1'] })
+    const cajas = page.locator('.card').first().locator('input')
+    await cajas.nth(0).fill('Nuevo')
+    await cajas.nth(1).fill('nuevo')
+    await cajas.nth(2).fill('123456')
+    await page.getByRole('main').getByRole('button', { name: 'DGA1', exact: true }).click()
+    await expect(page.getByText('Marca al menos un centro.')).toBeVisible()
+    await expect(page.getByText('Verá todos los centros', { exact: false })).toHaveCount(0)
+    const crear = page.getByRole('button', { name: 'Crear usuario' }).last()
+    await expect(crear).toBeDisabled()
+    // Y al volver a marcarla se puede.
+    await page.getByRole('main').getByRole('button', { name: 'DGA1', exact: true }).click()
+    await expect(page.getByText('Marca al menos un centro.')).toHaveCount(0)
+    await expect(crear).toBeEnabled()
+    expect(pedidas).toBe(0)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
+/* P16 + P17: un jefe de centro ve la lista de siempre, pero a quien no puede gestionar (un «Admin completo», otro jefe,
+   él mismo) sin «Editar» ni la papelera. El servidor lo dice con `puede_gestionar`. */
+test.describe('Usuarios · el jefe no gestiona a quien puede más (P16/P17)', () => {
+  const USUARIOS = [
+    { id: 'a1', name: 'Jefe DGA1', username: 'jefe', admin_role: 'center_manager', allowed_centers: ['DGA1'], puede_gestionar: false },
+    { id: 'a2', name: 'Mery', username: 'mery', admin_role: 'dispatcher', allowed_centers: ['DGA1'], permissions: ['chat'], puede_gestionar: true },
+    { id: 'a3', name: 'Rosa Oficina', username: 'rosa', admin_role: null, allowed_centers: null, puede_gestionar: false },
+  ]
+
+  test('solo la fila del dispatcher lleva «Editar» y la papelera, también en «Quién ve cada pantalla»', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarCon(page, { rol: 'center_manager', mias: ['DGA1'] })
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/auth\/admins/, json(USUARIOS))
+    await page.goto('/panel/usuarios', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Rosa Oficina', { exact: true })).toBeVisible({ timeout: 45000 })
+    for (const [id, botones] of [['a1', 0], ['a2', 1], ['a3', 0]]) {
+      const fila = page.locator(`#usuario-${id}`)
+      await expect(fila.getByRole('button', { name: 'Editar' })).toHaveCount(botones)
+      await expect(fila.getByRole('button', { name: 'Eliminar' })).toHaveCount(botones)
+    }
+    await page.getByRole('button', { name: 'Quién ve cada pantalla' }).click()
+    await expect(page.getByRole('columnheader', { name: /Rosa Oficina/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Editar', exact: true })).toHaveCount(1)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('sin el campo (super-admin o un servidor de antes) todo sigue con sus botones', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarCon(page, { superAdmin: true })
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/auth\/admins/, json(USUARIOS.map(({ puede_gestionar: _, ...u }) => u)))
+    await page.goto('/panel/usuarios', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Rosa Oficina', { exact: true })).toBeVisible({ timeout: 45000 })
+    for (const id of ['a1', 'a2', 'a3']) {
+      await expect(page.locator(`#usuario-${id}`).getByRole('button', { name: 'Editar' })).toHaveCount(1)
+    }
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
