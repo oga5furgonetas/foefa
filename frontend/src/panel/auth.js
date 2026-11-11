@@ -309,6 +309,12 @@ export function isDispatcher() {
   return getAdminRole() === 'dispatcher'
 }
 
+/* Añadir o quitar naves de la empresa: el super-admin y quien tenga «Admin completo»; un jefe de centro o un
+   dispatcher, no (11-11-2026, equipo-10). El servidor lo exige igual (`_puede_tocar_naves`); aquí solo se esconde. */
+export function puedeTocarNaves() {
+  return isSuperAdmin() || !['center_manager', 'dispatcher'].includes(getAdminRole())
+}
+
 /* LA DEMO NO PISA TU SESIÓN (03-10-2026). Dani entró en la demo del reparto
    desde su navegador y «le desapareció todo»: la demo había sustituido su
    sesión por la de la empresa de prueba. Ahora, al entrar en una demo con una

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { addOrgCenter } from '../api'
+import { puedeTocarNaves, decodeToken, getAdmin } from '../auth'
 
 /* QUÉ CENTROS DEL FICHERO SON TUYOS, Y A DÓNDE VA CADA UNO.
    La pieza común de todas las importaciones. Un fichero casi nunca es de una
@@ -52,6 +53,11 @@ export default function EleccionCentros({
   nombreFilas = 'Nuevas', nombreExistentes = 'Ya las tienes',
 }) {
   const [anadiendo, setAnadiendo] = useState('')
+  /* «Añadir X a mi empresa», solo a quien puede añadir naves (11-11-2026, equipo-10: un dispatcher de una nave
+     metía en la empresa una nave ajena del Excel de la región) y nunca con una que la empresa ya tiene aunque esta
+     persona no la vea (el servidor diría «Ese centro ya existe»). */
+  const anadeNaves = puedeTocarNaves()
+  const deLaEmpresa = decodeToken()?.centers || getAdmin()?.centers || []
   const marcar = (clave, cambio) => setSel((x) => ({ ...x, [clave]: { ...x[clave], ...cambio } }))
 
   const anadir = async (g) => {
@@ -81,7 +87,8 @@ export default function EleccionCentros({
           {(grupos || []).map((g) => {
             const s = sel[g.clave] || {}
             const nombre = g.clave ? g.texto : 'Sin centro en el fichero'
-            const puedeAnadir = g.sugerido && !(empresa || []).includes(g.sugerido)
+            const puedeAnadir = anadeNaves && g.sugerido && !(empresa || []).includes(g.sugerido)
+              && !deLaEmpresa.includes(g.sugerido)
             return (
               <tr key={g.clave || '_sin'} className={s.on ? '' : 'opacity-60'}>
                 <td className="px-3 py-2 align-top">

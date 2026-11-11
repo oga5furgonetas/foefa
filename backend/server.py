@@ -6662,9 +6662,19 @@ async def org_centros_geo(_=Depends(require_admin)):
     return {"centros": {c: v for c, v in out.items() if not naves or c in naves}}
 
 
+def _puede_tocar_naves(user: dict) -> bool:
+    """Añadir o quitar naves de la empresa: el super-admin y quien tenga «Admin completo» (admin_role vacío, que es como
+    se crean los dueños de las empresas cliente). Un jefe de centro o un dispatcher, no (11-11-2026, equipo-10, decidido
+    con Dani): desde la importación cualquiera pulsaba «Añadir X a mi empresa» con una nave ajena, y se quedaba para
+    siempre en el selector de todos."""
+    return bool(user.get("sa")) or user.get("admin_role") not in ("center_manager", "dispatcher")
+
+
 @api_router.post("/org/centers")
 async def add_org_center(data: dict = Body(...), user: dict = Depends(require_admin)):
     """Añade un centro a tu organización. Pasado el límite del plan → 402 (de pago)."""
+    if not _puede_tocar_naves(user):
+        raise HTTPException(status_code=403, detail="Solo un administrador completo puede añadir centros")
     name = _texto_cuerpo(data.get("name")).upper()
     if not name:
         raise HTTPException(status_code=400, detail="Indica el nombre del centro")
@@ -6681,6 +6691,52 @@ async def add_org_center(data: dict = Body(...), user: dict = Depends(require_ad
     await global_db.organizations.update_one(
         {"id": org["id"]}, {"$set": {"centers": centers}})
     return {"ok": True, "centers": centers}
+
+
+@api_router.delete("/org/centers/{nombre}")
+async def quitar_org_center(nombre: str, user: dict = Depends(require_admin)):
+    """Quita una nave de la empresa (11-11-2026, equipo-10). No había forma: una nave añadida por error se quedaba
+    para siempre en el selector de todos (y, pasadas 12, sacaba a otra de las listas: `_centros_de_la_empresa`).
+
+    Solo si está VACÍA: sin conductores vivos, sin furgonetas sin borrar y sin usuarios que la tengan entre sus naves
+    (si no, esas fichas se quedarían fuera de todos los selectores). Los centros se guardan sucios
+    («AMZL OGA5 SANTIAGO XPT»), así que se cuentan por el código dentro del texto, no por igualdad. No toca ningún dato
+    histórico (asignaciones, inspecciones…): guardan la nave como texto y siguen ahí si se vuelve a añadir."""
+    if not _puede_tocar_naves(user):
+        raise HTTPException(status_code=403, detail="Solo un administrador completo puede quitar centros")
+    buscado = str(nombre or "").strip().upper()
+    org = await get_org(user.get("org_id"))
+    if not org:
+        raise HTTPException(status_code=404, detail="Organización no encontrada")
+    centers = org.get("centers") or []
+    guardado = next((c for c in centers if buscado and str(c or "").strip().upper() == buscado), None)
+    if guardado is None:
+        raise HTTPException(status_code=404, detail="Ese centro no está en tu empresa")
+    if len([c for c in centers if str(c or "").strip()]) <= 1:
+        # Sin ninguna, las listas caerían a las naves que salgan en los datos (`_centros_de_la_empresa`).
+        raise HTTPException(status_code=409, detail={
+            "mensaje": "Tu empresa tiene que tener al menos un centro: añade el bueno antes de quitar este.",
+            "conductores": 0, "furgonetas": 0, "usuarios": 0})
+    rx = {"$regex": r"(?<![A-Z0-9])%s(?![A-Z0-9])" % re.escape(buscado), "$options": "i"}
+    conductores = await db.drivers.count_documents(
+        {"center": rx, "status": {"$ne": "deleted"}, "active": {"$ne": False}})
+    furgonetas = await db.vehicles.count_documents({"center": rx, "status": {"$ne": "deleted"}})
+    usuarios = 0
+    async for a in global_db.admin_users.find({"org_id": org["id"]}, {"_id": 0, "allowed_centers": 1}):
+        if any(str(c or "").strip().upper() == buscado for c in (a.get("allowed_centers") or [])):
+            usuarios += 1
+    if conductores or furgonetas or usuarios:
+        trozos = [("%d %s" % (n, uno if n == 1 else varios)) for n, uno, varios in (
+            (conductores, "conductor", "conductores"), (furgonetas, "furgoneta", "furgonetas"),
+            (usuarios, "usuario", "usuarios")) if n]
+        texto = trozos[0] if len(trozos) == 1 else ", ".join(trozos[:-1]) + " y " + trozos[-1]
+        raise HTTPException(status_code=409, detail={
+            "mensaje": "%s tiene %s: muévelos a otro centro antes de quitarlo." % (guardado, texto),
+            "conductores": conductores, "furgonetas": furgonetas, "usuarios": usuarios})
+    await global_db.organizations.update_one({"id": org["id"]}, {"$pull": {"centers": guardado}})
+    await _audit(user, "centro_quitado", {"centro": guardado})
+    org = await get_org(org["id"])
+    return {"ok": True, "centers": (org or {}).get("centers") or []}
 
 
 @auth_router.post("/lead")
@@ -8681,6 +8737,15 @@ def _can_manage_user(actor: dict, target_centers: Optional[list]) -> bool:
         return False  # dispatchers no pueden gestionar usuarios
     actor_centers = set(actor.get("allowed_centers") or [])
     target_set   = set(target_centers or [])
+    # «Todas las naves» se guarda como null o []. Antes un conjunto vacío «estaba dentro» de cualquiera, así que un
+    # jefe solo de DGA1 podía crear un usuario que viera todas las naves, o editar, cambiar la contraseña o borrar a
+    # cualquiera con acceso total (11-11-2026, equipo-2). Ahora:
+    #   · un jefe SIN restricción (ve todas) puede con cualquier no-jefe: ya podía con los de «todas», que es lo más;
+    #   · un jefe CON naves solo con usuarios que tengan naves, y todas dentro de las suyas.
+    if not actor_centers:
+        return True
+    if not target_set:
+        return False
     # center_manager solo puede gestionar usuarios cuyos centros son subconjunto de los suyos
     return target_set.issubset(actor_centers)
 
@@ -8715,6 +8780,11 @@ async def create_admin(
         raise HTTPException(403, "Sin permisos para crear usuarios")
 
     admin_role = data.admin_role if data.admin_role in ("center_manager", "dispatcher") else None
+    # Un jefe de centro solo da de alta dispatchers (11-11-2026, equipo-2). La pantalla solo le ofrece «Dispatcher»,
+    # pero el formulario salía con el rol vacío y, sin pulsarlo, se creaba un «Admin completo», que puede más que un
+    # dispatcher (p. ej. añadir naves). Se fuerza en vez de dar 403: la web vieja en caché lo sigue mandando vacío.
+    if _is_center_manager(_admin):
+        admin_role = "dispatcher"
     perms = _clamp_permissions(_admin, data.permissions)
 
     doc = {
@@ -8760,6 +8830,10 @@ async def update_admin_permissions(admin_id: str, data: dict = Body(...), _admin
     if "allowed_centers" in data:
         ac = data.get("allowed_centers")
         patch["allowed_centers"] = ac if (isinstance(ac, list) or ac is None) else None
+        # Las naves NUEVAS también tienen que ser del jefe (11-11-2026, equipo-2): antes solo se miraban las que el
+        # usuario ya tenía, y un jefe de DGA1 podía ampliar a un dispatcher suyo a «todas» o a OGA5.
+        if _is_center_manager(_admin) and not _can_manage_user(_admin, patch["allowed_centers"]):
+            raise HTTPException(403, "Solo puedes dar acceso a tus centros asignados")
     if data.get("name"):
         patch["name"] = str(data["name"]).strip()
     if "admin_role" in data:
@@ -8768,6 +8842,11 @@ async def update_admin_permissions(admin_id: str, data: dict = Body(...), _admin
             # center_manager no puede crear otros center_managers
             if ar == "center_manager" and not _admin.get("sa"):
                 raise HTTPException(403, "Solo super-admin puede asignar rol de gestor de centro")
+            # Ni subir a «Admin completo» a un dispatcher (11-11-2026, equipo-2). Si el usuario YA era «Admin
+            # completo» se le deja (null sobre null no cambia nada): la pantalla manda siempre el rol actual al
+            # guardar los permisos, y la web vieja no puede quedarse sin guardar.
+            if ar is None and _is_center_manager(_admin) and target.get("admin_role") is not None:
+                raise HTTPException(403, "Solo super-admin puede dar el rol de Admin completo")
             patch["admin_role"] = ar
     if "email" in data:
         em = _texto_cuerpo(data.get("email")).lower()
@@ -9155,11 +9234,12 @@ async def list_admins(_admin: dict = Depends(require_admin)):
     admins = await global_db.admin_users.find(q, {"_id": 0, "hashed_password": 0}).to_list(200)
     # center_manager solo ve usuarios en sus centros (+ a sí mismo)
     if not _admin.get("sa") and _is_center_manager(_admin):
-        my_centers = set(_admin.get("allowed_centers") or [])
+        # La misma regla que para gestionarlos (11-11-2026, equipo-2): un jefe con naves deja de ver a los usuarios
+        # sin restricción (antes «todas» contaba como dentro de las suyas); uno sin restricción los ve a todos.
         admins = [
             a for a in admins
             if a["id"] == _admin.get("sub")
-            or set(a.get("allowed_centers") or []).issubset(my_centers)
+            or _can_manage_user(_admin, a.get("allowed_centers"))
         ]
     return admins
 
@@ -12408,7 +12488,7 @@ def _imp_lee(filas: list) -> dict:
 
 @api_router.post("/drivers/importar/previsualizar")
 async def drivers_importar_prev(file: UploadFile = File(...), center: str = Form(""),
-                                _=Depends(require_admin)):
+                                user: dict = Depends(require_admin)):
     """Qué se importaría, SIN guardar nada."""
     contenido = await file.read()
     try:
@@ -12440,7 +12520,9 @@ async def drivers_importar_prev(file: UploadFile = File(...), center: str = Form
             repetidos += 1
         else:
             nuevos += 1
-    conocidos = set(c.upper() for c in (await _centros_de_la_empresa()) if c)
+    # Solo las naves que ve quien importa (11-11-2026, equipo-10): un jefe de DGA1 de una empresa cliente podía mandar
+    # gente a OGA5. En la cuenta dueña y para el super-admin son todas, como antes (`_naves_que_ve`).
+    conocidos = _naves_que_ve(user, set(c.upper() for c in (await _centros_de_la_empresa()) if c))
     # Un fichero de varias naves: se reparte por centro para que se elija cual
     # entra. Es la misma pieza que usan las furgonetas.
     centros = _grupos_por_centro(
@@ -12502,6 +12584,7 @@ async def drivers_importar(file: UploadFile = File(...), center: str = Form(""),
         pass
     conocidos = set(c.upper() for c in (await _centros_de_la_empresa()) if c)
     elegidos, destino = _eleccion_centros(centros, mapa, conocidos)
+    _destinos_que_ve(user, destino)
     nuevos, saltados, fuera_seleccion = [], [], 0
     for p in r["personas"]:
         clave = p.pop("centro_texto", "").upper()
@@ -28071,6 +28154,21 @@ def _grupos_por_centro(items: list, conocidos) -> list:
     return sorted(grupos.values(), key=lambda g: (g["clave"] == "", -g["filas"], g["clave"]))
 
 
+def _naves_que_ve(user: dict, naves) -> set:
+    """De las naves de la empresa, las que ve este usuario (11-11-2026, equipo-10): las importaciones solo ofrecen y
+    solo aceptan esas. En la cuenta dueña, para el super-admin y para quien no tiene naves asignadas son todas
+    (`_user_can_see_center`), o sea, lo de antes."""
+    return {c for c in (naves or ()) if _user_can_see_center(user, c)}
+
+
+def _destinos_que_ve(user: dict, destino: dict) -> None:
+    """403 si lo elegido en la vista previa manda filas a una nave que quien importa no ve (11-11-2026, equipo-10).
+    En la cuenta dueña, para el super-admin y para quien no tiene naves asignadas no rechaza nada, como antes."""
+    ajenos = sorted({c for c in (destino or {}).values() if c and not _user_can_see_center(user, c)})
+    if ajenos:
+        raise HTTPException(403, "No tienes acceso a estos centros: %s." % ", ".join(ajenos))
+
+
 def _eleccion_centros(centros, mapa, conocidos):
     """(elegidos, destino) de lo que la persona marco en la vista previa.
 
@@ -28183,10 +28281,12 @@ async def _veh_contexto():
 @api_router.post("/import/vehicles/previsualizar")
 async def import_vehicles_previsualizar(file: UploadFile = File(...),
                                         columnas: Optional[str] = Form(None),
-                                        _=Depends(require_admin)):
+                                        user: dict = Depends(require_admin)):
     """Que trae el fichero, SIN importar nada."""
     headers, cols, filas_crudas = await _veh_leer_fichero(file, columnas, exigir_matricula=False)
     conocidos, flota = await _veh_contexto()
+    # Solo las naves de quien importa (11-11-2026, equipo-10); en la cuenta dueña, todas como antes.
+    conocidos = _naves_que_ve(user, conocidos)
     cabeceras = [{"indice": i, "nombre": h,
                   "campo": next((c for c, j in cols.items() if j == i), ""),
                   "ejemplo": next((str(r[i]) for r in filas_crudas
@@ -28241,6 +28341,7 @@ async def import_vehicles(
     headers, cols, filas_crudas = await _veh_leer_fichero(file, columnas)
     conocidos, flota = await _veh_contexto()
     elegidos, destino = _eleccion_centros(centros, mapa, conocidos)
+    _destinos_que_ve(user, destino)
     filtro = _centro_norm(center_filter, conocidos) if center_filter and center_filter != "Todos" else ""
     unico = next(iter(conocidos)) if len(conocidos) == 1 else ""
 
