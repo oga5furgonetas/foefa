@@ -10,6 +10,17 @@ const dos = (n) => String(n).padStart(2, '0')
 const iso = (d) => `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`
 const hojaDe = (d) => `${dos(d.getDate())}/${dos(d.getMonth() + 1)}/${d.getFullYear()}`
 
+/* EL RELOJ, PARADO (11-11-2026). La Plantilla y la Asignación miran «hoy» en el navegador; si las pruebas lo
+   calculaban con el reloj real (y encima al cargar el fichero), una tanda que cruzaba la medianoche fallaba, y
+   las flechas del campo de fecha daban un día que no existe los días 1 y 2 de ciertos meses. Ahora el reloj del
+   navegador se para en AHORA (page.clock.setFixedTime) y las fechas de cada prueba salen de ese mismo instante:
+   un 14 a mediodía (el mismo día en UTC y en hora de Madrid), y en el pasado, para que la sesión simulada de
+   entrarComoAdmin (hora REAL + 1 h) nunca esté caducada para el navegador. Con el reloj parado, la primera carga
+   de cada worker va más lenta si el PC está cargado (medido: de 8 a 53 s): por eso abrir() espera hasta 45 s (un
+   tope, no una espera fija). */
+const AHORA = new Date(2026, 9, 14, 12, 0, 0)
+const elDia = (n) => { const d = new Date(AHORA); d.setDate(d.getDate() + n); return d }
+
 function vigilar(page) {
   const fallos = []
   page.on('pageerror', (e) => fallos.push(`excepcion: ${String(e.message).slice(0, 200)}`))
@@ -23,6 +34,7 @@ test.describe('Plantilla · borrador compartido', () => {
 
   // `alLeer` (opcional): lo que contesta el servidor al sondeo de la hoja abierta (GET …/b1).
   async function abrir(page, fecha, alBorrar, alLeer) {
+    await page.clock.setFixedTime(AHORA)
     await entrarComoAdmin(page)
     await simularApi(page, 'vacio')
     const borrados = []
@@ -38,13 +50,13 @@ test.describe('Plantilla · borrador compartido', () => {
       return json(borrador(fecha))(route)
     })
     await page.goto('/panel/plantilla', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('textbox', { name: 'Fecha' })).toHaveValue(fecha, { timeout: 15000 })
+    await expect(page.getByRole('textbox', { name: 'Fecha' })).toHaveValue(fecha, { timeout: 45000 })
     return borrados
   }
 
   test('si otra persona la está editando, pregunta con su nombre antes de borrarla para todos', async ({ page }) => {
     const fallos = vigilar(page)
-    const borrados = await abrir(page, hojaDe(new Date()), (url) => (url.searchParams.get('preguntar')
+    const borrados = await abrir(page, hojaDe(elDia(0)), (url) => (url.searchParams.get('preguntar')
       ? { ok: false, editando: { nombre: 'María', minutos: 3 } } : { ok: true }))
     const dialogos = []
     page.once('dialog', (d) => { dialogos.push(d.message()); d.dismiss() })
@@ -63,7 +75,7 @@ test.describe('Plantilla · borrador compartido', () => {
   })
 
   test('si nadie más la está editando, se borra sin preguntar', async ({ page }) => {
-    const borrados = await abrir(page, hojaDe(new Date()), () => ({ ok: true }))
+    const borrados = await abrir(page, hojaDe(elDia(0)), () => ({ ok: true }))
     let dialogo = false
     page.on('dialog', (d) => { dialogo = true; d.dismiss() })
     await page.getByRole('button', { name: 'Nueva plantilla' }).click()
@@ -92,8 +104,7 @@ test.describe('Plantilla · borrador compartido', () => {
   // Una hoja de hoy, de mañana, de pasado mañana o de dentro de unos días está hecha adrede: no avisa.
   for (const [nombre, dias] of [['hoy', 0], ['mañana', 1], ['pasado mañana', 2], ['dentro de 5 días', 5]]) {
     test(`la hoja de ${nombre} no avisa`, async ({ page }) => {
-      const d = new Date(); d.setDate(d.getDate() + dias)
-      await abrir(page, hojaDe(d), () => ({ ok: true }))
+      await abrir(page, hojaDe(elDia(dias)), () => ({ ok: true }))
       await expect(page.getByRole('button', { name: 'Nueva plantilla' })).toBeVisible()
       // El aviso sale justo después de cargar la hoja: se le da un momento para que se vea si saliera.
       await page.waitForTimeout(500)
@@ -102,7 +113,7 @@ test.describe('Plantilla · borrador compartido', () => {
   }
 
   test('la hoja de ayer sí avisa', async ({ page }) => {
-    const ayer = new Date(); ayer.setDate(ayer.getDate() - 1)
+    const ayer = elDia(-1)
     await abrir(page, hojaDe(ayer), () => ({ ok: true }))
     await expect(page.getByText(`Esta hoja es del ${hojaDe(ayer).slice(0, 5)}`)).toBeVisible()
   })
@@ -110,11 +121,11 @@ test.describe('Plantilla · borrador compartido', () => {
   test('si otra persona corrige la fecha a la de hoy, el aviso se va solo', async ({ page }) => {
     let corregida = false
     await abrir(page, '30/09/2026', () => ({ ok: true }),
-      () => (corregida ? { ...borrador(hojaDe(new Date())), revision: 2, updated_by: 'María' } : borrador('30/09/2026')))
+      () => (corregida ? { ...borrador(hojaDe(elDia(0))), revision: 2, updated_by: 'María' } : borrador('30/09/2026')))
     const aviso = page.getByText('Esta hoja es del 30/09')
     await expect(aviso).toBeVisible()
     corregida = true   // María la pone a hoy desde su equipo; llega con el sondeo de 2,5 s
-    await expect(page.getByRole('textbox', { name: 'Fecha' })).toHaveValue(hojaDe(new Date()), { timeout: 10000 })
+    await expect(page.getByRole('textbox', { name: 'Fecha' })).toHaveValue(hojaDe(elDia(0)), { timeout: 10000 })
     await expect(aviso).toHaveCount(0)
   })
 })
@@ -137,8 +148,9 @@ test('textos nuevos de la Plantilla y la Asignación: género, frases enteras y 
 
 /* ── D2, D3 y D4 · Asignación ── */
 test.describe('Asignación · cambios sin guardar, borrar fila y furgonetas en taller', () => {
-  const hoy = iso(new Date())
-  const ayer = (() => { const d = new Date(); d.setHours(12); d.setDate(d.getDate() - 1); return iso(d) })()
+  // Del reloj parado (AHORA), no del real: la pantalla abre en este mismo día.
+  const hoy = iso(elDia(0))
+  const ayer = iso(elDia(-1))
   const VEHICULOS = [
     { id: 'v1', license_plate: '1234 ABC', status: 'active', center: 'NORTE', itv_date: '2030-01-01' },
     { id: 'v2', license_plate: '5678 DEF', status: 'taller', center: 'NORTE', itv_date: '2030-01-01' },
@@ -147,7 +159,9 @@ test.describe('Asignación · cambios sin guardar, borrar fila y furgonetas en t
   ]
   const DRIVERS = [{ id: 'd1', name: 'Ana López', center: 'NORTE' }, { id: 'd2', name: 'Luis Gómez', center: 'NORTE' }]
 
-  async function abrir(page, { centros = ['NORTE'] } = {}) {
+  // `hoyVacio`: el día de hoy viene del servidor sin filas (ayer sigue trayendo la de v3).
+  async function abrir(page, { centros = ['NORTE'], hoyVacio = false } = {}) {
+    await page.clock.setFixedTime(AHORA)
     await entrarComoAdmin(page, { centros })
     await simularApi(page, 'vacio')
     const guardados = []
@@ -159,10 +173,13 @@ test.describe('Asignación · cambios sin guardar, borrar fila y furgonetas en t
       const fecha = new URL(req.url()).searchParams.get('date')
       return json({ date: fecha, slots: fecha === ayer
         ? [{ vehicle_id: 'v3', vehicle_plate: '9012 GHI', driver_id: 'd2', driver_name: 'Luis Gómez' }]
-        : [{ vehicle_id: 'v1', vehicle_plate: '1234 ABC', driver_id: 'd1', driver_name: 'Ana López' }] })(route)
+        : hoyVacio ? []
+          : [{ vehicle_id: 'v1', vehicle_plate: '1234 ABC', driver_id: 'd1', driver_name: 'Ana López' }] })(route)
     })
     await page.goto('/panel/asignacion', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('button', { name: 'Quitar fila' })).toHaveCount(1, { timeout: 15000 })
+    await expect(page.locator('input[type="date"]')).toHaveValue(hoy, { timeout: 45000 })
+    if (hoyVacio) await expect(page.getByText('Sin cuadrante para esta fecha')).toBeVisible({ timeout: 45000 })
+    else await expect(page.getByRole('button', { name: 'Quitar fila' })).toHaveCount(1, { timeout: 45000 })
     return guardados
   }
   const matriculas = (page) => page.locator('select').filter({ has: page.locator('option', { hasText: '1234 ABC' }) })
@@ -314,18 +331,57 @@ test.describe('Asignación · cambios sin guardar, borrar fila y furgonetas en t
     await expect(marca).toHaveCount(0)
   })
 
-  test('si se quitan todas las filas no se queda «Cambios sin guardar» ni pregunta al cambiar de día', async ({ page }) => {
-    await abrir(page)
-    page.once('dialog', (d) => d.accept())   // la fila tiene datos: se confirma quitarla
-    await page.getByRole('button', { name: 'Quitar fila' }).click()
-    await expect(page.getByRole('button', { name: 'Quitar fila' })).toHaveCount(0)
-    await expect(page.getByText('Cambios sin guardar')).toHaveCount(0)
+  test('en un día que venía vacío, quitar la fila añadida no deja «Cambios sin guardar» ni pregunta al cambiar de día', async ({ page }) => {
+    await abrir(page, { hoyVacio: true })
+    const marca = page.getByText('Cambios sin guardar')
+    const quitar = page.getByRole('button', { name: 'Quitar fila' })
+    await page.getByRole('button', { name: 'Añadir fila' }).first().click()
+    await expect(marca).toBeVisible()
+    await quitar.click()   // la fila está vacía: se quita sin preguntar
+    await expect(quitar).toHaveCount(0)
+    await expect(marca).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Guardar cuadrante' })).toBeDisabled()
 
     let otro = false
     page.on('dialog', (d) => { otro = true; d.accept() })
     await page.locator('input[type="date"]').fill(ayer)
     await expect(matriculas(page).first()).toHaveValue('v3')   // la de ayer, cargada sin preguntar
     expect(otro).toBe(false)
+  })
+
+  test('vaciar un día que tenía filas guardadas es un cambio: queda la marca, pregunta y Guardar lo deja vacío', async ({ page }) => {
+    const guardados = await abrir(page, { centros: ['NORTE', 'SUR'] })
+    const marca = page.getByText('Cambios sin guardar')
+    const quitar = page.getByRole('button', { name: 'Quitar fila' })
+    const fecha = page.locator('input[type="date"]')
+    const titulo = page.getByRole('heading', { level: 1 })
+    page.once('dialog', (d) => d.accept())   // la fila tiene datos: se confirma quitarla
+    await quitar.click()
+    await expect(quitar).toHaveCount(0)
+    await expect(marca).toBeVisible()
+    const guardar = page.getByRole('button', { name: 'Guardar cuadrante' })
+    await expect(guardar).toBeEnabled()
+
+    // Cambiar de centro y de día pregunta; con «No» se queda todo como estaba.
+    const dialogos = []
+    page.on('dialog', (d) => { dialogos.push(d.message()); d.dismiss() })
+    await page.getByRole('button', { name: 'SUR', exact: true }).click()
+    await expect.poll(() => dialogos.length).toBe(1)
+    await expect(titulo).toContainText('NORTE')
+    await fecha.fill(ayer)
+    await expect.poll(() => dialogos.length).toBe(2)
+    expect(dialogos.every((m) => m.includes('Hay cambios sin guardar')), dialogos.join(' | ')).toBe(true)
+    await expect(fecha).toHaveValue(hoy)
+    await expect(marca).toBeVisible()
+    expect(guardados).toEqual([])
+
+    // Guardar manda el día vacío y la marca se va; ya no pregunta.
+    await guardar.click()
+    await expect(marca).toHaveCount(0)
+    expect(guardados).toEqual([{ center: 'NORTE', date: hoy, slots: [] }])
+    await fecha.fill(ayer)
+    await expect(matriculas(page).first()).toHaveValue('v3')
+    expect(dialogos).toHaveLength(2)
   })
 
   test('escribir la fecha a mano con cambios pendientes no pregunta en cada tecla, sino al terminar', async ({ page }) => {
@@ -337,9 +393,13 @@ test.describe('Asignación · cambios sin guardar, borrar fila y furgonetas en t
     page.on('dialog', (d) => { dialogos.push(d.message()); d.dismiss() })
 
     await fecha.focus()
-    await page.keyboard.press('ArrowDown')   // baja un día (o un mes) en la parte que tiene el foco
+    // Baja un día (o un mes) en la parte que tiene el foco: desde el 14 de octubre del reloj parado, las dos
+    // flechas siempre dan una fecha que existe (con el reloj real, un día 1 o 2 bajaba al 31 o al 30, que en
+    // ciertos meses no existe, y el campo se quedaba en blanco).
+    await page.keyboard.press('ArrowDown')
     await page.keyboard.press('ArrowDown')
     await expect(fecha).not.toHaveValue(hoy)
+    await expect(fecha).toHaveValue(/^\d{4}-\d{2}-\d{2}$/)   // una fecha que existe, no el campo en blanco
     await page.waitForTimeout(300)
     expect(dialogos).toHaveLength(0)
 
@@ -394,11 +454,11 @@ test.describe('Inicio · casilla del checklist', () => {
 
   test('por la tarde enseña el turno de tarde', async ({ page }) => {
     const casilla = await abrirA(page, 17)
-    await expect(casilla).toContainText('1/4', { timeout: 15000 })
+    await expect(casilla).toContainText('1/4', { timeout: 45000 })
   })
 
   test('por la mañana, el de mañana', async ({ page }) => {
     const casilla = await abrirA(page, 9)
-    await expect(casilla).toContainText('5/7', { timeout: 15000 })
+    await expect(casilla).toContainText('5/7', { timeout: 45000 })
   })
 })
