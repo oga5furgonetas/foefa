@@ -19,13 +19,20 @@
         frase larga para el lector de pantalla. La que le cuenta, con su banda roja.
      4. Las semanas anteriores, una fila cada una con sus mini contadores de color; se abren al tocarlas.
      5. «Qué es cada color», plegado, y «¿Alguna no es tuya? Díselo a la oficina.» si hay alguna en pantalla: qué ID es de
-        quién lo decide la oficina (revisión de seguridad, 11-11-2026); la app no tiene otra forma de saberlo. */
+        quién lo decide la oficina (revisión de seguridad, 11-11-2026); la app no tiene otra forma de saberlo.
+
+   R9 (Dani, 11-11-2026, al verla): «en los fallos de contacto, ponles que dando tono no podemos colgar nosotros la llamada
+   y mínimo deben ser 30 segundos, aunque llames y te abra en la puerta». La llamada de menos de 30 s es «Llamada corta»
+   (fallo) y cada DNR con fallo de contacto lleva, una vez, el aviso de los 30 segundos. Y dos cosas EN PAUSA
+   (dnrPausas.js), sin borrarlas: el recordatorio de la entrega con preferencia (el bloque 2) y si le cuenta o no (el
+   estado, su banda, los contadores, «Qué es cada color» y «Actualizada»). En pausa, la tarjeta empieza por el día. */
 import { useCallback, useEffect, useState } from 'react'
 import {
   AlertTriangle, ArrowRight, Camera, CameraOff, Check, ChevronDown, ChevronUp, Clock, ConciergeBell, DoorOpen, Hand, Info,
-  Loader2, Lock, Mailbox, MapPin, MapPinOff, MessageCircleQuestion, Phone, PhoneCall, PhoneOff, Store, Trees, Truck,
+  Loader2, Lock, Mailbox, MapPin, MapPinOff, MessageCircleQuestion, Phone, PhoneCall, PhoneOff, Store, Timer, Trees, Truck,
   UserCheck, Users,
 } from 'lucide-react'
+import { PAUSAS } from './dnrPausas'
 import { getMisDnr } from '../../services/api'
 import { tx, locale, useIdioma } from '../../lib/idioma'
 import { lista } from '../../lib/lista'
@@ -88,9 +95,13 @@ function quePaso(x) {
       ? { k: 'llamada', corto: tx('Llamaste · {n} s', { n: x.segundos }), frase: tx('Llamaste al cliente ({n} s)', { n: x.segundos }), icono: PhoneCall, tono: 'bien' }
       : { k: 'llamada', corto: tx('Llamaste'), frase: tx('Llamaste al cliente'), icono: PhoneCall, tono: 'bien' })
   }
-  // «Sin llamada» ya dice el fallo de contacto: el de contacto solo sale si no se ha dicho.
+  // «Sin llamada» y «Llamada corta» ya dicen el fallo de contacto: el de contacto solo sale si no se ha dicho. La corta
+  // (R9: hay segundos y son menos de 30) solo con sus segundos; sin ellos no se afirma cuánto duró.
   if (x.llamada === 'no') out.push({ k: 'llamada', corto: tx('Sin llamada'), frase: tx('No llamaste al cliente'), icono: PhoneOff, tono: 'fallo' })
-  else if (x.fallo_contacto === true) {
+  else if (x.llamada === 'corta' && x.segundos) {
+    out.push({ k: 'llamada', corto: tx('Llamada corta · {n} s', { n: x.segundos }), icono: PhoneCall, tono: 'fallo',
+      frase: tx('Tu llamada al cliente duró {n} segundos; tiene que durar 30 como mínimo', { n: x.segundos }) })
+  } else if (x.fallo_contacto === true) {
     out.push({ k: 'contacto', corto: tx('Fallo de contacto'), frase: tx('Te apuntaron un fallo de contacto con el cliente'), icono: Phone, tono: 'fallo' })
   }
   if (x.foto === 'mal') {
@@ -135,7 +146,7 @@ function Cuantas({ s, n, revision }) {
     <h2 data-testid="dnr-frase" className="min-w-0 text-dark-50">
       <span data-testid="dnr-frase-arriba" className="block text-texto text-dark-400">{arriba}</span>{' '}
       <span className="flex items-baseline gap-2">
-        <span data-testid="dnr-numero" className={`text-paquete ${s.cuentan ? 'text-ruta-peligro-texto' : 'text-dark-50'}`}>{n}</span>{' '}
+        <span data-testid="dnr-numero" className={`text-paquete ${s.cuentan && !PAUSAS.estado ? 'text-ruta-peligro-texto' : 'text-dark-50'}`}>{n}</span>{' '}
         <span className="text-titulo">{despues.trim()}</span>
       </span>
     </h2>
@@ -162,7 +173,8 @@ function SinNinguna({ caso }) {
 
 function Resumen({ s, caso, hasta }) {
   const n = lista(s.dnr).length
-  const cs = contadores(s)
+  // Los contadores de color dicen cuántas le cuentan: con el estado en pausa, no salen.
+  const cs = PAUSAS.estado ? [] : contadores(s)
   return (
     <div data-testid="dnr-resumen" className="rounded-xl bg-dark-900 p-4">
       <div className="flex items-start justify-between gap-3">
@@ -215,20 +227,30 @@ function Tarjeta({ x, marca }) {
   const hechos = quePaso(x)
   const entrega = esDia(x.entrega) && x.entrega !== x.dia ? x.entrega : null
   const dnrDia = tx('DNR {dia}', { dia: diaCorto(x.dia) })
-  const cuenta = x.estado === 'cuenta'
+  // Con el estado en pausa (dnrPausas.js) ni su etiqueta ni la banda roja; la fila de arriba empieza por el día y, si es
+  // nueva, «Nueva» a la derecha.
+  const verEstado = !PAUSAS.estado
+  const cuenta = verEstado && x.estado === 'cuenta'
+  // R9: un fallo de contacto (sin llamada, una llamada corta o el fallo que dice el informe) lleva el aviso de los 30 s.
+  const falloContacto = x.llamada === 'no' || x.llamada === 'corta' || x.fallo_contacto === true
+  const etiquetas = (verEstado || marca) && (
+    <div className="flex min-w-0 flex-wrap gap-1">
+      {verEstado && <Etiqueta testid="dnr-estado" tono={e.tono} icono={e.icono} texto={tx(e.texto)} />}
+      {marca && <Etiqueta testid="dnr-nueva" tono={marca === 'nueva' ? 'marca' : 'neutro'} texto={marca === 'nueva' ? tx('Nueva') : tx('Actualizada')} />}
+    </div>
+  )
+  const dia = (
+    <p className="flex min-h-6 shrink-0 items-center gap-1 whitespace-nowrap text-sec text-dark-400">
+      {entrega && icono(Truck, 14, 'shrink-0')}
+      {entrega && <span data-testid="dnr-dia-frase" className="sr-only">{tx('Entregado el {dia}', { dia: diaCorto(entrega) })}</span>}
+      <span data-testid="dnr-dia" aria-hidden={entrega ? 'true' : undefined}>{entrega ? diaCorto(entrega) : dnrDia}</span>
+    </p>
+  )
   return (
-    <li data-testid="dnr-fila" data-cuenta={cuenta ? 'si' : 'no'}
+    <li data-testid="dnr-fila" data-cuenta={verEstado ? (cuenta ? 'si' : 'no') : undefined}
       className={`rounded-xl bg-dark-900 p-3 ${cuenta ? 'border-l-4 border-ruta-peligro pl-2' : ''}`}>
       <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 flex-wrap gap-1">
-          <Etiqueta testid="dnr-estado" tono={e.tono} icono={e.icono} texto={tx(e.texto)} />
-          {marca && <Etiqueta testid="dnr-nueva" tono={marca === 'nueva' ? 'marca' : 'neutro'} texto={marca === 'nueva' ? tx('Nueva') : tx('Actualizada')} />}
-        </div>
-        <p className="flex min-h-6 shrink-0 items-center gap-1 whitespace-nowrap text-sec text-dark-400">
-          {entrega && icono(Truck, 14, 'shrink-0')}
-          {entrega && <span data-testid="dnr-dia-frase" className="sr-only">{tx('Entregado el {dia}', { dia: diaCorto(entrega) })}</span>}
-          <span data-testid="dnr-dia" aria-hidden={entrega ? 'true' : undefined}>{entrega ? diaCorto(entrega) : dnrDia}</span>
-        </p>
+        {verEstado ? <>{etiquetas}{dia}</> : <>{dia}{etiquetas}</>}
       </div>
       <p data-testid="dnr-paquete" className="mt-2 whitespace-nowrap font-mono text-nombre text-dark-50">{x.paquete}</p>
       {(x.cp || entrega) && (
@@ -246,6 +268,12 @@ function Tarjeta({ x, marca }) {
             </li>
           ))}
         </ul>
+      )}
+      {falloContacto && (
+        <p data-testid="dnr-aviso-llamada" className="mt-2 flex items-start gap-2 rounded-lg bg-ruta-aviso p-2 text-sec text-ruta-aviso-texto">
+          {icono(Timer, 16, 'mt-0.5 shrink-0')}
+          <span className="min-w-0">{tx('La llamada, mínimo 30 segundos. No cuelgues tú mientras da tono, aunque te abran la puerta.')}</span>
+        </p>
       )}
     </li>
   )
@@ -301,10 +329,19 @@ function SemanaAnterior({ s, i, marcas, abierta, onTocar, vacia }) {
       <button type="button" onClick={onTocar} aria-expanded={abierta}
         className="flex min-h-12 w-full items-center gap-2 px-3 py-2 text-left ring-inset active:opacity-80">
         {izquierda}
-        <span data-testid="dnr-recuento" aria-hidden="true" className="flex shrink-0 flex-wrap justify-end gap-1">
-          {contadores(s).map((c) => <Etiqueta key={c.k} testid={`dnr-mini-${c.k}`} tono={c.tono} icono={c.icono} texto={String(c.n)} titulo={c.texto} />)}
-        </span>
-        <span data-testid="dnr-semana-desglose" className="sr-only">{desglose(s)}</span>
+        {/* Con el estado en pausa, a la derecha solo el total («2 DNR»), que también lee el lector de pantalla. */}
+        {PAUSAS.estado ? (
+          <span data-testid="dnr-recuento" className="shrink-0 whitespace-nowrap text-boton text-dark-50">
+            {n === 1 ? tx('1 DNR') : tx('{n} DNR', { n })}
+          </span>
+        ) : (
+          <>
+            <span data-testid="dnr-recuento" aria-hidden="true" className="flex shrink-0 flex-wrap justify-end gap-1">
+              {contadores(s).map((c) => <Etiqueta key={c.k} testid={`dnr-mini-${c.k}`} tono={c.tono} icono={c.icono} texto={String(c.n)} titulo={c.texto} />)}
+            </span>
+            <span data-testid="dnr-semana-desglose" className="sr-only">{desglose(s)}</span>
+          </>
+        )}
         {icono(abierta ? ChevronUp : ChevronDown, 20, 'shrink-0 text-dark-400')}
       </button>
       {abierta && (
@@ -411,7 +448,7 @@ export default function MisDnr({ onBack, driverId }) {
           {estaSemana && (
             <section data-testid="dnr-esta-semana" aria-label={tx('Esta semana')} className="flex flex-col gap-3">
               <Resumen s={estaSemana} caso={caso} hasta={hasta} />
-              <Recordatorio />
+              {!PAUSAS.preferencia && <Recordatorio />}
               {lista(estaSemana.dnr).length > 0 && <Tarjetas dnr={lista(estaSemana.dnr)} marcas={marcas} nombre={tx('Esta semana')} />}
             </section>
           )}
@@ -431,7 +468,7 @@ export default function MisDnr({ onBack, driverId }) {
             </section>
           )}
 
-          {semanas.length > 0 && <QueEsCadaColor />}
+          {semanas.length > 0 && !PAUSAS.estado && <QueEsCadaColor />}
           {hayAlguna && (
             <p data-testid="dnr-no-es-mia" className="flex items-start gap-2 px-1 text-sec text-dark-400">
               {icono(MessageCircleQuestion, 16, 'mt-0.5 shrink-0')} {tx('¿Alguna no es tuya? Díselo a la oficina.')}

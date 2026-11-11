@@ -10,9 +10,14 @@
    Cada arreglo de las revisiones (F1 a F34 de R7, G1 a G19 de R8) está en su prueba con su número.
    API simulada con la forma EXACTA del contrato (R7 con los cambios de R8) y datos fijos: nada depende del día de hoy (las
    semanas, su orden y hasta cuándo hay datos los decide el servidor; las marcas del móvil, relativas al reloj de la
-   página). */
+   página).
+   R9 (Dani, 11-11-2026): la llamada de menos de 30 s es «corta» (fallo) y cada DNR con fallo de contacto lleva el aviso de
+   los 30 segundos. Y EN PAUSA (src/pages/driver/dnrPausas.js) el estado («te cuenta / no cuenta») y el recordatorio de la
+   preferencia: las pruebas que los miran se saltan mientras dure la pausa y vuelven solas al quitarla; las de «R9 (lo que
+   se publica)» miran que no salgan. */
 import { test, expect } from '@playwright/test'
 import { simularApi } from './api-simulada.js'
+import { PAUSAS } from '../src/pages/driver/dnrPausas.js'
 
 const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 const token = (sub, name) => `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub, role: 'driver', name, exp: 4102444800 })}.firma`
@@ -32,6 +37,16 @@ const semana = (desde, hasta, dnr) => ({
 // Cada DNR con TODAS las claves del contrato, y null lo que no se sabe con seguridad.
 const NADA = { entrega: null, cp: null, como: null, lejos: null, llamada: null, segundos: null, fallo_contacto: null, foto: null, foto_motivo: null }
 const dnr = (dia, paquete, estado, mas = {}) => ({ dia, paquete, estado, ...NADA, cp: '15704', ...mas })
+// R9: `llamada` es «si» (30 s o más), «corta» (de 1 a 29 s), «no» o null; `fallo_contacto`, true con «no» o «corta» y si
+// no null (nunca false).
+function expectLlamada(x) {
+  expect([null, 'si', 'corta', 'no']).toContain(x.llamada)
+  if (x.llamada === 'corta') expect(x.segundos >= 1 && x.segundos < 30).toBe(true)
+  if (x.llamada === 'si' && x.segundos != null) expect(x.segundos).toBeGreaterThanOrEqual(30)
+  if (x.llamada === 'no' || x.llamada === 'corta') expect(x.fallo_contacto).toBe(true)
+  if (x.fallo_contacto === true) expect(['no', 'corta']).toContain(x.llamada)
+  expect(x.fallo_contacto).not.toBe(false)
+}
 const CLAVES_DNR = ['dia', 'entrega', 'paquete', 'estado', 'cp', 'como', 'lejos', 'llamada', 'segundos', 'fallo_contacto', 'foto', 'foto_motivo']
 const DATOS = {
   tiene_id: true, en_revision: false, datos_hasta: '2026-11-10',
@@ -44,7 +59,8 @@ const DATOS = {
         entrega: '2026-11-07', como: 'puerta', lejos: true, llamada: 'no', fallo_contacto: true, foto: 'mal', foto_motivo: 'borrosa' }),
     ]),
     semana('2026-11-01', '2026-11-07', [
-      dnr('2026-11-04', 'TBA123456789010', 'cuenta', { como: 'buzon', lejos: false, llamada: 'si', segundos: 12, fallo_contacto: true }),
+      // R9: llamó 12 s, menos de los 30 que hacen falta: «corta», y con ello fallo de contacto.
+      dnr('2026-11-04', 'TBA123456789010', 'cuenta', { como: 'buzon', lejos: false, llamada: 'corta', segundos: 12, fallo_contacto: true }),
       dnr('2026-11-03', 'TBA123456789009', 'no_cuenta', { cp: null }),
     ]),
     semana('2026-10-25', '2026-10-31', []),
@@ -62,6 +78,7 @@ test('la API simulada tiene la forma exacta del contrato (R7 y R8)', () => {
       expect(x.paquete).toMatch(/^[A-Za-z0-9]{8,30}$/)
       if (x.cp) expect(x.cp.replace(/[ -]/, '').length).toBeLessThanOrEqual(8)
       if (x.segundos != null) expect(x.segundos >= 1 && x.segundos <= 1800).toBe(true)
+      expectLlamada(x)
     }
   }
 })
@@ -118,8 +135,12 @@ const abrirColores = (page) => page.getByRole('button', { name: 'Qué es cada co
 // ESTA semana con las DNR que se le den (las anteriores, las de DATOS), para el singular, el plural y el «ninguna».
 const conEstaSemana = (dnr, mas = {}) => ({ ...DATOS, ...mas, semanas: [semana('2026-11-08', '2026-11-14', dnr), ...DATOS.semanas.slice(1)] })
 const paquetes = (n, estado = 'cuenta', pre = 'TBA99900000000') => Array.from({ length: n }, (_, k) => dnr('2026-11-09', `${pre}${k}`, estado))
+// EN PAUSA (dnrPausas.js): lo que mira el estado o el recordatorio se salta mientras dure, y vuelve solo al quitarla.
+const PAUSA_ESTADO = 'el estado («te cuenta / no cuenta») está en pausa (dnrPausas.js)'
+const PAUSA_PREFERENCIA = 'el recordatorio de la preferencia está en pausa (dnrPausas.js)'
 
 test('V5: arriba el resumen con el número grande y sus contadores; debajo, cuáles; las anteriores en filas con mini contadores; los colores, plegados', async ({ page }) => {
+  test.skip(PAUSAS.estado, PAUSA_ESTADO)
   const fallos = vigilar(page)
   const pedidas = await entrar(page)
   // La casilla dice lo mismo en corto, con el número rojo de las nuevas (la primera vez, todas: nunca las ha visto).
@@ -217,11 +238,16 @@ test('con una sola, en singular y con su contador; sin ninguna que le cuente, el
   await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana llevas 1 DNR')
   await expect(page.getByTestId('dnr-numero')).toHaveText('1')
   await expect(page.getByTestId('dnr-numero')).not.toHaveClass(/peligro/)
-  await expect(page.getByTestId('dnr-desglose').locator('span[data-testid]')).toHaveText(['1 pendiente'])
   const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
   await expect(filas).toHaveCount(1)
   await expect(filas.getByTestId('dnr-paquete')).toHaveText('TBA999000000000')
-  await expect(filas.getByTestId('dnr-estado')).toHaveText('Pendiente')
+  if (!PAUSAS.estado) {
+    await expect(page.getByTestId('dnr-desglose').locator('span[data-testid]')).toHaveText(['1 pendiente'])
+    await expect(filas.getByTestId('dnr-estado')).toHaveText('Pendiente')
+  } else {
+    await expect(page.getByTestId('dnr-desglose')).toHaveCount(0)
+    await expect(filas.getByTestId('dnr-estado')).toHaveCount(0)
+  }
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
@@ -231,7 +257,8 @@ test('con cinco, el número y los contadores en plural', async ({ page }) => {
   await expect(casilla(page).getByTestId('dnr-casilla-semana')).toHaveText('Esta semana: 7')
   await casilla(page).click()
   await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana llevas 7 DNR')
-  await expect(page.getByTestId('dnr-desglose').locator('span[data-testid]')).toHaveText(['3 te cuentan', '2 no cuentan', '2 pendientes'])
+  if (!PAUSAS.estado) await expect(page.getByTestId('dnr-desglose').locator('span[data-testid]')).toHaveText(['3 te cuentan', '2 no cuentan', '2 pendientes'])
+  else await expect(page.getByTestId('dnr-desglose')).toHaveCount(0)
   await expect(page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')).toHaveCount(7)
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
@@ -293,9 +320,10 @@ test('F3/F18 y G5/G7: sin ningún reporte de su centro lo dice, sin «ninguna» 
   await expect(recuentos).toHaveText(['Sin datos', 'Sin datos', 'Sin datos'])
   for (const r of await recuentos.all()) await expect(r).not.toHaveClass(/ruta-ok/)
   await expect(page.getByTestId('mis-dnr')).not.toContainText('Ninguna')
-  // Ya no acusa a la oficina de no subir nada; el recordatorio sigue; «¿Alguna no es tuya?», no (G16: no hay ninguna).
+  // Ya no acusa a la oficina de no subir nada; el recordatorio sigue (salvo en pausa); «¿Alguna no es tuya?», no (G16: no
+  // hay ninguna).
   await expect(page.getByTestId('mis-dnr')).not.toContainText('La oficina aún no ha subido')
-  await expect(page.getByTestId('dnr-recordatorio')).toBeVisible()
+  await expect(page.getByTestId('dnr-recordatorio')).toHaveCount(PAUSAS.preferencia ? 0 : 1)
   await expect(page.getByTestId('dnr-no-es-mia')).toHaveCount(0)
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
@@ -353,9 +381,11 @@ test('una semana anterior se abre al tocarla y enseña cuáles fueron; otro toqu
   const filas = anteriores.getByTestId('dnr-fila')
   await expect(filas).toHaveCount(2)
   await expect(filas.nth(0).getByTestId('dnr-paquete')).toHaveText('TBA123456789010')
-  await expect(filas.nth(0).getByTestId('dnr-estado')).toHaveText('Te cuenta')
   await expect(filas.nth(1).getByTestId('dnr-paquete')).toHaveText('TBA123456789009')
-  await expect(filas.nth(1).getByTestId('dnr-estado')).toHaveText('No cuenta')
+  if (!PAUSAS.estado) {
+    await expect(filas.nth(0).getByTestId('dnr-estado')).toHaveText('Te cuenta')
+    await expect(filas.nth(1).getByTestId('dnr-estado')).toHaveText('No cuenta')
+  }
   await expect(filas.nth(1).getByTestId('dnr-nueva')).toHaveText('Nueva')
   await pasada.click()
   await expect(pasada).toHaveAttribute('aria-expanded', 'false')
@@ -372,16 +402,17 @@ test('en inglés, el singular y el plural cambian («1 DNR» / «5 DNRs»)', asy
   await casillaEn.click()
   await expect(page.getByTestId('dnr-frase')).toHaveText('This week you have 1 DNR')
   await expect(page.getByTestId('dnr-hasta')).toContainText('Data up to')
-  await expect(page.getByTestId('dnr-fila').first().getByTestId('dnr-estado')).toHaveText('Counts')
+  if (!PAUSAS.estado) await expect(page.getByTestId('dnr-fila').first().getByTestId('dnr-estado')).toHaveText('Counts')
   await contesta(page, conEstaSemana(paquetes(5)))
   await page.getByRole('button', { name: 'Back' }).click()
   await page.getByRole('button', { name: /^My DNRs/ }).click()
   await expect(page.getByTestId('dnr-frase')).toHaveText('This week you have 5 DNRs')
-  await expect(page.getByTestId('dnr-contador-cuentan')).toHaveText('5 count')
+  if (!PAUSAS.estado) await expect(page.getByTestId('dnr-contador-cuentan')).toHaveText('5 count')
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
 test('F4/F16 y F13: las que solo cambiaron de estado van aparte como «actualizadas» y no suman al número rojo; lo apuntado no guarda el código', async ({ page }) => {
+  test.skip(PAUSAS.estado, PAUSA_ESTADO)
   const fallos = vigilar(page)
   // La primera vez: 011 y 009 sin clasificar. Las ve.
   const antes = structuredClone(DATOS)
@@ -426,6 +457,7 @@ test('F4/F16 y F13: las que solo cambiaron de estado van aparte como «actualiza
 })
 
 test('G17: «Nueva» va en el tono de marca y «Actualizada» en gris, también en la tarjeta', async ({ page }) => {
+  test.skip(PAUSAS.estado, PAUSA_ESTADO)
   const antes = structuredClone(DATOS)
   antes.semanas[0].dnr[1].estado = 'sin_clasificar'
   await entrar(page, { mias: antes })
@@ -678,13 +710,13 @@ test('en el móvil el resumen y el recordatorio se ven sin bajar, nada se sale d
   await entrar(page, { mias: conEstaSemana(paquetes(5)) })
   await casilla(page).click()
   await expect(page.getByTestId('dnr-semana')).toHaveCount(3)
-  for (const t of ['dnr-resumen', 'dnr-recordatorio']) {
+  for (const t of ['dnr-resumen', ...(PAUSAS.preferencia ? [] : ['dnr-recordatorio'])]) {
     const caja = await page.getByTestId(t).boundingBox()
     expect(caja.y + caja.height).toBeLessThanOrEqual(844)
   }
   // Y con una semana anterior abierta y los colores abiertos, nada se sale.
   await page.getByRole('button', { name: /La semana pasada/ }).click()
-  await abrirColores(page)
+  if (!PAUSAS.estado) await abrirColores(page)
   await expect(page.getByTestId('dnr-anteriores').getByTestId('dnr-fila')).toHaveCount(2)
   const ancho = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, ventana: window.innerWidth }))
   expect(ancho.doc).toBeLessThanOrEqual(ancho.ventana)
@@ -722,7 +754,7 @@ test('V5: cada DNR con su estado y su día arriba, el paquete, el CP y qué pas�
   await expect(sinDatos.getByTestId('dnr-cp')).toHaveText('CP 15704')
 
   // La que trae de todo: cada cosa en su etiqueta corta, con su tono y su frase larga.
-  await expect(conTodo.getByTestId('dnr-estado')).toHaveText('Te cuenta')
+  if (!PAUSAS.estado) await expect(conTodo.getByTestId('dnr-estado')).toHaveText('Te cuenta')
   const hecho = (k) => conTodo.getByTestId(`dnr-hecho-${k}`)
   const esperado = [
     ['como', 'Puerta', 'dato', 'Lo marcaste en la puerta'],
@@ -739,26 +771,31 @@ test('V5: cada DNR con su estado y su día arriba, el paquete, el CP y qué pas�
   // «Sin llamada» ya dice el fallo de contacto: no se repite. Y ya no hay bloque de consejos: lo dicen las etiquetas.
   await expect(hecho('contacto')).toHaveCount(0)
   await expect(page.getByTestId('mis-dnr')).not.toContainText('Lo que puedes hacer la próxima vez')
-  // La que le cuenta se distingue de un vistazo: su banda roja; las otras, sin ella.
-  await expect(conTodo).toHaveAttribute('data-cuenta', 'si')
+  // La que le cuenta se distingue de un vistazo: su banda roja; las otras, sin ella (con el estado en pausa, ninguna).
   const banda = (l) => l.evaluate((el) => parseFloat(getComputedStyle(el).borderLeftWidth))
-  expect(await banda(conTodo)).toBeGreaterThanOrEqual(4)
+  if (!PAUSAS.estado) {
+    await expect(conTodo).toHaveAttribute('data-cuenta', 'si')
+    expect(await banda(conTodo)).toBeGreaterThanOrEqual(4)
+  } else {
+    expect(await banda(conTodo)).toBe(0)
+  }
   expect(await banda(sinDatos)).toBe(0)
 
   // La que no trae nada que se entienda: solo día, CP, paquete y estado.
   await expect(sinDatos.getByTestId('dnr-que-paso')).toHaveCount(0)
 
-  // La semana pasada: la que llamó (12 s) con su fallo de contacto, y la que no trae CP, sin CP.
+  // La semana pasada: la que llamó solo 12 s (R9: «Llamada corta», que ya dice el fallo de contacto), y la que no trae CP,
+  // sin CP.
   await page.getByRole('button', { name: /La semana pasada/ }).click()
   const pasada = page.getByTestId('dnr-anteriores').getByTestId('dnr-fila')
   await expect(pasada.nth(0).getByTestId('dnr-dia')).toHaveText('DNR mié 4/11')
   await expect(corto(pasada.nth(0).getByTestId('dnr-hecho-como'))).toHaveText('Buzón')
   await expect(corto(pasada.nth(0).getByTestId('dnr-hecho-lejos'))).toHaveText('En el sitio')
   await expect(pasada.nth(0).getByTestId('dnr-hecho-lejos')).toHaveAttribute('data-tono', 'bien')
-  await expect(corto(pasada.nth(0).getByTestId('dnr-hecho-llamada'))).toHaveText('Llamaste · 12 s')
-  await expect(pasada.nth(0).getByTestId('dnr-hecho-llamada')).toHaveAttribute('title', 'Llamaste al cliente (12 s)')
-  await expect(corto(pasada.nth(0).getByTestId('dnr-hecho-contacto'))).toHaveText('Fallo de contacto')
-  await expect(pasada.nth(0).getByTestId('dnr-hecho-contacto')).toHaveAttribute('data-tono', 'fallo')
+  await expect(corto(pasada.nth(0).getByTestId('dnr-hecho-llamada'))).toHaveText('Llamada corta · 12 s')
+  await expect(pasada.nth(0).getByTestId('dnr-hecho-llamada')).toHaveAttribute('data-tono', 'fallo')
+  await expect(pasada.nth(0).getByTestId('dnr-hecho-llamada')).toHaveAttribute('title', 'Tu llamada al cliente duró 12 segundos; tiene que durar 30 como mínimo')
+  await expect(pasada.nth(0).getByTestId('dnr-hecho-contacto')).toHaveCount(0)
   await expect(pasada.nth(1).getByTestId('dnr-paquete')).toHaveText('TBA123456789009')
   await expect(pasada.nth(1).getByTestId('dnr-cp')).toHaveCount(0)
   await expect(pasada.nth(1).getByTestId('dnr-dia')).toHaveText('DNR mar 3/11')
@@ -768,6 +805,8 @@ test('V5: cada DNR con su estado y su día arriba, el paquete, el CP y qué pas�
 })
 
 test('V5: el recordatorio pone la CONDICIÓN arriba y con peso, y debajo llama + foto clara → no te cuenta; el lector lee la frase entera', async ({ page }) => {
+  test.skip(PAUSAS.preferencia, PAUSA_PREFERENCIA)
+  test.skip(PAUSAS.estado, PAUSA_ESTADO)   // también mira dónde queda «Qué es cada color»
   await entrar(page)
   await casilla(page).click()
   const r = page.getByTestId('dnr-recordatorio')
@@ -805,6 +844,7 @@ test('G13/G18: si la entrega es el mismo día que la DNR, la fecha sale una sola
 })
 
 test('F31: «Te cuenta» pesa más a la vista que «No cuenta» (que no va en verde relleno)', async ({ page }) => {
+  test.skip(PAUSAS.estado, PAUSA_ESTADO)
   await entrar(page)
   await casilla(page).click()
   await page.getByRole('button', { name: /La semana pasada/ }).click()
@@ -829,7 +869,9 @@ test('F31: «Te cuenta» pesa más a la vista que «No cuenta» (que no va en ve
 test('F28: el foco del teclado se ve, por dentro, en los botones de las semanas anteriores y en «Qué es cada color»', async ({ page }) => {
   await entrar(page)
   await casilla(page).click()
-  for (const boton of [page.getByRole('button', { name: /La semana pasada/ }), page.getByRole('button', { name: 'Qué es cada color' })]) {
+  const botones = [page.getByRole('button', { name: /La semana pasada/ })]
+  if (!PAUSAS.estado) botones.push(page.getByRole('button', { name: 'Qué es cada color' }))
+  for (const boton of botones) {
     await expect(boton).toBeVisible()
     let enfocado = false
     for (let k = 0; k < 40 && !enfocado; k++) {
@@ -842,7 +884,7 @@ test('F28: el foco del teclado se ve, por dentro, en los botones de las semanas 
 })
 
 for (const [idioma, nombre, entregado] of [['de', /^Meine DNRs/, 'Zugestellt am'], ['fr', /^Mes DNR/, 'Livré le']]) {
-  test(`F27, F32 y V5: a 360 px en ${idioma} y con «Letra más grande», el paquete entero en una línea, las etiquetas saltan sin cortarse y los colores sin apretar`, async ({ page }) => {
+  test(`F27, F32, V5 y R9: a 360 px en ${idioma} y con «Letra más grande», el paquete entero en una línea, las etiquetas y el aviso de la llamada saltan sin cortarse y los colores sin apretar`, async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 780 })
     await page.addInitScript((l) => {
       localStorage.setItem('fds_idioma', l)
@@ -850,7 +892,7 @@ for (const [idioma, nombre, entregado] of [['de', /^Meine DNRs/, 'Zugestellt am'
       document.documentElement.setAttribute('data-letra', 'grande')
     }, idioma)
     const largos = conEstaSemana([
-      dnr('2026-11-10', 'TBA319482771045', 'sin_clasificar', { como: 'puerta_trasera', lejos: false, llamada: 'si', segundos: 8, foto: 'bien' }),
+      dnr('2026-11-10', 'TBA319482771045', 'sin_clasificar', { como: 'puerta_trasera', lejos: false, llamada: 'corta', segundos: 8, fallo_contacto: true, foto: 'bien' }),
       dnr('2026-11-09', 'TBA319400000009', 'cuenta', { entrega: '2026-11-07', como: 'conserjeria', lejos: true, llamada: 'no', foto: 'mal', foto_motivo: 'en_furgoneta' }),
     ])
     await entrar(page, { mias: largos })
@@ -875,23 +917,34 @@ for (const [idioma, nombre, entregado] of [['de', /^Meine DNRs/, 'Zugestellt am'
         expect(r.derecha).toBeLessThanOrEqual(r.fila)
         expect(r.cortada).toBe(false)
       }
+      // R9: el aviso de los 30 segundos (las dos tienen fallo de contacto), dentro de su tarjeta y sin cortarse.
+      const a = await f.getByTestId('dnr-aviso-llamada').evaluate((el) => ({
+        derecha: el.getBoundingClientRect().right, fila: el.closest('[data-testid="dnr-fila"]').getBoundingClientRect().right,
+        cortada: el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1,
+      }))
+      expect(a.derecha).toBeLessThanOrEqual(a.fila)
+      expect(a.cortada).toBe(false)
     }
     await expect(page.getByTestId('dnr-fila').nth(1).getByTestId('dnr-dia-frase')).toContainText(entregado)
     // Los pasos del recordatorio, dentro de su bloque.
-    const r = await page.getByTestId('dnr-recordatorio').evaluate((el) => ({
-      dentro: [...el.querySelectorAll('[data-testid="dnr-recordatorio-pasos"] > *')].every((x) => x.getBoundingClientRect().right <= el.getBoundingClientRect().right),
-    }))
-    expect(r.dentro).toBe(true)
+    if (!PAUSAS.preferencia) {
+      const r = await page.getByTestId('dnr-recordatorio').evaluate((el) => ({
+        dentro: [...el.querySelectorAll('[data-testid="dnr-recordatorio-pasos"] > *')].every((x) => x.getBoundingClientRect().right <= el.getBoundingClientRect().right),
+      }))
+      expect(r.dentro).toBe(true)
+    }
     // Cada explicación de los colores, debajo de su etiqueta y con todo el ancho: como mucho dos líneas.
-    await page.getByTestId('dnr-estados').getByRole('button').click()
-    for (const dd of await page.getByTestId('dnr-estado-explica').all()) {
-      const { lineas, bajo } = await dd.evaluate((el) => {
-        const dt = el.previousElementSibling.getBoundingClientRect()
-        const rr = el.getBoundingClientRect()
-        return { lineas: rr.height / parseFloat(getComputedStyle(el).lineHeight), bajo: rr.top >= dt.bottom - 1 }
-      })
-      expect(lineas).toBeLessThan(2.5)
-      expect(bajo).toBe(true)
+    if (!PAUSAS.estado) {
+      await page.getByTestId('dnr-estados').getByRole('button').click()
+      for (const dd of await page.getByTestId('dnr-estado-explica').all()) {
+        const { lineas, bajo } = await dd.evaluate((el) => {
+          const dt = el.previousElementSibling.getBoundingClientRect()
+          const rr = el.getBoundingClientRect()
+          return { lineas: rr.height / parseFloat(getComputedStyle(el).lineHeight), bajo: rr.top >= dt.bottom - 1 }
+        })
+        expect(lineas).toBeLessThan(2.5)
+        expect(bajo).toBe(true)
+      }
     }
     const ancho = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, ventana: window.innerWidth }))
     expect(ancho.doc).toBeLessThanOrEqual(ancho.ventana)
@@ -932,7 +985,7 @@ test('«díselo a la oficina» también sin ninguna esta semana si hay alguna en
   await entrar(page, { mias: conEstaSemana([]) })
   await casilla(page).click()
   await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana, ninguna')
-  await expect(page.getByTestId('dnr-recordatorio')).toBeVisible()
+  await expect(page.getByTestId('dnr-recordatorio')).toHaveCount(PAUSAS.preferencia ? 0 : 1)
   await expect(page.getByTestId('dnr-no-es-mia')).toBeVisible()
   await page.getByRole('button', { name: 'Volver' }).click()
 
@@ -962,4 +1015,198 @@ test('la casilla del inicio no vuelve a pedir la ruta cada vez que se vuelve (la
   await casilla(page).click()
   await expect.poll(() => pedidas.length).toBe(4)
   expect(pedidas.length).toBe(4)
+})
+
+/* R9 (Dani, 11-11-2026): «en los fallos de contacto: ponles que dando tono no podemos colgar nosotros la llamada y mínimo
+   deben ser 30 segundos, aunque llames y te abra en la puerta la llamada debe seguir corriendo 30 segundos mínimo». */
+const AVISO_30 = 'La llamada, mínimo 30 segundos. No cuelgues tú mientras da tono, aunque te abran la puerta.'
+
+test('R9: «Llamada corta · 12 s» en tono fallo y con su frase para el lector; «Llamaste · 45 s» en bien; y el aviso de los 30 segundos, una vez y debajo de las etiquetas, solo en las DNR con fallo de contacto', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrar(page, { mias: conEstaSemana([
+    dnr('2026-11-10', 'TBA500000000001', 'cuenta', { llamada: 'corta', segundos: 12, fallo_contacto: true }),
+    dnr('2026-11-10', 'TBA500000000002', 'cuenta', { como: 'puerta', llamada: 'no', fallo_contacto: true, foto: 'mal', foto_motivo: 'oscura' }),
+    dnr('2026-11-09', 'TBA500000000003', 'no_cuenta', { como: 'buzon', llamada: 'si', segundos: 45, foto: 'bien' }),
+    dnr('2026-11-09', 'TBA500000000004', 'sin_clasificar', { como: 'en_mano', lejos: true }),
+    // El fallo de contacto sin nada de la llamada: R9 no lo manda así, pero la web lo enseña como hasta ahora.
+    dnr('2026-11-08', 'TBA500000000005', 'sin_clasificar', { fallo_contacto: true }),
+  ]) })
+  await casilla(page).click()
+  const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+  await expect(filas).toHaveCount(5)
+  const [corta, sin, larga, nada, contacto] = [0, 1, 2, 3, 4].map((k) => filas.nth(k))
+  const llamada = (f) => f.getByTestId('dnr-hecho-llamada')
+  const aviso = (f) => f.getByTestId('dnr-aviso-llamada')
+
+  // La corta: su etiqueta en fallo, la frase larga para el lector y como title; y no repite «Fallo de contacto».
+  await expect(corto(llamada(corta))).toHaveText('Llamada corta · 12 s')
+  await expect(llamada(corta)).toHaveAttribute('data-tono', 'fallo')
+  await expect(llamada(corta)).toHaveAttribute('title', 'Tu llamada al cliente duró 12 segundos; tiene que durar 30 como mínimo')
+  await expect(llamada(corta).locator('.sr-only')).toHaveText('Tu llamada al cliente duró 12 segundos; tiene que durar 30 como mínimo')
+  await expect(corta.getByTestId('dnr-hecho-contacto')).toHaveCount(0)
+  // La de 45 s, bien; la que no llamó, «Sin llamada»; la del fallo sin llamada, «Fallo de contacto».
+  await expect(corto(llamada(larga))).toHaveText('Llamaste · 45 s')
+  await expect(llamada(larga)).toHaveAttribute('data-tono', 'bien')
+  await expect(corto(llamada(sin))).toHaveText('Sin llamada')
+  await expect(corto(contacto.getByTestId('dnr-hecho-contacto'))).toHaveText('Fallo de contacto')
+
+  // El aviso: una vez en cada una con fallo de contacto (corta, sin llamada, fallo de contacto) y en ninguna otra.
+  for (const f of [corta, sin, contacto]) {
+    await expect(aviso(f)).toHaveCount(1)
+    await expect(aviso(f)).toHaveText(AVISO_30)
+    await expect(aviso(f)).toHaveClass(/bg-ruta-aviso/)
+    await expect(aviso(f).locator('svg')).toHaveCount(1)
+    // Debajo de sus etiquetas.
+    const q = await f.getByTestId('dnr-que-paso').boundingBox()
+    const a = await aviso(f).boundingBox()
+    expect(a.y).toBeGreaterThanOrEqual(q.y + q.height - 1)
+  }
+  for (const f of [larga, nada]) await expect(aviso(f)).toHaveCount(0)
+  await expect(page.getByTestId('dnr-aviso-llamada')).toHaveCount(3)
+  // Lo que se sigue sin decir: el bloque de consejos de antes.
+  await expect(page.getByTestId('mis-dnr')).not.toContainText('Lo que puedes hacer la próxima vez')
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('R9: en inglés, la llamada corta y el aviso de los 30 segundos, traducidos', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('fds_idioma', 'en'))
+  await entrar(page, { mias: conEstaSemana([dnr('2026-11-10', 'TBA500000000001', 'cuenta', { llamada: 'corta', segundos: 9, fallo_contacto: true })]) })
+  await page.getByRole('button', { name: /^My DNRs/ }).click()
+  const f = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+  await expect(corto(f.getByTestId('dnr-hecho-llamada'))).toHaveText('Short call · 9 s')
+  await expect(f.getByTestId('dnr-aviso-llamada')).toHaveText('Calls: 30 seconds minimum. Don’t hang up while it’s ringing, even if they open the door.')
+})
+
+test('R9 (lo que se publica): con el estado en pausa no se dice en ningún sitio si le cuenta: ni etiqueta ni banda, ni contadores, ni «Qué es cada color», ni «Actualizada»; el número en el color normal y las semanas anteriores con su total', async ({ page }) => {
+  test.skip(!PAUSAS.estado, 'solo mientras el estado está en pausa (dnrPausas.js)')
+  const fallos = vigilar(page)
+  await entrar(page)
+  await expect(casilla(page).getByTestId('dnr-casilla-semana')).toHaveText('Esta semana: 2')
+  await expect(numeroRojo(page)).toHaveText('5')
+  await expect(casilla(page)).toHaveAccessibleName(/5 nuevas/)
+  await casilla(page).click()
+  const pantalla = page.getByTestId('mis-dnr')
+
+  // 1. El resumen: «Esta semana llevas», el número grande en el color normal (aunque una le cuente), el rango y hasta
+  //    cuándo hay datos. Sin contadores.
+  await expect(pantalla.getByTestId('dnr-frase')).toHaveText('Esta semana llevas 2 DNR')
+  await expect(pantalla.getByTestId('dnr-numero')).toHaveText('2')
+  await expect(pantalla.getByTestId('dnr-numero')).toHaveClass(/text-dark-50/)
+  await expect(pantalla.getByTestId('dnr-numero')).not.toHaveClass(/peligro/)
+  await expect(pantalla.getByTestId('dnr-rango')).toHaveText('Del 8/11 al 14/11')
+  await expect(pantalla.getByTestId('dnr-hasta')).toHaveText('Datos hasta el mar 10/11')
+  await expect(pantalla.getByTestId('dnr-desglose')).toHaveCount(0)
+  await expect(pantalla.locator('[data-testid^="dnr-contador-"]')).toHaveCount(0)
+
+  // 2. Las tarjetas: el día arriba a la izquierda (y «Nueva» a su derecha), el paquete, el CP y qué pasó. Sin estado ni
+  //    banda. El aviso de los 30 segundos, solo en la que no llamó.
+  const filas = pantalla.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+  await expect(filas).toHaveCount(2)
+  await expect(pantalla.getByTestId('dnr-estado')).toHaveCount(0)
+  await expect(filas.nth(0).getByTestId('dnr-nueva')).toHaveText('Nueva')
+  for (const f of await filas.all()) {
+    expect(await f.evaluate((el) => parseFloat(getComputedStyle(el).borderLeftWidth))).toBe(0)
+    expect(await f.getAttribute('data-cuenta')).toBeNull()
+  }
+  const conTodo = filas.nth(1)
+  const caja = async (t) => conTodo.getByTestId(t).boundingBox()
+  const [fila, dia, paquete, cp, quePaso] = [await conTodo.boundingBox(), await caja('dnr-dia'), await caja('dnr-paquete'), await caja('dnr-cp'), await caja('dnr-que-paso')]
+  expect(dia.x - fila.x).toBeLessThan(40)
+  expect(dia.y).toBeLessThan(paquete.y)
+  expect(paquete.y).toBeLessThan(cp.y)
+  expect(cp.y).toBeLessThan(quePaso.y)
+  const nueva = await filas.nth(0).getByTestId('dnr-nueva').boundingBox()
+  const dia0 = await filas.nth(0).getByTestId('dnr-dia').boundingBox()
+  expect(nueva.x).toBeGreaterThan(dia0.x + dia0.width)
+  await expect(conTodo.getByTestId('dnr-aviso-llamada')).toHaveText(AVISO_30)
+  await expect(filas.nth(0).getByTestId('dnr-aviso-llamada')).toHaveCount(0)
+
+  // 3. Las semanas anteriores: su total a la derecha («2 DNR» / «1 DNR»), «Ninguna» como siempre; sin mini contadores.
+  const semanas = pantalla.getByTestId('dnr-anteriores').getByTestId('dnr-semana')
+  await expect(semanas.getByTestId('dnr-recuento')).toHaveText(['2 DNR', 'Ninguna', '1 DNR'])
+  await expect(semanas.nth(0).getByRole('button')).toHaveAccessibleName(/La semana pasada.*2 DNR/)
+  await expect(pantalla.locator('[data-testid^="dnr-mini-"]')).toHaveCount(0)
+  await expect(pantalla.getByTestId('dnr-semana-desglose')).toHaveCount(0)
+  await semanas.nth(0).getByRole('button').click()
+  await expect(pantalla.getByTestId('dnr-anteriores').getByTestId('dnr-fila')).toHaveCount(2)
+  await expect(pantalla.getByTestId('dnr-estado')).toHaveCount(0)
+
+  // 4. Ni «Qué es cada color»; sí «¿Alguna no es tuya?».
+  await expect(pantalla.getByTestId('dnr-estados')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Qué es cada color' })).toHaveCount(0)
+  await expect(pantalla.getByTestId('dnr-no-es-mia')).toHaveText('¿Alguna no es tuya? Díselo a la oficina.')
+
+  // Tampoco para el lector de pantalla ni en un title: en todo lo que pinta la pantalla (salvo el recordatorio, que tiene
+  // su propia pausa), nada de «cuenta», «pendiente», «actualizada» ni de los colores.
+  const html = await pantalla.evaluate((el) => {
+    const c = el.cloneNode(true)
+    c.querySelectorAll('[data-testid="dnr-recordatorio"]').forEach((x) => x.remove())
+    return c.outerHTML
+  })
+  expect(html).not.toMatch(/cuenta|cuentan|pendiente|actualizad|cada color/i)
+  await expect(pantalla).not.toContainText('€')
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('R9 (lo que se publica): con el estado en pausa, una DNR que solo cambia de estado no es novedad (ni se marca ni suma); una que no estaba, sí', async ({ page }) => {
+  test.skip(!PAUSAS.estado, 'solo mientras el estado está en pausa (dnrPausas.js)')
+  const fallos = vigilar(page)
+  // La primera vez: 011 y 009 sin clasificar. Las ve.
+  const antes = structuredClone(DATOS)
+  antes.semanas[0].dnr[1].estado = 'sin_clasificar'
+  antes.semanas[1].dnr[1].estado = 'sin_clasificar'
+  await entrar(page, { mias: antes })
+  await casilla(page).click()
+  await expect(page.getByTestId('dnr-nueva')).toHaveCount(2)
+  await page.getByRole('button', { name: 'Volver' }).click()
+
+  // Amazon clasifica las dos: nada nuevo. Ni número rojo, ni «actualizadas», ni marca en la tarjeta ni en la semana.
+  await contesta(page, DATOS)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(casilla(page)).toBeVisible()
+  await expect(casilla(page).getByTestId('dnr-casilla-semana')).toHaveText('Esta semana: 2')
+  await expect(numeroRojo(page)).toHaveCount(0)
+  await expect(casilla(page)).not.toHaveAccessibleName(/nueva|actualiz/i)
+  await casilla(page).click()
+  await expect(page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')).toHaveCount(2)
+  await expect(page.getByTestId('dnr-nueva')).toHaveCount(0)
+  await expect(page.getByTestId('dnr-semana-actualizadas')).toHaveCount(0)
+  await expect(page.getByTestId('dnr-semana-nuevas')).toHaveCount(0)
+  await expect(page.getByTestId('mis-dnr')).not.toContainText(/nueva|actualiz/i)
+  await page.getByRole('button', { name: 'Volver' }).click()
+
+  // Y una que no estaba: esa sí es nueva y suma al número rojo.
+  const mas = structuredClone(DATOS)
+  mas.semanas[0].dnr.unshift(dnr('2026-11-10', 'TBA123456789013', 'sin_clasificar'))
+  await contesta(page, mas)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(numeroRojo(page)).toHaveText('1')
+  await expect(casilla(page)).toHaveAccessibleName(/1 nueva/)
+  await casilla(page).click()
+  await expect(page.getByTestId('dnr-nueva')).toHaveCount(1)
+  await expect(page.getByTestId('dnr-fila').filter({ hasText: 'TBA123456789013' }).getByTestId('dnr-nueva')).toHaveText('Nueva')
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('R9 (lo que se publica): con la preferencia en pausa no sale el recordatorio ni el botón del ejemplo, y no queda hueco: bajo el resumen, las tarjetas', async ({ page }) => {
+  test.skip(!PAUSAS.preferencia, 'solo mientras la preferencia está en pausa (dnrPausas.js)')
+  await entrar(page)
+  await casilla(page).click()
+  await expect(page.getByTestId('dnr-fila').first()).toBeVisible()
+  await expect(page.getByTestId('dnr-recordatorio')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /preferencia/ })).toHaveCount(0)
+  const html = await page.getByTestId('mis-dnr').evaluate((el) => el.outerHTML)
+  expect(html).not.toMatch(/preferencia|Foto clara|No te cuenta|Recuerda/i)
+  // Sin hueco: la primera tarjeta, justo debajo del resumen (el hueco de la columna).
+  const r = await page.getByTestId('dnr-resumen').boundingBox()
+  const f = await page.getByTestId('dnr-fila').first().boundingBox()
+  expect(f.y).toBeGreaterThanOrEqual(r.y + r.height)
+  expect(f.y - (r.y + r.height)).toBeLessThanOrEqual(16)
+  // Tampoco sin DNR esta semana.
+  await page.getByRole('button', { name: 'Volver' }).click()
+  await contesta(page, conEstaSemana([]))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await casilla(page).click()
+  await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana, ninguna')
+  await expect(page.getByTestId('dnr-recordatorio')).toHaveCount(0)
 })
