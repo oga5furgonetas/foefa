@@ -473,8 +473,9 @@ test.describe('Conductores', () => {
   test('la ficha dice cómo se entra sin contraseña y la suya pide 8', async ({ page }) => {
     const fallos = vigilar(page)
     const { claves } = await conductores(page)
-    await expect(page.locator('thead').getByText('Acceso', { exact: true })).toBeVisible()
-    await expect(page.locator('thead').getByText('PIN', { exact: true })).toHaveCount(0)
+    // La columna solo existe con tabla: en el móvil (menos de 640 px) van tarjetas desde la tanda 2 (11-11-2026, E1).
+    if (page.viewportSize().width >= 640) await expect(page.locator('thead').getByText('Acceso', { exact: true })).toBeVisible()
+    await expect(page.getByText('PIN', { exact: true })).toHaveCount(0)
     await page.getByText('Ana Pérez').click()
     await page.getByRole('button', { name: /Acceso con contraseña/ }).click()
     await expect(page.getByText(/entra con un código que le llega a su correo o con la contraseña inicial de la empresa/)).toBeVisible()
