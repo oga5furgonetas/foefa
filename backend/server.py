@@ -16924,6 +16924,19 @@ async def push_center_event(center, title, body, url, exclude_id=None):
         logger.debug(f"push_center_event: {e}")
 
 
+def _url_con_centro(url: str, centro) -> str:
+    """La dirección de un aviso a la oficina con su centro: `/panel/turnos?centro=OGA5` (11-11-2026, cuadrante-3).
+
+    Quien lleva varios centros (la cuenta dueña recibe los avisos de los tres) abría la petición de OGA5 con el último
+    centro guardado en su navegador, y si era DGA1 la bandeja salía vacía. El panel nuevo lee `centro`, lo elige si esa
+    persona puede verlo y lo quita de la dirección; el de antes, en la caché de alguien, lo ignora y abre como siempre.
+    Sin centro, la dirección queda tal cual."""
+    c = str(centro or "").strip()
+    if not c:
+        return url
+    return f"{url}{'&' if '?' in url else '?'}centro={_url_quote(c, safe='')}"
+
+
 # ── AVISOS AL MÓVIL (29-10-2026): la bandeja de cada persona + web push + FCM ───────────────────────────────────
 # Dani (18-10): «mejor notificación de la propia app que WhatsApp»; (29-10): «si le apruebo días a alguien que tiene
 # la app, que le salte la notificación; y si hay un día que puedan solicitar trabajar».
@@ -33646,7 +33659,7 @@ async def create_shift_request(data: dict = Body(...), user: dict = Depends(requ
             f"📅 {drv.get('name', 'Un conductor')} pide {len(nuevas)} día{'s' if len(nuevas) > 1 else ''}"
             + (f" · {_nave}" if _nave else ""),
             f"{MOTIVOS_PETICION[motivo]} · {_fechas_dias(nuevas)}",
-            "/panel/turnos")
+            _url_con_centro("/panel/turnos", _nave))      # abre ese centro, no el último guardado (11-11-2026)
     except Exception as e:
         logger.debug("Push petición de días: %s", e)
 
@@ -33982,7 +33995,7 @@ async def cancelar_mis_peticiones(data: dict = Body(...), user: dict = Depends(r
                 _fechas_dias([r["date"] for r in hechas])
                 + (f" · {len(aprobados)} ya estaba{'n' if len(aprobados) > 1 else ''} aprobado{'s' if len(aprobados) > 1 else ''}: "
                    "vuelve al cuadrante como estaba" if aprobados else ""),
-                "/panel/turnos")
+                _url_con_centro("/panel/turnos", _nave))      # con su centro (11-11-2026)
         except Exception as e:                                   # noqa: BLE001
             logger.debug("Push cancelación de días: %s", e)
     for rid in {r.get("refuerzo_id") for r in hechas if r.get("refuerzo_id")}:
@@ -34074,7 +34087,8 @@ async def cambiar_mi_peticion(data: dict = Body(...), user: dict = Depends(requi
             viejas[0].get("center") or "",
             f"✏️ {viejas[0].get('driver_name') or 'Un conductor'} cambia su petición"
             + (f" · {_nave}" if _nave else ""),
-            f"Ahora: {_fechas_dias(nuevas_f)} · " + ", ".join(partes), "/panel/turnos")
+            f"Ahora: {_fechas_dias(nuevas_f)} · " + ", ".join(partes),
+            _url_con_centro("/panel/turnos", _nave))          # con su centro (11-11-2026)
     except Exception as e:                                       # noqa: BLE001
         logger.debug("Push cambio de petición: %s", e)
     return {"ok": True, "dias": sorted(nuevas_f), "anadidos": anadir, "quitados": quitar}
@@ -34626,7 +34640,8 @@ async def apuntarme_refuerzo(rid: str, data: dict = Body(default={}), user: dict
         await push_center_event(r["center"], f"🙋 {nombre or 'Un conductor'} quiere trabajar el {_refuerzo_dia(r['date'])}" if auto
                                 else f"🙋 {nombre or 'Un conductor'} se apunta al refuerzo del {_refuerzo_dia(r['date'])}",
                                 f"{n} apuntado{'s' if n > 1 else ''} para {r['plazas']} plaza{'s' if r['plazas'] > 1 else ''}. "
-                                "Apruébalo en Turnos → Refuerzos.", "/panel/turnos?vista=refuerzos")
+                                "Apruébalo en Turnos → Refuerzos.",
+                                _url_con_centro("/panel/turnos?vista=refuerzos", r["center"]))  # con su centro (11-11-2026)
     except Exception as e:                                       # noqa: BLE001
         logger.debug("Push apuntado a refuerzo: %s", e)
     return {"ok": True, "peticion": fila}
@@ -34656,7 +34671,7 @@ async def desapuntarme_refuerzo(rid: str, user: dict = Depends(require_any_auth)
     try:
         await push_center_event(q.get("center") or "", f"↩️ {nombre or 'Un conductor'} se borra del refuerzo del {_refuerzo_dia(fecha)}",
                                 "Estaba aprobado: vuelve a quedar una plaza libre" if estado == "aprobado" else "Aún no estaba aprobado",
-                                "/panel/turnos?vista=refuerzos")
+                                _url_con_centro("/panel/turnos?vista=refuerzos", q.get("center")))  # con su centro (11-11-2026)
     except Exception as e:                                       # noqa: BLE001
         logger.debug("Push desapuntado de refuerzo: %s", e)
     return {"ok": True}

@@ -969,9 +969,8 @@ export const DICT = {
   'turns.drivers.err': { es: 'No se han podido leer los conductores.', en: 'Could not load the drivers.', fr: 'Impossible de lire les conducteurs.', de: 'Die Fahrer konnten nicht gelesen werden.', it: 'Impossibile leggere gli autisti.', pt: 'Não foi possível ler os condutores.' },
   'turns.approve': { es: 'Aprobar', en: 'Approve', fr: 'Approuver', de: 'Genehmigen', it: 'Approva', pt: 'Aprovar' },
   'turns.reject': { es: 'Rechazar', en: 'Reject', fr: 'Refuser', de: 'Ablehnen', it: 'Rifiuta', pt: 'Rejeitar' },
-  'turns.title':      { es: 'Turnos',    en: 'Shifts',   fr: 'Équipes',   de: 'Schichten', it: 'Turni',     pt: 'Turnos' },
-  'turns.pick.center': { es: 'Elige un centro arriba para ver su cobertura de turnos.', en: 'Choose a centre above to see its shift coverage.', fr: 'Choisissez un centre ci-dessus pour voir la couverture des équipes.', de: 'Wähle ein Zentrum oben, um die Schichtabdeckung zu sehen.', it: 'Scegli un centro sopra per vedere la copertura dei turni.', pt: 'Escolhe um centro acima para ver a cobertura de turnos.' },
-  'turns.available':  { es: 'Disponibles:', en: 'Available:', fr: 'Disponibles :', de: 'Verfügbar:', it: 'Disponibili:', pt: 'Disponíveis:' },
+  'turns.title':      { es: 'Días libres', en: 'Time off', fr: 'Jours de congé', de: 'Freie Tage', it: 'Giorni liberi', pt: 'Dias livres' },
+  'turns.pick.center': { es: 'Refuerzos, suspensiones y días cerrados van por centro: elige uno.', en: 'Reinforcements, suspensions and closed days are per centre: pick one.', fr: 'Renforts, suspensions et jours fermés se gèrent par centre : choisissez-en un.', de: 'Verstärkungen, Sperren und gesperrte Tage gelten je Zentrum: wähle eines.', it: 'Rinforzi, sospensioni e giorni chiusi sono per centro: scegline uno.', pt: 'Reforços, suspensões e dias fechados são por centro: escolhe um.' },
   'turns.min':        { es: 'Mínimo: {n} conductores/día', en: 'Minimum: {n} drivers/day', fr: 'Minimum : {n} conducteurs/jour', de: 'Minimum: {n} Fahrer/Tag', it: 'Minimo: {n} autisti/giorno', pt: 'Mínimo: {n} condutores/dia' },
   'turns.error':      { es: 'No se pudo cargar la cobertura.', en: 'Could not load coverage.', fr: 'Impossible de charger la couverture.', de: 'Abdeckung konnte nicht geladen werden.', it: 'Impossibile caricare la copertura.', pt: 'Não foi possível carregar a cobertura.' },
 
