@@ -822,7 +822,8 @@ export default function Turnos() {
       const hasta = fechas[fechas.length - 1] < tope ? fechas[fechas.length - 1] : tope
       try {
         const { data } = await getCoberturaPeticiones(nave, desde, hasta)
-        if (data?.dias && typeof data.dias === 'object') out[nave] = { dias: data.dias, trabaja: new Set(lista(data.trabaja)) }
+        // Con el rango pedido: un día de fuera (más allá del tope) no se pidió, y no es «sin máxima» (P21).
+        if (data?.dias && typeof data.dias === 'object') out[nave] = { dias: data.dias, trabaja: new Set(lista(data.trabaja)), desde, hasta }
       } catch { /* sin chips */ }
     }))
     if (n === pedidaPet.current) setCoberturaPet(out)
@@ -2662,7 +2663,7 @@ export default function Turnos() {
                   {(() => {
                     const cob = coberturaPet[noCenter ? g.center : center]
                     const hoyIso = hoyLocal()
-                    const futuras = cob ? g.fechas.filter((f) => f >= hoyIso) : []
+                    const futuras = cob ? g.fechas.filter((f) => f >= hoyIso && f >= cob.desde && f <= cob.hasta) : []
                     if (!futuras.length) return null
                     return (
                       <div className="mt-1.5 flex min-w-0 flex-wrap gap-1" data-testid="cobertura-peticion">

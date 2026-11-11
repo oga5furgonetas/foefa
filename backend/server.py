@@ -51530,6 +51530,9 @@ class _CuaCambio:
             "id": cid, "center": self.center, "en": datetime.now(timezone.utc).isoformat(),
             "por": (self.user or {}).get("name") or "", "que": self.que,
             "n": len(self.snaps), "snaps": self.snaps, "deshecho": False})
+        # Cada celda de turnos tocada, apuntada para «Avisar a los conductores» (11-11-2026): aparte de este historial,
+        # que se queda con 30, para que no se pierda ningún aviso. Nunca rompe el cambio (_cua_avisos_apuntar no lanza).
+        await _cua_avisos_apuntar(self.center, _cua_aviso_celdas({"snaps": self.snaps}))
         # Se guardan los 30 últimos por centro: deshacer es para el error de
         # hace un rato, no un historial eterno.
         viejos = await db[_CUA_CAMBIOS].find({"center": self.center}, {"_id": 0, "id": 1}) \
@@ -52274,6 +52277,15 @@ async def cuadrante_deshacer(data: dict = Body(...), user: dict = Depends(requir
     if solo_si and c.get("id") != solo_si:
         raise HTTPException(409, "Lo último del cuadrante lo ha cambiado otra persona (%s): no se deshace para no "
                                  "pisarlo. Usa «Deshacer último cambio» si de verdad quieres." % (c.get("por") or "?"))
+    # Deshacer también cambia lo que el conductor tiene ese día: lo que había JUSTO ANTES se apunta para «Avisar a los
+    # conductores» (11-11-2026). Si esta lectura falla, se deshace igual, sin apuntar.
+    celdas_aviso, previo = set(), None
+    try:
+        hoy_aviso = _dia_negocio()
+        celdas_aviso = {(did, f) for did, f, _a in _cua_aviso_celdas(c) if f >= hoy_aviso}
+        previo = await _cua_turnos_de(celdas_aviso)
+    except Exception as e:                                           # noqa: BLE001
+        logger.warning("Avisos del cuadrante: no se ha podido leer lo de antes de deshacer en %s: %s", center, e)
     # Por lotes y por colección: deshacer una hoja importada son ~2.500 turnos,
     # y de uno en uno contra Atlas eran minutos. Cada filtro sale una sola vez
     # en `snaps` (lo garantiza _CuaCambio), así que el orden no cambia nada.
@@ -52289,20 +52301,27 @@ async def cuadrante_deshacer(data: dict = Body(...), user: dict = Depends(requir
     await db[_CUA_CAMBIOS].update_one({"id": c["id"]}, {"$set": {
         "deshecho": True, "deshecho_en": datetime.now(timezone.utc).isoformat(),
         "deshecho_por": user.get("name") or ""}})
+    if previo is not None:
+        await _cua_avisos_apuntar(center, [(did, f, previo.get((did, f))) for did, f in celdas_aviso])
     await _audit(user, "cuadrante_deshacer", {"center": center, "que": c.get("que")})
     return {"ok": True, "que": c.get("que"), "n": c.get("n")}
 
 
 # ── AVISAR A LOS CONDUCTORES DE SUS CAMBIOS (11-11-2026, cuadrante-8) ────────
 # Cuando la oficina cambia el cuadrante (propuesta, celdas, chat, Excel, Sheets) al conductor no le llegaba nada. Esto
-# es un BOTÓN, nunca automático: la oficina ve antes a quién y qué, desmarca a quien quiera y pulsa. Sale de los
-# registros de «Deshacer» (_CuaCambio), por los que pasa todo cambio del cuadrante: de cada celda tocada se mira lo
-# que había ANTES del primer cambio sin avisar y lo que hay AHORA en los turnos, y solo se avisa si cambia lo que se
-# lee («trabajas», «libras»…), de hoy a 14 días. Un cambio deshecho, o devuelto a como estaba, no avisa; un cambio
-# avisado y deshecho DESPUÉS, sí (se guarda en el registro lo que se le dijo, `avisado_ahora`). Lo que no pasa por el
-# cuadrante (un día concedido, una suspensión) tiene su propio camino y no se repite aquí. Cada registro guarda hasta
-# qué día se avisó (`avisado_hasta`): un cambio del día 20 sale cuando ese día entre en los 14. Marcarlo es la forma de
-# «coger» el envío: dos personas pulsando a la vez no mandan dos avisos.
+# es un BOTÓN, nunca automático: la oficina ve antes a quién y qué, desmarca a quien quiera y pulsa.
+# Rehecho el 11-11-2026 (revisión, P8-P10 y P22): ya NO sale del historial de «Deshacer», que guarda solo los 30
+# últimos registros por nave y se saltaba cambios sin decirlo. Ahora todo cambio del cuadrante (_CuaCambio.guardar y
+# el deshacer) apunta cada celda tocada de hoy en adelante en su propia colección, un documento por celda:
+#   cuadrante_avisos_pendientes {_id: "nave|conductor|fecha", center, driver_id, fecha, dicho, visto?, en, tocado,
+#                                avisado_en?, avisado_por?, avisado_lote?}
+# `dicho` es lo que el conductor SABE de ese día (lo que había antes del primer cambio sin avisar, o lo último que se le
+# avisó) y no se pisa al apuntar; `tocado` cambia con cada cambio de la celda; `visto` es lo que había cuando la oficina
+# la vio y la desmarcó. Se avisa si lo que hay AHORA se lee distinto («trabajas», «libras»…) de `dicho` y de `visto`, de
+# hoy a 14 días: un cambio deshecho o devuelto a como estaba no avisa, uno avisado y deshecho después sí, y uno lejano
+# sale cuando su día entra en los 14, tenga la edad que tenga. Lo que no pasa por el cuadrante (un día concedido, una
+# suspensión, la rejilla escondida de Turnos) tiene su propio camino o no se avisa por aquí.
+_CUA_AVISOS_PEND = "cuadrante_avisos_pendientes"
 _CUA_AVISO_DIAS = 14
 _CUA_AVISO_ETIQUETA = {"1": "trabajas", "T": "trabajas", "X": "trabajas", "EXTRA": "trabajas (extra)",
                        "N/T": "libras", "L": "libras", "N/T APROB": "libras", "APROBADO": "libras",
@@ -52338,53 +52357,48 @@ def _cua_aviso_ventana() -> Tuple[str, str]:
     return hoy, (date_cls.fromisoformat(hoy) + timedelta(days=_CUA_AVISO_DIAS)).isoformat()
 
 
-def _cua_aviso_pendiente_b(c: dict) -> bool:
-    """Avisado y deshecho después: lo que se le dijo ya no es verdad."""
-    return bool(c.get("deshecho") and c.get("avisado_ahora") and not c.get("avisado_deshecho_en"))
+async def _cua_avisos_apuntar(center: str, celdas) -> None:
+    """Apunta las celdas de turnos que acaba de tocar un cambio del cuadrante, de hoy en adelante. `celdas`: (driver_id,
+    fecha, lo que había ANTES del cambio). Una celda que no estaba entra con `dicho` = la etiqueta de lo de antes; una que
+    ya estaba solo cambia `tocado` (lo que el conductor sabe no se pisa). NUNCA rompe el cambio: si algo falla, se dice
+    en el log y el cuadrante se guarda (o se deshace) igual."""
+    try:
+        hoy = _dia_negocio()
+        antes: dict = {}
+        for did, f, doc in celdas:
+            if f >= hoy and (did, f) not in antes:
+                antes[(did, f)] = doc
+        if not antes:
+            return
+        marca, ahora = str(uuid.uuid4()), datetime.now(timezone.utc).isoformat()
+        # Un documento por celda con `_id` fijo: dos cambios a la vez sobre la misma celda no la duplican.
+        ops = [UpdateOne({"_id": f"{center}|{did}|{f}"},
+                         {"$set": {"tocado": marca},
+                          "$setOnInsert": {"center": center, "driver_id": did, "fecha": f, "en": ahora,
+                                           "dicho": _cua_aviso_etiqueta(doc)}}, upsert=True)
+               for (did, f), doc in antes.items()]
+        for i in range(0, len(ops), 500):
+            await db[_CUA_AVISOS_PEND].bulk_write(ops[i:i + 500], ordered=False)
+    except Exception as e:                                           # noqa: BLE001
+        logger.warning("Avisos del cuadrante: no se ha podido apuntar un cambio de %s: %s", center, e)
 
 
-async def _cua_avisos_registros(center: str, hasta: str) -> list:
-    """Los registros de cambios de la nave de los últimos 14 días con algo por avisar."""
-    corte = (datetime.now(timezone.utc) - timedelta(days=_CUA_AVISO_DIAS)).isoformat()
-    out = []
-    for c in await db[_CUA_CAMBIOS].find({"center": center, "en": {"$gte": corte}}, {"_id": 0}).to_list(200):
-        if str(c.get("avisado_hasta") or "") < hasta or _cua_aviso_pendiente_b(c):
-            out.append(c)
-    return sorted(out, key=lambda c: str(c.get("en") or ""))
-
-
-async def _cua_avisos_calcular(registros: list, usar_a=None, usar_b=None) -> Tuple[list, str]:
-    """(personas, hasta). `usar_a`/`usar_b`: los ids de registro que cuentan por cada camino (por defecto, todos)."""
+async def _cua_avisos_calcular(center: str) -> Tuple[list, str, dict]:
+    """(personas, hasta, leido): lo pendiente de la nave de hoy a 14 días comparado con lo que hay AHORA en los turnos.
+    `leido` es {(driver_id, fecha): el documento pendiente tal como se leyó}, para «coger» cada celda al mandar."""
     hoy, hasta = _cua_aviso_ventana()
-    base_a: dict = {}            # celda -> lo que se leía antes del primer cambio sin avisar
-    base_b: dict = {}            # celda -> (cuándo, lo que se le dijo) de un cambio avisado y deshecho después
-    for c in registros:
-        cid = c.get("id")
-        h = str(c.get("avisado_hasta") or "")
-        en_b = _cua_aviso_pendiente_b(c) and (usar_b is None or cid in usar_b)
-        en_a = usar_a is None or cid in usar_a
-        dicho = c.get("avisado_ahora") or {}
-        for did, f, antes in _cua_aviso_celdas(c):
-            if not (hoy <= f <= hasta):
-                continue
-            k = f"{did}|{f}"
-            if f > h:
-                if en_a:
-                    base_a.setdefault(k, _cua_aviso_etiqueta(antes))
-            elif en_b and k in dicho:
-                cuando = str(c.get("avisado_en") or "")
-                if k not in base_b or cuando > base_b[k][0]:
-                    base_b[k] = (cuando, str(dicho[k]))
-    claves = set(base_a) | set(base_b)
-    if not claves:
-        return [], hasta
-    pares = {tuple(k.split("|", 1)) for k in claves}
-    ahora = await _cua_turnos_de(pares)
-    ids = sorted({p[0] for p in pares})
+    leido: dict = {}
+    for p in await db[_CUA_AVISOS_PEND].find({"center": center, "fecha": {"$gte": hoy, "$lte": hasta}}).to_list(5000):
+        if isinstance(p.get("driver_id"), str) and isinstance(p.get("fecha"), str) and p.get("_id") is not None:
+            leido[(p["driver_id"], p["fecha"])] = p
+    if not leido:
+        return [], hasta, {}
+    ahora = await _cua_turnos_de(set(leido))
+    ids = sorted({k[0] for k in leido})
     fichas = {d["id"]: d for d in await db.drivers.find(
         {"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1, "active": 1, "merged_into": 1}).to_list(5000)}
     por: dict = {}
-    for did, f in sorted(pares, key=lambda p: (p[0], p[1])):
+    for did, f in sorted(leido):
         ficha = fichas.get(did)
         # Fichas de baja, fusionadas o que no existen: no se avisa a nadie que ya no está.
         if not ficha or ficha.get("active") is False or ficha.get("merged_into"):
@@ -52393,15 +52407,16 @@ async def _cua_avisos_calcular(registros: list, usar_a=None, usar_b=None) -> Tup
         # Un día concedido o de una suspensión tiene su propio camino (y su aviso, o su conversación): aquí no.
         if doc and (doc.get("aprobado_req") or doc.get("suspension_id")):
             continue
-        k = f"{did}|{f}"
-        antes = base_b[k][1] if k in base_b else base_a[k]
+        p = leido[(did, f)]
+        dicho = str(p.get("dicho") or "sin turno")
         nuevo = _cua_aviso_etiqueta(doc)
-        if nuevo == antes:
+        # Volvió a lo que él sabe, o la oficina ya vio esto mismo y decidió no avisar: nada.
+        if nuevo == dicho or nuevo == p.get("visto"):
             continue
         por.setdefault(did, {"driver_id": did, "nombre": ficha.get("name") or did, "dias": []})["dias"].append(
-            {"fecha": f, "antes": antes, "ahora": nuevo, "texto": f"{_refuerzo_dia(f)}: {nuevo}"})
+            {"fecha": f, "antes": dicho, "ahora": nuevo, "texto": f"{_refuerzo_dia(f)}: {nuevo}"})
     personas = sorted(por.values(), key=lambda p: _clave_nombre(p["nombre"]))
-    return personas, hasta
+    return personas, hasta, leido
 
 
 def _cua_aviso_texto(dias: list) -> str:
@@ -52412,79 +52427,88 @@ def _cua_aviso_texto(dias: list) -> str:
 
 @api_router.post("/cuadrante/avisos/previa")
 async def cuadrante_avisos_previa(data: dict = Body(...), user: dict = Depends(require_admin)):
-    """A quién se avisaría y de qué (no manda nada). body: {center}."""
+    """A quién se avisaría y de qué (no manda nada). body: {center}. De paso borra lo apuntado de días ya pasados."""
     center = _cua_centro(data.get("center"))
     _cua_acceso(user, center)
-    _hoy, hasta = _cua_aviso_ventana()
-    registros = await _cua_avisos_registros(center, hasta)
-    personas, hasta = await _cua_avisos_calcular(registros)
-    return {"personas": personas, "cambios": [c.get("id") for c in registros], "hasta": hasta}
+    hoy, _hasta = _cua_aviso_ventana()
+    try:
+        await db[_CUA_AVISOS_PEND].delete_many({"center": center, "fecha": {"$lt": hoy}})
+    except Exception as e:                                           # noqa: BLE001
+        logger.warning("Avisos del cuadrante: no se han podido borrar los días pasados de %s: %s", center, e)
+    personas, hasta, _leido = await _cua_avisos_calcular(center)
+    return {"personas": personas, "hasta": hasta}
 
 
 @api_router.post("/cuadrante/avisos/enviar")
 async def cuadrante_avisos_enviar(data: dict = Body(...), user: dict = Depends(require_admin)):
-    """Manda UN aviso por persona con sus días cambiados. body: {center, driver_ids?}. Lo vuelve a calcular aquí (no se
-    fía de lo que enseñó la pantalla); sin `driver_ids`, a todos los de la previa. Los desmarcados no se avisan y sus
-    cambios quedan como vistos, igual que los que no tenían nada que avisar."""
+    """Manda UN aviso por persona con sus días cambiados. body: {center, driver_ids?, descartar_ids?}. Lo vuelve a
+    calcular aquí (no se fía de lo que enseñó la pantalla). Se avisa a `driver_ids` (sin esa clave, a todos menos a
+    `descartar_ids`); a los de `descartar_ids` (los que la oficina vio y desmarcó) no se les avisa y se guarda lo que
+    vieron (`visto`), para que no vuelvan a salir mientras su día siga igual; a quien no está en ninguna de las dos
+    (apareció después de la previa) no se le toca nada y sale la próxima vez."""
     center = _cua_centro(data.get("center"))
     _cua_acceso(user, center)
     solo = None
     if data.get("driver_ids") is not None:
         solo = {str(x) for x in _lista_cuerpo(data.get("driver_ids"), 500) if x}
-    _hoy, hasta = _cua_aviso_ventana()
-    registros = await _cua_avisos_registros(center, hasta)
-    if not registros:
-        return {"avisados": 0, "personas": []}
-    ahora_iso = datetime.now(timezone.utc).isoformat()
-    lote = str(uuid.uuid4())
-    por_quien = user.get("name") or ""
-    ids_a = [c["id"] for c in registros if c.get("id") and str(c.get("avisado_hasta") or "") < hasta]
-    ids_b = [c["id"] for c in registros if c.get("id") and _cua_aviso_pendiente_b(c)]
-    # Se «cogen» primero, con la condición de que nadie los haya cogido ya: si otra persona pulsa a la vez, sus
-    # registros ya no cumplen la condición y no se avisa dos veces.
-    if ids_a:
-        await db[_CUA_CAMBIOS].update_many(
-            {"id": {"$in": ids_a}, "center": center,
-             "$or": [{"avisado_hasta": {"$exists": False}}, {"avisado_hasta": None}, {"avisado_hasta": {"$lt": hasta}}]},
-            {"$set": {"avisado_hasta": hasta, "avisado_en": ahora_iso, "avisado_por": por_quien, "avisado_lote": lote}})
-    if ids_b:
-        await db[_CUA_CAMBIOS].update_many(
-            {"id": {"$in": ids_b}, "center": center, "avisado_deshecho_en": {"$exists": False}},
-            {"$set": {"avisado_deshecho_en": ahora_iso, "avisado_lote_b": lote}})
-    mios_a = {c["id"] for c in await db[_CUA_CAMBIOS].find({"center": center, "avisado_lote": lote},
-                                                          {"_id": 0, "id": 1}).to_list(200)}
-    mios_b = {c["id"] for c in await db[_CUA_CAMBIOS].find({"center": center, "avisado_lote_b": lote},
-                                                          {"_id": 0, "id": 1}).to_list(200)}
-    # La cuenta, con los registros como estaban antes de cogerlos (hasta dónde se había avisado cada uno).
-    registros = [c for c in registros if c.get("id") in mios_a or c.get("id") in mios_b]
-    personas, hasta = await _cua_avisos_calcular(registros, usar_a=mios_a, usar_b=mios_b)
-    # Lo que se le dice a cada uno queda en su registro: si luego se deshace, se sabe que hay que avisar otra vez.
-    dicho: dict = {}
-    hoy = _dia_negocio()
-    pares = {(did, f) for c in registros if c.get("id") in mios_a and not c.get("deshecho")
-             for did, f, _a in _cua_aviso_celdas(c) if hoy <= f <= hasta}
-    actuales = await _cua_turnos_de(pares)
-    for c in registros:
-        if c.get("id") not in mios_a or c.get("deshecho"):
+    descartar = {str(x) for x in _lista_cuerpo(data.get("descartar_ids"), 500) if x}
+    personas, _hasta, leido = await _cua_avisos_calcular(center)
+    col = db[_CUA_AVISOS_PEND]
+    ahora_iso, lote, por_quien = datetime.now(timezone.utc).isoformat(), str(uuid.uuid4()), user.get("name") or ""
+    enviados, avisados, descartados = [], 0, 0
+    for p in personas:
+        did = p["driver_id"]
+        avisar = (did in solo) if solo is not None else (did not in descartar)
+        if not avisar:
+            if did not in descartar:
+                continue
+            # Desmarcado: no se le avisa y se guarda lo que la oficina vio. Solo si la celda no ha cambiado desde que
+            # se leyó: lo que haya cambiado después no lo ha visto nadie.
+            vistas = 0
+            for d in p["dias"]:
+                q = leido[(did, d["fecha"])]
+                r = await col.update_one({"_id": q["_id"], "tocado": q.get("tocado")}, {"$set": {"visto": d["ahora"]}})
+                vistas += 1 if getattr(r, "matched_count", 0) else 0
+            descartados += 1 if vistas else 0
             continue
-        # (Un id con «.» o «$» no puede ser nombre de campo: ese no se guarda y, si se deshace, no se reavisa.)
-        campos = {f"avisado_ahora.{did}|{f}": _cua_aviso_etiqueta(actuales.get((did, f)))
-                  for did, f, _a in _cua_aviso_celdas(c) if hoy <= f <= hasta and not re.search(r"[.$]", did + f)}
-        if campos:
-            dicho[c["id"]] = campos
-    for cid, campos in dicho.items():
-        await db[_CUA_CAMBIOS].update_one({"id": cid}, {"$set": campos})
-    enviar = [p for p in personas if solo is None or p["driver_id"] in solo]
-    avisados = 0
-    for p in enviar:
+        # Se «coge» cada celda con la condición de que siga como se leyó (lo que sabe y su último cambio): si otra
+        # persona pulsa a la vez, o la celda cambia en ese instante, no entra en este aviso y se queda pendiente.
+        cogidas = []
+        for d in p["dias"]:
+            q = leido[(did, d["fecha"])]
+            r = await col.update_one(
+                {"_id": q["_id"], "dicho": q.get("dicho"), "tocado": q.get("tocado")},
+                {"$set": {"dicho": d["ahora"], "avisado_en": ahora_iso, "avisado_por": por_quien, "avisado_lote": lote},
+                 "$unset": {"visto": ""}})
+            if getattr(r, "matched_count", 0):
+                cogidas.append((q, d))
+        if not cogidas:
+            continue
+        dias = [d for _q, d in cogidas]
         try:
-            avisados += await _avisar_usuarios([p["driver_id"]], "Cambios en tu cuadrante", _cua_aviso_texto(p["dias"]),
-                                               "/conductor")
+            avisados += await _avisar_usuarios([did], "Cambios en tu cuadrante", _cua_aviso_texto(dias), "/conductor")
         except Exception as e:                                       # noqa: BLE001
-            logger.warning("Aviso de cambios del cuadrante a %s: %s", p["driver_id"], e)
-    await _audit(user, "cuadrante_avisar", {"center": center, "avisados": avisados,
-                                            "sin_avisar": len(personas) - len(enviar)})
-    return {"avisados": avisados, "personas": enviar}
+            logger.warning("Aviso de cambios del cuadrante a %s: %s", did, e)
+            # No le ha llegado: sus celdas vuelven a como estaban y salen la próxima vez.
+            for q, _d in cogidas:
+                vuelta: dict = {"$set": {"dicho": q.get("dicho")}}
+                quitar = {}
+                for campo in ("avisado_en", "avisado_por", "avisado_lote", "visto"):
+                    if campo in q:
+                        vuelta["$set"][campo] = q[campo]
+                    else:
+                        quitar[campo] = ""
+                if quitar:
+                    vuelta["$unset"] = quitar
+                try:
+                    await col.update_one({"_id": q["_id"], "avisado_lote": lote}, vuelta)
+                except Exception as e2:                              # noqa: BLE001
+                    logger.warning("Avisos del cuadrante: no se ha podido devolver una celda de %s: %s", did, e2)
+            continue
+        enviados.append({**p, "dias": dias})
+    await _audit(user, "cuadrante_avisar", {"center": center, "avisados": avisados, "descartados": descartados,
+                                            "sin_tocar": len(personas) - len(enviados) - descartados})
+    return {"avisados": avisados, "personas": enviados, "descartados": descartados}
 
 
 # ── EL CHAT DEL CUADRANTE ────────────────────────────────────────────────────
