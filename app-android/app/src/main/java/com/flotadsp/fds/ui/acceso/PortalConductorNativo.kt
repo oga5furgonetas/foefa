@@ -122,14 +122,15 @@ fun PortalConductorNativo(alCerrar: () -> Unit, abrir: String? = null, alAbierto
     // semana («Esta semana: 2», «Esta semana: ninguna» o «Esta semana: aún sin datos»), como la casilla de la web. Se
     // pregunta al volver al inicio, como los avisos; un fallo de red deja la fila como estaba (null hasta el primer 200: no
     // sale).
+    // EN PAUSA (MIS_DNR_NATIVA, en DnrConductorNativo.kt): mientras lo esté, ni se pide la ruta ni sale la fila.
     var filaDnr by remember { mutableStateOf<FilaDnrInicio?>(null) }
     LaunchedEffect(pantalla) {
-        if (pantalla == "inicio") runCatching { app.repo.misDnr() }.onSuccess { d ->
+        if (MIS_DNR_NATIVA && pantalla == "inicio") runCatching { app.repo.misDnr() }.onSuccess { d ->
             filaDnr = d?.let { DnrConductor.filaInicio(it, runCatching { app.cuenta.dnrVistas() }.getOrNull()) }
         }
     }
     // Un aviso tocado en la barra de notificaciones abre lo que toca.
-    LaunchedEffect(abrir) { if (abrir != null) { pantalla = destinoDeAviso(abrir); alAbierto() } }
+    LaunchedEffect(abrir) { if (abrir != null) { pantalla = destinoPermitido(destinoDeAviso(abrir)); alAbierto() } }
     if (confirmarSalir) AlertDialog(
         onDismissRequest = { confirmarSalir = false },
         title = { Text(tx("¿Cerrar sesión?")) },
@@ -150,7 +151,7 @@ fun PortalConductorNativo(alCerrar: () -> Unit, abrir: String? = null, alAbierto
             alVolver = { pantalla = "inicio" },
             alCompletar = { pantalla = "inicio"; aviso = tx("Auditoría enviada correctamente.") },
         )
-        "avisos" -> AvisosConductorNativo(alVolver = { pantalla = "inicio" }, alAbrir = { a -> pantalla = destinoDeAviso(a.url, a.titulo).takeIf { it != "avisos" } ?: "avisos" })
+        "avisos" -> AvisosConductorNativo(alVolver = { pantalla = "inicio" }, alAbrir = { a -> pantalla = destinoPermitido(destinoDeAviso(a.url, a.titulo)).takeIf { it != "avisos" } ?: "avisos" })
         "turnos" -> TurnosConductorNativo(alVolver = { pantalla = "inicio" })
         "dnr" -> DnrConductorNativo(alVolver = { pantalla = "inicio" })
         "extras" -> ExtrasConductorNativos(alVolver = { pantalla = "inicio" })
