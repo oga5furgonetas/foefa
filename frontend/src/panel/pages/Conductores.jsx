@@ -1010,7 +1010,10 @@ function ContrasenaInicial() {
    falta. El ordenador sigue con la tabla. */
 /* Desde cuándo está de baja (11-11-2026, equipo-6): la fecha si se sabe, o que la sacó la hoja de Google. */
 function bajaTexto(d) {
-  if (d?.desactivada_por === 'hoja') return 'la sacó la hoja de Google'
+  /* Quién la sacó lo resuelve el servidor (`origen`, segunda revisión F5/F6): la hoja de Google deja `desactivada_por`
+     puesto aunque después la reactive y la dé de baja la oficina. Sin `origen` (un servidor anterior), como antes. */
+  const hoja = d && 'origen' in d ? d.origen === 'hoja' : d?.desactivada_por === 'hoja'
+  if (hoja) return 'la sacó la hoja de Google'
   // `baja_en` va en UTC: el día, el de aquí (una baja a las 00:30 es de ese día, no del anterior).
   const f = d?.baja_en ? new Date(d.baja_en) : null
   if (!f || Number.isNaN(f.getTime())) return 'de baja'
@@ -1343,6 +1346,17 @@ export default function Conductores() {
   const filtroVivo = faltas.find((f) => f.id === filtro) || null
   const vistos = filtroVivo ? list.filter((d) => filtroVivo.falta(d, accounts, appInfo)) : list
   const conChipBajas = enBajas || (Array.isArray(bajas) && bajas.length > 0)
+  /* El chip «Bajas (N)»: con los filtros y también cuando no hay ningún activo o la búsqueda no casa con nadie (segunda
+     revisión, F12): una nave que se ha quedado sin activos tiene que poder llegar a sus bajas para reactivarlas. */
+  const chipBajas = conChipBajas && (
+    <button aria-pressed={enBajas} onClick={() => { setFiltro(null); setVerBajas((v) => !v) }}
+      title="Las fichas dadas de baja: se pueden abrir y reactivar"
+      className={`min-h-[44px] rounded-full border px-3 text-[12.5px] font-semibold sm:min-h-0 sm:py-1 ${enBajas
+        ? 'border-dark-400/60 bg-dark-700/60 text-dark-100'
+        : 'border-dark-700 text-dark-400 hover:border-dark-600 hover:text-dark-200'}`}>
+      Bajas ({bajasVistas.length})
+    </button>
+  )
 
   /* «Ya tiene ficha»: se abre esa ficha. Puede no estar en la lista que se ve
      (otro centro): se busca entre todas las que puede ver quien da de alta. */
@@ -1554,7 +1568,10 @@ Cancelar: no hacer nada.`)) {
             ? <div className="rounded-2xl border border-dashed border-dark-700 py-12 text-center">
                 <p className="font-medium text-dark-300">Nadie coincide con «{q}»</p>
                 <p className="mt-1 text-sm text-dark-500">Se busca por nombre, correo, sede, nº de empleado y teléfono.</p>
-                <button onClick={() => setQ('')} className="btn-ghost mt-4 px-3 py-1.5 text-sm">Borrar búsqueda</button>
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                  <button onClick={() => setQ('')} className="btn-ghost px-3 py-1.5 text-sm">Borrar búsqueda</button>
+                  {chipBajas}
+                </div>
               </div>
           : list.length === 0 && !enBajas
             ? <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-dark-700 px-6 py-20 text-center">
@@ -1571,6 +1588,7 @@ Cancelar: no hacer nada.`)) {
                   <button onClick={() => setModal({ driver: null })} className="btn-ghost flex items-center gap-1.5 px-4 py-2 text-sm">
                     <Plus size={14} /> {t('drv.add')}
                   </button>
+                  {chipBajas}
                 </div>
               </div>
             : <div className="flex flex-col">
@@ -1618,15 +1636,7 @@ Cancelar: no hacer nada.`)) {
                         {t('drv.f.quitar')}
                       </button>
                     )}
-                    {conChipBajas && (
-                      <button aria-pressed={enBajas} onClick={() => { setFiltro(null); setVerBajas((v) => !v) }}
-                        title="Las fichas dadas de baja: se pueden abrir y reactivar"
-                        className={`min-h-[44px] rounded-full border px-3 text-[12.5px] font-semibold sm:min-h-0 sm:py-1 ${enBajas
-                          ? 'border-dark-400/60 bg-dark-700/60 text-dark-100'
-                          : 'border-dark-700 text-dark-400 hover:border-dark-600 hover:text-dark-200'}`}>
-                        Bajas ({bajasVistas.length})
-                      </button>
-                    )}
+                    {chipBajas}
                   </div>
                 )}
                 {filtro === 'app' && filtroVivo && (

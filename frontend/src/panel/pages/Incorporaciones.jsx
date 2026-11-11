@@ -724,9 +724,14 @@ function Ficha({ p, motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje,
                 className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
             )}
             {/* Ya tiene ficha de conductor (11-11-2026, equipo-11). Por teléfono solo es una pista: no se marca. */}
-            {p.ficha && p.ficha.por !== 'telefono' && (
-              <span data-testid="con-ficha" title={`Ficha de conductor: ${p.ficha.nombre}${p.ficha.centro ? ` (${p.ficha.centro})` : ''}`}
+            {p.ficha && p.ficha.por !== 'telefono' && !p.ficha.baja && (
+              <span data-testid="con-ficha" title={`Ficha de conductor${p.ficha.nombre ? `: ${p.ficha.nombre}` : ''}${p.ficha.centro ? ` (${p.ficha.centro})` : ''}`}
                 className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold text-sky-300">con ficha</span>
+            )}
+            {/* Una ficha DE BAJA se dice como tal, no como «con ficha» (11-11-2026, segunda revisión, F2). */}
+            {p.ficha && p.ficha.por !== 'telefono' && p.ficha.baja && (
+              <span data-testid="ficha-de-baja" title={`Tiene una ficha de conductor dada de baja${p.ficha.centro ? ` (${p.ficha.centro})` : ''}`}
+                className="rounded-full bg-dark-700/60 px-2 py-0.5 text-[10px] font-semibold text-dark-300">ficha de baja</span>
             )}
           </span>
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11.5px] text-dark-500">
@@ -914,12 +919,14 @@ function FichaConductor({ p, centers, center, onCambio }) {
   const f = p.ficha
   const abrir = (id) => navigate(`/panel/conductores?open=${encodeURIComponent(id)}`)
 
-  if (f && f.por !== 'telefono') {
+  const deBaja = !!(f && f.por !== 'telefono' && f.baja)
+  if (f && f.por !== 'telefono' && !deBaja) {
     return (
       <p data-testid="ya-tiene-ficha" className="flex flex-wrap items-center gap-2 text-[12.5px] text-sky-200">
         <IdCard size={14} className="shrink-0" />
         Ya tiene ficha de conductor{f.centro ? ` (${f.centro})` : ''}
-        <Link to={`/panel/conductores?open=${encodeURIComponent(f.id)}`} className="font-semibold text-brand-400 hover:text-brand-300">Abrir</Link>
+        {/* Sin `id` (de una nave que no ve quien mira, segunda revisión F10), sin «Abrir». */}
+        {f.id && <Link to={`/panel/conductores?open=${encodeURIComponent(f.id)}`} className="font-semibold text-brand-400 hover:text-brand-300">Abrir</Link>}
       </p>
     )
   }
@@ -929,6 +936,33 @@ function FichaConductor({ p, centers, center, onCambio }) {
     const r = await fichaConductorIncorporacion(p.id, body)
     setHecho(r.data?.ficha || { id: '', center: nave })
     onCambio?.()
+  }
+  /* REACTIVAR SU FICHA DE BAJA, como en Conductores (11-11-2026, segunda revisión, F9): si su ID de reparto lo tiene
+     otra ficha, se ofrece reactivarla sin él; si su correo lo tiene otra activa, no se reactiva y se ofrece abrir esa.
+     Queda en la nave de esta persona (la que se ve arriba): es la que tiene que ver quien la reactiva (F4/F14).
+     Devuelve true si quedó reactivada. */
+  async function reactivarLa(id) {
+    const cuerpo = nave ? { center: nave } : {}
+    try {
+      await reactivarConductor(id, cuerpo)
+      return true
+    } catch (e) {
+      const det = e?.response?.data?.detalle
+      if (e?.response?.status !== 409 || !det || typeof det !== 'object') throw e
+      if (det.conflicto === 'id_reparto') {
+        if (!window.confirm(`${det.mensaje}\n\nAceptar: reactivarla SIN ese ID de reparto (pónselo bueno en su ficha).\nCancelar: no hacer nada.`)) return false
+        await reactivarConductor(id, { ...cuerpo, quitar_id: true })
+        return true
+      }
+      if (det.conflicto !== 'correo') throw e
+      const no = 'No se reactiva: serían dos fichas activas con el mismo correo.'
+      if (det.abrir_id) {
+        if (window.confirm(`${det.mensaje}\n\n${no}\nAceptar: abrir esa ficha.`)) abrir(det.abrir_id)
+      } else {
+        window.alert(`${det.mensaje}\n\n${no}`)
+      }
+      return false
+    }
   }
   async function enviar() {
     setBusy(true); setErr('')
@@ -944,9 +978,12 @@ function FichaConductor({ p, centers, center, onCambio }) {
         if (e?.response?.status !== 409 || !d?.reactivar_id) throw e
         // Como el alta de Conductores: primero, reactivar la suya; si es OTRA persona, en un segundo paso.
         if (window.confirm(`${d.mensaje}\n\nAceptar: reactivar su ficha (conserva inspecciones, turnos e historial).\nCancelar: ver otras opciones.`)) {
-          await reactivarConductor(d.reactivar_id)
-          await crear()                      // ahora casa con la reactivada (por su correo): se enlaza
-        } else if (window.confirm('¿Es OTRA persona con el mismo correo?\n\nLa ficha dada de baja dejará de entrar con este correo.\nAceptar: crear una ficha nueva.\nCancelar: no hacer nada.')) {
+          if (!(await reactivarLa(d.reactivar_id))) return
+          await crear()                      // ahora casa con la reactivada (por su correo o su DNI): se enlaza
+        } else if (window.confirm(conCorreo
+          ? '¿Es OTRA persona con el mismo correo?\n\nLa ficha dada de baja dejará de entrar con este correo.\nAceptar: crear una ficha nueva.\nCancelar: no hacer nada.'
+          /* Sin el correo (casó por su DNI o por el correo de la lista, F2), no se le quita nada a la de baja. */
+          : '¿Es OTRA persona?\n\nAceptar: crear una ficha nueva.\nCancelar: no hacer nada.')) {
           await crear({ nueva: true })
         }
       }
@@ -971,6 +1008,12 @@ function FichaConductor({ p, centers, center, onCambio }) {
         <p data-testid="quiza-ficha" className="text-[12px] text-amber-300">
           Puede ser la ficha de {f.nombre}{f.centro ? ` (${f.centro})` : ''}: tiene el mismo teléfono.{' '}
           <Link to={`/panel/conductores?open=${encodeURIComponent(f.id)}`} className="font-semibold text-brand-400 hover:text-brand-300">Abrir</Link>
+        </p>
+      )}
+      {deBaja && (
+        <p data-testid="tiene-ficha-de-baja" className="flex items-start gap-2 text-[12.5px] text-dark-300">
+          <IdCard size={14} className="mt-0.5 shrink-0" />
+          <span className="min-w-0">Tiene una ficha de conductor dada de baja{f.centro ? ` (${f.centro})` : ''}: al darle de alta se ofrece reactivarla.</span>
         </p>
       )}
       {!abierto ? (
