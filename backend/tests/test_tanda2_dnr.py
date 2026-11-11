@@ -511,17 +511,20 @@ async def test_las_fichas_de_baja_no_disputan_y_se_queda_lo_que_hace_la_oficina(
     """Las de baja no cuentan para la disputa, pero lo que ve cada uno sigue siendo lo que da la oficina:
     · Una ficha de BAJA con el ID en `transporter_id` y una viva que lo tiene en `driver_id`: la oficina se lo da a la
       de baja y la viva no lo ve (se queda igual), sin quedar en revisión.
-    · Lo mismo si la de baja lo tiene en `driver_id` (en ese campo la oficina se queda con la primera, y las de baja van
-      primero): Eva deja de verlo, como en la oficina, y tampoco queda en revisión."""
+    · Si la de baja lo tiene en `driver_id`, en cambio, ya no se lo quita a la viva (tanda 3, S2, 11-11-2026: antes la
+      oficina se quedaba con la primera leída, que era la de baja, y Eva dejaba de verlo): la oficina se lo da a Eva y
+      Eva lo ve, sin quedar en revisión."""
     base["drivers"].docs += [_ficha("d-xavi-baja", active=False, transporter_id="AXAVI00001"),
                              _ficha("d-xavi", driver_id="AXAVI00001"),
                              _ficha("d-eva-baja", center="DGA1", active=False, driver_id="AEVA000001")]
     base["dnr_rows"].docs.append(_fila("TBXAVI100", "AXAVI00001", "2026-11-05", "Y"))
     oficina = await _de_la_oficina()
-    assert "TBXAVI100" in oficina["d-xavi-baja"] and "TBEVA0100" in oficina["d-eva-baja"]
-    for sub in ("d-xavi", "d-eva"):
-        r = await server.mis_dnr(_conductor(sub))
-        assert r["en_revision"] is False and _paquetes(r) == set(), sub
+    assert "TBXAVI100" in oficina["d-xavi-baja"] and "TBEVA0100" in oficina["d-eva"]
+    assert "TBEVA0100" not in oficina.get("d-eva-baja", set())
+    r = await server.mis_dnr(_conductor("d-xavi"))
+    assert r["en_revision"] is False and _paquetes(r) == set()
+    r = await server.mis_dnr(_conductor("d-eva"))
+    assert r["en_revision"] is False and _paquetes(r) == {"TBEVA0100"}
     await _como_la_oficina(oficina, {"d-xavi": {"d-xavi"}, "d-eva": {"d-eva"}, "d-ana": {"d-ana", "d-ana-vieja"},
                                      "d-luis": {"d-luis"}})
 

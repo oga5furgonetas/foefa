@@ -177,6 +177,8 @@ export const uploadDriverPhoto = (id, file) => { const fd = new FormData(); fd.a
 /* Salud de las fichas: duplicadas por correo y Transporter IDs que faltan. */
 export const getDriversDuplicados = () => api.get('/drivers/duplicados')
 export const fusionarConductores = (body) => api.post('/drivers/fusionar', body)
+/* «No es la misma persona»: { queda: id de la activa, ceden: [ids de baja] } (11-11-2026). */
+export const separarConductores = (body) => api.post('/drivers/separar', body)
 export const repasarFusiones = () => api.post('/drivers/fusiones/repasar')
 /* Los IDs que salen a ruta y no tienen ficha, con sus rutas para reconocerlos. */
 /* Alta de un tiron del que conduce un id, con el nombre que da Cortex: sin
