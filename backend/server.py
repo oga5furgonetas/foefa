@@ -52784,7 +52784,7 @@ async def cuadrante_deshacer(data: dict = Body(...), user: dict = Depends(requir
 # es un BOTÓN, nunca automático: la oficina ve antes a quién y qué, desmarca a quien quiera y pulsa.
 # Rehecho el 11-11-2026 (revisión, P8-P10 y P22): ya NO sale del historial de «Deshacer», que guarda solo los 30
 # últimos registros por nave y se saltaba cambios sin decirlo. Ahora todo cambio del cuadrante (_CuaCambio.guardar y
-# el deshacer) apunta cada celda tocada de hoy en adelante en su propia colección, un documento por celda:
+# el deshacer) apunta cada celda que cambia de hoy en adelante en su propia colección, un documento por celda:
 #   cuadrante_avisos_pendientes {_id: "nave|conductor|fecha", center, driver_id, fecha, dicho, visto?, en, tocado,
 #                                avisado_en?, avisado_por?, avisado_lote?}
 # `dicho` es lo que el conductor SABE de ese día (lo que había antes del primer cambio sin avisar, o lo último que se le
@@ -52833,22 +52833,50 @@ async def _cua_avisos_apuntar(center: str, celdas) -> None:
     """Apunta las celdas de turnos que acaba de tocar un cambio del cuadrante, de hoy en adelante. `celdas`: (driver_id,
     fecha, lo que había ANTES del cambio). Una celda que no estaba entra con `dicho` = la etiqueta de lo de antes; una que
     ya estaba solo cambia `tocado` (lo que el conductor sabe no se pisa). NUNCA rompe el cambio: si algo falla, se dice
-    en el log y el cuadrante se guarda (o se deshace) igual."""
+    en el log y el cuadrante se guarda (o se deshace) igual.
+    Se llama DESPUÉS de aplicar el cambio (11-11-2026, tercera ronda, V8): solo se apuntan las celdas que se leen
+    distinto para el conductor que antes. La sincronización con la hoja pasa por aquí ~2.500 celdas cada vez; las que
+    no cambian ni se crean ni se tocan (miles de escrituras inútiles, y un `tocado` movido anulaba lo descartado)."""
     try:
+        celdas = list(celdas)
+        if not celdas:
+            return
         hoy = _dia_negocio()
+        # Lo de días ya pasados de esta nave ya no se avisa nunca: fuera, también en las naves que no abren la previa.
+        await db[_CUA_AVISOS_PEND].delete_many({"center": center, "fecha": {"$lt": hoy}})
         antes: dict = {}
         for did, f, doc in celdas:
             if f >= hoy and (did, f) not in antes:
                 antes[(did, f)] = doc
         if not antes:
             return
+        ahora_turnos = await _cua_turnos_de(set(antes))                  # lo de ahora, en UNA consulta
+        cambiadas = {k: doc for k, doc in antes.items()
+                     if _cua_aviso_etiqueta(doc) != _cua_aviso_etiqueta(ahora_turnos.get(k))}
+        if not cambiadas:
+            return
         marca, ahora = str(uuid.uuid4()), datetime.now(timezone.utc).isoformat()
         # Un documento por celda con `_id` fijo: dos cambios a la vez sobre la misma celda no la duplican.
-        ops = [UpdateOne({"_id": f"{center}|{did}|{f}"},
-                         {"$set": {"tocado": marca},
-                          "$setOnInsert": {"center": center, "driver_id": did, "fecha": f, "en": ahora,
-                                           "dicho": _cua_aviso_etiqueta(doc)}}, upsert=True)
-               for (did, f), doc in antes.items()]
+        ops = []
+        for (did, f), doc in cambiadas.items():
+            nuevo = {"center": center, "driver_id": did, "fecha": f, "en": ahora}
+            if doc and (doc.get("aprobado_req") or doc.get("suspension_id")):
+                # Lo de antes era un día concedido o de una suspensión (tercera ronda, V1): eso se lo dijo su propio
+                # camino (el aviso de la aprobación, la suspensión), así que es lo que sabe aunque ya hubiera algo
+                # apuntado; y lo que la oficina hubiera descartado antes ya no vale.
+                ops.append(UpdateOne({"_id": f"{center}|{did}|{f}"},
+                                     {"$set": {"tocado": marca, "dicho": _cua_aviso_etiqueta(doc)},
+                                      "$setOnInsert": nuevo, "$unset": {"visto": ""}}, upsert=True))
+                continue
+            ops.append(UpdateOne({"_id": f"{center}|{did}|{f}"},
+                                 {"$set": {"tocado": marca},
+                                  "$setOnInsert": {**nuevo, "dicho": _cua_aviso_etiqueta(doc)}}, upsert=True))
+            # Si el día vuelve a lo que el conductor sabe, lo que la oficina descartó deja de valer (tercera ronda,
+            # V6): si más tarde se le vuelve a poner eso mismo, es un cambio nuevo que nadie ha visto. Sin leer nada:
+            # solo casa si `dicho` es lo de ahora. Las dos operaciones no se pisan, vayan en el orden que vayan.
+            ops.append(UpdateOne({"_id": f"{center}|{did}|{f}", "visto": {"$exists": True},
+                                  "dicho": _cua_aviso_etiqueta(ahora_turnos.get((did, f)))},
+                                 {"$unset": {"visto": ""}}))
         for i in range(0, len(ops), 500):
             await db[_CUA_AVISOS_PEND].bulk_write(ops[i:i + 500], ordered=False)
     except Exception as e:                                           # noqa: BLE001
@@ -52886,9 +52914,22 @@ async def _cua_avisos_calcular(center: str) -> Tuple[list, str, dict]:
         # Un día concedido o de una suspensión tiene su propio camino (y su aviso, o su conversación): aquí no.
         if doc and (doc.get("aprobado_req") or doc.get("suspension_id")):
             continue
+        # Ese día ya es de otra nave (tercera ronda, V9): lo enseña y lo avisa la suya, no esta (si no, dos avisos, y
+        # un jefe de esta nave viendo un día de otra). Un turno sin nave apuntada (datos viejos) sigue saliendo aquí.
+        if doc and doc.get("center") and not _cua_es_centro(doc.get("center"), center):
+            continue
         p = leido[(did, f)]
         dicho = str(p.get("dicho") or "sin turno")
         nuevo = _cua_aviso_etiqueta(doc)
+        if nuevo == dicho and p.get("visto") is not None:
+            # Volvió a lo que él sabe por fuera del cuadrante (tercera ronda, V6; por el cuadrante lo hace el apunte):
+            # lo descartado deja de valer. Solo si la celda sigue como se leyó.
+            try:
+                await db[_CUA_AVISOS_PEND].update_one(
+                    {"_id": p["_id"], "tocado": p.get("tocado"), "dicho": p.get("dicho"), "visto": p.get("visto")},
+                    {"$unset": {"visto": ""}})
+            except Exception as e:                                       # noqa: BLE001
+                logger.warning("Avisos del cuadrante: no se ha podido olvidar un descarte de %s: %s", center, e)
         # Volvió a lo que él sabe, o la oficina ya vio esto mismo y decidió no avisar: nada.
         if nuevo == dicho or nuevo == p.get("visto"):
             continue
@@ -52973,8 +53014,17 @@ async def cuadrante_avisos_enviar(data: dict = Body(...), user: dict = Depends(r
         if not cogidas:
             continue
         dias = [d for _q, d in cogidas]
+        titulo = "Cambios en tu cuadrante"
         try:
-            avisados += await _avisar_usuarios([did], "Cambios en tu cuadrante", _cua_aviso_texto(dias), "/conductor")
+            desde_iso = datetime.now(timezone.utc).isoformat()
+            n = await _avisar_usuarios([did], titulo, _cua_aviso_texto(dias), "/conductor")
+            # _avisar_usuarios se traga sus errores y no lanza (tercera ronda, V7): se comprueba que su aviso está de
+            # verdad en la bandeja. Si no, no cuenta como avisado y sus celdas vuelven atrás (mejor repetido que
+            # perdido).
+            if not n or not await db.avisos_movil.find_one(
+                    {"user_id": did, "titulo": titulo, "creado_en": {"$gte": desde_iso}}, {"_id": 0, "id": 1}):
+                raise RuntimeError("el aviso no está en su bandeja")
+            avisados += n
         except Exception as e:                                       # noqa: BLE001
             logger.warning("Aviso de cambios del cuadrante a %s: %s", did, e)
             # No le ha llegado: sus celdas vuelven a como estaban y salen la próxima vez.
