@@ -253,6 +253,10 @@ def _dnr(r, paquete):
 # R7 (11-11-2026): `entrega` es nueva y `sin_interpretar` ya no sale (F22/F25).
 CLAVES_DNR = {"dia", "entrega", "paquete", "estado", "cp", "como", "lejos", "llamada", "segundos", "fallo_contacto",
               "foto", "foto_motivo"}
+# R14 (11-11-2026): las 7 nuevas, de las columnas de la tabla DNR que Dani decidió usar.
+CLAVES_R14 = {"contacto_como", "preferencia", "buzon_otro", "varios_a_la_vez", "a_distancia", "cliente_no_confirma",
+              "alto_valor"}
+CLAVES_DNR = CLAVES_DNR | CLAVES_R14
 
 
 # ── Lo suyo, por semana y con su estado ────────────────────────────────────────
@@ -302,8 +306,9 @@ async def test_solo_lo_minimo_ni_euros_ni_el_id_ni_otros(base):
             assert set(x) == CLAVES_DNR, set(x) ^ CLAVES_DNR
     texto = json.dumps(r, ensure_ascii=False)
     # Ni euros, ni su ID, ni nada de otros conductores (ni sus filas de foto o contacto), ni las columnas que no se
-    # entienden (PHR, la excepción, las simultáneas).
-    for prohibido in ("25.4", "25.40", "€", "valor", "AANA000001", "AANAVIEJA1", "ALUIS", "TBLUIS", "TBEVA", "TBPACO",
+    # entienden (PHR, la excepción, las simultáneas). Desde R14 hay una clave «alto_valor» (un sí, nunca el importe): lo
+    # prohibido es la clave «valor» y «valor_eur», no la palabra.
+    for prohibido in ("25.4", "25.40", "€", '"valor"', "valor_eur", "AANA000001", "AANAVIEJA1", "ALUIS", "TBLUIS", "TBEVA", "TBPACO",
                       "TBFANT", "TBJUAN", "TBPEDR", "LUIS", "PACKAGE_NOT_VISIBLE", "GARDEN", "jardin", "NO_CALL",
                       "PHRSECRETO", "EXCSECRETA", "phr", "excepcion", "simultaneas"):
         assert prohibido not in texto, prohibido
@@ -1430,3 +1435,208 @@ async def test_r12_un_paquete_es_sale_y_contact_compliance_llega_de_lo_guardado(
     texto = json.dumps(r, ensure_ascii=False)
     for secreto in ("AANA000001", "PHRSECRETO", "EXCSECRETA", "25.4", "€"):
         assert secreto not in texto, secreto
+
+
+# ── R14 (11-11-2026): más información útil de la tabla DNR ─────────────────────
+# Dani: «monta lo que consideres necesario, que dé buena información y sea útil; si consideras lo de preferencia
+# respetada, mételo, y lo de la columna esa de Mailbox Eligible, delivered elsewhere, también». Cada marca solo se dice
+# con Y (con N, vacío o algo raro, null: la pantalla no dice nada); nunca euros ni la nota del cliente.
+
+# (columna guardada en la fila, clave que sale)
+MARCAS_R14 = (("phr", "preferencia"), ("buzon_otro", "buzon_otro"), ("simultaneas", "varios_a_la_vez"),
+              ("excepcion", "a_distancia"), ("escaneo_falso", "cliente_no_confirma"), ("alto_valor", "alto_valor"))
+
+
+def test_r14_cada_marca_solo_con_y_y_nunca_false():
+    e = server._dnr_entrega
+    base_r12 = e({}, [], [])
+    for columna, clave in MARCAS_R14:
+        for si in ("Y", "y", "Yes", "TRUE", " Y "):
+            r = e({columna: si}, [], [])
+            assert r[clave] is True, (columna, si)
+            # Las demás claves no cambian por esta columna.
+            assert {k: v for k, v in r.items() if k != clave} == {k: v for k, v in base_r12.items() if k != clave}
+        for nada in ("N", "No", "false", "", "-", "N/A", None, "1", "0", "PENDING", "PHRSECRETO", "€33.05"):
+            assert e({columna: nada}, [], [])[clave] is None, (columna, nada)
+    # Una fila de antes de R14 (sin las columnas nuevas): las 7 claves nuevas a null.
+    assert {k: base_r12[k] for k in CLAVES_R14} == dict.fromkeys(CLAVES_R14)
+
+
+def test_r14_contacto_como_de_contact_details():
+    e = server._dnr_entrega
+    for valor, como in (("Calls to Customer", "llamada"), ("CALL", "llamada"), ("Call", "llamada"),
+                        ("Text", "mensaje"), ("SMS", "mensaje"), ("Texts to Customer", "mensaje"),
+                        ("", None), (None, None), ("-", None), ("Email", None), ("1", None), ("Y", None),
+                        # Las dos cosas, o que no lo hubo: no se adivina.
+                        ("Text or call", None), ("No call attempted", None), ("Call not made", None),
+                        ("Not called", None), ("No text sent", None),
+                        # Las formas que trae el informe real además de «Calls to Customer» y vacío (revisión de R14,
+                        # 11-11-2026): con el prefijo entre corchetes; NOTIFY no es una negación.
+                        ("[NOTIFY_OF_ARRIVAL] Text to Customer", "mensaje"),
+                        ("[NOTIFY_OF_ARRIVAL] Calls to Customer / Text to Customer", None),
+                        ("[OTHER] Calls to Customer / Text to Customer", None)):
+        assert e({"contacto_detalle": valor}, [], [])["contacto_como"] == como, valor
+    # Sale de la fila de la DNR, no de la tabla de fallos de contacto.
+    assert e({}, [], [{"tipo": "Calls to Customer", "segundos": 0}])["contacto_como"] is None
+
+
+def test_r14_un_tipo_con_call_que_dice_que_no_la_hubo_es_no_y_no_corta():
+    """Retoque de R12: «habla de una llamada» era «el código contiene CALL», y «No call attempted» salía «corta». Un
+    tipo cuya negación va pegada a CALL (NO_CALL…, CALL_NOT…, NOT_CALLED, NEVER_CALLED, WITHOUT_CALL) es «no»."""
+    e = server._dnr_entrega
+    for tipo in ("No call attempted", "Call not made", "Not called", "Never called", "Delivered without call",
+                 "Customer not called", "NO_CALL_ATTEMPTED", "no-call", "CALL NEVER MADE"):
+        for cero in (0, "", None):
+            r = e({"contacto": "Y"}, [], [{"tipo": tipo, "segundos": cero}])
+            assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("no", None, True), (tipo, cero)
+    # Con segundos válidos siguen mandando ellos.
+    r = e({}, [], [{"tipo": "No call attempted", "segundos": 45}])
+    assert (r["llamada"], r["segundos"]) == ("si", 45)
+    # Si otra fila apunta una llamada de verdad, «corta» (como con NO_CALL).
+    r = e({}, [], [{"tipo": "No call attempted", "segundos": 0}, {"tipo": "Calls to Customer", "segundos": 0}])
+    assert (r["llamada"], r["segundos"]) == ("corta", None)
+    # «Calls to Customer» sigue siendo una llamada: CALLS no es una negación, ni CUSTOMER, ni NOTES.
+    for tipo in ("Calls to Customer", "CALL", "Call notes"):
+        assert e({}, [], [{"tipo": tipo, "segundos": 0}])["llamada"] == "corta", tipo
+    # Revisión de R14 (11-11-2026): la negación solo hace «no» cuando niega la LLAMADA. «Calls to Customer - No
+    # answer» apunta una llamada que sí se hizo y nadie cogió: «corta» sin segundos, como «Calls to Customer».
+    for cero in (0, "", None):
+        r = e({}, [], [{"tipo": "Calls to Customer - No answer", "segundos": cero}])
+        assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("corta", None, True), cero
+    # Un tipo SIN CALL con una negación no afirma «Sin llamada»: no se sabe qué fue (null), como cualquier otro tipo
+    # que no habla de una llamada. Sigue siendo un fallo de contacto (estar en la tabla lo es).
+    for tipo in ("Customer not available", "No answer", "Text not delivered", "NOT_AVAILABLE", "Never home",
+                 "Left without signature"):
+        for cero in (0, "", None):
+            r = e({}, [], [{"tipo": tipo, "segundos": cero}])
+            assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == (None, None, True), (tipo, cero)
+        # Junto a una fila que sí niega la llamada, tampoco: no TODAS dicen que no la hubo.
+        r = e({}, [], [{"tipo": tipo, "segundos": 0}, {"tipo": "No call attempted", "segundos": 0}])
+        assert r["llamada"] is None, tipo
+
+
+# Las claves que la subida del .html ya guardaba en cada fila DNR antes de R14 (no cambian).
+CLAVES_FILA_ANTES = {"tracking_id", "transporter_id", "fecha_entrega", "dsc", "scan", "phr", "mas_25m", "simultaneas",
+                     "contacto", "excepcion", "valor", "valor_eur", "cp"}
+CLAVES_FILA_R14 = {"contacto_detalle", "escaneo_falso", "buzon_otro", "alto_valor"}
+
+# La tabla DNR con las cabeceras del informe real y valores INVENTADOS con su forma. Trae también lo que no se usa nunca
+# (el importe, la nota del cliente, el Place ID, OTP/SIG, Next / Same Day), para ver que no sale.
+_HTML_R14 = """<html><body>
+<h1>ES TDSL OGA5 Daily Report 2026-11-09</h1>
+<h2>DNR (2026-11-07)</h2>
+<table>
+<tr><th>Tracking ID</th><th>Transporter ID</th><th>Delivery Date</th><th>Delivery Scan</th><th>DSC</th>
+<th>Delivered &ge; 25m</th><th>Simultaneous Deliveries</th><th>Contact Compliance</th><th>Contact Details</th>
+<th>PHR</th><th>Feedback False Scan Indicator</th><th>Delivery Exception</th>
+<th>Mailbox Eligible, Delivered Elsewhere</th><th>High Value</th><th>Value</th><th>Delivery Hint / Customer Note</th>
+<th>Place ID</th><th>OTP/SIG</th><th>Next / Same Day</th><th>Postal Code</th></tr>
+<tr><td>ES2600000011</td><td>AANA000001</td><td>2026-11-02</td><td>DELIVERED_TO_MAIL_SLOT</td><td>Y</td>
+<td>Y</td><td>Y</td><td>Y</td><td>Calls to Customer</td>
+<td>Y</td><td>Y</td><td>Y</td>
+<td>Y</td><td>Y</td><td>&euro;33.05</td><td>Dejar en el portal 3B, preguntar por Marta</td>
+<td>PLACEINVENT01</td><td>N</td><td>Next Day</td><td>15701</td></tr>
+<tr><td>ES2600000012</td><td>AANA000001</td><td>2026-11-03</td><td>DELIVERED_TO_DOORSTEP</td><td>Y</td>
+<td>N</td><td>N</td><td>N</td><td></td>
+<td>N</td><td>N</td><td>N</td>
+<td>N</td><td>N</td><td>&euro;33.05</td><td>Dejar en el portal 3B, preguntar por Marta</td>
+<td>PLACEINVENT02</td><td>N</td><td>Same Day</td><td>15702</td></tr>
+</table>
+</body></html>"""
+
+
+def test_r14_la_subida_guarda_las_cuatro_columnas_nuevas_sin_cambiar_las_de_antes():
+    p = server._parsea_diario_html(_HTML_R14)
+    assert p["fecha_dnr"] == "2026-11-07" and len(p["dnr"]) == 2
+    uno, dos = p["dnr"]
+    assert set(uno) == CLAVES_FILA_ANTES | CLAVES_FILA_R14, set(uno) ^ (CLAVES_FILA_ANTES | CLAVES_FILA_R14)
+    assert {k: uno[k] for k in CLAVES_FILA_R14} == {"contacto_detalle": "Calls to Customer", "escaneo_falso": "Y",
+                                                    "buzon_otro": "Y", "alto_valor": "Y"}
+    assert {k: dos[k] for k in CLAVES_FILA_R14} == {"contacto_detalle": "", "escaneo_falso": "N", "buzon_otro": "N",
+                                                    "alto_valor": "N"}
+    # Las de antes, igual que siempre.
+    assert {k: uno[k] for k in CLAVES_FILA_ANTES} == {
+        "tracking_id": "ES2600000011", "transporter_id": "AANA000001", "fecha_entrega": "2026-11-02", "dsc": "Y",
+        "scan": "DELIVERED_TO_MAIL_SLOT", "phr": "Y", "mas_25m": "Y", "simultaneas": "Y", "contacto": "Y",
+        "excepcion": "Y", "valor": "€33.05", "valor_eur": 33.05, "cp": "15701"}
+    # Un informe sin esas columnas (el de R12) guarda las de antes y las nuevas vacías.
+    viejo = server._parsea_diario_html(_HTML_R12)["dnr"][0]
+    assert set(viejo) == CLAVES_FILA_ANTES | CLAVES_FILA_R14
+    assert {k: viejo[k] for k in CLAVES_FILA_R14} == dict.fromkeys(CLAVES_FILA_R14, "")
+    # El pegado de texto no cambia: sigue sin estas columnas.
+    pegado = server._parsea_diario("DNR (2026-11-07)\nTracking ID\tTransporter ID\tDSC\tHigh Value\n"
+                                   "ES2600000013\tAANA000001\tY\tY\n")
+    assert set(pegado["dnr"][0]) == CLAVES_FILA_ANTES
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_r14_de_la_subida_a_lo_que_ve_el_conductor_con_las_19_claves(base):
+    """Por la ruta de la oficina (pegar_diario con el .html) y después la del conductor: cada DNR lleva exactamente 19
+    claves, las marcas nuevas llegan de lo guardado (la proyección de dnr_rows las pide: el doble de Mongo respeta las
+    proyecciones de inclusión) y siguen sin salir ni un euro ni la nota del cliente."""
+    r = await server.pegar_diario({"texto": _HTML_R14, "confirmar": True}, DANI)
+    assert r["guardado"] is True and r["dnr_guardados"] == 2
+    vista = await server.mis_dnr(_conductor("d-ana"))
+    for s in vista["semanas"]:
+        for x in s["dnr"]:
+            assert set(x) == CLAVES_DNR and len(x) == 19, set(x) ^ CLAVES_DNR
+    uno, dos = _dnr(vista, "ES2600000011"), _dnr(vista, "ES2600000012")
+    assert {k: uno[k] for k in CLAVES_R14} == {
+        "contacto_como": "llamada", "preferencia": True, "buzon_otro": True, "varios_a_la_vez": True,
+        "a_distancia": True, "cliente_no_confirma": True, "alto_valor": True}
+    assert {k: dos[k] for k in CLAVES_R14} == dict.fromkeys(CLAVES_R14)
+    # Las de antes, como en R12: «Contact Compliance» Y sin fila de contacto → «si» sin segundos.
+    assert (uno["como"], uno["lejos"], uno["llamada"], uno["segundos"], uno["fallo_contacto"]) == (
+        "buzon", True, "si", None, None)
+    assert (dos["como"], dos["lejos"], dos["llamada"], dos["fallo_contacto"]) == ("puerta", False, "no", True)
+    # Una DNR guardada antes de R14 (sin las columnas nuevas) sale con las 7 a null.
+    assert {k: _dnr(vista, "TBAANA100")[k] for k in CLAVES_R14} == dict.fromkeys(CLAVES_R14)
+    texto = json.dumps(vista, ensure_ascii=False)
+    for prohibido in ("33.05", "€", '"valor"', "valor_eur", "Marta", "portal 3B", "PLACEINVENT", "Next Day",
+                      "Same Day", "AANA000001", "Calls to Customer"):
+        assert prohibido not in texto, prohibido
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_r14_la_proyeccion_de_dnr_rows_pide_las_columnas_nuevas_y_ningun_euro(base):
+    await server.mis_dnr(_conductor("d-ana"))
+    proyecciones = [c.proyeccion for c in base["dnr_rows"].cursores
+                    if isinstance(c.proyeccion, dict) and "tracking_id" in c.proyeccion]
+    assert proyecciones
+    p = proyecciones[0]
+    for campo in ("phr", "simultaneas", "excepcion", "contacto_detalle", "escaneo_falso", "buzon_otro", "alto_valor"):
+        assert p.get(campo) == 1, campo
+    assert "valor" not in p and "valor_eur" not in p
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_r14_lo_que_ve_la_oficina_no_cambia(base):
+    """Las rutas de la oficina que devuelven algo de las filas DNR (la subida, en su previa y al guardar, y la tabla por
+    conductor) contestan lo mismo con las columnas nuevas que sin ellas: el detalle de la oficina va escrito campo a
+    campo y las columnas nuevas no salen ahí."""
+    sin_r14 = _HTML_R14
+    for cabecera in ("Contact Details", "Feedback False Scan Indicator", "Mailbox Eligible, Delivered Elsewhere",
+                     "High Value"):
+        sin_r14 = sin_r14.replace("<th>%s</th>" % cabecera, "<th>Otra columna %d</th>" % len(cabecera))
+    assert server._parsea_diario_html(sin_r14)["dnr"][0]["alto_valor"] == ""
+
+    async def oficina():
+        return await server.diarios_por_conductor("OGA5", "2026-10-18", "2026-11-14", DANI)
+
+    previa_sin = await server.pegar_diario({"texto": sin_r14}, DANI)
+    previa_con = await server.pegar_diario({"texto": _HTML_R14}, DANI)
+    assert previa_sin == previa_con
+    guardado_sin = await server.pegar_diario({"texto": sin_r14, "confirmar": True}, DANI)
+    tabla_sin = await oficina()
+    guardado_con = await server.pegar_diario({"texto": _HTML_R14, "confirmar": True}, DANI)
+    tabla_con = await oficina()
+    assert {k: v for k, v in guardado_sin.items() if k != "clasificados_ahora"} == {
+        k: v for k, v in guardado_con.items() if k != "clasificados_ahora"}
+    assert tabla_sin == tabla_con
+    # Y se guardó de verdad con las columnas nuevas (no es que no llegaran).
+    fila = next(d for d in base["dnr_rows"].docs if d["tracking_id"] == "ES2600000011")
+    assert (fila["contacto_detalle"], fila["alto_valor"]) == ("Calls to Customer", "Y")
+    detalle = [d for c in tabla_con["conductores"] for d in c["detalle"] if d["tracking_id"].startswith("ES26")]
+    assert len(detalle) == 2
+    for d in detalle:
+        assert set(d) == {"tracking_id", "fecha_concesion", "fecha_entrega", "dsc", "scan", "valor", "cp", "valor_eur"}

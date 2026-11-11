@@ -761,14 +761,18 @@ async function portal(page, ios) {
   // «Mis DNR» (11-11-2026, revisión final F34): una semana con DNR, para que la pantalla se mire con datos (la forma del
   // contrato de R7: cada DNR con su `entrega` y todo lo demás, null lo que no se sabe; y R9: una llamada «corta», de menos
   // de 30 s, con su fallo de contacto).
+  // R14 (11-11-2026): las 19 claves; lo demás del informe (preferencia, buzón, varios a la vez, a distancia, el cliente y el
+  // alto valor, sin su importe), en una DNR, para que el iPhone mire también esas etiquetas.
   const dnr = (dia, paquete, estado, mas = {}) => ({ dia, entrega: null, paquete, estado, cp: '15704', como: null, lejos: null,
-    llamada: null, segundos: null, fallo_contacto: null, foto: null, foto_motivo: null, ...mas })
+    llamada: null, segundos: null, fallo_contacto: null, foto: null, foto_motivo: null, contacto_como: null, preferencia: null,
+    buzon_otro: null, varios_a_la_vez: null, a_distancia: null, cliente_no_confirma: null, alto_valor: null, ...mas })
   await page.route(/\/api\/diarios\/mias/, (r) => r.fulfill({ json: {
     tiene_id: true, en_revision: false, datos_hasta: '2026-11-10',
     semanas: [{ semana: '2026-11-08', hasta: '2026-11-14', cuentan: 1, no_cuentan: 0, sin_clasificar: 1, dnr: [
       // La «corta» va en ESTA semana (la pasada sale cerrada y no se miraría): así el iPhone pinta su etiqueta y su aviso.
       dnr('2026-11-10', 'TBA123456789012', 'sin_clasificar', { llamada: 'corta', segundos: 12, fallo_contacto: true }),
-      dnr('2026-11-09', 'TBA123456789011', 'cuenta', { entrega: '2026-11-07', como: 'puerta', llamada: 'no', fallo_contacto: true, foto: 'mal', foto_motivo: 'borrosa' }),
+      dnr('2026-11-09', 'TBA123456789011', 'cuenta', { entrega: '2026-11-07', como: 'puerta', llamada: 'no', fallo_contacto: true, foto: 'mal', foto_motivo: 'borrosa',
+        a_distancia: true, preferencia: true, buzon_otro: true, varios_a_la_vez: true, cliente_no_confirma: true, alto_valor: true }),
     ] }, { semana: '2026-11-01', hasta: '2026-11-07', cuentan: 1, no_cuentan: 1, sin_clasificar: 0, dnr: [
       dnr('2026-11-04', 'TBA123456789010', 'cuenta'),
       dnr('2026-11-03', 'TBA123456789009', 'no_cuenta'),
