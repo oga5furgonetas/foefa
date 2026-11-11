@@ -28896,6 +28896,11 @@ async def stats_hoy(center: Optional[str] = None, user: dict = Depends(require_a
         sedes = [center]
     else:
         sedes = [c for c in await _centros_de_la_empresa() if _user_can_see_center(user, c)]
+    # `por_centro` (11-11-2026, revisión de la flota propia, portal_inicio-6 y -1): con «Todos», el Inicio sumaba
+    # las tres naves en una cifra y no había forma de saber cuál iba atrasada sin cambiar de nave arriba tres veces;
+    # y al tocar «salen sin revisar» no sabía a qué nave llevar. El bucle ya pasa por cada sede: se apunta lo de
+    # cada una. Es un campo NUEVO: la web de antes (en caché) no lo lee y todo lo demás sigue igual.
+    por_sede = {s: {"centro": s, "salidas": 0, "revisadas": 0, "golpes": 0, "checklist": []} for s in sedes}
     checklist = []
     for turno in ("manana", "tarde"):
         tot = hec = 0
@@ -28904,13 +28909,27 @@ async def stats_hoy(center: Optional[str] = None, user: dict = Depends(require_a
             if r:
                 tot += r["total"]
                 hec += r["hechas"]
+                por_sede[sede]["checklist"].append(
+                    {"turno": turno, "hechas": r["hechas"], "total": r["total"]})
         if tot:
             checklist.append({"turno": turno, "hechas": hec, "total": tot})
+
+    # Las salidas de cada sede salen de TODA la lista (no de la cortada a 60). El centro del cuadrante puede venir
+    # escrito largo («AMZL OGA5 …»): se casa por código contenido, como _user_can_see_center.
+    for x in lista:
+        for sede in sedes:
+            if re.search(re.escape(sede), x["center"] or "", re.I):
+                por_sede[sede]["salidas"] += 1
+                por_sede[sede]["revisadas"] += 1 if x["revisada"] else 0
+                break
 
     # ── Golpes nuevos y incidencias de hoy ──
     golpes = []
     for sede in sedes:
-        golpes.extend(await _danos_nuevos_hoy(sede, dia))
+        de_la_sede = await _danos_nuevos_hoy(sede, dia)
+        # Los golpes no llevan la nave en la lista: se cuentan aquí, dentro del bucle por sede.
+        por_sede[sede]["golpes"] = len(de_la_sede)
+        golpes.extend(de_la_sede)
     qi = {**fv, "created_at": {"$regex": f"^{dia}"}}
     incidencias = {
         "nuevas": await db.incidents.count_documents(qi),
@@ -28926,7 +28945,72 @@ async def stats_hoy(center: Optional[str] = None, user: dict = Depends(require_a
         "checklist": checklist,
         "golpes": {"n": len(golpes), "lista": golpes[:20]},
         "incidencias": incidencias,
+        "por_centro": [por_sede[s] for s in sedes],
     }
+
+
+# ── CÓMO VA CADA CENTRO (11-11-2026, revisión de la flota propia: portal_inicio-6 y -2, historia-6, dia-10) ──
+# Para saber si una nave tiene sus datos al día había que entrar en cada pantalla y cambiar de nave: la plantilla en
+# Plantilla, el plan de horas en Horas, la última DNR en Diarios, el cuadrante y las máximas en Cuadrante. Dani lleva
+# tres naves desde el móvil. Esto lo junta en una fila por centro, para el Inicio con «Todos».
+# SOLO dice si cada dato está y de cuándo es: ni una cifra de Amazon (ni horas, ni DNR, ni excepciones), que siguen
+# en espera del plan A-G. Es una ruta nueva: la web de antes no la llama.
+def _fecha_hoja_iso(valor) -> Optional[str]:
+    """La fecha de la plantilla (texto de la hoja, «11/11/2026» o «1/11/26») en AAAA-MM-DD; None si no se entiende."""
+    m = re.match(r"^\s*(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})\s*$", str(valor or ""))
+    if not m:
+        return None
+    d, mes, a = (int(x) for x in m.groups())
+    try:
+        return date_cls(a + 2000 if a < 100 else a, mes, d).isoformat()
+    except ValueError:
+        return None
+
+
+def _centros_que_ve(user: dict, centros: list) -> list:
+    """Los centros que esa persona puede ver. Sus centros de Usuarios se aplican AUNQUE sea de la cuenta dueña
+    (al revés que _user_can_see_center, que a la dueña la deja pasar: historia-1, aún sin decidir). Así la fila
+    de un centro que el panel no le enseña arriba no sale aquí, y su toque no lleva a un centro que no puede elegir.
+    Solo el super-admin ve todos; sin centros marcados, todos los de la empresa, como en el resto del panel."""
+    if user.get("sa"):
+        return list(centros)
+    ac = [str(p).upper() for p in (user.get("allowed_centers") or []) if p]
+    if not ac:
+        return [c for c in centros if _user_can_see_center(user, c)]
+    return [c for c in centros if any(p in c.upper() or c.upper() in p for p in ac)]
+
+
+@api_router.get("/stats/centros-hoy")
+async def stats_centros_hoy(user: dict = Depends(require_admin)):
+    """Por cada centro que esa persona ve: si la plantilla de hoy está guardada (y quién), si el plan de horas es de
+    esta semana, el último día de DNR subido y hasta qué día hay cuadrante y máximas.
+
+    La plantilla solo cuenta si se pulsó «Descargar y guardar» (es lo único que la apunta en plantillas_diarias) y su
+    fecha es el texto de la hoja (dd/mm/aaaa), no AAAA-MM-DD: se compara ya convertida.
+    """
+    dia = _hoy_madrid()
+    semana = _whc_domingo(dia)
+    filas = []
+    for c in _centros_que_ve(user, await _centros_de_la_empresa()):
+        rx = {"$regex": re.escape(c), "$options": "i"}
+        recientes = await db.plantillas_diarias.find(
+            {"center": rx}, {"_id": 0, "xlsx": 0}).sort("uploaded_at", -1).limit(20).to_list(20)
+        de_hoy = next((p for p in recientes if _fecha_hoja_iso(p.get("date")) == dia), None)
+        plan = await db.whc_planes.find_one({"center": rx}, {"_id": 0, "texto": 0}, sort=[("week", -1)])
+        dnr = await db.daily_reports.find_one({"center": rx, "fecha_dnr": {"$exists": True, "$ne": None}},
+                                              {"_id": 0, "fecha_dnr": 1}, sort=[("fecha_dnr", -1)])
+        turno = await db.shifts.find_one({"center": rx}, {"_id": 0, "date": 1}, sort=[("date", -1)])
+        maxima = await db.route_demand.find_one({"center": rx, "maximo": {"$exists": True, "$ne": None}},
+                                                {"_id": 0, "date": 1}, sort=[("date", -1)])
+        filas.append({
+            "centro": c,
+            "plantilla": ({"por": de_hoy.get("by") or "", "a": de_hoy.get("uploaded_at")} if de_hoy else None),
+            "horas": ({"semana": plan.get("week"), "al_dia": plan.get("week") == semana} if plan else None),
+            "dnr_ultimo": (dnr or {}).get("fecha_dnr"),
+            "cuadrante_hasta": (turno or {}).get("date"),
+            "maximas_hasta": (maxima or {}).get("date"),
+        })
+    return {"dia": dia, "semana": semana, "centros": filas}
 
 # =========================
 # ASIGNACION CONDUCTOR <-> VEHICULO

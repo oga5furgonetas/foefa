@@ -58,6 +58,8 @@ const PERMITIDO = [
   ['panel/ayudaFichas.js', 'amazon rellena la columna dsc', 'ficha de ayuda de la DNR diaria'],
   ['panel/PanelLayout.jsx', "'nav.dnr'", 'entrada de menu de la DNR diaria'],
   ['i18nDict.js', "'nav.dnr'", 'nombre del menu de la DNR diaria'],
+  // «Cómo va cada centro» del Inicio (11-11-2026) nombra la pantalla con su nombre del menú, y solo a quien la tiene.
+  ['panel/pages/Dashboard.jsx', "t('nav.dnr')", 'el nombre del menu de la DNR diaria en «Cómo va cada centro»'],
 ]
 
 function ficheros(dir, out = []) {

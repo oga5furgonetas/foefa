@@ -3,6 +3,7 @@ import { Sparkles, Send, Loader2, X, Check, Car, UserPlus, FileText, Paperclip, 
 import { getAiHistorial, enviarMensajeIA, ejecutarAccionIA, subirFichasTecnicasIA, confirmarFichasTecnicasIA } from './api'
 import { getAdmin } from './auth'
 import { MARCA } from '../marca'
+import ElegirNave from './components/ElegirNave'
 
 /* FLOTADSP AI — burbuja de ayuda flotante, abajo a la derecha, como los
    widgets de soporte de cualquier web grande (Intercom, Drift...): se ve
@@ -145,7 +146,7 @@ function Tarjeta({ t }) {
   )
 }
 
-export default function AsistenteBurbuja({ center, centers }) {
+export default function AsistenteBurbuja({ center, centers, setCenter, escondida = false, soloOrdenador = false }) {
   // Quien habla se ve de un vistazo: el logo cuando contesta la IA y la foto
   // de perfil cuando escribe la persona. Sin foto, sus iniciales.
   const yo = getAdmin()
@@ -261,7 +262,9 @@ export default function AsistenteBurbuja({ center, centers }) {
 
   return (
     // En el móvil, por ENCIMA de la barra de abajo (52 px + la zona segura): antes tapaba «Menú» (Dani, 17-10-2026).
-    <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)_+_4.25rem)] right-4 z-[95] flex flex-col items-end md:bottom-4">
+    // `soloOrdenador`: en el móvil no sale (el Chat, donde tapaba el botón de enviar; allí la IA ya está con @flota).
+    <div className={`fixed bottom-[calc(env(safe-area-inset-bottom,0px)_+_4.25rem)] right-4 z-[95] flex-col items-end md:bottom-4 ${
+      escondida ? 'hidden' : soloOrdenador ? 'hidden md:flex' : 'flex'}`}>
       {abierto && (
         <div onPaste={pegarImagenes}
           className="mb-3 flex h-[32rem] max-h-[calc(100dvh-9rem)] w-[23rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-dark-700 bg-dark-950 shadow-2xl">
@@ -275,10 +278,12 @@ export default function AsistenteBurbuja({ center, centers }) {
           </div>
 
           {sinCentro ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 overflow-y-auto p-4 text-center">
               <Sparkles size={22} className="text-brand-400" />
-              <p className="text-[12.5px] text-dark-300">Elige un centro arriba para hablar con el asistente de ese centro.</p>
-              <p className="text-[11px] text-dark-500">Disponibles: {centers?.join(' · ') || '—'}</p>
+              {/* Un botón por centro ahí mismo (11-11-2026, portal_inicio-9): antes, «Elige un centro arriba» y la
+                  lista de centros como texto que no se podía tocar. */}
+              <ElegirNave className="w-full" centers={centers} setCenter={setCenter}
+                texto="Elige el centro para hablar con su asistente." />
             </div>
           ) : (
             <>
