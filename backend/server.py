@@ -42541,13 +42541,23 @@ async def parking_resolve(body: dict = Body(...), user: dict = Depends(require_a
 
 
 @api_router.get("/parking/last-known")
-async def parking_last_known(center: str = "", _=Depends(require_admin)):
+async def parking_last_known(center: str = "", incluir_asignadas: bool = False, antes_de: str = "",
+                             _=Depends(require_admin)):
     """Donde quedo cada furgoneta la ultima vez que se CONFIRMO: lo que necesita
-    la plantilla del dia siguiente para saber de donde sale cada una."""
+    la plantilla del dia siguiente para saber de donde sale cada una.
+
+    «Como ayer» en Aparcamiento (11-11-2026): ningun conductor reporta su plaza, asi que casi nada llega a
+    «confirmada» y con eso solo el boton no colocaba nada. Con `incluir_asignadas` cuenta tambien la plaza que le
+    puso la oficina; con `antes_de` (AAAA-MM-DD) solo mira los dias anteriores a ese (el que se esta colocando).
+    Sin ellos, lo de siempre."""
     c = (center or "").upper()
-    q = {"status": "confirmada"}
+    q = {"status": {"$in": ["confirmada", "asignada"]}} if incluir_asignadas else {"status": "confirmada"}
     if c and c != "TODOS":
         q["center"] = c
+    if antes_de:
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", antes_de):
+            raise HTTPException(400, "antes_de va como AAAA-MM-DD")
+        q["day"] = {"$lt": antes_de}
     rows = await db.parking_assignments.find(q, {"_id": 0}).sort("day", -1).to_list(2000)
     last = {}
     for r in rows:
@@ -48774,7 +48784,12 @@ async def _afin_guardar(admin: dict, driver_id: str, cambios: dict) -> dict:
                 raise HTTPException(400, "La responsabilidad es una nota del 1 al 10")
     if "vetadas" in cambios:
         nuevo["vetadas"] = [_texto_cuerpo(x, 60) for x in _lista_cuerpo(cambios.get("vetadas")) if _texto_cuerpo(x, 60)][:30]
-    usadas = [x for x in (nuevo.get("principal"), nuevo.get("secundaria")) if x] + list(nuevo.get("vetadas") or [])
+    # De las vetadas solo se comprueban las NUEVAS (11-11-2026, ya hay casilla en Furgonetas fijas): una vetada que
+    # luego se da de baja dejaba al conductor sin poder guardar nada más («no existe o está de baja»), y vetar una
+    # que ya no sale no hace daño a nadie.
+    vetadas_antes = set(actual.get("vetadas") or [])
+    usadas = [x for x in (nuevo.get("principal"), nuevo.get("secundaria")) if x] + [
+        x for x in (nuevo.get("vetadas") or []) if x not in vetadas_antes]
     if usadas:
         existen = {v["id"] async for v in db.vehicles.find(
             {"id": {"$in": usadas}, "status": {"$nin": ["deleted", "baja"]}}, {"_id": 0, "id": 1})}
@@ -48785,6 +48800,9 @@ async def _afin_guardar(admin: dict, driver_id: str, cambios: dict) -> dict:
         raise HTTPException(400, "La principal y la secundaria no pueden ser la misma")
     if nuevo.get("principal") and nuevo["principal"] in (nuevo.get("vetadas") or []):
         raise HTTPException(400, "No puede ser su principal y estar vetada a la vez")
+    # Tampoco la de reserva (11-11-2026): «Poner furgonetas» la pondría como reserva aunque esté vetada.
+    if nuevo.get("secundaria") and nuevo["secundaria"] in (nuevo.get("vetadas") or []):
+        raise HTTPException(400, "No puede ser su furgoneta de reserva y estar vetada a la vez")
     if not nuevo.get("principal"):
         nuevo["titular"] = False
     ahora = datetime.now(timezone.utc).isoformat()
@@ -48793,8 +48811,9 @@ async def _afin_guardar(admin: dict, driver_id: str, cambios: dict) -> dict:
         {"driver_id": driver_id},
         {"$set": {**nuevo, "driver_id": driver_id, "center": drv.get("center") or "",
                   "actualizado_en": ahora, "actualizado_por": quien},
+         # Las vetadas también quedan en el historial (11-11-2026): un veto es un cambio como otro.
          "$push": {"historial": {"$each": [{**{k: nuevo.get(k) for k in ("principal", "secundaria", "titular", "sin_auto",
-                                                                          "responsabilidad")},
+                                                                          "vetadas", "responsabilidad")},
                                             "en": ahora, "por": quien}], "$slice": -50}}},
         upsert=True)
     # Un solo titular por furgoneta: si este lo es, los demás que la comparten dejan de serlo.

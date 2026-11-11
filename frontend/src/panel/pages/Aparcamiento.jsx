@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import {
-  Loader2, MapPin, Check, X, Pencil, ShieldAlert, Car, Calendar, Search,
-  Maximize2, Image as ImageIcon, Plus, Minus, Trash2, RotateCw, Move,
+  Loader2, Check, X, Pencil, ShieldAlert, Car, Calendar, Search,
+  Maximize2, Image as ImageIcon, Plus, Minus, Trash2, RotateCw, Move, History,
 } from 'lucide-react'
-import { parkingState, parkingResolve, parkingAssign, parkingZoneImage, parkingSaveLayout, getVehicles } from '../api'
+import { parkingState, parkingResolve, parkingAssign, parkingZoneImage, parkingSaveLayout, parkingUltimas, getVehicles } from '../api'
 import { hoyLocal } from '../../lib/fecha'
 import { useT } from '../../i18n'
 import { lista } from '../../lib/lista'
+import ElegirNave from '../components/ElegirNave'
 
 /* Estado de una plaza. El color comunica, nunca decora.
    `chip` = clases para insignias; fill/line/glow = pintura de la plaza en el plano. */
@@ -268,6 +269,44 @@ export default function Aparcamiento() {
     } catch (e) { flash(false, e?.response?.data?.detail || t('pk.eAsignar')) }
     setBusy(false)
   }
+  /* «COMO AYER» (11-11-2026): lo guardado es de cada día y cada mañana el plano salía vacío. Coloca cada furgoneta
+     que todavía no tiene plaza este día en la última en que estuvo (asignada o confirmada, de días anteriores). Solo
+     rellena: no mueve ninguna ya puesta ni ocupa una plaza que hoy ya tiene otra. Si dos furgonetas dejaron la misma
+     plaza en días distintos, se la queda la que estuvo más tarde. */
+  async function comoAyer() {
+    setBusy(true)
+    try {
+      const r = await parkingUltimas(center, day)
+      const ultimas = lista(r.data?.vehicles).slice().sort((a, b) => String(b.day || '').localeCompare(String(a.day || '')))
+      const validas = new Set(zones.flatMap((z) => (z.spots || []).map((s) => String(s.code))))
+      const filas = data?.assignments || []
+      const ocupadas = new Set(filas.flatMap((a) => [a.spot, a.reported_spot]).filter(Boolean).map(String))
+      const puestas = new Set(filas.map((a) => a.vehicle_id))
+      const conocidas = new Set(vehicles.map((v) => v.id))
+      const deBaja = new Set(vehicles.filter((v) => v.status === 'baja').map((v) => v.id))
+      const plan = []
+      for (const u of ultimas) {
+        const spot = String(u.spot || '')
+        const vid = u.vehicle_id
+        if (!spot || !vid || !validas.has(spot) || ocupadas.has(spot) || puestas.has(vid) || deBaja.has(vid)) continue
+        if (vehicles.length && !conocidas.has(vid)) continue
+        ocupadas.add(spot); puestas.add(vid); plan.push({ vehicle_id: vid, spot })
+      }
+      if (!plan.length) { flash(false, t('pk.comoAyerNada')); return }
+      let hechas = 0
+      for (let i = 0; i < plan.length; i += 5) {
+        const res = await Promise.allSettled(plan.slice(i, i + 5).map((p) => parkingAssign({ center, day, ...p })))
+        hechas += res.filter((x) => x.status === 'fulfilled').length
+      }
+      flash(hechas === plan.length,
+        hechas === plan.length
+          ? t(hechas === 1 ? 'pk.comoAyerOk.one' : 'pk.comoAyerOk.many').replace('{n}', hechas)
+          : t('pk.comoAyerParte').replace('{n}', hechas).replace('{t}', plan.length))
+      await load()
+    } catch (e) {
+      flash(false, e?.response?.data?.detail || t('pk.eAsignar'))
+    } finally { setBusy(false) }
+  }
   async function resolve(action, spot) {
     if (!selRow?.vehicle_id) return
     setBusy(true)
@@ -461,10 +500,7 @@ export default function Aparcamiento() {
     return (
       <div className="mx-auto max-w-2xl">
         <h1 className="rise font-display text-[clamp(26px,3vw,38px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">{t('pk.title')}</h1>
-        <div className="mt-6 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-10 text-center text-[14px] text-dark-400">
-          <MapPin size={26} className="mx-auto mb-3 opacity-30" />
-          {t('pk.eligeCentro')}
-        </div>
+        <ElegirNave texto={t('pk.eligeCentro')} className="mt-6" />
       </div>
     )
   }
@@ -495,21 +531,25 @@ export default function Aparcamiento() {
               <span className="text-[11.5px] leading-tight text-dark-500">{t('pk.m.disp')}</span>
             </div>
           ) : (
+            // Ya no promete que el conductor la marque desde el móvil (11-11-2026): ninguna app lo hace.
             <span className="max-w-[260px] text-[11.5px] leading-snug text-dark-500">
-              Aún no hay ninguna furgoneta colocada este día: arrastra una a su plaza o que el conductor la marque desde el móvil.
+              {t('pk.vacioDia')}
             </span>
           )}
         </div>
         )}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <div className="relative">
             <Calendar size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-dark-500" />
             <input type="date" value={day} onChange={(e) => setDay(e.target.value)}
-              className="rounded-lg border border-white/[0.07] bg-white/[0.02] py-1.5 pl-8 pr-2 text-[12.5px] text-dark-50 focus:border-brand-500/50 focus:outline-none" />
+              className="rounded-lg border border-white/[0.07] bg-white/[0.02] py-1.5 pl-8 pr-2 text-[12.5px] text-dark-50 focus:border-brand-500/50 focus:outline-none max-sm:min-h-[44px]" />
           </div>
+          {/* «Como ayer» aquí solo por debajo de `lg` (el panel de «Sin plaza» queda bajo el plano); en el ordenador
+              va en ese panel, junto a las que faltan, y la cabecera se queda como estaba. */}
+          {!edit && !plantilla && pending.length > 0 && <BotonComoAyer onClick={comoAyer} busy={busy} className="flex lg:hidden" />}
           {!edit ? (
             <button onClick={startEdit}
-              className="flex items-center gap-1.5 rounded-lg border border-white/[0.1] px-3 py-1.5 text-[12px] font-semibold text-dark-300 transition hover:border-brand-500/40 hover:text-brand-300">
+              className="flex items-center gap-1.5 rounded-lg border border-white/[0.1] px-3 py-1.5 text-[12px] font-semibold text-dark-300 transition hover:border-brand-500/40 hover:text-brand-300 max-sm:min-h-[44px]">
               <Pencil size={12} /> {t('pk.editar')}
             </button>
           ) : (
@@ -545,9 +585,10 @@ export default function Aparcamiento() {
             {zones.map((z, i) => {
               const zs = zoneStats(z), ac = ZONE_ACCENT[z.color] || ZONE_ACCENT.sky
               const on = i === zIdx
+              // En el móvil, una zona por línea (`basis-full`): las tres en una fila dejaban «Den…», «Ext…» (11-11-2026).
               return (
                 <button key={z.id} onClick={() => { setAz(i); setSel(null); setMoving(false); resetView(); localStorage.setItem('pk_zona_' + center, String(i)) }}
-                  className={`group relative flex flex-1 items-center gap-2.5 overflow-hidden rounded-xl px-3.5 py-2 text-left transition ${on ? 'bg-white/[0.06] ring-1 ring-inset ' + ac.br.replace('border-', 'ring-') : 'hover:bg-white/[0.03]'}`}>
+                  className={`group relative flex flex-1 basis-full items-center gap-2.5 overflow-hidden rounded-xl px-3.5 py-2 text-left transition sm:basis-0 ${on ? 'bg-white/[0.06] ring-1 ring-inset ' + ac.br.replace('border-', 'ring-') : 'hover:bg-white/[0.03]'}`}>
                   <span className={`h-8 w-1 shrink-0 rounded-full ${on ? ac.bar : 'bg-white/10'}`} />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-baseline gap-1.5">
@@ -575,14 +616,18 @@ export default function Aparcamiento() {
                   <span className="flex items-center gap-1.5">
                     <span className={`h-2.5 w-2.5 rounded-full ${zAc.bar}`} />
                     <span className="text-[12.5px] font-semibold text-dark-100">{zone?.name}</span>
-                    <span className="font-mono text-[10.5px] tabular-nums text-dark-500">· {zStats.occ}/{zStats.total} {t('pk.ocupadas')}</span>
+                    <span className="font-mono text-[10.5px] tabular-nums text-dark-300">· {zStats.occ}/{zStats.total} {t('pk.ocupadas')}</span>
                   </span>
                   <span className="mx-1 hidden h-4 w-px bg-white/10 md:block" />
-                  {Object.entries(SPOT_UI).map(([k, v]) => (
-                    <span key={k} className="hidden items-center gap-1.5 text-[10px] text-dark-500 lg:flex">
-                      <span className={`h-2 w-2 rounded-full ${v.dot}`} /> {t(v.label)}
-                    </span>
-                  ))}
+                  {/* La leyenda se leía gris sobre gris y en el móvil ni salía (11-11-2026): ahora con más contraste
+                      y en todas las pantallas (en el móvil salta de línea). */}
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="pk-leyenda">
+                    {Object.entries(SPOT_UI).map(([k, v]) => (
+                      <span key={k} className="flex items-center gap-1.5 text-[11px] font-medium text-dark-200">
+                        <span className={`h-2.5 w-2.5 rounded-full ring-1 ring-black/20 ${v.dot}`} /> {t(v.label)}
+                      </span>
+                    ))}
+                  </span>
                   <label title={t('pk.fotoTitle')}
                     className="ml-auto flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/[0.1] px-2.5 py-1 text-[11px] font-semibold text-dark-300 transition hover:border-brand-500/40 hover:text-brand-300">
                     <ImageIcon size={12} /> {zone?.bg ? t('pk.fotoCambiar') : t('pk.fotoSubir')}
@@ -714,9 +759,12 @@ export default function Aparcamiento() {
                 {/* Vehículos sin plaza — se arrastran al plano */}
                 {!edit && (
                   <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3">
-                    <div className="mb-2 flex items-baseline justify-between">
+                    <div className="mb-2 flex items-center justify-between gap-2">
                       <p className="text-[12px] font-semibold text-dark-200">{t('pk.sinPlaza')}</p>
-                      <span className={`font-mono text-[11px] tabular-nums ${pending.length ? 'text-amber-300' : 'text-dark-500'}`}>{pending.length}</span>
+                      <span className="flex items-center gap-2">
+                        {!plantilla && pending.length > 0 && <BotonComoAyer onClick={comoAyer} busy={busy} className="hidden lg:flex" />}
+                        <span className={`font-mono text-[11px] tabular-nums ${pending.length ? 'text-amber-300' : 'text-dark-500'}`}>{pending.length}</span>
+                      </span>
                     </div>
                     {pending.length === 0 ? (
                       <p className="py-3 text-center text-[11.5px] text-dark-500">{t('pk.todasUbicadas')}</p>
@@ -778,6 +826,15 @@ export default function Aparcamiento() {
   )
 }
 
+function BotonComoAyer({ onClick, busy, className = '' }) {
+  const { t } = useT()
+  return (
+    <button onClick={onClick} disabled={busy} title={t('pk.comoAyerTip')}
+      className={`items-center gap-1.5 rounded-lg border border-brand-500/40 px-3 py-1.5 text-[12px] font-semibold text-brand-300 transition hover:bg-brand-500/10 disabled:opacity-50 max-sm:min-h-[44px] ${className}`}>
+      {busy ? <Loader2 size={12} className="animate-spin" /> : <History size={12} />} {t('pk.comoAyer')}
+    </button>
+  )
+}
 function Metric({ n, l, c = 'text-dark-50' }) {
   return (
     <div className="flex items-baseline gap-1.5">

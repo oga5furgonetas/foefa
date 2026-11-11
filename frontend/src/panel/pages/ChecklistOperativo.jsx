@@ -6,11 +6,12 @@ import {
 } from 'lucide-react'
 import { getChecklist, upsertChecklist, toggleChecklistItem, saveChecklistTemplate, enviarResumenTurno } from '../api'
 import { hoyLocal, horaLocal } from '../../lib/fecha'
+import ElegirNave from '../components/ElegirNave'
 
 const isoToday = hoyLocal
 
 export default function ChecklistOperativo() {
-  const { center, centers } = useOutletContext()
+  const { center } = useOutletContext()
   const { t } = useT()
   const [date, setDate] = useState(isoToday())
   const [shift, setShift] = useState('manana')
@@ -126,11 +127,8 @@ export default function ChecklistOperativo() {
     return (
       <div className="mx-auto max-w-3xl">
         <h1 className="rise mb-5 font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">{t('chk.title')}</h1>
-        <div className="card flex flex-col items-center gap-3 p-10 text-center">
-          <CheckSquare size={28} className="text-brand-400" />
-          <p className="text-dark-200">Elige un centro arriba para ver su checklist.</p>
-          <p className="text-sm text-dark-500">Disponibles: {centers?.join(' · ') || '—'}</p>
-        </div>
+        {/* Un botón por centro ahí mismo (11-11-2026), en vez de «Disponibles: …» como texto que no se podía pulsar. */}
+        <ElegirNave texto={t('chk.pick.center')} />
       </div>
     )
   }
