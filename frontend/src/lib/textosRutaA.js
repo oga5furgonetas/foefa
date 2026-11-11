@@ -510,4 +510,23 @@ export const A = {
   // medida): «Llamada corta» a secas, sin afirmar cuánto duró.
   "Llamada corta": ["Short call", "Chamada curta", "Appel court", "Chiamata breve", "Kurzer Anruf"],
   "Tu llamada al cliente fue demasiado corta; tiene que durar 30 segundos como mínimo": ["Your call to the customer was too short; it must last at least 30 seconds", "A tua chamada ao cliente foi demasiado curta; tem de durar pelo menos 30 segundos", "Ton appel au client était trop court ; il doit durer au moins 30 secondes", "La tua chiamata al cliente è stata troppo breve; deve durare almeno 30 secondi", "Dein Anruf beim Kunden war zu kurz; er muss mindestens 30 Sekunden dauern"],
+  // R14 (Dani, 11-11-2026: «monta lo que consideres necesario, que dé buena información y sea útil»): lo demás que dice el
+  // Daily Report de cada DNR, en etiquetas (la preferencia respetada, cabía en el buzón, varios a la vez, marcado a
+  // distancia, lo que dice el cliente, el alto valor sin su importe) y si el contacto fue una llamada o un mensaje.
+  // Revisión N3 (11-11-2026): «Fuera de la dirección», no «Marcado a distancia» (sonaba a lo mismo que los 25 m).
+  "Fuera de la dirección": ["Not at the address", "Fora da morada", "Pas à l’adresse", "Non all’indirizzo", "Nicht an der Adresse"],
+  "Lo marcaste como entregado sin estar en la dirección del cliente": ["You marked it as delivered without being at the customer’s address", "Marcaste-a como entregue sem estar na morada do cliente", "Tu l’as marqué comme livré sans être à l’adresse du client", "L’hai segnato come consegnato senza essere all’indirizzo del cliente", "Du hast es als zugestellt markiert, ohne an der Adresse des Kunden zu sein"],
+  "Llamaste": ["Called", "Ligaste", "Appelé", "Chiamato", "Angerufen"],
+  "Escribiste": ["Messaged", "Mensagem enviada", "Message envoyé", "Messaggio inviato", "Nachricht gesendet"],
+  "Escribiste al cliente": ["You messaged the customer", "Escreveste ao cliente", "Tu as écrit au client", "Hai scritto al cliente", "Du hast dem Kunden geschrieben"],
+  "Preferencia respetada": ["Preference followed", "Preferência respeitada", "Préférence respectée", "Preferenza rispettata", "Präferenz beachtet"],
+  "Lo entregaste donde el cliente pedía": ["You delivered it where the customer asked", "Entregaste-a onde o cliente pediu", "Tu l’as livré là où le client le demandait", "L’hai consegnato dove chiedeva il cliente", "Du hast es dort zugestellt, wo der Kunde es wollte"],
+  "Cabía en el buzón": ["Fits letterbox", "Cabia na caixa de correio", "Tenait dans la boîte aux lettres", "Entrava nella buca", "Passte in den Briefkasten"],
+  "Se podía dejar en el buzón y lo dejaste en otro sitio": ["It could go in the letterbox and you left it somewhere else", "Podia ficar na caixa de correio e deixaste-a noutro sítio", "Il pouvait aller dans la boîte aux lettres et tu l’as laissé ailleurs", "Si poteva lasciare nella cassetta e l’hai lasciato altrove", "Es hätte in den Briefkasten gepasst und du hast es woanders gelassen"],
+  "Varios a la vez": ["Several at once", "Várias de uma vez", "Plusieurs à la fois", "Più pacchi insieme", "Mehrere auf einmal"],
+  "Marcaste varios paquetes como entregados a la vez": ["You marked several parcels as delivered at once", "Marcaste várias encomendas como entregues de uma vez", "Tu as marqué plusieurs colis comme livrés en même temps", "Hai segnato più pacchi come consegnati insieme", "Du hast mehrere Pakete gleichzeitig als zugestellt markiert"],
+  "El cliente dice otra cosa": ["Customer disagrees", "O cliente diz outra coisa", "Le client dit autre chose", "Il cliente dice altro", "Kunde sagt etwas anderes"],
+  "El cliente dice que la entrega no fue como la marcaste": ["The customer says the delivery wasn’t as you marked it", "O cliente diz que a entrega não foi como a marcaste", "Le client dit que la livraison ne s’est pas passée comme tu l’as marquée", "Il cliente dice che la consegna non è andata come l’hai segnata", "Der Kunde sagt, die Zustellung war nicht so, wie du sie markiert hast"],
+  "Alto valor, no en mano": ["High value, not to customer", "Valor alto, não em mão", "Grande valeur, pas en main propre", "Alto valore, non a mano", "Hoher Wert, nicht persönlich"],
+  "Era un paquete de alto valor y no se entregó al cliente en mano": ["It was a high-value parcel and wasn’t handed to the customer", "Era uma encomenda de valor alto e não foi entregue em mão ao cliente", "C’était un colis de grande valeur et il n’a pas été remis en main propre au client", "Era un pacco di alto valore e non è stato consegnato a mano al cliente", "Es war ein Paket mit hohem Wert und wurde dem Kunden nicht persönlich übergeben"],
 }

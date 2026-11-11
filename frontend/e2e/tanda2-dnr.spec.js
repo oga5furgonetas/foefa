@@ -38,7 +38,9 @@ const semana = (desde, hasta, dnr) => ({
   dnr,
 })
 // Cada DNR con TODAS las claves del contrato, y null lo que no se sabe con seguridad.
-const NADA = { entrega: null, cp: null, como: null, lejos: null, llamada: null, segundos: null, fallo_contacto: null, foto: null, foto_motivo: null }
+const NADA = { entrega: null, cp: null, como: null, lejos: null, llamada: null, segundos: null, fallo_contacto: null, foto: null, foto_motivo: null,
+  // R14 (11-11-2026): lo demás del informe; cada una true o null (nunca false), y `contacto_como` «llamada», «mensaje» o null.
+  ...Object.fromEntries(['contacto_como', 'preferencia', 'buzon_otro', 'varios_a_la_vez', 'a_distancia', 'cliente_no_confirma', 'alto_valor'].map((k) => [k, null])) }
 const dnr = (dia, paquete, estado, mas = {}) => ({ dia, paquete, estado, ...NADA, cp: '15704', ...mas })
 // R9 y R12 (11-11-2026, con un reporte real), con su retoque (revisión M1-M3): `segundos` es un entero de 1 a 1800 o null
 // (el 0 NO se manda: el informe lo trae en todas sus filas de contacto y no es una medida); `llamada` es «si» (30 s o más,
@@ -56,7 +58,10 @@ function expectLlamada(x) {
   if (x.llamada === 'no' || x.llamada === 'corta') expect(x.fallo_contacto).toBe(true)
   expect(x.fallo_contacto).not.toBe(false)
 }
-const CLAVES_DNR = ['dia', 'entrega', 'paquete', 'estado', 'cp', 'como', 'lejos', 'llamada', 'segundos', 'fallo_contacto', 'foto', 'foto_motivo']
+const CLAVES_R12 = ['dia', 'entrega', 'paquete', 'estado', 'cp', 'como', 'lejos', 'llamada', 'segundos', 'fallo_contacto', 'foto', 'foto_motivo']
+// R14: las 12 de antes y 7 más, 19 en total.
+const CLAVES_R14 = ['contacto_como', 'preferencia', 'buzon_otro', 'varios_a_la_vez', 'a_distancia', 'cliente_no_confirma', 'alto_valor']
+const CLAVES_DNR = [...CLAVES_R12, ...CLAVES_R14]
 const DATOS = {
   tiene_id: true, en_revision: false, datos_hasta: '2026-11-10',
   semanas: [
@@ -77,8 +82,9 @@ const DATOS = {
   ],
 }
 
-test('la API simulada tiene la forma exacta del contrato (R7, R8 y R12)', () => {
-  for (const datos of [DATOS, R12]) {
+test('la API simulada tiene la forma exacta del contrato (R7, R8, R12 y R14)', () => {
+  expect(CLAVES_DNR).toHaveLength(19)
+  for (const datos of [DATOS, R12, R14]) {
     expect(Object.keys(datos).sort()).toEqual(['datos_hasta', 'en_revision', 'semanas', 'tiene_id'])
     for (const s of datos.semanas) {
       expect(Object.keys(s).sort()).toEqual(['cuentan', 'dnr', 'hasta', 'no_cuentan', 'semana', 'sin_clasificar'])
@@ -88,12 +94,20 @@ test('la API simulada tiene la forma exacta del contrato (R7, R8 y R12)', () => 
         expect(x.paquete).toMatch(/^[A-Za-z0-9]{8,30}$/)
         if (x.cp) expect(x.cp.replace(/[ -]/, '').length).toBeLessThanOrEqual(8)
         expectLlamada(x)
+        // R14: cada una true o null (nunca false: un «N» del informe no dice nada), y cómo fue el contacto.
+        for (const k of CLAVES_R14.filter((c) => c !== 'contacto_como')) expect([true, null]).toContain(x[k])
+        expect(['llamada', 'mensaje', null]).toContain(x.contacto_como)
+        // Ni euros ni nada que no sea del contrato.
+        expect(JSON.stringify(x)).not.toMatch(/€|valor_eur|"valor"/)
       }
     }
   }
   // R12 con su retoque: la llamada corta sin segundos cabe en el contrato, el 0 no; y los motivos de foto nuevos.
   expect(R12_SEMANA.some((x) => x.llamada === 'corta' && x.segundos === null)).toBe(true)
-  for (const datos of [DATOS, R12]) for (const s of datos.semanas) for (const x of s.dnr) expect(x.segundos).not.toBe(0)
+  for (const datos of [DATOS, R12, R14]) for (const s of datos.semanas) for (const x of s.dnr) expect(x.segundos).not.toBe(0)
+  // R14: cada clave nueva sale true en alguna DNR, y las dos formas del contacto.
+  for (const k of CLAVES_R14.filter((c) => c !== 'contacto_como')) expect(R14_SEMANA.some((x) => x[k] === true), k).toBe(true)
+  expect(R14_SEMANA.map((x) => x.contacto_como)).toEqual(expect.arrayContaining(['llamada', 'mensaje']))
   expect(R12_SEMANA.map((x) => x.foto_motivo)).toEqual(expect.arrayContaining(['en_mano', 'en_buzon']))
 })
 
@@ -162,6 +176,20 @@ const R12_SEMANA = [
   dnr('2026-11-08', 'ES2600000005', 'sin_clasificar', { fallo_contacto: true }),
 ]
 const R12 = conEstaSemana(R12_SEMANA)
+/* R14 (11-11-2026): lo demás que dice el Daily Report de cada DNR (la leyenda del propio informe), con datos inventados:
+   una con TODO a la vez (para ver que sigue leyéndose), el contacto con su forma (una llamada, un mensaje, sin decir cuál
+   y con segundos) y una con solo «Varios a la vez». */
+const R14_SEMANA = [
+  dnr('2026-11-10', 'ES2600000021', 'sin_clasificar', {
+    entrega: '2026-11-06', como: 'lugar_seguro', lejos: true, a_distancia: true, llamada: 'no', fallo_contacto: true, foto: 'mal',
+    foto_motivo: 'en_furgoneta', preferencia: true, buzon_otro: true, varios_a_la_vez: true, cliente_no_confirma: true, alto_valor: true }),
+  dnr('2026-11-10', 'ES2600000022', 'sin_clasificar', { como: 'familiar', lejos: false, llamada: 'si', contacto_como: 'llamada', foto: 'bien', preferencia: true }),
+  dnr('2026-11-09', 'ES2600000023', 'sin_clasificar', { como: 'buzon', llamada: 'si', contacto_como: 'mensaje' }),
+  dnr('2026-11-09', 'ES2600000024', 'sin_clasificar', { como: 'puerta', llamada: 'si' }),
+  dnr('2026-11-08', 'ES2600000025', 'sin_clasificar', { llamada: 'si', segundos: 45, contacto_como: 'llamada' }),
+  dnr('2026-11-08', 'ES2600000026', 'sin_clasificar', { como: 'puerta', varios_a_la_vez: true }),
+]
+const R14 = conEstaSemana(R14_SEMANA)
 const paquetes = (n, estado = 'cuenta', pre = 'TBA99900000000') => Array.from({ length: n }, (_, k) => dnr('2026-11-09', `${pre}${k}`, estado))
 // EN PAUSA (dnrPausas.js): lo que mira el estado o el recordatorio se salta mientras dure, y vuelve solo al quitarla.
 const PAUSA_ESTADO = 'el estado («te cuenta / no cuenta») está en pausa (dnrPausas.js)'
@@ -1760,3 +1788,245 @@ test('Ejemplo (R12): bajo la lista, una línea apagada «Sin preferencia, lo pri
   await expect(entrega.getByTestId('ejemplo-pref-opcion')).toHaveCount(3)
   expect(fallos).toEqual([])
 })
+
+/* R14 (11-11-2026, Dani: «monta lo que consideres necesario, que dé buena información y sea útil; si consideras lo de
+   preferencia respetada, mételo, y lo de la columna esa de Mailbox Eligible, delivered elsewhere, también»). Cada etiqueta
+   nueva sale con true y no con null; el contacto dice «Llamaste» o «Escribiste» si el informe lo sabe; el orden de la
+   tarjeta; lo demás del informe, en su propio bloque; y una DNR «de antes» (sin las claves nuevas) se pinta igual. */
+const NUEVAS_R14 = [
+  ['a_distancia', 'Fuera de la dirección', 'fallo', 'Lo marcaste como entregado sin estar en la dirección del cliente'],
+  // Revisión N1: la preferencia respetada es un DATO del informe (gris), no un veredicto.
+  ['preferencia', 'Preferencia respetada', 'dato', 'Lo entregaste donde el cliente pedía'],
+  ['buzon_otro', 'Cabía en el buzón', 'aviso', 'Se podía dejar en el buzón y lo dejaste en otro sitio'],
+  ['varios_a_la_vez', 'Varios a la vez', 'aviso', 'Marcaste varios paquetes como entregados a la vez'],
+  ['cliente_no_confirma', 'El cliente dice otra cosa', 'fallo', 'El cliente dice que la entrega no fue como la marcaste'],
+  ['alto_valor', 'Alto valor, no en mano', 'fallo', 'Era un paquete de alto valor y no se entregó al cliente en mano'],
+]
+const hechosDe = (f) => f.locator('[data-testid^="dnr-hecho-"]').evaluateAll((els) => els.map((el) => el.dataset.testid.replace('dnr-hecho-', '')))
+
+for (const [k, visible, tono, frase] of NUEVAS_R14) {
+  test(`R14: «${visible}» sale con ${k} true (tono ${tono}, con su frase larga) y no sale con null`, async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrar(page, { mias: conEstaSemana([
+      dnr('2026-11-10', 'ES2600000031', 'sin_clasificar', { como: 'puerta', [k]: true }),
+      dnr('2026-11-10', 'ES2600000032', 'sin_clasificar', { como: 'puerta', [k]: null }),
+    ]) })
+    await casilla(page).click()
+    const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+    await expect(filas).toHaveCount(2)
+    const h = filas.nth(0).getByTestId(`dnr-hecho-${k}`)
+    await expect(corto(h)).toHaveText(visible)
+    await expect(h).toHaveAttribute('data-tono', tono)
+    await expect(h).toHaveAttribute('title', frase)
+    await expect(h.locator('.sr-only')).toHaveText(frase)
+    // Con true, solo esa de las nuevas; con null, ninguna (lo que no se sabe no se dice).
+    expect(await hechosDe(filas.nth(0))).toEqual(['como', k])
+    expect(await hechosDe(filas.nth(1))).toEqual(['como'])
+    await expect(filas.nth(1)).not.toContainText(visible)
+    // Nunca euros (el importe del alto valor no llega ni se pinta).
+    await expect(page.getByTestId('mis-dnr')).not.toContainText('€')
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+}
+
+test('R14: el contacto, «Llamaste» o «Escribiste» si el informe dice cuál, «Contactaste» si no; con segundos, como antes; sin «si», no se dice cómo', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrar(page, { mias: conEstaSemana([
+    ...R14_SEMANA.slice(1, 5),
+    // `contacto_como` sin una llamada «si» (el informe dice cómo, pero no que bastara): ni «Llamaste» ni «Escribiste».
+    dnr('2026-11-08', 'ES2600000027', 'sin_clasificar', { llamada: 'no', fallo_contacto: true, contacto_como: 'llamada' }),
+    dnr('2026-11-08', 'ES2600000028', 'sin_clasificar', { como: 'puerta', contacto_como: 'mensaje' }),
+  ]) })
+  await casilla(page).click()
+  const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+  await expect(filas).toHaveCount(6)
+  const comprueba = async (h, visible, tono, frase) => {
+    await expect(corto(h)).toHaveText(visible)
+    await expect(h).toHaveAttribute('data-tono', tono)
+    await expect(h).toHaveAttribute('title', frase)
+    await expect(h.locator('.sr-only')).toHaveText(frase)
+  }
+  const llamada = (k) => filas.nth(k).getByTestId('dnr-hecho-llamada')
+  await comprueba(llamada(0), 'Llamaste', 'bien', 'Llamaste al cliente')
+  await comprueba(llamada(1), 'Escribiste', 'bien', 'Escribiste al cliente')
+  await comprueba(llamada(2), 'Contactaste', 'bien', 'Llamaste o escribiste al cliente')
+  await comprueba(llamada(3), 'Llamaste · 45 s', 'bien', 'Llamaste al cliente (45 s)')
+  await comprueba(llamada(4), 'Sin llamada', 'fallo', 'No llamaste al cliente')
+  await expect(llamada(5)).toHaveCount(0)
+  await expect(filas.nth(5)).not.toContainText(/Llamaste|Escribiste|Contactaste/)
+  // Ninguna «si» lleva el aviso de los 30 segundos; la «no», sí.
+  for (const k of [0, 1, 2, 3]) await expect(filas.nth(k).getByTestId('dnr-aviso-llamada')).toHaveCount(0)
+  await expect(filas.nth(4).getByTestId('dnr-aviso-llamada')).toHaveText(AVISO_30)
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('R14: con todo a la vez, el orden de la tarjeta (dónde, distancia y «Fuera de la dirección», llamada, foto) y lo demás del informe en su bloque, bajo una raya que el lector no lee; el aviso, una vez', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrar(page, { mias: R14 })
+  await casilla(page).click()
+  const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+  const todo = filas.nth(0)
+  expect(await hechosDe(todo)).toEqual(['como', 'lejos', 'a_distancia', 'llamada', 'foto',
+    'preferencia', 'buzon_otro', 'varios_a_la_vez', 'cliente_no_confirma', 'alto_valor'])
+  // La raya va justo entre la foto y lo demás, una sola vez, y no es una etiqueta para el lector.
+  const raya = todo.getByTestId('dnr-que-paso-raya')
+  await expect(raya).toHaveCount(1)
+  await expect(raya).toHaveAttribute('aria-hidden', 'true')
+  expect(await raya.evaluate((el) => [el.previousElementSibling.querySelector('[data-testid]').dataset.testid,
+    el.nextElementSibling.querySelector('[data-testid]').dataset.testid])).toEqual(['dnr-hecho-foto', 'dnr-hecho-preferencia'])
+  // Lo de debajo de la raya empieza en otra línea, no mezclado con lo de antes.
+  const [foto, pref] = [await todo.getByTestId('dnr-hecho-foto').boundingBox(), await todo.getByTestId('dnr-hecho-preferencia').boundingBox()]
+  expect(pref.y).toBeGreaterThan(foto.y + foto.height - 1)
+  // En el árbol accesible, diez etiquetas (la raya no cuenta).
+  const arbol = await todo.getByTestId('dnr-que-paso').ariaSnapshot()
+  expect(arbol.match(/- listitem/g)).toHaveLength(10)
+  await expect(todo.getByTestId('dnr-aviso-llamada')).toHaveCount(1)
+  // Sin nada de lo demás, sin raya; con lo demás debajo de dónde lo marcó, con ella.
+  await expect(filas.nth(2).getByTestId('dnr-que-paso-raya')).toHaveCount(0)
+  await expect(filas.nth(5).getByTestId('dnr-que-paso-raya')).toHaveCount(1)
+  expect(await hechosDe(filas.nth(5))).toEqual(['como', 'varios_a_la_vez'])
+  await expect(page.getByTestId('mis-dnr')).not.toContainText('€')
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('R14: una DNR «de antes» (las 12 claves, sin las nuevas) se pinta igual que la misma con las nuevas a null, y como hoy', async ({ page }) => {
+  const fallos = vigilar(page)
+  const igual = { como: 'puerta', lejos: false, llamada: 'corta', fallo_contacto: true, foto: 'mal', foto_motivo: 'borrosa', entrega: '2026-11-06' }
+  const nueva = dnr('2026-11-10', 'ES2600000041', 'sin_clasificar', igual)
+  const vieja = Object.fromEntries(Object.entries(dnr('2026-11-10', 'ES2600000042', 'sin_clasificar', igual)).filter(([k]) => !CLAVES_R14.includes(k)))
+  expect(Object.keys(vieja).sort()).toEqual([...CLAVES_R12].sort())
+  await entrar(page, { mias: conEstaSemana([nueva, vieja]) })
+  await casilla(page).click()
+  const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+  await expect(filas).toHaveCount(2)
+  const pinta = (f) => f.evaluate((el) => el.querySelector('[data-testid="dnr-que-paso"]').outerHTML + (el.querySelector('[data-testid="dnr-aviso-llamada"]')?.outerHTML || ''))
+  expect(await pinta(filas.nth(1))).toBe(await pinta(filas.nth(0)))
+  // Como hoy: dónde, la distancia, la llamada corta y la foto; sin raya y con el aviso de los 30 segundos.
+  for (const f of [filas.nth(0), filas.nth(1)]) {
+    expect(await hechosDe(f)).toEqual(['como', 'lejos', 'llamada', 'foto'])
+    await expect(corto(f.locator('[data-testid^="dnr-hecho-"]'))).toHaveText(['Puerta', 'En el sitio', 'Llamada corta', 'Foto borrosa'])
+    await expect(f.getByTestId('dnr-que-paso-raya')).toHaveCount(0)
+    await expect(f.getByTestId('dnr-aviso-llamada')).toHaveText(AVISO_30)
+  }
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('R14: en inglés, las etiquetas nuevas y el contacto, traducidos', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('fds_idioma', 'en'))
+  await entrar(page, { mias: R14 })
+  await page.getByRole('button', { name: /^My DNRs/ }).click()
+  const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+  const ver = (f, k) => corto(f.getByTestId(`dnr-hecho-${k}`))
+  await expect(ver(filas.nth(0), 'a_distancia')).toHaveText('Not at the address')
+  await expect(ver(filas.nth(0), 'preferencia')).toHaveText('Preference followed')
+  await expect(ver(filas.nth(0), 'buzon_otro')).toHaveText('Fits letterbox')
+  await expect(ver(filas.nth(0), 'varios_a_la_vez')).toHaveText('Several at once')
+  await expect(ver(filas.nth(0), 'cliente_no_confirma')).toHaveText('Customer disagrees')
+  await expect(ver(filas.nth(0), 'alto_valor')).toHaveText('High value, not to customer')
+  await expect(filas.nth(0).getByTestId('dnr-hecho-alto_valor')).toHaveAttribute('title', 'It was a high-value parcel and wasn’t handed to the customer')
+  await expect(ver(filas.nth(1), 'llamada')).toHaveText('Called')
+  await expect(ver(filas.nth(2), 'llamada')).toHaveText('Messaged')
+  await expect(filas.nth(2).getByTestId('dnr-hecho-llamada')).toHaveAttribute('title', 'You messaged the customer')
+})
+
+/* Revisión de R14 (11-11-2026, N1, N3 y N6). */
+test('R14 (N1): «Preferencia respetada» va como dato (gris, sin el verde) y con un icono que no es el del recordatorio de arriba', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrar(page, { mias: R14 })
+  await casilla(page).click()
+  const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+  // La de «Llamaste» y «Foto bien» con la preferencia: lo que se juntaba en verde y se leía «esta no me cuenta».
+  const h = filas.nth(1).getByTestId('dnr-hecho-preferencia')
+  await expect(h).toHaveAttribute('data-tono', 'dato')
+  await expect(h.locator('svg')).toHaveCount(1)
+  await expect(h.locator('svg')).not.toHaveClass(/ruta-ok/)
+  const clase = await h.locator('svg').getAttribute('class')
+  // El icono del recordatorio (el de «Solo si el cliente tiene preferencia de entrega») es UserCheck.
+  expect(clase).not.toMatch(/lucide-user-check/)
+  const nombre = (c) => c.split(/\s+/).find((x) => x.startsWith('lucide-'))
+  if (!PAUSAS.preferencia) {
+    const delRecordatorio = await page.getByTestId('dnr-recordatorio-condicion').locator('svg').getAttribute('class')
+    expect(nombre(clase)).not.toBe(nombre(delRecordatorio))
+  }
+  // Las que sí son un hecho bueno de la entrega siguen en verde.
+  await expect(filas.nth(1).getByTestId('dnr-hecho-llamada')).toHaveAttribute('data-tono', 'bien')
+  await expect(filas.nth(1).getByTestId('dnr-hecho-foto')).toHaveAttribute('data-tono', 'bien')
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('R14 (N3): con «Fuera de la dirección» no se dice «En el sitio» (se contradecían); «A más de 25 m», sí; sin ella, «En el sitio» como antes', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrar(page, { mias: conEstaSemana([
+    dnr('2026-11-10', 'ES2600000051', 'sin_clasificar', { como: 'puerta', lejos: false, a_distancia: true }),
+    dnr('2026-11-10', 'ES2600000052', 'sin_clasificar', { como: 'puerta', lejos: true, a_distancia: true }),
+    dnr('2026-11-10', 'ES2600000053', 'sin_clasificar', { como: 'puerta', lejos: false }),
+  ]) })
+  await casilla(page).click()
+  const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+  await expect(filas).toHaveCount(3)
+  expect(await hechosDe(filas.nth(0))).toEqual(['como', 'a_distancia'])
+  await expect(filas.nth(0)).not.toContainText('En el sitio')
+  await expect(corto(filas.nth(0).getByTestId('dnr-hecho-a_distancia'))).toHaveText('Fuera de la dirección')
+  await expect(filas.nth(0)).not.toContainText('Marcado a distancia')
+  expect(await hechosDe(filas.nth(1))).toEqual(['como', 'lejos', 'a_distancia'])
+  await expect(corto(filas.nth(1).locator('[data-testid^="dnr-hecho-"]'))).toHaveText(['Puerta', 'A más de 25 m', 'Fuera de la dirección'])
+  expect(await hechosDe(filas.nth(2))).toEqual(['como', 'lejos'])
+  await expect(corto(filas.nth(2).getByTestId('dnr-hecho-lejos'))).toHaveText('En el sitio')
+  await expect(filas.nth(2).getByTestId('dnr-hecho-lejos')).toHaveAttribute('data-tono', 'bien')
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('R14 (N6): si el contacto fue un mensaje, con la llamada «corta» o «no» dice «Fallo de contacto» a secas, sin hablar de una llamada y sin el aviso de los 30 segundos', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrar(page, { mias: conEstaSemana([
+    dnr('2026-11-10', 'ES2600000061', 'sin_clasificar', { como: 'puerta', llamada: 'corta', fallo_contacto: true, contacto_como: 'mensaje' }),
+    dnr('2026-11-10', 'ES2600000062', 'sin_clasificar', { como: 'puerta', llamada: 'no', fallo_contacto: true, contacto_como: 'mensaje' }),
+    dnr('2026-11-10', 'ES2600000063', 'sin_clasificar', { como: 'puerta', llamada: 'corta', segundos: 12, fallo_contacto: true, contacto_como: 'mensaje' }),
+    // Con una llamada (o sin decir cuál), como antes: la llamada y el aviso.
+    dnr('2026-11-09', 'ES2600000064', 'sin_clasificar', { como: 'puerta', llamada: 'corta', fallo_contacto: true, contacto_como: 'llamada' }),
+    dnr('2026-11-09', 'ES2600000065', 'sin_clasificar', { como: 'puerta', llamada: 'no', fallo_contacto: true }),
+  ]) })
+  await casilla(page).click()
+  const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+  await expect(filas).toHaveCount(5)
+  for (const k of [0, 1, 2]) {
+    const f = filas.nth(k)
+    expect(await hechosDe(f)).toEqual(['como', 'contacto'])
+    const h = f.getByTestId('dnr-hecho-contacto')
+    await expect(corto(h)).toHaveText('Fallo de contacto')
+    await expect(h).toHaveAttribute('data-tono', 'fallo')
+    await expect(h).toHaveAttribute('title', 'Te apuntaron un fallo de contacto con el cliente')
+    await expect(f).not.toContainText(/llam/i)
+    await expect(f.getByTestId('dnr-aviso-llamada')).toHaveCount(0)
+  }
+  await expect(corto(filas.nth(3).getByTestId('dnr-hecho-llamada'))).toHaveText('Llamada corta')
+  await expect(filas.nth(3).getByTestId('dnr-aviso-llamada')).toHaveText(AVISO_30)
+  await expect(corto(filas.nth(4).getByTestId('dnr-hecho-llamada'))).toHaveText('Sin llamada')
+  await expect(filas.nth(4).getByTestId('dnr-aviso-llamada')).toHaveText(AVISO_30)
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+for (const [idioma, nombre] of [['de', /^Meine DNRs/], ['fr', /^Mes DNR/]]) {
+  test(`R14: a 360 px en ${idioma} y con «Letra más grande», la tarjeta con todo: cada etiqueta dentro y entera (salta de línea, no se corta) y sin scroll de lado`, async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 780 })
+    await page.addInitScript((l) => {
+      localStorage.setItem('fds_idioma', l)
+      localStorage.setItem('fds_letra', 'grande')
+      document.documentElement.setAttribute('data-letra', 'grande')
+    }, idioma)
+    await entrar(page, { mias: R14 })
+    await page.getByRole('button', { name: nombre }).click()
+    const todo = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila').nth(0)
+    await expect(todo.locator('[data-testid^="dnr-hecho-"]')).toHaveCount(10)
+    for (const h of await todo.locator('[data-testid^="dnr-hecho-"]').all()) {
+      const r = await h.evaluate((el) => {
+        const c = el.querySelector('[data-corto]')
+        return { dentro: el.getBoundingClientRect().right <= el.closest('[data-testid="dnr-fila"]').getBoundingClientRect().right, cortada: c.scrollWidth > c.clientWidth + 1 }
+      })
+      expect(r.dentro).toBe(true)
+      expect(r.cortada).toBe(false)
+    }
+    const ancho = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, ventana: window.innerWidth }))
+    expect(ancho.doc).toBeLessThanOrEqual(ancho.ventana)
+  })
+}
