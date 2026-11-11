@@ -263,6 +263,9 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
     suspend fun referidosConductor(): JsonObject = api.get("conductor/referidos").jsonObject
     suspend fun retirarReferidosConductor(titular: String, metodo: String, destino: String): JsonObject =
         api.post("conductor/referidos/retirar", buildJsonObject { put("titular", titular); put("metodo", metodo); put("destino", destino) }).jsonObject
+    /** «Mis DNR» (11-11-2026): las DNR que le caen al conductor, por semana; null si su empresa no tiene la DNR diaria
+     *  (el servidor contesta 404) y entonces la app hace como si no existiera. */
+    suspend fun misDnr(): MisDnr? = misDnrDe(api)
 
     // ── Avisos al móvil (29-10-2026) ────────────────────────────────────────────────────────────────────────
 

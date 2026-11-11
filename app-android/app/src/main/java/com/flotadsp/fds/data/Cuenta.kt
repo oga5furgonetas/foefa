@@ -8,6 +8,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -31,6 +33,7 @@ class Cuenta(private val ctx: Context) {
     private val kVoz = androidx.datastore.preferences.core.booleanPreferencesKey("voz")
     private val kGuiaVoz = androidx.datastore.preferences.core.booleanPreferencesKey("guia_voz")
     private val kInvitarOculto = stringPreferencesKey("invitar_oculto")
+    private val kDnrVistas = stringPreferencesKey("dnr_vistas")
 
     private val _token = MutableStateFlow<String?>(null)
     val token: StateFlow<String?> = _token
@@ -149,6 +152,23 @@ class Cuenta(private val ctx: Context) {
     /** Hasta qué aviso (su `creado_en`) se ha enseñado ya como notificación (AvisosWorker, Fcm). */
     suspend fun ultimoAviso(): String? = ctx.almacen.data.first()[kUltimoAviso]
     suspend fun guardarUltimoAviso(v: String) { ctx.almacen.edit { it[kUltimoAviso] = v } }
+
+    /* «MIS DNR» (11-11-2026): qué DNR vio cada conductor la última vez que abrió la pantalla (paquete → estado), para
+       marcar las nuevas y las que Amazon ha clasificado desde entonces, como la web (dnrVistas.js). Por persona (`quien`):
+       un móvil compartido no mezcla las de dos. Solo se guarda lo de sus 4 semanas, que se pisa cada vez, así que no
+       crece. Es una comodidad del móvil: si se pierde, solo vuelven a salir como nuevas. */
+    private val serieVistas = MapSerializer(String.serializer(), MapSerializer(String.serializer(), String.serializer()))
+    private suspend fun todasDnrVistas(): Map<String, Map<String, String>> =
+        ctx.almacen.data.first()[kDnrVistas]?.let { runCatching { JSON.decodeFromString(serieVistas, it) }.getOrNull() }.orEmpty()
+
+    /** Lo que vio esta persona la última vez; null si nunca abrió «Mis DNR» en este móvil (entonces todas son nuevas). */
+    suspend fun dnrVistas(): Map<String, String>? = todasDnrVistas()[quien()]
+
+    suspend fun guardarDnrVistas(vistas: Map<String, String>) {
+        val q = quien().ifBlank { return }
+        val todas = todasDnrVistas() + (q to vistas)
+        ctx.almacen.edit { it[kDnrVistas] = JSON.encodeToString(serieVistas, todas) }
+    }
 
     /** Para que dos cuentas en el mismo móvil no compartan la ruta guardada ni lo pendiente de enviar. */
     fun quien(): String = _token.value?.let { claims(it)?.get("sub")?.jsonPrimitive?.content } ?: ""
