@@ -118,6 +118,41 @@ async def test_week_futura_o_mal_escrita_no_cuenta(mundo):
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_un_plan_sin_fechas_de_una_semana_acabada_va_al_dia_7(mundo, monkeypatch):
+    # U8 (11-11-2026): pegado HOY (miércoles) mirando la semana pasada, el plan se
+    # guarda allí, pero el día salía del de hoy: «día 4 de 7», el ritmo con 4
+    # jornadas y quien hizo 45 h en esa semana cerrada, en «peligro».
+    monkeypatch.setattr(server, "_dia_negocio", lambda: (DOM + timedelta(days=3)).isoformat())
+    plan = server._texto_cuerpo(
+        "Buscar asociados\n" + _conductor(NOMBRES[0], "45h 00m")
+        + "".join(_conductor(n) for n in NOMBRES[1:]), 400_000)
+    r = await _analizar(texto=plan, center="DGA1", week=PASADA)
+    assert r["semana_guardada"] == PASADA
+    assert r["ritmo"]["dia_semana"] == 7
+    assert r["ritmo"]["bloques_ref"] == server._WHC_BLOQUES_SEMANA
+    assert r["ritmo"]["peligro"] == 0 and r["ritmo"]["pasados"] == 0
+    # Al volver a abrirlo (pegado hoy, fuera de esa semana), lo mismo.
+    r2 = await _analizar(texto=plan, center="DGA1", guardar=False, week=PASADA)
+    assert r2["es_el_guardado"] is True
+    assert r2["ritmo"]["dia_semana"] == 7
+    # La semana de ahora, sin `week`, sigue contando con el día de hoy (miércoles = 4).
+    r3 = await _analizar(texto=plan, center="DGA1", guardar=False)
+    assert r3["ritmo"]["dia_semana"] == 4
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_un_plan_sin_fechas_pegado_en_su_semana_conserva_su_dia(mundo):
+    # El que se pegó el martes de la semana pasada sigue siendo «día 3», no el 7.
+    mundo["whc_planes"].docs.append({
+        "center": "DGA1", "week": PASADA, "texto": SIN_FECHAS, "n_conductores": len(NOMBRES),
+        "pegado_en": (DOM - timedelta(days=5)).isoformat() + "T08:00:00+00:00",
+        "updated_at": (DOM - timedelta(days=5)).isoformat() + "T08:00:00+00:00"})
+    r = await _analizar(texto=SIN_FECHAS, center="DGA1", guardar=False, week=PASADA)
+    assert r["es_el_guardado"] is True
+    assert r["ritmo"]["dia_semana"] == 3
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_sin_guardar_no_hay_semana_guardada(mundo):
     r = await _analizar(texto=SIN_FECHAS, center="DGA1", guardar=False, week=PASADA)
     assert r["guardado"] is False

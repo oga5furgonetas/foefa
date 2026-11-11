@@ -41495,7 +41495,17 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
         pegado_en = datetime.now(timezone.utc).isoformat()
     pegado_hoy = dia_pegado is None or dia_pegado == hoy
     # El día de la semana, con el día en que se pegó, no con el de hoy.
-    dia, dia_del_plan = _whc_dias_del_plan(texto, dia_pegado or hoy)
+    dia_ref = dia_pegado or hoy
+    # UNA SEMANA YA ACABADA VA AL DÍA 7 (11-11-2026). Un plan sin fechas pegado hoy
+    # mirando una semana anterior (`week`) se guarda en esa semana, pero el día salía
+    # del de HOY: el miércoles, «día 4 de 7» de una semana cerrada, con el ritmo «a
+    # estas alturas, 4 jornadas» y quien hizo 45 h en «peligro». Si el día con el que
+    # se cuenta cae después del sábado de la semana del plan, se cuenta su sábado.
+    if not _whc_semana_del_plan(texto):
+        fin_semana = date_cls.fromisoformat(sun_plan) + timedelta(days=6)
+        if dia_ref > fin_semana:
+            dia_ref = fin_semana
+    dia, dia_del_plan = _whc_dias_del_plan(texto, dia_ref)
     ev = _whc_evaluar(conductores, limite, bloque_limite, dia)
 
     guardado = False
