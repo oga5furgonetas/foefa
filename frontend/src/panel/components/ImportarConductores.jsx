@@ -95,6 +95,7 @@ export default function ImportarConductores({ center, alTerminar }) {
               {hecho.fuera_seleccion > 0 && `${hecho.fuera_seleccion} de otros centros sin tocar`}
             </p>
           )}
+          <DeBaja n={hecho.de_baja} nombres={hecho.nombres_de_baja} />
           <Link to="/panel/conductores" className="mt-2 inline-flex items-center gap-1 text-[13px] font-semibold text-emerald-300 hover:text-emerald-200">
             Ver conductores <ArrowRight size={13} />
           </Link>
@@ -133,7 +134,7 @@ export default function ImportarConductores({ center, alTerminar }) {
                       <td className="px-3 py-1.5 text-dark-200">{p.name}</td>
                       <td className="px-3 py-1.5 tabular-nums text-dark-400">{p.phone || '—'}</td>
                       <td className="px-3 py-1.5 text-dark-400">{p.email || '—'}</td>
-                      <td className="px-3 py-1.5 text-right text-[11px] text-dark-500">{p.ya_existe ? 'ya estaba' : ''}</td>
+                      <td className="px-3 py-1.5 text-right text-[11px] text-dark-500">{p.de_baja ? 'estaba de baja' : p.ya_existe ? 'ya estaba' : ''}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -154,6 +155,8 @@ export default function ImportarConductores({ center, alTerminar }) {
             </details>
           )}
 
+          <DeBaja n={prev.de_baja} nombres={prev.nombres_de_baja} />
+
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-dark-800 pt-4">
             <span className="text-[12px] text-dark-500">
               {resumen.existentes} ya estaban{resumen.fuera > 0 && ` · ${resumen.fuera} fuera`}
@@ -168,5 +171,21 @@ export default function ImportarConductores({ center, alTerminar }) {
         </>
       )}
     </div>
+  )
+}
+
+/* QUIÉN ESTABA DE BAJA (11-11-2026, tanda 3, equipo-6). Contaban como «ya estaban» y no se veía que eran bajas: no se
+   dan de alta otra vez (serían dos fichas de la misma persona) ni se reactivan solas (por nombre puede ser un tocayo).
+   Se reactivan a mano desde «Bajas», en Conductores. Un servidor viejo no manda `de_baja`: no sale nada. */
+function DeBaja({ n, nombres }) {
+  if (!(n > 0)) return null
+  const lista = Array.isArray(nombres) ? nombres.filter(Boolean) : []
+  const resto = n - lista.length
+  return (
+    <p data-testid="importar-de-baja" className="mt-1 rounded-lg bg-white/[0.03] px-3 py-2 text-[12.5px] text-dark-300">
+      {n} {n === 1 ? 'estaba de baja' : 'estaban de baja'}
+      {lista.length > 0 && `: ${lista.join(', ')}${resto > 0 ? `… y ${resto} más` : ''}`}.
+      {' '}No se dan de alta otra vez: {n === 1 ? 'reactívalo' : 'reactívalos'} desde «Bajas», en Conductores.
+    </p>
   )
 }

@@ -155,6 +155,7 @@ export const DICT = {
   'vh.vida.reps':     { es: 'reparados', en: 'repaired', fr: 'réparés', de: 'repariert', it: 'riparati', pt: 'reparados' },
   // Próximos cambios (cola de mantenimiento de flota)
   'mant.tab':         { es: 'Próximos cambios', en: 'Upcoming servicing', fr: 'Prochains entretiens', de: 'Anstehende Wartung', it: 'Prossimi tagliandi', pt: 'Próximas revisões' },
+  'carnet.tab':       { es: 'Carnets', en: 'Licences', fr: 'Permis', de: 'Führerscheine', it: 'Patenti', pt: 'Cartas de condução' },
   'mant.oil':         { es: 'Aceite', en: 'Oil', fr: 'Huile', de: 'Öl', it: 'Olio', pt: 'Óleo' },
   'mant.tyres':       { es: 'Ruedas', en: 'Tyres', fr: 'Pneus', de: 'Reifen', it: 'Gomme', pt: 'Pneus' },
   'mant.pads':        { es: 'Pastillas de freno', en: 'Brake pads', fr: 'Plaquettes de frein', de: 'Bremsbeläge', it: 'Pastiglie freno', pt: 'Pastilhas de travão' },
@@ -408,6 +409,8 @@ export const DICT = {
   'drv.f.sinId':      { es: 'sin ID de reparto', en: 'no delivery ID', fr: 'sans ID de livraison', de: 'ohne Zustell-ID', it: 'senza ID consegna', pt: 'sem ID de entrega' },
   'drv.f.sinAcceso':  { es: 'sin acceso', en: 'no access', fr: 'sans accès', de: 'ohne Zugang', it: 'senza accesso', pt: 'sem acesso' },
   'drv.f.sinTel':     { es: 'sin teléfono', en: 'no phone', fr: 'sans téléphone', de: 'ohne Telefon', it: 'senza telefono', pt: 'sem telefone' },
+  'drv.f.sinApp':     { es: 'sin app', en: 'no app', fr: 'sans appli', de: 'ohne App', it: 'senza app', pt: 'sem app' },
+  'drv.f.sinAppAyuda': { es: 'Sin app: no ha abierto la app de Android con su cuenta. También sale así quien solo usa la web o el iPhone, quien cerró sesión en el móvil y quien tiene una app anterior a la 2.3.0.', en: 'No app: has not opened the Android app with their account. Also shown for people who only use the web or the iPhone, who signed out on the phone, or who have an app older than 2.3.0.', fr: "Sans appli : n'a pas ouvert l'appli Android avec son compte. Apparaît aussi ainsi qui n'utilise que le web ou l'iPhone, qui s'est déconnecté sur le téléphone ou a une appli antérieure à la 2.3.0.", de: 'Ohne App: hat die Android-App nicht mit seinem Konto geöffnet. So erscheint auch, wer nur das Web oder das iPhone nutzt, sich am Handy abgemeldet hat oder eine App vor 2.3.0 hat.', it: "Senza app: non ha aperto l'app Android con il suo account. Compare così anche chi usa solo il web o l'iPhone, chi è uscito dall'account sul telefono o ha un'app precedente alla 2.3.0.", pt: 'Sem app: não abriu a app Android com a sua conta. Também aparece assim quem só usa a web ou o iPhone, quem terminou sessão no telemóvel ou tem uma app anterior à 2.3.0.' },
   'drv.f.quitar':     { es: 'Ver todos', en: 'Show all', fr: 'Voir tous', de: 'Alle zeigen', it: 'Vedi tutti', pt: 'Ver todos' },
   // La pestaña del ranking, corta en el móvil para que las tres quepan en una línea (11-11-2026, revisión de la tanda 2).
   'drv.tabRanking':   { es: 'Ranking', en: 'Ranking', fr: 'Classement', de: 'Ranking', it: 'Classifica', pt: 'Ranking' },

@@ -107,6 +107,13 @@ export const removeDriverRecoveryEmail = (id) => api.delete(`/drivers/${id}/reco
 // aplica el servidor ese día; si ya ha llegado, en el acto).
 export const programarTraslado = (id, centro, desde) => api.post(`/drivers/${id}/traslado`, { centro, desde })
 export const cancelarTraslado = (id) => api.delete(`/drivers/${id}/traslado`)
+// Las fichas de baja y reactivar una (11-11-2026, equipo-6). Reactivar: 409 {mensaje, abrir_id, conflicto} si el
+// correo o el ID de reparto ya los tiene otra ficha; con { quitar_id: true } se reactiva sin el ID.
+export const getDriversBajas = (center) => api.get('/drivers/bajas', { params: centerParam(center) })
+export const reactivarConductor = (id, body = {}) => api.post(`/drivers/${id}/reactivar`, body)
+// Quién tiene la app de Android, con qué versión y cuándo la abrió (11-11-2026, equipo-5):
+// {conductores: {id: {app, plataforma, visto}}, ultima}. Un servidor viejo contesta 404/405: la columna no sale.
+export const getDriversApp = (center) => api.get('/drivers/app', { params: centerParam(center) })
 // Apoyo en ruta: quien le quita paradas a quien, con mapa por WhatsApp
 /* Empleo: ofertas, cuestionario y candidatos. La oferta va SIEMPRE atada a un
    centro y el candidato hereda el suyo, para que no se mezclen las naves. */
@@ -159,6 +166,9 @@ export const importarIncorporaciones = (body) => api.post('/incorporaciones/pers
 export const editarIncorporacion = (id, body) => api.patch(`/incorporaciones/personas/${id}`, body)
 export const mensajeIncorporacion = (id, body) => api.post(`/incorporaciones/personas/${id}/mensaje`, body)
 export const marcarAvisoIncorporacion = (id, body) => api.post(`/incorporaciones/personas/${id}/enviado`, body)
+/* De Incorporaciones a ficha de conductor (11-11-2026, equipo-11): { usar_correo, nueva, centro } (todo opcional) ->
+   { ya_tenia, ficha: {id, name, center} } o el mismo 409 que POST /drivers ({mensaje, abrir_id} o {mensaje, reactivar_id}). */
+export const fichaConductorIncorporacion = (id, body = {}) => api.post(`/incorporaciones/personas/${id}/ficha-conductor`, body)
 export const guardarPlantillaIncorporaciones = (body) => api.put('/incorporaciones/plantillas', body)
 /* La descarga va como `blob`: sin esto axios intenta leerlo como texto y
    el fichero llega con los acentos rotos. */

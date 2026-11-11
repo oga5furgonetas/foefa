@@ -17,6 +17,9 @@ const CasasAlquiler = lazy(() => import('./CasasAlquiler'))
 // km en vez de en días: entra aquí y no como una entrada más en la barra
 // lateral, que ya tiene de sobra.
 const Mantenimiento = lazy(() => import('./Mantenimiento'))
+// La caducidad del carnet de los conductores (11-11-2026, historia-10): con el permiso de Conductores, que es quien
+// mete la fecha en la ficha.
+const CarnetsConductores = lazy(() => import('./CarnetsConductores'))
 
 export default function Vencimientos() {
   const { t } = useT()
@@ -28,6 +31,7 @@ export default function Vencimientos() {
     canSee('avisos-itv') && { k: 'mant', label: t('mant.tab'), C: Mantenimiento },
     canSee('renting') && { k: 'renting', label: t('nav.renting'), C: Renting },
     canSee('casas-alquiler') && { k: 'casas', label: t('nav.rental'), C: CasasAlquiler },
+    canSee('conductores') && { k: 'carnets', label: t('carnet.tab'), C: CarnetsConductores },
   ].filter(Boolean)
   const [tab, setTab] = useState(tabs[0]?.k)
   const active = tabs.find((x) => x.k === tab) || tabs[0]
@@ -40,7 +44,8 @@ export default function Vencimientos() {
         <h1 className="font-display text-[clamp(28px,3.4vw,42px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">
           {t('nav.grp.expiry')}
         </h1>
-        <div className="flex gap-1 rounded-lg bg-dark-900 p-1 ring-1 ring-dark-700">
+        {/* Salta de línea si no caben (11-11-2026, historia-10): con «Carnets» son seis y en el móvil se salían. */}
+        <div className="flex max-w-full flex-wrap gap-1 rounded-lg bg-dark-900 p-1 ring-1 ring-dark-700">
           {tabs.map((x) => (
             <button
               key={x.k}
