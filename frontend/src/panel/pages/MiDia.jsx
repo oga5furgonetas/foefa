@@ -88,7 +88,8 @@ export default function MiDia() {
     <div className="mx-auto max-w-3xl space-y-4">
       <header className="rise">
         <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-brand-400/80">{centro}
-          {defaulted && <span className="ml-2 normal-case tracking-normal text-dark-500">· {t('midia.default.center')}</span>}
+          {/* Con la tarjeta de los otros centros justo debajo, «cámbialo arriba» sobra y la contradice (11-11-2026). */}
+          {defaulted && !(centers?.length > 1) && <span className="ml-2 normal-case tracking-normal text-dark-500">· {t('midia.default.center')}</span>}
         </p>
         <h1 className="mt-2 font-display text-[clamp(28px,3.4vw,42px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">{t('midia.title')}</h1>
         {/* Solo la primera letra en mayúscula: `capitalize` ponía «17 De Septiembre». */}
@@ -97,8 +98,9 @@ export default function MiDia() {
 
       {/* Con «Todos» se enseña el primer centro; los demás, a un toque ahí mismo (11-11-2026, portal_inicio-9):
           antes había que subir al selector de arriba para ver DGA1. */}
+      {/* Solo los OTROS centros: el que ya se está viendo no se ofrece (era un botón igual que los demás). */}
       {defaulted && centers?.length > 1 && (
-        <ElegirNave texto={t('midia.default.pick').replace('{c}', centro)} />
+        <ElegirNave texto={t('midia.default.pick').replace('{c}', centro)} centers={centers.filter((c) => c !== centro)} />
       )}
 
       {allClear && (

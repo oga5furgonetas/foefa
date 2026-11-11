@@ -867,10 +867,12 @@ export default function PanelLayout() {
         <header className="relative z-30 flex items-center gap-2 border-b border-white/[0.05] bg-transparent px-3 py-2.5 backdrop-blur-md md:gap-3 md:px-4">
           {/* La puerta del menu tambien arriba: en iOS la barra de abajo se
               queda debajo del navegador y no siempre se ve. */}
+          {/* Se ve de 36 px (la cabecera no crece), pero se toca en 44: el `before` invisible sale 5 px por cada lado
+              del borde de dentro (34 px + 10) (11-11-2026; con el número rojo invita más a tocarlo). */}
           <button
             onClick={() => setMenuOpen(true)}
             aria-label={nombreMenu}
-            className="relative flex h-9 w-9 flex-none items-center justify-center rounded-lg border border-dark-700 bg-dark-800/70 text-dark-300 active:bg-dark-800 md:hidden">
+            className="relative flex h-9 w-9 flex-none items-center justify-center rounded-lg border border-dark-700 bg-dark-800/70 text-dark-300 before:absolute before:-inset-[5px] active:bg-dark-800 md:hidden">
             <Menu size={18} />
             {globoMenu}
           </button>
@@ -949,7 +951,10 @@ export default function PanelLayout() {
         {/* El hueco de abajo deja sitio a la burbuja de la IA (11-11-2026, vista en las fotos tapando «Editar» y la
             última columna de las tablas): en el móvil, la barra de abajo (52 px) más la burbuja encima (48 px y su
             margen); en el ordenador, la burbuja (48 px a 16 px del borde). Se puede bajar hasta que nada quede debajo. */}
-        <main key={loc.pathname} className="animate-fade-in flex-1 overflow-y-auto p-4 pb-36 md:p-5 md:pb-20">
+        {/* El Chat y el Centro de IA no: su altura va calculada contra la ventana y con el hueco nuevo dejaban de caber
+            (salía una barra y la página entera subía comiéndose la cabecera). Ellos, con el de siempre. */}
+        <main key={loc.pathname} className={`animate-fade-in flex-1 overflow-y-auto p-4 md:p-5 ${
+          curKey === 'chat' || curKey === 'centro-ia' ? 'pb-24 md:pb-5' : 'pb-36 md:pb-20'}`}>
           {/* `ve`: la regla del menú, para que el Inicio solo enseñe casillas de pantallas que este usuario puede abrir. */}
           <Outlet context={{ center, centers, admin, setCenter, ve: (to) => itemVisible({ to }) }} />
         </main>
@@ -1011,10 +1016,10 @@ export default function PanelLayout() {
       {/* En el Centro de IA la burbuja sobra (y en el móvil tapaba el botón de enviar). */}
       {/* Con la hoja del menú abierta, la burbuja se esconde (sin desmontarla: no se pierde la conversación): iba por
           encima y tapaba el número rojo de Días libres (foto del 10-11-2026). `setCenter`: para elegir el centro
-          ahí mismo con «Todos». En el Chat, en el móvil, tapaba el botón de enviar (foto del 11-11-2026): allí no sale,
-          y la IA sigue a mano en la sala con @flota. */}
+          ahí mismo con «Todos». En el Chat, en el móvil, tapaba el botón de enviar (foto del 11-11-2026): allí va más
+          arriba, por encima de la caja de escribir (sigue a mano, como siempre). */}
       {curKey !== 'centro-ia' && <AsistenteBurbuja center={center} centers={centers} setCenter={setCenter}
-        escondida={menuOpen} soloOrdenador={curKey === 'chat'} />}
+        escondida={menuOpen} sobreEscribir={curKey === 'chat'} />}
     </div>
   )
 }
