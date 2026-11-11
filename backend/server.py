@@ -16159,9 +16159,11 @@ async def _danos_nuevos_hoy(center: str, dia: str) -> list:
                "status": {"$nin": ["deleted", "baja"]}})
     if not ids:
         return []
+    # El día en hora de Madrid, no la fecha UTC de la marca (11-11-2026, portal_inicio-5): con `^{dia}` lo hecho
+    # entre las 00:00 y la 01:00 (02:00 en verano) contaba para el día anterior. Ver _rango_dia_negocio.
     insps = await db.inspections.find(
         {"deleted": {"$ne": True}, "vehicle_id": {"$in": ids},
-         "created_at": {"$regex": f"^{dia}"}},
+         "created_at": _rango_dia_negocio(dia)},
         {"_id": 0, "vehicle_id": 1, "analysis": 1, "driver_name": 1}).to_list(2000)
 
     asig = await db.daily_assignments.find_one(
@@ -16218,7 +16220,7 @@ async def _inspecciones_del_dia(center: str, dia: str) -> dict:
         return {"hechas": 0, "flota": 0}
     revisados = await db.inspections.distinct(
         "vehicle_id", {"deleted": {"$ne": True}, "vehicle_id": {"$in": ids},
-                       "created_at": {"$regex": f"^{dia}"}})
+                       "created_at": _rango_dia_negocio(dia)})      # día de Madrid (11-11-2026)
     return {"hechas": len(revisados), "flota": len(ids)}
 
 
@@ -16233,10 +16235,48 @@ async def _incidencias_flota_dia(center: str, dia: str) -> dict:
     ids = await _vehiculos_de_sede(center)
     if not ids:
         return {"nuevas": 0, "graves": 0}
-    q = {"vehicle_id": {"$in": ids}, "created_at": {"$regex": f"^{dia}"}}
+    q = {"vehicle_id": {"$in": ids}, "created_at": _rango_dia_negocio(dia)}      # día de Madrid (11-11-2026)
     return {"nuevas": await db.incidents.count_documents(q),
             "graves": await db.incidents.count_documents(
                 {**q, "severity": {"$in": list(_INCIDENCIA_GRAVE)}})}
+
+
+async def _salidas_sin_auditoria(center: str, dia: str) -> dict:
+    """Las furgonetas de la Asignación diaria de la sede y cuáles salieron sin auditoría ese día, con quién las
+    llevaba (11-11-2026, revisión de la flota propia, portal_inicio-5).
+
+    El resumen de la noche decía «Revisados: X de Y» con la flota entera, pero no QUÉ furgoneta salió sin revisar ni
+    quién la llevaba, que es lo que hace falta al día siguiente para atribuir un golpe. Sale de datos propios: la
+    Asignación diaria (`daily_assignments`) y las inspecciones del día (en hora de Madrid, _rango_dia_negocio).
+
+    Cada furgoneta cuenta una vez aunque esté en dos huecos (se queda el primer conductor). El conductor es el de la
+    asignación; si el hueco no lo dice, None: un nombre puesto a dedo en un parte es justo lo que no se puede hacer.
+    Sin asignación ese día: total 0 (y el resumen no pinta nada, como antes).
+    """
+    asigs = await db.daily_assignments.find(
+        {"date": dia, "center": {"$regex": re.escape(center), "$options": "i"}},
+        {"_id": 0, "slots": 1}).to_list(50)
+    salidas = {}
+    for a in asigs:
+        for s in (a.get("slots") or []):
+            if isinstance(s, dict) and s.get("vehicle_id") and s["vehicle_id"] not in salidas:
+                salidas[s["vehicle_id"]] = s
+    if not salidas:
+        return {"total": 0, "revisadas": 0, "sin_auditoria": []}
+    revisadas = set(await db.inspections.distinct(
+        "vehicle_id", {"deleted": {"$ne": True}, "vehicle_id": {"$in": list(salidas)},
+                       "created_at": _rango_dia_negocio(dia)}))
+    faltan = [vid for vid in salidas if vid not in revisadas]
+    # La matrícula, de la asignación; si el hueco no la trae, de la ficha de la furgoneta.
+    sin_placa = [vid for vid in faltan if not salidas[vid].get("vehicle_plate")]
+    placas = {}
+    if sin_placa:
+        placas = {v["id"]: v.get("license_plate") for v in await db.vehicles.find(
+            {"id": {"$in": sin_placa}}, {"_id": 0, "id": 1, "license_plate": 1}).to_list(200)}
+    lista = [{"matricula": salidas[vid].get("vehicle_plate") or placas.get(vid) or "—",
+              "conductor": salidas[vid].get("driver_name") or None} for vid in faltan]
+    lista.sort(key=lambda x: (x["conductor"] is None, (x["conductor"] or "").lower(), x["matricula"]))
+    return {"total": len(salidas), "revisadas": len(salidas) - len(faltan), "sin_auditoria": lista}
 
 
 async def resumen_dia_centro(center: str, dia: str) -> dict:
@@ -16272,12 +16312,19 @@ async def resumen_dia_centro(center: str, dia: str) -> dict:
     placas = sorted({d["matricula"] for d in danos})
     golpes = f"{len(danos)} · {', '.join(placas[:6])}" if danos else "ninguno"
     inc = await _incidencias_flota_dia(center, dia)
+    # Las salidas sin auditoría (11-11-2026, portal_inicio-5). Protegido: este resumen lo manda el bucle de las 21:00
+    # sede por sede, y un fallo aquí no puede dejar sin resumen a esta ni a las demás (ya pasó con un KeyError).
+    try:
+        salidas = await _salidas_sin_auditoria(center, dia)
+    except Exception as e:                                       # noqa: BLE001
+        logger.warning("Resumen diario: salidas sin auditoría de %s: %s", center, e)
+        salidas = None
 
     d, m, y = dia[8:10], dia[5:7], dia[0:4]
     return {"center": center, "fecha": f"{d}/{m}/{y}",
             "inspecciones": inspecciones, "checklist": checklist, "golpes": golpes,
             "placas": placas, "danos": danos, "turnos": turnos,
-            "incidencias": inc}
+            "incidencias": inc, "salidas": salidas}
 
 
 def _texto_resumen_largo(r: dict) -> str:
@@ -16297,6 +16344,20 @@ def _texto_resumen_largo(r: dict) -> str:
         L.append(f"   ⚠️ {inc['nuevas']} incidencias nuevas{graves}")
     else:
         L.append("   Sin incidencias nuevas")
+
+    # Las salidas de la asignación y quién salió sin auditoría (11-11-2026, portal_inicio-5). Sin asignación ese día
+    # (total 0) o si no se pudo calcular (None), no se dice nada, como antes. Los nombres se escapan: un «<» o un «&»
+    # en un nombre haría que Telegram rechazara el mensaje entero (va con parse_mode HTML).
+    sal = r.get("salidas") or {}
+    if sal.get("total"):
+        esc = lambda s: str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        L.append(f"🚚 <b>Salidas de la asignación:</b> {sal['revisadas']} de {sal['total']} revisadas")
+        sin = sal.get("sin_auditoria") or []
+        if sin:
+            quienes = [f"{esc(x['conductor'])} ({esc(x['matricula'])})" if x.get("conductor")
+                       else f"sin conductor ({esc(x['matricula'])})" for x in sin[:15]]
+            mas = f", …y {len(sin) - 15} más" if len(sin) > 15 else ""
+            L.append(f"   Sin auditoría: {', '.join(quienes)}{mas}")
 
     L.append("")
     danos = r.get("danos") or []
@@ -16400,6 +16461,25 @@ def _html_resumen(r: dict) -> str:
         P.append(f'<div style="margin-top:8px;color:#fbbf24;font-size:14px">'
                  f'⚠️ {esc(str(inc["nuevas"]) + " incidencias nuevas" + graves)}</div>')
     P.append('</div>')
+
+    # Salidas sin auditoría (11-11-2026, portal_inicio-5): quién salió con qué furgoneta sin revisarla. Solo si ese
+    # día hay asignación cargada (total > 0); si no, el correo sigue como antes.
+    sal = r.get("salidas") or {}
+    if sal.get("total"):
+        sin = sal.get("sin_auditoria") or []
+        P.append(f'<div style="background:{L};border-radius:10px;padding:16px;margin-bottom:14px">')
+        P.append(f'<div style="font-size:12px;color:{S};margin-bottom:8px">'
+                 f'SALIDAS SIN AUDITORÍA ({len(sin)}) · {sal["revisadas"]} de {sal["total"]} revisadas</div>')
+        if sin:
+            for x in sin[:30]:
+                P.append(f'<div style="padding:8px 0;border-top:1px solid #2a2f38">'
+                         f'{esc(x.get("conductor") or "sin conductor en la asignación")} · '
+                         f'<b style="font-family:monospace">{esc(x["matricula"])}</b></div>')
+            if len(sin) > 30:
+                P.append(f'<div style="padding-top:8px;font-size:13px;color:{S}">…y {len(sin) - 30} más</div>')
+        else:
+            P.append('<div style="font-size:15px;color:#34d399">Todas revisadas ✓</div>')
+        P.append('</div>')
 
     # Golpes
     danos = r.get("danos") or []
@@ -16535,6 +16615,8 @@ async def enviar_resumen_diario(dia: Optional[str] = None, solo_id: Optional[str
         # aviso resumen_diario: 'entrega'» en el registro del 03-11) y los demás centros se quedaban sin resumen.
         salida.append({**{k: r[k] for k in ("center", "fecha", "inspecciones", "checklist", "golpes")},
                        "incidencias": r["incidencias"], "danos": r["danos"],
+                       # Clave NUEVA (11-11-2026, portal_inicio-5); .get: None si no se pudo calcular.
+                       "salidas": r.get("salidas"),
                        "turnos": [{k: t[k] for k in ("turno", "hechas", "total")} for t in r["turnos"]],
                        "destinatarios": [d["nombre"] for d in quienes],
                        "correos": correos, "whatsapp": wasap})
@@ -28998,9 +29080,11 @@ async def stats_hoy(center: Optional[str] = None, user: dict = Depends(require_a
     vids = list({s["vehicle_id"] for _, s in slots})
     revision = {}
     if vids:
+        # El día de Madrid y no la fecha UTC de la marca (11-11-2026, portal_inicio-5): con `^{dia}`, lo revisado
+        # entre las 00:00 y la 01:00 (02:00 en verano) no contaba como de hoy. Ver _rango_dia_negocio.
         async for i in db.inspections.find(
                 {"deleted": {"$ne": True}, "vehicle_id": {"$in": vids},
-                 "created_at": {"$regex": f"^{dia}"}},
+                 "created_at": _rango_dia_negocio(dia)},
                 {"_id": 0, "vehicle_id": 1, "analysis.severity": 1}):
             sev = str((i.get("analysis") or {}).get("severity") or "").lower() or None
             prev = revision.get(i["vehicle_id"], "sin_revisar")
@@ -29030,7 +29114,7 @@ async def stats_hoy(center: Optional[str] = None, user: dict = Depends(require_a
     if ids_flota:
         hechas = len(await db.inspections.distinct(
             "vehicle_id", {"deleted": {"$ne": True}, "vehicle_id": {"$in": ids_flota},
-                           "created_at": {"$regex": f"^{dia}"}}))
+                           "created_at": _rango_dia_negocio(dia)}))      # día de Madrid (11-11-2026)
 
     # ── Checklist de turno, sumado por turno en las sedes que se ven ──
     if center and center != "Todos":
@@ -29071,7 +29155,7 @@ async def stats_hoy(center: Optional[str] = None, user: dict = Depends(require_a
         # Los golpes no llevan la nave en la lista: se cuentan aquí, dentro del bucle por sede.
         por_sede[sede]["golpes"] = len(de_la_sede)
         golpes.extend(de_la_sede)
-    qi = {**fv, "created_at": {"$regex": f"^{dia}"}}
+    qi = {**fv, "created_at": _rango_dia_negocio(dia)}      # día de Madrid (11-11-2026)
     incidencias = {
         "nuevas": await db.incidents.count_documents(qi),
         "graves": await db.incidents.count_documents(
