@@ -33208,7 +33208,7 @@ async def _bloqueos_que_afectan(driver_id: str, center: str, fechas: list) -> li
 
 
 @api_router.get("/shift-blocks")
-async def listar_bloqueos(center: str = "", pasados: bool = False, admin: dict = Depends(require_admin)):
+async def listar_bloqueos(center: str = "", pasados: Optional[bool] = None, admin: dict = Depends(require_admin)):
     """Los bloqueos vigentes. Cada uno con a quién afecta.
 
     (10-11-2026) De verdad los vigentes: los que aún no han acabado (`hasta`
@@ -33217,10 +33217,27 @@ async def listar_bloqueos(center: str = "", pasados: bool = False, admin: dict =
     acababa debajo de los del año pasado. Los que ya pasaron se cuentan en
     `n_pasados` y, con `pasados=true`, vienen aparte en `pasados` (el último
     primero), para el «ver pasados» plegado del panel.
+
+    (11-11-2026) Lo de arriba SOLO si viene `pasados` (true o false). Sin él
+    responde lo de siempre, todos juntos en `bloqueos`: el panel de antes que
+    siga en la caché de alguien pinta con esa lista su calendario, también los
+    días cerrados de meses pasados, y la lista nueva se los quitaba.
     """
     q = {}
     if center and center not in ("Todos", "todos"):
         q["center"] = {"$regex": re.escape(center.strip()), "$options": "i"}
+    if pasados is None:
+        # Tal cual estaba antes del 10-11-2026 (misma consulta, mismo orden, mismo tope, mismos campos).
+        docs = await db.shift_blocks.find(q, {"_id": 0}).sort("desde", 1).to_list(500)
+        docs = [d for d in docs if _user_can_see_center(admin, d.get("center") or "")]
+        ids = [d["driver_id"] for d in docs if d.get("driver_id")]
+        nombres = {}
+        if ids:
+            nombres = {d["id"]: d.get("name", "") for d in await db.drivers.find(
+                {"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(500)}
+        for d in docs:
+            d["driver_name"] = nombres.get(d.get("driver_id")) if d.get("driver_id") else None
+        return {"bloqueos": docs, "total": len(docs)}
     hoy = _dia_negocio()
     # Cada lista con su propia consulta, ya filtrada por fecha y ordenada en la base ANTES del tope (revisión del
     # 10-11-2026): pidiendo los 500 más viejos y filtrando después, con muchos acumulados los vigentes, que son los
@@ -33604,10 +33621,12 @@ async def _resolver_peticion(req_id: str, data: dict, admin: dict, avisar: bool 
     # de palabra y no hemos arreglado nada.
     if avisar:
         await _avisar_respuesta([req], new_status, motivo)
-    if new_status != "aprobado":
+    if new_status != "aprobado" and req.get("status") in ("aprobado", "pendiente"):
         # También si estaba «pendiente»: un aprobado que se cortó tras escribir su turno lo tiene en el cuadrante.
-        # Sin esa marca (aprobado_req de esta petición) no toca nada.
-        await _turno_desaprobado(req)
+        # Sin esa marca (aprobado_req de esta petición) no toca nada. Una que ya estaba «rechazado» NO (11-11-2026,
+        # como antes): al suspender, un extra aprobado pasa a SUSP y su petición a rechazado sin quitar la marca, y
+        # volver a rechazarla devolvía la celda a libre con la suspensión aún en marcha.
+        await _turno_desaprobado(req, respetar_suspension=True)
     # De un refuerzo: al cubrirse se cierra (y se da las gracias a quien esperaba); si se desaprueba, se reabre.
     if req.get("refuerzo_id"):
         await _refuerzo_recalcular(req["refuerzo_id"])
@@ -33905,13 +33924,20 @@ async def _turno_aprobado(req: dict):
     await _upsert_turno(filtro, cambio)
 
 
-async def _turno_desaprobado(req: dict):
+async def _turno_desaprobado(req: dict, respetar_suspension: bool = False):
     """Se desaprueba lo que estaba aprobado: la celda vuelve a lo que había
     antes de aprobarlo. Si alguien la cambió después (ya no lleva la marca de
-    esta petición), no se toca: manda lo último que puso una persona."""
+    esta petición), no se toca: manda lo último que puso una persona.
+
+    `respetar_suspension` (11-11-2026, solo al contestar desde la oficina): una
+    celda que hoy es de una suspensión activa se queda como está (SUSP y su
+    candado), aunque aún lleve la marca de la petición."""
     filtro = {"driver_id": req["driver_id"], "date": req["date"], "aprobado_req": req["id"]}
     doc = await db.shifts.find_one(filtro, {"_id": 0})
     if not doc:
+        return
+    if respetar_suspension and doc.get("suspension_id") and await db.suspensiones.find_one(
+            {"id": doc["suspension_id"], "estado": "activa"}, {"_id": 0, "id": 1}):
         return
     antes = doc.get("antes_aprob")
     if isinstance(antes, dict) and antes.get("vacio"):

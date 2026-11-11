@@ -256,6 +256,32 @@ test.describe('Días libres · Refuerzos y Días cerrados', () => {
     await expect(pasados.getByText('Prime Day del año pasado')).toBeVisible()
     expect(pedidos).toContain('true')
   })
+
+  /* Revisión final (11-11-2026, G4): el calendario pide los pasados y pinta con ellos los días cerrados de meses de
+     atrás, como antes. Aquí el cierre del mes pasado llega SOLO en `pasados`. El mes se calcula cuando la pantalla lo
+     pide, no al cargar el fichero. */
+  test('el calendario sigue pintando un día cerrado del mes pasado', async ({ page }) => {
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const pedidos = []
+    let cierre = null
+    await page.route(/\/api\/shift-blocks(\?|$)/, (route) => {
+      const pasados = new URL(route.request().url()).searchParams.get('pasados')
+      pedidos.push(pasados)
+      const h = new Date()
+      const d = (n) => iso(new Date(h.getFullYear(), h.getMonth() - 1, n, 12))
+      cierre = { id: 'b9', center: 'NORTE', desde: d(1), hasta: d(28), motivo: 'Cierre por obras', driver_id: null }
+      return json(pasados === 'true' ? { total: 0, n_pasados: 1, bloqueos: [], pasados: [cierre] }
+        : { total: 1, bloqueos: [cierre] })(route)
+    })
+    await page.goto('/panel/turnos', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Calendario', exact: true }).click({ timeout: 15000 })
+    await expect.poll(() => cierre).not.toBeNull()
+    await page.getByRole('button', { name: 'Mes anterior' }).click()
+    await page.getByRole('button', { name: '15 cerrado', exact: true }).click()
+    await expect(page.getByText('Día cerrado: Cierre por obras')).toBeVisible()
+    expect(pedidos).toContain('true')
+  })
 })
 
 test.describe('Cuadrante · cambiar de nave', () => {

@@ -267,8 +267,8 @@ function CalendarioDiasLibres({ center }) {
       .catch(() => setErr('No se pudieron cargar los días.'))
     // `r.data.bloqueos`, no `r.data`: el endpoint devuelve un objeto. Leyendo
     // mal, la lista sale vacía y los días cerrados no se pintarían — sin fallar.
-    // Con los pasados (10-11-2026): el servidor ya solo da los vigentes si no se le piden, y el calendario
-    // enseña también los meses de atrás.
+    // Con los pasados (10-11-2026): pidiéndolos, el servidor da los vigentes en `bloqueos` y los que ya pasaron en
+    // `pasados`, y el calendario enseña también los meses de atrás.
     getShiftBlocks(center, true)
       .then((r) => setBloqueos([...lista(r.data?.bloqueos), ...lista(r.data?.pasados)])).catch(() => {})
   }, [center, ventanaDesde, ventanaHasta])
