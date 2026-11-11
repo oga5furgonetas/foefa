@@ -9364,11 +9364,17 @@ async def generar_accesos_conductores(data: DriverBulkPasswordRequest,
     logger.info("Acceso temporal actualizado para %d conductores (%s); %d con la suya respetada, %d sin email y "
                 "%d cuentas inactivas", r["actualizadas"], data.center or "todas las naves", r["respetadas"],
                 r["sin_email"], r["cuentas_inactivas"])
+    # A QUIEN SE LE HA RESPETADO LA SUYA, DICHO EN EL AVISO (11-11-2026, G7): la pantalla vieja solo pinta `aviso` y
+    # dice «Todos entran con… la temporal»; sin esto, la oficina daba la temporal a quien no se le habia cambiado.
+    n = r["respetadas"]
+    respetadas = ("" if not n else
+                  " A 1 que ya tenía su contraseña no se le ha cambiado: sigue entrando con la suya." if n == 1 else
+                  " A %d que ya tenían su contraseña no se les ha cambiado: siguen entrando con la suya." % n)
     return {
         **r,
         "aviso": ("La contraseña anterior de las cuentas cambiadas queda invalidada. "
                   "Todos ellos comparten la contraseña temporal hasta cambiarla. "
-                  "El portal obliga a elegir una contraseña personal en el siguiente acceso."),
+                  "El portal obliga a elegir una contraseña personal en el siguiente acceso." + respetadas),
     }
 
 
@@ -37091,19 +37097,26 @@ def _onb_clave(p: dict) -> str:
 
 
 def _onb_filtro_centro(center: Optional[str]) -> dict:
-    """Las personas de un centro Y TAMBIEN QUIEN NO TIENE NINGUNO (10-11-2026, revision de la flota propia, equipo-4):
-    el alta a mano la guardaba sin centro y, con un centro elegido arriba, la persona recien anadida no salia nunca.
-    Igual que en Conductores: sale en cualquier centro, y la pantalla la marca «sin centro». Lo comparten la lista y
-    el CSV, para que lo que se descarga sea lo que se ve (R34)."""
+    """Las personas de un centro, como siempre: solo las que lo tienen. Lo comparten la lista y el CSV (R34).
+
+    11-11-2026 (revision final, G3/G6): se probo a meter aqui tambien a quien no tiene centro y salia en los TRES
+    centros a la vez: en sus contadores, en sus tandas de WhatsApp (el mismo mensaje dos o tres veces, de oficinas
+    distintas) y en su CSV. Vuelve a ser lo de antes; los sin centro se piden aparte (`sin_centro`, onb_listar)."""
     if not center:
         return {}
-    return {"$or": [{"centro": {"$regex": re.escape(_centro_norm(center) or center), "$options": "i"}},
-                    {"centro": {"$in": ["", None]}}, {"centro": {"$exists": False}}]}
+    return {"centro": {"$regex": re.escape(_centro_norm(center) or center), "$options": "i"}}
+
+
+# QUIEN NO TIENE CENTRO (11-11-2026, G3/G6): vacio, nulo, solo espacios o sin el campo. No es de ningun centro.
+_ONB_SIN_CENTRO = {"$or": [{"centro": {"$in": ["", None]}}, {"centro": {"$exists": False}},
+                           {"centro": {"$regex": r"^\s*$"}}]}
 
 
 @api_router.get("/incorporaciones/personas")
-async def onb_listar(center: Optional[str] = None, _=Depends(require_admin)):
-    q = {"archivada": {"$ne": True}, **_onb_filtro_centro(center)}
+async def onb_listar(center: Optional[str] = None, _=Depends(require_admin), sin_centro: bool = False):
+    # `sin_centro` (11-11-2026, G3/G6, opcional): SOLO quien no tiene centro, para el bloque «Sin centro» de la pantalla
+    # nueva, que se lo pone. Sin el, lo de siempre: con un centro, solo la gente de ese centro.
+    q = {"archivada": {"$ne": True}, **(_ONB_SIN_CENTRO if sin_centro else _onb_filtro_centro(center))}
     # POR QUIEN LLEVA MAS ESPERANDO. Ordenar por fecha de alta ponia arriba al
     # ultimo que llego, que es justo el que menos urge.
     filas = await db[_ONB_COL].find(q, {"_id": 0}).to_list(500)
@@ -37382,7 +37395,7 @@ async def onb_export(center: Optional[str] = None, _=Depends(require_admin)):
     Y NO LLEVA CONTRASENAS. Un CSV se reenvia por correo y acaba en sitios que
     no controlamos; la cuenta se mira en la pantalla, que pide sesion.
     """
-    q = {"archivada": {"$ne": True}, **_onb_filtro_centro(center)}   # lo mismo que la lista (10-11-2026, R34)
+    q = {"archivada": {"$ne": True}, **_onb_filtro_centro(center)}   # lo mismo que la lista, sin los sin centro (G3)
     filas = await db[_ONB_COL].find(q, {"_id": 0}).to_list(2000)
     pl = await _onb_plantilla()
     docs = list(pl["motivos"].keys())

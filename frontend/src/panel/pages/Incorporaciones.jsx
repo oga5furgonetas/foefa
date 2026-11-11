@@ -6,7 +6,7 @@ import {
   FileQuestion, Table2, List, Download, SkipForward, MoreHorizontal,
 } from 'lucide-react'
 import {
-  getIncorporaciones, altaIncorporacion, importarIncorporaciones, editarIncorporacion,
+  getIncorporaciones, getIncorporacionesSinCentro, altaIncorporacion, importarIncorporaciones, editarIncorporacion,
   mensajeIncorporacion, marcarAvisoIncorporacion, guardarPlantillaIncorporaciones,
   exportarIncorporaciones,
 } from '../api'
@@ -111,6 +111,10 @@ export default function Incorporaciones() {
   const { center, centers } = useOutletContext() || {}
   const centroElegido = center && center !== 'Todos' ? center : ''   // a quien no tiene centro se le pone este (R36)
   const [d, setD] = useState(null)
+  /* LOS SIN CENTRO, APARTE (11-11-2026, revisión final G3/G6). Con un centro elegido, la lista es la de siempre: solo
+     la gente de ese centro. Meter ahí a quien no tiene centro lo ponía en los TRES centros a la vez (sus contadores,
+     sus tandas de WhatsApp y su CSV). Se piden aparte y salen arriba, en su bloque, para ponerles el centro. */
+  const [sinCentro, setSinCentro] = useState([])
   const [err, setErr] = useState('')
   const [q, setQ] = useState('')
   const [abierta, setAbierta] = useState(null)     // id de la ficha desplegada
@@ -139,6 +143,16 @@ export default function Incorporaciones() {
     getIncorporaciones(center)
       .then((r) => { if (centroMirado.current === center) { setD(normaliza(r.data)); setErr('') } })
       .catch((e) => { if (centroMirado.current === center) setErr(e?.response?.data?.detail || 'No se ha podido cargar.') })
+    if (center && center !== 'Todos') {
+      /* Se filtra también aquí: un servidor que no conozca `sin_centro` devolvería a todo el mundo. */
+      getIncorporacionesSinCentro()
+        .then((r) => {
+          if (centroMirado.current !== center) return
+          const gente = Array.isArray(r?.data?.personas) ? r.data.personas : []
+          setSinCentro(gente.filter((p) => !String(p?.centro || '').trim()))
+        })
+        .catch(() => { if (centroMirado.current === center) setSinCentro([]) })
+    }
   }, [center])
   useEffect(() => { cargar() }, [cargar])
 
@@ -408,6 +422,33 @@ export default function Incorporaciones() {
         </p>
       )}
 
+      {/* ── SIN CENTRO (11-11-2026, G3/G6) ──────────────────────────────────
+          Quien no tiene centro no es de ninguno: no entra en las columnas, ni en los contadores, ni en los avisos,
+          ni en el CSV de este centro. Aquí se ve y se le pone el de arriba con un clic. Con «Todos» no hace falta:
+          sale en la lista, como siempre. */}
+      {centroElegido && sinCentro.length > 0 && (
+        <div data-testid="sin-centro" className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-3.5 py-3">
+          <p className="text-[13px] font-semibold text-amber-300">Sin centro ({sinCentro.length})</p>
+          <p className="mt-0.5 text-[11.5px] text-dark-400">
+            No salen en la lista, ni en los avisos, ni en el CSV de ningún centro hasta que tengan uno.
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {sinCentro.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
+                <span className="font-semibold text-dark-100">{p.nombre}</span>
+                {p.telefono && <span className="text-dark-500">{p.telefono}</span>}
+                {p.ett && <span className="text-dark-500">{p.ett}</span>}
+                <button onClick={() => editarIncorporacion(p.id, { centro: centroElegido }).then(cargar)
+                  .catch((e) => setErr(e?.response?.data?.detail || 'No se ha podido guardar.'))}
+                  className="ml-auto rounded-lg border border-amber-500/40 px-2.5 py-1 text-[12px] font-semibold text-amber-200 hover:bg-amber-500/10">
+                  Ponerla en {centroElegido}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* ── LA BARRA DE ARRIBA ────────────────────────────────────────────
           Lo que se usa todos los días a la vista, y lo de vez en cuando detrás
           de «Más». Antes había SEIS botones en fila compitiendo con el buscador
@@ -564,7 +605,7 @@ export default function Incorporaciones() {
       {(paso && paso !== 'papeles' && !motivo) ? (
         <div className="space-y-2">
           {deAbajo.map((p) => (
-            <Ficha key={p.id} p={p} centroElegido={centroElegido} motivosCat={d.plantilla.motivos} nombres={d.estado_nombre}
+            <Ficha key={p.id} p={p} motivosCat={d.plantilla.motivos} nombres={d.estado_nombre}
               abierta={abierta === p.id}
               onAbrir={() => setAbierta(abierta === p.id ? null : p.id)}
               onGuardar={(c) => editarIncorporacion(p.id, c).then(cargar)
@@ -593,7 +634,7 @@ export default function Incorporaciones() {
               </div>
               <div className="mt-2 space-y-2">
                 {gente.map((p) => (
-                  <Ficha key={p.id} p={p} centroElegido={centroElegido} motivosCat={d.plantilla.motivos} nombres={d.estado_nombre}
+                  <Ficha key={p.id} p={p} motivosCat={d.plantilla.motivos} nombres={d.estado_nombre}
                     abierta={abierta === p.id}
                     onAbrir={() => setAbierta(abierta === p.id ? null : p.id)}
                     onGuardar={(c) => editarIncorporacion(p.id, c).then(cargar)
@@ -619,7 +660,7 @@ export default function Incorporaciones() {
 }
 
 /* ── UNA PERSONA ─────────────────────────────────────────────────────────── */
-function Ficha({ p, centroElegido = '', motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje }) {
+function Ficha({ p, motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje }) {
   const sinCentro = !String(p.centro || '').trim()
   /* Los estados vienen ya resueltos del servidor, con lo que dice el listado de
      la ETT traducido: si pone «falta el alta en la Seguridad Social», ese papel
@@ -668,10 +709,10 @@ function Ficha({ p, centroElegido = '', motivosCat, nombres, abierta, onAbrir, o
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <span className="text-[13.5px] font-semibold text-dark-100">{p.nombre}</span>
-            {/* Sin centro sale en todos (10-11-2026), y marcada, como en Conductores: así se ve a quién ponérselo.
-                Al abrirla se le puede poner el de arriba (R36). */}
+            {/* Sin centro, marcada (10-11-2026). Solo sale aquí con «Todos»: con un centro elegido va en el bloque
+                «Sin centro» de arriba, que se lo pone (11-11-2026, G3/G6). */}
             {sinCentro && (
-              <span title={centroElegido ? `Ábrela para ponerla en ${centroElegido}` : 'Sale en la lista de todos los centros'}
+              <span title="Elige un centro arriba para ponérselo"
                 className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">sin centro</span>
             )}
             {/* Sin avisar: un punto, no una frase en naranja repetida en cada
@@ -765,17 +806,11 @@ function Ficha({ p, centroElegido = '', motivosCat, nombres, abierta, onAbrir, o
             {p.idper && <span>IDPER {p.idper}</span>}
             {p.centro && <span>{p.centro}</span>}
           </div>
-          {/* PONERLE EL CENTRO (10-11-2026, R36): sin centro sale en la lista de todos y entra en las tandas de
-              todos; solo se quitaba volviendo a pegar el listado con su Sede. Con un centro elegido arriba, ese. */}
+          {/* SIN CENTRO (11-11-2026, G3/G6): no es de ningún centro. Con uno elegido arriba sale en el bloque
+              «Sin centro», con su botón para ponérselo (R36). */}
           {sinCentro && (
-            <p className="flex flex-wrap items-center gap-2 text-[12px] text-amber-300">
-              Sin centro: sale en la lista de todos los centros.
-              {centroElegido && (
-                <button onClick={() => onGuardar({ centro: centroElegido })}
-                  className="rounded-lg border border-amber-500/40 px-2.5 py-1 text-[12px] font-semibold text-amber-200 hover:bg-amber-500/10">
-                  Ponerla en {centroElegido}
-                </button>
-              )}
+            <p className="text-[12px] text-amber-300">
+              Sin centro: no sale en la lista de ningún centro. Elige uno arriba para ponérselo.
             </p>
           )}
 
