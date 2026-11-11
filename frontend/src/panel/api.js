@@ -350,7 +350,8 @@ export const importShiftsPegado = (body) => api.post('/shifts/import-pegado', bo
 export const setAliasNombres = (mapa) => api.put('/shifts/alias-nombres', { mapa })
 
 // Bloqueos: dias en los que no se pueden pedir libres.
-// `pasados` (10-11-2026): sin él llegan solo los vigentes o futuros; con él, también los que ya pasaron, aparte.
+// `pasados` (10-11-2026): con él, en `bloqueos` llegan solo los vigentes o futuros y los que ya pasaron, aparte en
+// `pasados`. Sin él (11-11-2026) el servidor responde lo de siempre: todos juntos en `bloqueos`, como al panel de antes.
 export const getShiftBlocks = (center, pasados = false) =>
   api.get('/shift-blocks', { params: { center, ...(pasados ? { pasados: true } : {}) } })
 export const createShiftBlock = (body) => api.post('/shift-blocks', body)

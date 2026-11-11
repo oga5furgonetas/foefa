@@ -223,6 +223,56 @@ async def test_si_para_tras_poner_el_turno_y_se_rechaza_el_cuadrante_vuelve_a_lo
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_volver_a_rechazar_una_rechazada_no_toca_los_turnos(base):
+    # Revisión final (11-11-2026, G2): como antes, el turno solo se deshace si la petición estaba aprobada (o pendiente,
+    # el corte entre turno y estado). Una que ya estaba rechazada cambia su texto y se avisa, pero el cuadrante no.
+    celda = {"driver_id": "d1", "date": "2026-11-16", "type": "libre", "cod": "N/T APROB", "center": "OGA5",
+             "fijada": True, "aprobado_req": "r0", "antes_aprob": {"cod": "1", "type": "trabaja"}}
+    base.t.shifts.docs.append(dict(celda))
+    _peticion(base.t, "r0", "2026-11-16", estado="rechazado")
+    r = await server.resolve_shift_request("r0", {"action": "rechazar", "motivo": "Sigue sin poder ser"}, OFI)
+    assert r == {"success": True, "status": "rechazado"}
+    assert _turno(base.t, "d1", "2026-11-16") == celda
+    assert [a.titulo for a in base.conductores] == ["Tu petición del 16/11: rechazada"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_un_extra_aprobado_y_luego_suspendido_sigue_suspendido_si_se_rechaza_otra_vez(base):
+    # Revisión final (11-11-2026, G2), el caso entero con los flujos de verdad: extra aprobado → suspensión de ese día
+    # (la petición pasa a rechazado y la celda a SUSP, que conserva la marca de la petición) → alguien la rechaza otra
+    # vez (el asistente, o una pestaña de Refuerzos sin refrescar). La celda sigue SUSP, con su candado.
+    _peticion(base.t, "e0", "2026-11-16", tipo="extra")
+    await server.resolve_shift_request("e0", {"action": "aprobar"}, OFI)
+    assert _turno(base.t, "d1", "2026-11-16")["cod"] == "EXTRA"
+    s = await server.crear_suspension({"driver_id": "d1", "desde": "2026-11-16", "hasta": "2026-11-16",
+                                       "motivo": "Falta grave"}, OFI)
+    assert s["extras_contestados"] == 1 and base.t.shift_requests.docs[0]["status"] == "rechazado"
+    await server.resolve_shift_request("e0", {"action": "rechazar", "motivo": "No puede ser"}, OFI)
+    t = _turno(base.t, "d1", "2026-11-16")
+    assert (t["cod"], t["fijada"], t["suspension_id"]) == ("SUSP", True, s["suspension"]["id"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_al_rechazar_no_se_deshace_una_celda_de_una_suspension_activa(base):
+    # Por si acaso (11-11-2026, G2): aunque la petición siga aprobada, contestar que no desde la oficina no convierte en
+    # libre una celda que hoy es de una suspensión activa. Levantada la suspensión, se deshace como siempre.
+    base.t["suspensiones"] = Col([{"id": "s1", "estado": "activa", "driver_id": "d1",
+                                   "desde": "2026-11-16", "hasta": "2026-11-17"}])
+    for f, rid in (("2026-11-16", "r0"), ("2026-11-17", "r1")):
+        base.t.shifts.docs.append({"driver_id": "d1", "date": f, "type": "libre", "cod": "SUSP", "center": "OGA5",
+                                   "fijada": True, "aprobado_req": rid, "antes_aprob": {"cod": "1", "type": "trabaja"},
+                                   "suspension_id": "s1", "antes_susp": {"cod": "N/T APROB", "type": "libre"}})
+        _peticion(base.t, rid, f, estado="aprobado")
+    await server.resolve_shift_request("r0", {"action": "rechazar", "motivo": "No puede ser"}, OFI)
+    t = _turno(base.t, "d1", "2026-11-16")
+    assert (t["cod"], t["fijada"], t["suspension_id"], t["aprobado_req"]) == ("SUSP", True, "s1", "r0")
+    base.t.suspensiones.docs[0]["estado"] = "levantada"
+    await server.resolve_shift_request("r1", {"action": "rechazar", "motivo": "No puede ser"}, OFI)
+    t = _turno(base.t, "d1", "2026-11-17")
+    assert (t["cod"], t["type"], t.get("aprobado_req")) == ("1", "trabaja", None)
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_los_avisos_de_cancelar_y_de_cambiar_tambien_dicen_la_nave(base):
     # Revisión del 10-11-2026 (R17): la cuenta dueña recibe los de las tres naves.
     _peticion(base.t, "r0", "2026-11-16", grupo="g1")
@@ -377,7 +427,7 @@ async def test_dias_cerrados_por_defecto_solo_los_vigentes_y_los_proximos_primer
         {"id": "b4", "center": "OGA5", "desde": "2026-07-01", "hasta": "2026-07-15", "motivo": "Prime Day", "driver_id": "d1"},
         {"id": "b5", "center": "DGA1", "desde": "2026-11-01", "hasta": "2026-11-02", "motivo": "Otra nave", "driver_id": None},
     ])
-    r = await server.listar_bloqueos(center="OGA5", admin=OFI)
+    r = await server.listar_bloqueos(center="OGA5", pasados=False, admin=OFI)
     # El que acaba hoy sigue vigente; los de antes no salen, pero se cuentan.
     assert [b["id"] for b in r["bloqueos"]] == ["b3", "b2"]
     assert (r["total"], r["n_pasados"]) == (2, 2) and "pasados" not in r
@@ -401,3 +451,28 @@ async def test_con_muchos_dias_cerrados_viejos_los_vigentes_no_se_pierden(base):
     assert [b["id"] for b in r["bloqueos"]] == ["nav"]
     # Los pasados, los más recientes primero (los de 2011 antes que los de 2010), con su tope.
     assert len(r["pasados"]) == 500 and r["pasados"][0]["desde"].startswith("2011")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sin_el_parametro_pasados_la_lista_es_la_de_siempre(base):
+    # Revisión final (11-11-2026, G4): el panel de antes (en la caché de alguien) no manda `pasados` y pinta con
+    # `bloqueos` su calendario, meses de atrás incluidos. Para él, todo como estaba: todos juntos, del más viejo al
+    # más nuevo, los 500 primeros, y solo `bloqueos` y `total`.
+    base.t["shift_blocks"] = Col([
+        {"id": "b1", "center": "OGA5", "desde": "2025-12-20", "hasta": "2026-01-06", "motivo": "Navidad 25", "driver_id": None},
+        {"id": "b2", "center": "OGA5", "desde": "2026-12-20", "hasta": "2027-01-06", "motivo": "Navidad 26", "driver_id": None},
+        {"id": "b3", "center": "OGA5", "desde": "2026-10-15", "hasta": "2026-10-18", "motivo": "Hasta hoy", "driver_id": None},
+        {"id": "b4", "center": "OGA5", "desde": "2026-07-01", "hasta": "2026-07-15", "motivo": "Prime Day", "driver_id": "d1"},
+        {"id": "b5", "center": "DGA1", "desde": "2026-11-01", "hasta": "2026-11-02", "motivo": "Otra nave", "driver_id": None},
+    ])
+    r = await server.listar_bloqueos(center="OGA5", admin=OFI)
+    assert set(r) == {"bloqueos", "total"}
+    assert [b["id"] for b in r["bloqueos"]] == ["b1", "b4", "b3", "b2"] and r["total"] == 4
+    assert [b["driver_name"] for b in r["bloqueos"]] == [None, "Ana", None, None]
+    assert [b["id"] for b in (await server.listar_bloqueos(center="", admin=OFI))["bloqueos"]] == [
+        "b1", "b4", "b3", "b5", "b2"]
+    # El tope de siempre: los 500 más viejos.
+    base.t["shift_blocks"] = Col([{"id": f"v{i:03d}", "center": "OGA5", "desde": f"2020-01-01+{i:03d}",
+                                   "hasta": "2020-01-02", "motivo": "viejo", "driver_id": None} for i in range(600)])
+    r = await server.listar_bloqueos(center="OGA5", admin=OFI)
+    assert (len(r["bloqueos"]), r["total"], r["bloqueos"][0]["id"], r["bloqueos"][-1]["id"]) == (500, 500, "v000", "v499")
