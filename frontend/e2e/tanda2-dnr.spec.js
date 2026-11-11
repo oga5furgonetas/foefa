@@ -40,14 +40,20 @@ const semana = (desde, hasta, dnr) => ({
 // Cada DNR con TODAS las claves del contrato, y null lo que no se sabe con seguridad.
 const NADA = { entrega: null, cp: null, como: null, lejos: null, llamada: null, segundos: null, fallo_contacto: null, foto: null, foto_motivo: null }
 const dnr = (dia, paquete, estado, mas = {}) => ({ dia, paquete, estado, ...NADA, cp: '15704', ...mas })
-// R9: `llamada` es «si» (30 s o más), «corta» (de 1 a 29 s), «no» o null; `fallo_contacto`, true con «no» o «corta» y si
-// no null (nunca false).
+// R9 y R12 (11-11-2026, con un reporte real), con su retoque (revisión M1-M3): `segundos` es un entero de 1 a 1800 o null
+// (el 0 NO se manda: el informe lo trae en todas sus filas de contacto y no es una medida); `llamada` es «si» (30 s o más,
+// o sin segundos si el reporte dice que hubo llamada o mensaje), «corta» (de 1 a 29 s, o sin segundos si Amazon apunta una
+// llamada sin medirla), «no» (sin segundos) o null; `fallo_contacto`, true con «no», con «corta» o si el paquete está en la
+// tabla de fallos de contacto (también con «si» de 30 s o más, o con la llamada a null), y si no null (nunca false).
 function expectLlamada(x) {
   expect([null, 'si', 'corta', 'no']).toContain(x.llamada)
-  if (x.llamada === 'corta') expect(x.segundos >= 1 && x.segundos < 30).toBe(true)
+  if (x.segundos != null) expect(Number.isInteger(x.segundos) && x.segundos >= 1 && x.segundos <= 1800).toBe(true)
+  if (x.llamada === 'corta' && x.segundos != null) expect(x.segundos).toBeLessThan(30)
   if (x.llamada === 'si' && x.segundos != null) expect(x.segundos).toBeGreaterThanOrEqual(30)
+  if (x.llamada === 'si' && x.segundos == null) expect(x.fallo_contacto).toBeNull()
+  if (x.llamada === 'si' && x.fallo_contacto === true) expect(x.segundos).toBeGreaterThanOrEqual(30)
+  if (x.llamada === 'no' || x.llamada == null) expect(x.segundos).toBeNull()
   if (x.llamada === 'no' || x.llamada === 'corta') expect(x.fallo_contacto).toBe(true)
-  if (x.fallo_contacto === true) expect(['no', 'corta']).toContain(x.llamada)
   expect(x.fallo_contacto).not.toBe(false)
 }
 const CLAVES_DNR = ['dia', 'entrega', 'paquete', 'estado', 'cp', 'como', 'lejos', 'llamada', 'segundos', 'fallo_contacto', 'foto', 'foto_motivo']
@@ -71,19 +77,24 @@ const DATOS = {
   ],
 }
 
-test('la API simulada tiene la forma exacta del contrato (R7 y R8)', () => {
-  expect(Object.keys(DATOS).sort()).toEqual(['datos_hasta', 'en_revision', 'semanas', 'tiene_id'])
-  for (const s of DATOS.semanas) {
-    expect(Object.keys(s).sort()).toEqual(['cuentan', 'dnr', 'hasta', 'no_cuentan', 'semana', 'sin_clasificar'])
-    for (const x of s.dnr) {
-      expect(Object.keys(x).sort()).toEqual([...CLAVES_DNR].sort())
-      // R8: el paquete con forma de código (letras y cifras, de 8 a 30) y el CP de como mucho 8.
-      expect(x.paquete).toMatch(/^[A-Za-z0-9]{8,30}$/)
-      if (x.cp) expect(x.cp.replace(/[ -]/, '').length).toBeLessThanOrEqual(8)
-      if (x.segundos != null) expect(x.segundos >= 1 && x.segundos <= 1800).toBe(true)
-      expectLlamada(x)
+test('la API simulada tiene la forma exacta del contrato (R7, R8 y R12)', () => {
+  for (const datos of [DATOS, R12]) {
+    expect(Object.keys(datos).sort()).toEqual(['datos_hasta', 'en_revision', 'semanas', 'tiene_id'])
+    for (const s of datos.semanas) {
+      expect(Object.keys(s).sort()).toEqual(['cuentan', 'dnr', 'hasta', 'no_cuentan', 'semana', 'sin_clasificar'])
+      for (const x of s.dnr) {
+        expect(Object.keys(x).sort()).toEqual([...CLAVES_DNR].sort())
+        // R8: el paquete con forma de código (letras y cifras, de 8 a 30) y el CP de como mucho 8.
+        expect(x.paquete).toMatch(/^[A-Za-z0-9]{8,30}$/)
+        if (x.cp) expect(x.cp.replace(/[ -]/, '').length).toBeLessThanOrEqual(8)
+        expectLlamada(x)
+      }
     }
   }
+  // R12 con su retoque: la llamada corta sin segundos cabe en el contrato, el 0 no; y los motivos de foto nuevos.
+  expect(R12_SEMANA.some((x) => x.llamada === 'corta' && x.segundos === null)).toBe(true)
+  for (const datos of [DATOS, R12]) for (const s of datos.semanas) for (const x of s.dnr) expect(x.segundos).not.toBe(0)
+  expect(R12_SEMANA.map((x) => x.foto_motivo)).toEqual(expect.arrayContaining(['en_mano', 'en_buzon']))
 })
 
 function vigilar(page) {
@@ -137,6 +148,20 @@ const abrirColores = (page) => page.getByRole('button', { name: 'Qué es cada co
 
 // ESTA semana con las DNR que se le den (las anteriores, las de DATOS), para el singular, el plural y el «ninguna».
 const conEstaSemana = (dnr, mas = {}) => ({ ...DATOS, ...mas, semanas: [semana('2026-11-08', '2026-11-14', dnr), ...DATOS.semanas.slice(1)] })
+/* R12 (11-11-2026): con el vocabulario de un Daily Report REAL (sus valores, ninguno de sus datos: los paquetes son
+   inventados, con su forma, «ES» + 10 cifras). La llamada que Amazon apunta sin segundos de verdad (el reporte trae «0» en
+   todas, que no es una medida: el servidor la manda «corta» con segundos null), lo que dice la columna «Contact
+   Compliance» sin fila en la tabla de fallos de contacto (Y → «si» sin segundos; N → «no»), una fila de contacto con 45 s,
+   otra sin llamada que reconocer, y los dos motivos de foto nuevos. */
+const R12_SEMANA = [
+  dnr('2026-11-10', 'ES2600000001', 'sin_clasificar', {
+    entrega: '2026-11-04', como: 'familiar', lejos: false, llamada: 'corta', fallo_contacto: true, foto: 'mal', foto_motivo: 'en_mano' }),
+  dnr('2026-11-10', 'ES2600000002', 'sin_clasificar', { entrega: '2026-11-05', como: 'familiar', lejos: false, llamada: 'si' }),
+  dnr('2026-11-09', 'ES2600000003', 'sin_clasificar', { como: 'buzon', llamada: 'no', fallo_contacto: true, foto: 'mal', foto_motivo: 'en_buzon' }),
+  dnr('2026-11-09', 'ES2600000004', 'sin_clasificar', { como: 'puerta', llamada: 'si', segundos: 45, fallo_contacto: true }),
+  dnr('2026-11-08', 'ES2600000005', 'sin_clasificar', { fallo_contacto: true }),
+]
+const R12 = conEstaSemana(R12_SEMANA)
 const paquetes = (n, estado = 'cuenta', pre = 'TBA99900000000') => Array.from({ length: n }, (_, k) => dnr('2026-11-09', `${pre}${k}`, estado))
 // EN PAUSA (dnrPausas.js): lo que mira el estado o el recordatorio se salta mientras dure, y vuelve solo al quitarla.
 const PAUSA_ESTADO = 'el estado («te cuenta / no cuenta») está en pausa (dnrPausas.js)'
@@ -1053,7 +1078,7 @@ test('R9: «Llamada corta · 12 s» en tono fallo y con su frase para el lector;
     dnr('2026-11-10', 'TBA500000000002', 'cuenta', { como: 'puerta', llamada: 'no', fallo_contacto: true, foto: 'mal', foto_motivo: 'oscura' }),
     dnr('2026-11-09', 'TBA500000000003', 'no_cuenta', { como: 'buzon', llamada: 'si', segundos: 45, foto: 'bien' }),
     dnr('2026-11-09', 'TBA500000000004', 'sin_clasificar', { como: 'en_mano', lejos: true }),
-    // El fallo de contacto sin nada de la llamada: R9 no lo manda así, pero la web lo enseña como hasta ahora.
+    // El fallo de contacto sin nada de la llamada (R12: una fila de la tabla de fallos de contacto sin segundos válidos).
     dnr('2026-11-08', 'TBA500000000005', 'sin_clasificar', { fallo_contacto: true }),
   ]) })
   await casilla(page).click()
@@ -1100,6 +1125,88 @@ test('R9: en inglés, la llamada corta y el aviso de los 30 segundos, traducidos
   const f = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
   await expect(corto(f.getByTestId('dnr-hecho-llamada'))).toHaveText('Short call · 9 s')
   await expect(f.getByTestId('dnr-aviso-llamada')).toHaveText('Calls: 30 seconds minimum. Don’t hang up while it’s ringing, even if they open the door.')
+})
+
+/* R12 (11-11-2026): lo que trae un Daily Report REAL. La tabla de contacto es de FALLOS y sus segundos son «0» en todas
+   las filas, que no es una medida (retoque, revisión M1/M2): la llamada que apunta Amazon sale «Llamada corta» a secas,
+   nunca «0 s». La columna «Contact Compliance» dice si hubo «llamada o mensaje», sin decir cuál: con «Y» y sin fila de
+   fallo, «Contactaste» (no «Llamaste»); con «N», «Sin llamada». La fila de fallo con 45 s (M3: los datos se contradicen),
+   «Llamaste · 45 s» sin verde, «Fallo de contacto» y sin el aviso de los 30 s. Y dos motivos de foto más. */
+test('R12: «Llamada corta» sin segundos con su aviso, «Contactaste» sin segundos y sin aviso, «Sin llamada», la fila de contacto con 45 s (sin verde, con el fallo y sin aviso) y la que no trae llamada; y el paquete «ES…» entero', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrar(page, { mias: R12 })
+  await casilla(page).click()
+  const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+  await expect(filas).toHaveCount(5)
+  const [cero, contacto, sin, larga, soloFallo] = [0, 1, 2, 3, 4].map((k) => filas.nth(k))
+  const llamada = (f) => f.getByTestId('dnr-hecho-llamada')
+  const aviso = (f) => f.getByTestId('dnr-aviso-llamada')
+  const comprueba = async (h, visible, tono, frase) => {
+    await expect(corto(h)).toHaveText(visible)
+    await expect(h).toHaveAttribute('data-tono', tono)
+    await expect(h).toHaveAttribute('title', frase)
+    await expect(h.locator('.sr-only')).toHaveText(frase)
+  }
+  // El paquete con la forma del reporte real, entero.
+  await expect(cero.getByTestId('dnr-paquete')).toHaveText('ES2600000001')
+  // Sin segundos: «Llamada corta» a secas, en fallo, con su frase que no dice cuánto duró; no un «Fallo de contacto»
+  // genérico (que no dice que llamó) ni «0 s» (una medida que el informe no da).
+  await comprueba(llamada(cero), 'Llamada corta', 'fallo', 'Tu llamada al cliente fue demasiado corta; tiene que durar 30 segundos como mínimo')
+  await expect(cero.getByTestId('dnr-hecho-contacto')).toHaveCount(0)
+  await expect(page.getByTestId('mis-dnr')).not.toContainText(/\b0 s\b|\b0 segundos/)
+  // «si» sin segundos: «Contactaste», en bien, con la frase que no afirma que fuera una llamada.
+  await comprueba(llamada(contacto), 'Contactaste', 'bien', 'Llamaste o escribiste al cliente')
+  await expect(contacto).not.toContainText('Llamaste ·')
+  // «no»: «Sin llamada».
+  await comprueba(llamada(sin), 'Sin llamada', 'fallo', 'No llamaste al cliente')
+  // «si» de 45 s con fila en la tabla de fallos de contacto (M3): «Llamaste · 45 s» como dato (sin el verde) y, aparte,
+  // «Fallo de contacto»: se dice lo que pasó sin afirmar que estuvo bien.
+  await comprueba(llamada(larga), 'Llamaste · 45 s', 'dato', 'Llamaste al cliente (45 s)')
+  await comprueba(larga.getByTestId('dnr-hecho-contacto'), 'Fallo de contacto', 'fallo', 'Te apuntaron un fallo de contacto con el cliente')
+  // Una fila de fallo de contacto sin llamada que reconocer: «Fallo de contacto».
+  await expect(llamada(soloFallo)).toHaveCount(0)
+  await comprueba(soloFallo.getByTestId('dnr-hecho-contacto'), 'Fallo de contacto', 'fallo', 'Te apuntaron un fallo de contacto con el cliente')
+  // El aviso de los 30 segundos: con «corta», «no» o fallo de contacto sin llamada; nunca con «Contactaste» ni con
+  // «Llamaste · 45 s» (sí llamó 30 s: el aviso le diría lo contrario).
+  for (const f of [cero, sin, soloFallo]) await expect(aviso(f)).toHaveText(AVISO_30)
+  await expect(aviso(contacto)).toHaveCount(0)
+  await expect(aviso(larga)).toHaveCount(0)
+  await expect(page.getByTestId('dnr-aviso-llamada')).toHaveCount(3)
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('R12: los motivos de foto nuevos, «Paquete en la mano» y «Paquete en el buzón», en fallo y con su frase larga', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrar(page, { mias: R12 })
+  await casilla(page).click()
+  const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+  const esperado = [
+    [0, 'Paquete en la mano', 'La foto no pasó la revisión: el paquete estaba en la mano'],
+    [2, 'Paquete en el buzón', 'La foto no pasó la revisión: el paquete estaba en el buzón'],
+  ]
+  for (const [k, visible, frase] of esperado) {
+    const h = filas.nth(k).getByTestId('dnr-hecho-foto')
+    await expect(corto(h)).toHaveText(visible)
+    await expect(h).toHaveAttribute('data-tono', 'fallo')
+    await expect(h).toHaveAttribute('title', frase)
+    await expect(h.locator('.sr-only')).toHaveText(frase)
+  }
+  // Ninguna sale como el genérico «Foto mal».
+  await expect(page.getByTestId('mis-dnr')).not.toContainText('Foto mal')
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('R12: en inglés, «Contactaste», la llamada corta sin segundos y los motivos nuevos, traducidos', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('fds_idioma', 'en'))
+  await entrar(page, { mias: R12 })
+  await page.getByRole('button', { name: /^My DNRs/ }).click()
+  const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+  await expect(corto(filas.nth(0).getByTestId('dnr-hecho-llamada'))).toHaveText('Short call')
+  await expect(filas.nth(0).getByTestId('dnr-hecho-llamada')).toHaveAttribute('title', 'Your call to the customer was too short; it must last at least 30 seconds')
+  await expect(corto(filas.nth(0).getByTestId('dnr-hecho-foto'))).toHaveText('Parcel in hand')
+  await expect(corto(filas.nth(1).getByTestId('dnr-hecho-llamada'))).toHaveText('Contacted')
+  await expect(filas.nth(1).getByTestId('dnr-hecho-llamada')).toHaveAttribute('title', 'You called or messaged the customer')
+  await expect(corto(filas.nth(2).getByTestId('dnr-hecho-foto'))).toHaveText('Parcel in letterbox')
 })
 
 test('R9 (lo que se publica): con el estado en pausa no se dice en ningún sitio si le cuenta: ni etiqueta ni banda, ni contadores, ni «Qué es cada color», ni «Actualizada»; el número en el color normal y las semanas anteriores con su total', async ({ page }) => {
@@ -1238,11 +1345,12 @@ test('R9 (lo que se publica): con la preferencia en pausa no sale el recordatori
 
 /* REVISIÓN 4 (11-11-2026, R10), H4: lo que se VE de cada etiqueta va oculto al lector de pantalla (aria-hidden) y su frase
    larga se lee UNA vez; y los casos que no tenían prueba: «Foto bien», «Foto mal» sin motivo o con uno que la web no
-   conoce, «Llamaste» sin segundos y un `como` desconocido (no pinta etiqueta). Lo que lee el lector sale del árbol
+   conoce, «si» sin segundos (R12: «Contactaste», el reporte dice «llamada o mensaje» sin decir cuál) y un `como`
+   desconocido (no pinta etiqueta). Lo que lee el lector sale del árbol
    accesible (ariaSnapshot), donde no entra lo que lleva aria-hidden. */
 const vecesEnArbol = async (l, texto) => (await l.ariaSnapshot()).split(texto).length - 1
 
-test('H4: cada etiqueta de qué pasó: lo visible, oculto al lector, y la frase larga leída una vez; foto bien, foto mal sin motivo o con uno desconocido, «Llamaste» sin segundos y un «como» desconocido', async ({ page }) => {
+test('H4: cada etiqueta de qué pasó: lo visible, oculto al lector, y la frase larga leída una vez; foto bien, foto mal sin motivo o con uno desconocido, «Contactaste» (si sin segundos) y un «como» desconocido', async ({ page }) => {
   const fallos = vigilar(page)
   await entrar(page, { mias: conEstaSemana([
     dnr('2026-11-10', 'TBA600000000001', 'sin_clasificar', { como: 'xyz', llamada: 'si', foto: 'bien' }),
@@ -1256,7 +1364,7 @@ test('H4: cada etiqueta de qué pasó: lo visible, oculto al lector, y la frase 
   await expect(filas).toHaveCount(5)
   const [bien, sinMotivo, motivoRaro, comoRaro, deTodo] = [0, 1, 2, 3, 4].map((k) => filas.nth(k))
   const esperado = [
-    [bien, 'llamada', 'Llamaste', 'bien', 'Llamaste al cliente'],
+    [bien, 'llamada', 'Contactaste', 'bien', 'Llamaste o escribiste al cliente'],
     [bien, 'foto', 'Foto bien', 'bien', 'La foto pasó la revisión'],
     [sinMotivo, 'foto', 'Foto mal', 'fallo', 'La foto no pasó la revisión'],
     [motivoRaro, 'foto', 'Foto mal', 'fallo', 'La foto no pasó la revisión'],
@@ -1569,6 +1677,9 @@ test('Ejemplo: a 360 px en alemán y con «Letra más grande», nada se corta ni
   await expect(entrega).toHaveAccessibleName('"¿Dónde vas a dejar el paquete?" (Wo lässt du das Paket?)')
   await expect(entrega.getByTestId('ejemplo-pref-texto')).toHaveText(['"Buzón de correos" (Briefkasten)', '"Caseta" (Gartenhaus)', '"Más opciones" (Weitere Optionen)'])
   await expect(entrega.getByTestId('ejemplo-pref-etiqueta')).toHaveText('Das ist eine Präferenz')
+  // R12: sin preferencia, lo primero es «Miembro del hogar», también literal de la app.
+  await expect(entrega.getByTestId('ejemplo-pref-sin-etiqueta')).toHaveText('Keine Präferenz')
+  await expect(entrega.getByTestId('ejemplo-pref-sin-texto')).toHaveText('"Miembro del hogar" (Haushaltsmitglied)')
   const notas = hoja.getByTestId('ejemplo-pref-notas')
   await expect(notas).toHaveAccessibleName('"Notas" (Notizen)')
   const lineas = notas.getByTestId('ejemplo-pref-nota')
@@ -1607,4 +1718,45 @@ test('Ejemplo: en portugués, lo que es la misma palabra va entre comillas y sin
   await expect(hoja.getByTestId('ejemplo-pref-notas')).toHaveAccessibleName('"Notas"')
   await expect(hoja.getByTestId('ejemplo-pref-nota').first().getByTestId('ejemplo-pref-texto')).toHaveText('"Entregar a:" Barracão/Arrecadação')
   await expect(hoja.getByTestId('ejemplo-pref-opcion').getByTestId('ejemplo-pref-texto')).toHaveText(['"Buzón de correos" (Caixa de correio)', '"Caseta" (Arrecadação)', '"Más opciones" (Mais opções)'])
+  await expect(hoja.getByTestId('ejemplo-pref-sin-texto')).toHaveText('"Miembro del hogar" (Membro do agregado familiar)')
+})
+
+/* R12 (Dani, 11-11-2026): «cuando el cliente no tiene preferencia sale normal, como siempre: debería salir "Miembro del
+   hogar"; pero la primera siempre debe ser la preferencia de entrega». Bajo la lista del ejemplo, una línea corta y
+   apagada con su redondel: «Sin preferencia» (gris) y lo primero, «Miembro del hogar». */
+test('Ejemplo (R12): bajo la lista, una línea apagada «Sin preferencia, lo primero es "Miembro del hogar"», en gris y sin nada de verde', async ({ page }) => {
+  test.skip(PAUSAS.preferencia, PAUSA_PREFERENCIA)
+  const fallos = vigilar(page)
+  await entrar(page)
+  await casilla(page).click()
+  await botonEjemplo(page).click()
+  const hoja = hojaEjemplo(page)
+  await expect(hoja).toBeVisible()
+  const entrega = hoja.getByTestId('ejemplo-pref-entrega')
+  const sin = entrega.getByTestId('ejemplo-pref-sin')
+  await expect(sin).toBeVisible()
+  // Dentro de lo de entregar y DEBAJO de su lista (de la última opción), antes de las notas.
+  const yDe = async (l) => (await l.boundingBox()).y
+  const ultima = entrega.getByTestId('ejemplo-pref-opcion').nth(2)
+  const fin = await ultima.boundingBox()
+  expect(await yDe(sin)).toBeGreaterThanOrEqual(fin.y + fin.height - 1)
+  expect(await yDe(sin)).toBeLessThan(await yDe(hoja.getByTestId('ejemplo-pref-notas')))
+  // Lo que se ve: la etiqueta gris «Sin preferencia» y, debajo, como una opción más (sin comillas en español, como las de
+  // la lista), su redondel y «Miembro del hogar»; el lector, la frase entera.
+  const etiqueta = sin.getByTestId('ejemplo-pref-sin-etiqueta')
+  await expect(etiqueta).toHaveText('Sin preferencia')
+  await expect(etiqueta).toHaveClass(/bg-dark-800/)
+  await expect(sin.getByTestId('ejemplo-pref-sin-texto')).toHaveText('Miembro del hogar')
+  expect(await yDe(etiqueta)).toBeLessThan(await yDe(sin.getByTestId('ejemplo-pref-sin-texto')))
+  await expect(sin.locator('.rounded-full.border-2')).toHaveCount(1)
+  expect(await leido(sin)).toBe('Sin preferencia, lo primero es "Miembro del hogar"')
+  // Apagada: ni verde ni borde de destacada, y en el color apagado (el de «Más opciones»), no en el de las opciones.
+  await expect(sin.locator('[class*="ruta-ok"]')).toHaveCount(0)
+  const color = (l) => l.evaluate((el) => getComputedStyle(el).color)
+  expect(await color(sin.getByTestId('ejemplo-pref-sin-texto'))).toBe(await color(ultima.getByTestId('ejemplo-pref-texto')))
+  expect(await color(sin.getByTestId('ejemplo-pref-sin-texto'))).not.toBe(await color(entrega.getByTestId('ejemplo-pref-opcion').nth(1).getByTestId('ejemplo-pref-texto')))
+  // «Sí es preferencia» sigue saliendo una sola vez, en la primera opción; la línea no es una opción más.
+  await expect(hoja.getByText('Sí es preferencia', { exact: true })).toHaveCount(1)
+  await expect(entrega.getByTestId('ejemplo-pref-opcion')).toHaveCount(3)
+  expect(fallos).toEqual([])
 })

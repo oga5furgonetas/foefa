@@ -28,7 +28,16 @@
    estado, su banda, los contadores, «Qué es cada color» y «Actualizada»). En pausa, la tarjeta empieza por el día.
 
    R11 (Dani, 11-11-2026): VUELVE el recordatorio de la preferencia, con su ejemplo corregido («¿Cómo sé si tiene
-   preferencia?»: la preferencia es lo PRIMERO que aparece al entregar, no las notas). El estado SIGUE en pausa. */
+   preferencia?»: la preferencia es lo PRIMERO que aparece al entregar, no las notas). El estado SIGUE en pausa.
+
+   R12 (11-11-2026, con un Daily Report real que mandó Dani): el informe dice si hubo «llamada o mensaje» sin decir cuál
+   («Contactaste») y dos motivos de foto más (en la mano, en el buzón). Y el ejemplo de la preferencia dice también cómo
+   se ve SIN ella: lo primero es «Miembro del hogar».
+
+   R12, retoque (11-11-2026, revisión M1-M3): el informe trae «0» segundos en TODAS sus filas de contacto (y la subida
+   guarda 0 una celda vacía), así que el 0 no es una medida: el servidor ya no lo manda y aquí nunca se pinta «0 s». La
+   llamada que Amazon apunta sin segundos es «Llamada corta» a secas. Y la fila de fallo de contacto con 30 s o más (los
+   datos se contradicen) dice «Llamaste · n s» sin verde, más «Fallo de contacto», y sin el aviso de los 30 s. */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle, Camera, CameraOff, Check, ChevronDown, ChevronUp, CircleHelp, Clock, ConciergeBell, DoorOpen, Hand, Info,
@@ -75,7 +84,8 @@ const COMO = {
   garaje: ['Garaje', 'Lo marcaste en el garaje', MapPin],
   cobertizo: ['Cobertizo', 'Lo marcaste en el cobertizo', MapPin],
 }
-// Por qué no pasó la foto: [lo que se ve, el motivo dentro de la frase larga].
+// Por qué no pasó la foto: [lo que se ve, el motivo dentro de la frase larga]. R12 (11-11-2026, con un reporte real y su
+// leyenda): dos motivos más, el paquete en la mano y en el buzón.
 const FOTO = {
   borrosa: ['Foto borrosa', 'salió borrosa'],
   oscura: ['Foto oscura', 'salió muy oscura'],
@@ -83,6 +93,8 @@ const FOTO = {
   muy_cerca: ['Foto muy cerca', 'estaba hecha demasiado cerca'],
   persona: ['Persona en la foto', 'salía una persona'],
   en_furgoneta: ['Foto en la furgoneta', 'el paquete estaba en la furgoneta'],
+  en_mano: ['Paquete en la mano', 'el paquete estaba en la mano'],
+  en_buzon: ['Paquete en el buzón', 'el paquete estaba en el buzón'],
   sin_foto: ['Sin foto', 'no había foto'],
 }
 
@@ -91,20 +103,31 @@ const FOTO = {
 function quePaso(x) {
   const out = []
   const como = COMO[x.como]
+  // Retoque de R12 (revisión M1/M2): los segundos, de 1 en adelante. El 0 no es una medida (el informe real lo trae en
+  // todas sus filas de contacto y la subida guarda 0 una celda vacía): «0 s» no se pinta nunca, ni aunque llegue.
+  const seg = Number.isInteger(x.segundos) && x.segundos > 0 ? x.segundos : null
   if (como) out.push({ k: 'como', corto: tx(como[0]), frase: tx(como[1]), icono: como[2], tono: 'dato' })
   if (x.lejos === true) out.push({ k: 'lejos', corto: tx('A más de 25 m'), frase: tx('Lo marcaste a más de 25 m del sitio'), icono: MapPinOff, tono: 'fallo' })
   if (x.lejos === false) out.push({ k: 'lejos', corto: tx('En el sitio'), frase: tx('Lo marcaste a menos de 25 m del sitio'), icono: MapPin, tono: 'bien' })
+  // «si» sin segundos (R12) sale de la columna del reporte que dice que hubo «llamada o mensaje», sin decir cuál:
+  // «Contactaste», no «Llamaste». Con fallo de contacto (revisión M3: una fila de fallo con 30 s o más, los datos se
+  // contradicen) se dice lo que pasó sin el verde: la llamada como dato y, aparte, el fallo.
   if (x.llamada === 'si') {
-    out.push(x.segundos
-      ? { k: 'llamada', corto: tx('Llamaste · {n} s', { n: x.segundos }), frase: tx('Llamaste al cliente ({n} s)', { n: x.segundos }), icono: PhoneCall, tono: 'bien' }
-      : { k: 'llamada', corto: tx('Llamaste'), frase: tx('Llamaste al cliente'), icono: PhoneCall, tono: 'bien' })
+    const tono = x.fallo_contacto === true ? 'dato' : 'bien'
+    out.push(seg != null
+      ? { k: 'llamada', corto: tx('Llamaste · {n} s', { n: seg }), frase: tx('Llamaste al cliente ({n} s)', { n: seg }), icono: PhoneCall, tono }
+      : { k: 'llamada', corto: tx('Contactaste'), frase: tx('Llamaste o escribiste al cliente'), icono: PhoneCall, tono })
   }
-  // «Sin llamada» y «Llamada corta» ya dicen el fallo de contacto: el de contacto solo sale si no se ha dicho. La corta
-  // (R9: hay segundos y son menos de 30) solo con sus segundos; sin ellos no se afirma cuánto duró.
+  // «Sin llamada» y «Llamada corta» ya dicen el fallo de contacto: el de contacto sale si no se ha dicho nada de la llamada
+  // o si se dijo que llamó. La corta con sus segundos dice cuánto duró; sin ellos (Amazon apunta una llamada que no bastó,
+  // sin medirla), «Llamada corta» a secas.
   if (x.llamada === 'no') out.push({ k: 'llamada', corto: tx('Sin llamada'), frase: tx('No llamaste al cliente'), icono: PhoneOff, tono: 'fallo' })
-  else if (x.llamada === 'corta' && x.segundos) {
-    out.push({ k: 'llamada', corto: tx('Llamada corta · {n} s', { n: x.segundos }), icono: PhoneCall, tono: 'fallo',
-      frase: tx('Tu llamada al cliente duró {n} segundos; tiene que durar 30 como mínimo', { n: x.segundos }) })
+  else if (x.llamada === 'corta') {
+    out.push(seg != null
+      ? { k: 'llamada', corto: tx('Llamada corta · {n} s', { n: seg }), icono: PhoneCall, tono: 'fallo',
+        frase: tx('Tu llamada al cliente duró {n} segundos; tiene que durar 30 como mínimo', { n: seg }) }
+      : { k: 'llamada', corto: tx('Llamada corta'), icono: PhoneCall, tono: 'fallo',
+        frase: tx('Tu llamada al cliente fue demasiado corta; tiene que durar 30 segundos como mínimo') })
   } else if (x.fallo_contacto === true) {
     out.push({ k: 'contacto', corto: tx('Fallo de contacto'), frase: tx('Te apuntaron un fallo de contacto con el cliente'), icono: Phone, tono: 'fallo' })
   }
@@ -240,7 +263,8 @@ function Tarjeta({ x, marca }) {
   const verEstado = !PAUSAS.estado
   const cuenta = verEstado && x.estado === 'cuenta'
   // R9: un fallo de contacto (sin llamada, una llamada corta o el fallo que dice el informe) lleva el aviso de los 30 s.
-  const falloContacto = x.llamada === 'no' || x.llamada === 'corta' || x.fallo_contacto === true
+  // Con «Llamaste» no (revisión M3, 11-11-2026): sí llamó 30 s o más, y el aviso le diría lo contrario.
+  const falloContacto = x.llamada === 'no' || x.llamada === 'corta' || (x.fallo_contacto === true && x.llamada !== 'si')
   const etiquetas = (verEstado || marca) && (
     <div className="flex min-w-0 flex-wrap gap-1">
       {verEstado && <Etiqueta testid="dnr-estado" tono={e.tono} icono={e.icono} texto={tx(e.texto)} />}

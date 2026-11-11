@@ -445,7 +445,6 @@ export const A = {
   "A más de 25 m": ["Over 25 m away", "A mais de 25 m", "À plus de 25 m", "A più di 25 m", "Über 25 m entfernt"],
   "En el sitio": ["On site", "No local", "Sur place", "Sul posto", "Vor Ort"],
   "Llamaste · {n} s": ["Called · {n} s", "Ligaste · {n} s", "Appelé · {n} s", "Chiamato · {n} s", "Angerufen · {n} s"],
-  "Llamaste": ["Called", "Ligaste", "Appelé", "Chiamato", "Angerufen"],
   "Sin llamada": ["No call", "Sem chamada", "Pas d’appel", "Nessuna chiamata", "Kein Anruf"],
   "Fallo de contacto": ["Contact failure", "Falha de contacto", "Échec de contact", "Contatto mancato", "Kontakt fehlgeschlagen"],
   "Foto borrosa": ["Blurry photo", "Foto desfocada", "Photo floue", "Foto sfocata", "Unscharfes Foto"],
@@ -494,4 +493,21 @@ export const A = {
   "No lo es, clave de acceso": ["Not a preference, access code", "Não é preferência, código de acesso", "Pas une préférence, code d’accès", "Non è una preferenza, codice di accesso", "Keine Präferenz, Zugangscode"],
   "Código del portal: 1234": ["Door code: 1234", "Código do portão: 1234", "Code de l’immeuble : 1234", "Codice del portone: 1234", "Türcode: 1234"],
   "Con preferencia de entrega": ["With a delivery preference", "Com preferência de entrega", "Avec une préférence de livraison", "Con una preferenza di consegna", "Mit Zustellpräferenz"],
+  // R12 (11-11-2026, con un Daily Report real): el informe dice si hubo «llamada o mensaje» sin decir cuál («Contactaste»),
+  // dos motivos más de la foto (en la mano, en el buzón) y, en el ejemplo, cómo se ve SIN preferencia: lo primero es
+  // «Miembro del hogar» (literal de la app, como los de arriba: en los demás idiomas, entre comillas y con lo que significa).
+  "Contactaste": ["Contacted", "Contactaste", "Contacté", "Contattato", "Kontaktiert"],
+  "Llamaste o escribiste al cliente": ["You called or messaged the customer", "Ligaste ou escreveste ao cliente", "Tu as appelé le client ou tu lui as écrit", "Hai chiamato o scritto al cliente", "Du hast den Kunden angerufen oder ihm geschrieben"],
+  "Paquete en la mano": ["Parcel in hand", "Encomenda na mão", "Colis en main", "Pacco in mano", "Paket in der Hand"],
+  "el paquete estaba en la mano": ["the parcel was in your hand", "a encomenda estava na mão", "le colis était dans ta main", "il pacco era in mano", "das Paket war in der Hand"],
+  "Paquete en el buzón": ["Parcel in letterbox", "Encomenda na caixa de correio", "Colis dans la boîte aux lettres", "Pacco nella cassetta", "Paket im Briefkasten"],
+  "el paquete estaba en el buzón": ["the parcel was in the letterbox", "a encomenda estava na caixa de correio", "le colis était dans la boîte aux lettres", "il pacco era nella cassetta delle lettere", "das Paket war im Briefkasten"],
+  "Sin preferencia": ["No preference", "Sem preferência", "Sans préférence", "Senza preferenza", "Keine Präferenz"],
+  "lo primero es": ["the first one is", "a primeira é", "la première est", "la prima è", "zuerst steht"],
+  "Sin preferencia, lo primero es {opcion}": ["No preference: the first one is {opcion}", "Sem preferência, a primeira é {opcion}", "Sans préférence, la première est {opcion}", "Senza preferenza, la prima è {opcion}", "Ohne Präferenz steht zuerst {opcion}"],
+  "Miembro del hogar": ["Household member", "Membro do agregado familiar", "Membre du foyer", "Familiare convivente", "Haushaltsmitglied"],
+  // R12, retoque (11-11-2026, revisión M1/M2): la llamada que Amazon apunta sin segundos (el informe trae 0, que no es una
+  // medida): «Llamada corta» a secas, sin afirmar cuánto duró.
+  "Llamada corta": ["Short call", "Chamada curta", "Appel court", "Chiamata breve", "Kurzer Anruf"],
+  "Tu llamada al cliente fue demasiado corta; tiene que durar 30 segundos como mínimo": ["Your call to the customer was too short; it must last at least 30 seconds", "A tua chamada ao cliente foi demasiado curta; tem de durar pelo menos 30 segundos", "Ton appel au client était trop court ; il doit durer au moins 30 secondes", "La tua chiamata al cliente è stata troppo breve; deve durare almeno 30 secondi", "Dein Anruf beim Kunden war zu kurz; er muss mindestens 30 Sekunden dauern"],
 }
