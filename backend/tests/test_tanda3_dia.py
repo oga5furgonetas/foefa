@@ -173,16 +173,37 @@ async def test_poner_furgonetas_no_pone_la_de_itv_caducada_y_lo_dice(cliente, ba
     j = r.json()
     puestas = [p["furgo"] for p in j["propuestas"] if p["aplicar"]]
     assert puestas == ["5678 DEF"], j["propuestas"]
-    assert j["itv_caducada"] == [{"furgo": "1234 ABC", "itv_date": _iso(_hoy() - timedelta(days=2)),
-                                  "conductor": "ANA PÉREZ"}]
+    # Se le ha puesto su secundaria, que está bien: no hay nada que avisar (P26).
+    assert j["itv_caducada"] == []
     assert "1234 ABC" not in [o["furgo"] for o in j["opciones"]["0"]]
+    # Con las dos caducadas se queda sin ninguna, y entonces sí se nombran las dos.
+    base.vehicles.docs[1]["itv_date"] = _iso(_hoy() - timedelta(days=5))
+    r = await cliente.post("/api/tools/plantilla-furgos", headers=_cab(),
+                           json={"center": "OGA5", "date": _hoja(_hoy()), "rows": [{"conductor": "ANA PÉREZ"}]})
+    j = r.json()
+    assert [p["furgo"] for p in j["propuestas"] if p["aplicar"]] == []
+    assert j["itv_caducada"] == [
+        {"furgo": "1234 ABC", "itv_date": _iso(_hoy() - timedelta(days=2)), "conductor": "ANA PÉREZ"},
+        {"furgo": "5678 DEF", "itv_date": _iso(_hoy() - timedelta(days=5)), "conductor": "ANA PÉREZ"}]
 
 
-async def test_poner_furgonetas_sin_fecha_mide_contra_hoy(cliente, base):
-    # Caduca dentro de 3 días: hoy (sin `date`, como la web de antes) se pone su principal, como siempre.
+async def test_la_nota_de_la_itv_no_nombra_la_secundaria_si_la_principal_se_puso(cliente, base):
+    """P26 (11-11-2026): la principal está bien y se pone; que la secundaria tenga la ITV caducada no es noticia."""
+    base.drivers.docs.append({"id": "d1", "name": "ANA PÉREZ", "center": "OGA5"})
+    _flota_itv(base, _iso(_hoy() + timedelta(days=400)), _iso(_hoy() - timedelta(days=2)))
+    base[server._AFIN_COL].docs.append({"driver_id": "d1", "principal": "v1", "secundaria": "v2"})
+    r = await cliente.post("/api/tools/plantilla-furgos", headers=_cab(),
+                           json={"center": "OGA5", "date": _hoja(_hoy()), "rows": [{"conductor": "ANA PÉREZ"}]})
+    assert r.status_code == 200, r.text
+    assert [p["furgo"] for p in r.json()["propuestas"] if p["aplicar"]] == ["1234 ABC"]
+    assert r.json()["itv_caducada"] == []
+
+
+async def test_poner_furgonetas_con_fecha_vacia_mide_contra_hoy(cliente, base):
+    # Caduca dentro de 3 días: hoy (el panel nuevo con la fecha de la hoja vacía) se pone su principal.
     _flota_fijas(base, _iso(_hoy() + timedelta(days=3)))
     r = await cliente.post("/api/tools/plantilla-furgos", headers=_cab(),
-                           json={"center": "OGA5", "rows": [{"conductor": "ANA PÉREZ"}]})
+                           json={"center": "OGA5", "date": "", "rows": [{"conductor": "ANA PÉREZ"}]})
     assert r.status_code == 200, r.text
     assert [p["furgo"] for p in r.json()["propuestas"] if p["aplicar"]] == ["1234 ABC"]
     assert r.json()["itv_caducada"] == []
@@ -191,6 +212,24 @@ async def test_poner_furgonetas_sin_fecha_mide_contra_hoy(cliente, base):
                            json={"center": "OGA5", "date": _hoja(_hoy() + timedelta(days=5)),
                                  "rows": [{"conductor": "ANA PÉREZ"}]})
     assert [p["furgo"] for p in r.json()["propuestas"] if p["aplicar"]] == ["5678 DEF"]
+    # Con la fecha vacía y la ITV ya caducada hoy: tampoco.
+    base.vehicles.docs[0]["itv_date"] = _iso(_hoy() - timedelta(days=1))
+    r = await cliente.post("/api/tools/plantilla-furgos", headers=_cab(),
+                           json={"center": "OGA5", "date": "", "rows": [{"conductor": "ANA PÉREZ"}]})
+    assert [p["furgo"] for p in r.json()["propuestas"] if p["aplicar"]] == ["5678 DEF"]
+
+
+async def test_poner_furgonetas_web_vieja_sin_date_como_main(cliente, base):
+    """P25 (11-11-2026): la web vieja en caché no manda `date`. Para ella, como en main: la de la ITV caducada se
+    propone como cualquier otra y la respuesta no trae `itv_caducada`."""
+    _flota_fijas(base, _iso(_hoy() - timedelta(days=2)))
+    cuerpo = {"center": "OGA5", "rows": [{"conductor": "ANA PÉREZ"}]}
+    r = await cliente.post("/api/tools/plantilla-furgos", headers=_cab(), json=cuerpo)
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert [p["furgo"] for p in j["propuestas"] if p["aplicar"]] == ["1234 ABC"]
+    assert "itv_caducada" not in j
+    assert "1234 ABC" in [o["furgo"] for o in j["opciones"]["0"]]
 
 
 async def test_furgonetas_fijas_sigue_viendola_operativa(cliente, base):
@@ -332,6 +371,75 @@ async def test_los_avisos_nuevos_van_junto_a_los_de_su_fila(cliente, base):
     assert j["resumen"]["con_aviso"] == 2
 
 
+async def test_el_casador_de_la_plantilla_casa_igual_que_afin_casar():
+    """P24 (11-11-2026): el casado con los nombres normalizados una sola vez da lo mismo que `_afin_casar`."""
+    pares = [("d1", "ANA PÉREZ GIL"), ("d2", "LUIS GÓMEZ RUIZ"), ("d3", "ANA PÉREZ GIL"), ("d4", "Sara Vidal-Rey"),
+             ("d5", "PABLO SOUTO"), ("d6", "PABLO SOUTO DÍAZ"), ("d7", ""), ("d8", "MARÍA JOSÉ LAGO PAZ"),
+             ("d9", "MARIA JOSE LAGO")]
+    casar = server._plantilla_casador(pares)
+    for nombre in ("ANA PÉREZ GIL", "ana perez gil", "LUIS GOMEZ", "luis gómez ruiz", "SARA VIDAL REY", "SARA",
+                   "PABLO SOUTO", "PABLO SOUTO DIAZ", "SOUTO DIAZ", "MARIA JOSE LAGO PAZ", "MARIA JOSE LAGO",
+                   "JOSE LAGO", "LAGO", "", "   ", "NADIE CONOCIDO", "LUIS GOM...", "PÉREZ GIL ANA"):
+        assert casar(nombre) == server._afin_casar(nombre, pares), nombre
+        for _, otro in pares:
+            assert server._plantilla_puntos(server._name_tokens(nombre), server._name_tokens(otro)) == \
+                server._match_score(nombre, otro), (nombre, otro)
+
+
+async def test_validar_no_normaliza_la_plantilla_entera_en_cada_fila(base, monkeypatch):
+    """P24: con 200 fichas y 50 filas, los nombres se normalizan una vez por llamada, no una por fila (antes, más
+    de 10.000 veces)."""
+    nombres = ["CONDUCTOR%03d APELLIDO%03d SEGUNDO%03d" % (i, i, i) for i in range(200)]
+    conductores = [{"id": f"c{i}", "name": n, "center": "OGA5"} for i, n in enumerate(nombres)]
+    base.drivers.docs += [dict(c) for c in conductores]
+    dia = _iso(_hoy() + timedelta(days=1))
+    for i in range(150, 180):                                     # 30 de turno de ruta que no están en la hoja
+        _turno(base, f"c{i}", dia, "1", nombre=nombres[i])
+    filas = [_fila(conductor=n) for n in nombres[:45]] + \
+        [_fila(conductor="CONDUCTOR%03d APELLIDO%03d" % (i, i)) for i in range(45, 50)]   # 5 que casan por parecido
+    llamadas = [0]
+    original = server._normalize_name
+
+    def _contando(nombre):
+        llamadas[0] += 1
+        return original(nombre)
+    monkeypatch.setattr(server, "_normalize_name", _contando)
+    avisos, faltan, con = await server._plantilla_cuadrante(filas, conductores, "OGA5", dia, {"account_type": "owner"})
+    assert con is True and len(faltan) == 30
+    assert llamadas[0] < 1500, llamadas[0]
+
+
+async def test_limitado_a_una_nave_no_ve_ausencias_ni_suspensiones_de_otra(cliente, base):
+    """P1 (11-11-2026): quien solo ve OGA5 no se entera de que alguien de DGA1 está de vacaciones o suspendido.
+    El prestado de DGA1 con su turno en OGA5 sí avisa (ese turno lo ve en su cuadrante); para el dueño, todo igual."""
+    _equipo(base)
+    base.drivers.docs += [{"id": "e1", "name": "TOMÁS RIVAS PENA", "center": "DGA1"},
+                          {"id": "e2", "name": "ELENA CASAL MOURE", "center": "DGA1"},
+                          {"id": "e3", "name": "IVÁN LOSADA FREIRE", "center": "DGA1"}]
+    dia = _hoy() + timedelta(days=1)
+    _turno(base, "d1", _iso(dia), "V")                             # de OGA5: se ve
+    _turno(base, "e1", _iso(dia), "V", center="DGA1")              # de DGA1, de vacaciones en DGA1: no se ve
+    base.suspensiones.docs.append({"driver_id": "e2", "center": "DGA1", "estado": "activa", "desde": _iso(dia),
+                                   "hasta": _iso(dia), "motivo": "X"})
+    _turno(base, "e3", _iso(dia), "L", center="OGA5")              # de DGA1, con su día en OGA5: se ve
+    filas = [_fila(conductor=n) for n in ("ANA PÉREZ GIL", "TOMÁS RIVAS PENA", "ELENA CASAL MOURE",
+                                          "IVÁN LOSADA FREIRE")]
+    cuerpo = {"rows": filas, "center": "OGA5", "date": dia.strftime("%d/%m/%Y")}
+    nuevos = ("no_tiene_turno", "suspendido")
+    r = await cliente.post("/api/tools/plantilla-validar", json=cuerpo,
+                           headers=_cab("u-oga5", "Jefe OGA5", centros=["OGA5"], cuenta="dsp"))
+    assert r.status_code == 200, r.text
+    assert [(a["fila"], a["tipo"]) for a in r.json()["avisos"] if a["tipo"] in nuevos] == [
+        (0, "no_tiene_turno"), (3, "no_tiene_turno")]
+    assert "Suspendido" not in str(r.json()) and "Vacaciones" not in str([a for a in r.json()["avisos"]
+                                                                          if a["fila"] == 1])
+    # El dueño (y quien no tiene naves asignadas) lo ve todo, como hasta ahora.
+    for cab in (_cab(), _cab("u-todas", "Oficina", centros=None, cuenta="dsp")):
+        r = await cliente.post("/api/tools/plantilla-validar", json=cuerpo, headers=cab)
+        assert [(a["fila"], a["tipo"]) for a in r.json()["avisos"] if a["tipo"] in nuevos] == [
+            (0, "no_tiene_turno"), (1, "no_tiene_turno"), (2, "suspendido"), (3, "no_tiene_turno")]
+
+
 # ── dia-6 · «otro guardó mientras editabas» en la Asignación ─────────────────
 
 SLOT = {"vehicle_id": "v1", "vehicle_plate": "1234 ABC", "driver_id": "d1", "driver_name": "ANA", "route": ""}
@@ -435,6 +543,52 @@ async def test_el_get_de_la_asignacion_trae_quien_guardo(cliente, base):
     assert doc["updated_by"] == "Jefe OGA5" and doc["updated_at"]
 
 
+def _asignaciones_de_dos_naves(base):
+    base["daily_assignments"] = Col([
+        {"id": "a1", "date": "2026-11-11", "center": "OGA5", "slots": [{"driver_id": "dO"}],
+         "updated_at": "2026-11-11T06:00:00+00:00", "updated_by": "María"},
+        {"id": "a2", "date": "2026-11-11", "center": "DGA1", "slots": [{"driver_id": "dD"}],
+         "updated_at": "2026-11-11T06:30:00+00:00", "updated_by": "Pedro"}])
+
+
+async def test_limitado_no_lee_ni_pisa_la_asignacion_de_otra_nave(cliente, base):
+    """P2 (11-11-2026, ya pasaba en main): quien solo ve OGA5 no lee ni pisa la Asignación de DGA1."""
+    _asignaciones_de_dos_naves(base)
+    cab = _cab("u-oga5", "Jefe OGA5", centros=["OGA5"], cuenta="dsp")
+    r = await cliente.get("/api/assignments/daily?center=DGA1&date=2026-11-11", headers=cab)
+    assert r.status_code == 403, r.text
+    assert r.json()["detail"] == "No tienes acceso a ese centro"
+    r = await cliente.put("/api/assignments/daily", headers=cab,
+                          json={"center": "DGA1", "date": "2026-11-11", "slots": [SLOT]})
+    assert r.status_code == 403, r.text
+    dga1 = next(d for d in base.daily_assignments.docs if d["center"] == "DGA1")
+    assert dga1["slots"] == [{"driver_id": "dD"}] and dga1["updated_by"] == "Pedro"
+    # Su nave, como siempre (también con «oga5» en minúsculas en el permiso).
+    r = await cliente.get("/api/assignments/daily?center=OGA5&date=2026-11-11", headers=cab)
+    assert r.status_code == 200 and [d["id"] for d in r.json()] == ["a1"]
+    r = await cliente.put("/api/assignments/daily", headers=_cab("u-oga5b", "Jefe", centros=["oga5"], cuenta="dsp"),
+                          json={"center": "OGA5", "date": "2026-11-11", "slots": [SLOT]})
+    assert r.status_code == 200, r.text
+    # Con «Todos» o sin centro, solo las suyas.
+    for q in ("center=Todos&", ""):
+        r = await cliente.get(f"/api/assignments/daily?{q}date=2026-11-11", headers=cab)
+        assert r.status_code == 200, r.text
+        assert [d["id"] for d in r.json()] == ["a1"], q
+
+
+async def test_asignacion_sin_naves_asignadas_o_dueno_igual_que_siempre(cliente, base):
+    _asignaciones_de_dos_naves(base)
+    for cab in (_cab(), _cab("u-todas", "Oficina", centros=None, cuenta="dsp"),
+                _cab("u-vacio", "Oficina", centros=[], cuenta="dsp")):
+        r = await cliente.get("/api/assignments/daily?center=Todos&date=2026-11-11", headers=cab)
+        assert r.status_code == 200 and sorted(d["id"] for d in r.json()) == ["a1", "a2"]
+        r = await cliente.get("/api/assignments/daily?center=DGA1&date=2026-11-11", headers=cab)
+        assert r.status_code == 200 and [d["id"] for d in r.json()] == ["a2"]
+        r = await cliente.put("/api/assignments/daily", headers=cab,
+                              json={"center": "DGA1", "date": "2026-11-11", "slots": [SLOT]})
+        assert r.status_code == 200, r.text
+
+
 # ── dia-1-prestados · el portal ve la furgoneta de la Asignación de otra nave ─
 
 HOY_PORTAL = "2026-11-11"
@@ -471,8 +625,30 @@ async def test_prestado_en_la_asignacion_de_otra_nave_y_la_suya_sin_el(portal):
 
 
 async def test_prestado_y_su_nave_sin_asignacion(portal):
+    """P12 (11-11-2026): su nave no tiene Asignación. Ve lo de siempre (la lista de su nave, «sin_cuadrante») y
+    además la furgoneta de la otra nave; nunca en lugar de lo suyo."""
     _asig(portal, "OGA5", ("juan", "vO"))
-    assert await _ver("juan") == (["vO"], True, None)
+    ids, puede, motivo = await _ver("juan")
+    assert ids[0] == "vO" and sorted(ids) == ["vD", "vD2", "vO"] and puede is True and motivo == "sin_cuadrante"
+
+
+async def test_prestado_su_nave_sin_asignacion_y_con_furgoneta_fija(portal):
+    """P12: con su furgoneta fija (la de siempre) la sigue viendo, y además la del préstamo."""
+    next(v for v in portal.vehicles.docs if v["id"] == "vD")["current_driver_id"] = "juan"
+    _asig(portal, "OGA5", ("juan", "vO"))
+    assert await _ver("juan") == (["vO", "vD"], True, None)
+
+
+async def test_prestado_con_la_furgoneta_del_hueco_de_baja_ve_lo_de_antes(portal):
+    """P12: la furgoneta del hueco de la otra nave no está (de baja o borrada): lo de antes, en los dos casos."""
+    next(v for v in portal.vehicles.docs if v["id"] == "vO")["status"] = "baja"
+    _asig(portal, "OGA5", ("juan", "vO"))
+    ids, puede, motivo = await _ver("juan")                          # su nave sin Asignación: la lista de su nave
+    assert sorted(ids) == ["vD", "vD2"] and puede is True and motivo == "sin_cuadrante"
+    _asig(portal, "DGA2", ("otro", "vD"))                            # su nave con Asignación y él no está
+    assert await _ver("juan") == ([], False, "no_en_ruta")
+    portal.vehicles.docs[:] = [v for v in portal.vehicles.docs if v["id"] != "vO"]   # borrada del todo: igual
+    assert await _ver("juan") == ([], False, "no_en_ruta")
 
 
 async def test_sin_estar_en_ninguna_igual_que_hoy(portal):
