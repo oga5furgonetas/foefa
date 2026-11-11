@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { whcAnalizar, getWhcPlan, deleteWhcPlan, getWhcEstado } from '../api'
 import { lista } from '../../lib/lista'
-import { useOrden } from '../../lib/orden'
+import { useOrden, flechaOrden, claseOrden } from '../../lib/orden'
 import ThOrden from '../components/ThOrden'
 import { fechaHoraLocal, horaLocal, diaMesLocal, diasAtras, isoLocal } from '../../lib/fecha'
 
@@ -100,6 +100,27 @@ function useEstrecha() {
   return si
 }
 
+/* ORDENAR EN EL MÓVIL (11-11-2026). Las tarjetas no tienen cabecera que pulsar: una
+   fila de botones con los mismos campos que la tabla y el mismo orden en tres pasos. */
+function OrdenMovil({ campos, orden, pulsar }) {
+  return (
+    <div role="group" aria-label="Ordenar por" className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] text-dark-500">Ordenar por</span>
+      {campos.map(([campo, txt]) => {
+        const activa = orden?.campo === campo
+        return (
+          <button key={campo} type="button" onClick={() => pulsar(campo)} aria-pressed={activa}
+            className={`inline-flex min-h-[44px] items-center gap-1 rounded-lg border px-2.5 text-xs ${
+              activa ? 'border-brand-500/50 bg-brand-500/15 text-brand-200' : 'border-dark-700 text-dark-400'}`}>
+            {txt}
+            <span className={`text-[11px] leading-none ${claseOrden(orden, campo)}`}>{flechaOrden(orden, campo)}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function Horas() {
   const { center } = useOutletContext()
   const estrecha = useEstrecha()
@@ -116,8 +137,12 @@ export default function Horas() {
   /* LA SEMANA QUE SE MIRA (11-11-2026, horas_dnr-3, lo que faltaba). null = la en
      curso (la decide el servidor, no el reloj del móvil). `vista`: la que contestó
      el servidor; `planLeido`: ya se sabe si esa semana tiene plan. */
-  /* Va con su centro: al cambiar de centro se vuelve a la semana en curso. */
-  const [eleccion, setEleccion] = useState({ center: null, week: null })
+  /* Va con su centro: al cambiar de centro se vuelve a la semana en curso. Y se
+     olvida (11-11-2026): con solo comparar el centro, volver al de antes reabría la
+     semana anterior que se miraba allí. Se ajusta al pintar, no en un efecto, para
+     no pedir antes el plan de la semana vieja. */
+  const [eleccion, setEleccion] = useState({ center, week: null })
+  if (eleccion.center !== center) setEleccion({ center, week: null })
   const semana = eleccion.center === center ? eleccion.week : null
   const setSemana = (week) => setEleccion({ center, week })
   const [vista, setVista] = useState(null)
@@ -143,7 +168,8 @@ export default function Horas() {
      texto sea el mismo.
      `week` (11-11-2026): la semana del plan que se ha abierto (al abrirlo y al
      recalcular). Si su texto no trae fechas, el servidor lo deja en esa semana y no
-     en la de hoy; un pegado nuevo no la manda. */
+     en la de hoy. Un pegado nuevo solo la manda si se está mirando una semana
+     anterior: sin ella, pegado allí, se guardaba en la de hoy y podía pisar su plan. */
   const analizar = useCallback(async (txt, exc, { carga = false, centro = null, sustituir = null, quitarVacia = false, recalcular = false, week = null } = {}) => {
     const cuerpo = txt ?? texto
     const e = exc ?? excepciones
@@ -336,26 +362,28 @@ export default function Horas() {
             <input id="horas-excepciones" type="number" value={excepciones} min={0} max={200}
               placeholder="?"
               onChange={(e) => setExcepciones(e.target.value === '' ? '' : Number(e.target.value))}
-              className="w-16 rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-sm text-dark-100" />
+              className="w-16 rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-sm text-dark-100 max-sm:min-h-[44px]" />
           </label>
           {mostrarPegar ? (
-            <button onClick={() => analizar()} disabled={cargando || texto.trim().length < 40}
-              className="btn-primary flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-40">
+            /* Mirando una semana anterior, lo pegado va a ESA semana si no trae fechas
+               (11-11-2026); en la de ahora, como siempre. */
+            <button onClick={() => analizar(null, null, semana ? { week: vistaSemana } : {})} disabled={cargando || texto.trim().length < 40}
+              className="btn-primary flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-40 max-sm:min-h-[44px]">
               {cargando ? <Loader2 size={14} className="animate-spin" /> : <Clock size={14} />}
               Ver cómo vamos
             </button>
           ) : (
             <>
               <button onClick={() => analizar(null, null, { quitarVacia: true, recalcular: true, week: guardado?.week || guardado?.semana || vista })} disabled={cargando}
-                className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-2 text-xs text-dark-300 hover:bg-dark-800 disabled:opacity-40">
+                className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-2 text-xs text-dark-300 hover:bg-dark-800 disabled:opacity-40 max-sm:min-h-[44px]">
                 {cargando ? <Loader2 size={13} className="animate-spin" /> : <Clock size={13} />} Recalcular
               </button>
               <button onClick={() => { setEditando(true); setTexto('') }}
-                className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-2 text-xs text-dark-300 hover:bg-dark-800">
+                className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-2 text-xs text-dark-300 hover:bg-dark-800 max-sm:min-h-[44px]">
                 <RefreshCw size={13} /> Pegar uno nuevo
               </button>
               <button onClick={borrar}
-                className="flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10">
+                className="flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10 max-sm:min-h-[44px]">
                 <Trash2 size={13} /> Borrar
               </button>
               <span className="text-[11px] text-dark-500">guardado {fechaHoraLocal(guardado.updated_at)}</span>
@@ -585,6 +613,9 @@ export default function Horas() {
           {/* EN EL MÓVIL, UNA TARJETA POR CONDUCTOR (11-11-2026, horas_dnr-7): la
               tabla mide 620 px y la columna del estado (quién se pasa) quedaba fuera. */}
           {estrecha ? (
+          <>
+          <OrdenMovil orden={orden} pulsar={pulsar} campos={[['nombre', 'Nombre'], ['trabajado', 'Horas'],
+            ['margen_semanal', 'Le quedan'], ['dias_trabajados', 'Jornadas']]} />
           <ul className="space-y-2" data-testid="horas-tarjetas">
             {filas.map((c, i) => {
               const abierta = abierto === i
@@ -619,9 +650,10 @@ export default function Horas() {
                         )}
                       </span>
                     </span>
+                    {/* Pasado del límite: «1h 00m de más», no «−1h 00m le quedan» (11-11-2026). */}
                     <span className={`shrink-0 text-right text-base font-semibold tabular-nums ${colorMargen(c)}`}>
-                      {signo(c.margen_semanal)}
-                      <span className="block text-[10px] font-normal text-dark-500">le quedan</span>
+                      {hm(c.margen_semanal)}
+                      <span className="block text-[10px] font-normal text-dark-500">{c.margen_semanal < 0 ? 'de más' : 'le quedan'}</span>
                     </span>
                   </button>
                   {abierta && largos > 0 && (
@@ -642,6 +674,7 @@ export default function Horas() {
               )
             })}
           </ul>
+          </>
           ) : (
           <section className="card overflow-hidden">
             <div className="overflow-x-auto">

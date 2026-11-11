@@ -119,12 +119,16 @@ test.describe('Horas · semana a semana (H2)', () => {
     await page.setViewportSize(ORDENADOR)
     await entrarComoAdmin(page)
     await simularApi(page, 'vacio')
+    const cuerpos = []
     await page.route(/\/api\/whc\/estado/, json(ESTADO))
     await page.route(/\/api\/whc\/plan/, (route) => {
       const week = new URL(route.request().url()).searchParams.get('week')
       return json(week ? { hay: false, semana: week } : plan('2026-11-08'))(route)
     })
-    await page.route(/\/api\/whc\/analizar/, json(ANALISIS()))
+    await page.route(/\/api\/whc\/analizar/, (route) => {
+      cuerpos.push(route.request().postDataJSON())
+      return json(ANALISIS({ semana_del_plan: null }))(route)
+    })
     await page.goto('/panel/horas', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText(/Cómo vamos · NORTE/)).toBeVisible({ timeout: 15000 })
     await page.getByRole('button', { name: 'Semana anterior' }).click()
@@ -132,6 +136,62 @@ test.describe('Horas · semana a semana (H2)', () => {
     await expect(page.getByText('No hay ningún plan guardado de NORTE de la semana del 25/10.')).toBeVisible({ timeout: 15000 })
     await expect(page.locator('#horas-plan')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Borrar' })).toHaveCount(0)
+    // Lo pegado aquí va a la semana del 25/10 si no trae fechas, no a la de hoy (T4).
+    const antes = cuerpos.length
+    await page.locator('#horas-plan').fill(TEXTO)
+    await page.getByRole('button', { name: 'Ver cómo vamos' }).click()
+    await expect.poll(() => cuerpos.length).toBe(antes + 1)
+    expect(cuerpos.at(-1).week).toBe('2026-10-25')
+    expect(cuerpos.at(-1).guardar).toBeUndefined()
+  })
+
+  test('pegado en la semana de ahora, no manda semana (como siempre)', async ({ page }) => {
+    await page.setViewportSize(ORDENADOR)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const cuerpos = []
+    await page.route(/\/api\/whc\/estado/, json(ESTADO))
+    await page.route(/\/api\/whc\/plan/, json({ hay: false, semana: '2026-11-08' }))
+    await page.route(/\/api\/whc\/analizar/, (route) => {
+      cuerpos.push(route.request().postDataJSON())
+      return json(ANALISIS())(route)
+    })
+    await page.goto('/panel/horas', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByTestId('horas-semana')).toContainText('la de ahora', { timeout: 15000 })
+    await page.locator('#horas-plan').fill(TEXTO)
+    await page.getByRole('button', { name: 'Ver cómo vamos' }).click()
+    await expect.poll(() => cuerpos.length).toBe(1)
+    expect(cuerpos[0].week).toBeUndefined()
+  })
+
+  test('al volver al centro de antes, se abre la semana de ahora (T36)', async ({ page }) => {
+    await page.setViewportSize(ORDENADOR)
+    await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
+    await simularApi(page, 'vacio')
+    const pedidas = []
+    await page.route(/\/api\/whc\/estado/, json(ESTADO))
+    await page.route(/\/api\/whc\/plan/, (route) => {
+      const u = new URL(route.request().url()).searchParams
+      pedidas.push([u.get('center'), u.get('week')])
+      return json(plan(u.get('week') || '2026-11-08'))(route)
+    })
+    await page.route(/\/api\/whc\/analizar/, (route) => {
+      const b = route.request().postDataJSON()
+      return json(ANALISIS({ centro: b.center, semana_del_plan: b.week || '2026-11-08' }))(route)
+    })
+    await page.goto('/panel/horas', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText(/Cómo vamos · NORTE · semana del 08\/11/)).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'Semana anterior' }).click()
+    await expect(page.getByTestId('horas-semana')).toContainText('Semana del 01/11')
+    await page.getByRole('button', { name: 'SUR', exact: true }).click()
+    await expect(page.getByTestId('horas-semana')).toContainText('la de ahora')
+    await page.getByRole('button', { name: 'NORTE', exact: true }).click()
+    await expect(page.getByText(/Cómo vamos · NORTE · semana del 08\/11/)).toBeVisible({ timeout: 15000 })
+    await expect(page.getByTestId('horas-semana')).toContainText('Semana del 08/11')
+    await expect(page.getByTestId('horas-semana')).toContainText('la de ahora')
+    // Ni siquiera se pide la semana vieja al volver.
+    expect(pedidas.at(-1)).toEqual(['NORTE', null])
+    expect(pedidas.filter(([c, w]) => c === 'NORTE' && w === '2026-11-01')).toHaveLength(1)
   })
 
   test('pegado el plan de otra semana, un botón lleva a esa semana', async ({ page }) => {
@@ -178,10 +238,13 @@ test.describe('Horas en el móvil (H1)', () => {
     await expect(pasado).toBeVisible()
     const caja = await pasado.boundingBox()
     expect(caja.x + caja.width).toBeLessThanOrEqual(MOVIL.width)
-    const queda = tarjetas.locator('li').first().getByText('−2h 30m')
-    await expect(queda).toBeVisible()
+    // Pasado del límite: «2h 30m de más», no «−2h 30m le quedan» (T35).
+    const queda = tarjetas.locator('li').first().locator('span.text-base')
+    await expect(queda).toHaveText(/^2h 30m\s*de más$/)
     const cq = await queda.boundingBox()
     expect(cq.x + cq.width).toBeLessThanOrEqual(MOVIL.width)
+    await expect(tarjetas.getByText(/−/)).toHaveCount(0)
+    await expect(tarjetas.locator('li').nth(2).locator('span.text-base')).toHaveText(/^27h 30m\s*le quedan$/)
     expect(await sinDesborde(page)).toBe(true)
     // Las flechas de semana se aciertan con el dedo.
     const flecha = await page.getByRole('button', { name: 'Semana anterior' }).boundingBox()
@@ -190,6 +253,51 @@ test.describe('Horas en el móvil (H1)', () => {
     await expect(page.getByText('Jornadas de 10 h o más: riesgo, no incumplimiento')).toHaveCount(0)
     await tarjetas.locator('li').first().getByRole('button').click()
     await expect(page.getByText('Jornadas de 10 h o más: riesgo, no incumplimiento')).toBeVisible()
+  })
+
+  test('en el móvil se ordenan las tarjetas y los botones miden 44 px (T33, T31)', async ({ page }) => {
+    await page.setViewportSize(MOVIL)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/whc\/estado/, json(ESTADO))
+    await page.route(/\/api\/whc\/plan/, json(plan('2026-11-08')))
+    await page.route(/\/api\/whc\/analizar/, json(ANALISIS()))
+    await page.goto('/panel/horas', { waitUntil: 'domcontentloaded' })
+    const tarjetas = page.getByTestId('horas-tarjetas')
+    await expect(tarjetas).toBeVisible({ timeout: 15000 })
+    const nombres = () => tarjetas.locator('li').evaluateAll((ls) => ls.map((l) => l.querySelector('.break-words')?.textContent))
+    expect((await nombres())[0]).toBe('MIGUEL ÁNGEL TORRES BLANCO DE LA FUENTE')
+    // «Le quedan»: primero a quien más le queda; otra vez, al revés; la tercera, como venía.
+    const leQuedan = page.getByRole('group', { name: 'Ordenar por' }).getByRole('button', { name: /^Le quedan/ })
+    expect((await leQuedan.boundingBox()).height).toBeGreaterThanOrEqual(DEDO)
+    await leQuedan.click()
+    await expect.poll(nombres).toEqual(['SARA VIDAL', 'ANA PÉREZ', 'MIGUEL ÁNGEL TORRES BLANCO DE LA FUENTE'])
+    await leQuedan.click()
+    await expect.poll(nombres).toEqual(['MIGUEL ÁNGEL TORRES BLANCO DE LA FUENTE', 'ANA PÉREZ', 'SARA VIDAL'])
+    await page.getByRole('group', { name: 'Ordenar por' }).getByRole('button', { name: /^Horas/ }).click()
+    await expect.poll(nombres).toEqual(['MIGUEL ÁNGEL TORRES BLANCO DE LA FUENTE', 'ANA PÉREZ', 'SARA VIDAL'])
+    expect(await sinDesborde(page)).toBe(true)
+    // Los botones del plan y la casilla de excepciones, a tamaño de dedo.
+    for (const nombre of ['Recalcular', 'Pegar uno nuevo', 'Borrar']) {
+      expect((await page.getByRole('button', { name: nombre, exact: true }).boundingBox()).height, nombre).toBeGreaterThanOrEqual(DEDO)
+    }
+    expect((await page.locator('#horas-excepciones').boundingBox()).height).toBeGreaterThanOrEqual(DEDO)
+    await page.getByRole('button', { name: 'Pegar uno nuevo' }).click()
+    expect((await page.getByRole('button', { name: 'Ver cómo vamos' }).boundingBox()).height).toBeGreaterThanOrEqual(DEDO)
+  })
+
+  test('en el ordenador, los botones del plan no cambian de tamaño ni hay botones de ordenar', async ({ page }) => {
+    await page.setViewportSize(ORDENADOR)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/whc\/estado/, json(ESTADO))
+    await page.route(/\/api\/whc\/plan/, json(plan('2026-11-08')))
+    await page.route(/\/api\/whc\/analizar/, json(ANALISIS()))
+    await page.goto('/panel/horas', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('table')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByRole('group', { name: 'Ordenar por' })).toHaveCount(0)
+    expect((await page.getByRole('button', { name: 'Recalcular' }).boundingBox()).height).toBeLessThan(40)
+    expect((await page.locator('#horas-excepciones').boundingBox()).height).toBeLessThan(40)
   })
 
   test('en el ordenador sigue la tabla', async ({ page }) => {
@@ -212,7 +320,7 @@ const fila = (tid, nombre, extra) => ({
   sin_clasificar: 0, euros: 61.4, euros_defectos: 48.9, rts: 1, pod_fails: 0, cc_fails: 0, de_baja: false,
   sin_ficha: false, ficha_sin_vincular: false, solo_historial: false, verif: 'coincide',
   detalle: [
-    { tracking_id: `TBA${tid}1`, fecha_concesion: '2026-11-09', fecha_entrega: '2026-11-09', dsc: 'Y',
+    { tracking_id: `TBA${tid}1`, fecha_concesion: '2026-11-09', fecha_entrega: '2026-11-07', dsc: 'Y',
       scan: 'DELIVERED_TO_DOORSTEP', valor: '€38.90', valor_eur: 38.9, cp: '15701' },
   ],
   ...extra,
@@ -265,6 +373,10 @@ test.describe('DNR diaria · tanda 2', () => {
     const elegir = page.getByTestId('elegir-centro')
     await expect(elegir).toBeVisible({ timeout: 15000 })
     await expect(elegir.getByText('Elige un centro para ver sus DNR.')).toBeVisible()
+    // Con su título encima, como las demás pantallas (T39).
+    const titulo = page.getByRole('heading', { name: 'DNR diaria', exact: true })
+    await expect(titulo).toBeVisible()
+    expect((await titulo.boundingBox()).y).toBeLessThan((await elegir.boundingBox()).y)
     await elegir.getByRole('button', { name: 'SUR', exact: true }).click()
     await expect(page.getByRole('heading', { name: /DNR diaria · SUR/ })).toBeVisible()
   })
@@ -328,8 +440,9 @@ test.describe('DNR diaria · tanda 2', () => {
       buffer: Buffer.from('<h1>ES TDSL NORTE Daily Report</h1>') })
     await expect(page.getByRole('cell', { name: 'NORTE', exact: true })).toBeVisible({ timeout: 15000 })
     await expect(page.getByText(/no de NORTE/)).toHaveCount(0)
-    await page.getByRole('button', { name: 'Guardar 1 reportes' }).click()
-    await expect(page.getByText(/1 reportes guardados en NORTE/)).toBeVisible({ timeout: 15000 })
+    // Singular con un solo fichero (T38).
+    await page.getByRole('button', { name: 'Guardar 1 reporte', exact: true }).click()
+    await expect(page.getByText('1 reporte guardado en NORTE: 3 DNR y 0 filas de RTS, POD y contacto.')).toBeVisible({ timeout: 15000 })
     await expect(page.getByRole('button', { name: /^Ir a / })).toHaveCount(0)
   })
 
@@ -401,5 +514,80 @@ test.describe('DNR diaria · tanda 2', () => {
     const flecha = await page.getByRole('button', { name: 'Semana siguiente' }).boundingBox()
     expect(flecha.height).toBeGreaterThanOrEqual(DEDO)
     expect(flecha.x + flecha.width).toBeLessThanOrEqual(MOVIL.width)
+  })
+
+  test('en el móvil: ordenar, la fecha de entrega, «nada puntúa» y botones de 44 px (T33, T34, T35, T31)', async ({ page }) => {
+    await abrirDnr(page, { tam: MOVIL })
+    const tarjetas = page.getByTestId('dnr-tarjetas')
+    await expect(tarjetas).toBeVisible({ timeout: 15000 })
+    // Los € que puntúan con su etiqueta; sin ellos, «nada puntúa» (T35).
+    await expect(tarjetas.locator('li').first().getByText('que puntúan', { exact: true })).toBeVisible()
+    await expect(tarjetas.locator('li').nth(2).getByText('nada puntúa', { exact: true })).toBeVisible()
+    await expect(tarjetas.getByText('que puntúan', { exact: true })).toHaveCount(2)
+    // Ordenar: «Defectos» dos veces = de menos a más (T33).
+    const primero = () => tarjetas.locator('li').first().locator('button').first().locator('span.break-words').textContent()
+    expect(await primero()).toBe('PABLO MARTÍNEZ SOUTO DE LA IGLESIA')
+    const defectos = page.getByRole('group', { name: 'Ordenar por' }).getByRole('button', { name: /^Defectos/ })
+    expect((await defectos.boundingBox()).height).toBeGreaterThanOrEqual(DEDO)
+    await defectos.click()
+    await defectos.click()
+    await expect.poll(primero).toBe('A3F97QW8E2LZ77')
+    await defectos.click()
+    await expect.poll(primero).toBe('PABLO MARTÍNEZ SOUTO DE LA IGLESIA')
+    expect(await sinDesborde(page)).toBe(true)
+    // La fecha de entrega en el detalle, junto a la de concesión (T34).
+    await tarjetas.locator('li').first().getByRole('button').first().click()
+    await expect(tarjetas.locator('li').first().getByText('conc. 09/11 · entr. 07/11')).toBeVisible()
+    // Los botones de arriba, a tamaño de dedo (T31).
+    for (const nombre of ['Transporter IDs', 'Pegar', 'Subir Daily Report']) {
+      expect((await page.getByRole('button', { name: nombre, exact: true }).boundingBox()).height, nombre).toBeGreaterThanOrEqual(DEDO)
+    }
+  })
+
+  test('en el ordenador, sin botones de ordenar y los de arriba como estaban (T33, T31)', async ({ page }) => {
+    await abrirDnr(page)
+    await expect(page.locator('table')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByRole('group', { name: 'Ordenar por' })).toHaveCount(0)
+    for (const nombre of ['Transporter IDs', 'Pegar']) {
+      expect((await page.getByRole('button', { name: nombre, exact: true }).boundingBox()).height, nombre).toBeLessThan(40)
+    }
+  })
+
+  test('con ‹ pulsada seguida, la respuesta que llega tarde no pisa la de la última semana (T32)', async ({ page }) => {
+    await page.setViewportSize(ORDENADOR)
+    await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
+    await simularApi(page, 'vacio')
+    const conNombre = (nombre) => ({ ...DIARIOS, conductores: [fila('A07K7Q2M07R4T9', nombre)] })
+    let primera = null
+    const retenidas = []
+    await page.route(/\/api\/diarios\/conductores/, (route) => {
+      const desde = new URL(route.request().url()).searchParams.get('desde')
+      if (primera === null || desde === primera) {
+        primera = desde
+        return json(DIARIOS)(route)
+      }
+      retenidas.push({ desde, route })
+      return undefined
+    })
+    await page.route(/\/api\/drivers(\?|$)/, json(DRIVERS))
+    await page.goto('/panel/diarios', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('MARÍA FERNÁNDEZ RUIZ').first()).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'Semana anterior' }).click()
+    await page.getByRole('button', { name: 'Semana anterior' }).click()
+    await expect.poll(() => retenidas.length).toBe(2)
+    const [vieja, nueva] = retenidas
+    expect(vieja.desde).toBe(masDias(primera, -7))
+    expect(nueva.desde).toBe(masDias(primera, -14))
+    // Contesta primero la última (dos semanas atrás) y después, tarde, la de una semana atrás.
+    await json(conNombre('LA DE DOS SEMANAS ATRÁS'))(nueva.route)
+    await expect(page.getByText('LA DE DOS SEMANAS ATRÁS')).toBeVisible()
+    const tarde = page.waitForEvent('requestfinished', (r) => r.url().includes(`desde=${vieja.desde}`))
+    await json(conNombre('LA DE UNA SEMANA ATRÁS'))(vieja.route)
+    await tarde
+    // Dos fotogramas para que la respuesta tardía haya podido pintarse.
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+    await expect(page.getByText('LA DE UNA SEMANA ATRÁS')).toHaveCount(0)
+    await expect(page.getByText('LA DE DOS SEMANAS ATRÁS')).toBeVisible()
+    await expect(page.getByLabel('Desde')).toHaveValue(nueva.desde)
   })
 })
