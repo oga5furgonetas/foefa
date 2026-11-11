@@ -38,8 +38,10 @@ function loadPending() {
 
 /* `ve(clave)`: si la empresa tiene esa pantalla. Sin esto, a un súper con
    solo el reparto le llegaban avisos de candidatos o de checklist de turnos,
-   que ni tiene ni puede abrir. */
-export default function LiveNotifier({ center, centers, ve = () => true }) {
+   que ni tiene ni puede abrir.
+   `sobreEscribir` (el Chat, 11-11-2026): como la burbuja de la IA, en el móvil
+   sube por encima de la caja de escribir; si no, tapaba el principio de Enviar. */
+export default function LiveNotifier({ center, centers, ve = () => true, sobreEscribir = false }) {
   const veRef = useRef(ve)
   veRef.current = ve
   const nav = useNavigate()
@@ -188,7 +190,7 @@ export default function LiveNotifier({ center, centers, ve = () => true }) {
     // arriba (como AsistenteBurbuja). `z-[90]` < el `z-[95]` de la IA: con la
     // ventana de la IA abierta, esta tapa el boton hasta que se cierra.
     // Como la burbuja de la IA: en el móvil, por encima de la barra de abajo.
-    <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)_+_4.25rem)] right-[4.5rem] z-[90] flex flex-col items-end gap-2 md:bottom-4">
+    <div className={`fixed ${sobreEscribir ? 'bottom-[calc(env(safe-area-inset-bottom,0px)_+_8.5rem)]' : 'bottom-[calc(env(safe-area-inset-bottom,0px)_+_4.25rem)]'} right-[4.5rem] z-[90] flex flex-col items-end gap-2 md:bottom-4`}>
       {abierto && (
         // max-w descuenta los 5,5 rem de la derecha: con 4,5 rem de margen + 1 de
         // aire, a 375 px la lista se salia por la izquierda de la pantalla.

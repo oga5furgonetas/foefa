@@ -249,6 +249,14 @@ function ComoVaCadaCentro({ centers, datos, porCentro, hoyIso, puede, ir, t }) {
             },
           ].filter(Boolean)
           const porMirar = datosC.filter((x) => x.tono === 'falta').length
+          /* Sin lo de /stats/centros-hoy (aún no ha llegado, ha fallado o es un servidor de antes) y con pantallas de
+             las que sí podría traer datos, no se sabe si está todo: el resumen no dice «Todo al día» (11-11-2026,
+             revisión), dice solo las salidas, que sí se saben, en su tono. */
+          const sinSaber = !d && ['/panel/plantilla', '/panel/horas', '/panel/diarios', '/panel/cuadrante'].some((r) => puede(r))
+          const resumen = sinSaber && p
+            ? { texto: p.salidas > 0 ? t('centros.hoy.salidas.corto').replace('{n}', p.revisadas).replace('{t}', p.salidas) : t('centros.hoy.sin.salidas'),
+              tono: p.salidas === 0 ? 'neutro' : p.revisadas === p.salidas ? 'ok' : 'falta' }
+            : { texto: porMirar ? t('centros.hoy.por.mirar').replace('{n}', porMirar) : t('centros.hoy.al.dia'), tono: porMirar ? 'falta' : 'ok' }
           const abierto = !!abiertos[c]
           return (
             <div key={c} className="rounded-xl border border-dark-800 bg-dark-900/40 p-3" data-centro={c}>
@@ -260,8 +268,8 @@ function ComoVaCadaCentro({ centers, datos, porCentro, hoyIso, puede, ir, t }) {
                 {/* Solo en el móvil: el resumen de la fila, que abre y cierra sus datos. */}
                 {datosC.length > 0 && (
                   <button type="button" aria-expanded={abierto} onClick={() => setAbiertos((a) => ({ ...a, [c]: !a[c] }))}
-                    className={`flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[12.5px] font-medium sm:hidden ${TONO_DATO[porMirar ? 'falta' : 'ok']}`}>
-                    {porMirar ? t('centros.hoy.por.mirar').replace('{n}', porMirar) : t('centros.hoy.al.dia')}
+                    className={`flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[12.5px] font-medium sm:hidden ${TONO_DATO[resumen.tono]}`}>
+                    {resumen.texto}
                     <ChevronDown size={14} aria-hidden="true" className={`transition-transform ${abierto ? 'rotate-180' : ''}`} />
                   </button>
                 )}

@@ -1012,7 +1012,8 @@ export default function PanelLayout() {
       <PrimerosPasos
         puedeVer={(k) => itemVisible({ to: k === 'dashboard' ? '/panel' : `/panel/${k}` })}
         idUsuario={admin?.id || admin?.sub} />
-      <LiveNotifier center={center} centers={centers} ve={(k) => moduloOk(k) && (SIEMPRE_VISIBLES.has(k) || canSee(k))} />
+      <LiveNotifier center={center} centers={centers} ve={(k) => moduloOk(k) && (SIEMPRE_VISIBLES.has(k) || canSee(k))}
+        sobreEscribir={curKey === 'chat'} />
       {/* En el Centro de IA la burbuja sobra (y en el móvil tapaba el botón de enviar). */}
       {/* Con la hoja del menú abierta, la burbuja se esconde (sin desmontarla: no se pierde la conversación): iba por
           encima y tapaba el número rojo de Días libres (foto del 10-11-2026). `setCenter`: para elegir el centro
