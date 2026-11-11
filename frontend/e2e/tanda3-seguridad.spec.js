@@ -212,3 +212,68 @@ test.describe('S3 · el portal guarda el id de quien entra con contraseña', () 
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })
+
+/* Revisión V11 (11-11-2026): el selector de centro de arriba (getVisibleCenters de panel/auth.js) cruza las naves de la
+   empresa con las del usuario con la MISMA regla que el servidor. Con trozos en las dos direcciones, a quien solo tiene
+   NORTE2 le ofrecía NORTE, que el servidor ya le niega con un 403. Con códigos (OGA5, DGA1) o sin naves, nada cambia. */
+async function selector(page, { org, mios }) {
+  await entrarComoAdmin(page, { centros: org })
+  await page.addInitScript((mios) => {
+    const a = JSON.parse(localStorage.getItem('flota_admin'))
+    localStorage.setItem('flota_admin', JSON.stringify({ ...a, allowed_centers: mios }))
+    localStorage.setItem('panel_center', 'Todos')
+  }, mios)
+  await simularApi(page, 'vacio')
+  await page.goto('/panel', { waitUntil: 'domcontentloaded' })
+  const arriba = page.locator('header').first()
+  await expect(arriba).toBeVisible({ timeout: 30000 })
+  return arriba
+}
+
+const boton = (arriba, nombre) => arriba.getByRole('button', { name: nombre, exact: true })
+
+test.describe('V11 · el selector de centro no ofrece lo que el servidor rechaza', () => {
+  test('con solo NORTE2, sale NORTE2 fijo y no NORTE', async ({ page }) => {
+    const fallos = vigilar(page)
+    const arriba = await selector(page, { org: ['NORTE', 'NORTE2', 'SUR'], mios: ['NORTE2'] })
+    await expect(arriba.getByText('NORTE2', { exact: true })).toBeVisible()
+    await expect(boton(arriba, 'NORTE')).toHaveCount(0)
+    await expect(arriba.getByText('NORTE', { exact: true })).toHaveCount(0)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('con NORTE2 y MADRID SUR, esos dos (ni NORTE ni MADRID)', async ({ page }) => {
+    const arriba = await selector(page, { org: ['NORTE', 'NORTE2', 'MADRID', 'MADRID SUR'], mios: ['NORTE2', 'MADRID SUR'] })
+    await expect(boton(arriba, 'NORTE2')).toBeVisible()
+    await expect(boton(arriba, 'MADRID SUR')).toBeVisible()
+    await expect(boton(arriba, 'NORTE')).toHaveCount(0)
+    await expect(boton(arriba, 'MADRID')).toHaveCount(0)
+  })
+
+  // Controles: con códigos de nave o sin naves asignadas, el selector es el de siempre.
+  const ORG = ['OGA5', 'DGA1', 'DGA2']
+
+  test('con códigos: solo DGA1, sale DGA1 fijo', async ({ page }) => {
+    const arriba = await selector(page, { org: ORG, mios: ['DGA1'] })
+    await expect(arriba.getByText('DGA1', { exact: true })).toBeVisible()
+    await expect(boton(arriba, 'OGA5')).toHaveCount(0)
+  })
+
+  test('con códigos: OGA5 y DGA2, esos dos botones', async ({ page }) => {
+    const arriba = await selector(page, { org: ORG, mios: ['OGA5', 'DGA2'] })
+    await expect(boton(arriba, 'OGA5')).toBeVisible()
+    await expect(boton(arriba, 'DGA2')).toBeVisible()
+    await expect(boton(arriba, 'DGA1')).toHaveCount(0)
+  })
+
+  test('con el nombre largo de la nave guardado en Usuarios, sale su código', async ({ page }) => {
+    const arriba = await selector(page, { org: ORG, mios: ['AMZL OGA5 SANTIAGO XPT'] })
+    await expect(arriba.getByText('OGA5', { exact: true })).toBeVisible()
+    await expect(boton(arriba, 'DGA1')).toHaveCount(0)
+  })
+
+  test('sin naves asignadas, todas las de la empresa', async ({ page }) => {
+    const arriba = await selector(page, { org: ORG, mios: [] })
+    for (const c of ORG) await expect(boton(arriba, c)).toBeVisible()
+  })
+})

@@ -563,6 +563,19 @@ def _limitado(*centros):
     # La otra dirección, que se queda como estaba: el código permitido dentro de un nombre sucio de la base.
     (["OGA5"], "AMZL OGA5 SANTIAGO XPT", True), (["OGA5"], "amzl oga5 santiago xpt", True),
     (["DGA1"], "AMZL OGA5 SANTIAGO XPT", False),
+    # Revisión V3 (11-11-2026): naves con nombre de palabras. El pedido dentro del permitido solo pasa si es IGUAL
+    # (recortado, sin mayúsculas) o es el CÓDIGO de nave que el permitido lleva dentro; otra palabra del nombre, no.
+    (["MADRID SUR"], "MADRID", False), (["MADRID SUR"], "madrid", False), (["MADRID SUR"], " MADRID ", False),
+    (["MADRID SUR"], "SUR", False),
+    (["MADRID SUR"], "MADRID SUR", True), (["MADRID SUR"], "madrid sur", True), (["MADRID SUR"], " MADRID SUR ", True),
+    (["AMZL OGA5 SANTIAGO XPT"], "AMZL", False), (["AMZL OGA5 SANTIAGO XPT"], "SANTIAGO", False),
+    (["AMZL OGA5 SANTIAGO XPT"], "XPT", False), (["AMZL OGA5 SANTIAGO XPT"], "AMZL OGA5", False),
+    (["AMZL OGA5 SANTIAGO XPT"], "AMZL OGA5 SANTIAGO XPT", True), (["amzl oga5 santiago xpt"], "OGA5", True),
+    (["DGA1-NORTE"], "DGA1", True), (["DGA1-NORTE"], "NORTE", False), (["NORTE2"], "NORTE", False),
+    # La dirección que NO se puede cerrar sin saber las naves de la empresa: el permitido dentro del pedido es lo que
+    # deja a «OGA5» leer el nombre sucio «AMZL OGA5 SANTIAGO XPT» de la base; con naves de palabras, a «MADRID» le
+    # deja pedir «MADRID SUR» (y a «NORTE», «NORTE2»). Se queda como estaba, a sabiendas.
+    (["MADRID"], "MADRID SUR", True), (["NORTE"], "NORTE2", True),
 ])
 def test_p11_solo_el_codigo_entero(permitidos, pedido, ve):
     assert server._user_can_see_center(_limitado(*permitidos), pedido) is ve
@@ -634,3 +647,93 @@ async def test_p31_ficha_conductor_desde_incorporaciones_con_una_baja_de_otra_na
         await server.onb_ficha_conductor("p-pedro", {"usar_correo": True, "nueva": True}, JEFE_DGA1)
     assert e.value.status_code == 403
     assert _foto(s1) == antes and "driver_id" not in s1["incorporaciones"].docs[0]
+
+
+# V3 (revisión, 11-11-2026) · Por una ruta de verdad: con naves de palabras, quien solo tiene «MADRID SUR» pedía
+#      «MADRID» y la consulta (un $regex sin anclar) le traía las dos naves.
+
+@pytest.fixture
+def madrid(monkeypatch):
+    tenant = Db()
+    tenant["drivers"] = Col([
+        {"id": "d-m", "name": "ANA MADRID", "center": "MADRID", "active": True},
+        {"id": "d-s", "name": "BEA SUR", "center": "MADRID SUR", "active": True},
+    ])
+    for col in ("vehicles", "shift_requests", "shifts", "daily_assignments", "suspensiones"):
+        tenant[col] = Col([])
+    monkeypatch.setattr(server, "db", tenant)
+    return tenant
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("pedido", ["MADRID", "madrid", "SUR"])
+async def test_v3_drivers_de_otra_nave_con_una_palabra_del_nombre_da_403(madrid, pedido):
+    with pytest.raises(HTTPException) as e:
+        await server.get_drivers(pedido, _limitado("MADRID SUR"))
+    assert e.value.status_code == 403
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v3_drivers_de_su_nave_con_nombre_de_palabras_como_siempre(madrid):
+    assert [d["id"] for d in await server.get_drivers("madrid sur", _limitado("MADRID SUR"))] == ["d-s"]
+    # El dueño y quien no tiene naves asignadas, como antes (la regex sin anclar sigue siendo la de siempre).
+    for u in ({"account_type": "owner", "allowed_centers": ["MADRID SUR"]}, _limitado()):
+        assert sorted(d["id"] for d in await server.get_drivers("MADRID", u)) == ["d-m", "d-s"]
+
+
+# V11 (revisión, 11-11-2026) · _centros_que_ve (GET /stats/centros-hoy) con la MISMA regla que _user_can_see_center:
+#      antes, con los trozos en las dos direcciones, a quien solo tiene NORTE2 le salía la fila de NORTE.
+
+NAVES_CODIGO = ["OGA5", "DGA1", "DGA2"]
+NAVES_NOMBRE = ["NORTE", "NORTE2", "MADRID", "MADRID SUR", "SUR"]
+
+
+@pytest.mark.parametrize("permitidos,ve", [
+    (["NORTE2"], ["NORTE2"]),
+    (["MADRID SUR"], ["MADRID SUR"]),
+    (["NORTE2", "MADRID SUR"], ["NORTE2", "MADRID SUR"]),
+    # La dirección que no se puede cerrar (la de _user_can_see_center): el permitido dentro del nombre de la nave.
+    (["NORTE"], ["NORTE", "NORTE2"]),
+    (["MADRID"], ["MADRID", "MADRID SUR"]),
+    (["NORTE2", "SUR"], ["NORTE2", "MADRID SUR", "SUR"]),
+])
+def test_v11_centros_que_ve_con_naves_de_palabras(permitidos, ve):
+    assert server._centros_que_ve(_limitado(*permitidos), NAVES_NOMBRE) == ve
+    # En la cuenta dueña, sus centros de Usuarios se aplican igual (lo que ya decía _centros_que_ve).
+    assert server._centros_que_ve({"account_type": "owner", "allowed_centers": permitidos}, NAVES_NOMBRE) == ve
+
+
+@pytest.mark.parametrize("user,ve", [
+    (_limitado("DGA1"), ["DGA1"]),
+    (_limitado("OGA5", "DGA2"), ["OGA5", "DGA2"]),
+    (_limitado("oga5 "), ["OGA5"]),
+    (_limitado("AMZL OGA5 SANTIAGO XPT"), ["OGA5"]),
+    ({"account_type": "owner", "allowed_centers": ["DGA1"]}, ["DGA1"]),
+    (_limitado(), NAVES_CODIGO),
+    ({"account_type": "dsp"}, NAVES_CODIGO),
+    ({"account_type": "owner"}, NAVES_CODIGO),
+    ({"sa": True, "allowed_centers": ["DGA1"]}, NAVES_CODIGO),
+])
+def test_v11_centros_que_ve_con_codigos_y_sin_naves_como_antes(user, ve):
+    assert server._centros_que_ve(user, NAVES_CODIGO) == ve
+
+
+@pytest.mark.parametrize("permitidos", [["NORTE2"], ["NORTE"], ["MADRID SUR"], ["MADRID"], ["SUR"], ["NORTE2", "SUR"],
+                                        ["OGA5"], ["AMZL OGA5 SANTIAGO XPT"], ["oga5 "], ["DGA1-NORTE"]])
+def test_v11_la_lista_y_el_permiso_dicen_lo_mismo(permitidos):
+    u = _limitado(*permitidos)
+    naves = NAVES_NOMBRE + NAVES_CODIGO
+    assert server._centros_que_ve(u, naves) == [c for c in naves if server._user_can_see_center(u, c)]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v11_centros_hoy_no_trae_la_fila_de_otra_nave(monkeypatch):
+    b, g = Db(), Db()
+    g.organizations.docs.append({"id": "o1", "account_type": "dsp", "db_name": server._current_db_name.get(),
+                                 "centers": ["NORTE", "NORTE2", "SUR"]})
+    monkeypatch.setattr(server, "db", b)
+    monkeypatch.setattr(server, "global_db", g)
+    r = await server.stats_centros_hoy(_limitado("NORTE2"))
+    assert [x["centro"] for x in r["centros"]] == ["NORTE2"]
+    r = await server.stats_centros_hoy(_limitado())
+    assert [x["centro"] for x in r["centros"]] == ["NORTE", "NORTE2", "SUR"]

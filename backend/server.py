@@ -16430,24 +16430,23 @@ def _user_can_see_center(user: dict, center: str) -> bool:
     c = (center or "").upper()
     if not c:
         return any(p for p in ac)          # centro vacío: como siempre ("" está dentro de cualquier permitido)
-    # El pedido, dentro del permitido SOLO como palabra entera (11-11-2026, revisión P11/P20): con el `c in p` a
-    # secas, alguien limitado a «OGA5» pedía «GA» (o a «DGA1», «1») y la consulta casaba otras naves. La otra
-    # dirección (el código permitido dentro de un nombre sucio de la base) se queda como estaba.
-    return any(p.upper() in c or _palabra_entera_en(c.strip(), p.upper()) for p in ac if p)
+    return any(_centro_casa_con_permitido(c, p) for p in ac if p)
 
 
-def _palabra_entera_en(trozo: str, texto: str) -> bool:
-    """True si `trozo` está en `texto` sin una letra ni una cifra pegada delante o detrás («OGA5» en
-    «AMZL OGA5 SANTIAGO XPT» sí; «GA» en «OGA5», no)."""
-    if not trozo:
-        return False
-    i = texto.find(trozo)
-    while i >= 0:
-        fin = i + len(trozo)
-        if (i == 0 or not texto[i - 1].isalnum()) and (fin == len(texto) or not texto[fin].isalnum()):
-            return True
-        i = texto.find(trozo, i + 1)
-    return False
+def _centro_casa_con_permitido(centro_upper: str, permitido: str) -> bool:
+    """La regla de un centro frente a UNO de los permitidos de un usuario. La usan _user_can_see_center y
+    _centros_que_ve, y la copia `centroCasaConPermitido` de frontend/src/panel/auth.js (el selector de arriba).
+
+    - El permitido dentro del centro, como siempre: «OGA5» lee el nombre sucio «AMZL OGA5 SANTIAGO XPT» de la base.
+    - El centro dentro del permitido, SOLO si es IGUAL (recortado) o es el CÓDIGO de nave que el permitido lleva
+      dentro (_CENTRO_RE: «OGA5» en «AMZL OGA5 SANTIAGO XPT»). 11-11-2026, revisión V3: la palabra entera no bastaba
+      con naves de palabras («MADRID» y «MADRID SUR»: quien solo tenía «MADRID SUR» pedía «MADRID» y la consulta le
+      traía las dos); antes de P11/P20 pasaba cualquier trozo («GA» con «OGA5»)."""
+    p = str(permitido).upper()
+    if p in centro_upper:
+        return True
+    pedido = centro_upper.strip()
+    return bool(pedido) and (pedido == p.strip() or pedido in _CENTRO_RE.findall(p))
 
 
 async def _filtro_por_vehiculos(user: dict, center: Optional[str] = None) -> dict:
@@ -29976,7 +29975,9 @@ def _centros_que_ve(user: dict, centros: list) -> list:
     ac = [str(p).upper() for p in (user.get("allowed_centers") or []) if p]
     if not ac:
         return [c for c in centros if _user_can_see_center(user, c)]
-    return [c for c in centros if any(p in c.upper() or c.upper() in p for p in ac)]
+    # La MISMA regla que _user_can_see_center (11-11-2026, revisión V11): con los trozos en las dos direcciones, a quien
+    # solo tiene NORTE2 le salía aquí la fila de NORTE, que el resto del panel ya le niega.
+    return [c for c in centros if any(_centro_casa_con_permitido(str(c).upper(), p) for p in ac)]
 
 
 @api_router.get("/stats/centros-hoy")
