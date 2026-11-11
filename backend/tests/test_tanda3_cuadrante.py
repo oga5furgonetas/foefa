@@ -215,81 +215,220 @@ CAMBIOS = [("d1", MAN, "1", "N/T"),          # trabajaba y ahora libra: se avisa
            ("d4", PAS, "", "1")]             # no tenía nada y ahora trabaja: se avisa
 
 
+async def _celdas(t, cambios):
+    """Celdas tocadas a mano en la rejilla, con el flujo de verdad."""
+    return await server.cuadrante_celdas({"center": "OGA5", "cambios": [
+        {"driver_id": d, "fecha": f, "cod": c} for d, f, c in cambios]}, OFI)
+
+
+async def _previa():
+    r = await server.cuadrante_avisos_previa({"center": "OGA5"}, OFI)
+    return [(p["driver_id"], [(d["fecha"], d["antes"], d["ahora"]) for d in p["dias"]]) for p in r["personas"]]
+
+
+def _bandeja(t):
+    return sorted(a["user_id"] for a in t["avisos_movil"].docs)
+
+
+PEND = "cuadrante_avisos_pendientes"
+
+
 @pytest.mark.asyncio(loop_scope="session")
 async def test_la_previa_lista_lo_que_cambia_en_los_proximos_14_dias(base):
     assert (await _aceptar(base.t, CAMBIOS))["aplicadas"] == 4
     r = await server.cuadrante_avisos_previa({"center": "OGA5"}, OFI)
-    assert r["hasta"] == "2026-11-01"
+    assert set(r) == {"personas", "hasta"} and r["hasta"] == "2026-11-01"
     assert [(p["driver_id"], p["nombre"], [(d["fecha"], d["antes"], d["ahora"], d["texto"]) for d in p["dias"]])
             for p in r["personas"]] == [
         ("d1", "Ana", [(MAN, "trabajas", "libras", "lunes 19/10: libras")]),
         ("d4", "Sara", [(PAS, "sin turno", "trabajas", "martes 20/10: trabajas")])]
-    assert len(r["cambios"]) == 1
-    # La previa no manda nada ni marca nada.
+    # Cada celda tocada de hoy en adelante queda apuntada con lo que el conductor sabía (también la de dentro de 20
+    # días y la de 1 → T, que no se enseñan); la previa no manda nada ni marca nada.
+    assert sorted((d["driver_id"], d["fecha"], d["dicho"]) for d in base.t[PEND].docs) == [
+        ("d1", MAN, "trabajas"), ("d2", MAN, "trabajas"), ("d3", LEJOS, "sin turno"), ("d4", PAS, "sin turno")]
     assert base.avisos == [] and base.t["avisos_movil"].docs == []
-    assert "avisado_en" not in base.t["cuadrante_cambios"].docs[0]
+    assert not any(d.get("avisado_en") or d.get("visto") for d in base.t[PEND].docs)
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_un_cambio_deshecho_o_devuelto_a_como_estaba_no_avisa(base):
     await _aceptar(base.t, CAMBIOS)
     await server.cuadrante_deshacer({"center": "OGA5"}, OFI)
-    assert (await server.cuadrante_avisos_previa({"center": "OGA5"}, OFI))["personas"] == []
+    assert await _previa() == []
     # Cambiado a mano y vuelto a dejar como estaba: tampoco.
-    await server.cuadrante_celdas({"center": "OGA5", "cambios": [{"driver_id": "d1", "fecha": MAN, "cod": "N/T"}]}, OFI)
-    await server.cuadrante_celdas({"center": "OGA5", "cambios": [{"driver_id": "d1", "fecha": MAN, "cod": "1"}]}, OFI)
-    assert (await server.cuadrante_avisos_previa({"center": "OGA5"}, OFI))["personas"] == []
+    await _celdas(base.t, [("d1", MAN, "N/T")])
+    await _celdas(base.t, [("d1", MAN, "1")])
+    assert await _previa() == []
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_enviar_manda_un_aviso_por_persona_y_no_lo_repite(base):
     await _aceptar(base.t, CAMBIOS)
-    await server.cuadrante_celdas({"center": "OGA5", "cambios": [{"driver_id": "d1", "fecha": PAS, "cod": "V"}]}, OFI)
+    await _celdas(base.t, [("d1", PAS, "V")])
     r = await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI)
-    assert r["avisados"] == 2 and [p["driver_id"] for p in r["personas"]] == ["d1", "d4"]
+    assert (r["avisados"], r["descartados"]) == (2, 0) and [p["driver_id"] for p in r["personas"]] == ["d1", "d4"]
     bandeja = sorted((a["user_id"], a["titulo"], a["cuerpo"], a["url"]) for a in base.t["avisos_movil"].docs)
     assert bandeja == [
         ("d1", "Cambios en tu cuadrante", "lunes 19/10: libras · martes 20/10: vacaciones", "/conductor"),
         ("d4", "Cambios en tu cuadrante", "martes 20/10: trabajas", "/conductor")]
     assert sorted(a.ids[0] for a in base.avisos) == ["d1", "d4"]          # y el push, uno por persona
-    assert all(c.get("avisado_en") and c.get("avisado_hasta") == "2026-11-01"
-               for c in base.t["cuadrante_cambios"].docs)
+    # Lo que se le dijo a cada uno queda como lo que sabe, con quién y cuándo.
+    dichos = {(d["driver_id"], d["fecha"]): d for d in base.t[PEND].docs}
+    assert dichos[("d1", MAN)]["dicho"] == "libras" and dichos[("d1", PAS)]["dicho"] == "vacaciones"
+    assert dichos[("d1", MAN)]["avisado_por"] == "Oficina" and dichos[("d1", MAN)]["avisado_en"]
     # Ya avisado: la previa sale vacía y volver a pulsar no manda nada.
-    assert (await server.cuadrante_avisos_previa({"center": "OGA5"}, OFI))["personas"] == []
+    assert await _previa() == []
     assert (await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI))["avisados"] == 0
     assert len(base.t["avisos_movil"].docs) == 2
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_dos_envios_a_la_vez_no_avisan_dos_veces(base, monkeypatch):
-    await _aceptar(base.t, CAMBIOS)
-    original = server._cua_avisos_registros
-    dentro = []
-
-    async def otro_pulsa_a_la_vez(center, hasta):
-        regs = await original(center, hasta)
-        # La primera vez, justo después de leer los registros, otra persona manda el suyo entero.
-        if not dentro:
-            dentro.append(1)
-            await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI)
-        return regs
-
-    monkeypatch.setattr(server, "_cua_avisos_registros", otro_pulsa_a_la_vez)
-    r = await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI)
-    assert r["avisados"] == 0
-    assert sorted(a["user_id"] for a in base.t["avisos_movil"].docs) == ["d1", "d4"]
+async def test_garantia_a_35_cambios_seguidos_no_pierden_ningun_aviso(base):
+    """(a) «Deshacer» guarda los 30 últimos registros por nave; el aviso ya no sale de ahí y no pierde nada."""
+    await _celdas(base.t, [("d1", MAN, "N/T")])                              # el primero de todos
+    for i in range(34):
+        await _celdas(base.t, [("d2", PAS, "V" if i % 2 == 0 else "L")])
+    # «Deshacer» sigue exactamente igual: sus 30 últimos registros.
+    assert len(base.t["cuadrante_cambios"].docs) == 30
+    assert await _previa() == [("d1", [(MAN, "trabajas", "libras")]), ("d2", [(PAS, "sin turno", "libras")])]
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_driver_ids_limita_a_quien_se_avisa_y_los_desmarcados_no_vuelven(base):
+async def test_garantia_b_un_dia_lejano_sale_cuando_entra_aunque_el_cambio_tenga_un_mes(base, monkeypatch):
+    lejisimo = "2026-11-27"                                                   # hoy + 40
+    await _celdas(base.t, [("d3", lejisimo, "N/T")])
+    assert await _previa() == []                                              # todavía fuera de los 14 días
+    for col in ("cuadrante_cambios", PEND):                                   # el cambio se hizo hace un mes
+        for d in base.t[col].docs:
+            d["en"] = "2026-09-01T10:00:00+00:00"
+    monkeypatch.setattr(server, "_dia_negocio", lambda: "2026-11-17")       # ya está dentro
+    assert await _previa() == [("d3", [(lejisimo, "sin turno", "libras")])]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_garantia_c_un_cambio_entre_la_previa_y_el_envio_no_queda_como_avisado(base):
+    await _aceptar(base.t, CAMBIOS)
+    assert [p for p, _d in await _previa()] == ["d1", "d4"]
+    await _celdas(base.t, [("d2", MAN, "V")])                                # Luis, con la ventana abierta
+    r = await server.cuadrante_avisos_enviar({"center": "OGA5", "driver_ids": ["d1", "d4"], "descartar_ids": []}, OFI)
+    assert [p["driver_id"] for p in r["personas"]] == ["d1", "d4"] and _bandeja(base.t) == ["d1", "d4"]
+    # A Luis nadie lo ha visto en la lista: no se le avisa ni queda como avisado; sale la próxima vez.
+    assert await _previa() == [("d2", [(MAN, "trabajas", "vacaciones")])]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_garantia_d_el_desmarcado_no_se_avisa_ni_vuelve_y_si_se_deshace_no_recibe_nada(base):
+    await _aceptar(base.t, CAMBIOS)
+    r = await server.cuadrante_avisos_enviar({"center": "OGA5", "driver_ids": ["d4"], "descartar_ids": ["d1"]}, OFI)
+    assert (r["avisados"], r["descartados"]) == (1, 1) and _bandeja(base.t) == ["d4"]
+    assert await _previa() == []                                              # mientras su día siga igual, no sale
+    # Se deshace la propuesta: Ana vuelve a trabajar, que es lo que ella sabía, y no recibe nada. A Sara sí se le
+    # avisó de su turno, y ahora ya no lo tiene.
+    await server.cuadrante_deshacer({"center": "OGA5"}, OFI)
+    assert await _previa() == [("d4", [(PAS, "trabajas", "sin turno")])]
+    # Si su día cambia a otra cosa, vuelve a salir con el «antes» de verdad (lo que ella sabe), no con lo desmarcado.
+    await _celdas(base.t, [("d1", MAN, "V")])
+    assert ("d1", [(MAN, "trabajas", "vacaciones")]) in await _previa()
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_garantia_d_desmarcado_y_cambiado_a_otra_cosa_dice_lo_que_sabia(base):
+    await _aceptar(base.t, CAMBIOS)
+    await server.cuadrante_avisos_enviar({"center": "OGA5", "driver_ids": [], "descartar_ids": ["d1", "d4"]}, OFI)
+    assert base.t["avisos_movil"].docs == [] and await _previa() == []
+    await _celdas(base.t, [("d1", MAN, "V")])
+    assert await _previa() == [("d1", [(MAN, "trabajas", "vacaciones")])]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_garantia_e_dos_envios_a_la_vez_no_avisan_dos_veces(base, monkeypatch):
+    await _aceptar(base.t, CAMBIOS)
+    original = server._cua_avisos_calcular
+    dentro = []
+
+    async def otro_pulsa_a_la_vez(center):
+        leido = await original(center)
+        # La primera vez, justo después de leer lo pendiente, otra persona manda el suyo entero.
+        if not dentro:
+            dentro.append(1)
+            await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI)
+        return leido
+
+    monkeypatch.setattr(server, "_cua_avisos_calcular", otro_pulsa_a_la_vez)
+    r = await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI)
+    assert r["avisados"] == 0 and r["personas"] == []
+    assert _bandeja(base.t) == ["d1", "d4"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_garantia_e_avisado_y_deshecho_despues_se_avisa_otra_vez(base):
+    await _aceptar(base.t, CAMBIOS)
+    await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI)
+    await server.cuadrante_deshacer({"center": "OGA5"}, OFI)
+    assert _celda(base.t, "d1", MAN)["cod"] == "1"
+    # Se le dijo «libras» y ya no es verdad: vuelve a trabajar. A Sara se le quita el turno que se le dijo.
+    assert await _previa() == [("d1", [(MAN, "libras", "trabajas")]), ("d4", [(PAS, "trabajas", "sin turno")])]
+    assert (await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI))["avisados"] == 2
+    assert await _previa() == []
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_driver_ids_limita_y_quien_no_esta_en_ninguna_lista_sigue_pendiente(base):
     await _aceptar(base.t, CAMBIOS)
     r = await server.cuadrante_avisos_enviar({"center": "OGA5", "driver_ids": ["d4"]}, OFI)
-    assert r["avisados"] == 1 and [p["driver_id"] for p in r["personas"]] == ["d4"]
-    assert [a["user_id"] for a in base.t["avisos_movil"].docs] == ["d4"]
-    assert (await server.cuadrante_avisos_previa({"center": "OGA5"}, OFI))["personas"] == []
+    assert r["avisados"] == 1 and [p["driver_id"] for p in r["personas"]] == ["d4"] and _bandeja(base.t) == ["d4"]
+    # Ana no estaba ni en una lista ni en la otra: no se le ha tocado nada y sale la próxima vez.
+    assert await _previa() == [("d1", [(MAN, "trabajas", "libras")])]
     # Una lista vacía es «a nadie», no «a todos».
-    await server.cuadrante_celdas({"center": "OGA5", "cambios": [{"driver_id": "d2", "fecha": MAN, "cod": "V"}]}, OFI)
     assert (await server.cuadrante_avisos_enviar({"center": "OGA5", "driver_ids": []}, OFI))["avisados"] == 0
+    assert await _previa() == [("d1", [(MAN, "trabajas", "libras")])]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_si_el_envio_a_uno_falla_sus_dias_siguen_pendientes(base, monkeypatch):
+    await _aceptar(base.t, CAMBIOS)
+    original = server._avisar_usuarios
+
+    async def falla_con_ana(ids, *a, **k):
+        if ids == ["d1"]:
+            raise RuntimeError("sin red")
+        return await original(ids, *a, **k)
+
+    monkeypatch.setattr(server, "_avisar_usuarios", falla_con_ana)
+    r = await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI)
+    assert r["avisados"] == 1 and [p["driver_id"] for p in r["personas"]] == ["d4"]
+    assert await _previa() == [("d1", [(MAN, "trabajas", "libras")])]
+    ana = next(d for d in base.t[PEND].docs if (d["driver_id"], d["fecha"]) == ("d1", MAN))
+    assert ana["dicho"] == "trabajas" and not ana.get("avisado_en")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_si_apuntar_falla_el_cuadrante_se_guarda_y_se_deshace_igual(base):
+    class Rota(Col):
+        def find(self, *a, **k):
+            raise RuntimeError("base caída")
+
+        async def bulk_write(self, *a, **k):
+            raise RuntimeError("base caída")
+
+        async def update_one(self, *a, **k):
+            raise RuntimeError("base caída")
+
+    base.t[PEND] = Rota()
+    await _celdas(base.t, [("d1", MAN, "N/T")])
+    assert _celda(base.t, "d1", MAN)["cod"] == "N/T"
+    assert len(base.t["cuadrante_cambios"].docs) == 1
+    await server.cuadrante_deshacer({"center": "OGA5"}, OFI)
+    assert _celda(base.t, "d1", MAN)["cod"] == "1"
+    assert base.t["cuadrante_cambios"].docs[0]["deshecho"] is True
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_previa_borra_lo_pendiente_de_dias_ya_pasados(base, monkeypatch):
+    await _aceptar(base.t, CAMBIOS)
+    monkeypatch.setattr(server, "_dia_negocio", lambda: PAS)                  # el lunes ya pasó
+    assert await _previa() == [("d4", [(PAS, "sin turno", "trabajas")])]
+    assert sorted({d["fecha"] for d in base.t[PEND].docs}) == [PAS, LEJOS]
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -297,7 +436,7 @@ async def test_una_ficha_de_baja_o_fusionada_no_se_avisa(base):
     base.t["drivers"].docs[0]["active"] = False                           # Ana, de baja
     base.t["drivers"].docs[3]["merged_into"] = "d2"                       # Sara, fusionada
     await _aceptar(base.t, CAMBIOS)
-    assert (await server.cuadrante_avisos_previa({"center": "OGA5"}, OFI))["personas"] == []
+    assert await _previa() == []
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -314,28 +453,12 @@ async def test_avisar_pide_un_centro_y_que_sea_tuyo(base):
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_avisado_y_deshecho_despues_se_avisa_otra_vez(base):
-    await _aceptar(base.t, CAMBIOS)
-    await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI)
-    await server.cuadrante_deshacer({"center": "OGA5"}, OFI)
-    assert _celda(base.t, "d1", MAN)["cod"] == "1"
-    r = await server.cuadrante_avisos_previa({"center": "OGA5"}, OFI)
-    # Se le dijo «libras» y ya no es verdad: vuelve a trabajar. A Sara se le quita el turno que se le dijo.
-    assert [(p["driver_id"], [(d["antes"], d["ahora"]) for d in p["dias"]]) for p in r["personas"]] == [
-        ("d1", [("libras", "trabajas")]), ("d4", [("trabajas", "sin turno")])]
-    assert (await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI))["avisados"] == 2
-    assert (await server.cuadrante_avisos_previa({"center": "OGA5"}, OFI))["personas"] == []
-
-
-@pytest.mark.asyncio(loop_scope="session")
 async def test_un_cambio_lejano_sale_cuando_entra_en_los_14_dias(base, monkeypatch):
     await _aceptar(base.t, CAMBIOS)
     await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI)
     # Una semana después, el día 7 de noviembre ya está dentro: se avisa a Pepe (y solo eso).
     monkeypatch.setattr(server, "_dia_negocio", lambda: "2026-10-25")
-    r = await server.cuadrante_avisos_previa({"center": "OGA5"}, OFI)
-    assert [(p["driver_id"], [(d["fecha"], d["antes"], d["ahora"]) for d in p["dias"]]) for p in r["personas"]] == [
-        ("d3", [(LEJOS, "sin turno", "libras")])]
+    assert await _previa() == [("d3", [(LEJOS, "sin turno", "libras")])]
 
 
 @pytest.mark.asyncio(loop_scope="session")

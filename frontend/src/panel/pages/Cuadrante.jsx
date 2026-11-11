@@ -158,7 +158,9 @@ function Modal({ titulo, onCerrar, children, ancho = 'max-w-2xl' }) {
 /* ── AVISAR A LOS CONDUCTORES (11-11-2026, cuadrante-8) ──────────────────────
    Al cambiar el cuadrante al conductor no le llegaba nada. Un botón, nunca solo: primero se ve a quién y qué (de hoy a
    14 días, solo lo que de verdad cambia para él), se desmarca a quien no se quiera avisar, y se manda UN aviso por
-   persona a su app. El servidor lo vuelve a calcular al mandar: no se fía de esta lista. */
+   persona (a la bandeja de la app y como notificación). El servidor lo vuelve a calcular al mandar: no se fía de esta
+   lista. Van los marcados y los desmarcados por separado (11-11-2026, revisión): a quien aparezca después de abrir la
+   ventana no se le toca nada y sale la próxima vez. */
 function AvisarConductores({ center, onCerrar, onHecho }) {
   const [previa, setPrevia] = useState(null)
   const [err, setErr] = useState('')
@@ -184,7 +186,8 @@ function AvisarConductores({ center, onCerrar, onHecho }) {
   const enviar = async () => {
     setEnviando(true); setErr('')
     try {
-      const { data } = await cuadranteAvisosEnviar(center, [...marcados])
+      const desmarcados = lista(previa?.personas).map((p) => p.driver_id).filter((did) => !marcados.has(did))
+      const { data } = await cuadranteAvisosEnviar(center, [...marcados], desmarcados)
       onHecho(data)
     } catch (e) {
       setErr(e?.response?.data?.detail || 'No se han podido mandar los avisos.')
@@ -204,7 +207,7 @@ function AvisarConductores({ center, onCerrar, onHecho }) {
         )}
         {personas.length > 0 && (
           <>
-            <p>Tienen cambios sin avisar de hoy al {fmt(previa.hasta)}. A cada uno le llega un aviso a su app con sus días:</p>
+            <p>Tienen cambios sin avisar de hoy al {fmt(previa.hasta)}. A cada uno le llega un aviso con sus días:</p>
             <ul className="max-h-[50vh] space-y-1.5 overflow-y-auto">
               {personas.map((p) => (
                 <li key={p.driver_id}>
@@ -221,8 +224,12 @@ function AvisarConductores({ center, onCerrar, onHecho }) {
                 </li>
               ))}
             </ul>
-            <p className="text-[11.5px] text-dark-500">
-              A quien desmarques no se le avisa, y esos cambios no vuelven a salir aquí.
+            <p className="text-[11.5px] text-dark-500" data-testid="avisar-como-llega">
+              Le llega a la bandeja de avisos de la app de Android y, si tiene las notificaciones activadas, también como
+              notificación. En el portal web no hay bandeja: allí solo lo ve quien activó las notificaciones.
+            </p>
+            <p className="text-[11.5px] text-dark-500" data-testid="avisar-desmarcados">
+              A quien desmarques no se le avisa de estos cambios; volverá a salir aquí si su cuadrante cambia otra vez.
             </p>
           </>
         )}

@@ -1,3 +1,4 @@
+/* global process */
 import { test, expect } from '@playwright/test'
 import { simularApi, entrarComoAdmin } from './api-simulada.js'
 
@@ -11,7 +12,11 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
 const json = (body, status = 200) => (route) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 async function reloj(page) {
-  const ahora = new Date()
+  // E2E_AHORA=AAAA-MM-DD (opcional, 11-11-2026): mueve el «ahora» a ese día para probar las semanas difíciles (un fin
+  // de mes entre el jueves y el viernes, un día 1 al 9) sin esperar a que lleguen. Sin la variable, hoy.
+  const ahora = process.env.E2E_AHORA ? new Date(`${process.env.E2E_AHORA}T10:00:00`) : new Date()
+  // entrarComoAdmin pone la caducidad del token con el reloj de Node: con el día movido, ese reloj también se mueve.
+  if (process.env.E2E_AHORA) Date.now = () => ahora.getTime()
   await page.clock.setFixedTime(ahora)
   const lunes = new Date(ahora)
   lunes.setHours(12, 0, 0, 0)
@@ -34,6 +39,9 @@ function vigilar(page) {
 }
 
 const fmt = (f) => `${f.slice(8, 10)}/${f.slice(5, 7)}`
+// Las fechas de Días libres, como las pinta la pantalla (11-11-2026, P7): la misma llamada que `fmtNum` de Turnos.jsx,
+// en el navegador. Su «2-digit» no pone el cero delante («2/12», no «02/12»): compararlas con `fmt` falla del 1 al 9.
+const fmtPet = (page, f) => page.evaluate((x) => new Date(`${x}T12:00:00`).toLocaleDateString('es', { day: '2-digit', month: '2-digit' }), f)
 
 // ── cuadrante-2 · los chips de cobertura en Peticiones ───────────────────────────────────────────────────────────
 
@@ -82,16 +90,16 @@ test('cuadrante-2: cada día pedido lleva su chip con el color de la fila Difere
   // Ana trabaja ese día: darle el libre deja la nave en 2 de 3 (rojo), con lo ya concedido y lo que piden otros.
   const ana = filaDe(page, 'ANA PÉREZ').getByTestId('chip-cobertura')
   await expect(ana).toHaveCount(2)
-  await expect(ana.nth(0)).toContainText(`${fmt(dia(9))} · en ruta 3/3 → si se lo das -1`)
+  await expect(ana.nth(0)).toContainText(`${await fmtPet(page, dia(9))} · en ruta 3/3 → si se lo das -1`)
   await expect(ana.nth(0)).toContainText('ya concedidos: 1')
   await expect(ana.nth(0)).toContainText('otras pendientes: 1')
   await expect(ana.nth(0)).toHaveClass(/bg-red-500/)
   // El día sin máxima: gris, sin inventar nada.
-  await expect(ana.nth(1)).toContainText(`${fmt(dia(10))} · sin máxima`)
+  await expect(ana.nth(1)).toContainText(`${await fmtPet(page, dia(10))} · sin máxima`)
   await expect(ana.nth(1)).toHaveClass(/bg-dark-800/)
   // El extra de quien ese día no sale a ruta suma uno: 4 de 3, por encima pero sin llegar al colchón de 2 (ámbar).
   const pepe = filaDe(page, 'PEPE RÍOS').getByTestId('chip-cobertura')
-  await expect(pepe).toContainText(`${fmt(dia(9))} · en ruta 3/3 → si se lo das +1 · ya concedidos: 1`)
+  await expect(pepe).toContainText(`${await fmtPet(page, dia(9))} · en ruta 3/3 → si se lo das +1 · ya concedidos: 1`)
   await expect(pepe).toHaveClass(/bg-amber-500/)
   // La petición de un día que ya pasó: sin chip.
   await expect(filaDe(page, 'SARA GIL').getByText('Sin contestar y el día ya pasó')).toBeVisible()
@@ -112,7 +120,7 @@ test('cuadrante-2: un libre de quien ya libra no cambia nada y lo dice; con colc
     trabaja: [] })))
   await page.goto('/panel/turnos', { waitUntil: 'domcontentloaded' })
   const chip = filaDe(page, 'SARA GIL').getByTestId('chip-cobertura')
-  await expect(chip).toContainText(`${fmt(dia(9))} · en ruta 5/3 → ya libra: no cambia`, { timeout: 15000 })
+  await expect(chip).toContainText(`${await fmtPet(page, dia(9))} · en ruta 5/3 → ya libra: no cambia`, { timeout: 15000 })
   await expect(chip).toHaveClass(/bg-emerald-500/)
   // En el title, de dónde sale la cuenta (los que bajan, la máxima, el colchón).
   await expect(chip).toHaveAttribute('title', /En ruta 4 \+ 1 que bajan de otros centros, máxima 3, colchón 2/)
@@ -132,7 +140,7 @@ test('cuadrante-2: con un servidor sin la ruta nueva (404) la bandeja sale como 
   await expect.poll(() => pedida).toBe(1)
   await expect(page.getByTestId('chip-cobertura')).toHaveCount(0)
   await expect(page.getByTestId('peticiones-error')).toHaveCount(0)
-  await expect(filaDe(page, 'ANA PÉREZ').getByText(`${fmt(dia(9))} · ${fmt(dia(10))}`)).toBeVisible()
+  await expect(filaDe(page, 'ANA PÉREZ').getByText(`${await fmtPet(page, dia(9))} · ${await fmtPet(page, dia(10))}`)).toBeVisible()
   await expect(filaDe(page, 'ANA PÉREZ').getByRole('button', { name: 'Aprobar' })).toBeEnabled()
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
@@ -156,7 +164,7 @@ test('cuadrante-2: con «Todos», una cobertura por nave; y tras aprobar se vuel
     return json({ resueltas: ['r2'], canceladas: [], saltadas: [] })(route)
   })
   await page.goto('/panel/turnos', { waitUntil: 'domcontentloaded' })
-  await expect(filaDe(page, 'LUIS GÓMEZ').getByTestId('chip-cobertura')).toContainText(`${fmt(dia(10))} · sin máxima`, { timeout: 15000 })
+  await expect(filaDe(page, 'LUIS GÓMEZ').getByTestId('chip-cobertura')).toContainText(`${await fmtPet(page, dia(10))} · sin máxima`, { timeout: 15000 })
   await expect(filaDe(page, 'ANA PÉREZ').getByTestId('chip-cobertura')).toContainText('si se lo das -1')
   expect([...pedidas].sort()).toEqual(['NORTE', 'SUR'])
   await filaDe(page, 'LUIS GÓMEZ').getByRole('button', { name: 'Aprobar' }).click()
@@ -164,6 +172,28 @@ test('cuadrante-2: con «Todos», una cobertura por nave; y tras aprobar se vuel
   // Recargada con la bandeja: ya solo la nave que queda.
   await expect.poll(() => pedidas.length).toBe(3)
   expect(pedidas[2]).toBe('NORTE')
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('cuadrante-2: un día pedido fuera del rango que se pudo pedir no lleva chip (no es «sin máxima»: no se pidió)', async ({ page }) => {
+  const fallos = vigilar(page)
+  const { dia } = await reloj(page)
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  // Ana pide un día de dentro de nueve días y Pepe uno de dentro de casi tres meses: más de los 62 días que da el servidor.
+  await page.route(/\/api\/shift-requests(\?|$)/, json({ requests: [
+    peticion('r1', 'g1', 'NORTE', 'd1', 'ANA PÉREZ', dia(9)), peticion('r5', 'g5', 'NORTE', 'd3', 'PEPE RÍOS', dia(80))] }))
+  const pedidas = []
+  await page.route(/\/api\/shift-requests\/cobertura/, (route) => {
+    pedidas.push(new URL(route.request().url()).searchParams)
+    return json(cobertura(dia, { hasta: dia(70), dias: { [dia(9)]: cobertura(dia).dias[dia(9)] } }))(route)
+  })
+  await page.goto('/panel/turnos', { waitUntil: 'domcontentloaded' })
+  await expect(filaDe(page, 'ANA PÉREZ').getByTestId('chip-cobertura')).toContainText('si se lo das -1', { timeout: 15000 })
+  // Se pidió del día 9 al 70 (el tope): el día 80 de Pepe queda fuera y no lleva chip, ni gris ni de ningún color.
+  expect(pedidas.map((p) => [p.get('desde'), p.get('hasta')])).toEqual([[dia(9), dia(70)]])
+  await expect(filaDe(page, 'PEPE RÍOS').getByText(await fmtPet(page, dia(80)), { exact: true })).toBeVisible()
+  await expect(filaDe(page, 'PEPE RÍOS').getByTestId('chip-cobertura')).toHaveCount(0)
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
@@ -225,7 +255,10 @@ test('cuadrante-1: la celda pedida lleva el punto y su title; el menú lo dice y
   await expect(celdaDe(page, 'LAURA SÁNCHEZ GIL', dia(5))).toHaveAttribute('title', /· pidió día extra \(sin contestar\)$/)
   const vecina = celdaDe(page, 'ANTONIO GARCÍA LÓPEZ', dia(2))
   await expect(vecina.getByTestId('punto-pendiente')).toHaveCount(0)
-  // El punto no cambia el tamaño de la celda: igual que la de al lado, sin punto.
+  // El punto no cambia el tamaño de la celda: igual que la de al lado, sin punto. Se mide al acabar la animación de
+  // entrada del <main> (lleva un `transform`): medida a mitad, las dos cajas salían distintas una vez de cada dos (P6).
+  await page.locator('main.animate-fade-in').first()
+    .evaluate((el) => Promise.all(el.getAnimations().map((x) => x.finished.catch(() => {}))))
   const [a, b] = [await pedida.boundingBox(), await vecina.boundingBox()]
   expect([a.width, a.height]).toEqual([b.width, b.height])
 
@@ -265,7 +298,10 @@ test('cuadrante-1: el Asistente dice las peticiones sin contestar de esas fechas
   await page.getByRole('button', { name: 'Rehacer cuadrante' }).click()
   // Del día siguiente a «hoy» en adelante: la de Sara (el lunes, antes) no entra.
   const aviso = page.getByTestId('asistente-pendientes')
-  await expect(aviso).toContainText(`Peticiones sin contestar en estas fechas: 3 días de 2 personas (ANTONIO GARCÍA LÓPEZ ${dia(3).slice(8, 10)}-${fmt(dia(4))}`)
+  // Los dos días seguidos, como los junta la pantalla: «12-13/11»; si el jueves y el viernes son de meses distintos,
+  // «31/12-01/01» (P5: la semana en que el jueves es fin de mes).
+  const tramo = dia(3).slice(5, 7) === dia(4).slice(5, 7) ? `${dia(3).slice(8, 10)}-${fmt(dia(4))}` : `${fmt(dia(3))}-${fmt(dia(4))}`
+  await expect(aviso).toContainText(`Peticiones sin contestar en estas fechas: 3 días de 2 personas (ANTONIO GARCÍA LÓPEZ ${tramo}`)
   await expect(aviso).toContainText(`LAURA SÁNCHEZ GIL ${fmt(dia(5))}`)
   await expect(aviso).not.toContainText('SARA')
   await expect(aviso.getByRole('link', { name: 'Ver en Días libres' })).toHaveAttribute('href', '/panel/turnos?centro=NORTE')
@@ -300,7 +336,7 @@ test('cuadrante-1: sin `pendientes` (un servidor de antes) el Cuadrante, el Asis
 // ── cuadrante-8 · «Avisar a los conductores» ─────────────────────────────────────────────────────────────────────
 
 const previa = (dia) => ({
-  hasta: dia(14), cambios: ['c1'],
+  hasta: dia(14),
   personas: [
     { driver_id: 'p1', nombre: 'ANTONIO GARCÍA LÓPEZ', dias: [
       { fecha: dia(3), antes: 'trabajas', ahora: 'libras', texto: 'x' },
@@ -333,10 +369,15 @@ test('cuadrante-8: el botón enseña la lista antes de mandar; desmarcar a uno m
   await expect(ventana).toContainText(`${fmt(dia(5))}: vacaciones`)
   await expect(ventana.getByRole('checkbox')).toHaveCount(2)
   await expect(ventana.getByRole('button', { name: 'Avisar a 2' })).toBeEnabled()
+  // Dice cómo le llega de verdad (P23): la bandeja es de la app; en el portal web, solo con las notificaciones.
+  await expect(ventana.getByTestId('avisar-como-llega')).toContainText('bandeja de avisos de la app de Android')
+  await expect(ventana.getByTestId('avisar-como-llega')).toContainText('En el portal web no hay bandeja')
+  await expect(ventana.getByTestId('avisar-desmarcados')).toContainText('volverá a salir aquí si su cuadrante cambia otra vez')
   await ventana.getByRole('checkbox', { name: 'Avisar a ANTONIO GARCÍA LÓPEZ' }).uncheck()
   expect(enviado).toBeNull()
   await ventana.getByRole('button', { name: 'Avisar a 1' }).click()
-  await expect.poll(() => enviado).toEqual({ center: 'NORTE', driver_ids: ['p2'] })
+  // Los marcados y los desmarcados, por separado (P8): a quien apareciera después de abrir la ventana no se le toca.
+  await expect.poll(() => enviado).toEqual({ center: 'NORTE', driver_ids: ['p2'], descartar_ids: ['p1'] })
   await expect(ventana).toHaveCount(0)
   await expect(page.getByText('Avisado 1 conductor: LAURA SÁNCHEZ GIL.')).toBeVisible()
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
@@ -348,7 +389,7 @@ test('cuadrante-8: sin cambios por avisar lo dice y no deja mandar; con un servi
   await entrarComoAdmin(page)
   await simularApi(page, 'vacio')
   await page.route(/\/api\/cuadrante\?/, json(cuadrante(dia)))
-  let respuesta = json({ personas: [], cambios: [], hasta: dia(14) })
+  let respuesta = json({ personas: [], hasta: dia(14) })
   await page.route(/\/api\/cuadrante\/avisos\/previa/, (route) => respuesta(route))
   let enviado = 0
   await page.route(/\/api\/cuadrante\/avisos\/enviar/, (route) => { enviado += 1; return json({ avisados: 0, personas: [] })(route) })
