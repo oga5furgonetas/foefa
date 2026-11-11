@@ -18,6 +18,7 @@ import LiveNotifier from './LiveNotifier'
 import AsistenteBurbuja from './AsistenteBurbuja'
 import MenuMovil from './components/MenuMovil'
 import EquipoEnLinea from './components/EquipoEnLinea'
+import casarCentro from './casarCentro'
 import { useT, LANGS } from '../i18n'
 import { usePlan } from '../lib/usePlan'
 import { sinPagos } from '../lib/plataforma'
@@ -329,7 +330,16 @@ export default function PanelLayout() {
   useEffect(() => { if (billing?.sector === 'autonomo') nav('/ruta' + window.location.search, { replace: true }) }, [billing?.sector, nav])
   // ¿Tiene la empresa activada esta pantalla? (Negocio → Clientes → Módulos)
   const moduloOk = (k) => !Array.isArray(modulos) || SIN_MODULO.has(k) || modulos.includes(MODULO_DE[k] || k)
-  const [center, setCenter] = useState(() => localStorage.getItem('panel_center') || 'Todos')
+  /* `?centro=OGA5` en la dirección (11-11-2026, cuadrante-3): el aviso de una petición de OGA5 abría el panel con
+     la última nave guardada en el navegador (DGA1) y la bandeja salía vacía. Si la dirección trae un centro que esta
+     persona puede ver, se elige ese ya al pintar (sin enseñar un momento el de antes); el parámetro se quita abajo. */
+  const [center, setCenter] = useState(() => {
+    try {
+      const pedido = casarCentro(new URLSearchParams(window.location.search).get('centro'), getVisibleCenters())
+      if (pedido) return pedido
+    } catch { /* sin dirección legible, lo de siempre */ }
+    return localStorage.getItem('panel_center') || 'Todos'
+  })
   const [cmdOpen, setCmdOpen] = useState(false)
   /* Si se publica una compilación distinta a la que tiene esta pestaña, se
      avisa. Se mira cada cinco minutos y al volver a la pestaña, que es cuando
@@ -441,6 +451,19 @@ export default function PanelLayout() {
   }, [center, centers.join('|')]) // eslint-disable-line
 
   useEffect(() => { localStorage.setItem('panel_center', center) }, [center])
+
+  /* El `?centro=` también cuando llega con el panel ya abierto (un enlace dentro de la app). Se elige si se puede
+     ver y el parámetro se quita SIEMPRE de la dirección: si se quedara, recargar o volver atrás pisaría el centro
+     que la persona haya elegido después. Los demás parámetros (`?con=` del chat…) se conservan. */
+  useEffect(() => {
+    const sp = new URLSearchParams(loc.search)
+    if (!sp.has('centro')) return
+    const pedido = casarCentro(sp.get('centro'), centers)
+    if (pedido) setCenter(pedido)
+    sp.delete('centro')
+    const resto = sp.toString()
+    nav(`${loc.pathname}${resto ? `?${resto}` : ''}${loc.hash}`, { replace: true })
+  }, [loc.search]) // eslint-disable-line
 
   /* ── PETICIONES DE DIAS SIN CONTESTAR, EN EL MENU ────────────────────────
      Dani: "si tengo 1 persona por contestar pon 1, si tengo 2 personas pero 3
@@ -586,6 +609,12 @@ export default function PanelLayout() {
     })) }))
     .filter((g) => g.items.length > 0)
   const flatItems = groups.flatMap((g) => g.items)
+  /* LO PENDIENTE, EN EL BOTÓN «MENÚ» (11-11-2026, portal_inicio-3). En el móvil no hay menú lateral: los números
+     rojos de días sin contestar, candidatos nuevos y WhatsApp solo se veían abriendo la hoja, y Dani lo sigue casi
+     todo desde el móvil. Se suman y van en el botón de abajo y en el de la cabecera. El chat interno no: ya pinta
+     sus no leídos en la cabecera (EquipoEnLinea), y contarlo dos veces haría pensar que hay más. Solo cuenta lo
+     que esta persona ve en su menú (cada aviso cuelga de una entrada ya filtrada por permiso). */
+  const avisosMenu = flatItems.reduce((n, it) => n + (it.to === '/panel/chat' ? 0 : (it.aviso || 0)), 0)
 
   // Guard de ruta: impide acceder por URL a un módulo no permitido.
   const curKey = keyOf(loc.pathname.replace(/\/+$/, '') || '/panel')
@@ -611,6 +640,38 @@ export default function PanelLayout() {
 
   // Las pantallas del dueño del producto (negocio, planes y cobros, analítica, gastos) no existen en la app de iPhone (09-11-2026).
   const showAdmin = sa && !sinPagos()
+  /* Las entradas del dueño y la de Usuarios, en UNA lista para el lateral y para la hoja del móvil (11-11-2026,
+     portal_inicio-11): el móvil pintaba su propia copia, solo con Negocio y Usuarios, y Gastos y Bandeja no
+     llegaban (desde el móvil solo con Buscar). Así no vuelven a separarse. */
+  const extrasMenu = [
+    showAdmin && { to: '/panel/admin', label: t('nav.business'), icon: Shield },
+    (showAdmin || cm) && { to: '/panel/usuarios', label: t('nav.users'), icon: Users },
+    showAdmin && { to: '/panel/analitica', label: 'Cómo va el negocio', icon: Activity },
+    showAdmin && { to: '/panel/gastos', label: 'Gastos', icon: Euro },
+    showAdmin && { to: '/panel/bandeja', label: t('nav.inbox'), icon: Inbox },
+  ].filter(Boolean)
+
+  /* LA BARRA DE ABAJO DEL MÓVIL, con la MISMA regla que el menú (11-11-2026, portal_inicio-8). Solo miraba el
+     módulo de la empresa, no el permiso de cada persona: a quien no tenía «Revisión» o «Vehículos» (ni el Inicio)
+     le salía el botón y, al tocarlo, el guardián lo devolvía a otra pantalla sin decir nada. Si quedan menos de
+     cuatro, se rellena con las primeras pantallas que sí puede abrir, en el orden del menú. */
+  const barraAbajo = [
+    { to: '/panel', label: t('nav.dashboard'), icon: LayoutDashboard, end: true },
+    { to: '/panel/revision', label: t('nav.revision'), icon: CheckCircle2 },
+    { to: '/panel/asignacion', label: t('nav.assign'), icon: ClipboardCheck },
+    { to: '/panel/vehiculos', label: t('nav.vehicles'), icon: Truck },
+  ].filter((it) => itemVisible(it))
+  for (const it of flatItems) {
+    if (barraAbajo.length >= 4) break
+    if (!barraAbajo.some((b) => b.to === it.to)) barraAbajo.push({ to: it.to, label: it.label, icon: it.icon, end: it.end })
+  }
+  const globoMenu = avisosMenu > 0 ? (
+    <span aria-hidden="true"
+      className="absolute -right-1.5 -top-1.5 min-w-[18px] rounded-full bg-red-600 px-1 text-center text-[10px] font-bold leading-[18px] text-white">
+      {avisosMenu > 99 ? '99+' : avisosMenu}
+    </span>
+  ) : null
+  const nombreMenu = avisosMenu > 0 ? `${t('nav.menu')} · ${avisosMenu}` : t('nav.menu')
 
   function doLogout() {
     logout()
@@ -721,46 +782,12 @@ export default function PanelLayout() {
               </div>
             )
           })}
-          {showAdmin && (
-            <NavLink
-              to="/panel/admin"
-              className={({ isActive }) => `nav-item mt-1 ${isActive ? 'nav-item-active' : ''}`}
-            >
-              <Shield size={16} /> {t('nav.business')}
+          {extrasMenu.map((it, i) => (
+            <NavLink key={it.to} to={it.to}
+              className={({ isActive }) => `nav-item ${i === 0 ? 'mt-1' : ''} ${isActive ? 'nav-item-active' : ''}`}>
+              <it.icon size={16} /> {it.label}
             </NavLink>
-          )}
-          {(showAdmin || cm) && (
-            <NavLink
-              to="/panel/usuarios"
-              className={({ isActive }) => `nav-item ${isActive ? 'nav-item-active' : ''}`}
-            >
-              <Users size={16} /> {t('nav.users')}
-            </NavLink>
-          )}
-          {showAdmin && (
-            <NavLink
-              to="/panel/analitica"
-              className={({ isActive }) => `nav-item ${isActive ? 'nav-item-active' : ''}`}
-            >
-              <Activity size={16} /> Cómo va el negocio
-            </NavLink>
-          )}
-          {showAdmin && (
-            <NavLink
-              to="/panel/gastos"
-              className={({ isActive }) => `nav-item ${isActive ? 'nav-item-active' : ''}`}
-            >
-              <Euro size={16} /> Gastos
-            </NavLink>
-          )}
-          {showAdmin && (
-            <NavLink
-              to="/panel/bandeja"
-              className={({ isActive }) => `nav-item ${isActive ? 'nav-item-active' : ''}`}
-            >
-              <Inbox size={16} /> {t('nav.inbox')}
-            </NavLink>
-          )}
+          ))}
         </nav>
 
         {/* Badge Fundador */}
@@ -842,9 +869,10 @@ export default function PanelLayout() {
               queda debajo del navegador y no siempre se ve. */}
           <button
             onClick={() => setMenuOpen(true)}
-            aria-label={t('nav.menu')}
-            className="flex h-9 w-9 flex-none items-center justify-center rounded-lg border border-dark-700 bg-dark-800/70 text-dark-300 active:bg-dark-800 md:hidden">
+            aria-label={nombreMenu}
+            className="relative flex h-9 w-9 flex-none items-center justify-center rounded-lg border border-dark-700 bg-dark-800/70 text-dark-300 active:bg-dark-800 md:hidden">
             <Menu size={18} />
+            {globoMenu}
           </button>
 
           <div className="hidden text-sm text-dark-400 md:block">
@@ -918,7 +946,10 @@ export default function PanelLayout() {
             pastillas: para llegar a una había que barrer a ciegas, y era lo
             que más se usaba en el móvil (02-09-2026). */}
 
-        <main key={loc.pathname} className="animate-fade-in flex-1 overflow-y-auto p-4 pb-24 md:p-5 md:pb-5">
+        {/* El hueco de abajo deja sitio a la burbuja de la IA (11-11-2026, vista en las fotos tapando «Editar» y la
+            última columna de las tablas): en el móvil, la barra de abajo (52 px) más la burbuja encima (48 px y su
+            margen); en el ordenador, la burbuja (48 px a 16 px del borde). Se puede bajar hasta que nada quede debajo. */}
+        <main key={loc.pathname} className="animate-fade-in flex-1 overflow-y-auto p-4 pb-36 md:p-5 md:pb-20">
           {/* `ve`: la regla del menú, para que el Inicio solo enseñe casillas de pantallas que este usuario puede abrir. */}
           <Outlet context={{ center, centers, admin, setCenter, ve: (to) => itemVisible({ to }) }} />
         </main>
@@ -931,12 +962,7 @@ export default function PanelLayout() {
             lo lleva el menú: el chat tenía 8 mensajes desde el 16 de julio
             (medido), y desde aquí no se llegaba a ninguna otra pantalla sin
             barrer la tira de pastillas. */}
-        {[
-          { to: '/panel', label: t('nav.dashboard'), icon: LayoutDashboard, end: true },
-          { to: '/panel/revision', label: t('nav.revision'), icon: CheckCircle2 },
-          { to: '/panel/asignacion', label: t('nav.assign'), icon: ClipboardCheck },
-          { to: '/panel/vehiculos', label: t('nav.vehicles'), icon: Truck },
-        ].filter((it) => moduloOk(keyOf(it.to))).map((it) => (
+        {barraAbajo.map((it) => (
           <NavLink key={it.to} to={it.to} end={it.end}
             className={({ isActive }) =>
               `flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold transition-colors ${
@@ -946,16 +972,16 @@ export default function PanelLayout() {
             <span className="max-w-full truncate px-1">{it.label}</span>
           </NavLink>
         ))}
-        <button onClick={() => setMenuOpen(true)}
+        <button onClick={() => setMenuOpen(true)} aria-label={nombreMenu}
           className={`flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold transition-colors ${
             menuOpen ? 'text-brand-400' : 'text-dark-400'}`}>
-          <Menu size={19} />
+          <span className="relative"><Menu size={19} />{globoMenu}</span>
           <span className="max-w-full truncate px-1">{t('nav.menu')}</span>
         </button>
       </nav>
 
       <MenuMovil abierto={menuOpen} cerrar={() => setMenuOpen(false)}
-        groups={groups} showAdmin={showAdmin} cm={cm} t={t}
+        groups={groups} extras={extrasMenu} t={t}
         acciones={[
           { clave: 'buscar', icono: Search, texto: t('cmdk.hint'), hacer: () => setCmdOpen(true) },
           { clave: 'ayuda', icono: CircleHelp, texto: t('nav.help'), hacer: () => setAyudaOpen(true) },
@@ -983,7 +1009,12 @@ export default function PanelLayout() {
         idUsuario={admin?.id || admin?.sub} />
       <LiveNotifier center={center} centers={centers} ve={(k) => moduloOk(k) && (SIEMPRE_VISIBLES.has(k) || canSee(k))} />
       {/* En el Centro de IA la burbuja sobra (y en el móvil tapaba el botón de enviar). */}
-      {curKey !== 'centro-ia' && <AsistenteBurbuja center={center} centers={centers} />}
+      {/* Con la hoja del menú abierta, la burbuja se esconde (sin desmontarla: no se pierde la conversación): iba por
+          encima y tapaba el número rojo de Días libres (foto del 10-11-2026). `setCenter`: para elegir el centro
+          ahí mismo con «Todos». En el Chat, en el móvil, tapaba el botón de enviar (foto del 11-11-2026): allí no sale,
+          y la IA sigue a mano en la sala con @flota. */}
+      {curKey !== 'centro-ia' && <AsistenteBurbuja center={center} centers={centers} setCenter={setCenter}
+        escondida={menuOpen} soloOrdenador={curKey === 'chat'} />}
     </div>
   )
 }

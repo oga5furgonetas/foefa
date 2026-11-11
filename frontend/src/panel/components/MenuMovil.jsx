@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
-import { X, Shield, Users } from 'lucide-react'
+import { X } from 'lucide-react'
 
 /* EL MENÚ DEL MÓVIL — el mismo de escritorio, no una tira de pastillas.
    ═══════════════════════════════════════════════════════════════════════
@@ -19,7 +19,7 @@ import { X, Shield, Users } from 'lucide-react'
    · se cierra al elegir, al tocar fuera y con Escape,
    · respeta la zona segura de los iPhone con notch,
    · la pantalla en la que estás sale marcada, para no perder el sitio. */
-export default function MenuMovil({ abierto, cerrar, groups, showAdmin, cm, t, acciones = [] }) {
+export default function MenuMovil({ abierto, cerrar, groups, extras = [], t, acciones = [] }) {
   useEffect(() => {
     if (!abierto) return
     const esc = (e) => { if (e.key === 'Escape') cerrar() }
@@ -86,16 +86,14 @@ export default function MenuMovil({ abierto, cerrar, groups, showAdmin, cm, t, a
             </div>
           ))}
 
-          {(showAdmin || cm) && (
+          {/* Las del dueño y Usuarios: la MISMA lista que el menú lateral (11-11-2026), con Gastos y Bandeja. */}
+          {extras.length > 0 && (
             <div className="mb-3 border-t border-dark-800 pt-2">
-              {showAdmin && (
-                <NavLink to="/panel/admin" onClick={cerrar} className={fila}>
-                  <Shield size={17} className="shrink-0 text-dark-400" /> {t('nav.business')}
+              {extras.map((it) => (
+                <NavLink key={it.to} to={it.to} onClick={cerrar} className={fila}>
+                  <it.icon size={17} className="shrink-0 text-dark-400" /> {it.label}
                 </NavLink>
-              )}
-              <NavLink to="/panel/usuarios" onClick={cerrar} className={fila}>
-                <Users size={17} className="shrink-0 text-dark-400" /> {t('nav.users')}
-              </NavLink>
+              ))}
             </div>
           )}
         </div>

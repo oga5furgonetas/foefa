@@ -6,6 +6,7 @@ import { getChat, postChat, chatToChecklist, deleteChatMessage,
          getMensajesGente, getMensajesCon, postMensaje, postMensajeArchivo, chatIaEstado } from '../api'
 import { getAdmin, isSuperAdmin } from '../auth'
 import { MARCA } from '../../marca'
+import ElegirNave from '../components/ElegirNave'
 
 const POLL_MS = 7000
 const POLL_GENTE_MS = 20000
@@ -337,10 +338,10 @@ export default function Chat() {
 
         <div className="flex-1 overflow-y-auto rounded-lg border border-dark-800 bg-dark-900 p-3">
           {salaBloqueada ? (
-            <div className="flex flex-col items-center gap-3 py-12 text-center">
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
               <MessageSquare size={26} className="text-brand-400" />
-              <p className="text-sm text-dark-200">{t('chat.center.hint')}</p>
-              <p className="text-xs text-dark-500">Disponibles: {centers?.join(' · ') || '—'}</p>
+              {/* Un botón por centro ahí mismo (11-11-2026, portal_inicio-9): antes, la lista de centros como texto. */}
+              <ElegirNave className="w-full max-w-md" centers={centers} texto={t('chat.center.pick')} />
               <p className="text-xs text-dark-500">Los mensajes privados sí funcionan sin elegir centro.</p>
             </div>
           ) : loading ? (

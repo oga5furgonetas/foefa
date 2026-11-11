@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, Search, Send, ArrowLeft, Check, CheckCheck, AlertTriangle, MessageCircle, Clock } from 'lucide-react'
 import {
-  getConversaciones, getConversacion, marcarConversacionLeida, responderConversacion,
+  getConversaciones, getConversacion, marcarConversacionLeida, responderConversacion, getWhatsappEstado,
 } from '../api'
 import { horaLocal, diaMesLocal } from '../../lib/fecha'
 
@@ -43,6 +43,15 @@ export default function Conversaciones() {
   const [err, setErr] = useState('')
   const caja = useRef(null)     // el scroll de los mensajes
   const abajo = useRef(true)      // ¿estaba abajo del todo? solo entonces se sigue el hilo
+  /* ¿Está WhatsApp conectado? (11-11-2026, historia-12). Sin conectar, la pantalla salía vacía diciendo «aún no hay
+     conversaciones», y quien llega nuevo a la oficina pensaba que nadie había escrito. null = no se sabe (falló la
+     pregunta): entonces no se dice nada, mejor que avisar de algo que no es. */
+  const [conectado, setConectado] = useState(null)
+  useEffect(() => {
+    getWhatsappEstado()
+      .then((r) => setConectado(typeof r.data?.configurado === 'boolean' ? r.data.configurado : null))
+      .catch(() => setConectado(null))
+  }, [])
 
   const cargarLista = useCallback(() => {
     getConversaciones(q.trim())
@@ -104,6 +113,16 @@ export default function Conversaciones() {
         </p>
       </div>
 
+      {conectado === false && (
+        <div role="status" className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-[13px] leading-snug text-amber-200">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <span>
+            <b className="font-semibold">WhatsApp no está conectado.</b> Por aquí no entra ni sale nada; los avisos a los
+            conductores van por la app. Lo de antes, si lo hubo, sigue abajo.
+          </span>
+        </div>
+      )}
+
       <div className="grid gap-3 md:grid-cols-[320px_1fr]" style={{ minHeight: '60vh' }}>
         {/* ── Lista ── */}
         <div className={`card flex max-h-[75vh] flex-col overflow-hidden ${tel ? 'hidden md:flex' : ''}`}>
@@ -118,7 +137,9 @@ export default function Conversaciones() {
               <div className="p-6 text-center"><Loader2 className="mx-auto animate-spin text-dark-500" size={18} /></div>
             ) : lista.length === 0 ? (
               <p className="p-6 text-center text-[13px] leading-relaxed text-dark-500">
-                {q ? 'Nada coincide.' : 'Aún no hay conversaciones. Aparecerán aquí cuando la app mande un aviso o alguien escriba al número.'}
+                {q ? 'Nada coincide.'
+                  : conectado === false ? 'No hay conversaciones: WhatsApp no está conectado.'
+                  : 'Aún no hay conversaciones. Aparecerán aquí cuando la app mande un aviso o alguien escriba al número.'}
               </p>
             ) : lista.map((c) => (
               <button key={c.telefono} onClick={() => abrir(c.telefono)}

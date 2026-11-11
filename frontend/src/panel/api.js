@@ -62,6 +62,8 @@ export const chatToChecklist = (center, messageId, body = {}) =>
 export const getDashboardStats = (center) => api.get('/stats/dashboard', { params: centerParam(center) })
 export const getDamageCosts = (center) => api.get('/stats/damage-costs', { params: centerParam(center) })
 export const getStatsHoy = (center) => api.get('/stats/hoy', { params: centerParam(center) })
+// Cómo va cada centro (11-11-2026): plantilla de hoy, plan de horas, última DNR, cuadrante y máximas, por centro.
+export const getCentrosHoy = () => api.get('/stats/centros-hoy')
 
 /* ── Vehículos / Flota ── */
 export const getOnboarding = () => api.get('/onboarding')

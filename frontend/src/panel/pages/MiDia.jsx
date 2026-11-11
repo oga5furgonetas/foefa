@@ -5,6 +5,7 @@ import { verMatricula } from '../../lib/matricula'
 import { Camera, AlertTriangle, ClipboardCheck, BellRing, CheckCircle2, ChevronRight } from 'lucide-react'
 import { getDailyAssignment, getInspections, getIncidents, getItvAlerts } from '../api'
 import { PageSkeleton } from '../components/Skeleton'
+import ElegirNave from '../components/ElegirNave'
 import { hoyLocal, horaLocal } from '../../lib/fecha'
 
 /* ── Torre de control "Mi día" ────────────────────────────────────────────────
@@ -49,7 +50,7 @@ export default function MiDia() {
     return (
       <div className="mx-auto max-w-3xl">
         <h1 className="rise mb-5 font-display text-[clamp(28px,3.4vw,42px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">{t('midia.title')}</h1>
-        <div className="card p-10 text-center text-dark-300">{t('midia.pick.center')}</div>
+        <ElegirNave texto={t('midia.pick.center')} />
       </div>
     )
   }
@@ -93,6 +94,12 @@ export default function MiDia() {
         {/* Solo la primera letra en mayúscula: `capitalize` ponía «17 De Septiembre». */}
         <p className="mt-3 text-[13.5px] text-dark-500">{(() => { const f = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }); return f.charAt(0).toUpperCase() + f.slice(1) })()}</p>
       </header>
+
+      {/* Con «Todos» se enseña el primer centro; los demás, a un toque ahí mismo (11-11-2026, portal_inicio-9):
+          antes había que subir al selector de arriba para ver DGA1. */}
+      {defaulted && centers?.length > 1 && (
+        <ElegirNave texto={t('midia.default.pick').replace('{c}', centro)} />
+      )}
 
       {allClear && (
         <div className="card flex items-center gap-3 border-emerald-500/20 bg-emerald-500/5 p-5 text-emerald-300">

@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { useT } from '../../i18n'
-import { Shield, Copy, Check, ExternalLink, Info, Link2, QrCode } from 'lucide-react'
+import { Shield, Copy, Check, ExternalLink, Info, Link2, QrCode, Smartphone } from 'lucide-react'
 import { getAdmin } from '../auth'
 import { origen } from '../../marca'
+import { GOOGLE_PLAY_URL } from '../../components/GooglePlayBadge'
+import { esAppIOS } from '../../lib/plataforma'
 
 const PORTAL_BASE = origen()
 
@@ -50,6 +52,16 @@ export default function PortalConductor() {
   // de quien lo mira), un servicio de fuera que no estaba en los textos legales.
   const [qr, setQr] = useState('')
   useEffect(() => { QRCode.toDataURL(empresa, { margin: 1, width: 220 }).then(setQr).catch(() => setQr('')) }, [empresa])
+  /* LA APP DE ANDROID (11-11-2026, portal_inicio-12): la usan ya los conductores de una nave y aquí solo había
+     enlaces web, así que para llevar a los de las otras no había nada que enseñar. Su enlace y su QR, hechos en el
+     navegador como el de arriba. Dentro de la app de iPhone NO sale: allí no se nombran otras tiendas. */
+  const conApp = !esAppIOS()
+  const [qrApp, setQrApp] = useState('')
+  const [copiadoApp, setCopiadoApp] = useState(false)
+  useEffect(() => {
+    if (!conApp) return
+    QRCode.toDataURL(GOOGLE_PLAY_URL, { margin: 1, width: 220 }).then(setQrApp).catch(() => setQrApp(''))
+  }, [conApp])
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -72,6 +84,33 @@ export default function PortalConductor() {
           </div>
         </div>
       </div>
+
+      {conApp && (
+        <div className="card mb-4 p-5" data-testid="portal-app-android">
+          <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-dark-200"><Smartphone size={16} /> {t('portal.app.title')}</div>
+          <p className="mb-3 text-sm text-dark-400">{t('portal.app.desc')}</p>
+          <div className="grid gap-5 md:grid-cols-[1fr_auto] md:items-center">
+            {/* Botones y no la caja de texto de los enlaces del portal: esas cajas son SOLO enlaces al portal web
+                (lo vigila ios-sin-pagos.spec.js), y el de la tienda no lo es. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <a href={GOOGLE_PLAY_URL} target="_blank" rel="noreferrer"
+                className="btn-primary inline-flex min-h-[44px] items-center gap-1.5 px-4 text-sm">
+                <ExternalLink size={14} /> {t('portal.app.open')}
+              </a>
+              <button type="button" onClick={() => { navigator.clipboard?.writeText(GOOGLE_PLAY_URL).catch(() => {}); setCopiadoApp(true); setTimeout(() => setCopiadoApp(false), 1500) }}
+                className="btn-secondary inline-flex min-h-[44px] items-center gap-1.5 px-4 text-sm">
+                {copiadoApp ? <><Check size={14} /> {t('portal.copied')}</> : <><Copy size={14} /> {t('portal.copy')}</>}
+              </button>
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <div className="rounded-lg bg-white p-2">
+                {qrApp ? <img src={qrApp} alt={t('portal.app.qr')} width="160" height="160" /> : <div className="h-[160px] w-[160px]" />}
+              </div>
+              <div className="flex items-center gap-1 text-[11px] text-dark-500"><QrCode size={11} /> {t('portal.scan.mobile')}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Un enlace por estación */}
       {centers.length > 0 && (
