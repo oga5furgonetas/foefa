@@ -67,18 +67,37 @@ function casaBusqueda(p, busca) {
 
 /* EL NOMBRE CORTO DEL MÓVIL (11-11-2026, cuadrante-10). La columna de nombres se comía la pantalla: en un móvil se
    veían dos días y medio. En pantallas estrechas va el nombre y la inicial del segundo («ANTONIO G.»); si dos
-   coinciden, el segundo entero (lo que no quepa se corta). El completo, al tocar el nombre (abre su ficha). */
+   coinciden, el segundo entero (lo que no quepa se corta). El completo, al tocar el nombre (abre su ficha).
+   Si aun así siguen iguales (11-11-2026): «JOSÉ GARCÍA PÉREZ» y «JOSÉ GARCÍA LÓPEZ» salían los dos «JOSÉ GARCÍA», y en
+   el móvil no se sabía cuál era cuál. Ahora se van añadiendo iniciales («JOSÉ G. P.» / «JOSÉ G. L.») hasta que se
+   distinguen (y, si no, el nombre entero). Las partículas (DE, DEL, LA, LAS, LOS, Y) no cuentan para la inicial:
+   «MARÍA DE LOS ÁNGELES RUIZ» es «MARÍA Á.», no «MARÍA D.». */
+const NEXOS = new Set(['de', 'del', 'la', 'las', 'los', 'y'])
 function nombresCortos(personas) {
-  const partes = (n) => String(n || '').trim().split(/\s+/)
-  const corto = (n) => { const w = partes(n); return w.length > 1 ? `${w[0]} ${w[1][0]}.` : w[0] || '' }
-  const veces = {}
-  for (const p of personas) { const c = corto(p.nombre); veces[c] = (veces[c] || 0) + 1 }
-  const m = {}
-  for (const p of personas) {
-    const c = corto(p.nombre)
-    m[p.id] = veces[c] > 1 ? partes(p.nombre).slice(0, 2).join(' ') : c
+  // Las formas de un nombre, de la más corta a la entera.
+  const formas = (n) => {
+    const w = String(n || '').trim().split(/\s+/).filter(Boolean)
+    if (w.length < 2) return [w[0] || '']
+    const sig = w.slice(1).filter((x) => !NEXOS.has(sinAcentos(x)))
+    const ini = (k) => sig.slice(0, k).map((x) => `${x[0]}.`).join(' ')
+    const f = sig.length ? [`${w[0]} ${ini(1)}`, `${w[0]} ${sig[0]}`] : []
+    for (let k = 2; k <= sig.length; k++) f.push(`${w[0]} ${ini(k)}`)
+    f.push(w.join(' '))
+    return [...new Set(f)]
   }
-  return m
+  const fs = Object.fromEntries(personas.map((p) => [p.id, formas(p.nombre)]))
+  const nivel = Object.fromEntries(personas.map((p) => [p.id, 0]))
+  // Mientras dos enseñen lo mismo, los dos pasan a su forma siguiente (acaba: cada vuelta alarga alguno).
+  for (let movido = true; movido;) {
+    movido = false
+    const quien = {}
+    for (const p of personas) (quien[fs[p.id][nivel[p.id]]] ||= []).push(p.id)
+    for (const ids of Object.values(quien)) {
+      if (ids.length < 2) continue
+      for (const id of ids) if (nivel[id] < fs[id].length - 1) { nivel[id] += 1; movido = true }
+    }
+  }
+  return Object.fromEntries(personas.map((p) => [p.id, fs[p.id][nivel[p.id]]]))
 }
 
 function Modal({ titulo, onCerrar, children, ancho = 'max-w-2xl' }) {
@@ -1176,15 +1195,17 @@ export default function Cuadrante() {
               )}
 
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1">
+                {/* En el móvil, la fila de fechas ocupa el ancho y los dos campos encogen: con su ancho de siempre la
+                    flecha «Semana siguiente» quedaba fuera y la página se deslizaba de lado (11-11-2026). Desde sm, igual. */}
+                <div className="flex items-center gap-1 max-sm:w-full">
                   <button onClick={() => mover(-7)} aria-label="Semana anterior" className="btn-ghost p-1.5"><ChevronLeft size={16} /></button>
                   <input type="date" value={rango.desde} aria-label="Desde"
                     onChange={(e) => e.target.value && setRango((r) => ({ ...r, desde: e.target.value, hasta: r.hasta < e.target.value ? e.target.value : r.hasta }))}
-                    className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-xs text-dark-100" />
+                    className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-xs text-dark-100 max-sm:min-w-0 max-sm:flex-1" />
                   <span className="text-dark-500">–</span>
                   <input type="date" value={rango.hasta} aria-label="Hasta" min={rango.desde}
                     onChange={(e) => e.target.value && setRango((r) => ({ ...r, hasta: e.target.value }))}
-                    className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-xs text-dark-100" />
+                    className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-xs text-dark-100 max-sm:min-w-0 max-sm:flex-1" />
                   <button onClick={() => mover(7)} aria-label="Semana siguiente" className="btn-ghost p-1.5"><ChevronRight size={16} /></button>
                 </div>
                 <button onClick={() => { const l = lunesDe(hoyLocal()); setRango({ desde: l, hasta: sumaDias(l, 13) }) }}

@@ -36,7 +36,7 @@ def base(monkeypatch):
         return None
 
     async def push_oficina(center, titulo, cuerpo, url, exclude_id=None):
-        oficina.append(SimpleNamespace(center=center, titulo=titulo, url=url))
+        oficina.append(SimpleNamespace(center=center, titulo=titulo, cuerpo=cuerpo, url=url))
 
     async def sin_fcm(docs):
         return 0
@@ -83,6 +83,16 @@ async def test_los_avisos_de_refuerzos_abren_su_centro_y_su_pestana(base):
     await server.apuntarme_refuerzo(rid, {}, {"sub": "d1", "role": "driver"})
     await server.desapuntarme_refuerzo(rid, {"sub": "d1", "role": "driver"})
     assert [a.url for a in base.oficina] == ["/panel/turnos?vista=refuerzos&centro=OGA5"] * 2
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_aviso_de_refuerzo_nombra_la_pantalla_dias_libres(base):
+    """La pantalla se llama «Días libres» (C6): el aviso de «se apunta al refuerzo» ya no puede mandar a «Turnos»."""
+    rid = (await server.crear_refuerzo({"center": "OGA5", "date": MAN, "plazas": 1, "nota": ""}, OFI))["refuerzo"]["id"]
+    await server.apuntarme_refuerzo(rid, {}, {"sub": "d1", "role": "driver"})
+    [aviso] = base.oficina
+    assert "Apruébalo en Días libres → Refuerzos." in aviso.cuerpo
+    assert "Turnos" not in aviso.cuerpo
 
 
 @pytest.mark.asyncio(loop_scope="session")
