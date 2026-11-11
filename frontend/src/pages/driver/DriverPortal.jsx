@@ -17,7 +17,7 @@ import TrabajarMas from './TrabajarMas'
 import Tienda from './Tienda'
 import MiRuta from './MiRuta'
 import MisDnr from './MisDnr'
-import { useCasillaDnr, IconoDnr } from './dnrVistas'
+import { useCasillaDnr, IconoDnr, olvidarDnr } from './dnrVistas'
 import { Boton, Aviso, Etiqueta } from './piezas'
 import DriverReferralWallet from './DriverReferralWallet'
 import Mercadillo from '../mercadillo/Mercadillo'
@@ -295,6 +295,7 @@ export default function DriverPortal() {
     setVista(d.configurar_cuenta ? 'clave' : 'inicio')
   }
   const logout = () => {
+    olvidarDnr()   // «Mis DNR»: lo que tenía en memoria no se le enseña a quien entre después (11-11-2026)
     // Salir de la demo devuelve la sesión real del conductor, si la había.
     try {
       const raw = esDemo && localStorage.getItem('flota_driver_previo')
