@@ -93,19 +93,48 @@ async def test_alta_sin_nave_usa_la_unica_de_quien_la_da_de_alta(base):
     """Un panel viejo (o sin nave elegida) no la manda: quien solo tiene DGA1 la da de alta en DGA1."""
     r = await server.onb_alta({"nombre": "NUEVO", "telefono": "611111112"}, MERY)
     assert r["persona"]["centro"] == "DGA1"
-    # Con varias naves no se adivina: queda sin nave (y la lista la enseña marcada).
+    # Con varias naves no se adivina: queda sin centro (y sale en el bloque «Sin centro» de la pantalla).
     r = await server.onb_alta({"nombre": "OTRO", "telefono": "611111113"}, DANI)
     assert r["persona"]["centro"] == ""
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_la_lista_de_una_nave_saca_tambien_a_quien_no_tiene_nave(base):
+async def test_la_lista_de_un_centro_es_la_de_main_solo_su_gente(base):
+    """G3/G6 (revisión final, 11-11-2026): con un centro elegido, SOLO la gente de ese centro, como en main. Los sin
+    centro salían en los tres centros: en sus contadores, en sus tandas de WhatsApp y en su CSV."""
+    base["incorporaciones"].docs.append({"id": "p-espacios", "nombre": "PACO ESPACIOS", "telefono": "600000006",
+                                         "clave": "tel:600000006", "centro": "  "})
+    # El mismo filtro que main (`q["centro"] = {"$regex": ..., "$options": "i"}`), y lo comparten lista y CSV.
+    assert server._onb_filtro_centro("OGA5") == {"centro": {"$regex": "OGA5", "$options": "i"}}
+    assert server._onb_filtro_centro(None) == {} and server._onb_filtro_centro("") == {}
     r = await server.onb_listar("OGA5", DANI)
-    nombres = {p["nombre"] for p in r["personas"]}
-    assert nombres == {"ANA OGA5", "EVA SIN NAVE", "IVAN SIN CAMPO"}
-    # Con «Todos» (sin center), como antes: todos menos los archivados.
+    assert {p["nombre"] for p in r["personas"]} == {"ANA OGA5"}
+    # Los contadores son solo de su gente: una persona en total.
+    assert sum(r["por_columna"].values()) == 1 and sum(r["por_fase"].values()) == 1
+    # Con «Todos» (sin center), como en main: todos menos los archivados, también los sin centro.
     r = await server.onb_listar(None, DANI)
-    assert {p["nombre"] for p in r["personas"]} == {"ANA OGA5", "LUIS DGA1", "EVA SIN NAVE", "IVAN SIN CAMPO"}
+    assert {p["nombre"] for p in r["personas"]} == {"ANA OGA5", "LUIS DGA1", "EVA SIN NAVE", "IVAN SIN CAMPO",
+                                                    "PACO ESPACIOS"}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_los_sin_centro_se_piden_aparte(base):
+    """G3/G6: el parámetro nuevo y opcional `sin_centro` da SOLO a quien no tiene centro (vacío, sin el campo o solo
+    espacios), con o sin centro elegido; nunca a los archivados."""
+    base["incorporaciones"].docs.append({"id": "p-espacios", "nombre": "PACO ESPACIOS", "telefono": "600000006",
+                                         "clave": "tel:600000006", "centro": "  "})
+    base["incorporaciones"].docs.append({"id": "p-sc-dentro", "nombre": "SARA DENTRO", "telefono": "600000007",
+                                         "clave": "tel:600000007", "centro": "", "archivada": True})
+    for center in ("OGA5", None):
+        r = await server.onb_listar(center, DANI, sin_centro=True)
+        assert {p["nombre"] for p in r["personas"]} == {"EVA SIN NAVE", "IVAN SIN CAMPO", "PACO ESPACIOS"}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_recien_dada_de_alta_se_ve_en_su_centro(base):
+    await server.onb_alta({"nombre": "NUEVO DGA2", "telefono": "611111119", "centro": "DGA2"}, DANI)
+    assert "NUEVO DGA2" in {p["nombre"] for p in (await server.onb_listar("DGA2", DANI))["personas"]}
+    assert "NUEVO DGA2" not in {p["nombre"] for p in (await server.onb_listar("DGA2", DANI, sin_centro=True))["personas"]}
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -122,14 +151,19 @@ async def test_ya_esta_en_la_lista_dice_donde_esta(base):
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_el_csv_de_un_centro_saca_lo_mismo_que_la_lista(base):
-    """R34: con un centro elegido, la lista enseña también a quien no tiene centro; el CSV de «Descargar», igual."""
+    """R34 y G3: el CSV de un centro es lo que enseña su lista, y como en main: solo la gente de ese centro (el CSV
+    se manda a la ETT o a Coordinación; los sin centro iban en el de los tres)."""
     r = await server.onb_export("OGA5", DANI)
     csv = r.body.decode("utf-8")
-    for nombre in ("ANA OGA5", "EVA SIN NAVE", "IVAN SIN CAMPO"):
-        assert nombre in csv, nombre
-    assert "LUIS DGA1" not in csv and "OLGA DENTRO" not in csv
+    assert "ANA OGA5" in csv
+    for nombre in ("EVA SIN NAVE", "IVAN SIN CAMPO", "LUIS DGA1", "OLGA DENTRO"):
+        assert nombre not in csv, nombre
     lista = {p["nombre"] for p in (await server.onb_listar("OGA5", DANI))["personas"]}
-    assert lista == {"ANA OGA5", "EVA SIN NAVE", "IVAN SIN CAMPO"}
+    assert lista == {"ANA OGA5"}
+    # Con «Todos», todos (menos los archivados), como en main.
+    csv = (await server.onb_export(None, DANI)).body.decode("utf-8")
+    for nombre in ("ANA OGA5", "LUIS DGA1", "EVA SIN NAVE", "IVAN SIN CAMPO"):
+        assert nombre in csv, nombre
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -141,6 +175,7 @@ async def test_se_le_puede_poner_el_centro_a_quien_no_lo_tiene(base):
     assert eva["centro"] == "DGA1"
     assert "EVA SIN NAVE" not in {p["nombre"] for p in (await server.onb_listar("OGA5", DANI))["personas"]}
     assert "EVA SIN NAVE" in {p["nombre"] for p in (await server.onb_listar("DGA1", DANI))["personas"]}
+    assert "EVA SIN NAVE" not in {p["nombre"] for p in (await server.onb_listar(None, DANI, sin_centro=True))["personas"]}
     # Sin `centro` en el cuerpo, el centro no se toca.
     await server.onb_editar("p-oga5", {"nota": "llamar"}, DANI)
     assert next(p for p in base["incorporaciones"].docs if p["id"] == "p-oga5")["centro"] == "OGA5"
@@ -183,6 +218,22 @@ async def test_temporal_sin_nave_es_todas_como_antes_pero_respetando_la_suya(bas
     assert r["actualizadas"] == 2 and r["respetadas"] == 2 and r["sin_email"] == 2
     assert _cuenta(base, "d-dga1")["hashed_password"] == "h-dga1"
     assert _cuenta(base, "d-propia")["hashed_password"] == "h-propia"
+    # G7 (revisión final): la pantalla vieja solo pinta `aviso`; dice a cuántos no se les ha cambiado.
+    assert r["aviso"].startswith("La contraseña anterior de las cuentas cambiadas queda invalidada.")
+    assert r["aviso"].endswith("A 2 que ya tenían su contraseña no se les ha cambiado: siguen entrando con la suya.")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_aviso_dice_a_cuantos_se_les_respeto_la_suya(base):
+    """G7: con uno respetado, en singular; con la casilla (nadie respetado), el aviso no dice nada de eso."""
+    r = await server.generar_accesos_conductores(_peticion(center="OGA5"), DANI)
+    assert r["respetadas"] == 1
+    assert r["aviso"].endswith(" A 1 que ya tenía su contraseña no se le ha cambiado: sigue entrando con la suya.")
+    r = await server.generar_accesos_conductores(_peticion(center="OGA5", incluir_propias=True), DANI)
+    assert r["respetadas"] == 0
+    assert r["aviso"] == ("La contraseña anterior de las cuentas cambiadas queda invalidada. "
+                          "Todos ellos comparten la contraseña temporal hasta cambiarla. "
+                          "El portal obliga a elegir una contraseña personal en el siguiente acceso.")
 
 
 @pytest.mark.asyncio(loop_scope="session")

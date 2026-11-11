@@ -704,12 +704,9 @@ function AvisoAccesos({ list, center, onHecho }) {
         <p className="mt-1 text-[12.5px] leading-relaxed text-amber-200">
           Entran con su correo de empresa y la contraseña temporal que acabas de establecer. El portal les obligará a crear una contraseña propia antes de continuar.
         </p>
+        {/* A cuántos se les respetó la suya lo dice ya el `aviso` del servidor (11-11-2026, G7), que es lo que lee
+            también la pantalla vieja: aquí no se repite. */}
         <p className="mt-1 text-[12.5px] leading-relaxed text-dark-400">{hecho.aviso}</p>
-        {hecho.respetadas > 0 && (
-          <p className="mt-1 text-[12.5px] text-dark-300">
-            {hecho.respetadas} ya {hecho.respetadas === 1 ? 'tenía la suya y la sigue' : 'tenían la suya y la siguen'} usando.
-          </p>
-        )}
         {hecho.sin_email > 0 && (
           <p className="mt-1 text-[12.5px] text-amber-300">
             {hecho.sin_email} se han quedado fuera por no tener correo. Ponles uno en su ficha y vuelve a pulsar.

@@ -9,7 +9,10 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
      marque la casilla y la confirmación dice a cuántos, de qué centros y cuántos sin centro se quedan fuera; sin esa
      previa (calculando o fallida) no se puede aplicar. La ficha dice la verdad de cómo se entra sin contraseña, la
      columna es «Acceso» y la contraseña de la ficha pide 8.
-   (Corrección del 10-11-2026 tras la revisión: R6/R35, R7/R39/R41, R34, R36, R38, R40/R42, R43.) */
+   (Corrección del 10-11-2026 tras la revisión: R6/R35, R7/R39/R41, R34, R36, R38, R40/R42, R43.)
+   Revisión final (11-11-2026, G3/G6): con un centro elegido la lista vuelve a ser la de main (solo su gente) y quien
+   no tiene centro sale aparte, en «Sin centro (N)», con «Ponerla en X». G7: el aviso del servidor dice a cuántos se
+   les respetó la suya, y la pantalla no lo repite. */
 
 function vigilar(page) {
   const fallos = []
@@ -36,16 +39,29 @@ const PERSONAS = [
   { id: 'p4', nombre: 'EVA SIN NAVE', telefono: '600000004', centro: '', columna: 'completo', fase: 'listo' },
 ]
 
-async function incorporaciones(page, { todos = false } = {}) {
+/* Lo que contesta el servidor, como el de verdad (onb_listar): con `sin_centro`, solo quien no tiene centro; con un
+   centro, solo su gente; con «Todos», todos. `sinCentroViejo` imita un servidor que no conoce `sin_centro`. */
+function listaDelServidor(url, personas, { sinCentroViejo = false } = {}) {
+  const u = new URL(url)
+  const centro = u.searchParams.get('center')
+  if (u.searchParams.get('sin_centro') === 'true' && !sinCentroViejo) return personas.filter((p) => !p.centro)
+  return centro ? personas.filter((p) => p.centro === centro) : personas
+}
+
+async function incorporaciones(page, { todos = false, sinCentroViejo = false } = {}) {
   await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
   if (todos) await page.addInitScript(() => localStorage.setItem('panel_center', 'Todos'))
   await simularApi(page, 'vacio')
   const altas = []
   const cambios = []
+  const pedidas = []
+  const personas = PERSONAS.map((p) => ({ ...p }))
   // El PATCH de una persona (ponerle el centro, R36).
   await page.route(/\/api\/incorporaciones\/personas\/[^/?]+$/, (route) => {
     if (route.request().method() !== 'PATCH') return route.fallback()
-    cambios.push({ id: route.request().url().split('/').pop(), ...route.request().postDataJSON() })
+    const id = route.request().url().split('/').pop()
+    cambios.push({ id, ...route.request().postDataJSON() })
+    Object.assign(personas.find((p) => p.id === id) || {}, route.request().postDataJSON())
     return route.fulfill({ json: { ok: true, ...route.request().postDataJSON() } })
   })
   await page.route(/\/api\/incorporaciones\/personas(\?|$)/, (route) => {
@@ -55,14 +71,18 @@ async function incorporaciones(page, { todos = false } = {}) {
       if (body.nombre === 'REPETIDA') {
         return route.fulfill({ status: 409, json: { detail: 'Esa persona ya está en la lista (OLGA): en SUR.' } })
       }
+      personas.push({ ...body, id: `nueva${altas.length}`, columna: 'pendiente', fase: 'por_pedir' })
       return route.fulfill({ json: { ok: true, persona: { ...body, id: 'nueva' } } })
     }
-    return route.fulfill({ json: { personas: PERSONAS, plantilla: PLANTILLA, estados: ['falta', 'pedido', 'revision', 'ok'],
+    pedidas.push(Object.fromEntries(new URL(route.request().url()).searchParams))
+    return route.fulfill({ json: { personas: listaDelServidor(route.request().url(), personas, { sinCentroViejo }),
+      plantilla: PLANTILLA, estados: ['falta', 'pedido', 'revision', 'ok'],
       estado_nombre: { falta: 'Falta', pedido: 'Se lo he pedido', revision: 'En revision', ok: 'Correcto' } } })
   })
   await page.goto('/panel/incorporaciones', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('ANA PENDIENTE')).toBeVisible({ timeout: 15000 })
   altas.cambios = cambios
+  altas.pedidas = pedidas
   return altas
 }
 
@@ -72,7 +92,7 @@ const arriba = (page, c) => page.locator('header').getByRole('button', { name: c
 test.describe('Incorporaciones', () => {
   test('quien tiene los papeles en revisión sale en su columna', async ({ page }) => {
     const fallos = vigilar(page)
-    await incorporaciones(page)
+    await incorporaciones(page, { todos: true })   // con «Todos», las cuatro en la lista (EVA no tiene centro)
     // Las cuatro personas se pintan; antes RITA contaba en el total y no salía.
     for (const n of ['ANA PENDIENTE', 'LUIS CARNET', 'RITA REVISION', 'EVA SIN NAVE']) {
       await expect(page.getByText(n)).toBeVisible()
@@ -87,29 +107,49 @@ test.describe('Incorporaciones', () => {
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
-  test('quien no tiene centro sale marcado «sin centro» y se le puede poner el de arriba', async ({ page }) => {
+  test('con un centro elegido, quien no tiene centro va aparte, en «Sin centro (N)», y se le pone el de arriba', async ({ page }) => {
+    // G3/G6: la lista del centro es la de main (solo su gente); los sin centro, en su bloque, fuera de la lista.
     const fallos = vigilar(page)
     const altas = await incorporaciones(page)
-    const fila = page.locator('.card').filter({ hasText: 'EVA SIN NAVE' })
-    await expect(fila.getByText('sin centro', { exact: true })).toBeVisible()
-    await expect(page.locator('.card').filter({ hasText: 'ANA PENDIENTE' }).getByText('sin centro', { exact: true })).toHaveCount(0)
+    const bloque = page.getByTestId('sin-centro')
+    await expect(bloque).toContainText('Sin centro (1)')
+    await expect(bloque.getByText('EVA SIN NAVE')).toBeVisible()
+    // No está en la lista de NORTE ni en sus contadores: tres personas, no cuatro.
+    await expect(page.locator('.card').filter({ hasText: 'EVA SIN NAVE' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Todos · 3' })).toBeVisible()
+    // La lista se pide como en main (solo center) y los sin centro aparte (solo sin_centro).
+    expect(altas.pedidas).toContainEqual({ center: 'NORTE' })
+    expect(altas.pedidas).toContainEqual({ sin_centro: 'true' })
     // R38: en esta pantalla se dice «centro», no «nave».
     await expect(page.getByText('sin nave', { exact: true })).toHaveCount(0)
-    // R36: abierta, ofrece ponerla en el centro de arriba, y lo manda en el PATCH.
-    await fila.getByText('EVA SIN NAVE').click()
-    await fila.getByRole('button', { name: 'Ponerla en NORTE' }).click()
+    // R36: «Ponerla en NORTE» lo manda en el PATCH; después sale en la lista de NORTE y el bloque se va.
+    await bloque.getByRole('button', { name: 'Ponerla en NORTE' }).click()
     await expect.poll(() => altas.cambios.length).toBe(1)
     expect(altas.cambios[0]).toEqual({ id: 'p4', centro: 'NORTE' })
+    await expect(page.locator('.card').filter({ hasText: 'EVA SIN NAVE' })).toHaveCount(1)
+    await expect(bloque).toHaveCount(0)
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
-  test('con «Todos» arriba no hay centro que ponerle: solo se dice', async ({ page }) => {
+  test('si el servidor no conoce «sin_centro», el bloque solo enseña a quien no tiene centro', async ({ page }) => {
     const fallos = vigilar(page)
-    await incorporaciones(page, { todos: true })
+    await incorporaciones(page, { sinCentroViejo: true })
+    const bloque = page.getByTestId('sin-centro')
+    await expect(bloque).toContainText('Sin centro (1)')
+    await expect(bloque.getByText('ANA PENDIENTE')).toHaveCount(0)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('con «Todos» arriba, como en main: los sin centro en la lista, sin bloque aparte', async ({ page }) => {
+    const fallos = vigilar(page)
+    const altas = await incorporaciones(page, { todos: true })
     const fila = page.locator('.card').filter({ hasText: 'EVA SIN NAVE' })
+    await expect(fila.getByText('sin centro', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('sin-centro')).toHaveCount(0)
+    expect(altas.pedidas.some((p) => 'sin_centro' in p)).toBe(false)
     await fila.getByText('EVA SIN NAVE').click()
-    await expect(fila.getByText('Sin centro: sale en la lista de todos los centros.')).toBeVisible()
-    await expect(fila.getByRole('button', { name: /Ponerla en/ })).toHaveCount(0)
+    await expect(fila.getByText('Sin centro: no sale en la lista de ningún centro. Elige uno arriba para ponérselo.')).toBeVisible()
+    await expect(page.getByRole('button', { name: /Ponerla en/ })).toHaveCount(0)
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
@@ -126,6 +166,9 @@ test.describe('Incorporaciones', () => {
     await alta.getByRole('button', { name: 'Añadir', exact: true }).click()
     await expect.poll(() => altas.length).toBe(1)
     expect(altas[0]).toMatchObject({ nombre: 'NUEVO', telefono: '611 22 33 44', centro: 'NORTE' })
+    // Recién dada de alta, se ve en su centro (en la lista, no en «Sin centro»).
+    await expect(page.locator('.card').filter({ hasText: 'NUEVO' }).filter({ hasNotText: 'Añadir una persona' })).toHaveCount(1)
+    await expect(page.getByTestId('sin-centro').getByText('NUEVO')).toHaveCount(0)
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
@@ -203,8 +246,12 @@ async function incorporacionesRetenidas(page) {
       await retenida
       return route.fulfill({ json: { ok: true, persona: { ...route.request().postDataJSON(), id: 'nueva' } } })
     }
-    const centro = new URL(route.request().url()).searchParams.get('center') || 'Todos'
+    const params = new URL(route.request().url()).searchParams
+    const centro = params.get('sin_centro') === 'true' ? 'sin_centro' : (params.get('center') || 'Todos')
     pedidas.push(centro)
+    if (centro === 'sin_centro') {
+      return route.fulfill({ json: { personas: PERSONAS.filter((p) => !p.centro), plantilla: PLANTILLA } })
+    }
     const personas = centro === 'SUR'
       ? [{ id: 's1', nombre: 'SOFIA SUR', telefono: '600000009', centro: 'SUR', columna: 'pendiente', fase: 'por_pedir' }]
       : PERSONAS
@@ -234,9 +281,7 @@ test.describe('Incorporaciones: la recarga de otro centro no pisa la lista', () 
   test('tras «Ponerla en NORTE», si arriba ya está SUR, sigue la lista de SUR', async ({ page }) => {
     const fallos = vigilar(page)
     const r = await incorporacionesRetenidas(page)
-    const fila = page.locator('.card').filter({ hasText: 'EVA SIN NAVE' })
-    await fila.getByText('EVA SIN NAVE').click()
-    await fila.getByRole('button', { name: 'Ponerla en NORTE' }).click()
+    await page.getByTestId('sin-centro').getByRole('button', { name: 'Ponerla en NORTE' }).click()
     await r.cambiarYSoltar()
     await expect(page.getByText('SOFIA SUR')).toBeVisible()
     await expect(page.getByText('ANA PENDIENTE')).toHaveCount(0)
@@ -268,7 +313,7 @@ const CONDUCTORES = [
 ]
 
 /* `previa(route, params, n)`, si se da, contesta la previa en vez de la de siempre (para hacerla fallar o esperar). */
-async function conductores(page, { previa, todos = false } = {}) {
+async function conductores(page, { previa, todos = false, generar } = {}) {
   await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
   if (todos) await page.addInitScript(() => localStorage.setItem('panel_center', 'Todos'))
   await simularApi(page, 'vacio')
@@ -286,6 +331,7 @@ async function conductores(page, { previa, todos = false } = {}) {
   const aplicadas = []
   await page.route(/\/api\/auth\/driver-accounts\/generar$/, (route) => {
     aplicadas.push(route.request().postDataJSON())
+    if (generar) return route.fulfill({ json: generar })
     return route.fulfill({ json: { actualizadas: 3, naves: { NORTE: 3 }, respetadas: 0, sin_email: 1,
       cuentas_inactivas: 0, aviso: 'La contraseña anterior de las cuentas cambiadas queda invalidada.' } })
   })
@@ -324,6 +370,21 @@ test.describe('Conductores', () => {
     await expect.poll(() => aplicadas.length).toBe(1)
     expect(aplicadas[0]).toEqual({ password: 'temporal-1', center: 'NORTE', incluir_propias: true })
     await expect(page.getByText('3 conductores ya tienen acceso temporal')).toBeVisible()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('a cuántos se les respetó la suya lo dice el aviso del servidor, una sola vez', async ({ page }) => {
+    // G7: el `aviso` (lo único que pinta la pantalla vieja) ya lo dice; la nueva no lo repite debajo.
+    const fallos = vigilar(page)
+    await conductores(page, { generar: { actualizadas: 2, naves: { NORTE: 2 }, respetadas: 1, sin_email: 1,
+      cuentas_inactivas: 0, aviso: 'La contraseña anterior de las cuentas cambiadas queda invalidada. '
+        + 'A 1 que ya tenía su contraseña no se le ha cambiado: sigue entrando con la suya.' } })
+    await page.getByRole('button', { name: 'Establecer contraseña temporal común' }).click()
+    await page.getByLabel('Contraseña temporal común', { exact: true }).fill('temporal-1')
+    await page.getByRole('button', { name: 'Aplicar contraseña temporal a 2' }).click()
+    await expect(page.getByText('2 conductores ya tienen acceso temporal')).toBeVisible()
+    await expect(page.getByText(/no se le ha cambiado: sigue entrando con la suya/)).toHaveCount(1)
+    await expect(page.getByText(/la sigue usando/)).toHaveCount(0)
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 

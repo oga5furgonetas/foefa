@@ -146,6 +146,9 @@ export const getInvitados = () => api.get('/empleo/invitados')
    manda la CADENA 'Todos' y el backend buscaria un centro que se llama asi —
    cero resultados, sin error y con 26 personas en la base (gotcha 12). */
 export const getIncorporaciones = (center) => api.get('/incorporaciones/personas', { params: centerParam(center) })
+/* Solo quien no tiene centro (11-11-2026): con un centro elegido no sale en su lista ni en sus tandas; la pantalla
+   lo enseña aparte, en «Sin centro», para ponérselo. */
+export const getIncorporacionesSinCentro = () => api.get('/incorporaciones/personas', { params: { sin_centro: true } })
 // Las cuentas de Amazon y QUE le falta a cada una, de la pantalla de Asociados.
 // Por defecto solo las cuentas de la gente que esta entrando (la del listado
 // de la ETT). `todas` las trae todas, para buscar a alguien que no este.
