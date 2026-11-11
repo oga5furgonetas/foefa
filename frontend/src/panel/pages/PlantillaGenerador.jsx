@@ -1282,11 +1282,11 @@ function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePi
   )
 }
 
-/* `size`: lo ancha que «quiere» ser la celda (11-11-2026). Con todas en el tamaño por defecto, la tabla repartía el
-   sitio a partes iguales: las tres horas («09:20») cogían lo mismo que el conductor y su nombre salía cortado. */
 /* La caja de la hoja, que se desliza de lado. En el móvil el conductor llena el ancho y Móvil, Vehículo y las horas
    quedaban fuera sin ninguna pista: la tabla parecía de dos columnas (11-11-2026). Mientras quede algo a la derecha,
-   una sombra con una flecha en ese borde (solo por debajo de sm: en el ordenador la hoja cabe y nada cambia). */
+   una sombra con una flecha en ese borde (solo por debajo de sm: en el ordenador la hoja cabe y nada cambia).
+   La sombra es estrecha y tenue (w-6, negro al 20 %): un nombre largo llega justo al borde y con una más ancha y
+   oscura sus últimas letras se leían oscurecidas; la flecha es la que avisa (11-11-2026). */
 function TablaDeslizable({ children }) {
   const ref = useRef(null)
   const [mas, setMas] = useState(false)
@@ -1308,7 +1308,7 @@ function TablaDeslizable({ children }) {
       </div>
       {mas && (
         <div aria-hidden="true" data-testid="pg-tabla-mas"
-          className="pointer-events-none absolute inset-y-px right-px w-8 rounded-r-xl bg-gradient-to-l from-black/35 to-transparent sm:hidden">
+          className="pointer-events-none absolute inset-y-px right-px w-6 rounded-r-xl bg-gradient-to-l from-black/20 to-transparent sm:hidden">
           <span className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white">
             <ChevronRight size={15} />
           </span>
@@ -1318,6 +1318,8 @@ function TablaDeslizable({ children }) {
   )
 }
 
+/* `size`: lo ancha que «quiere» ser la celda (11-11-2026). Con todas en el tamaño por defecto, la tabla repartía el
+   sitio a partes iguales: las tres horas («09:20») cogían lo mismo que el conductor y su nombre salía cortado. */
 function EditCell({ value, onChange, onBlur, extraCls, label, size }) {
   return (
     <input value={value || ''} onChange={e => onChange(e.target.value)} onBlur={onBlur} aria-label={label} size={size}

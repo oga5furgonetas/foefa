@@ -45,6 +45,11 @@ test.describe('Asignación · en el móvil, cada fila en dos líneas', () => {
     await page.route(/\/api\/assignments\/daily/, json({ date: HOY, slots: SLOTS }))
     await page.goto('/panel/asignacion', { waitUntil: 'domcontentloaded' })
     await expect(page.getByTestId('asgn-fila')).toHaveCount(12, { timeout: 45000 })
+    // La página entra con una animación de 0,3 s que lleva un `transform` (animate-fade-in en el <main>), y mientras
+    // dura, lo `fixed` de dentro (la barra de Guardar del móvil) se coloca respecto al <main> y no a la pantalla. Antes
+    // de medir nada se espera a que acabe: con la batería entera y el PC cargado, la medida caía a veces en medio.
+    await page.locator('main.animate-fade-in').first()
+      .evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {}))))
   }
 
   test('el conductor se lee entero en el móvil y la fila de siempre en el ordenador', async ({ page, isMobile }) => {
@@ -516,16 +521,37 @@ test('Plantilla · en el móvil una sombra dice que hay más columnas y se va al
     return
   }
   await expect(mas).toBeVisible()
-  // La sombra está en el borde derecho de la caja y no tapa el nombre.
+  // La sombra está en el borde derecho de la caja y el Vehículo, fuera de ella.
   const caja = page.getByRole('table').locator('xpath=..')
-  const [cajaMas, cajaTabla, cajaNombre] = await Promise.all([mas.boundingBox(), caja.boundingBox(),
-    page.getByRole('textbox', { name: 'Conductor', exact: true }).first().boundingBox()])
-  expect(Math.abs(cajaMas.x + cajaMas.width - (cajaTabla.x + cajaTabla.width))).toBeLessThan(3)
+  const [cajaMas, cajaTabla] = await Promise.all([mas.boundingBox(), caja.boundingBox()])
+  const bordeDerecho = cajaTabla.x + cajaTabla.width
+  expect(Math.abs(cajaMas.x + cajaMas.width - bordeDerecho)).toBeLessThan(3)
   expect(await page.getByRole('textbox', { name: 'Vehículo' }).first().evaluate((el) => {
     const r = el.getBoundingClientRect(); const c = el.closest('table').parentElement.getBoundingClientRect()
     return r.left >= c.right
   })).toBe(true)
-  expect(cajaNombre.x).toBeLessThan(cajaMas.x)
+  // Revisión 2, U3: un nombre largo llega justo al borde de la caja, así que la sombra roza sus últimas letras. Lo que
+  // se sujeta es lo que se puede prometer: (1) el TEXTO de cada nombre acaba dentro de la caja (se miden las letras con
+  // la fuente del campo; el campo en sí siempre llega al borde y no dice nada), y (2) la sombra es estrecha (24 px como
+  // mucho) y tenue (negro al 20 % como mucho), para que esas letras se lean limpias. Con la de antes (32 px, al 35 %) falla.
+  const finDeLosNombres = await page.getByRole('textbox', { name: 'Conductor', exact: true }).evaluateAll((campos) => {
+    const lienzo = document.createElement('canvas').getContext('2d')
+    return campos.map((el) => {
+      const cs = getComputedStyle(el)
+      lienzo.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`
+      const espaciado = cs.letterSpacing === 'normal' ? 0 : parseFloat(cs.letterSpacing) * el.value.length
+      return { nombre: el.value, fin: el.getBoundingClientRect().left + parseFloat(cs.borderLeftWidth)
+        + parseFloat(cs.paddingLeft) + lienzo.measureText(el.value).width + espaciado }
+    })
+  })
+  for (const { nombre, fin } of finDeLosNombres) expect(fin, nombre).toBeLessThanOrEqual(bordeDerecho - 1)
+  expect(cajaMas.width).toBeLessThanOrEqual(24)
+  const oscuridad = await mas.evaluate((el) => {
+    const m = getComputedStyle(el).backgroundImage.match(/rgba?\(0,\s*0,\s*0(?:,\s*([\d.]+))?\)/)
+    return m ? Number(m[1] ?? 1) : null
+  })
+  expect(oscuridad).not.toBeNull()
+  expect(oscuridad).toBeLessThanOrEqual(0.2)
   // Deslizada hasta el final, ya no hay más: la sombra se va. Y vuelve al volver al principio.
   await caja.evaluate((el) => { el.scrollLeft = el.scrollWidth })
   await expect(mas).toHaveCount(0)
