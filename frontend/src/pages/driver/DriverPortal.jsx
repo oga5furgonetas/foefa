@@ -1,7 +1,8 @@
 /* diseño compacto */
 import { useEffect, useState } from 'react'
 import { ClipboardCheck, CalendarDays, CalendarClock, CalendarPlus, LogOut, Lock, Mail, Ban, ShoppingBag, RefreshCw, Route, Gift, ArrowLeft, Store, ChevronRight, Check } from 'lucide-react'
-import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, mercEstado, getTrabajarMas, DRIVER_TOKEN_KEY } from '../../services/api'
+import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, mercEstado, getTrabajarMas, getAssignedVehicle, DRIVER_TOKEN_KEY } from '../../services/api'
+import { tx } from '../../lib/idioma'
 import { lista } from '../../lib/lista'
 import { medirSeccion } from '../../lib/analitica'
 import { vigilarVersion } from '../../lib/versionApp'
@@ -15,6 +16,8 @@ import PedirDias from './PedirDias'
 import TrabajarMas from './TrabajarMas'
 import Tienda from './Tienda'
 import MiRuta from './MiRuta'
+import MisDnr from './MisDnr'
+import { useCasillaDnr, IconoDnr, olvidarDnr } from './dnrVistas'
 import { Boton, Aviso, Etiqueta } from './piezas'
 import DriverReferralWallet from './DriverReferralWallet'
 import Mercadillo from '../mercadillo/Mercadillo'
@@ -82,7 +85,9 @@ function Opcion({ icono: Icono, titulo, sub, onClick, principal, bloqueado, pron
    mercadillo). «Pronto», en «pie» bajo el título; las respuestas sin leer, en su número arriba a la derecha (el
    detalle ya las dice, así que el número no se lee dos veces). Sin degradado ni sombra; el tono (verde, ámbar) queda en
    el icono. */
-function Casilla({ icono: Icono, titulo, detalle, onClick, pronto, aviso, tono }) {
+// `linea` (opcional, 11-11-2026, «Mis DNR»): una segunda línea en «sec» gris FUERA del recorte del título, con el suyo
+// (tres líneas, para la «Letra más grande»): dentro, en alemán y en francés se cortaba justo la palabra que importa.
+function Casilla({ icono: Icono, titulo, linea, detalle, onClick, pronto, aviso, tono }) {
   const color = pronto ? 'text-dark-400' : { verde: 'text-ruta-ok-texto', ambar: 'text-ruta-aviso-texto' }[tono] || 'text-dark-400'
   return (
     <button type="button" onClick={pronto ? undefined : onClick} disabled={pronto}
@@ -95,6 +100,7 @@ function Casilla({ icono: Icono, titulo, detalle, onClick, pronto, aviso, tono }
       <Icono size={20} className={`shrink-0 ${color}`} aria-hidden="true" />
       <span className="mt-2 block">
         <span className={`line-clamp-3 break-words text-boton hyphens-auto ${pronto ? 'text-dark-400' : 'text-dark-50'}`}>{titulo}</span>
+        {linea && <span className="line-clamp-3 break-words text-sec text-dark-400">{linea}</span>}
         {pronto && <span className="block text-pie text-dark-400">Pronto</span>}
         {detalle && <span className="sr-only">. {detalle}</span>}
       </span>
@@ -139,6 +145,11 @@ export default function DriverPortal() {
   // null = apagada o todavía sin contestar. Con datos: {desde, n} para poder
   // poner el precio en la entrada del menú, que es lo que hace que se entre.
   const [tienda, setTienda] = useState(null)
+  /* LA FURGONETA DE HOY BAJO «HACER LA AUDITORÍA» (11-11-2026, tanda 2, E3 / portal_inicio-7). Decía siempre «Antes de
+     salir a ruta»: ni qué furgoneta le toca ni si ya la había mandado. El servidor ya lo sabe (/auth/me/assigned-vehicle,
+     con la asignación del día y `already_inspected`). null = sin asignación (o sin respuesta): el texto de siempre.
+     Lo de «hoy no sales» y «suspendido» ya estaba y manda sobre esto. */
+  const [hoyFurgo, setHoyFurgo] = useState(null)   // { matricula, enviada }
 
   /* LA TIENDA NO SE VE HASTA QUE SE ENCIENDE, y la decision es del servidor.
      Se pregunta al escaparate: si contesta `visible: false` no se pinta ni la
@@ -169,7 +180,7 @@ export default function DriverPortal() {
   // ?vista=mercadillo: el enlace del correo de «tienes un mensaje» (17-10-2026).
   const [vista, setVista] = useState(() => {
     const v = new URLSearchParams(window.location.search).get('vista')
-    return v === 'ruta' || v === 'mercadillo' || v === 'extra' ? v : 'inicio'
+    return v === 'ruta' || v === 'mercadillo' || v === 'extra' || v === 'dnr' ? v : 'inicio'
   })
   useEffect(() => {
     if (driver?.configurar_cuenta) setVista('clave')
@@ -271,7 +282,15 @@ export default function DriverPortal() {
       .catch(() => setSinVer(0))
     mercEstado().then((r) => setMerc(r.data?.visible ? r.data : null)).catch(() => setMerc(null))
     getTrabajarMas().then((r) => setExtra(r.data || null)).catch(() => setExtra(null))
+    // Su furgoneta de hoy y si ya mandó la auditoría: se pide al volver al inicio, así que al terminar una sale ya
+    // «Enviada hoy». Si falla o no tiene furgoneta asignada, se queda el texto de siempre.
+    getAssignedVehicle()
+      .then((r) => setHoyFurgo(r.data?.assigned && r.data?.vehicle
+        ? { matricula: r.data.vehicle.license_plate || '', enviada: !!r.data.already_inspected } : null))
+      .catch(() => setHoyFurgo(null))
   }, [driver, vista])
+  // «Mis DNR» (11-11-2026): null si su empresa no tiene la DNR diaria; si no, con cuántas hay nuevas.
+  const casillaDnr = useCasillaDnr(driver, vista)
 
   const login = (d) => {
     localStorage.setItem(DRIVER_KEY, JSON.stringify(d))
@@ -279,6 +298,7 @@ export default function DriverPortal() {
     setVista(d.configurar_cuenta ? 'clave' : 'inicio')
   }
   const logout = () => {
+    olvidarDnr()   // «Mis DNR»: lo que tenía en memoria no se le enseña a quien entre después (11-11-2026)
     // Salir de la demo devuelve la sesión real del conductor, si la había.
     try {
       const raw = esDemo && localStorage.getItem('flota_driver_previo')
@@ -304,6 +324,7 @@ export default function DriverPortal() {
   if (vista === 'dias') return <PedirDias onBack={() => setVista('inicio')} />
   if (vista === 'extra') return <TrabajarMas onBack={() => setVista('inicio')} />
   if (vista === 'turnos') return <MisTurnos onBack={() => setVista('inicio')} />
+  if (vista === 'dnr') return <MisDnr driverId={driver.id} onBack={() => setVista('inicio')} />
   if (vista === 'clave') return <MiClave obligatoria={!!driver.configurar_cuenta} onSalir={logout}
     onBack={() => {
       if (driver.configurar_cuenta) {
@@ -407,8 +428,12 @@ export default function DriverPortal() {
           <Opcion
             icono={ClipboardCheck}
             titulo="Hacer la auditoría"
-            sub={portal?.motivo === 'suspendido' ? 'Hoy no trabajas' : noLeToca ? 'Hoy no sales a ruta' : 'Antes de salir a ruta'}
-            principal={!esDemo}
+            sub={portal?.motivo === 'suspendido' ? 'Hoy no trabajas' : noLeToca ? 'Hoy no sales a ruta'
+              : hoyFurgo?.enviada ? (hoyFurgo.matricula ? tx('Enviada hoy · {matricula}', { matricula: hoyFurgo.matricula }) : tx('Enviada hoy'))
+                : hoyFurgo?.matricula ? tx('Hoy: {matricula}', { matricula: hoyFurgo.matricula }) : 'Antes de salir a ruta'}
+            /* Ya enviada hoy, en el tono de las demás y no en el de marca (11-11-2026, revisión de la tanda 2): turquesa y a
+               todo lo ancho parecía que aún faltaba. Se puede seguir abriendo, por si hay que repetirla. */
+            principal={!esDemo && !hoyFurgo?.enviada}
             bloqueado={noLeToca || esDemo}
             onClick={() => setVista('auditoria')}
           />
@@ -481,6 +506,10 @@ export default function DriverPortal() {
                 : extrasProximos ? `${extrasProximos} día${extrasProximos > 1 ? 's' : ''} extra` : 'Sin vacantes ahora'}
               onClick={() => setVista('extra')}
             />
+          )}
+          {casillaDnr && (
+            <Casilla icono={IconoDnr} titulo={casillaDnr.titulo} linea={casillaDnr.linea} detalle={casillaDnr.detalle} aviso={casillaDnr.nuevas}
+              onClick={() => setVista('dnr')} />
           )}
           {/* Sin «Comparte y gana» en la app de iPhone (09-11-2026): allí no hay invitaciones, bonos ni cartera. */}
           {!sinPagos() && <Casilla

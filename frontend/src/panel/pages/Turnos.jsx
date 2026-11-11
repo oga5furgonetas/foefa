@@ -18,12 +18,20 @@ import { lista } from '../../lib/lista'
 import { canSee } from '../auth'
 import Refuerzos from '../components/Refuerzos'
 import Suspensiones from '../components/Suspensiones'
+import ElegirNave from '../components/ElegirNave'
 import { getRefuerzos } from '../api'
 import { isoLocal, hoyLocal, horaLocal, diaMesLocal } from '../../lib/fecha'
 
 /* Cuantos dias se pueden pintar de una vez. 92 es un trimestre: por encima
    son miles de celdas y la pantalla se arrastra sin que nadie lo necesite. */
 const TOPE_DIAS = 92
+
+/* «Noviembre de 2026», no «Noviembre De 2026» (11-11-2026, fotos): la clase `capitalize` ponía en mayúscula cada
+   palabra. Solo la primera letra. */
+const mesYAnio = (d) => {
+  const s = d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
 
 /* ── EL CÓDIGO, NO EL TIPO ─────────────────────────────────────────────────
    La app entiende tres tipos (trabaja / libre / extra) y con eso decide
@@ -190,8 +198,8 @@ function SelectorRango({ desde, hasta, onElegir, ocupados }) {
       <div className="mb-2 flex items-center gap-1">
         <button type="button" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1))}
           className="btn-ghost p-1" aria-label="Mes anterior"><ChevronLeft size={14} /></button>
-        <span className="min-w-[8rem] text-center text-[12.5px] font-semibold capitalize text-dark-200">
-          {mes.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
+        <span className="min-w-[8rem] text-center text-[12.5px] font-semibold text-dark-200">
+          {mesYAnio(mes)}
         </span>
         <button type="button" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() + 1, 1))}
           className="btn-ghost p-1" aria-label="Mes siguiente"><ChevronRight size={14} /></button>
@@ -240,6 +248,7 @@ function SelectorRango({ desde, hasta, onElegir, ocupados }) {
 }
 
 function CalendarioDiasLibres({ center }) {
+  const todos = center === 'Todos'
   const hoyRef = new Date()
   const [mes, setMes] = useState(new Date(hoyRef.getFullYear(), hoyRef.getMonth(), 1))
   const [filas, setFilas] = useState(null)
@@ -289,7 +298,10 @@ function CalendarioDiasLibres({ center }) {
 
   const hoyK = claveDia(hoyRef)
 
-  const cerrado = (k) => bloqueos.find((b) => b.desde <= k && k <= b.hasta && !b.driver_id)
+  /* Con «Todos» llegan los días cerrados de todos los centros (11-11-2026): un cierre de DGA1 no puede pintar la casilla
+     de rojo como si cerraran todos, y si cierran dos el mismo día se dicen los dos. `cerrados` da todos los de ese día. */
+  const cerrados = (k) => bloqueos.filter((b) => b.desde <= k && k <= b.hasta && !b.driver_id)
+  const cerrado = (k) => cerrados(k)[0]
 
   /* Quién ha pedido días, con los suyos de HOY EN ADELANTE.
      Solo futuro a propósito: un día que ya pasó no se puede dar ni quitar, y
@@ -306,7 +318,7 @@ function CalendarioDiasLibres({ center }) {
       const id = f.driver_id || f.driver_name
       const k = String(f.date || '').slice(0, 10)
       if (!id || !k || k < hoyK) continue
-      const p = m.get(id) || { id, nombre: f.driver_name, dias: [], pendientes: 0 }
+      const p = m.get(id) || { id, nombre: f.driver_name, centro: f.center, dias: [], pendientes: 0 }
       p.dias.push({ k, status: f.status, motivo: f.motivo_label || f.type })
       if (f.status === 'pendiente') p.pendientes += 1
       m.set(id, p)
@@ -329,7 +341,7 @@ function CalendarioDiasLibres({ center }) {
   const celdas = [...Array(huecos).fill(null),
                   ...Array.from({ length: diasMes }, (_, i) => i + 1)]
 
-  const nombreMes = mes.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+  const nombreMes = mesYAnio(mes)
   const totalMes = Object.entries(porDia)
     .reduce((n, [, v]) => n + v.filter((x) => x.status === 'aprobado').length, 0)
 
@@ -338,7 +350,7 @@ function CalendarioDiasLibres({ center }) {
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <button onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1))}
           className="btn-ghost p-1.5" aria-label="Mes anterior"><ChevronLeft size={16} /></button>
-        <h3 className="min-w-[9rem] text-center text-sm font-bold capitalize text-dark-100">{nombreMes}</h3>
+        <h3 className="min-w-[9rem] text-center text-sm font-bold text-dark-100">{nombreMes}</h3>
         <button onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() + 1, 1))}
           className="btn-ghost p-1.5" aria-label="Mes siguiente"><ChevronRight size={16} /></button>
         <button onClick={() => setMes(new Date(hoyRef.getFullYear(), hoyRef.getMonth(), 1))}
@@ -369,7 +381,9 @@ function CalendarioDiasLibres({ center }) {
               const dia = porDia[k] || []
               const apro = dia.filter((x) => x.status === 'aprobado')
               const pend = dia.filter((x) => x.status === 'pendiente')
-              const bloq = cerrado(k)
+              const bloqs = cerrados(k)
+              // Con «Todos», el cierre no pinta la casilla entera: lleva debajo el centro que cierra (11-11-2026).
+              const bloq = todos ? null : bloqs[0]
               /* Con una persona elegida, sus días se marcan y el resto se
                  apaga. Apagar y no esconder: si los demás desaparecieran no se
                  vería que ese día ya hay otros tres fuera, que es justo lo que
@@ -378,7 +392,7 @@ function CalendarioDiasLibres({ center }) {
               const apagado = suyos && !esSuyo
               return (
                 <button key={k} onClick={() => setAbierto(abierto === k ? null : k)}
-                  className={`min-h-[62px] rounded-lg border p-1.5 text-left transition-colors ${
+                  className={`min-h-[62px] rounded-lg border p-1.5 text-left transition-colors max-sm:overflow-hidden ${
                     esSuyo ? 'border-brand-400 bg-brand-500/20 ring-1 ring-brand-400/50'
                       : abierto === k ? 'border-brand-500 bg-brand-500/10'
                         : bloq ? 'border-red-500/40 bg-red-500/[0.07]'
@@ -413,13 +427,28 @@ function CalendarioDiasLibres({ center }) {
                       {apro.length > 2 && (
                         <span className="block text-[10.5px] text-emerald-400/80">+{apro.length - 2} más</span>
                       )}
+                      {/* En el móvil la casilla no cabe «1 sin contestar» («contestar» se montaba en la de al lado):
+                          allí, el número y el punto ámbar de la leyenda; desde sm, como siempre (11-11-2026). */}
                       {pend.length > 0 && (
                         <span className="mt-0.5 block text-[10.5px] leading-tight text-amber-300">
-                          {pend.length} sin contestar
+                          <span className="inline-flex items-center gap-1 sm:hidden">
+                            {pend.length}<i aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                            <span className="sr-only">sin contestar</span>
+                          </span>
+                          <span className="max-sm:hidden">{pend.length} sin contestar</span>
                         </span>
                       )}
                       {bloq && !apro.length && !pend.length && (
                         <span className="mt-0.5 block truncate text-[10.5px] leading-tight text-red-300">cerrado</span>
+                      )}
+                      {todos && bloqs.length > 0 && (
+                        <span data-testid="cierre-centros"
+                          className="mt-0.5 flex items-center gap-1 text-[10.5px] leading-tight text-red-300">
+                          <i aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+                          {/* En el móvil la casilla no da para el código (salía «D…»): allí solo el punto rojo (el del
+                              «día cerrado» de la leyenda), y al tocarla el detalle dice qué centro cierra. */}
+                          <span className="truncate max-sm:sr-only">{bloqs.map((b) => b.center || 'cerrado').join(' · ')}</span>
+                        </span>
                       )}
                     </>
                   )}
@@ -467,6 +496,8 @@ function CalendarioDiasLibres({ center }) {
                         sel ? 'border-brand-400 bg-brand-500/20 text-brand-200'
                           : 'border-dark-700 bg-dark-900 text-dark-300 hover:border-dark-600 hover:text-dark-100'}`}>
                       <span className="font-semibold">{p.nombre}</span>
+                      {/* Con «Todos», su centro (11-11-2026, cuadrante-3). */}
+                      {todos && p.centro && <span className="font-mono text-[10.5px] text-dark-500">{p.centro}</span>}
                       <span className="tabular-nums text-dark-500">{p.dias.length}</span>
                       {p.pendientes > 0 && (
                         <span className="rounded-full bg-amber-500/20 px-1.5 text-[10.5px] font-bold text-amber-300">
@@ -506,11 +537,12 @@ function CalendarioDiasLibres({ center }) {
           {abierto && (
             <div className="mt-3 rounded-lg border border-dark-700 bg-dark-900/60 p-3">
               <p className="mb-2 text-[13px] font-bold text-dark-100">{abierto}</p>
-              {cerrado(abierto) && (
-                <p className="mb-2 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[12.5px] text-red-300">
-                  Día cerrado: {cerrado(abierto).motivo}
+              {/* Con «Todos», una línea por centro que cierra ese día; con un centro, como siempre (11-11-2026). */}
+              {(todos ? cerrados(abierto) : [cerrado(abierto)].filter(Boolean)).map((b, i) => (
+                <p key={b.id || i} className="mb-2 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[12.5px] text-red-300">
+                  Día cerrado{todos && b.center ? ` en ${b.center}` : ''}: {b.motivo}
                 </p>
-              )}
+              ))}
               {(porDia[abierto] || []).length === 0 ? (
                 <p className="text-[13px] text-dark-500">Nadie tiene día ese día.</p>
               ) : (
@@ -519,6 +551,7 @@ function CalendarioDiasLibres({ center }) {
                     <div key={x.id} className="flex flex-wrap items-center gap-2 text-[13px]">
                       <span className={`h-2 w-2 rounded-full ${x.status === 'aprobado' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
                       <span className="font-semibold text-dark-100">{x.driver_name}</span>
+                      {todos && x.center && <span className="font-mono text-[11px] text-dark-400">{x.center}</span>}
                       <span className="text-dark-500">{x.motivo_label || x.type}</span>
                       {x.status === 'pendiente' && <span className="text-amber-300">sin contestar</span>}
                     </div>
@@ -589,7 +622,7 @@ function sumaDias(iso, n) {
 const MOSTRAR_CUADRANTE = false
 
 export default function Turnos() {
-  const { center, centers } = useOutletContext()
+  const { center } = useOutletContext()
   const { t, lang } = useT()
   const noCenter = center === 'Todos'
 
@@ -766,8 +799,10 @@ export default function Turnos() {
      no piden nada: pisaban la bandeja y los conductores de la nueva. */
   const naveRef = useRef(center)
   naveRef.current = center
+  /* Con «Todos» también (11-11-2026, cuadrante-3): el menú contaba las pendientes de todos los centros y la pantalla
+     no dejaba verlas. El servidor ya da solo las de los centros de quien mira. */
   const cargarPeticiones = useCallback(async () => {
-    if (noCenter || naveRef.current !== center) return
+    if (naveRef.current !== center) return
     const n = ++pedidaPet.current
     setCargandoPeticiones(true); setErrPeticiones('')
     try {
@@ -778,7 +813,7 @@ export default function Turnos() {
     } finally {
       if (n === pedidaPet.current) setCargandoPeticiones(false)
     }
-  }, [center, noCenter, t])
+  }, [center, t])
   // Al cambiar de nave, la lista de la otra no se queda a la vista mientras llega la nueva.
   useEffect(() => { setSolicitudes([]); cargarPeticiones() }, [cargarPeticiones])
 
@@ -1498,7 +1533,7 @@ export default function Turnos() {
     const m = new Map()
     for (const s of solicitudes) {
       const k = s.grupo || s.id
-      if (!m.has(k)) m.set(k, { key: k, driver_name: s.driver_name, type: s.type,
+      if (!m.has(k)) m.set(k, { key: k, driver_name: s.driver_name, type: s.type, center: s.center,
         motivo_label: s.motivo_label, note: s.note, created_at: s.created_at,
         fechas: [], ids: [], cambiada: false })
       const g = m.get(k)
@@ -1521,18 +1556,10 @@ export default function Turnos() {
         : (a.caducada ? -1 : 1)))
   }, [solicitudes])
 
-  if (noCenter) {
-    return (
-      <div>
-        <h1 className="mb-4 rise font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">{t('turns.title')}</h1>
-        <div className="card flex flex-col items-center gap-3 p-10 text-center">
-          <CalendarClock size={30} className="text-brand-400" />
-          <p className="text-dark-200">{t('turns.pick.center')}</p>
-          <p className="text-sm text-dark-500">{t('turns.available')} {centers?.join(' · ') || '—'}</p>
-        </div>
-      </div>
-    )
-  }
+  /* CON «TODOS» (11-11-2026, cuadrante-3). Antes, la pantalla entera se quedaba en «Elige un centro arriba…». Ahora
+     Peticiones y Calendario funcionan con todos los centros de quien mira (cada grupo dice de qué centro es), y
+     Refuerzos, Suspensiones y Días cerrados, que van por centro, piden cuál con un botón por centro. */
+  const porCentro = noCenter && ['refuerzos', 'suspensiones', 'bloqueos'].includes(vistaDias)
 
   const fmtDia = (f) => new Date(f + 'T12:00:00').toLocaleDateString(lang, { weekday: 'short' })
   const fmtNum = (f) => new Date(f + 'T12:00:00').toLocaleDateString(lang, { day: '2-digit', month: '2-digit' })
@@ -1563,21 +1590,23 @@ export default function Turnos() {
       {/* Cabecera: centro + navegación de quincena */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="flex items-center gap-2 rise font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">
-          <CalendarClock size={20} /> {t('turns.title')} · {center}
+          <CalendarClock size={20} /> {t('turns.title')}{noCenter ? '' : ` · ${center}`}
         </h1>
         {/* ── TRES COSAS DISTINTAS, TRES SITIOS ──────────────────────────────
             Contestar peticiones, ver qué días hay ya dados y cerrar fechas son
             tareas separadas y se hacen en momentos distintos. Estaban las tres
             revueltas en la misma pantalla —y las dos últimas, dentro del
             cuadrante escondido, sin forma de llegar. */}
-        <div className="flex gap-1 rounded-lg bg-dark-900 p-1 ring-1 ring-dark-700">
+        {/* En el móvil las cinco pestañas saltan de línea y cada una mide 44 px de alto (11-11-2026,
+            cuadrante-10): en una sola fila medían unos 500 px y arrastraban la página de lado. Desde sm, como antes. */}
+        <div className="flex w-full flex-wrap gap-1 rounded-lg bg-dark-900 p-1 ring-1 ring-dark-700 sm:w-auto sm:flex-nowrap" data-testid="pestanas-dias">
           {[['peticiones', `Peticiones${grupos.length ? ` · ${grupos.length}` : ''}`],
             ['refuerzos', `Refuerzos${refPend ? ` · ${refPend}` : ''}`],
             ['suspensiones', 'Suspensiones'],
             ['calendario', 'Calendario'],
             ['bloqueos', 'Días cerrados']].map(([k, lbl]) => (
-            <button key={k} onClick={() => setVistaDias(k)}
-              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+            <button key={k} onClick={() => setVistaDias(k)} aria-pressed={vistaDias === k}
+              className={`min-h-[44px] flex-auto whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold transition-colors sm:min-h-0 sm:flex-none ${
                 vistaDias === k ? 'bg-brand-500/20 text-brand-300' : 'text-dark-400 hover:text-dark-200'}`}>
               {lbl}
             </button>
@@ -2164,6 +2193,7 @@ export default function Turnos() {
                     <tr key={r.id || i} className={`border-t border-dark-800/70 ${i % 2 ? 'bg-dark-800/[0.15]' : ''}`}>
                       <td className="max-w-[12rem] truncate px-3 py-1.5 text-dark-200" title={r.driver_name}>
                         {r.driver_name}
+                        {noCenter && r.center && <span className="ml-1.5 font-mono text-[10.5px] text-dark-500">{r.center}</span>}
                       </td>
                       <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-dark-300">{fmtNum(r.date)}</td>
                       <td className="px-2 py-1.5 text-dark-400">
@@ -2236,7 +2266,9 @@ export default function Turnos() {
         </div>
       )}
 
-      {(vistaDias === 'bloqueos' || (MOSTRAR_CUADRANTE && verBloqueos)) && (
+      {porCentro && <ElegirNave texto={t('turns.pick.center')} />}
+
+      {!noCenter && (vistaDias === 'bloqueos' || (MOSTRAR_CUADRANTE && verBloqueos)) && (
         <div className="card p-4">
           <div className="mb-2 flex items-center gap-2">
             <Ban size={16} className="text-red-400" />
@@ -2491,8 +2523,8 @@ export default function Turnos() {
       )}
 
       {/* Solicitudes de los conductores */}
-      {vistaDias === 'refuerzos' && <Refuerzos center={center} puedeAprobar={puedeAprobar} onCambio={setRefPend} />}
-      {vistaDias === 'suspensiones' && <Suspensiones center={center} drivers={drivers} puede={puedeAprobar} />}
+      {!noCenter && vistaDias === 'refuerzos' && <Refuerzos center={center} puedeAprobar={puedeAprobar} onCambio={setRefPend} />}
+      {!noCenter && vistaDias === 'suspensiones' && <Suspensiones center={center} drivers={drivers} puede={puedeAprobar} />}
       {vistaDias === 'peticiones' && (
       <div className="card p-4">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-dark-100">
@@ -2512,7 +2544,7 @@ export default function Turnos() {
               humana de abrirlo. Es el mismo fallo del gotcha 27 —una pantalla
               a la que no se llega no existe— y por eso se mueve aqui. */}
           <button onClick={() => setVerHistorial((v) => !v)}
-            className={`ml-auto flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[12px] font-semibold transition ${
+            className={`ml-auto flex min-h-[44px] items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[12px] font-semibold transition sm:min-h-0 ${
               verHistorial ? 'border-brand-500/50 bg-brand-500/15 text-brand-300'
                 : 'border-dark-800 bg-dark-900/60 text-dark-300 hover:text-dark-100'}`}>
             <History size={14} /> Historial
@@ -2540,6 +2572,12 @@ export default function Turnos() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-semibold text-dark-100">{g.driver_name}</span>
+                    {/* Con «Todos», de qué centro es cada petición (11-11-2026, cuadrante-3). */}
+                    {noCenter && g.center && (
+                      <span className="rounded bg-dark-800 px-1.5 py-0.5 font-mono text-[11px] font-bold text-dark-200" data-testid="centro-peticion">
+                        {g.center}
+                      </span>
+                    )}
                     {g.caducada && (
                       <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[11px] font-semibold text-red-300">
                         Sin contestar y el día ya pasó
@@ -2568,10 +2606,10 @@ export default function Turnos() {
                 </div>
                 {puedeAprobar ? (
                   <div className="flex gap-2">
-                    <button onClick={() => resolver(g, 'aprobar')} disabled={resolviendo.has(g.key)} className="flex items-center gap-1 rounded-lg bg-emerald-500/15 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50">
+                    <button onClick={() => resolver(g, 'aprobar')} disabled={resolviendo.has(g.key)} className="flex min-h-[44px] items-center gap-1 sm:min-h-0 rounded-lg bg-emerald-500/15 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50">
                       {resolviendo.has(g.key) ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} {t('turns.approve')}
                     </button>
-                    <button onClick={() => resolver(g, 'rechazar')} disabled={resolviendo.has(g.key)} className="flex items-center gap-1 rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/25 disabled:opacity-50">
+                    <button onClick={() => resolver(g, 'rechazar')} disabled={resolviendo.has(g.key)} className="flex min-h-[44px] items-center gap-1 sm:min-h-0 rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/25 disabled:opacity-50">
                       <X size={13} /> {t('turns.reject')}
                     </button>
                   </div>

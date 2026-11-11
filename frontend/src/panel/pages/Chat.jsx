@@ -6,6 +6,7 @@ import { getChat, postChat, chatToChecklist, deleteChatMessage,
          getMensajesGente, getMensajesCon, postMensaje, postMensajeArchivo, chatIaEstado } from '../api'
 import { getAdmin, isSuperAdmin } from '../auth'
 import { MARCA } from '../../marca'
+import ElegirNave from '../components/ElegirNave'
 
 const POLL_MS = 7000
 const POLL_GENTE_MS = 20000
@@ -325,9 +326,11 @@ export default function Chat() {
               {con ? con.nombre : t('chat.title')}
               {!con && !noCenter && <span className="text-dark-500"> · {center}</span>}
             </h1>
+            {/* Sin centro, nada: los botones para elegirlo están justo debajo (11-11-2026). Antes decía «Elige un centro
+                arriba…», que mandaba a otro sitio y repetía la frase de los botones. */}
             <p className="text-xs text-dark-500">
               {con ? 'Conversación privada: solo la veis vosotros dos.'
-                : noCenter ? t('chat.center.hint')
+                : noCenter ? null
                 : t('chat.visibility').replace('{center}', center)}
             </p>
           </div>
@@ -335,12 +338,14 @@ export default function Chat() {
 
         {err && <div className="mb-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300">{err}</div>}
 
-        <div className="flex-1 overflow-y-auto rounded-lg border border-dark-800 bg-dark-900 p-3">
+        {/* En el móvil la burbuja de la IA va encima de la caja de escribir, sobre el final de esta lista: el hueco de
+            abajo (pb-16) deja que el último mensaje suba por encima de ella (11-11-2026). En el ordenador, como antes. */}
+        <div className="flex-1 overflow-y-auto rounded-lg border border-dark-800 bg-dark-900 p-3 pb-16 md:pb-3" data-testid="chat-mensajes">
           {salaBloqueada ? (
-            <div className="flex flex-col items-center gap-3 py-12 text-center">
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
               <MessageSquare size={26} className="text-brand-400" />
-              <p className="text-sm text-dark-200">{t('chat.center.hint')}</p>
-              <p className="text-xs text-dark-500">Disponibles: {centers?.join(' · ') || '—'}</p>
+              {/* Un botón por centro ahí mismo (11-11-2026, portal_inicio-9): antes, la lista de centros como texto. */}
+              <ElegirNave className="w-full max-w-md" centers={centers} texto={t('chat.center.pick')} />
               <p className="text-xs text-dark-500">Los mensajes privados sí funcionan sin elegir centro.</p>
             </div>
           ) : loading ? (

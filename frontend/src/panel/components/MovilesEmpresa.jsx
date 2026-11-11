@@ -4,6 +4,7 @@ import {
   getMoviles, anadirMoviles, editarMovil, borrarMovil, guardarMovilesDe, pegarMoviles,
 } from '../api'
 import { lista } from '../../lib/lista'
+import ElegirNave from './ElegirNave'
 
 /* MÓVILES DE EMPRESA — la extensión de cada móvil del centro y quién lo lleva.
 
@@ -226,7 +227,8 @@ export default function MovilesEmpresa({ center }) {
     return m
   }, [conductores])
 
-  if (noCenter) return <p className="card p-5 text-dark-300">Elige un centro arriba: los móviles van por centro.</p>
+  // Un botón por centro ahí mismo (11-11-2026, portal_inicio-9), en vez de mandar arriba.
+  if (noCenter) return <ElegirNave texto="Los móviles van por centro: elige uno." />
   if (!datos) return <div className="card flex items-center gap-2 p-6 text-dark-400"><Loader2 size={16} className="animate-spin" /> Cargando los móviles…</div>
 
   const anadir = async () => {

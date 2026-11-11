@@ -62,6 +62,8 @@ export const chatToChecklist = (center, messageId, body = {}) =>
 export const getDashboardStats = (center) => api.get('/stats/dashboard', { params: centerParam(center) })
 export const getDamageCosts = (center) => api.get('/stats/damage-costs', { params: centerParam(center) })
 export const getStatsHoy = (center) => api.get('/stats/hoy', { params: centerParam(center) })
+// Cómo va cada centro (11-11-2026): plantilla de hoy, plan de horas, última DNR, cuadrante y máximas, por centro.
+export const getCentrosHoy = () => api.get('/stats/centros-hoy')
 
 /* ── Vehículos / Flota ── */
 export const getOnboarding = () => api.get('/onboarding')
@@ -793,6 +795,8 @@ export const parkingState = (center, day) => api.get('/parking/state', { params:
 export const parkingAssign = (body) => api.post('/parking/assign', body)
 export const parkingResolve = (body) => api.post('/parking/resolve', body)
 export const parkingZoneImage = (formData) => api.post('/parking/zone-image', formData)
+// «Como ayer» (11-11-2026): la última plaza de cada furgoneta antes de `day`, contando también las asignadas.
+export const parkingUltimas = (center, day) => api.get('/parking/last-known', { params: { center, incluir_asignadas: true, antes_de: day } })
 
 /* Cuadre del debrief. `center` se manda crudo, como el resto del panel: el
    backend filtra por regex porque el centro esta guardado de cuatro formas

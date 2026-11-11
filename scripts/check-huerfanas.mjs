@@ -109,10 +109,8 @@ const SIN_UI_A_PROPOSITO = new Set([
   // de escribirse el 15-06-2026 (363 documentos). Lo que se mira hoy es
   // `/diarios/conductores` y la scorecard por conductor.
   'GET /metrics/driver-history/{transporter_id}',
-  // Donde quedo cada furgoneta la ultima vez que se confirmo la plaza. El
-  // plano (`/parking/state`) ya enseña plaza mandada, reportada y confirmada
-  // del dia; el historico se consulta a mano si hace falta.
-  'GET /parking/last-known',
+  // (11-11-2026) 'GET /parking/last-known' salio de aqui: la usa el boton
+  // «Como ayer» de Aparcamiento.
   // Disparo manual de los avisos de ITV por WhatsApp: los manda el cron a su
   // hora (`envio_itv_whatsapp`) y el canal sigue bloqueado por Meta.
   'POST /whatsapp/avisar-itv',

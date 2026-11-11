@@ -2,11 +2,11 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useOutletContext } from 'react-router-dom'
 import {
   Loader2, Clock, AlertTriangle, CircleCheck, Info, ChevronDown, ChevronUp,
-  Trash2, RefreshCw, Lock, CalendarX2,
+  Trash2, RefreshCw, Lock, CalendarX2, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { whcAnalizar, getWhcPlan, deleteWhcPlan, getWhcEstado } from '../api'
 import { lista } from '../../lib/lista'
-import { useOrden } from '../../lib/orden'
+import { useOrden, flechaOrden, claseOrden } from '../../lib/orden'
 import ThOrden from '../components/ThOrden'
 import { fechaHoraLocal, horaLocal, diaMesLocal, diasAtras, isoLocal } from '../../lib/fecha'
 
@@ -53,9 +53,77 @@ function cuandoPegado(iso) {
   return { hace, hora, corto, largo }
 }
 const ddmm = (s) => (s ? `${s.slice(8, 10)}/${s.slice(5, 7)}` : '')
+/* El domingo AAAA-MM-DD de n semanas antes o después (11-11-2026). En UTC y a
+   mediodía: con la hora local, el cambio de hora de octubre movía un día. */
+const moverSemana = (iso, n) => {
+  const d = new Date(`${iso}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 7 * n)
+  return d.toISOString().slice(0, 10)
+}
+
+/* Lo que se ve de cada conductor, igual en la tabla (ordenador) y en las tarjetas
+   (móvil, 11-11-2026): el color de lo que le queda y su estado. */
+const colorMargen = (c) => (c.supera_semanal ? 'text-red-300' : c.pasara_hoy ? 'text-orange-300'
+  : c.al_limite ? 'text-amber-300' : 'text-emerald-300')
+function EstadoConductor({ c, deHoy, pegado }) {
+  if (c.supera_semanal) {
+    return <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-semibold text-red-300">Pasado</span>
+  }
+  if (c.pasara_hoy) {
+    return (
+      <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[11px] font-semibold text-orange-300"
+        title={deHoy ? `Lleva ${hm(c.cerrado)} cerradas; con la ruta de hoy entera pasaría del límite.`
+          : `Cuando se pegó el plan (${pegado?.largo || ''}) llevaba ${hm(c.cerrado)} cerradas; con aquella ruta entera pasaba del límite.`}>
+        {deHoy ? 'Se pasa hoy si acaba' : `Se pasaba si acababa (${pegado?.corto || 'otro día'})`}
+      </span>
+    )
+  }
+  if (c.al_limite) {
+    return <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">Al límite</span>
+  }
+  return <span className="flex items-center gap-1 text-[11px] text-emerald-400/80"><CircleCheck size={11} /> Con margen</span>
+}
+
+/* LA TABLA O LAS TARJETAS, UNA SOLA EN LA PÁGINA (11-11-2026). Por debajo de 640 px
+   (el `sm` de Tailwind), tarjetas. Con las dos y una escondida por CSS, cada nombre y
+   cada estado estaban dos veces en la página. */
+const ESTRECHA = '(max-width: 639.98px)'
+function useEstrecha() {
+  const [si, setSi] = useState(() => { try { return window.matchMedia(ESTRECHA).matches } catch { return false } })
+  useEffect(() => {
+    let m
+    try { m = window.matchMedia(ESTRECHA) } catch { return undefined }
+    const cambio = () => setSi(m.matches)
+    m.addEventListener?.('change', cambio)
+    return () => m.removeEventListener?.('change', cambio)
+  }, [])
+  return si
+}
+
+/* ORDENAR EN EL MÓVIL (11-11-2026). Las tarjetas no tienen cabecera que pulsar: una
+   fila de botones con los mismos campos que la tabla y el mismo orden en tres pasos. */
+function OrdenMovil({ campos, orden, pulsar }) {
+  return (
+    <div role="group" aria-label="Ordenar por" className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] text-dark-500">Ordenar por</span>
+      {campos.map(([campo, txt]) => {
+        const activa = orden?.campo === campo
+        return (
+          <button key={campo} type="button" onClick={() => pulsar(campo)} aria-pressed={activa}
+            className={`inline-flex min-h-[44px] items-center gap-1 rounded-lg border px-2.5 text-xs ${
+              activa ? 'border-brand-500/50 bg-brand-500/15 text-brand-200' : 'border-dark-700 text-dark-400'}`}>
+            {txt}
+            <span className={`text-[11px] leading-none ${claseOrden(orden, campo)}`}>{flechaOrden(orden, campo)}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 export default function Horas() {
   const { center } = useOutletContext()
+  const estrecha = useEstrecha()
   const [texto, setTexto] = useState('')
   /* VACÍA, no 0: quien no la toca no está afirmando «cero excepciones». */
   const [excepciones, setExcepciones] = useState('')
@@ -66,6 +134,19 @@ export default function Horas() {
   const [abierto, setAbierto] = useState(null)
   const [guardado, setGuardado] = useState(null)
   const [editando, setEditando] = useState(false)
+  /* LA SEMANA QUE SE MIRA (11-11-2026, horas_dnr-3, lo que faltaba). null = la en
+     curso (la decide el servidor, no el reloj del móvil). `vista`: la que contestó
+     el servidor; `planLeido`: ya se sabe si esa semana tiene plan. */
+  /* Va con su centro: al cambiar de centro se vuelve a la semana en curso. Y se
+     olvida (11-11-2026): con solo comparar el centro, volver al de antes reabría la
+     semana anterior que se miraba allí. Se ajusta al pintar, no en un efecto, para
+     no pedir antes el plan de la semana vieja. */
+  const [eleccion, setEleccion] = useState({ center, week: null })
+  if (eleccion.center !== center) setEleccion({ center, week: null })
+  const semana = eleccion.center === center ? eleccion.week : null
+  const setSemana = (week) => setEleccion({ center, week })
+  const [vista, setVista] = useState(null)
+  const [planLeido, setPlanLeido] = useState(false)
 
   const cargarEstado = useCallback(() => {
     getWhcEstado().then(({ data }) => setEstado(data)).catch(() => {})
@@ -84,8 +165,12 @@ export default function Horas() {
      quita la cifra guardada; sin él, la casilla vacía no manda nada y se conserva.
      `recalcular` (11-11-2026): es «Recalcular», no un pegado nuevo: el servidor
      conserva la hora del pegado guardado. Un pegado nuevo es de ahora aunque el
-     texto sea el mismo. */
-  const analizar = useCallback(async (txt, exc, { carga = false, centro = null, sustituir = null, quitarVacia = false, recalcular = false } = {}) => {
+     texto sea el mismo.
+     `week` (11-11-2026): la semana del plan que se ha abierto (al abrirlo y al
+     recalcular). Si su texto no trae fechas, el servidor lo deja en esa semana y no
+     en la de hoy. Un pegado nuevo solo la manda si se está mirando una semana
+     anterior: sin ella, pegado allí, se guardaba en la de hoy y podía pisar su plan. */
+  const analizar = useCallback(async (txt, exc, { carga = false, centro = null, sustituir = null, quitarVacia = false, recalcular = false, week = null } = {}) => {
     const cuerpo = txt ?? texto
     const e = exc ?? excepciones
     const n = ++peticion.current
@@ -98,6 +183,7 @@ export default function Horas() {
         ...(carga ? { guardar: false } : {}),
         ...(sustituir == null ? {} : { sustituir }),
         ...(recalcular ? { recalcular: true } : {}),
+        ...(week ? { week } : {}),
       })
       if (n !== peticion.current) return null
       setDatos({ ...r.data, esCarga: carga })
@@ -106,7 +192,8 @@ export default function Horas() {
       setEditando(!!centro || !!(r.data?.otra_nave && !r.data?.es_el_guardado))
       if (r.data?.guardado) {
         // Guardado en OTRO centro (con su botón): el elegido sigue sin plan.
-        if (!centro) setGuardado({ updated_at: new Date().toISOString(), pegado_en: r.data.pegado_en, week: r.data.semana_del_plan })
+        // `semana_guardada` (11-11-2026): la de un plan sin fechas, para que «Borrar» borre esa.
+        if (!centro) setGuardado({ updated_at: new Date().toISOString(), pegado_en: r.data.pegado_en, week: r.data.semana_del_plan || r.data.semana_guardada })
         cargarEstado()
       }
       return r.data
@@ -128,7 +215,8 @@ export default function Horas() {
     }
   }
 
-  // Al entrar se recupera el plan de ESTA semana del centro y se analiza solo.
+  // Al entrar se recupera el plan de ESTA semana del centro (o de la elegida con
+  // ‹ ›, 11-11-2026) y se analiza solo.
   useEffect(() => {
     let vivo = true
     peticion.current += 1
@@ -136,17 +224,20 @@ export default function Horas() {
     // Las excepciones también: la cifra de una nave no puede viajar a otra
     // (10-11-2026: con 2 en OGA5, se cambiaba a DGA1 sin plan y se guardaba con 2).
     setDatos(null); setGuardado(null); setTexto(''); setEditando(false); setExcepciones('')
+    setVista(semana); setPlanLeido(false)
     if (!center || center === 'Todos') return undefined
-    getWhcPlan(center).then(({ data }) => {
-      if (!vivo || !data?.hay || !data.texto) return
+    getWhcPlan(center, semana).then(({ data }) => {
+      if (!vivo) return
+      setVista(data?.semana || semana); setPlanLeido(true)
+      if (!data?.hay || !data.texto) return
       setGuardado(data)
       setTexto(data.texto)
       const exc = data.excepciones == null ? '' : data.excepciones
       setExcepciones(exc)
-      analizar(data.texto, exc, { carga: true })
+      analizar(data.texto, exc, { carga: true, week: data.week || data.semana || semana })
     }).catch(() => {})
     return () => { vivo = false }
-  }, [center]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [center, semana]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Borra el plan QUE SE ESTÁ VIENDO, con su semana (10-11-2026): antes borraba
      siempre el de la semana en curso, aunque en pantalla estuviera el de la pasada. */
@@ -170,7 +261,12 @@ export default function Horas() {
   // Si el servidor no lo dice (uno viejo), se decide por la fecha.
   const deHoy = datos?.pegado_hoy != null ? datos.pegado_hoy !== false : !pegado || pegado.hace === 0
   const semanaEnCurso = estado?.semana_en_curso
-  const otraSemana = !!(datos?.semana_del_plan && semanaEnCurso && datos.semana_del_plan !== semanaEnCurso)
+  // La semana que se está mirando (11-11-2026): la elegida con ‹ ›, o la en curso.
+  const vistaSemana = semana || vista || semanaEnCurso || null
+  const esEnCurso = !semana || semana === semanaEnCurso
+  const conSemanas = !!(center && center !== 'Todos' && vistaSemana)
+  const otraSemana = !!(datos?.semana_del_plan && vistaSemana && datos.semana_del_plan !== vistaSemana)
+  const irASemana = (w) => setSemana(semanaEnCurso && w >= semanaEnCurso ? null : w)
   const otraNave = datos?.otra_nave
   const guardadoFuera = !!(datos?.guardado && datos.centro && center && center !== 'Todos'
     && datos.centro !== String(center).toUpperCase())
@@ -213,6 +309,38 @@ export default function Horas() {
         )}
       </header>
 
+      {/* ‹ SEMANA DEL 01/11 › (11-11-2026, horas_dnr-3): el plan de semanas
+          anteriores, para verlo, meterle las excepciones y borrarlo. */}
+      {conSemanas && (
+        <nav aria-label="Semana del plan" className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => irASemana(moverSemana(vistaSemana, -1))}
+            aria-label="Semana anterior" title="Semana anterior"
+            className="flex h-11 w-11 items-center justify-center rounded-lg border border-dark-700 text-dark-300 hover:bg-dark-800 sm:h-9 sm:w-9">
+            <ChevronLeft size={18} />
+          </button>
+          <span data-testid="horas-semana" className="min-w-[9.5rem] text-center text-sm font-semibold text-dark-100">
+            Semana del {ddmm(vistaSemana)}
+            <span className="block text-[11px] font-normal text-dark-500">{esEnCurso ? 'la de ahora' : 'una semana anterior'}</span>
+          </span>
+          <button type="button" onClick={() => irASemana(moverSemana(vistaSemana, 1))} disabled={esEnCurso}
+            aria-label="Semana siguiente" title="Semana siguiente"
+            className="flex h-11 w-11 items-center justify-center rounded-lg border border-dark-700 text-dark-300 hover:bg-dark-800 disabled:opacity-30 sm:h-9 sm:w-9">
+            <ChevronRight size={18} />
+          </button>
+          {!esEnCurso && (
+            <button type="button" onClick={() => setSemana(null)}
+              className="min-h-[44px] rounded-lg px-3 text-xs font-semibold text-brand-400 hover:bg-dark-800 sm:min-h-0 sm:py-2">
+              Volver a esta semana
+            </button>
+          )}
+        </nav>
+      )}
+      {conSemanas && planLeido && !esEnCurso && !guardado && !datos && (
+        <p className="rounded-lg border border-dark-800 bg-dark-900/50 px-3 py-2 text-[12.5px] text-dark-400">
+          No hay ningún plan guardado de {center} de la semana del {ddmm(vistaSemana)}.
+        </p>
+      )}
+
       <section className="card p-4">
         {mostrarPegar && (
           <>
@@ -234,26 +362,28 @@ export default function Horas() {
             <input id="horas-excepciones" type="number" value={excepciones} min={0} max={200}
               placeholder="?"
               onChange={(e) => setExcepciones(e.target.value === '' ? '' : Number(e.target.value))}
-              className="w-16 rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-sm text-dark-100" />
+              className="w-16 rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-sm text-dark-100 max-sm:min-h-[44px]" />
           </label>
           {mostrarPegar ? (
-            <button onClick={() => analizar()} disabled={cargando || texto.trim().length < 40}
-              className="btn-primary flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-40">
+            /* Mirando una semana anterior, lo pegado va a ESA semana si no trae fechas
+               (11-11-2026); en la de ahora, como siempre. */
+            <button onClick={() => analizar(null, null, semana ? { week: vistaSemana } : {})} disabled={cargando || texto.trim().length < 40}
+              className="btn-primary flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-40 max-sm:min-h-[44px]">
               {cargando ? <Loader2 size={14} className="animate-spin" /> : <Clock size={14} />}
               Ver cómo vamos
             </button>
           ) : (
             <>
-              <button onClick={() => analizar(null, null, { quitarVacia: true, recalcular: true })} disabled={cargando}
-                className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-2 text-xs text-dark-300 hover:bg-dark-800 disabled:opacity-40">
+              <button onClick={() => analizar(null, null, { quitarVacia: true, recalcular: true, week: guardado?.week || guardado?.semana || vista })} disabled={cargando}
+                className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-2 text-xs text-dark-300 hover:bg-dark-800 disabled:opacity-40 max-sm:min-h-[44px]">
                 {cargando ? <Loader2 size={13} className="animate-spin" /> : <Clock size={13} />} Recalcular
               </button>
               <button onClick={() => { setEditando(true); setTexto('') }}
-                className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-2 text-xs text-dark-300 hover:bg-dark-800">
+                className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-2 text-xs text-dark-300 hover:bg-dark-800 max-sm:min-h-[44px]">
                 <RefreshCw size={13} /> Pegar uno nuevo
               </button>
               <button onClick={borrar}
-                className="flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10">
+                className="flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10 max-sm:min-h-[44px]">
                 <Trash2 size={13} /> Borrar
               </button>
               <span className="text-[11px] text-dark-500">guardado {fechaHoraLocal(guardado.updated_at)}</span>
@@ -322,8 +452,17 @@ export default function Horas() {
           {/* UN PLAN QUE NO ES DE ESTA SEMANA (10-11-2026): antes solo se notaba por
               el «semana del 01/11» pequeño del título. */}
           {otraSemana && (
-            <div className="card border-amber-500/30 bg-amber-500/5 p-3 text-[12.5px] text-amber-200/90">
-              Este plan es de la semana del {ddmm(datos.semana_del_plan)}, no de esta.
+            <div className="card flex flex-wrap items-center gap-x-3 gap-y-2 border-amber-500/30 bg-amber-500/5 p-3 text-[12.5px] text-amber-200/90">
+              <span>
+                Este plan es de la semana del {ddmm(datos.semana_del_plan)}, {esEnCurso ? 'no de esta.' : `no de la del ${ddmm(vistaSemana)}.`}
+              </span>
+              {/* Ya guardado: se puede ir a su semana para verlo con ‹ › (11-11-2026). */}
+              {datos.guardado && !guardadoFuera && (
+                <button type="button" onClick={() => irASemana(datos.semana_del_plan)}
+                  className="min-h-[44px] rounded-lg border border-amber-500/40 px-3 text-xs font-semibold text-amber-200 hover:bg-amber-500/10 sm:min-h-0 sm:py-1.5">
+                  Ver la semana del {ddmm(datos.semana_del_plan)}
+                </button>
+              )}
             </div>
           )}
           {datos.aviso_guardado && !otraNave && (
@@ -471,6 +610,72 @@ export default function Horas() {
             </div>
           )}
 
+          {/* EN EL MÓVIL, UNA TARJETA POR CONDUCTOR (11-11-2026, horas_dnr-7): la
+              tabla mide 620 px y la columna del estado (quién se pasa) quedaba fuera. */}
+          {estrecha ? (
+          <>
+          <OrdenMovil orden={orden} pulsar={pulsar} campos={[['nombre', 'Nombre'], ['trabajado', 'Horas'],
+            ['margen_semanal', 'Le quedan'], ['dias_trabajados', 'Jornadas']]} />
+          <ul className="space-y-2" data-testid="horas-tarjetas">
+            {filas.map((c, i) => {
+              const abierta = abierto === i
+              const largos = c.riesgo_diario?.length || 0
+              return (
+                <li key={`${c.nombre}-${i}`} className="card p-3">
+                  <button type="button" disabled={!largos} aria-expanded={largos ? abierta : undefined}
+                    onClick={() => setAbierto(abierta ? null : i)}
+                    className="flex min-h-[44px] w-full items-start justify-between gap-3 text-left disabled:cursor-default">
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1.5 font-medium text-dark-100">
+                        {c.trabajando_ahora && deHoy && (
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400" title="En ruta ahora" />
+                        )}
+                        <span className="break-words">{c.nombre}</span>
+                      </span>
+                      <span className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-dark-400">
+                        <span className="tabular-nums text-dark-300">{hm(c.trabajado)}</span>
+                        {c.pasara_hoy && <span className="tabular-nums">{hm(c.cerrado)} cerradas</span>}
+                        {c.trabajado_origen === 'bloques' && (
+                          <span className="rounded bg-amber-500/15 px-1 py-0.5 text-[9px] font-medium text-amber-300">de bloques</span>
+                        )}
+                        <span>{c.dias_trabajados} {c.dias_trabajados === 1 ? 'jornada' : 'jornadas'}</span>
+                      </span>
+                      <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <EstadoConductor c={c} deHoy={deHoy} pegado={pegado} />
+                        {largos > 0 && (
+                          <span className="flex items-center gap-0.5 text-[10px] text-dark-500">
+                            {largos} {largos === 1 ? 'jornada larga' : 'jornadas largas'}
+                            {abierta ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                    {/* Pasado del límite: «1h 00m de más», no «−1h 00m le quedan» (11-11-2026). */}
+                    <span className={`shrink-0 text-right text-base font-semibold tabular-nums ${colorMargen(c)}`}>
+                      {hm(c.margen_semanal)}
+                      <span className="block text-[10px] font-normal text-dark-500">{c.margen_semanal < 0 ? 'de más' : 'le quedan'}</span>
+                    </span>
+                  </button>
+                  {abierta && largos > 0 && (
+                    <div className="mt-2 border-t border-dark-800 pt-2">
+                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-dark-500">
+                        Jornadas de 10 h o más: riesgo, no incumplimiento
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {c.riesgo_diario.map((b, j) => (
+                          <span key={j} className="rounded-lg bg-dark-800 px-2.5 py-1 text-[11px] text-dark-200">
+                            {b.inicio}{b.fin ? ` – ${b.fin}` : ''} · <b>{hm(b.minutos)}</b>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+          </>
+          ) : (
           <section className="card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[620px] text-sm">
@@ -513,25 +718,12 @@ export default function Horas() {
                               </span>
                             )}
                           </td>
-                          <td className={`px-3 py-2.5 text-right font-semibold tabular-nums ${
-                            c.supera_semanal ? 'text-red-300' : c.pasara_hoy ? 'text-orange-300' : c.al_limite ? 'text-amber-300' : 'text-emerald-300'}`}>
+                          <td className={`px-3 py-2.5 text-right font-semibold tabular-nums ${colorMargen(c)}`}>
                             {signo(c.margen_semanal)}
                           </td>
                           <td className="px-3 py-2.5 text-center tabular-nums text-dark-500">{c.dias_trabajados}</td>
                           <td className="px-4 py-2.5">
-                            {c.supera_semanal ? (
-                              <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-semibold text-red-300">Pasado</span>
-                            ) : c.pasara_hoy ? (
-                              <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[11px] font-semibold text-orange-300"
-                                title={deHoy ? `Lleva ${hm(c.cerrado)} cerradas; con la ruta de hoy entera pasaría del límite.`
-                                  : `Cuando se pegó el plan (${pegado?.largo || ''}) llevaba ${hm(c.cerrado)} cerradas; con aquella ruta entera pasaba del límite.`}>
-                                {deHoy ? 'Se pasa hoy si acaba' : `Se pasaba si acababa (${pegado?.corto || 'otro día'})`}
-                              </span>
-                            ) : c.al_limite ? (
-                              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">Al límite</span>
-                            ) : (
-                              <span className="flex items-center gap-1 text-[11px] text-emerald-400/80"><CircleCheck size={11} /> Con margen</span>
-                            )}
+                            <EstadoConductor c={c} deHoy={deHoy} pegado={pegado} />
                             {largos > 0 && (
                               <span className="ml-2 text-[10px] text-dark-500">· {largos} {largos === 1 ? 'jornada larga' : 'jornadas largas'}</span>
                             )}
@@ -560,6 +752,7 @@ export default function Horas() {
               </table>
             </div>
           </section>
+          )}
 
           <div className="flex items-start gap-2 rounded-xl border border-dark-800 bg-dark-900/50 p-3.5">
             <Info size={14} className="mt-0.5 shrink-0 text-dark-500" />

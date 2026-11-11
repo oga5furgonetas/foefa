@@ -758,6 +758,22 @@ async function portal(page, ios) {
     ruta: { fin: '11:00', minutos: 45, km: 6, trafico: true }, pedidos: [parada(1, 'pendiente'), parada(2, 'pendiente')] } }))
   await page.route(/\/api\/conductor\/referidos/, (r) => r.fulfill({ json: { enlace: 'https://flotadsp.com/invita?ref=XYZ', por_invitado: 250, saldo: 500, invitados: 1, premiados: 0, metodos: ['bizum', 'iban'], retiradas: [] } }))
   await page.route(/\/api\/driver-offers$/, (r) => r.fulfill({ json: { offers: [OFERTA] } }))
+  // «Mis DNR» (11-11-2026, revisión final F34): una semana con DNR, para que la pantalla se mire con datos (la forma del
+  // contrato de R7: cada DNR con su `entrega` y todo lo demás, null lo que no se sabe; y R9: una llamada «corta», de menos
+  // de 30 s, con su fallo de contacto).
+  const dnr = (dia, paquete, estado, mas = {}) => ({ dia, entrega: null, paquete, estado, cp: '15704', como: null, lejos: null,
+    llamada: null, segundos: null, fallo_contacto: null, foto: null, foto_motivo: null, ...mas })
+  await page.route(/\/api\/diarios\/mias/, (r) => r.fulfill({ json: {
+    tiene_id: true, en_revision: false, datos_hasta: '2026-11-10',
+    semanas: [{ semana: '2026-11-08', hasta: '2026-11-14', cuentan: 1, no_cuentan: 0, sin_clasificar: 1, dnr: [
+      // La «corta» va en ESTA semana (la pasada sale cerrada y no se miraría): así el iPhone pinta su etiqueta y su aviso.
+      dnr('2026-11-10', 'TBA123456789012', 'sin_clasificar', { llamada: 'corta', segundos: 12, fallo_contacto: true }),
+      dnr('2026-11-09', 'TBA123456789011', 'cuenta', { entrega: '2026-11-07', como: 'puerta', llamada: 'no', fallo_contacto: true, foto: 'mal', foto_motivo: 'borrosa' }),
+    ] }, { semana: '2026-11-01', hasta: '2026-11-07', cuentan: 1, no_cuentan: 1, sin_clasificar: 0, dnr: [
+      dnr('2026-11-04', 'TBA123456789010', 'cuenta'),
+      dnr('2026-11-03', 'TBA123456789009', 'no_cuenta'),
+    ] }],
+  } }))
 }
 const HOLA = 'Hola, ANA'
 const PORTAL = [
@@ -772,6 +788,9 @@ const PORTAL = [
   { nombre: 'Cambiar mi contraseña', ruta: '/conductor', ancla: HOLA, clic: 'Cambiar mi contraseña' },
   { nombre: 'Correo de recuperación', ruta: '/conductor', ancla: HOLA, clic: 'Correo de recuperación' },
   { nombre: 'Mercadillo (portal)', ruta: '/conductor?vista=mercadillo', perfil: 'basico' },
+  { nombre: 'Mis DNR', ruta: '/conductor?vista=dnr', ancla: (p) => p.getByTestId('dnr-fila') },
+  // La hoja del ejemplo de la preferencia (11-11-2026): se abre desde el recordatorio y también se mira en el iPhone.
+  { nombre: 'Mis DNR · el ejemplo de la preferencia', ruta: '/conductor?vista=dnr', ancla: (p) => p.getByTestId('dnr-fila'), clic: 'Cómo sé si tiene preferencia' },
 ]
 test.describe('iPhone · el portal del conductor de empresa', () => {
   test.use({ userAgent: UA_APP })

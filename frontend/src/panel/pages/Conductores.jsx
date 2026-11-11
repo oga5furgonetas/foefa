@@ -11,7 +11,7 @@ import {
   Loader2, Search, Plus, X, Pencil, Trash2, UserCheck, FileSpreadsheet, Phone, Mail, IdCard, Car,
   MapPin, FileText, Building2, Save, Camera, Trophy, TrendingUp, TrendingDown, Minus, Flame,
   BarChart2, ChevronDown, ChevronUp, AlertCircle, Lock, LockOpen, Eye, EyeOff, ShieldCheck,
-  Share2, Smartphone, ArrowRightLeft, KeyRound,
+  Share2, Smartphone, ArrowRightLeft, KeyRound, MoreHorizontal,
 } from 'lucide-react'
 import {
   getDrivers, createDriver, updateDriver, deleteDriver, uploadDriverPhoto, programarTraslado, cancelarTraslado,
@@ -31,6 +31,19 @@ const EMPTY = {
 // Sin centro, la ficha sale en la lista de TODOS los centros (así nadie la
 // pierde de vista) y marcada, para que se le ponga el suyo.
 const sinCentro = (d) => !String(d?.center || '').trim()
+
+/* LO QUE LE FALTA A UNA FICHA (11-11-2026, tanda 2, E2 / equipo-7). Para encontrar a quien no tiene centro, correo,
+   ID de reparto o acceso había que abrir las fichas una a una. Cada falta es un filtro de un toque encima de la
+   lista y, en el móvil, una etiqueta en la tarjeta. El ID de reparto solo cuenta si la empresa usa la DNR o las horas
+   (la misma regla que enseña el campo en la ficha), y el acceso solo si se sabe quién tiene cuenta. */
+const FALTAS = [
+  { id: 'centro', clave: 'drv.f.sinCentro', falta: (d) => sinCentro(d) },
+  { id: 'correo', clave: 'drv.f.sinCorreo', falta: (d) => !String(d?.email || '').trim() },
+  { id: 'reparto', clave: 'drv.f.sinId', falta: (d) => !String(d?.transporter_id || '').trim(), soloReparto: true },
+  { id: 'acceso', clave: 'drv.f.sinAcceso', falta: (d, cuentas) => !cuentas.includes(d.id), soloCuentas: true },
+]
+const faltasQueCuentan = ({ conIdReparto, cuentasOk }) =>
+  FALTAS.filter((f) => (!f.soloReparto || conIdReparto) && (!f.soloCuentas || cuentasOk))
 
 function initials(n) {
   return (n || '?').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -764,8 +777,10 @@ function AvisoAccesos({ list, center, onHecho }) {
           ) : previaFallo ? (
             <p className="flex flex-wrap items-center gap-2 text-amber-300">
               No se ha podido calcular a quién afecta.
+              {/* 44 px en el móvil (11-11-2026, segunda revisión de la tanda 2): sin previa no se puede aplicar, así que
+                  es el botón que hay que pulsar. Igual desde `sm`. */}
               <button onClick={() => setReintento((n) => n + 1)}
-                className="rounded-lg bg-dark-800 px-2.5 py-1 font-semibold text-dark-200 hover:bg-dark-700">Reintentar</button>
+                className="min-h-[44px] rounded-lg bg-dark-800 px-2.5 py-1 font-semibold text-dark-200 hover:bg-dark-700 sm:min-h-0">Reintentar</button>
             </p>
           ) : (
             <p className="flex items-center gap-1.5 text-dark-400">
@@ -773,7 +788,8 @@ function AvisoAccesos({ list, center, onHecho }) {
             </p>
           )}
         </div>
-        <label className="mt-2 flex items-start gap-2 text-[12.5px] text-dark-300">
+        {/* Lo que se toca, de 44 px en el móvil también aquí (11-11-2026, revisión de la tanda 2); igual desde `sm`. */}
+        <label className="mt-2 flex min-h-[44px] items-center gap-2 text-[12.5px] text-dark-300 sm:min-h-0 sm:items-start">
           <input type="checkbox" checked={incluirPropias} onChange={(e) => setIncluirPropias(e.target.checked)}
             className="mt-0.5" />
           <span>Cambiársela también a quien ya se ha puesto la suya</span>
@@ -790,16 +806,16 @@ function AvisoAccesos({ list, center, onHecho }) {
         <input id="clave-temporal-conductores" type="password" autoComplete="new-password"
           value={claveTemporal} onChange={(e) => setClaveTemporal(e.target.value)}
           placeholder="Escribe la contraseña temporal" minLength={8} maxLength={128}
-          className="mt-1 w-full max-w-sm rounded-lg border border-dark-700 bg-dark-950 px-3 py-2 text-sm text-dark-100 outline-none focus:border-amber-400" />
+          className="mt-1 min-h-[44px] w-full max-w-sm rounded-lg border border-dark-700 bg-dark-950 px-3 py-2 text-sm text-dark-100 outline-none focus:border-amber-400 sm:min-h-0" />
         <div className="mt-3 flex flex-wrap gap-2">
           {/* Sin la previa de lo que hay en pantalla (calculando o fallida), no se aplica: ver arriba. */}
           <button onClick={dar} disabled={dando || !previa || previa.actualizadas === 0}
-            className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-2 text-[12.5px] font-semibold text-amber-100 hover:bg-amber-500/30 disabled:opacity-50">
+            className="flex min-h-[44px] items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-2 text-[12.5px] font-semibold text-amber-100 hover:bg-amber-500/30 disabled:opacity-50 sm:min-h-0">
             {dando ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />}
             {dando ? 'Aplicando…' : previa ? `Aplicar contraseña temporal a ${previa.actualizadas}` : 'Aplicar contraseña temporal'}
           </button>
           <button onClick={() => setConfirmar(false)}
-            className="px-3 py-2 text-[12.5px] text-dark-400 hover:text-dark-200">Dejarlo como está</button>
+            className="min-h-[44px] px-3 py-2 text-[12.5px] text-dark-400 hover:text-dark-200 sm:min-h-0">Dejarlo como está</button>
         </div>
         {error && <p className="mt-2 text-[12px] text-red-300">{error}</p>}
       </div>
@@ -812,7 +828,9 @@ function AvisoAccesos({ list, center, onHecho }) {
   return (
     <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-dark-800 bg-dark-900/60 px-3 py-2 text-[12.5px]">
       <Lock size={13} className="shrink-0 text-dark-500" />
-      <span className="min-w-0 flex-1 text-dark-300">
+      {/* Un mínimo de ancho (11-11-2026, tanda 2, E1): en el móvil el botón largo lo aplastaba a una palabra por
+          línea; ahora, si no cabe al lado, el botón baja a la línea siguiente. En el ordenador cabe todo como antes. */}
+      <span className="min-w-[min(15rem,calc(100%_-_2rem))] flex-1 text-dark-300">
         Contraseña temporal común: se aplica a {deCentro}
         {sinCorreo > 0 && <> · <span className="text-amber-300">{sinCorreo} sin correo</span></>}
         <span className="ml-1.5 cursor-help text-dark-500"
@@ -820,10 +838,11 @@ function AvisoAccesos({ list, center, onHecho }) {
             + (sinCorreo > 0 ? ` Los ${sinCorreo} sin correo no pueden entrar de ninguna forma hasta ponérselo en su ficha.` : '')}>(?)</span>
       </span>
       <button onClick={() => setConfirmar(true)}
-        className="rounded-lg bg-dark-800 px-2.5 py-1 font-semibold text-dark-200 hover:bg-dark-700">
+        className="min-h-[44px] rounded-lg bg-dark-800 px-2.5 py-1 font-semibold text-dark-200 hover:bg-dark-700 sm:min-h-0">
         Establecer contraseña temporal común
       </button>
-      <button onClick={plegar} aria-label="Ocultar este aviso" className="rounded p-1 text-dark-500 hover:text-dark-300">
+      <button onClick={plegar} aria-label="Ocultar este aviso"
+        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded p-1 text-dark-500 hover:text-dark-300 sm:min-h-0 sm:min-w-0">
         <X size={13} />
       </button>
     </div>
@@ -881,7 +900,8 @@ function ContrasenaInicial() {
     <div className="mb-3 rounded-xl border border-dark-800 bg-dark-900/60 px-3 py-2 text-[12.5px]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <KeyRound size={13} className="shrink-0 text-dark-500" />
-        <span className="min-w-0 flex-1 text-dark-300">
+        {/* El mismo mínimo de ancho que el aviso de la temporal (11-11-2026, tanda 2, E1). */}
+        <span className="min-w-[min(15rem,calc(100%_-_2rem))] flex-1 text-dark-300">
           Contraseña inicial de los conductores nuevos:{' '}
           {estado.definida
             ? <span className="text-lime-300">definida{desde ? ` desde el ${desde}` : ''}{estado.por ? ` por ${estado.por}` : ''}</span>
@@ -891,13 +911,13 @@ function ContrasenaInicial() {
         </span>
         {!editar && (
           <button onClick={() => { setEditar(true); setAviso('') }}
-            className="rounded-lg bg-dark-800 px-2.5 py-1 font-semibold text-dark-200 hover:bg-dark-700">
+            className="min-h-[44px] rounded-lg bg-dark-800 px-2.5 py-1 font-semibold text-dark-200 hover:bg-dark-700 sm:min-h-0">
             {estado.definida ? 'Cambiarla' : 'Definirla'}
           </button>
         )}
         {!editar && estado.definida && (
           <button onClick={quitar} disabled={ocupado}
-            className="px-2 py-1 text-dark-400 hover:text-dark-200 disabled:opacity-50">Quitarla</button>
+            className="min-h-[44px] px-2 py-1 text-dark-400 hover:text-dark-200 disabled:opacity-50 sm:min-h-0">Quitarla</button>
         )}
       </div>
       {editar && (
@@ -906,12 +926,13 @@ function ContrasenaInicial() {
             onKeyDown={(e) => { if (e.key === 'Enter') guardar() }}
             placeholder="Contraseña inicial (mínimo 8 caracteres)" minLength={8} maxLength={128}
             aria-label="Contraseña inicial de los conductores nuevos"
-            className="w-full max-w-xs rounded-lg border border-dark-700 bg-dark-950 px-3 py-1.5 text-sm text-dark-100 outline-none focus:border-brand-400" />
-          <button onClick={guardar} disabled={ocupado} className="btn-primary flex items-center gap-1.5 px-3 py-1.5 text-[12.5px]">
+            className="min-h-[44px] w-full max-w-xs rounded-lg border border-dark-700 bg-dark-950 px-3 py-1.5 text-sm text-dark-100 outline-none focus:border-brand-400 sm:min-h-0" />
+          {/* 44 px en el móvil, como «Cambiarla» (11-11-2026, revisión de la tanda 2); igual desde `sm`. */}
+          <button onClick={guardar} disabled={ocupado} className="btn-primary flex min-h-[44px] items-center gap-1.5 px-3 py-1.5 text-[12.5px] sm:min-h-0">
             {ocupado ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />} Guardar
           </button>
           <button onClick={() => { setEditar(false); setClave(''); setError('') }}
-            className="px-2 py-1 text-dark-400 hover:text-dark-200">Cancelar</button>
+            className="min-h-[44px] px-2 py-1 text-dark-400 hover:text-dark-200 sm:min-h-0">Cancelar</button>
         </div>
       )}
       {error && <p className="mt-1.5 text-[12px] text-red-300">{error}</p>}
@@ -921,8 +942,109 @@ function ContrasenaInicial() {
 }
 
 
-function TablaConductores({ list, accounts, onAbrir }) {
+/* UNA TARJETA POR CONDUCTOR EN EL MÓVIL (11-11-2026, tanda 2, E1 / equipo-9). La tabla mide 760 px como mínimo y en el
+   móvil había que deslizar de lado para ver el teléfono. Debajo de `sm` va esto: el nombre y su centro; el teléfono, a
+   un toque para llamar (aparte de la tarjeta, que abre la ficha: un enlace dentro de un botón no vale); y lo que le
+   falta. El ordenador sigue con la tabla. */
+function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, onAbrir }) {
+  const { t } = useT()
+  const faltan = faltasQueCuentan({ conIdReparto, cuentasOk }).filter((f) => f.id !== 'centro' && f.falta(d, accounts))
+  const tel = String(d.phone || '').replace(/[^\d+]/g, '')
+  return (
+    <li className="flex items-stretch border-b border-dark-800/50 last:border-0">
+      <button type="button" onClick={() => onAbrir(d)} className="flex min-h-[56px] min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-left active:bg-dark-800/60">
+        <Avatar driver={d} size={8} />
+        <span className="min-w-0 flex-1">
+          {/* En dos líneas si hace falta, no cortado con «…» (11-11-2026, revisión de la tanda 2): a 390 px caben unas
+              28 letras y un nombre compuesto con dos apellidos («MARÍA DEL CARMEN FERNÁNDEZ RODRÍGUEZ») se perdía. */}
+          <span className="line-clamp-2 break-words text-[13.5px] font-semibold text-dark-100">{String(d.name || '').replace(/\s+/g, ' ').trim()}</span>
+          <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[12px] text-dark-400">
+            {sinCentro(d)
+              ? <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-amber-300">sin centro</span>
+              : <span>{d.center}</span>}
+            {tel && <span className="cifra text-dark-400">· {verTelefono(d.phone)}</span>}
+            {datoOrden && <DatoDeOrden d={d} col={datoOrden} nombre={t(COLUMNA_ORDEN[datoOrden])} />}
+            {d.traslado?.centro && (
+              <span className="whitespace-nowrap rounded-full bg-sky-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-sky-300">
+                → {d.traslado.centro} {fechaCorta(d.traslado.desde).slice(0, 5)}
+              </span>
+            )}
+            {faltan.map((f) => (
+              <span key={f.id} className="whitespace-nowrap rounded-full bg-dark-800 px-2 py-0.5 text-[10.5px] font-semibold text-amber-300">{t(f.clave)}</span>
+            ))}
+          </span>
+        </span>
+      </button>
+      {/* El número se lee en la tarjeta; el botón redondo llama. Así el nombre tiene casi todo el ancho. */}
+      {tel ? (
+        <a href={`tel:${tel}`} aria-label={`${t('drv.llamar')} ${verTelefono(d.phone)}`} title={t('drv.llamar')}
+          className="my-auto mr-2 flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-300 active:bg-brand-500/30">
+          <Phone size={17} />
+        </a>
+      ) : (
+        <span className="flex shrink-0 items-center pr-3 text-[11px] text-dark-500">{t('drv.f.sinTel')}</span>
+      )}
+    </li>
+  )
+}
+
+/* POR QUÉ SE PUEDE ORDENAR EN EL MÓVIL: por lo mismo que en la tabla (11-11-2026, tercera revisión de la tanda 2, M1).
+   Antes de las tarjetas, el móvil deslizaba la tabla de lado y ordenaba tocando cualquier cabecera; dejar solo nombre,
+   centro y teléfono le quitaba algo que tenía. Las siete columnas, en el orden de la tabla, con la clave de su nombre.
+   Las cuatro que la tarjeta no enseña (alojamiento, correo, contrato y nivel), al elegirlas, la tarjeta las enseña en su
+   línea de datos (DatoDeOrden): sin eso la lista cambiaba de orden sin ninguna pista de por qué. */
+const COLUMNA_ORDEN = { name: 'drv.o.nombre', center: 'drv.o.centro', alojamiento: 'drv.o.alojamiento', phone: 'drv.o.telefono',
+  email: 'drv.o.correo', contrato: 'drv.o.contrato', nivel: 'drv.o.nivel' }
+const NO_SALE_EN_TARJETA = ['alojamiento', 'email', 'contrato', 'nivel']
+
+/* El dato por el que se ordena, con el mismo texto que la celda de la tabla: la etiqueta de contrato o de nivel, el
+   correo o el alojamiento tal cual, y «—» si la ficha no lo tiene. Discreto, como el teléfono. El correo puede partirse
+   detrás de la «@» y, si aun así no cabe, por donde haga falta; el alojamiento, en dos líneas como mucho (entero en el
+   `title`). Así nada empuja la tarjeta de lado a 360 px. */
+function DatoDeOrden({ d, col, nombre }) {
+  if (col === 'contrato' || col === 'nivel') {
+    const [l, c] = (col === 'nivel' ? NIVEL : CONTRATO)[d[col]] || []
+    return c
+      ? <span data-testid="dato-orden" title={nombre} className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${c}`}>{l}</span>
+      : <span data-testid="dato-orden" title={nombre} className="text-dark-500">· —</span>
+  }
+  const v = d[col] || ''
+  if (!v) return <span data-testid="dato-orden" title={nombre} className="text-dark-500">· —</span>
+  if (col === 'email') {
+    // Se parte detrás de la «@» y de cada «.», no en mitad de una palabra; el «·» de delante va pegado (espacio duro)
+    // para no quedarse solo en una línea.
+    const trozos = v.replace(/[@.]/g, (c) => `${c}\n`).split('\n')
+    return (
+      <span data-testid="dato-orden" title={`${nombre}: ${v}`} className="min-w-0 max-w-full text-dark-500 [overflow-wrap:anywhere]">
+        {'· '}{trozos.flatMap((x, i) => (i ? [<wbr key={i} />, x] : [x]))}
+      </span>
+    )
+  }
+  return (
+    <span data-testid="dato-orden" title={`${nombre}: ${v}`} className="line-clamp-2 min-w-0 max-w-full text-dark-500 [overflow-wrap:anywhere]">· {v}</span>
+  )
+}
+
+// Pantalla estrecha (por debajo de `sm`, 640 px): sigue al giro del móvil y al tamaño de la ventana.
+const ESTRECHO = '(max-width: 639.98px)'
+function useEstrecho() {
+  const [si, setSi] = useState(() => { try { return window.matchMedia(ESTRECHO).matches } catch { return false } })
+  useEffect(() => {
+    let mq
+    try { mq = window.matchMedia(ESTRECHO) } catch { return undefined }
+    const cambia = () => setSi(mq.matches)
+    cambia()
+    mq.addEventListener?.('change', cambia)
+    return () => mq.removeEventListener?.('change', cambia)
+  }, [])
+  return si
+}
+
+function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = false, onAbrir }) {
+  const { t } = useT()
+  const estrecho = useEstrecho()
   const [orden, setOrden] = useState({ col: 'name', asc: true })
+  const datoOrden = NO_SALE_EN_TARJETA.includes(orden.col) ? orden.col : null
 
   const filas = useMemo(() => {
     const { col, asc } = orden
@@ -949,6 +1071,32 @@ function TablaConductores({ list, accounts, onAbrir }) {
 
   return (
     <div className="card overflow-hidden">
+      {/* Una cosa u otra, no las dos escondidas: así cada nombre está una sola vez en la página. */}
+      {estrecho ? (
+      <>
+      {/* ORDENAR TAMBIÉN EN EL MÓVIL (11-11-2026, revisión de la tanda 2). Con la tabla se ordenaba tocando su cabecera
+          (por centro, para tener juntos a los de cada nave con «Todos»; por contrato…); las tarjetas no tienen cabecera,
+          así que lo mismo va en un selector y un botón de sentido, sobre el mismo `orden` que usa la tabla. */}
+      <div className="flex items-center gap-2 border-b border-dark-800 px-3 py-1.5 text-[12.5px] text-dark-400">
+        <label htmlFor="orden-conductores">{t('drv.ordenarPor')}</label>
+        <select id="orden-conductores" value={orden.col} onChange={(e) => setOrden({ col: e.target.value, asc: true })}
+          className="min-h-[44px] min-w-0 flex-1 rounded-lg border border-dark-700 bg-dark-950 px-2 text-[13px] text-dark-100">
+          {Object.entries(COLUMNA_ORDEN).map(([col, clave]) => <option key={col} value={col}>{t(clave)}</option>)}
+        </select>
+        <button type="button" onClick={() => setOrden((o) => ({ ...o, asc: !o.asc }))}
+          aria-label={orden.asc ? t('drv.ordenAZ') : t('drv.ordenZA')} title={t('drv.ordenVuelta')}
+          className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-lg border border-dark-700 text-dark-300">
+          {orden.asc ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
+      </div>
+      <ul aria-label="Conductores">
+        {filas.map((d) => (
+          <TarjetaConductor key={d.id} d={d} accounts={accounts} cuentasOk={cuentasOk} conIdReparto={conIdReparto}
+            datoOrden={datoOrden} onAbrir={onAbrir} />
+        ))}
+      </ul>
+      </>
+      ) : (
       <div className="overflow-x-auto">
         <table className="w-full min-w-[760px] text-[13px]">
           <thead className="sticky top-0 z-10 bg-dark-900">
@@ -1009,8 +1157,9 @@ function TablaConductores({ list, accounts, onAbrir }) {
           </tbody>
         </table>
       </div>
+      )}
       <p className="border-t border-dark-800 px-3 py-1.5 text-[11px] text-dark-500">
-        {filas.length} {filas.length === 1 ? 'conductor' : 'conductores'} · pulsa una fila para abrir la ficha
+        {filas.length} {filas.length === 1 ? 'conductor' : 'conductores'} · pulsa {estrecho ? 'uno' : 'una fila'} para abrir la ficha
       </p>
     </div>
   )
@@ -1026,6 +1175,12 @@ export default function Conductores() {
   const [modal, setModal] = useState(null)
   const [verImportar, setVerImportar] = useState(false) // null | { driver: obj|null }
   const [verMoviles, setVerMoviles] = useState(false)
+  const [verMas, setVerMas] = useState(false)          // el menú «Más» del móvil
+  const [filtro, setFiltro] = useState(null)           // id de FALTAS o null
+  // Si se sabe quién tiene cuenta: sin esa lista, «sin acceso» diría que nadie la tiene.
+  const [cuentasOk, setCuentasOk] = useState(false)
+  const { modulos } = usePlan()
+  const conIdReparto = !Array.isArray(modulos) || modulos.includes('diarios') || modulos.includes('horas')
   // /panel/conductores?importar=1 abre directamente la importación.
   const [paramsImp] = useSearchParams()
   useEffect(() => { if (paramsImp.get('importar')) setVerImportar(true) }, [paramsImp])
@@ -1047,9 +1202,10 @@ export default function Conductores() {
       const [rd, ra] = await Promise.all([getDrivers(center), getDriverAccounts()])
       setDrivers(lista(rd.data))
       setAccounts((lista(ra.data)).map(a => a.driver_id))
+      setCuentasOk(true)
     } catch {
       try { const r = await getDrivers(center); setDrivers(lista(r.data)) } catch { setDrivers([]) }
-      setAccounts([])
+      setAccounts([]); setCuentasOk(false)
     }
   }
   useEffect(() => { setDrivers(null); setModal(null); load() }, [center]) // eslint-disable-line
@@ -1064,6 +1220,12 @@ export default function Conductores() {
         .some(v => plano(v).includes(b)))
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }))
   }, [drivers, q])
+
+  // Los filtros de un toque, contados sobre lo que deja el buscador: el número es lo que se ve al pulsarlo.
+  const faltas = useMemo(() => faltasQueCuentan({ conIdReparto, cuentasOk })
+    .map((f) => ({ ...f, n: list.filter((d) => f.falta(d, accounts)).length })), [list, accounts, conIdReparto, cuentasOk])
+  const filtroVivo = faltas.find((f) => f.id === filtro) || null
+  const vistos = filtroVivo ? list.filter((d) => filtroVivo.falta(d, accounts)) : list
 
   /* «Ya tiene ficha»: se abre esa ficha. Puede no estar en la lista que se ve
      (otro centro): se busca entre todas las que puede ver quien da de alta. */
@@ -1121,16 +1283,19 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
 
   const TABS = [
     { id: 'directorio', label: t('drv.title') },
-    { id: 'ranking',    label: `🏆 ${t('sc.ranking')}` },
+    // `corto`: lo que dice en el móvil, para que las tres quepan en una línea (11-11-2026, revisión de la tanda 2).
+    { id: 'ranking',    label: `🏆 ${t('sc.ranking')}`, corto: `🏆 ${t('drv.tabRanking')}` },
     // Pestaña y no entrada de menú: es mantenimiento que se hace de vez en
     // cuando, no una tarea del día.
-    { id: 'fichas',     label: 'Fichas duplicadas' },
+    { id: 'fichas',     label: 'Fichas duplicadas', corto: t('drv.tabDuplicadas') },
   ]
 
   return (
     <div>
       {/* Header */}
-      <header className="rise mb-6">
+      {/* Con el menú «Más» abierto, la cabecera por encima de lo que viene debajo (la animación de entrada la hace
+          su propia capa y, sin esto, las pestañas tapaban el menú). */}
+      <header className={`rise mb-6 ${verMas ? 'relative z-30' : ''}`}>
         {center && center !== 'Todos' && (
           <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-brand-400/80">{center}</p>
         )}
@@ -1139,28 +1304,53 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
             {t('drv.title')}{drivers && <span className="text-dark-500"> · {(drivers || []).length}</span>}
           </h1>
           {tab === 'directorio' && (
-            <div className="flex items-center gap-2.5">
-              <div className="relative">
+            /* EN EL MÓVIL SALTA DE LÍNEA (11-11-2026, tanda 2, E1 / equipo-9): era una fila fija de ~600 px que se
+               salía de la pantalla. Debajo de `sm`, el buscador va a todo el ancho y «Importar» y «Móviles personales»
+               van dentro de «Más»; en el ordenador sigue todo en una fila, como antes. */
+            <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto">
+              <div className="relative w-full sm:w-auto">
                 <Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-dark-500" />
                 <input
-                  className="w-56 rounded-xl border border-white/[0.07] bg-white/[0.02] py-2.5 pl-10 pr-3 text-[13.5px] text-dark-50 placeholder:text-dark-500 transition-all duration-300 hover:border-white/[0.12] focus:border-brand-500/50 focus:bg-white/[0.045] focus:outline-none focus:ring-[3px] focus:ring-brand-500/15"
+                  className="min-h-[44px] w-full rounded-xl border border-white/[0.07] bg-white/[0.02] py-2.5 pl-10 pr-3 text-[13.5px] text-dark-50 placeholder:text-dark-500 transition-all duration-300 hover:border-white/[0.12] focus:border-brand-500/50 focus:bg-white/[0.045] focus:outline-none focus:ring-[3px] focus:ring-brand-500/15 sm:min-h-0 sm:w-56"
                   placeholder={t('drv.search')} value={q} onChange={e => setQ(e.target.value)}
                 />
               </div>
               {/* Importar va ANTES de «añadir»: quien llega el primer día no
                   quiere teclear cincuenta fichas, quiere subir su Excel. */}
               <button onClick={() => setVerImportar((v) => !v)}
-                className="flex items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 py-2.5 text-[13.5px] font-semibold text-dark-300 hover:border-dark-600 hover:text-dark-100">
+                className="hidden items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 py-2.5 text-[13.5px] font-semibold text-dark-300 hover:border-dark-600 hover:text-dark-100 sm:flex">
                 <FileSpreadsheet size={15} /> {t('drv.importar')}
               </button>
               <button onClick={() => setVerMoviles((v) => !v)}
                 title="Pon los móviles personales desde la agenda de tu teléfono: los WhatsApp personales van a ese número."
-                className="flex items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 py-2.5 text-[13.5px] font-semibold text-dark-300 hover:border-dark-600 hover:text-dark-100">
-                <Smartphone size={15} /> Móviles personales
+                className="hidden items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 py-2.5 text-[13.5px] font-semibold text-dark-300 hover:border-dark-600 hover:text-dark-100 sm:flex">
+                <Smartphone size={15} /> {t('drv.moviles')}
               </button>
+              {/* «Más», solo en el móvil: las dos de arriba, en un menú. */}
+              <div className="relative sm:hidden">
+                <button onClick={() => setVerMas((v) => !v)} aria-expanded={verMas} aria-haspopup="menu"
+                  className="flex min-h-[44px] items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 text-[13.5px] font-semibold text-dark-300">
+                  <MoreHorizontal size={16} /> {t('drv.mas')}
+                </button>
+                {verMas && (
+                  <>
+                    <button aria-label="Cerrar" tabIndex={-1} onClick={() => setVerMas(false)} className="fixed inset-0 z-30 cursor-default" />
+                    <div role="menu" className="absolute left-0 top-full z-40 mt-1.5 w-60 overflow-hidden rounded-xl border border-dark-700 bg-dark-900 py-1 shadow-xl">
+                      <button role="menuitem" onClick={() => { setVerMas(false); setVerImportar((v) => !v) }}
+                        className="flex min-h-[44px] w-full items-center gap-2 px-3.5 text-left text-[13.5px] font-semibold text-dark-200 active:bg-dark-800">
+                        <FileSpreadsheet size={15} /> {t('drv.importar')}
+                      </button>
+                      <button role="menuitem" onClick={() => { setVerMas(false); setVerMoviles((v) => !v) }}
+                        className="flex min-h-[44px] w-full items-center gap-2 px-3.5 text-left text-[13.5px] font-semibold text-dark-200 active:bg-dark-800">
+                        <Smartphone size={15} /> {t('drv.moviles')}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
               <button
                 onClick={() => setModal({ driver: null })}
-                className="group relative flex items-center gap-1.5 overflow-hidden rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-lg shadow-brand-500/25 transition-all duration-300 [text-shadow:0_1px_1px_rgba(0,0,0,0.15)] hover:-translate-y-px hover:shadow-xl hover:shadow-brand-500/30 hover:brightness-110 active:translate-y-0 active:scale-[0.98]"
+                className="group relative flex min-h-[44px] flex-1 items-center justify-center gap-1.5 overflow-hidden rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-lg shadow-brand-500/25 transition-all duration-300 [text-shadow:0_1px_1px_rgba(0,0,0,0.15)] hover:-translate-y-px hover:shadow-xl hover:shadow-brand-500/30 hover:brightness-110 active:translate-y-0 active:scale-[0.98] sm:min-h-0 sm:flex-none"
               >
                 <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/20 to-transparent" />
                 <Plus size={15} /> {t('drv.add')}
@@ -1188,12 +1378,12 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
       <div className="flex gap-0 border-b border-dark-800 mb-6">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            className={`min-h-[44px] px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px sm:min-h-0 sm:px-4 ${
               tab === t.id
                 ? 'border-brand-400 text-brand-300'
                 : 'border-transparent text-dark-500 hover:text-dark-300'
             }`}>
-            {t.label}
+            {t.corto ? <><span className="sm:hidden">{t.corto}</span><span className="hidden sm:inline">{t.label}</span></> : t.label}
           </button>
         ))}
       </div>
@@ -1225,9 +1415,17 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
                   </button>
                 </div>
               </div>
-            : <>
-                <ContrasenaInicial />
-                <AvisoAccesos list={list} center={center} onHecho={load} />
+            : <div className="flex flex-col">
+                {/* EN EL MÓVIL, LOS AVISOS DE CONTRASEÑAS DEBAJO DE LA LISTA (11-11-2026, revisión de la tanda 2): son
+                    ajustes de vez en cuando y, encima, ocupaban media pantalla: al abrir Conductores no se veía ningún
+                    conductor sin bajar. En el ordenador siguen arriba, como siempre.
+                    Se pintan UNA vez y los baja el CSS (`order-last`), no dos copias según el ancho (11-11-2026, segunda
+                    revisión): al girar el móvil se desmontaba una y se montaba la otra vacía, y se perdía el resultado de
+                    aplicar la temporal o la clave a medio escribir. */}
+                <div className="order-last mt-3 sm:order-none sm:mt-0">
+                  <ContrasenaInicial />
+                  <AvisoAccesos list={list} center={center} onHecho={load} />
+                </div>
                 {centers.length > 1 && list.some(sinCentro) && (
                   <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[12.5px] text-amber-200">
                     <AlertCircle size={13} className="shrink-0" />
@@ -1237,8 +1435,29 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
                     </span>
                   </div>
                 )}
-                <TablaConductores list={list} accounts={accounts} onAbrir={(d) => setModal({ driver: d })} />
-              </>
+                {/* Solo los que tienen a alguien (o el que está puesto, para poder quitarlo). */}
+                {faltas.some((f) => f.n > 0 || f.id === filtro) && (
+                  <div role="group" aria-label={t('drv.filtros')} className="mb-3 flex flex-wrap items-center gap-2">
+                    {faltas.filter((f) => f.n > 0 || f.id === filtro).map((f) => (
+                      <button key={f.id} aria-pressed={filtro === f.id}
+                        onClick={() => setFiltro((x) => (x === f.id ? null : f.id))}
+                        className={`min-h-[44px] rounded-full border px-3 text-[12.5px] font-semibold sm:min-h-0 sm:py-1 ${filtro === f.id
+                          ? 'border-amber-400/60 bg-amber-500/15 text-amber-200'
+                          : 'border-dark-700 text-dark-300 hover:border-dark-600 hover:text-dark-100'}`}>
+                        {t(f.clave)} ({f.n})
+                      </button>
+                    ))}
+                    {filtro && (
+                      <button onClick={() => setFiltro(null)}
+                        className="min-h-[44px] px-2 text-[12.5px] text-dark-400 hover:text-dark-200 sm:min-h-0 sm:py-1">
+                        {t('drv.f.quitar')}
+                      </button>
+                    )}
+                  </div>
+                )}
+                <TablaConductores list={vistos} accounts={accounts} cuentasOk={cuentasOk} conIdReparto={conIdReparto}
+                  onAbrir={(d) => setModal({ driver: d })} />
+              </div>
       )}
 
       {/* Ranking + scoring unificado */}

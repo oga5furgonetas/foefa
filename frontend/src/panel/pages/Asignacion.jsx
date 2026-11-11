@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { getDailyAssignment, putDailyAssignment, getVehicles, getDrivers, getInspections } from '../api'
 import { hoyLocal, isoLocal } from '../../lib/fecha'
+import ElegirNave from '../components/ElegirNave'
 
 /* ── Date helpers ── */
 const isoToday = hoyLocal
@@ -286,8 +287,12 @@ function SlotRow({ slot, vehicles, drivers, usedV, usedD, onChange, onDelete, in
   const itv = estadoItv(slot.vehicle_id ? vehicles.find(v => v.id === slot.vehicle_id) : null)
   const noOp = noOperativa(slot.vehicle_id ? vehicles.find(v => v.id === slot.vehicle_id) : null)
 
+  /* EN EL MÓVIL, DOS LÍNEAS (11-11-2026). En una sola fila, la matrícula (128 px), el avatar, las fotos (112 px) y el
+     botón de borrar dejaban al conductor en un cuadradito: en la foto no se leía el nombre de nadie. Ahora, en
+     pantallas estrechas, arriba la matrícula con su ITV, las fotos y borrar; abajo el conductor a todo lo ancho
+     (`order-last basis-full`). Desde `sm` es la fila de siempre. */
   return (
-    <div className={`group flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-all duration-300 ${
+    <div data-testid="asgn-fila" className={`group flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border px-3 py-2.5 transition-all duration-300 sm:flex-nowrap ${
       hasPhotos
         ? 'border-emerald-500/20 bg-emerald-500/5'
         : hasIssue
@@ -303,7 +308,7 @@ function SlotRow({ slot, vehicles, drivers, usedV, usedD, onChange, onDelete, in
             const v = vehicles.find(x => x.id === e.target.value)
             onChange({ vehicle_id: e.target.value, vehicle_plate: v?.license_plate || '' })
           }}
-          className={`w-full cursor-pointer appearance-none rounded-md border px-2 py-1.5 text-center text-sm font-bold tracking-widest transition-colors focus:outline-none focus:ring-1 ${
+          className={`w-full cursor-pointer appearance-none rounded-md border px-2 py-1.5 text-center text-sm font-bold tracking-widest transition-colors focus:outline-none focus:ring-1 max-sm:min-h-[44px] ${
             hasPhotos
               ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300 focus:ring-emerald-500'
               : slot.vehicle_id
@@ -345,7 +350,7 @@ function SlotRow({ slot, vehicles, drivers, usedV, usedD, onChange, onDelete, in
       </div>
 
       {/* Driver avatar + name */}
-      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+      <div className="order-last flex min-w-0 flex-1 basis-full items-center gap-2.5 sm:order-none sm:basis-0">
         {/* Avatar: foto si existe, iniciales si no */}
         {photoUrl ? (
           <img
@@ -373,7 +378,7 @@ function SlotRow({ slot, vehicles, drivers, usedV, usedD, onChange, onDelete, in
               const d = drivers.find(x => x.id === e.target.value)
               onChange({ driver_id: e.target.value, driver_name: d?.name || '' })
             }}
-            className={`select w-full text-sm ${!slot.driver_id ? 'text-amber-400' : hasPhotos ? 'text-emerald-200' : ''}`}
+            className={`select w-full text-sm max-sm:min-h-[44px] ${!slot.driver_id ? 'text-amber-400' : hasPhotos ? 'text-emerald-200' : ''}`}
           >
             <option value="">{t('asgn.driver.ph')}</option>
             <optgroup label={t('asgn.drv.center')}>
@@ -408,7 +413,7 @@ function SlotRow({ slot, vehicles, drivers, usedV, usedD, onChange, onDelete, in
       </div>
 
       {/* Photos today */}
-      <div className="w-28 shrink-0 text-right">
+      <div className="ml-auto shrink-0 text-right sm:ml-0 sm:w-28">
         {slot.vehicle_id
           ? <SeverityBadge insp={inspection} />
           : <span className="text-xs text-dark-700">—</span>
@@ -423,7 +428,7 @@ function SlotRow({ slot, vehicles, drivers, usedV, usedD, onChange, onDelete, in
         onClick={onDelete}
         aria-label={t('asgn.del.row')}
         title={t('asgn.del.row')}
-        className="btn-ghost shrink-0 p-1.5 text-dark-500 transition-opacity hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:hover)_and_(min-width:640px)]:text-dark-700 [@media(hover:hover)_and_(min-width:640px)]:opacity-0"
+        className="btn-ghost shrink-0 p-1.5 text-dark-500 transition-opacity hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100 max-sm:inline-flex max-sm:min-h-[44px] max-sm:min-w-[44px] max-sm:items-center max-sm:justify-center [@media(hover:hover)_and_(min-width:640px)]:text-dark-700 [@media(hover:hover)_and_(min-width:640px)]:opacity-0"
       >
         <Trash2 size={14} />
       </button>
@@ -433,7 +438,7 @@ function SlotRow({ slot, vehicles, drivers, usedV, usedD, onChange, onDelete, in
 
 /* ── Main page ── */
 export default function Asignacion() {
-  const { center, centers, setCenter } = useOutletContext()
+  const { center, setCenter } = useOutletContext()
   const { t } = useT()
   const [date, setDate] = useState(isoToday())
   const [slots, setSlots] = useState([])
@@ -707,19 +712,30 @@ export default function Asignacion() {
   const pending     = withVehicle - withPhotos
   const issues      = slots.filter(s => !s.vehicle_id || !s.driver_id).length
 
+  // Dice «Guardar asignación» (11-11-2026): decía «Guardar cuadrante», y el Cuadrante es otra pantalla.
+  const botonGuardar = (
+    <button
+      onClick={save}
+      disabled={busy || (slots.length === 0 && !cambios)}
+      className="btn-primary flex items-center justify-center gap-2 disabled:opacity-40 max-sm:min-h-[44px] max-sm:flex-1"
+    >
+      {busy ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+      {t('asgn.save')}
+    </button>
+  )
+
+  // Con «Todos», un botón por centro ahí mismo (11-11-2026): antes, «Disponibles: OGA5 · DGA1» como texto.
   if (noCenter) return (
     <div>
-      <h1 className="rise mb-6 font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">{t('asgn.daily')}</h1>
-      <div className="card flex flex-col items-center gap-3 p-10 text-center">
-        <ClipboardList size={30} className="text-brand-400" />
-        <p className="text-dark-200">{t('asgn.pick.center')}</p>
-        <p className="text-sm text-dark-500">Disponibles: {centers?.join(' · ') || '—'}</p>
-      </div>
+      <h1 className="rise mb-6 font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">{t('asgn.title')}</h1>
+      <ElegirNave texto={t('asgn.pick.center')} />
     </div>
   )
 
   return (
-    <div className="mx-auto max-w-4xl">
+    // `max-sm:pb-24`: el hueco para que la barra de Guardar del móvil (con «Cambios sin guardar» encima) no tape la
+    // última fila.
+    <div className="mx-auto max-w-4xl max-sm:pb-24">
       {/* Toast overlay — fuera del flujo, encima de todo */}
       <Toasts toasts={toasts} />
 
@@ -741,7 +757,7 @@ export default function Asignacion() {
         <div className="flex items-center gap-2 text-dark-500">
           <Calendar size={14} />
           <input
-            type="date" className="input w-44 py-1.5" value={fechaEscrita ?? date}
+            type="date" className="input w-44 py-1.5 max-sm:min-h-[44px]" value={fechaEscrita ?? date}
             onKeyDown={e => { if (e.key === 'Enter') aplicarFechaEscrita(); else if (e.key !== 'Tab') tecleando.current = true }}
             onBlur={aplicarFechaEscrita}
             onChange={e => fechaCambiada(e.target.value)}
@@ -751,45 +767,47 @@ export default function Asignacion() {
 
       {/* Stats */}
       {!loading && slots.length > 0 && (
-        <div className="mb-4 grid grid-cols-4 gap-3">
+        // En el móvil, las cuatro cifras más juntas y más bajas (11-11-2026): ocupaban media pantalla.
+        <div className="mb-4 grid grid-cols-4 gap-1.5 sm:gap-3">
           {[
             { label: t('asgn.vans'),     value: withVehicle, color: 'text-brand-300' },
             { label: t('asgn.assigned'), value: withDriver,  color: 'text-brand-300' },
             { label: t('asgn.with.photos'), value: withPhotos, color: 'text-emerald-300' },
             { label: t('asgn.pending'),  value: pending,     color: pending > 0 ? 'text-amber-300' : 'text-dark-500' },
           ].map(s => (
-            <div key={s.label} className="card p-3 text-center">
-              <div className={`text-2xl font-bold tabular-nums ${s.color}`}>{s.value}</div>
-              <div className="text-xs text-dark-500">{s.label}</div>
+            <div key={s.label} className="card px-1 py-2 text-center sm:p-3">
+              <div className={`text-xl font-bold tabular-nums sm:text-2xl ${s.color}`}>{s.value}</div>
+              <div className="truncate text-[11px] text-dark-500 sm:text-xs">{s.label}</div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Action bar */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <button onClick={() => setPasteOpen(true)} className="btn-primary flex items-center gap-1.5 text-sm">
+      {/* Action bar. En el móvil, los cuatro botones en una rejilla de dos (44 px de alto) y Guardar abajo del
+          todo, fijo sobre la barra de navegación (11-11-2026): con la lista larga quedaba muy arriba. */}
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+        <button onClick={() => setPasteOpen(true)} className="btn-primary flex items-center justify-center gap-1.5 text-sm max-sm:min-h-[44px]">
           <ClipboardPaste size={14} /> {t('asgn.paste.roster')}
         </button>
-        <button onClick={copyYesterday} className="btn-secondary flex items-center gap-1.5 text-sm">
+        <button onClick={copyYesterday} className="btn-secondary flex items-center justify-center gap-1.5 text-sm max-sm:min-h-[44px]">
           <Copy size={14} /> {t('asgn.copy.yesterday')}
         </button>
-        <button onClick={addSlot} className="btn-secondary flex items-center gap-1.5 text-sm">
+        <button onClick={addSlot} className="btn-secondary flex items-center justify-center gap-1.5 text-sm max-sm:min-h-[44px]">
           <Plus size={14} /> {t('asgn.add.row')}
         </button>
-        <button onClick={() => { if (puedePisar()) load() }} className="btn-ghost p-2 text-dark-400 hover:text-dark-200" title="Recargar">
+        <button onClick={() => { if (puedePisar()) load() }} className="btn-ghost flex items-center justify-center gap-1.5 p-2 text-dark-400 hover:text-dark-200 max-sm:min-h-[44px] max-sm:border max-sm:border-dark-700" title="Recargar" aria-label="Recargar">
           <RotateCcw size={14} />
         </button>
-        <div className="ml-auto flex items-center gap-2">
-          {cambios && <span className="text-xs font-semibold text-amber-400">{t('asgn.unsaved')}</span>}
-          <button
-            onClick={save}
-            disabled={busy || (slots.length === 0 && !cambios)}
-            className="btn-primary flex items-center gap-2 disabled:opacity-40"
-          >
-            {busy ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-            {t('asgn.save')}
-          </button>
+        {/* En el móvil este mismo grupo va abajo, fijo encima de la barra de navegación (60 px + la zona segura),
+            como la barra de Incorporaciones: `fixed` y no `sticky`, porque en el móvil se desliza la página y no el
+            <main>. A la derecha deja sitio a la burbuja del asistente, que si no tapaba la punta del botón. Es el
+            MISMO grupo (no una copia): «Cambios sin guardar» y Guardar están una sola vez en la página. En el móvil
+            «Cambios sin guardar» va ENCIMA del botón (11-11-2026): al lado se comía la mitad del hueco y «Guardar
+            asignación» partía en dos líneas (en francés, peor). */}
+        <div data-testid="asgn-guardar"
+          className="ml-auto flex items-center gap-2 max-sm:fixed max-sm:bottom-[calc(60px+env(safe-area-inset-bottom,0px))] max-sm:left-3 max-sm:right-[76px] max-sm:z-30 max-sm:ml-0 max-sm:flex-col max-sm:items-stretch max-sm:gap-1 max-sm:rounded-xl max-sm:border max-sm:border-dark-700 max-sm:bg-dark-900/95 max-sm:p-2 max-sm:shadow-lg max-sm:backdrop-blur">
+          {cambios && <span className="shrink-0 text-xs font-semibold text-amber-400 max-sm:text-center">{t('asgn.unsaved')}</span>}
+          {botonGuardar}
         </div>
       </div>
 
@@ -804,7 +822,7 @@ export default function Asignacion() {
       {!loading && issues > 0 && (
         <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-sm text-amber-200">
           <AlertTriangle size={14} className="shrink-0" />
-          {issues} {t('asgn.incomplete.rows')} — {t('asgn.complete.before.save')}
+          {issues} {t(issues === 1 ? 'asgn.incomplete.rows.one' : 'asgn.incomplete.rows.many')} — {t('asgn.complete.before.save')}
         </div>
       )}
 
@@ -867,7 +885,8 @@ export default function Asignacion() {
             </div>
           )}
 
-          <div className="mb-2 grid grid-cols-12 gap-3 px-3 text-[11px] font-semibold uppercase tracking-wider text-dark-500">
+          {/* La cabecera de columnas, solo donde hay columnas: en el móvil cada fila va en dos líneas (11-11-2026). */}
+          <div className="mb-2 hidden grid-cols-12 gap-3 px-3 text-[11px] font-semibold uppercase tracking-wider text-dark-500 sm:grid">
             <div className="col-span-3 flex items-center gap-1"><Truck size={10} /> {t('asgn.col.van')}</div>
             <div className="col-span-6 flex items-center gap-1"><User size={10} /> {t('asgn.col.driver')}</div>
             <div className="col-span-3 flex items-center justify-end gap-1"><Camera size={10} /> {t('asgn.col.photos')}</div>

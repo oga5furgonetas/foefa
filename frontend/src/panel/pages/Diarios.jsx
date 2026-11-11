@@ -1,17 +1,18 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import {
-  Loader2, ClipboardPaste, Check, X, AlertTriangle, IdCard, Search, Users,
-  Upload, FileText,
+  Loader2, ClipboardPaste, Check, X, AlertTriangle, IdCard, Search,
+  Upload, FileText, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, UserPen,
 } from 'lucide-react'
 import {
   pegarDiario, diariosPorConductor, vincularTransporterIds, asignarIdConductor, getDrivers,
   subirDiarios, verificarTransporterIds,
 } from '../api'
 import { lista } from '../../lib/lista'
-import { useOrden } from '../../lib/orden'
+import { useOrden, flechaOrden, claseOrden } from '../../lib/orden'
 import ThOrden from '../components/ThOrden'
 import AvisoIdAmazon from '../components/AvisoIdAmazon'
+import ElegirNave from '../components/ElegirNave'
 import { isoLocal } from '../../lib/fecha'
 
 /* ── CONTADOR DE DNRs ────────────────────────────────────────────────────────
@@ -42,9 +43,58 @@ const domingoDe = (d) => {
   return x
 }
 
+/* EL MISMO CENTRO aunque venga escrito distinto (11-11-2026): el del fichero sale
+   de su título («ES TDSL OGA5»), el elegido, de la lista de la empresa. */
+const mismoCentro = (a, b) => String(a || '').trim().toUpperCase() === String(b || '').trim().toUpperCase()
+
+/* LA TABLA O LAS TARJETAS, UNA SOLA EN LA PÁGINA (11-11-2026). Por debajo de 640 px
+   (el `sm` de Tailwind), una tarjeta por conductor: la tabla tiene 10 columnas y en el
+   móvil solo se veían el nombre y el ID. Con las dos y una escondida por CSS, cada
+   nombre estaría dos veces en la página. */
+const ESTRECHA = '(max-width: 639.98px)'
+function useEstrecha() {
+  const [si, setSi] = useState(() => { try { return window.matchMedia(ESTRECHA).matches } catch { return false } })
+  useEffect(() => {
+    let m
+    try { m = window.matchMedia(ESTRECHA) } catch { return undefined }
+    const cambio = () => setSi(m.matches)
+    m.addEventListener?.('change', cambio)
+    return () => m.removeEventListener?.('change', cambio)
+  }, [])
+  return si
+}
+
+/* ORDENAR EN EL MÓVIL (11-11-2026). Las tarjetas no tienen cabecera que pulsar: una
+   fila de botones con los mismos campos que la tabla y el mismo orden en tres pasos. */
+function OrdenMovil({ campos, orden, pulsar }) {
+  return (
+    <div role="group" aria-label="Ordenar por" className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] text-dark-500">Ordenar por</span>
+      {campos.map(([campo, txt]) => {
+        const activa = orden?.campo === campo
+        return (
+          <button key={campo} type="button" onClick={() => pulsar(campo)} aria-pressed={activa}
+            className={`inline-flex min-h-[44px] items-center gap-1 rounded-lg border px-2.5 text-xs ${
+              activa ? 'border-brand-500/50 bg-brand-500/15 text-brand-200' : 'border-dark-700 text-dark-400'}`}>
+            {txt}
+            <span className={`text-[11px] leading-none ${claseOrden(orden, campo)}`}>{flechaOrden(orden, campo)}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/* «06/11» de «2026-11-06» (las fechas del detalle); lo que no sea una fecha, tal cual. */
+const ddmm = (s) => (/^\d{4}-\d{2}-\d{2}/.test(s || '') ? `${s.slice(8, 10)}/${s.slice(5, 7)}` : (s || '—'))
+
 export default function Diarios() {
-  const { center } = useOutletContext()
+  const { center, centers, setCenter } = useOutletContext()
   const noCenter = center === 'Todos'
+  const estrecha = useEstrecha()
+  /* Dónde se ha guardado lo último (11-11-2026, horas_dnr-4): va con SU aviso, y
+     con otro aviso deja de verse. */
+  const [guardadoEn, setGuardadoEn] = useState({ aviso: '', centros: [] })
 
   const [rango, setRango] = useState(() => {
     const d = domingoDe(new Date())
@@ -66,6 +116,12 @@ export default function Diarios() {
     const d = domingoDe(new Date(iso + 'T12:00:00'))
     return { desde: isoLocal(d), hasta: isoLocal(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 6)) }
   }
+  /* ‹ › (11-11-2026, horas_dnr-7): de semana en semana sin escribir dos fechas. */
+  const moverSemana = (n) => setRango((r) => {
+    const d = domingoDe(new Date(r.desde + 'T12:00:00'))
+    d.setDate(d.getDate() + 7 * n)
+    return semanaDe(isoLocal(d))
+  })
   /* Sólo se coloca solo UNA vez, al abrir. Si saltara cada vez que el rango
      queda vacío, no se podría mirar una semana sin datos a propósito. */
   const yaColocado = useRef(false)
@@ -97,7 +153,12 @@ export default function Diarios() {
   const [textoIds, setTextoIds] = useState('')
   const [previaIds, setPreviaIds] = useState(null)
 
+  /* Cada carga lleva su número (11-11-2026): con ‹ › pulsadas seguidas, la respuesta
+     de una semana que llega tarde enseñaba sus cifras bajo las fechas de otra. Solo
+     cuenta la de la última petición. */
+  const peticion = useRef(0)
   const cargar = useCallback(async () => {
+    const n = ++peticion.current
     if (noCenter) return
     setCargando(true); setErr('')
     try {
@@ -105,13 +166,14 @@ export default function Diarios() {
         diariosPorConductor(center, rango.desde, rango.hasta),
         getDrivers(center),
       ])
+      if (n !== peticion.current) return
       setDatos(r.data)
       setConductores(lista(rd.data)
         .filter((d) => d.active !== false)
         .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })))
     } catch (e) {
-      setErr(e?.response?.data?.detail || 'No se pudieron cargar los diarios.')
-    } finally { setCargando(false) }
+      if (n === peticion.current) setErr(e?.response?.data?.detail || 'No se pudieron cargar los diarios.')
+    } finally { if (n === peticion.current) setCargando(false) }
   }, [center, rango, noCenter])
 
   useEffect(() => { cargar() }, [cargar])
@@ -148,7 +210,17 @@ export default function Diarios() {
       const tot = r.data.totales || {}
       setPreviaSubida(null); setFicheros([])
       if (ficheroRef.current) ficheroRef.current.value = ''
-      setAviso(`${tot.reportes} reportes guardados: ${tot.dnr} DNR y ${tot.otras} filas de RTS, POD y contacto.`)
+      // DÓNDE SE HA GUARDADO (11-11-2026, horas_dnr-4): el centro lo dice cada
+      // fichero, no el elegido; con el de otro centro, parecía que no se guardaba nada.
+      const porCentro = {}
+      for (const x of r.data.resultados || []) {
+        if (!x.error && x.centro) porCentro[x.centro] = (porCentro[x.centro] || 0) + 1
+      }
+      const centros = Object.keys(porCentro)
+      const dondeTxt = centros.length === 1 ? ` en ${centros[0]}`
+        : centros.length > 1 ? ` (${centros.map((c) => `${porCentro[c]} en ${c}`).join(', ')})` : ''
+      const msg = `${tot.reportes} ${tot.reportes === 1 ? 'reporte guardado' : 'reportes guardados'}${dondeTxt}: ${tot.dnr} DNR y ${tot.otras} filas de RTS, POD y contacto.`
+      setAviso(msg); setGuardadoEn({ aviso: msg, centros })
       // Colocarse donde están los datos que se acaban de subir.
       if (r.data.ultimo_dia) { yaColocado.current = true; setRango(semanaDe(r.data.ultimo_dia)) }
       else await cargar()
@@ -172,8 +244,10 @@ export default function Diarios() {
     try {
       const r = await pegarDiario({ texto, center, confirmar: true })
       setPrevia(null); setTexto(''); setVerPegar(false)
-      setAviso(`Guardado: ${r.data.dnr_guardados} filas DNR del ${r.data.fecha_dnr}`
-        + `${r.data.clasificados_ahora ? ` · ${r.data.clasificados_ahora} pasaron a defecto al reclasificarse` : ''}`)
+      // También el pegado dice en qué centro se ha guardado (11-11-2026).
+      const msg = `Guardado${r.data.center ? ` en ${r.data.center}` : ''}: ${r.data.dnr_guardados} filas DNR del ${r.data.fecha_dnr}`
+        + `${r.data.clasificados_ahora ? ` · ${r.data.clasificados_ahora} pasaron a defecto al reclasificarse` : ''}`
+      setAviso(msg); setGuardadoEn({ aviso: msg, centros: r.data.center ? [r.data.center] : [] })
       await cargar()
     } catch (e) {
       setErr(e?.response?.data?.detail || 'No se pudo guardar.')
@@ -269,16 +343,30 @@ export default function Diarios() {
     return ordenar(base)
   }, [datos, busca, ordenar])
 
+  // Con «Todos», un botón por centro ahí mismo (11-11-2026, portal_inicio-9).
+  // Con su título encima, como Asignación y las demás pantallas (11-11-2026).
   if (noCenter) {
     return (
-      <div className="card flex flex-col items-center gap-3 p-10 text-center">
-        <Users size={28} className="text-dark-500" />
-        <p className="text-dark-300">Elige un centro arriba para ver sus DNRs.</p>
+      <div className="flex flex-col gap-4">
+        <h1 className="flex items-center gap-2 font-display text-[clamp(22px,2.6vw,30px)] font-semibold tracking-[-0.02em] text-dark-50">
+          <AlertTriangle size={22} /> DNR diaria
+        </h1>
+        <ElegirNave texto="Elige un centro para ver sus DNR." />
       </div>
     )
   }
 
   const t = datos?.totales || {}
+  // El centro de la lista de la empresa que corresponde a uno escrito en un fichero.
+  const centroDeLaLista = (c) => (centers || []).find((x) => x !== 'Todos' && mismoCentro(x, c))
+  const irA = guardadoEn.aviso && guardadoEn.aviso === aviso
+    ? guardadoEn.centros.filter((c) => !mismoCentro(c, center) && centroDeLaLista(c)) : []
+  // De qué centro es cada fichero de la previa (11-11-2026, horas_dnr-4).
+  const centrosPrevia = {}
+  for (const r of previaSubida?.resultados || []) {
+    if (!r.error && r.centro) centrosPrevia[r.centro] = (centrosPrevia[r.centro] || 0) + 1
+  }
+  const deOtroPrevia = Object.keys(centrosPrevia).filter((c) => !mismoCentro(c, center))
 
   return (
     <div className="flex flex-col gap-4">
@@ -289,26 +377,37 @@ export default function Diarios() {
         {/* Las dos fechas y su nota medían 400 px en un móvil de 375 y movían
             la página de lado; abajo ocupan su propia línea. */}
         <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto">
-          <input type="date" value={rango.desde}
-            onChange={(e) => e.target.value && setRango((r) => ({ ...r, desde: e.target.value }))}
-            className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1 text-[12.5px] font-semibold text-dark-100" />
-          <span className="text-dark-500">→</span>
-          <input type="date" value={rango.hasta}
-            onChange={(e) => e.target.value && setRango((r) => ({ ...r, hasta: e.target.value }))}
-            className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1 text-[12.5px] font-semibold text-dark-100" />
+          {/* ‹ › para pasar de semana (11-11-2026): en el móvil, escribir dos fechas a mano. */}
+          <div className="flex w-full items-center gap-1 sm:w-auto">
+            <button type="button" onClick={() => moverSemana(-1)} aria-label="Semana anterior" title="Semana anterior"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-dark-700 text-dark-300 hover:text-dark-100 sm:h-8 sm:w-6">
+              <ChevronLeft size={16} />
+            </button>
+            <input type="date" value={rango.desde} aria-label="Desde"
+              onChange={(e) => e.target.value && setRango((r) => ({ ...r, desde: e.target.value }))}
+              className="min-w-0 flex-1 rounded-lg border border-dark-700 bg-dark-950 px-1.5 py-1 sm:px-2 text-[12.5px] font-semibold text-dark-100 max-sm:min-h-[44px] sm:flex-none" />
+            <span className="text-dark-500 max-sm:hidden">→</span>
+            <input type="date" value={rango.hasta} aria-label="Hasta"
+              onChange={(e) => e.target.value && setRango((r) => ({ ...r, hasta: e.target.value }))}
+              className="min-w-0 flex-1 rounded-lg border border-dark-700 bg-dark-950 px-1.5 py-1 sm:px-2 text-[12.5px] font-semibold text-dark-100 max-sm:min-h-[44px] sm:flex-none" />
+            <button type="button" onClick={() => moverSemana(1)} aria-label="Semana siguiente" title="Semana siguiente"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-dark-700 text-dark-300 hover:text-dark-100 sm:h-8 sm:w-6">
+              <ChevronRight size={16} />
+            </button>
+          </div>
           <span className="ml-1 text-[11px] text-dark-500">por fecha de concesión</span>
         </div>
         <div className="ml-auto flex flex-wrap gap-2">
           <button onClick={() => setVerIds((v) => !v)}
-            className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-1.5 text-[12.5px] font-semibold text-dark-300 hover:text-dark-100">
+            className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-1.5 text-[12.5px] font-semibold text-dark-300 hover:text-dark-100 max-sm:min-h-[44px]">
             <IdCard size={15} /> Transporter IDs
           </button>
           <button onClick={() => setVerPegar((v) => !v)}
-            className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-1.5 text-[12.5px] font-semibold text-dark-300 hover:text-dark-100">
+            className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-1.5 text-[12.5px] font-semibold text-dark-300 hover:text-dark-100 max-sm:min-h-[44px]">
             <ClipboardPaste size={15} /> Pegar
           </button>
           <button onClick={() => ficheroRef.current?.click()} disabled={subiendo}
-            className="btn-primary flex items-center gap-1.5 text-[12.5px] disabled:opacity-50">
+            className="btn-primary flex items-center gap-1.5 text-[12.5px] disabled:opacity-50 max-sm:min-h-[44px]">
             {subiendo ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
             Subir Daily Report
           </button>
@@ -318,7 +417,18 @@ export default function Diarios() {
       </div>
 
       {err && <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">{err}</p>}
-      {aviso && <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">{aviso}</p>}
+      {aviso && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">
+          <p>{aviso}</p>
+          {/* Guardado en OTRO centro que el elegido: se ofrece ir a verlo (11-11-2026). */}
+          {irA.map((c) => (
+            <button key={c} type="button" onClick={() => setCenter(centroDeLaLista(c))}
+              className="min-h-[44px] rounded-lg border border-emerald-500/40 px-3 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/10 sm:min-h-0 sm:py-1.5">
+              Ir a {c}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Las cuatro cifras. Separadas a propósito: el total y los defectos NO
           son lo mismo y juntarlos daría un número que no cuadra con Amazon. */}
@@ -420,11 +530,22 @@ export default function Diarios() {
             ))}
           </div>
 
-          <div className="max-h-72 overflow-y-auto rounded-lg border border-dark-800">
+          {/* DE QUÉ CENTRO ES CADA FICHERO (11-11-2026, horas_dnr-4). Lo decide su
+              título, no el centro elegido: si es de otro, se dice antes de guardar. */}
+          {deOtroPrevia.length > 0 && (
+            <p className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2 text-[12px] leading-relaxed text-amber-200">
+              {Object.keys(centrosPrevia).length === 1
+                ? <>Estos ficheros son de <b>{deOtroPrevia[0]}</b>, no de {center}: se guardarán en {deOtroPrevia[0]}.</>
+                : <>Hay ficheros de varios centros ({Object.entries(centrosPrevia).map(([c, n]) => `${n} de ${c}`).join(', ')}): cada uno se guardará en el suyo, no todos en {center}.</>}
+            </p>
+          )}
+
+          <div className="max-h-72 overflow-auto rounded-lg border border-dark-800">
             <table className="w-full text-left text-[12px]">
               <thead className="sticky top-0 bg-dark-900">
                 <tr className="text-[10px] uppercase tracking-wider text-dark-500">
                   <th className="px-2 py-1.5 font-semibold">Fichero</th>
+                  <th className="px-2 py-1.5 font-semibold">Centro</th>
                   <th className="px-2 py-1.5 font-semibold">Reporte</th>
                   <th className="px-2 py-1.5 font-semibold">Bloque DNR</th>
                   <th className="px-2 py-1.5 text-right font-semibold">DNR</th>
@@ -439,9 +560,13 @@ export default function Diarios() {
                   <tr key={r.fichero + i} className={`border-t border-dark-800/70 ${i % 2 ? 'bg-dark-800/[0.15]' : ''}`}>
                     <td className="max-w-[15rem] truncate px-2 py-1 text-dark-300" title={r.fichero}>{r.fichero}</td>
                     {r.error ? (
-                      <td colSpan={7} className="px-2 py-1 text-red-300">{r.error}</td>
+                      <td colSpan={8} className="px-2 py-1 text-red-300">{r.error}</td>
                     ) : (
                       <>
+                        <td className={`whitespace-nowrap px-2 py-1 font-semibold ${
+                          r.centro && !mismoCentro(r.centro, center) ? 'text-amber-300' : 'text-dark-300'}`}>
+                          {r.centro || '—'}
+                        </td>
                         <td className="whitespace-nowrap px-2 py-1 tabular-nums text-dark-300">{r.fecha_reporte}</td>
                         <td className="whitespace-nowrap px-2 py-1 tabular-nums text-dark-400">{r.fecha_dnr}</td>
                         <td className="px-2 py-1 text-right tabular-nums text-dark-200">
@@ -499,7 +624,7 @@ export default function Diarios() {
           <button onClick={confirmarSubida} disabled={subiendo || !previaSubida.totales?.reportes}
             className="btn-primary mt-3 flex items-center gap-1.5 text-sm disabled:opacity-40">
             {subiendo ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-            Guardar {previaSubida.totales?.reportes} reportes
+            Guardar {previaSubida.totales?.reportes} {previaSubida.totales?.reportes === 1 ? 'reporte' : 'reportes'}
           </button>
         </div>
       )}
@@ -536,15 +661,21 @@ export default function Diarios() {
           {previa && (
             <div className="mt-3 rounded-lg border border-dark-700 bg-dark-900/60 p-3">
               <div className="flex flex-wrap gap-x-6 gap-y-2">
-                {[['Reporte', previa.fecha_reporte], ['Bloque DNR', previa.fecha_dnr],
+                {[['Centro', previa.center], ['Reporte', previa.fecha_reporte], ['Bloque DNR', previa.fecha_dnr],
                   ['Semana Amazon', previa.semana], ['Conductores', previa.conductores],
                   ['Filas DNR', previa.filas_dnr]].map(([k, v]) => (
                   <div key={k}>
                     <p className="text-[10.5px] uppercase tracking-wider text-dark-500">{k}</p>
-                    <p className="text-[13px] font-semibold text-dark-100">{v ?? '—'}</p>
+                    <p className={`text-[13px] font-semibold ${
+                      k === 'Centro' && v && !mismoCentro(v, center) ? 'text-amber-300' : 'text-dark-100'}`}>{v ?? '—'}</p>
                   </div>
                 ))}
               </div>
+              {previa.center && !mismoCentro(previa.center, center) && (
+                <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2 text-[12px] leading-relaxed text-amber-200">
+                  Este reporte es de <b>{previa.center}</b>, no de {center}: se guardará en {previa.center}.
+                </p>
+              )}
 
               {/* EL CRUCE. Es lo único que dice si lo pegado está completo. */}
               <div className={`mt-3 rounded-lg px-3 py-2 text-[12.5px] ${
@@ -790,6 +921,133 @@ export default function Diarios() {
             tarde: vuelve a subir el mismo reporte unos días después y se actualiza solo.
           </p>
         </div>
+      ) : estrecha ? (
+        /* EN EL MÓVIL, UNA TARJETA POR CONDUCTOR (11-11-2026, horas_dnr-7): arriba el
+           nombre y lo que cuenta (€ que puntúan · defectos · DNR); al tocarla, el resto. */
+        <>
+        <OrdenMovil orden={orden} pulsar={pulsar} campos={[['driver_name', 'Nombre'], ['dnr_total', 'DNR'],
+          ['defectos', 'Defectos'], ['euros_defectos', '€ que puntúan'], ['rts', 'RTS'], ['pod_fails', 'POD'], ['cc_fails', 'CC']]} />
+        <ul className="space-y-2" data-testid="dnr-tarjetas">
+          {filas.map((c) => {
+            const abierta = abierto === c.transporter_id
+            const corrige = c.driver_name && corrigiendo === c.transporter_id
+            return (
+              <li key={c.transporter_id} className="card p-3">
+                <button type="button" aria-expanded={abierta}
+                  onClick={() => setAbierto(abierta ? null : c.transporter_id)}
+                  className="flex min-h-[44px] w-full items-start justify-between gap-3 text-left">
+                  <span className="min-w-0">
+                    <span className={`block break-words ${c.driver_name ? 'font-medium text-dark-100' : 'font-mono text-[12px] text-amber-300/80'}`}>
+                      {c.driver_name || c.transporter_id}
+                    </span>
+                    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-dark-400">
+                      <span className={c.defectos ? 'font-semibold text-red-300' : ''}>
+                        {c.defectos} {c.defectos === 1 ? 'defecto' : 'defectos'}
+                      </span>
+                      <span>· {c.dnr_total} DNR</span>
+                      {c.sin_clasificar > 0 && <span className="text-amber-300">· {c.sin_clasificar} sin clasif.</span>}
+                      {(c.de_baja || c.ficha_sin_vincular || c.sin_ficha || c.solo_historial) && (
+                        <span className={`rounded px-1 text-[10px] ${
+                          c.ficha_sin_vincular ? 'bg-amber-500/15 text-amber-300/80' : 'bg-dark-800 text-dark-300'}`}>
+                          {c.de_baja ? 'ya no está' : c.ficha_sin_vincular ? 'ID sin vincular' : 'sin ficha'}
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-start gap-1.5">
+                    {/* Sin € que puntúen, «nada puntúa» y no «— que puntúan» (11-11-2026). */}
+                    <span className={`text-right text-base font-bold tabular-nums ${c.euros_defectos ? 'text-red-300' : 'text-dark-600'}`}>
+                      {c.euros_defectos ? eur(c.euros_defectos) : '—'}
+                      <span className="block text-[10px] font-normal text-dark-500">{c.euros_defectos ? 'que puntúan' : 'nada puntúa'}</span>
+                    </span>
+                    {abierta ? <ChevronUp size={14} className="mt-1 text-dark-500" /> : <ChevronDown size={14} className="mt-1 text-dark-500" />}
+                  </span>
+                </button>
+
+                {/* Sin nombre: se elige aquí mismo, a la vista (es lo que falta). */}
+                {!c.driver_name && (
+                  <select value="" aria-label={`¿Quién es ${c.transporter_id}?`}
+                    onChange={(e) => e.target.value && ponerNombre(c.transporter_id, e.target.value)}
+                    disabled={asignando === c.transporter_id}
+                    className="mt-2 h-11 w-full rounded-lg border border-amber-500/40 bg-dark-950 px-2 text-sm text-amber-200 outline-none">
+                    <option value="">{asignando === c.transporter_id ? 'guardando…' : '¿quién es?'}</option>
+                    {conductores.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                )}
+                {c.verif === 'no_coincide' && c.amazon_nombre && (
+                  <AvisoIdAmazon tid={c.transporter_id} fichaId={c.driver_id} ficha={c.driver_name}
+                    amazon={c.amazon_nombre} propuesta={c.propuesta}
+                    onHecho={cargar} onError={setErr} />
+                )}
+
+                {abierta && (
+                  <div className="mt-2 space-y-2 border-t border-dark-800 pt-2">
+                    <p className="break-all font-mono text-[11px] text-dark-500">{c.transporter_id}</p>
+                    <dl className="grid grid-cols-3 gap-x-3 gap-y-1.5 text-xs">
+                      {[['No puntúan', c.limpias], ['Sin clasif.', c.sin_clasificar || '—'], ['En DNRs', eur(c.euros)],
+                        ['RTS', c.rts ?? '—'], ['POD', c.pod_fails ?? '—'], ['CC', c.cc_fails ?? '—']].map(([k, v]) => (
+                        <div key={k}>
+                          <dt className="text-[10px] uppercase tracking-wider text-dark-500">{k}</dt>
+                          <dd className="font-semibold tabular-nums text-dark-200">{v}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    {c.detalle?.length > 0 && (
+                      <ul className="divide-y divide-dark-800 rounded-lg border border-dark-800">
+                        {c.detalle.map((d) => (
+                          <li key={d.tracking_id} className="px-2.5 py-1.5 text-[12px] text-dark-400">
+                            <span className="flex items-center justify-between gap-2">
+                              {/* La entrega también: es la que se coteja con quién llevaba la ruta (11-11-2026). */}
+                              <span className="tabular-nums">conc. {ddmm(d.fecha_concesion)} · entr. {ddmm(d.fecha_entrega)}</span>
+                              <span className="flex items-center gap-2">
+                                <span className="tabular-nums text-dark-300">{d.valor || '—'}</span>
+                                <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                                  d.dsc === 'Y' ? 'bg-red-500/20 text-red-300'
+                                    : d.dsc === 'N' ? 'bg-emerald-500/15 text-emerald-300'
+                                      : 'bg-amber-500/15 text-amber-300'}`}>
+                                  {d.dsc || 'sin clasificar'}
+                                </span>
+                              </span>
+                            </span>
+                            <span className="block break-all font-mono text-[10.5px] text-dark-500">
+                              {d.tracking_id} · {(d.scan || '').replace('DELIVERED_TO_', '').replace(/_/g, ' ').toLowerCase()}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {/* «¿No es esta persona?», sin género y solo aquí dentro (11-11-2026). */}
+                    {c.driver_name && !corrige && (
+                      <button type="button" onClick={() => setCorrigiendo(c.transporter_id)}
+                        className="flex min-h-[44px] items-center gap-1.5 text-xs font-semibold text-dark-400 hover:text-dark-100">
+                        <UserPen size={14} /> ¿No es esta persona? Cambiarla
+                      </button>
+                    )}
+                    {corrige && (
+                      <div className="flex items-center gap-2">
+                        <select value="" autoFocus aria-label="¿Quién es en realidad?"
+                          onChange={(e) => {
+                            if (!e.target.value) return
+                            ponerNombre(c.transporter_id, e.target.value === '__quitar' ? '' : e.target.value)
+                            setCorrigiendo(null)
+                          }}
+                          disabled={asignando === c.transporter_id}
+                          className="h-11 min-w-0 flex-1 rounded-lg border border-amber-500/40 bg-dark-950 px-2 text-sm text-amber-200 outline-none">
+                          <option value="">{asignando === c.transporter_id ? 'guardando…' : '¿quién es en realidad?'}</option>
+                          <option value="__quitar">— quitarlo, ya lo asigno luego —</option>
+                          {conductores.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                        <button type="button" onClick={() => setCorrigiendo(null)}
+                          className="min-h-[44px] px-2 text-xs text-dark-500 hover:text-dark-200">cancelar</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+        </>
       ) : (
         <div className="card overflow-x-auto">
           <table className="w-full text-left text-[13px]">
@@ -817,12 +1075,15 @@ export default function Diarios() {
                       <span className={c.driver_name ? 'text-dark-200' : 'font-mono text-[11px] text-amber-300/80'}>
                         {c.driver_name || c.transporter_id}
                       </span>
+                      {/* «¿No es esta persona?» (11-11-2026): un icono discreto en vez del
+                          «no es él» en cada fila, que metía ruido y hablaba en masculino. */}
                       {c.driver_name && corrigiendo !== c.transporter_id && (
-                        <button
+                        <button type="button"
                           onClick={(e) => { e.stopPropagation(); setCorrigiendo(c.transporter_id) }}
-                          title={`Transporter ID ${c.transporter_id} — pulsa si no es esta persona`}
-                          className="ml-2 rounded border border-dark-700 px-1.5 py-0.5 text-[10px] font-semibold text-dark-500 hover:text-dark-200">
-                          no es él
+                          aria-label="¿No es esta persona? Cambiarla"
+                          title={`Transporter ID ${c.transporter_id}: ¿no es esta persona? Cambiarla`}
+                          className="ml-1.5 inline-flex rounded p-0.5 align-[-2px] text-dark-600 hover:bg-dark-800 hover:text-dark-200">
+                          <UserPen size={13} />
                         </button>
                       )}
                       {c.driver_name && corrigiendo === c.transporter_id && (

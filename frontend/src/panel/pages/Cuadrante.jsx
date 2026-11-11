@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom'
 import {
   Loader2, ChevronLeft, ChevronRight, Sparkles, MessageSquare, Undo2, Download, Upload,
   Lock, StickyNote, X, Check, AlertTriangle, Users, SlidersHorizontal, Gift, Eraser, Plus,
-  Brush, CalendarRange, Unlock, Sheet, RefreshCw,
+  Brush, CalendarRange, Unlock, Sheet, RefreshCw, Search,
 } from 'lucide-react'
 import {
   getCuadrante, cuadranteCeldas, cuadranteMaximas, cuadranteConfig, cuadrantePersona,
@@ -17,6 +17,7 @@ import { canSee } from '../auth'
 import CuadranteChat from '../components/CuadranteChat'
 import SincronizarSheets from '../components/SincronizarSheets'
 import HojaCuadrante from '../hoja/HojaCuadrante'
+import ElegirNave from '../components/ElegirNave'
 import {
   TRABAJO, LETRA, DIA, MES, PALETA, ABREV, DOMINGO_TRABAJA, COLUMNA_DOMINGO, CABECERA_DIA, NOMBRE_EMPRESA, NOMBRE_FINDE, NOMBRE_SE_VA, claseCodigo, claseNombre, wd,
   sumaDias, rangoDias, fmt, lunesDe, signo, claseDif, resumenDias, septimosDe,
@@ -50,6 +51,53 @@ function descargar(blob, nombre) {
   a.download = nombre
   document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+/* BUSCAR A ALGUIEN (11-11-2026, cuadrante-9). Con 60-70 filas, en el móvil había que bajar con el dedo hasta dar con
+   el nombre cuando un conductor llama («¿qué tengo el jueves?»). Se busca por nombre o por apodo, sin acentos ni
+   mayúsculas, y cada palabra tiene que estar («jose cas» encuentra a JOSÉ MANUEL PÉREZ CASTRO). Solo se esconden filas:
+   las de totales (rutas, máxima, diferencia) siguen contando a todos. */
+const sinAcentos = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+function casaBusqueda(p, busca) {
+  const palabras = sinAcentos(busca).split(/\s+/).filter(Boolean)
+  if (!palabras.length) return true
+  const texto = sinAcentos([p.nombre, ...lista(p.apodos)].join(' '))
+  return palabras.every((w) => texto.includes(w))
+}
+
+/* EL NOMBRE CORTO DEL MÓVIL (11-11-2026, cuadrante-10). La columna de nombres se comía la pantalla: en un móvil se
+   veían dos días y medio. En pantallas estrechas va el nombre y la inicial del segundo («ANTONIO G.»); si dos
+   coinciden, el segundo entero (lo que no quepa se corta). El completo, al tocar el nombre (abre su ficha).
+   Si aun así siguen iguales (11-11-2026): «JOSÉ GARCÍA PÉREZ» y «JOSÉ GARCÍA LÓPEZ» salían los dos «JOSÉ GARCÍA», y en
+   el móvil no se sabía cuál era cuál. Ahora se van añadiendo iniciales («JOSÉ G. P.» / «JOSÉ G. L.») hasta que se
+   distinguen (y, si no, el nombre entero). Las partículas (DE, DEL, LA, LAS, LOS, Y) no cuentan para la inicial:
+   «MARÍA DE LOS ÁNGELES RUIZ» es «MARÍA Á.», no «MARÍA D.». */
+const NEXOS = new Set(['de', 'del', 'la', 'las', 'los', 'y'])
+function nombresCortos(personas) {
+  // Las formas de un nombre, de la más corta a la entera.
+  const formas = (n) => {
+    const w = String(n || '').trim().split(/\s+/).filter(Boolean)
+    if (w.length < 2) return [w[0] || '']
+    const sig = w.slice(1).filter((x) => !NEXOS.has(sinAcentos(x)))
+    const ini = (k) => sig.slice(0, k).map((x) => `${x[0]}.`).join(' ')
+    const f = sig.length ? [`${w[0]} ${ini(1)}`, `${w[0]} ${sig[0]}`] : []
+    for (let k = 2; k <= sig.length; k++) f.push(`${w[0]} ${ini(k)}`)
+    f.push(w.join(' '))
+    return [...new Set(f)]
+  }
+  const fs = Object.fromEntries(personas.map((p) => [p.id, formas(p.nombre)]))
+  const nivel = Object.fromEntries(personas.map((p) => [p.id, 0]))
+  // Mientras dos enseñen lo mismo, los dos pasan a su forma siguiente (acaba: cada vuelta alarga alguno).
+  for (let movido = true; movido;) {
+    movido = false
+    const quien = {}
+    for (const p of personas) (quien[fs[p.id][nivel[p.id]]] ||= []).push(p.id)
+    for (const ids of Object.values(quien)) {
+      if (ids.length < 2) continue
+      for (const id of ids) if (nivel[id] < fs[id].length - 1) { nivel[id] += 1; movido = true }
+    }
+  }
+  return Object.fromEntries(personas.map((p) => [p.id, fs[p.id][nivel[p.id]]]))
 }
 
 function Modal({ titulo, onCerrar, children, ancho = 'max-w-2xl' }) {
@@ -900,6 +948,10 @@ export default function Cuadrante() {
   }, [personas, dias, celda])
 
   const dentro = useMemo(() => new Set(personas.map((p) => p.id)), [personas])
+  // Lo que se pinta: las filas que casan con el buscador. Las cuentas de arriba usan `personas`, todas (11-11-2026).
+  const [busca, setBusca] = useState('')
+  const visibles = useMemo(() => personas.filter((p) => casaBusqueda(p, busca)), [personas, busca])
+  const cortos = useMemo(() => nombresCortos(personas), [personas])
 
   const guardarCeldas = async (cambios, msg) => {
     setErr(''); setAviso('')
@@ -1002,13 +1054,33 @@ export default function Cuadrante() {
     return (
       <div className="mx-auto max-w-3xl">
         <h1 className="font-display text-[clamp(26px,3vw,36px)] font-semibold text-dark-50">Cuadrante</h1>
-        <p className="card mt-4 p-5 text-dark-300">Elige un centro arriba: el cuadrante va por centro.</p>
+        {/* Un botón por centro ahí mismo, no «elige arriba» (11-11-2026, portal_inicio-9). */}
+        <ElegirNave className="mt-4" centers={centers} setCenter={setCenter} texto="El cuadrante va por centro: ¿cuál quieres ver?" />
       </div>
     )
   }
 
   const ultimaMax = Object.keys(datos?.maximas || {}).sort().pop()
   const hayExtras = dias.some((f) => porDia[f]?.extras > 0)
+
+  // El mismo buscador en la rejilla y en «Personas y notas»: lo escrito se mantiene al cambiar de pestaña.
+  const buscador = (
+    <div className="flex flex-wrap items-center gap-2">
+      <label className="relative w-full sm:w-72">
+        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-dark-500" />
+        <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Buscar persona"
+          placeholder="Buscar por nombre o apodo…"
+          className="min-h-[44px] w-full rounded-lg border border-dark-700 bg-dark-900 py-2 pl-9 pr-3 text-[13px] text-dark-100 placeholder:text-dark-500 sm:min-h-0 sm:py-1.5" />
+      </label>
+      {busca.trim() && (
+        <span className="text-[12px] text-dark-400" data-testid="busca-cuenta">
+          {visibles.length} de {personas.length}
+          <button onClick={() => setBusca('')}
+            className="ml-1 inline-flex min-h-[44px] items-center px-2 font-semibold text-brand-300 hover:text-brand-200 sm:min-h-0">Ver a todos</button>
+        </span>
+      )}
+    </div>
+  )
 
   /* Con el chat abierto en pantalla ancha, TODA la página deja su hueco a la
      derecha: antes solo la tabla, y la cabecera y los botones quedaban debajo
@@ -1123,15 +1195,17 @@ export default function Cuadrante() {
               )}
 
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1">
+                {/* En el móvil, la fila de fechas ocupa el ancho y los dos campos encogen: con su ancho de siempre la
+                    flecha «Semana siguiente» quedaba fuera y la página se deslizaba de lado (11-11-2026). Desde sm, igual. */}
+                <div className="flex items-center gap-1 max-sm:w-full">
                   <button onClick={() => mover(-7)} aria-label="Semana anterior" className="btn-ghost p-1.5"><ChevronLeft size={16} /></button>
                   <input type="date" value={rango.desde} aria-label="Desde"
                     onChange={(e) => e.target.value && setRango((r) => ({ ...r, desde: e.target.value, hasta: r.hasta < e.target.value ? e.target.value : r.hasta }))}
-                    className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-xs text-dark-100" />
+                    className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-xs text-dark-100 max-sm:min-w-0 max-sm:flex-1" />
                   <span className="text-dark-500">–</span>
                   <input type="date" value={rango.hasta} aria-label="Hasta" min={rango.desde}
                     onChange={(e) => e.target.value && setRango((r) => ({ ...r, hasta: e.target.value }))}
-                    className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-xs text-dark-100" />
+                    className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-xs text-dark-100 max-sm:min-w-0 max-sm:flex-1" />
                   <button onClick={() => mover(7)} aria-label="Semana siguiente" className="btn-ghost p-1.5"><ChevronRight size={16} /></button>
                 </div>
                 <button onClick={() => { const l = lunesDe(hoyLocal()); setRango({ desde: l, hasta: sumaDias(l, 13) }) }}
@@ -1193,6 +1267,8 @@ export default function Cuadrante() {
                 </button>
               </div>
 
+              {personas.length > 0 && buscador}
+
               {cargando && !datos ? (
                 <div className="card flex items-center gap-2 p-8 text-dark-400"><Loader2 className="animate-spin" size={18} /> Cargando el cuadrante…</div>
               ) : personas.length === 0 ? (
@@ -1208,7 +1284,9 @@ export default function Cuadrante() {
                   <table className="border-collapse text-[11px]">
                     <thead>
                       <tr>
-                        <th className="sticky left-0 z-20 min-w-[13rem] bg-dark-900 px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-wide text-dark-500">
+                        {/* En el móvil, la columna del nombre se estrecha (nombre corto) para que quepan más días;
+                            desde sm, como siempre (11-11-2026, cuadrante-10). */}
+                        <th className="sticky left-0 z-20 bg-dark-900 px-1 py-1 text-left text-[10px] font-semibold uppercase tracking-wide text-dark-500 sm:min-w-[13rem] sm:px-2">
                           Conductor
                         </th>
                         {dias.map((f) => (
@@ -1224,24 +1302,41 @@ export default function Cuadrante() {
                       </tr>
                     </thead>
                     <tbody>
-                      {personas.map((p) => (
+                      {visibles.length === 0 && (
+                        <tr className="border-t border-dark-800/70">
+                          <td className="sticky left-0 z-10 bg-dark-900 px-2 py-3 text-[12px] text-dark-400" colSpan={3}>
+                            Nadie en este cuadrante se llama «{busca.trim()}».
+                          </td>
+                        </tr>
+                      )}
+                      {visibles.map((p) => (
                         <tr key={p.id} className="border-t border-dark-800/70">
-                          <td className="sticky left-0 z-10 bg-dark-900 px-2 py-0.5">
-                            <button onClick={() => setPersona(p)} className="flex w-full items-center gap-1.5 text-left"
-                              title={[p.nombre, ...lista(p.entendido), p.nota].filter(Boolean).join(' · ')}>
-                              <span className={`max-w-[11rem] truncate rounded-[3px] px-1 text-[12px] ${claseNombre(p, rango.hasta) || (p.ficha_activa ? 'text-dark-100' : 'text-dark-400 italic')}`}>{p.nombre}</span>
+                          <td className="sticky left-0 z-10 bg-dark-900 px-1 py-0.5 sm:px-2">
+                            {/* En el móvil, el nombre corto, sin las etiquetas de horario (el color del nombre ya dice
+                                horario fijo o findes) y con «SE VA» / «ENTRA» debajo, en su segunda línea, para no
+                                ensanchar la columna; al tocarlo se abre su ficha con el nombre entero. */}
+                            <button onClick={() => setPersona(p)}
+                              className="flex w-full max-w-[7.5rem] flex-wrap items-center gap-1 text-left sm:max-w-none sm:flex-nowrap sm:gap-1.5"
+                              title={[p.nombre, ...lista(p.entendido), p.nota,
+                                p.alta_desde ? `entra ${fmt(p.alta_desde)}` : '', p.inactivo_desde ? `se va ${fmt(p.inactivo_desde)}` : '']
+                                .filter(Boolean).join(' · ')}>
+                              <span className={`max-w-[6.5rem] truncate rounded-[3px] px-1 text-[12px] sm:max-w-[11rem] ${claseNombre(p, rango.hasta) || (p.ficha_activa ? 'text-dark-100' : 'text-dark-400 italic')}`}>
+                                {/* El corto solo se ve; el entero es el que se lee en voz alta (y el nombre del botón). */}
+                                <span className="sm:hidden" aria-hidden="true">{cortos[p.id] || p.nombre}</span>
+                                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">{p.nombre}</span>
+                              </span>
                               {p.tipo === 'empresa' && (
-                                <span className="shrink-0 rounded bg-sky-500/20 px-1 text-[9px] font-bold text-sky-300">
+                                <span className="hidden shrink-0 rounded bg-sky-500/20 px-1 text-[9px] font-bold text-sky-300 sm:inline">
                                   {p.patron ? p.patron.map((d) => LETRA[d]).join('') : 'L-V'}
                                 </span>
                               )}
-                              {p.tipo === 'finde' && <span className="shrink-0 rounded bg-orange-500/15 px-1 text-[9px] font-bold text-orange-300">FINDE</span>}
-                              {p.tipo === 'inactivo' && <span className="shrink-0 rounded bg-dark-800 px-1 text-[9px] font-bold text-dark-400">FUERA</span>}
+                              {p.tipo === 'finde' && <span className="hidden shrink-0 rounded bg-orange-500/15 px-1 text-[9px] font-bold text-orange-300 sm:inline">FINDE</span>}
+                              {p.tipo === 'inactivo' && <span className="hidden shrink-0 rounded bg-dark-800 px-1 text-[9px] font-bold text-dark-400 sm:inline">FUERA</span>}
                               {p.inactivo_desde && p.inactivo_desde <= rango.hasta && (
-                                <span className="shrink-0 rounded bg-amber-500/20 px-1 text-[9px] font-bold text-amber-300">SE VA {fmt(p.inactivo_desde)}</span>
+                                <span className="order-last shrink-0 rounded bg-amber-500/20 px-1 text-[9px] font-bold text-amber-300 sm:order-none">SE VA {fmt(p.inactivo_desde)}</span>
                               )}
                               {p.alta_desde && p.alta_desde >= rango.desde && (
-                                <span className="shrink-0 rounded bg-emerald-500/20 px-1 text-[9px] font-bold text-emerald-300">ENTRA {fmt(p.alta_desde)}</span>
+                                <span className="order-last shrink-0 rounded bg-emerald-500/20 px-1 text-[9px] font-bold text-emerald-300 sm:order-none">ENTRA {fmt(p.alta_desde)}</span>
                               )}
                               {(p.nota || lista(p.reglas_fijas).length > 0) && <StickyNote size={11} className="shrink-0 text-amber-300" />}
                             </button>
@@ -1260,7 +1355,7 @@ export default function Cuadrante() {
                                   title={`${p.nombre} · ${DIA[wd(f)]} ${fmt(f)} · ${cod || 'sin poner'}${c?.hora ? ` (${c.hora})` : ''}${
                                     c?.extra ? ' · DÍA EXTRA' : ''}${c?.fijada ? ' · fijada a mano' : ''}${c?.otro_centro ? ` · en ${c.otro_centro}` : ''}${
                                     c?.propuesta ? ` · antes: ${c.antes || 'vacío'}` : ''}${septimo ? ' · 7º DÍA SEGUIDO' : ''}`}
-                                  className={`relative h-6 w-9 rounded-[3px] text-[10px] font-bold leading-none ${cod
+                                  className={`relative h-6 w-8 sm:w-9 rounded-[3px] text-[10px] font-bold leading-none ${cod
                                     ? claseCodigo(cod, c?.extra, wd(f) === 6)
                                     : `border border-dashed text-dark-500 ${wd(f) === 6 ? 'border-orange-500/40' : 'border-dark-800'}`} ${
                                     c?.otro_centro ? 'opacity-40' : ''} ${c?.propuesta ? 'outline outline-2 outline-violet-400' : ''} ${
@@ -1279,7 +1374,7 @@ export default function Cuadrante() {
                         <td className="sticky left-0 z-10 bg-dark-900 px-2 py-1 text-[11px] font-bold text-dark-200">Rutas (cuenta de 1)</td>
                         {dias.map((f) => (
                           <td key={f} className={`px-[1px] py-1 text-center ${wd(f) === 6 ? COLUMNA_DOMINGO : ''}`}>
-                            <span className="inline-block w-9 rounded-[3px] bg-sky-500/20 py-0.5 text-[11px] font-bold text-sky-300">{porDia[f]?.rutas}</span>
+                            <span className="inline-block w-8 sm:w-9 rounded-[3px] bg-sky-500/20 py-0.5 text-[11px] font-bold text-sky-300">{porDia[f]?.rutas}</span>
                           </td>
                         ))}
                         <td colSpan={2} />
@@ -1293,7 +1388,7 @@ export default function Cuadrante() {
                               onChange={(e) => setMaxEdit((m) => ({ ...m, [f]: e.target.value }))}
                               onBlur={() => guardarMaxima(f)}
                               onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
-                              className="w-9 rounded-[3px] border border-dark-700 bg-dark-900 px-0 py-0.5 text-center text-[11px] font-bold text-dark-100" />
+                              className="w-8 sm:w-9 rounded-[3px] border border-dark-700 bg-dark-900 px-0 py-0.5 text-center text-[11px] font-bold text-dark-100" />
                           </td>
                         ))}
                         <td colSpan={2} />
@@ -1310,7 +1405,7 @@ export default function Cuadrante() {
                               onChange={(e) => setRefEdit((m) => ({ ...m, [f]: e.target.value }))}
                               onBlur={() => guardarRefuerzo(f)}
                               onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
-                              className="w-9 rounded-[3px] border border-violet-500/40 bg-dark-900 px-0 py-0.5 text-center text-[11px] font-bold text-violet-200" />
+                              className="w-8 sm:w-9 rounded-[3px] border border-violet-500/40 bg-dark-900 px-0 py-0.5 text-center text-[11px] font-bold text-violet-200" />
                           </td>
                         ))}
                         <td colSpan={2} />
@@ -1325,7 +1420,7 @@ export default function Cuadrante() {
                             <td key={f} className={`px-[1px] py-1 text-center ${wd(f) === 6 ? COLUMNA_DOMINGO : ''}`}>
                               <button onClick={() => d.extras && setDiaExtra(f)} disabled={!d.extras}
                                 title={d.extras ? `${d.extras} días extra: pulsa para dar libres` : `Objetivo +${d.colchon}`}
-                                className={`w-9 rounded-[3px] py-0.5 text-[11px] font-bold ${claseDif(d)} ${d.extras ? 'cursor-pointer ring-1 ring-pink-400/50' : 'cursor-default'}`}>
+                                className={`w-8 sm:w-9 rounded-[3px] py-0.5 text-[11px] font-bold ${claseDif(d)} ${d.extras ? 'cursor-pointer ring-1 ring-pink-400/50' : 'cursor-default'}`}>
                                 {signo(d.dif)}
                               </button>
                             </td>
@@ -1367,6 +1462,7 @@ export default function Cuadrante() {
                   <Plus size={13} /> Añadir
                 </button>
               </div>
+              {personas.length > 0 && <div className="border-b border-dark-800 px-4 py-2.5">{buscador}</div>}
               <table className="w-full text-[12.5px]">
                 <thead>
                   <tr className="text-left text-[10.5px] uppercase tracking-wide text-dark-500">
@@ -1375,7 +1471,10 @@ export default function Cuadrante() {
                   </tr>
                 </thead>
                 <tbody>
-                  {personas.map((p) => (
+                  {personas.length > 0 && visibles.length === 0 && (
+                    <tr className="border-t border-dark-800"><td colSpan={5} className="px-4 py-3 text-dark-400">Nadie en este cuadrante se llama «{busca.trim()}».</td></tr>
+                  )}
+                  {visibles.map((p) => (
                     <tr key={p.id} onClick={() => setPersona(p)} className="cursor-pointer border-t border-dark-800 hover:bg-dark-800/50">
                       <td className="px-4 py-2 text-dark-100">{p.nombre}{!p.ficha_activa && <span className="ml-1 text-[10px] text-amber-300">(ficha de baja)</span>}</td>
                       <td className="px-2 text-dark-300">

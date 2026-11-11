@@ -39,7 +39,8 @@ export default function AvisoIdAmazon({ tid, fichaId, ficha, amazon, propuesta, 
     } finally { setOcupado('') }
   }
 
-  const btn = 'rounded border px-1.5 py-0.5 text-[10.5px] font-semibold disabled:opacity-40'
+  // En el móvil (11-11-2026), botones que se aciertan con el dedo: 44 px de alto.
+  const btn = 'rounded border px-1.5 py-0.5 text-[10.5px] font-semibold disabled:opacity-40 max-sm:min-h-[44px] max-sm:px-2.5 max-sm:text-xs'
   return (
     <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11.5px]" onClick={(e) => e.stopPropagation()}>
       <ShieldAlert size={13} className="shrink-0 text-red-400" />

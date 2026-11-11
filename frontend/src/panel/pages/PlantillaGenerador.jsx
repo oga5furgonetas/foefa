@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import {
   Upload, FileSpreadsheet, Loader2, AlertCircle, X, CheckCircle2,
-  Download, RotateCcw, Plus, ChevronDown, ChevronUp, Trash2, FolderOpen,
+  Download, RotateCcw, Plus, ChevronDown, ChevronUp, ChevronRight, Trash2, FolderOpen,
   Copy, ClipboardPaste, Car, Info, ClipboardCheck, Wand2, AlertTriangle, Smartphone,
 } from 'lucide-react'
 import { getToken } from '../auth'
 import { getPlantillas, downloadPlantilla, deletePlantilla, getVehicles, plantillaDesdeAsignacion, plantillaFurgos, plantillaMoviles } from '../api'
 import FurgonetasFijas from '../components/FurgonetasFijas'
 import MovilesEmpresa from '../components/MovilesEmpresa'
+import ElegirNave from '../components/ElegirNave'
 import { API_BASE as API } from '../../lib/apiBase'
 import { useT, LANG_LOCALE } from '../../i18n'
 import { lista } from '../../lib/lista'
@@ -148,7 +149,8 @@ function Historial({ center }) {
       {open && (
         <div className="border-t border-dark-700 px-4 pb-4 pt-3">
           {noCenter ? (
-            <p className="text-sm text-dark-500">{t('pg.eligeCentroHist')}</p>
+            <ElegirNave texto={t('pg.eligeCentroHist')} />
+
           ) : loading ? (
             <div className="flex items-center gap-2 py-4 text-dark-400">
               <Loader2 size={15} className="animate-spin" /> {t('pg.cargando')}
@@ -988,7 +990,12 @@ export default function PlantillaGenerador() {
             <p className="mb-3 flex items-center gap-1.5 text-[12px] text-emerald-300"><CheckCircle2 size={13} /> {t('pg.avisos.ok')}</p>
           )}
           <AvisosFurgos info={furgosIA} nota={ponerNota} filas={data.rows} />
-          <div className="overflow-x-auto rounded-xl border border-dark-700">
+          {/* En el móvil la hoja se apretaba al ancho de la pantalla y no se leía ni la ruta entera («CX1») ni el nombre
+              (11-11-2026): ahora cada celda tiene su mínimo y la tabla se desliza de lado, con la ruta y el conductor
+              a la vista al entrar. */}
+          {/* Y como el conductor llena la caja, en el móvil una sombra en el borde derecho dice que hay más columnas
+              (Móvil, Vehículo, las horas…) deslizando; se va al llegar al final (11-11-2026). */}
+          <TablaDeslizable>
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-[#FFD966] text-black">
@@ -1012,20 +1019,20 @@ export default function PlantillaGenerador() {
                   return (
                     <tr key={i} className={`border-t border-[#BFBFBF] ${rowBg}`}>
                       <td className="border border-[#BFBFBF] px-1 py-0.5">
-                        <EditCell value={row.ruta} onChange={v => editCell(i, 'ruta', v)} extraCls={`text-center font-bold ${textCl}`} label={t('pg.col.ruta')} />
+                        <EditCell value={row.ruta} onChange={v => editCell(i, 'ruta', v)} extraCls={`min-w-[4em] text-center font-bold ${textCl}`} label={t('pg.col.ruta')} size={6} />
                       </td>
                       <td className={`border border-[#BFBFBF] px-1 py-0.5 ${isMarked && !isRed ? 'bg-[#FCE4D6]' : ''}`}>
                         <div className="flex items-center gap-1">
                           <button onClick={() => toggle(markedSet, setMarkedSet, (row.conductor || '').toUpperCase(), 'marked_conductors')}
                             title={t('pg.tMarcar')} aria-label={t('pg.tMarcar')}
                             className={`h-3.5 w-3.5 shrink-0 rounded-sm border transition ${isMarked ? 'border-orange-500 bg-orange-300' : 'border-gray-300 hover:border-orange-400'}`} />
-                          <EditCell value={row.conductor} onChange={v => editCell(i, 'conductor', v)} label={t('pg.col.conductor')}
-                            extraCls={`min-w-[140px] ${isMarked && !isRed ? 'font-semibold text-orange-900' : textCl} ${anillo('conductor')}`} />
+                          <EditCell value={row.conductor} onChange={v => editCell(i, 'conductor', v)} label={t('pg.col.conductor')} size={30}
+                            extraCls={`min-w-[17em] sm:min-w-[140px] ${isMarked && !isRed ? 'font-semibold text-orange-900' : textCl} ${anillo('conductor')}`} />
                         </div>
                       </td>
                       {ver('movil') && (
                         <td className="border border-[#BFBFBF] px-1 py-0.5">
-                          <EditCell value={row.movil} onChange={v => editCell(i, 'movil', v)} extraCls={`text-center ${textCl}`} label={t('pg.col.movil')} />
+                          <EditCell value={row.movil} onChange={v => editCell(i, 'movil', v)} extraCls={`min-w-[5.5rem] text-center ${textCl}`} label={t('pg.col.movil')} size={10} />
                         </td>
                       )}
                       <td className={`border border-[#BFBFBF] px-1 py-0.5 ${isPink && !isRed ? 'bg-pink-200' : ''} ${anillo('furgo')}`}>
@@ -1045,7 +1052,7 @@ export default function PlantillaGenerador() {
                         .filter(([k]) => ver(k)).map(([k, clave]) => (
                           <td key={k} className="border border-[#BFBFBF] px-1 py-0.5" style={waveColor ? { background: waveColor } : {}}>
                             <EditCell value={row[k]} onChange={v => editCell(i, k, v)} onBlur={() => normalizarHora(i, k)}
-                              extraCls={`text-center font-mono ${textCl} ${anillo(k)}`} label={t(clave)} />
+                              extraCls={`min-w-[3.5rem] text-center font-mono ${textCl} ${anillo(k)}`} label={t(clave)} size={5} />
                           </td>
                         ))}
                       <td className="border border-[#BFBFBF] px-1 py-0.5">
@@ -1088,7 +1095,7 @@ export default function PlantillaGenerador() {
                 })}
               </tbody>
             </table>
-          </div>
+          </TablaDeslizable>
 
           <div className="mt-2">
             <button onClick={addRow} className="btn-ghost flex items-center gap-1.5 text-xs text-dark-400 hover:text-brand-300">
@@ -1275,9 +1282,47 @@ function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePi
   )
 }
 
-function EditCell({ value, onChange, onBlur, extraCls, label }) {
+/* La caja de la hoja, que se desliza de lado. En el móvil el conductor llena el ancho y Móvil, Vehículo y las horas
+   quedaban fuera sin ninguna pista: la tabla parecía de dos columnas (11-11-2026). Mientras quede algo a la derecha,
+   una sombra con una flecha en ese borde (solo por debajo de sm: en el ordenador la hoja cabe y nada cambia).
+   La sombra es estrecha y tenue (w-6, negro al 20 %): un nombre largo llega justo al borde y con una más ancha y
+   oscura sus últimas letras se leían oscurecidas; la flecha es la que avisa (11-11-2026). */
+function TablaDeslizable({ children }) {
+  const ref = useRef(null)
+  const [mas, setMas] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const medir = () => setMas(el.scrollLeft + el.clientWidth < el.scrollWidth - 2)
+    medir()
+    el.addEventListener('scroll', medir, { passive: true })
+    const ro = new ResizeObserver(medir)
+    ro.observe(el)
+    if (el.firstElementChild) ro.observe(el.firstElementChild)
+    return () => { el.removeEventListener('scroll', medir); ro.disconnect() }
+  }, [])
   return (
-    <input value={value || ''} onChange={e => onChange(e.target.value)} onBlur={onBlur} aria-label={label}
+    <div className="relative">
+      <div ref={ref} className="overflow-x-auto rounded-xl border border-dark-700">
+        {children}
+      </div>
+      {mas && (
+        <div aria-hidden="true" data-testid="pg-tabla-mas"
+          className="pointer-events-none absolute inset-y-px right-px w-6 rounded-r-xl bg-gradient-to-l from-black/20 to-transparent sm:hidden">
+          <span className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white">
+            <ChevronRight size={15} />
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* `size`: lo ancha que «quiere» ser la celda (11-11-2026). Con todas en el tamaño por defecto, la tabla repartía el
+   sitio a partes iguales: las tres horas («09:20») cogían lo mismo que el conductor y su nombre salía cortado. */
+function EditCell({ value, onChange, onBlur, extraCls, label, size }) {
+  return (
+    <input value={value || ''} onChange={e => onChange(e.target.value)} onBlur={onBlur} aria-label={label} size={size}
       className={[
         'w-full rounded bg-transparent px-1 py-0.5 transition focus:bg-yellow-50 focus:outline-none focus:ring-1 focus:ring-yellow-400/60',
         extraCls || '',

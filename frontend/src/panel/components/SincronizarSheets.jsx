@@ -6,6 +6,7 @@ import {
 import {
   getSyncHoja, conectarSyncHoja, modoSyncHoja, aceptarSyncHoja, desconectarSyncHoja, emparejarSyncHoja,
   borradorSyncHoja, quitarBorradorSyncHoja, definitivoSyncHoja, repintarSyncHoja, quitarRepintarSyncHoja,
+  getCodigosCuadrante, setCodigosCuadrante,
 } from '../api'
 import { lista } from '../../lib/lista'
 import { fechaHoraLocal } from '../../lib/fecha'
@@ -28,6 +29,59 @@ const dia = (f) => {
 }
 
 const fmt = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}` : '')
+
+/* LOS CÓDIGOS QUE LA APP NO CONOCE, SE ENSEÑAN AQUÍ (11-11-2026, historia-8). Antes el cuadro solo decía «Códigos que
+   no conozco, no se tocan: B/V (1)» y ese día no llegaba a la app; había que importar el Excel en Días libres para ver
+   los botones. Se guardan en la MISMA tabla (PUT /shifts/codigos, como al importar) y la sincronización ya la lee: en la
+   siguiente vuelta esas celdas entran solas.
+   Sin «Ignorar», a propósito: esa tabla lo guarda como vacío, la sincronización deja entonces de verlo como desconocido
+   y lo mete en la app como un día libre más. En Google Sheets «Ignorar» no haría lo que dice. */
+const TIPOS_CODIGO = [['trabaja', 'Trabaja'], ['libre', 'Libre'], ['extra', 'Extra']]
+
+function CodigosDesconocidos({ codigos }) {
+  const [hechos, setHechos] = useState({})           // código → tipo que se le ha dado
+  const [ocupado, setOcupado] = useState('')
+  const [err, setErr] = useState('')
+  const traducir = async (cod, tipo) => {
+    setOcupado(`${cod}|${tipo}`); setErr('')
+    try {
+      // La tabla se guarda entera: se lee la de ahora y se le añade este, igual que al importar el Excel.
+      const actual = (await getCodigosCuadrante()).data?.codigos || {}
+      await setCodigosCuadrante({ ...actual, [cod]: tipo })
+      setHechos((h) => ({ ...h, [cod]: tipo }))
+    } catch (e) { setErr(e?.response?.data?.detail || 'No se ha podido guardar el código.') }
+    setOcupado('')
+  }
+  return (
+    <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.06] p-2.5 text-[12px]" data-testid="codigos-desconocidos">
+      <p className="font-semibold text-amber-200">Códigos de la hoja que no conozco: esos días no llegan a la app. Dime qué son y los recordaré:</p>
+      <div className="mt-2 flex flex-col gap-2">
+        {Object.entries(codigos).map(([cod, n]) => (
+          <div key={cod} className="flex flex-wrap items-center gap-2">
+            <code className="rounded bg-dark-800 px-2 py-1 font-mono text-[12.5px] text-dark-100">{cod}</code>
+            <span className="text-dark-500">{n} {n === 1 ? 'vez' : 'veces'}</span>
+            {hechos[cod] ? (
+              <span className="text-emerald-300">
+                <Check size={12} className="mr-1 inline align-[-1px]" />
+                {(TIPOS_CODIGO.find(([k]) => k === hechos[cod]) || [])[1]}: entra en la próxima sincronización.
+              </span>
+            ) : (
+              <div className="flex gap-1.5">
+                {TIPOS_CODIGO.map(([k, lbl]) => (
+                  <button key={k} onClick={() => traducir(cod, k)} disabled={!!ocupado}
+                    className="min-h-[44px] rounded-lg border border-dark-700 px-3 py-1 text-[12px] font-semibold text-dark-200 hover:border-brand-500/50 hover:text-brand-300 disabled:opacity-50 sm:min-h-0">
+                    {ocupado === `${cod}|${k}` ? <Loader2 size={12} className="inline animate-spin" /> : null} {lbl}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {err && <p className="mt-2 text-red-300">{err}</p>}
+    </div>
+  )
+}
 
 /* Un nombre de la hoja que no casa solo con una ficha (se parece a alguien, o a dos). Se elige aquí: es esa
    persona (se recuerda), es alguien nuevo (se le hace la ficha) o no es del cuadrante (la hoja lo deja de mirar). */
@@ -399,11 +453,7 @@ export default function SincronizarSheets({ center }) {
               </div>
               {u.personas && <Gente center={center} g={u.personas} prueba={u.modo === 'prueba'} />}
               {lista(u.ambiguos).length > 0 && <p className="text-[12px] text-amber-300">Dudosos, fuera: {u.ambiguos.join(', ')}.</p>}
-              {Object.keys(u.codigos_desconocidos || {}).length > 0 && (
-                <p className="text-[12px] text-amber-300">
-                  Códigos que no conozco, no se tocan: {Object.entries(u.codigos_desconocidos).map(([c, n]) => `${c} (${n})`).join(', ')}.
-                </p>
-              )}
+              {Object.keys(u.codigos_desconocidos || {}).length > 0 && <CodigosDesconocidos codigos={u.codigos_desconocidos} />}
               {cambios.length > 0 && (
                 <div className="max-h-64 overflow-auto rounded-lg border border-dark-800">
                   <table className="w-full text-[12px]">
