@@ -51392,17 +51392,20 @@ async def plantilla_furgos(data: dict = Body(...), admin: dict = Depends(require
     # Cuántos de la hoja tienen ya furgoneta fija: con 0, «no había ninguna
     # que poner» no dice qué hacer; la pantalla manda a aplicar el reparto.
     con_fija = sum(1 for f in filas if f.conductor and (D["fijas"].get(f.conductor) or _af.Fija()).principal)
-    # Para la nota de la pantalla: a quién no se le ha puesto su principal o su secundaria por la ITV (solo las
-    # filas que siguen sin furgoneta; la web de antes no lee esta clave).
-    # Solo las filas que se quedan SIN furgoneta (11-11-2026, P26): si se le pone una buena (la principal, o la
-    # secundaria porque la principal tiene la ITV caducada), no se nombra ninguna.
-    puestas = {p.fila for p in res["propuestas"] if p.aplicar and p.furgo}
+    # Para la nota de la pantalla: a quién no se le ha puesto su principal o su secundaria por la ITV (la web de
+    # antes no lee esta clave).
+    # Se nombra la saltada por la ITV solo si iba POR DELANTE de la que al final se puso, o si no se puso ninguna
+    # (11-11-2026, segunda ronda de P26): principal caducada y secundaria puesta, sale la principal; principal puesta
+    # y secundaria caducada, nada (era el ruido de P26).
+    puestas = {p.fila: p.furgo for p in res["propuestas"] if p.aplicar and p.furgo}
     itv_caducada = []
     for f in filas:
-        if not f.conductor or f.furgo or f.i in puestas:
+        if not f.conductor or f.furgo:
             continue
         fija = D["fijas"].get(f.conductor) or _af.Fija()
         for vid in (fija.principal, fija.secundaria):
+            if vid and vid == puestas.get(f.i):
+                break
             if vid and vid in itv_mal:
                 itv_caducada.append({"furgo": placa.get(vid, vid), "itv_date": itv_mal[vid],
                                      "conductor": nombre_ficha.get(f.conductor, "")})

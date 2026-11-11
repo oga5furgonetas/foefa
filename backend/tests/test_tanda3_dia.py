@@ -173,8 +173,10 @@ async def test_poner_furgonetas_no_pone_la_de_itv_caducada_y_lo_dice(cliente, ba
     j = r.json()
     puestas = [p["furgo"] for p in j["propuestas"] if p["aplicar"]]
     assert puestas == ["5678 DEF"], j["propuestas"]
-    # Se le ha puesto su secundaria, que está bien: no hay nada que avisar (P26).
-    assert j["itv_caducada"] == []
+    # Se le ha puesto su secundaria PORQUE la principal tiene la ITV caducada: se nombra la principal, que iba por
+    # delante de la que se puso (11-11-2026, segunda ronda; la primera corrección de P26 no la nombraba).
+    assert j["itv_caducada"] == [
+        {"furgo": "1234 ABC", "itv_date": _iso(_hoy() - timedelta(days=2)), "conductor": "ANA PÉREZ"}]
     assert "1234 ABC" not in [o["furgo"] for o in j["opciones"]["0"]]
     # Con las dos caducadas se queda sin ninguna, y entonces sí se nombran las dos.
     base.vehicles.docs[1]["itv_date"] = _iso(_hoy() - timedelta(days=5))
@@ -197,6 +199,40 @@ async def test_la_nota_de_la_itv_no_nombra_la_secundaria_si_la_principal_se_puso
     assert r.status_code == 200, r.text
     assert [p["furgo"] for p in r.json()["propuestas"] if p["aplicar"]] == ["1234 ABC"]
     assert r.json()["itv_caducada"] == []
+
+
+async def test_la_nota_de_la_itv_nombra_la_principal_si_por_ella_se_puso_la_secundaria(cliente, base):
+    """Segunda ronda (11-11-2026): se nombra la saltada por la ITV que iba POR DELANTE de la que se puso. Principal
+    caducada y secundaria puesta: sale la nota de la principal, y solo de ella."""
+    base.drivers.docs.append({"id": "d1", "name": "ANA PÉREZ", "center": "OGA5"})
+    _flota_itv(base, _iso(_hoy() - timedelta(days=3)), _iso(_hoy() + timedelta(days=400)))
+    base[server._AFIN_COL].docs.append({"driver_id": "d1", "principal": "v1", "secundaria": "v2"})
+    r = await cliente.post("/api/tools/plantilla-furgos", headers=_cab(),
+                           json={"center": "OGA5", "date": _hoja(_hoy()), "rows": [{"conductor": "ANA PÉREZ"}]})
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert [p["furgo"] for p in j["propuestas"] if p["aplicar"]] == ["5678 DEF"]
+    assert j["itv_caducada"] == [
+        {"furgo": "1234 ABC", "itv_date": _iso(_hoy() - timedelta(days=3)), "conductor": "ANA PÉREZ"}]
+
+
+async def test_la_nota_de_la_itv_con_completar_nombra_las_dos_si_se_puso_otra(cliente, base):
+    """Segunda ronda (11-11-2026): con «completar» y las dos fijas caducadas se le pone una tercera; las dos iban por
+    delante de ella, así que se nombran las dos (con la primera corrección de P26 no salía ninguna)."""
+    base.drivers.docs.append({"id": "d1", "name": "ANA PÉREZ", "center": "OGA5"})
+    _flota_itv(base, _iso(_hoy() - timedelta(days=3)), _iso(_hoy() - timedelta(days=6)))
+    base.vehicles.docs.append({"id": "v3", "license_plate": "9012 GHI", "status": "active", "center": "OGA5",
+                               "itv_date": _iso(_hoy() + timedelta(days=400))})
+    base[server._AFIN_COL].docs.append({"driver_id": "d1", "principal": "v1", "secundaria": "v2"})
+    r = await cliente.post("/api/tools/plantilla-furgos", headers=_cab(),
+                           json={"center": "OGA5", "date": _hoja(_hoy()), "completar": True,
+                                 "rows": [{"conductor": "ANA PÉREZ"}]})
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert [p["furgo"] for p in j["propuestas"] if p["aplicar"]] == ["9012 GHI"], j["propuestas"]
+    assert j["itv_caducada"] == [
+        {"furgo": "1234 ABC", "itv_date": _iso(_hoy() - timedelta(days=3)), "conductor": "ANA PÉREZ"},
+        {"furgo": "5678 DEF", "itv_date": _iso(_hoy() - timedelta(days=6)), "conductor": "ANA PÉREZ"}]
 
 
 async def test_poner_furgonetas_con_fecha_vacia_mide_contra_hoy(cliente, base):
