@@ -85,7 +85,9 @@ function Opcion({ icono: Icono, titulo, sub, onClick, principal, bloqueado, pron
    mercadillo). «Pronto», en «pie» bajo el título; las respuestas sin leer, en su número arriba a la derecha (el
    detalle ya las dice, así que el número no se lee dos veces). Sin degradado ni sombra; el tono (verde, ámbar) queda en
    el icono. */
-function Casilla({ icono: Icono, titulo, detalle, onClick, pronto, aviso, tono }) {
+// `linea` (opcional, 11-11-2026, «Mis DNR»): una segunda línea en «sec» gris FUERA del recorte del título, con el suyo
+// (tres líneas, para la «Letra más grande»): dentro, en alemán y en francés se cortaba justo la palabra que importa.
+function Casilla({ icono: Icono, titulo, linea, detalle, onClick, pronto, aviso, tono }) {
   const color = pronto ? 'text-dark-400' : { verde: 'text-ruta-ok-texto', ambar: 'text-ruta-aviso-texto' }[tono] || 'text-dark-400'
   return (
     <button type="button" onClick={pronto ? undefined : onClick} disabled={pronto}
@@ -98,6 +100,7 @@ function Casilla({ icono: Icono, titulo, detalle, onClick, pronto, aviso, tono }
       <Icono size={20} className={`shrink-0 ${color}`} aria-hidden="true" />
       <span className="mt-2 block">
         <span className={`line-clamp-3 break-words text-boton hyphens-auto ${pronto ? 'text-dark-400' : 'text-dark-50'}`}>{titulo}</span>
+        {linea && <span className="line-clamp-3 break-words text-sec text-dark-400">{linea}</span>}
         {pronto && <span className="block text-pie text-dark-400">Pronto</span>}
         {detalle && <span className="sr-only">. {detalle}</span>}
       </span>
@@ -505,7 +508,7 @@ export default function DriverPortal() {
             />
           )}
           {casillaDnr && (
-            <Casilla icono={IconoDnr} titulo={casillaDnr.titulo} detalle={casillaDnr.detalle} aviso={casillaDnr.nuevas}
+            <Casilla icono={IconoDnr} titulo={casillaDnr.titulo} linea={casillaDnr.linea} detalle={casillaDnr.detalle} aviso={casillaDnr.nuevas}
               onClick={() => setVista('dnr')} />
           )}
           {/* Sin «Comparte y gana» en la app de iPhone (09-11-2026): allí no hay invitaciones, bonos ni cartera. */}

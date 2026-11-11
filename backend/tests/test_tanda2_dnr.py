@@ -20,7 +20,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import server
-from base_de_mentira import Col, Cursor, Db
+from base_de_mentira import _FALTA, Col, Cursor, Db, _casa, _leer, _proyecta
 
 HOY = "2026-11-11"          # miércoles: su semana de Amazon empieza el domingo 08-11
 DANI = {"sub": "u1", "name": "Dani", "role": "admin", "account_type": "owner"}
@@ -74,7 +74,11 @@ class _Col(Col):
         self.otras = []
 
     def find(self, q=None, proyeccion=None, **_):
-        return _CursorMongo(super().find(q, proyeccion).docs, self)
+        # Como MongoDB, `{campo: {"$nin": [None, …]}}` deja FUERA los documentos sin ese campo (null casa con «no
+        # está»); la base de mentira los deja entrar. Con el tope bajado (R8/G1) eso cambia qué fichas caben.
+        sin_campo = [k for k, v in (q or {}).items() if isinstance(v, dict) and None in (v.get("$nin") or ())]
+        docs = [d for d in self.docs if all(_leer(d, k) is not _FALTA for k in sin_campo)]
+        return _CursorMongo([_proyecta(d, proyeccion) for d in docs if _casa(d, q)], self)
 
     async def find_one(self, *a, **k):
         self.otras.append("find_one")
@@ -140,34 +144,34 @@ def _fila(tracking, tid, dia, dsc, center="OGA5", **mas):
 
 FILAS = [
     # cuenta; marcado en la puerta, a más de 25 m; foto borrosa y llamada de 12 s (ver FOTO y CONTACTO)
-    _fila("TBAANA1", "AANA000001", "2026-11-09", "Y", scan="DELIVERED_TO_DOORSTEP", mas_25m="Y", cp="15704"),
-    _fila("TBAANA2", "AANA000001", "2026-11-03", "N"),                   # no cuenta: ese día OGA5 tiene una Y (Luis)
-    _fila("TBAANA3", "AANA000001", "2026-11-10", "N"),                   # sin clasificar: ninguna Y en OGA5 ese día
-    _fila("TBAANA4", "AANA000001", "2026-10-20", ""),                    # sin clasificar: sin DSC
-    _fila("TBAANA5", "AANA000001", "2026-10-18", "Y"),                   # el primer día de la 4.ª semana: entra
-    _fila("TBAANA6", "AANA000001", "2026-10-17", "Y"),                   # el sábado anterior: fuera
-    _fila("TBAANAV", "AANAVIEJA1", "2026-11-02", "Y"),                   # de su ficha fusionada: suya
-    _fila("TBLUIS1", "ALUIS00001", "2026-11-03", "Y"),
-    _fila("TBEVA01", "AEVA000001", "2026-11-10", "Y", center="DGA1"),   # una Y en DGA1 el 10: no clasifica OGA5
-    _fila("TBPACO1", "APACO00001", "2026-11-04", "N", center="DGA1"),
-    _fila("TBFANT1", "AFANTASMA1", "2026-11-05", "Y"),                   # un ID sin ficha: de nadie
-    _fila("TBJUAN1", "AJUAN00001", "2026-11-09", "Y"),                   # de Juan (de baja)
-    _fila("TBPEDR1", "APEDRO0001", "2026-11-05", "Y"),                   # de Pedro
-    _fila("TBRITA1", "ARITA00001", "2026-11-04", "Y", center="DGA10"),
+    _fila("TBAANA100", "AANA000001", "2026-11-09", "Y", scan="DELIVERED_TO_DOORSTEP", mas_25m="Y", cp="15704"),
+    _fila("TBAANA200", "AANA000001", "2026-11-03", "N"),                   # no cuenta: ese día OGA5 tiene una Y (Luis)
+    _fila("TBAANA300", "AANA000001", "2026-11-10", "N"),                   # sin clasificar: ninguna Y en OGA5 ese día
+    _fila("TBAANA400", "AANA000001", "2026-10-20", ""),                    # sin clasificar: sin DSC
+    _fila("TBAANA500", "AANA000001", "2026-10-18", "Y"),                   # el primer día de la 4.ª semana: entra
+    _fila("TBAANA600", "AANA000001", "2026-10-17", "Y"),                   # el sábado anterior: fuera
+    _fila("TBAANAV00", "AANAVIEJA1", "2026-11-02", "Y"),                   # de su ficha fusionada: suya
+    _fila("TBLUIS100", "ALUIS00001", "2026-11-03", "Y"),
+    _fila("TBEVA0100", "AEVA000001", "2026-11-10", "Y", center="DGA1"),   # una Y en DGA1 el 10: no clasifica OGA5
+    _fila("TBPACO100", "APACO00001", "2026-11-04", "N", center="DGA1"),
+    _fila("TBFANT100", "AFANTASMA1", "2026-11-05", "Y"),                   # un ID sin ficha: de nadie
+    _fila("TBJUAN100", "AJUAN00001", "2026-11-09", "Y"),                   # de Juan (de baja)
+    _fila("TBPEDR100", "APEDRO0001", "2026-11-05", "Y"),                   # de Pedro
+    _fila("TBRITA100", "ARITA00001", "2026-11-04", "Y", center="DGA10"),
 ]
 
 # La tabla de los fallos de foto y la de los de contacto (las guarda la subida del .html por paquete y fecha del
 # reporte). La de Luis lleva el MISMO paquete que una de Ana: no es de Ana y no puede cambiar lo que ve ella.
 FOTO = [
-    {"tracking_id": "TBAANA1", "transporter_id": "AANA000001", "fecha_reporte": "2026-11-11",
+    {"tracking_id": "TBAANA100", "transporter_id": "AANA000001", "fecha_reporte": "2026-11-11",
      "motivo": "DELIVERED_TO_DOORSTEP", "fallo": "Blurry photo"},
-    {"tracking_id": "TBAANA2", "transporter_id": "ALUIS00001", "fecha_reporte": "2026-11-05",
+    {"tracking_id": "TBAANA200", "transporter_id": "ALUIS00001", "fecha_reporte": "2026-11-05",
      "motivo": "DELIVERED_TO_GARDEN", "fallo": "PACKAGE_NOT_VISIBLE"},
 ]
 CONTACTO = [
-    {"tracking_id": "TBAANA1", "transporter_id": "AANA000001", "fecha_reporte": "2026-11-11",
+    {"tracking_id": "TBAANA100", "transporter_id": "AANA000001", "fecha_reporte": "2026-11-11",
      "motivo": "DELIVERED_TO_DOORSTEP", "tipo": "CALL", "segundos": 12},
-    {"tracking_id": "TBAANA2", "transporter_id": "ALUIS00001", "fecha_reporte": "2026-11-05",
+    {"tracking_id": "TBAANA200", "transporter_id": "ALUIS00001", "fecha_reporte": "2026-11-05",
      "motivo": "DELIVERED_TO_GARDEN", "tipo": "NO_CALL", "segundos": 0},
 ]
 
@@ -235,10 +239,10 @@ async def test_ana_ve_sus_cuatro_semanas_con_el_estado_de_cada_una(base):
         ("2026-11-08", "2026-11-14"), ("2026-11-01", "2026-11-07"),
         ("2026-10-25", "2026-10-31"), ("2026-10-18", "2026-10-24")]
     estado = {x["paquete"]: x["estado"] for s in r["semanas"] for x in s["dnr"]}
-    assert estado == {"TBAANA1": "cuenta", "TBAANA2": "no_cuenta", "TBAANA3": "sin_clasificar",
-                      "TBAANA4": "sin_clasificar", "TBAANA5": "cuenta", "TBAANAV": "cuenta"}
+    assert estado == {"TBAANA100": "cuenta", "TBAANA200": "no_cuenta", "TBAANA300": "sin_clasificar",
+                      "TBAANA400": "sin_clasificar", "TBAANA500": "cuenta", "TBAANAV00": "cuenta"}
     s0, s1, s2, s3 = r["semanas"]
-    assert [x["paquete"] for x in s0["dnr"]] == ["TBAANA3", "TBAANA1"]          # la más nueva primero
+    assert [x["paquete"] for x in s0["dnr"]] == ["TBAANA300", "TBAANA100"]          # la más nueva primero
     assert (s0["cuentan"], s0["no_cuentan"], s0["sin_clasificar"]) == (1, 0, 1)
     assert (s1["cuentan"], s1["no_cuentan"], s1["sin_clasificar"]) == (1, 1, 0)
     assert s2["dnr"] == [] and (s2["cuentan"], s2["no_cuentan"], s2["sin_clasificar"]) == (0, 0, 0)
@@ -251,14 +255,14 @@ async def test_el_estado_sale_bien_en_los_tres_casos(base):
     DSC, o N en un día de ese centro sin una sola Y (la regla del aviso al subir): una Y de OTRO centro no lo clasifica."""
     r = await server.mis_dnr(_conductor("d-ana"))
     estado = {x["paquete"]: x["estado"] for s in r["semanas"] for x in s["dnr"]}
-    assert estado["TBAANA1"] == "cuenta"
-    assert estado["TBAANA2"] == "no_cuenta"
-    assert estado["TBAANA3"] == "sin_clasificar"
-    assert estado["TBAANA4"] == "sin_clasificar"
+    assert estado["TBAANA100"] == "cuenta"
+    assert estado["TBAANA200"] == "no_cuenta"
+    assert estado["TBAANA300"] == "sin_clasificar"
+    assert estado["TBAANA400"] == "sin_clasificar"
     # Cuando Amazon clasifica el día 10 de OGA5 (llega una Y de otro), la N de Ana pasa a «no cuenta».
-    base["dnr_rows"].docs.append(_fila("TBLUIS2", "ALUIS00001", "2026-11-10", "Y"))
+    base["dnr_rows"].docs.append(_fila("TBLUIS200", "ALUIS00001", "2026-11-10", "Y"))
     r = await server.mis_dnr(_conductor("d-ana"))
-    assert {x["paquete"]: x["estado"] for s in r["semanas"] for x in s["dnr"]}["TBAANA3"] == "no_cuenta"
+    assert {x["paquete"]: x["estado"] for s in r["semanas"] for x in s["dnr"]}["TBAANA300"] == "no_cuenta"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -284,20 +288,20 @@ async def test_solo_lo_minimo_ni_euros_ni_el_id_ni_otros(base):
 async def test_cada_uno_ve_solo_lo_suyo(base):
     vistos = {sub: _paquetes(await server.mis_dnr(_conductor(sub))) for sub in
               ("d-ana", "d-luis", "d-eva", "d-mar", "d-paco", "d-sin", "d-pedro", "d-diez")}
-    assert vistos["d-ana"] == {"TBAANA1", "TBAANA2", "TBAANA3", "TBAANA4", "TBAANA5", "TBAANAV"}  # con la fusionada
+    assert vistos["d-ana"] == {"TBAANA100", "TBAANA200", "TBAANA300", "TBAANA400", "TBAANA500", "TBAANAV00"}  # con la fusionada
     # Mar (viva) tiene en `driver_id` el ID que Luis (vivo) tiene en `transporter_id`: la oficina se lo da a Luis
     # (manda el `transporter_id`), y aquí igual. No es una disputa (R7/F11 afinado, S1): ninguno queda «en revisión».
-    assert vistos["d-luis"] == {"TBLUIS1"}
-    assert vistos["d-eva"] == {"TBEVA01"}                    # por su `driver_id`, con espacios y en minúsculas
+    assert vistos["d-luis"] == {"TBLUIS100"}
+    assert vistos["d-eva"] == {"TBEVA0100"}                    # por su `driver_id`, con espacios y en minúsculas
     assert vistos["d-mar"] == set()                          # su `driver_id` lo tiene Luis en `transporter_id`
     for sub in ("d-luis", "d-mar"):
         assert (await server.mis_dnr(_conductor(sub)))["en_revision"] is False, sub
-    assert vistos["d-paco"] == {"TBPACO1"}                   # dos fichas con el mismo ID: manda la activa
+    assert vistos["d-paco"] == {"TBPACO100"}                   # dos fichas con el mismo ID: manda la activa
     assert vistos["d-sin"] == set()                          # mismo nombre que el del historial: nunca por nombre
-    assert vistos["d-pedro"] == {"TBPEDR1"}                  # el mismo correo que Juan no le da lo de Juan
-    assert vistos["d-diez"] == {"TBRITA1"}
+    assert vistos["d-pedro"] == {"TBPEDR100"}                  # el mismo correo que Juan no le da lo de Juan
+    assert vistos["d-diez"] == {"TBRITA100"}
     # Y el ID sin ficha no lo ve nadie.
-    assert not any("TBFANT1" in v for v in vistos.values())
+    assert not any("TBFANT100" in v for v in vistos.values())
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -305,15 +309,15 @@ async def test_el_mismo_correo_no_junta_a_dos_personas(base):
     """D1: la oficina dio de alta a Pedro con el buzón de Juan (de baja) eligiendo «es otra persona». Ninguno ve lo del
     otro, en los dos sentidos: Pedro solo lo suyo; con la ficha de Juan, 403 (está de baja) y nunca lo de Pedro. Lo que
     SÍ se suma es lo que la oficina fusionó en la ficha (Ana y su ficha vieja)."""
-    assert _paquetes(await server.mis_dnr(_conductor("d-pedro"))) == {"TBPEDR1"}
+    assert _paquetes(await server.mis_dnr(_conductor("d-pedro"))) == {"TBPEDR100"}
     with pytest.raises(HTTPException) as e:
         await server.mis_dnr(_conductor("d-juan"))
     assert e.value.status_code == 403
     # Aunque Juan siguiera activo, el correo compartido no le daría lo de Pedro (ni a Pedro lo de Juan).
     base["drivers"].docs[[f["id"] for f in base["drivers"].docs].index("d-juan")]["active"] = True
-    assert _paquetes(await server.mis_dnr(_conductor("d-juan"))) == {"TBJUAN1"}
-    assert _paquetes(await server.mis_dnr(_conductor("d-pedro"))) == {"TBPEDR1"}
-    assert "TBAANAV" in _paquetes(await server.mis_dnr(_conductor("d-ana")))
+    assert _paquetes(await server.mis_dnr(_conductor("d-juan"))) == {"TBJUAN100"}
+    assert _paquetes(await server.mis_dnr(_conductor("d-pedro"))) == {"TBPEDR100"}
+    assert "TBAANAV00" in _paquetes(await server.mis_dnr(_conductor("d-ana")))
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -337,9 +341,9 @@ async def test_se_casan_igual_que_en_la_pantalla_de_la_oficina(base):
     personas = {"d-ana": {"d-ana", "d-ana-vieja"}, "d-luis": {"d-luis"}, "d-eva": {"d-eva"}, "d-mar": {"d-mar"},
                 "d-paco": {"d-paco"}, "d-sin": {"d-sin"}, "d-pedro": {"d-pedro"}, "d-diez": {"d-diez"}}
     await _como_la_oficina(de_la_oficina, personas)
-    assert "TBLUIS1" in de_la_oficina.get("d-luis", set())
+    assert "TBLUIS100" in de_la_oficina.get("d-luis", set())
     # El ID sin ficha, la oficina lo enseña con el nombre del historial pero sin ficha (driver_id None).
-    assert "TBFANT1" in de_la_oficina.get(None, set())
+    assert "TBFANT100" in de_la_oficina.get(None, set())
 
 
 async def _de_la_oficina(centros=("OGA5", "DGA1", "DGA10")) -> dict:
@@ -376,7 +380,7 @@ def test_no_hay_parametro_que_cambiar_para_ver_lo_de_otro(base, monkeypatch):
                                                 "sub": "d-luis", "center": "DGA1", "desde": "2026-01-01",
                                                 "hasta": "2026-12-31", "id": "d-luis"}).json()
     assert trampa == normal
-    assert _paquetes(normal) == {"TBAANA1", "TBAANA2", "TBAANA3", "TBAANA4", "TBAANA5", "TBAANAV"}
+    assert _paquetes(normal) == {"TBAANA100", "TBAANA200", "TBAANA300", "TBAANA400", "TBAANA500", "TBAANAV00"}
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -410,7 +414,7 @@ async def test_con_el_id_en_el_transporter_id_de_una_sola_persona_es_suyo(base, 
     base["drivers"].docs.append(_ficha("d-copia", driver_id="aana000001"))
     r = await server.mis_dnr(_conductor("d-ana"))
     assert r["tiene_id"] is True and r["en_revision"] is False
-    assert _paquetes(r) == {"TBAANA1", "TBAANA2", "TBAANA3", "TBAANA4", "TBAANA5", "TBAANAV"}
+    assert _paquetes(r) == {"TBAANA100", "TBAANA200", "TBAANA300", "TBAANA400", "TBAANA500", "TBAANAV00"}
     r = await server.mis_dnr(_conductor("d-copia"))
     assert r["en_revision"] is False and _paquetes(r) == set()
     monkeypatch.setattr(server, "_amazon_nombres", original)
@@ -424,12 +428,12 @@ async def test_dos_personas_con_el_mismo_transporter_id_es_una_disputa(base):
     `driver_id` tampoco lo ve, pero NO queda en revisión: no es de las que lo reclaman donde manda la oficina."""
     base["drivers"].docs += [_ficha("d-gemela", transporter_id="AANA000001"),
                              _ficha("d-tercera", driver_id="AANA000001")]
-    disputadas = {"TBAANA1", "TBAANA2", "TBAANA3", "TBAANA4", "TBAANA5"}
+    disputadas = {"TBAANA100", "TBAANA200", "TBAANA300", "TBAANA400", "TBAANA500"}
     for sub in ("d-ana", "d-gemela"):
         r = await server.mis_dnr(_conductor(sub))
         assert r["en_revision"] is True, sub
         assert not (disputadas & _paquetes(r)), sub
-    assert _paquetes(await server.mis_dnr(_conductor("d-ana"))) == {"TBAANAV"}
+    assert _paquetes(await server.mis_dnr(_conductor("d-ana"))) == {"TBAANAV00"}
     r = await server.mis_dnr(_conductor("d-tercera"))
     assert r["en_revision"] is False and _paquetes(r) == set()
     await _como_la_oficina(await _de_la_oficina(), {"d-ana": {"d-ana", "d-ana-vieja"}, "d-gemela": {"d-gemela"},
@@ -444,7 +448,7 @@ async def test_si_todos_sus_ids_estan_en_duda_no_ve_nada(base):
     for sub in ("d-luis", "d-luis-dos"):
         r = await server.mis_dnr(_conductor(sub))
         assert r["tiene_id"] is True and r["en_revision"] is True and r["semanas"] == [], sub
-        assert "TBLUIS1" not in json.dumps(r)
+        assert "TBLUIS100" not in json.dumps(r)
     # datos_hasta, el de su centro (OGA5), como a cualquiera.
     assert (await server.mis_dnr(_conductor("d-luis")))["datos_hasta"] == "2026-11-10"
     r = await server.mis_dnr(_conductor("d-mar"))
@@ -460,14 +464,14 @@ async def test_sin_transporter_id_y_dos_con_el_mismo_driver_id_es_una_disputa(ba
         r = await server.mis_dnr(_conductor(sub))
         assert r["tiene_id"] is True and r["en_revision"] is True and r["semanas"] == [], sub
         assert r["datos_hasta"] == "2026-11-11", sub
-        assert "TBEVA01" not in json.dumps(r)
+        assert "TBEVA0100" not in json.dumps(r)
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_sin_transporter_id_y_uno_solo_con_el_driver_id_es_suyo(base):
     """T vacío y D = 1: Eva, la única viva con ese `driver_id`, lo ve y no está en revisión."""
     r = await server.mis_dnr(_conductor("d-eva"))
-    assert r["en_revision"] is False and _paquetes(r) == {"TBEVA01"}
+    assert r["en_revision"] is False and _paquetes(r) == {"TBEVA0100"}
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -480,9 +484,9 @@ async def test_las_fichas_de_baja_no_disputan_y_se_queda_lo_que_hace_la_oficina(
     base["drivers"].docs += [_ficha("d-xavi-baja", active=False, transporter_id="AXAVI00001"),
                              _ficha("d-xavi", driver_id="AXAVI00001"),
                              _ficha("d-eva-baja", center="DGA1", active=False, driver_id="AEVA000001")]
-    base["dnr_rows"].docs.append(_fila("TBXAVI1", "AXAVI00001", "2026-11-05", "Y"))
+    base["dnr_rows"].docs.append(_fila("TBXAVI100", "AXAVI00001", "2026-11-05", "Y"))
     oficina = await _de_la_oficina()
-    assert "TBXAVI1" in oficina["d-xavi-baja"] and "TBEVA01" in oficina["d-eva-baja"]
+    assert "TBXAVI100" in oficina["d-xavi-baja"] and "TBEVA0100" in oficina["d-eva-baja"]
     for sub in ("d-xavi", "d-eva"):
         r = await server.mis_dnr(_conductor(sub))
         assert r["en_revision"] is False and _paquetes(r) == set(), sub
@@ -499,11 +503,17 @@ async def test_la_sesion_y_sus_fusionadas_son_una_sola_persona(base):
     base["drivers"].docs[0]["driver_id"] = "AANAVIEJA1"
     base["drivers"].docs.append(_ficha("d-otra", driver_id="AANAVIEJA1"))
     r = await server.mis_dnr(_conductor("d-ana"))
-    assert r["en_revision"] is False and "TBAANAV" in _paquetes(r)
+    assert r["en_revision"] is False and "TBAANAV00" in _paquetes(r)
     assert _paquetes(await server.mis_dnr(_conductor("d-otra"))) == set()
     base["drivers"].docs[-1] = _ficha("d-otra", transporter_id="AANAVIEJA1")
     r = await server.mis_dnr(_conductor("d-ana"))
-    assert r["en_revision"] is True and "TBAANAV" not in _paquetes(r) and "TBAANA1" in _paquetes(r)
+    assert r["en_revision"] is True and "TBAANAV00" not in _paquetes(r) and "TBAANA100" in _paquetes(r)
+    # R8/G2: y desde el OTRO lado, lo mismo. La ficha vieja de Ana (fusionada, ya no viva) cuenta como Ana para todos,
+    # no solo para la sesión de Ana: d-otra también está en revisión y tampoco ve la DNR de ese ID. Antes d-otra la
+    # veía (la oficina se la da a ella: la activa pisa a la de baja) y el servidor se contradecía.
+    r = await server.mis_dnr(_conductor("d-otra"))
+    assert r["en_revision"] is True and "TBAANAV00" not in _paquetes(r)
+    assert r == {"tiene_id": True, "en_revision": True, "datos_hasta": "2026-11-10", "semanas": []}
 
 
 # ── Sin ID, sin módulo ─────────────────────────────────────────────────────────
@@ -520,11 +530,13 @@ async def test_sin_id_de_reparto_lista_vacia(base):
 async def test_sin_el_modulo_de_la_dnr_la_ruta_no_existe(base):
     with pytest.raises(HTTPException) as e:
         await server.mis_dnr(_conductor("d-ana", org="o2"))
-    assert e.value.status_code == 404 and e.value.detail == "Not Found"
+    # R8/G10: un 404 PROPIO («Sin DNR diaria»), no el genérico de una ruta que no existe («Not Found»): la web solo
+    # recuerda 12 horas este, y no el de un servidor que aún no tiene la ruta.
+    assert e.value.status_code == 404 and e.value.detail == "Sin DNR diaria"
     # Ni siquiera a quien no es conductor se le dice otra cosa.
     with pytest.raises(HTTPException) as e:
         await server.mis_dnr({**DANI, "org_id": "o2"})
-    assert e.value.status_code == 404
+    assert e.value.status_code == 404 and e.value.detail == "Sin DNR diaria"
     # Con el módulo puesto, sí; la cuenta del dueño lo ve todo.
     assert _paquetes(await server.mis_dnr(_conductor("d-ana", org="o3")))
     assert _paquetes(await server.mis_dnr(_conductor("d-ana", org="o1")))
@@ -538,15 +550,15 @@ async def test_sin_ningun_reporte_subido_la_ruta_no_existe(base):
     base["dnr_rows"].docs = []
     with pytest.raises(HTTPException) as e:
         await server.mis_dnr(_conductor("d-ana"))
-    assert e.value.status_code == 404 and e.value.detail == "Not Found"
+    assert e.value.status_code == 404 and e.value.detail == "Sin DNR diaria"          # R8/G10
     # A quien no es conductor se le sigue diciendo lo de siempre (el rol va antes).
     with pytest.raises(HTTPException) as e:
         await server.mis_dnr(DANI)
     assert e.value.status_code == 403
     # Un pegado de solo el bloque DNR (sin el resumen) guarda filas pero ningún documento en daily_reports: eso
     # también es un reporte subido, y sus DNR se ven.
-    base["dnr_rows"].docs = [_fila("TBAANA1", "AANA000001", "2026-11-09", "Y")]
-    assert _paquetes(await server.mis_dnr(_conductor("d-ana"))) == {"TBAANA1"}
+    base["dnr_rows"].docs = [_fila("TBAANA100", "AANA000001", "2026-11-09", "Y")]
+    assert _paquetes(await server.mis_dnr(_conductor("d-ana"))) == {"TBAANA100"}
     # Y con un reporte, aunque no tenga filas DNR, la ruta existe (otro conductor, sin ninguna: 200 y vacía).
     base["dnr_rows"].docs = []
     base["daily_reports"].docs = [{"center": "OGA5", "fecha": "2026-11-11", "fecha_dnr": "2026-11-09"}]
@@ -597,7 +609,7 @@ async def test_una_empresa_solo_con_filas_pegadas_tambien_dice_hasta_cuando(base
     `daily_reports`. datos_hasta tiene que mirar también esas filas (su `fecha_concesion`), o el conductor leería «Aún
     no hay reportes de tu centro» habiéndolos. Los centros, casados por código exacto, como con los reportes."""
     base["daily_reports"].docs = []
-    base["dnr_rows"].docs.append(_fila("TBOTRO1", "AFANTASMA1", "2026-11-11", "", center="DGA1"))
+    base["dnr_rows"].docs.append(_fila("TBOTRO100", "AFANTASMA1", "2026-11-11", "", center="DGA1"))
     base["drivers"].docs += [
         {"id": "d-nada", "name": "NADA DE CENTRO", "email": "nada@ejemplo.test", "active": True,
          "transporter_id": "ANADA00001"},
@@ -760,7 +772,7 @@ def test_nada_que_parezca_texto_libre_sale_tal_cual():
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_lo_que_no_se_entiende_no_sale_ni_en_la_respuesta_ni_en_el_log(base, caplog):
-    base["dnr_rows"].docs.append(_fila("TBAANA9", "AANA000001", "2026-11-09", "Y", scan="Maria Lopez",
+    base["dnr_rows"].docs.append(_fila("TBAANA900", "AANA000001", "2026-11-09", "Y", scan="Maria Lopez",
                                        mas_25m="600123456", contacto="JUAN PEREZ", cp="Calle Mayor 5"))
     with caplog.at_level("DEBUG"):
         r = await server.mis_dnr(_conductor("d-ana"))
@@ -791,41 +803,46 @@ def test_el_dia_de_la_entrega_solo_si_es_una_fecha_iso_clara():
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_cada_dnr_lleva_su_dia_de_entrega_si_se_sabe(base):
-    base["dnr_rows"].docs = [d for d in base["dnr_rows"].docs if d["tracking_id"] not in ("TBAANA1", "TBAANA3")]
-    base["dnr_rows"].docs += [_fila("TBAANA1", "AANA000001", "2026-11-09", "Y", fecha_entrega="2026-11-07"),
-                              _fila("TBAANA3", "AANA000001", "2026-11-10", "N", fecha_entrega="07/11/2026")]
+    base["dnr_rows"].docs = [d for d in base["dnr_rows"].docs if d["tracking_id"] not in ("TBAANA100", "TBAANA300")]
+    base["dnr_rows"].docs += [_fila("TBAANA100", "AANA000001", "2026-11-09", "Y", fecha_entrega="2026-11-07"),
+                              _fila("TBAANA300", "AANA000001", "2026-11-10", "N", fecha_entrega="07/11/2026")]
     r = await server.mis_dnr(_conductor("d-ana"))
-    assert (_dnr(r, "TBAANA1")["dia"], _dnr(r, "TBAANA1")["entrega"]) == ("2026-11-09", "2026-11-07")
-    assert _dnr(r, "TBAANA3")["entrega"] is None
-    assert _dnr(r, "TBAANA2")["entrega"] == "2026-11-03"        # el mismo día que la DNR
+    assert (_dnr(r, "TBAANA100")["dia"], _dnr(r, "TBAANA100")["entrega"]) == ("2026-11-09", "2026-11-07")
+    assert _dnr(r, "TBAANA300")["entrega"] is None
+    assert _dnr(r, "TBAANA200")["entrega"] == "2026-11-03"        # el mismo día que la DNR
     # La semana y el orden siguen yendo por el día de la DNR.
-    assert [x["paquete"] for x in r["semanas"][0]["dnr"]] == ["TBAANA3", "TBAANA1"]
+    assert [x["paquete"] for x in r["semanas"][0]["dnr"]] == ["TBAANA300", "TBAANA100"]
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_una_n_de_mas_de_7_dias_ya_no_cuenta_aunque_su_centro_no_tenga_ninguna_y(base):
     """R7/F12: Amazon rellena la DSC con 2 a 4 días de retraso; una N de hace más de 7 días ya está decidida, aunque
-    ese día nadie de su centro tuviera una Y. A los 7 justos, todavía «sin clasificar». Sin DSC, sigue sin clasificar."""
-    base["dnr_rows"].docs.append(_fila("TBPACO2", "APACO00001", "2026-11-03", "N", center="DGA1"))   # 8 días
+    ese día nadie de su centro tuviera una Y. A los 7 justos, todavía «sin clasificar». Sin DSC, sigue sin clasificar.
+    (R8/G4: las dos filas se volvieron a pegar 6 días después de su día, cuando Amazon ya debía haberlas clasificado;
+    si no, se quedan sin clasificar: test_la_n_que_nunca_se_volvio_a_pegar_sigue_sin_clasificar.)"""
+    base["dnr_rows"].docs.append(_fila("TBPACO200", "APACO00001", "2026-11-03", "N", center="DGA1",   # 8 días
+                                       actualizado="2026-11-09T10:00:00+00:00"))
+    base["dnr_rows"].docs[[f["tracking_id"] for f in base["dnr_rows"].docs].index("TBPACO100")]["actualizado"] = (
+        "2026-11-10T10:00:00+00:00")
     r = await server.mis_dnr(_conductor("d-paco"))
     estado = {x["paquete"]: x["estado"] for s in r["semanas"] for x in s["dnr"]}
-    assert estado == {"TBPACO1": "sin_clasificar", "TBPACO2": "no_cuenta"}   # TBPACO1: el 04-11, 7 días
+    assert estado == {"TBPACO100": "sin_clasificar", "TBPACO200": "no_cuenta"}   # TBPACO100: el 04-11, 7 días
     assert r["semanas"][1]["no_cuentan"] == 1 and r["semanas"][1]["sin_clasificar"] == 1
     # Ana: la de hace 22 días sin DSC sigue «sin clasificar».
-    assert _dnr(await server.mis_dnr(_conductor("d-ana")), "TBAANA4")["estado"] == "sin_clasificar"
+    assert _dnr(await server.mis_dnr(_conductor("d-ana")), "TBAANA400")["estado"] == "sin_clasificar"
     assert server._DNR_DIAS_PARA_DAR_POR_CLASIFICADA == 7
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_ana_ve_como_fue_cada_entrega_y_nada_de_las_filas_de_otro(base):
     r = await server.mis_dnr(_conductor("d-ana"))
-    a1 = _dnr(r, "TBAANA1")
+    a1 = _dnr(r, "TBAANA100")
     assert (a1["cp"], a1["como"], a1["lejos"]) == ("15704", "puerta", True)
     assert (a1["llamada"], a1["segundos"], a1["fallo_contacto"]) == ("si", 12, None)
     assert (a1["foto"], a1["foto_motivo"]) == ("mal", "borrosa")
-    # TBAANA2 comparte paquete con una fila de foto y otra de contacto de LUIS (con NO_CALL y un motivo de foto
+    # TBAANA200 comparte paquete con una fila de foto y otra de contacto de LUIS (con NO_CALL y un motivo de foto
     # conocido): no son de Ana y no cuentan.
-    a2 = _dnr(r, "TBAANA2")
+    a2 = _dnr(r, "TBAANA200")
     assert (a2["cp"], a2["como"], a2["lejos"], a2["llamada"], a2["segundos"], a2["fallo_contacto"], a2["foto"],
             a2["foto_motivo"]) == ("15701", None, None, None, None, None, None, None)
 
@@ -857,7 +874,7 @@ def dos_empresas(monkeypatch):
     otra = _Db()
     otra["drivers"] = _Col([{"id": "d-ana", "name": "ANA OTRA EMPRESA", "email": "ana@otra.test", "center": "MAD1",
                              "active": True, "transporter_id": "AANA000001"}])
-    otra["dnr_rows"] = _Col([_fila("TBOTRA1", "AANA000001", "2026-11-09", "Y", center="MAD1")])
+    otra["dnr_rows"] = _Col([_fila("TBOTRA100", "AANA000001", "2026-11-09", "Y", center="MAD1")])
     otra["daily_reports"] = _Col([{"center": "MAD1", "fecha": "2026-11-11", "fecha_dnr": "2026-11-09"}])
     globales = _Db()
     globales["organizations"] = _organizaciones()
@@ -885,12 +902,12 @@ def test_por_la_sesion_cada_empresa_lee_solo_su_base(dos_empresas):
     c = dos_empresas
     r = _pedir(c, _token("d-ana"))
     assert r.status_code == 200
-    assert _paquetes(r.json()) == {"TBAANA1", "TBAANA2", "TBAANA3", "TBAANA4", "TBAANA5", "TBAANAV"}
+    assert _paquetes(r.json()) == {"TBAANA100", "TBAANA200", "TBAANA300", "TBAANA400", "TBAANA500", "TBAANAV00"}
     r = _pedir(c, _token("d-ana", org="o3", db_name="dsp_o3"))
-    assert r.status_code == 200 and _paquetes(r.json()) == {"TBOTRA1"}
+    assert r.status_code == 200 and _paquetes(r.json()) == {"TBOTRA100"}
     assert r.json()["datos_hasta"] == "2026-11-09"
     # Pedro, por su token, solo lo suyo (el mismo correo que Juan no le da lo de Juan).
-    assert _paquetes(_pedir(c, _token("d-pedro")).json()) == {"TBPEDR1"}
+    assert _paquetes(_pedir(c, _token("d-pedro")).json()) == {"TBPEDR100"}
 
 
 def test_por_la_sesion_de_baja_sin_otra_ficha_activa_403(dos_empresas):
@@ -903,7 +920,7 @@ def test_por_la_sesion_la_ficha_fusionada_lleva_a_la_buena(dos_empresas):
     """El token de la ficha vieja de Ana (fusionada en la buena, mismo correo) lo lleva get_current_user a la ficha
     buena: ve lo de Ana, que es suyo."""
     r = _pedir(dos_empresas, _token("d-ana-vieja"))
-    assert r.status_code == 200 and "TBAANA1" in _paquetes(r.json())
+    assert r.status_code == 200 and "TBAANA100" in _paquetes(r.json())
 
 
 def test_por_la_sesion_el_token_de_juan_no_ve_lo_de_pedro(dos_empresas):
@@ -915,10 +932,10 @@ def test_por_la_sesion_el_token_de_juan_no_ve_lo_de_pedro(dos_empresas):
     c = dos_empresas
     r = _pedir(c, _token("d-juan"))
     assert r.status_code == 403 and r.json()["detail"] == "Tu ficha está de baja"
-    assert "TBPEDR1" not in r.text
+    assert "TBPEDR100" not in r.text
     # El de Pedro, el suyo, sigue funcionando.
     r = _pedir(c, _token("d-pedro"))
-    assert r.status_code == 200 and _paquetes(r.json()) == {"TBPEDR1"}
+    assert r.status_code == 200 and _paquetes(r.json()) == {"TBPEDR100"}
 
 
 def test_por_la_sesion_dos_fichas_suyas_sin_fusionar_403_hasta_que_vuelva_a_entrar(dos_empresas):
@@ -931,7 +948,7 @@ def test_por_la_sesion_dos_fichas_suyas_sin_fusionar_403_hasta_que_vuelva_a_entr
          "active": False})
     assert _pedir(c, _token("d-eva-vieja")).status_code == 403
     r = _pedir(c, _token("d-eva"))
-    assert r.status_code == 200 and _paquetes(r.json()) == {"TBEVA01"}
+    assert r.status_code == 200 and _paquetes(r.json()) == {"TBEVA0100"}
 
 
 def test_por_la_sesion_caducado_401_y_sin_token_401(dos_empresas):
@@ -944,4 +961,176 @@ def test_por_la_sesion_la_demo_de_reparto_no_la_tiene(dos_empresas):
     t = server.create_token("demo-r1", "driver", "Repartidor 1", org_id=server._DEMO_REP_ORG_ID,
                             db_name=server._DEMO_REP_DB, account_type="dsp", demo=True)
     r = _pedir(dos_empresas, t)
-    assert r.status_code == 404
+    # R8/G10: por HTTP llega tal cual, con su `detail` propio (la web lo distingue del «Not Found» de una ruta que no
+    # existe todavía en el servidor).
+    assert r.status_code == 404 and r.json() == {"detail": "Sin DNR diaria"}
+
+
+# ── R8 (11-11-2026): lo de la comprobación de las correcciones (G1, G2, G4, G11) ─────────────────────────────────
+
+EN_REVISION_SIN_NADA = {"tiene_id": True, "en_revision": True, "datos_hasta": "2026-11-10", "semanas": []}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_si_las_fichas_llegan_al_tope_no_se_casa_nada(base, monkeypatch, caplog):
+    """G1: las fichas se leen con tope y ordenadas por `active` ascendente (como la oficina, para que la activa pise),
+    así que lo primero que corta el tope son las ACTIVAS. Pedro (activo) tiene APEDRO0001 en `transporter_id`; Dora
+    (viva) lo tiene en `driver_id`. Con el tope en 3, la lectura se queda con las 3 de baja y Pedro no entra: sin el
+    arreglo, Dora veía la DNR de Pedro. Ahora, si cualquiera de las dos lecturas llega al tope, no se casa nada: en
+    revisión y sin semanas, para todos los que tienen un ID. Quien no tiene ningún ID sigue como siempre (vacío: decirle
+    que su ID está en revisión sería falso). Y una línea en el log sin datos de nadie."""
+    base["drivers"].docs.append(_ficha("d-dora", driver_id="APEDRO0001"))
+    monkeypatch.setattr(server, "_DNR_TOPE_FICHAS", 3)
+    with caplog.at_level("INFO"):
+        for sub in ("d-dora", "d-pedro", "d-ana"):
+            r = await server.mis_dnr(_conductor(sub))
+            assert r == EN_REVISION_SIN_NADA, sub
+            assert "TBPEDR100" not in json.dumps(r), sub
+        assert await server.mis_dnr(_conductor("d-sin")) == {
+            "tiene_id": False, "en_revision": False, "datos_hasta": None, "semanas": []}
+    avisos = [x.getMessage() for x in caplog.records if "tope" in x.getMessage()]
+    assert avisos, caplog.text
+    for dato in ("d-dora", "d-pedro", "d-ana", "DORA", "PEDRO", "ANA", "APEDRO", "AANA", "ejemplo.test", "OGA5"):
+        assert dato not in caplog.text, dato
+    # Con el tope por encima de las que hay, todo como siempre.
+    monkeypatch.setattr(server, "_DNR_TOPE_FICHAS", 50)
+    assert _paquetes(await server.mis_dnr(_conductor("d-pedro"))) == {"TBPEDR100"}
+    assert _paquetes(await server.mis_dnr(_conductor("d-dora"))) == set()
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_tambien_si_el_tope_lo_alcanza_la_lectura_de_driver_id(base, monkeypatch):
+    """G1, la otra lectura: las de `transporter_id` (8) caben, pero las de `driver_id` no. Tampoco se casa nada."""
+    base["drivers"].docs += [_ficha(f"d-relleno{i}", driver_id=f"ARELLENO{i:02d}") for i in range(9)]
+    monkeypatch.setattr(server, "_DNR_TOPE_FICHAS", 9)
+    assert await server.mis_dnr(_conductor("d-ana")) == EN_REVISION_SIN_NADA
+    assert (await server.mis_dnr(_conductor("d-eva")))["semanas"] == []
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_disputa_con_una_ficha_fusionada_sale_igual_desde_los_dos_lados(base):
+    """G2: una ficha no viva con `merged_into` cuenta como la persona en la que acaba su cadena de fusiones, para TODOS.
+    · Cadena de dos: la ficha «muy vieja» de Ana se fusionó en la vieja, y la vieja en la buena. Otra persona viva tiene
+      su ID en `transporter_id`: las dos en revisión y ninguna lo ve (sin el arreglo, la otra lo veía).
+    · Cadena que sale de lo leído: la ficha buena de Fede no tiene ningún ID (no entra en la lectura); la vieja,
+      fusionada en ella, sí. La persona es la última ficha a la que se llega (Fede): disputa para los dos."""
+    base["drivers"].docs += [
+        _ficha("d-ana-muy-vieja", active=False, status="fusionada", merged_into="d-ana-vieja",
+               transporter_id="AANAMUY001"),
+        _ficha("d-otra2", transporter_id="AANAMUY001"),
+        _ficha("d-fede"),
+        _ficha("d-fede-viejo", active=False, merged_into="d-fede", transporter_id="AFEDE00001"),
+        _ficha("d-x", transporter_id="AFEDE00001"),
+    ]
+    base["dnr_rows"].docs += [_fila("TBAMUY001", "AANAMUY001", "2026-11-05", "Y"),
+                              _fila("TBFEDE001", "AFEDE00001", "2026-11-05", "Y")]
+    for sub, suya in (("d-ana", "TBAMUY001"), ("d-otra2", "TBAMUY001"), ("d-fede", "TBFEDE001"), ("d-x", "TBFEDE001")):
+        r = await server.mis_dnr(_conductor(sub))
+        assert r["en_revision"] is True and suya not in _paquetes(r), sub
+    # Ana sigue viendo lo suyo que no está en disputa (la de su ficha vieja, con otro ID).
+    assert {"TBAANA100", "TBAANAV00"} <= _paquetes(await server.mis_dnr(_conductor("d-ana")))
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_una_fusionada_en_una_ficha_de_baja_no_disputa(base):
+    """G2, el otro extremo: si la cadena acaba en una ficha de BAJA (no fusionada), esa persona ya no está, y como
+    cualquier ficha de baja no disputa. Lo ve la viva, como en la oficina (la activa pisa a las de baja)."""
+    base["drivers"].docs += [
+        _ficha("d-bea", active=False, transporter_id="ABEA000001"),
+        _ficha("d-bea-vieja", active=False, merged_into="d-bea", transporter_id="ABEA000002"),
+        _ficha("d-y", transporter_id="ABEA000002"),
+    ]
+    base["dnr_rows"].docs.append(_fila("TBBEA0002", "ABEA000002", "2026-11-05", "Y"))
+    r = await server.mis_dnr(_conductor("d-y"))
+    assert r["en_revision"] is False and _paquetes(r) == {"TBBEA0002"}
+    await _como_la_oficina(await _de_la_oficina(), {"d-y": {"d-y"}})
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_una_ficha_de_baja_con_el_id_en_transporter_id_no_deja_a_nadie_en_revision(base):
+    """R8: si una ficha de BAJA (no fusionada) tiene el ID en `transporter_id`, la oficina se lo da a ella y ninguna viva
+    lo ve. Aunque dos vivas lo tengan en `driver_id`, eso NO es una disputa: ninguna queda «en revisión» (antes, las
+    dos). Y ninguna lo ve, como en la oficina."""
+    base["drivers"].docs += [_ficha("d-xavi-baja", active=False, transporter_id="AXAVI00001"),
+                             _ficha("d-xavi", driver_id="AXAVI00001"),
+                             _ficha("d-xavi-dos", driver_id="axavi00001 ")]
+    base["dnr_rows"].docs.append(_fila("TBXAVI100", "AXAVI00001", "2026-11-05", "Y"))
+    oficina = await _de_la_oficina()
+    assert "TBXAVI100" in oficina["d-xavi-baja"]
+    for sub in ("d-xavi", "d-xavi-dos"):
+        r = await server.mis_dnr(_conductor(sub))
+        assert r["en_revision"] is False and _paquetes(r) == set(), sub
+    await _como_la_oficina(oficina, {"d-xavi": {"d-xavi"}, "d-xavi-dos": {"d-xavi-dos"}})
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_n_que_nunca_se_volvio_a_pegar_sigue_sin_clasificar(base):
+    """G4: la regla de los 7 días solo vale si la fila se guardó cuando Amazon ya debía haberla clasificado (su
+    `actualizado` es de al menos 5 días después de su día). Un bloque pegado al día siguiente llega todo a N: si la
+    oficina no lo vuelve a pegar, esa N no dice nada, y decirle «no te cuenta» sería afirmar lo contrario de lo que
+    puede ser verdad. (DGA1 no tiene ninguna Y esos días: solo cuenta la regla de los 7 días.)"""
+    base["dnr_rows"].docs += [
+        _fila("TBPACO300", "APACO00001", "2026-10-19", "N", center="DGA1", actualizado="2026-10-20T07:00:00+00:00"),
+        _fila("TBPACO400", "APACO00001", "2026-10-20", "N", center="DGA1", actualizado="2026-10-26T07:00:00+00:00"),
+        _fila("TBPACO500", "APACO00001", "2026-10-21", "N", center="DGA1", actualizado="2026-10-26T23:59:00+00:00"),
+        _fila("TBPACO600", "APACO00001", "2026-10-22", "N", center="DGA1", actualizado="2026-10-26T07:00:00+00:00"),
+        _fila("TBPACO700", "APACO00001", "2026-10-23", "N", center="DGA1"),                 # sin `actualizado`
+    ]
+    r = await server.mis_dnr(_conductor("d-paco"))
+    estado = {x["paquete"]: x["estado"] for s in r["semanas"] for x in s["dnr"]}
+    assert estado["TBPACO300"] == "sin_clasificar"      # pegada al día siguiente y nunca más: a los 23 días, igual
+    assert estado["TBPACO400"] == "no_cuenta"           # vuelta a pegar a los 6 días
+    assert estado["TBPACO500"] == "no_cuenta"           # a los 5 justos
+    assert estado["TBPACO600"] == "sin_clasificar"      # a los 4: aún podía no estar
+    assert estado["TBPACO700"] == "sin_clasificar"      # sin saber cuándo se guardó
+    assert server._DNR_DIAS_PARA_DAR_POR_REPEGADA == 5
+
+
+def test_los_segundos_de_llamada_solo_entre_1_y_1800():
+    """G11: un teléfono en la celda de los segundos («600123456») salía como «Llamaste al cliente (600123456 s)».
+    Ahora, entero entre 1 y 1800; fuera de eso, null, y entonces `llamada` no es «si» por los segundos. Y si los
+    segundos traen algo que no se entiende, tampoco se afirma «No llamaste» aunque el tipo lo diga."""
+    e = server._dnr_entrega
+    for raro in (600123456, "600123456", 1801, -5, "600 123456x"):
+        r = e({}, [], [{"tipo": "CALL", "segundos": raro}])
+        assert (r["llamada"], r["segundos"]) == (None, None), raro
+    for bueno, s in ((1, 1), (1800, 1800), ("12", 12), ("12.7", 12)):
+        r = e({}, [], [{"tipo": "CALL", "segundos": bueno}])
+        assert (r["llamada"], r["segundos"]) == ("si", s), bueno
+    r = e({}, [], [{"tipo": "NO_CALL", "segundos": 600123456}])
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == (None, None, None)
+    # Una fila con segundos buenos y otra con un teléfono: los buenos.
+    r = e({}, [], [{"tipo": "CALL", "segundos": 12}, {"tipo": "CALL", "segundos": 600123456}])
+    assert (r["llamada"], r["segundos"]) == ("si", 12)
+    # Lo de siempre sigue igual.
+    assert e({}, [], [{"tipo": "NO_CALL", "segundos": 0}])["llamada"] == "no"
+    assert e({}, [], [{"tipo": "NO_CALL", "segundos": ""}])["llamada"] == "no"
+
+
+def test_un_movil_no_es_un_codigo_postal():
+    """G11: además de lo de R7, como mucho 8 caracteres sin contar el espacio o el guion y nunca más de 6 cifras
+    seguidas (un móvil de 9 cifras no es un código postal)."""
+    e = server._dnr_entrega
+    for malo in ("600123456", "600 123456", "600-123456", "1234567", "AB12345678", "ABCDE 12345"):
+        assert e({"cp": malo}, [], [])["cp"] is None, malo
+    for bueno in ("15704", "123456", "1000-001", "SW1A 1AA", "EC1A 1BB", "28001"):
+        assert e({"cp": bueno}, [], [])["cp"] == bueno, bueno
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_paquete_solo_si_tiene_forma_de_codigo(base):
+    """G11: `paquete` era el tracking_id en crudo (al guardar solo se pide que no esté vacío): con una tabla pegada
+    descuadrada, cualquier texto de esa columna llegaba al conductor. Ahora solo letras y cifras (con alguna cifra), sin
+    espacios, de 8 a 30 caracteres; si no, esa fila NO sale (ni cuenta en los totales)."""
+    raros = ("TBA 1234 5678", "MARIA LOPEZ", "MARIALOPEZ", "TBA-12345678", "TB12345", "T" * 20 + "1" * 11,
+             "600 123 456")
+    base["dnr_rows"].docs += [_fila(p, "AANA000001", "2026-11-09", "Y") for p in raros]
+    base["dnr_rows"].docs += [_fila("TBA123456789012", "AANA000001", "2026-11-09", "Y"),
+                              _fila("T" * 20 + "1" * 10, "AANA000001", "2026-11-09", "Y")]
+    r = await server.mis_dnr(_conductor("d-ana"))
+    paquetes = _paquetes(r)
+    assert {"TBA123456789012", "T" * 20 + "1" * 10} <= paquetes
+    texto = json.dumps(r, ensure_ascii=False)
+    for p in raros:
+        assert p not in paquetes and p not in texto, p
+    assert r["semanas"][0]["cuentan"] == 3                # TBAANA100 y las dos con forma de código

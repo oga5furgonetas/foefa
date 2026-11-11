@@ -79,6 +79,9 @@ const PERMITIDO = [
   // comptée», para que el «elle» no se lea como la foto).
   ['lib/textosRutaA.js', '"dnr del {dia}"', 'texto de «Mis DNR», parte de la DNR diaria'],
   ['lib/textosRutaA.js', '"recuerda: si el cliente tiene preferencia de entrega,', 'texto de «Mis DNR», parte de la DNR diaria'],
+  // V5 (11-11-2026, «menos texto»): el día de la DNR en corto en la tarjeta y el recordatorio nuevo (en francés, «la DNR»).
+  ['lib/textosRutaA.js', '"dnr {dia}"', 'texto de «Mis DNR», parte de la DNR diaria'],
+  ['lib/textosRutaA.js', '"recuerda: para que no te cuente,', 'texto de «Mis DNR», parte de la DNR diaria'],
 ]
 
 function ficheros(dir, out = []) {
