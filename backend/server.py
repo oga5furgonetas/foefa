@@ -40213,13 +40213,17 @@ async def _dnr_mis_fichas(ficha_id: str) -> set:
 #     Un «1» o un «0» NO (como con la DSC: no esta demostrado que sea si).
 #   · Llamada: los segundos de «Call duration (seconds)» de su fila de contacto;
 #     mas de cero es que hubo llamada y de cuanto. «No llamaste» solo si el tipo
-#     lo dice con todas las letras (NO_CALL…) y no hay segundos.
-#   · Fallo de contacto: SOLO cuando el tipo lo dice con todas las letras (los
-#     mismos NO_CALL… de «No llamaste», y sin segundos que lo contradigan). Estar
+#     lo dice con todas las letras (NO_CALL…) y no hay segundos. Y desde R9
+#     (11-11-2026) la llamada tiene un minimo, _DNR_SEGUNDOS_MIN_LLAMADA: por
+#     debajo es «corta», y eso tambien es un fallo de contacto.
+#   · Fallo de contacto: cuando el tipo lo dice con todas las letras (los
+#     mismos NO_CALL… de «No llamaste», y sin segundos que lo contradigan) o la
+#     llamada medida es «corta» (R9). Estar
 #     en la tabla de contacto ya NO basta (R7/F7, 11-11-2026): no se ha visto
 #     nunca su vocabulario real y con «CALL» y 12 s salia a la vez «Llamaste» y
-#     «Te apuntaron un fallo». En la practica ira a null hasta calibrarlo con un
-#     reporte real; la clave se queda para poder encenderla desde aqui.
+#     «Te apuntaron un fallo». Por el tipo, en la practica ira a null hasta
+#     calibrarlo con un reporte real; por los segundos (R9) ya sale, porque es
+#     una regla de Dani y no una lectura del vocabulario.
 #   · Foto: «mal» SOLO si el «POD audit» es uno de los motivos conocidos
 #     (_DNR_FOTO_MOTIVO); «bien» solo si todo lo que dice es PASS/PASSED. Con
 #     cualquier otro valor («N», «Y», «PENDING», un codigo raro) no se sabe si es
@@ -40283,6 +40287,12 @@ _DNR_CP_CIFRAS_SEGUIDAS = re.compile(r"[0-9]{7}")
 # Una llamada de mas de media hora a un cliente no es real: es otra cosa en la
 # celda (R8/G11).
 _DNR_SEGUNDOS_MAX = 1800
+# La llamada al cliente dura como minimo 30 segundos (R9, 11-11-2026). La regla
+# es de Dani: «dando tono no podemos colgar nosotros la llamada y minimo deben
+# ser 30 segundos; aunque llames y te abra en la puerta, la llamada debe seguir
+# corriendo 30 segundos minimo». Con menos, `llamada` es «corta» y cuenta como
+# fallo de contacto; con 30 o mas, «si».
+_DNR_SEGUNDOS_MIN_LLAMADA = 30
 # El paquete (R8/G11): letras y cifras, con alguna cifra (los codigos de
 # Amazon, «TBA…», siempre las llevan; un nombre pegado sin espacios no), sin
 # espacios ni signos, de 8 a 30 caracteres.
@@ -40365,8 +40375,10 @@ def _dnr_entrega(fila: dict, pods: list, ccs: list) -> dict:
     segundos = max((s for s, _raro in lecturas if s), default=None)
     raros = any(raro for _s, raro in lecturas)
     tipos = [_dnr_token(r.get("tipo")) for r in ccs if _dia_celda(r.get("tipo"))]
+    # Con segundos manda lo medido, aunque el tipo diga NO_CALL; y por debajo del
+    # minimo de Dani (R9) la llamada es «corta».
     if segundos:
-        llamada = "si"
+        llamada = "si" if segundos >= _DNR_SEGUNDOS_MIN_LLAMADA else "corta"
     elif raros:
         llamada = None
     elif tipos and any(t in _DNR_SIN_LLAMADA for t in tipos):
@@ -40389,8 +40401,9 @@ def _dnr_entrega(fila: dict, pods: list, ccs: list) -> dict:
             "como": como, "lejos": lejos,
             "llamada": llamada, "segundos": segundos,
             # Solo si el tipo dice el fallo con todas las letras y no consta una
-            # llamada (R7/F7): es justo cuando sale «No llamaste».
-            "fallo_contacto": True if llamada == "no" else None,
+            # llamada (R7/F7), o si la llamada no llego a 30 s (R9): es justo
+            # cuando sale «Sin llamada» o «Llamada corta». Nunca false.
+            "fallo_contacto": True if llamada in ("no", "corta") else None,
             "foto": foto, "foto_motivo": motivo}
 
 

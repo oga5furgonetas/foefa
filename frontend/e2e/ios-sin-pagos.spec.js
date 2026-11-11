@@ -759,7 +759,8 @@ async function portal(page, ios) {
   await page.route(/\/api\/conductor\/referidos/, (r) => r.fulfill({ json: { enlace: 'https://flotadsp.com/invita?ref=XYZ', por_invitado: 250, saldo: 500, invitados: 1, premiados: 0, metodos: ['bizum', 'iban'], retiradas: [] } }))
   await page.route(/\/api\/driver-offers$/, (r) => r.fulfill({ json: { offers: [OFERTA] } }))
   // «Mis DNR» (11-11-2026, revisión final F34): una semana con DNR, para que la pantalla se mire con datos (la forma del
-  // contrato de R7: cada DNR con su `entrega` y todo lo demás, null lo que no se sabe).
+  // contrato de R7: cada DNR con su `entrega` y todo lo demás, null lo que no se sabe; y R9: una llamada «corta», de menos
+  // de 30 s, con su fallo de contacto).
   const dnr = (dia, paquete, estado, mas = {}) => ({ dia, entrega: null, paquete, estado, cp: '15704', como: null, lejos: null,
     llamada: null, segundos: null, fallo_contacto: null, foto: null, foto_motivo: null, ...mas })
   await page.route(/\/api\/diarios\/mias/, (r) => r.fulfill({ json: {
@@ -767,7 +768,8 @@ async function portal(page, ios) {
     semanas: [{ semana: '2026-11-08', hasta: '2026-11-14', cuentan: 1, no_cuentan: 0, sin_clasificar: 1, dnr: [
       dnr('2026-11-10', 'TBA123456789012', 'sin_clasificar'),
       dnr('2026-11-09', 'TBA123456789011', 'cuenta', { entrega: '2026-11-07', como: 'puerta', llamada: 'no', fallo_contacto: true, foto: 'mal', foto_motivo: 'borrosa' }),
-    ] }, { semana: '2026-11-01', hasta: '2026-11-07', cuentan: 0, no_cuentan: 1, sin_clasificar: 0, dnr: [
+    ] }, { semana: '2026-11-01', hasta: '2026-11-07', cuentan: 1, no_cuentan: 1, sin_clasificar: 0, dnr: [
+      dnr('2026-11-04', 'TBA123456789010', 'cuenta', { llamada: 'corta', segundos: 12, fallo_contacto: true }),
       dnr('2026-11-03', 'TBA123456789009', 'no_cuenta'),
     ] }],
   } }))

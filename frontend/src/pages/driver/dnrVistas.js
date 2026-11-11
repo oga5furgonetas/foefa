@@ -18,6 +18,7 @@ import { PackageX } from 'lucide-react'
 import { getMisDnr, DRIVER_TOKEN_KEY } from '../../services/api'
 import { tx } from '../../lib/idioma'
 import { lista } from '../../lib/lista'
+import { PAUSAS } from './dnrPausas'
 
 // El mismo icono en la casilla y en la pantalla.
 export const IconoDnr = PackageX
@@ -95,7 +96,9 @@ export function guardarVistas(id, datos) {
   poner(clave(id), JSON.stringify(m))
 }
 
-// {paquete: 'nueva' | 'actualizada'} de lo que no vio la última vez.
+// {paquete: 'nueva' | 'actualizada'} de lo que no vio la última vez. Con el estado EN PAUSA (dnrPausas.js, 11-11-2026: la
+// pantalla no dice si le cuenta), una que solo cambió de estado no es novedad: ni se marca ni cuenta. Lo apuntado sigue
+// guardando el estado, para que al volver a enseñarlo se compare con lo que vio.
 export function novedades(datos, vistas) {
   const out = {}
   const s = sal()
@@ -103,7 +106,7 @@ export function novedades(datos, vistas) {
     if (!x?.paquete) continue
     const h = huella(x.paquete, s)
     if (!vistas || !Object.prototype.hasOwnProperty.call(vistas, h)) out[x.paquete] = 'nueva'
-    else if (vistas[h].e !== x.estado) out[x.paquete] = 'actualizada'
+    else if (!PAUSAS.estado && vistas[h].e !== x.estado) out[x.paquete] = 'actualizada'
   }
   return out
 }

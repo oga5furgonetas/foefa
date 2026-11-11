@@ -684,8 +684,8 @@ def test_cada_dato_interpretado_y_lo_que_no_se_entiende_a_null():
     r = e(base, [{"fallo": "Blurry photo", "motivo": "DELIVERED_TO_DOORSTEP"}], [{"tipo": "CALL", "segundos": 12}])
     assert set(r) == CLAVES_DNR - {"dia", "entrega", "paquete", "estado"}
     assert (r["cp"], r["como"], r["lejos"]) == ("15704", "puerta", True)
-    # Llamó 12 s: eso se dice. Un tipo «CALL» no dice ningún fallo: fallo_contacto null (R7/F7).
-    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("si", 12, None)
+    # Llamó 12 s: eso se dice, y es menos de los 30 que pide Dani: «corta» y fallo de contacto (R9, 11-11-2026).
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("corta", 12, True)
     assert (r["foto"], r["foto_motivo"]) == ("mal", "borrosa")
 
     # A menos de 25 m; sin filas de foto ni de contacto: de eso no se sabe nada (null, no «bien»).
@@ -699,7 +699,8 @@ def test_cada_dato_interpretado_y_lo_que_no_se_entiende_a_null():
 
     # «No llamaste» solo si el tipo lo dice con todas las letras y sin segundos; con 0 s y un tipo desconocido, no se sabe.
     assert e({}, [], [{"tipo": "NO_CALL", "segundos": 0}])["llamada"] == "no"
-    assert e({}, [], [{"tipo": "NO_CALL", "segundos": 9}])["llamada"] == "si"
+    # Con segundos manda lo medido: 9 s es una llamada, corta (R9).
+    assert e({}, [], [{"tipo": "NO_CALL", "segundos": 9}])["llamada"] == "corta"
     sin_saber = e({}, [], [{"tipo": "SMS", "segundos": 0}])
     assert (sin_saber["llamada"], sin_saber["segundos"], sin_saber["fallo_contacto"]) == (None, None, None)
 
@@ -728,19 +729,46 @@ def test_la_foto_mal_solo_con_un_motivo_conocido():
     assert (r["foto"], r["foto_motivo"]) == ("mal", "sin_foto")
 
 
-def test_el_fallo_de_contacto_solo_si_el_tipo_lo_dice():
+def test_el_fallo_de_contacto_solo_si_el_tipo_lo_dice_o_la_llamada_es_corta():
     """R7/F7: estar en la tabla de contacto ya NO basta para «Te apuntaron un fallo de contacto». Solo un tipo que lo
-    dice con todas las letras (los NO_CALL… que dan «No llamaste»), y nunca si a la vez consta una llamada."""
+    dice con todas las letras (los NO_CALL… que dan «No llamaste») o, desde R9, una llamada de menos de 30 s."""
     e = server._dnr_entrega
-    for tipo, segundos in (("CALL", 12), ("SMS", 0), ("Y", 0), ("", 0), ("CONTACTED", 30)):
-        assert e({}, [], [{"tipo": tipo, "segundos": segundos}])["fallo_contacto"] is None, tipo
+    for tipo, segundos in (("CALL", 30), ("SMS", 0), ("Y", 0), ("", 0), ("CONTACTED", 30), ("CALL", 1800)):
+        assert e({}, [], [{"tipo": tipo, "segundos": segundos}])["fallo_contacto"] is None, (tipo, segundos)
     for tipo in ("NO_CALL", "no call made", "CALL_NOT_MADE", "NOT_CALLED"):
         r = e({}, [], [{"tipo": tipo, "segundos": 0}])
         assert (r["llamada"], r["fallo_contacto"]) == ("no", True), tipo
-    # Contradictorio (dice NO_CALL pero hay segundos de llamada): no se afirma el fallo.
-    assert e({}, [], [{"tipo": "NO_CALL", "segundos": 9}])["fallo_contacto"] is None
+    # Dice NO_CALL pero hay 9 s medidos: manda lo medido, y es corta (R9).
+    assert e({}, [], [{"tipo": "NO_CALL", "segundos": 9}])["fallo_contacto"] is True
     # Sin fila de contacto, no se sabe (nunca false).
     assert e({}, [], [])["fallo_contacto"] is None
+
+
+def test_la_llamada_minimo_30_segundos():
+    """R9 (Dani, 11-11-2026): «dando tono no podemos colgar nosotros la llamada y mínimo deben ser 30 segundos».
+    Menos de 30 s medidos es «corta» y es fallo de contacto; 30 o más, «si» y sin fallo. Los demás casos, igual."""
+    e = server._dnr_entrega
+    assert server._DNR_SEGUNDOS_MIN_LLAMADA == 30
+    for segundos, llamada, fallo in ((1, "corta", True), (29, "corta", True), ("29.9", "corta", True),
+                                     (30, "si", None), (31, "si", None), (1800, "si", None)):
+        r = e({}, [], [{"tipo": "CALL", "segundos": segundos}])
+        assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == (llamada, int(float(segundos)), fallo), segundos
+    # NO_CALL sin segundos: «no», como siempre.
+    for vacio in (0, "", None, "0"):
+        r = e({}, [], [{"tipo": "NO_CALL", "segundos": vacio}])
+        assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("no", None, True), vacio
+    # NO_CALL con 12 s: los datos se contradicen y manda lo medido.
+    r = e({}, [], [{"tipo": "NO_CALL", "segundos": 12}])
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("corta", 12, True)
+    # Dos filas: vale la llamada más larga (si una llega a 30, no es corta).
+    r = e({}, [], [{"tipo": "CALL", "segundos": 12}, {"tipo": "CALL", "segundos": 45}])
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("si", 45, None)
+    # Sin fila de contacto: todo null.
+    r = e({}, [], [])
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == (None, None, None)
+    # Segundos raros: ni «si», ni «corta», ni «no».
+    r = e({}, [], [{"tipo": "NO_CALL", "segundos": 600123456}])
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == (None, None, None)
 
 
 def test_el_cp_solo_si_parece_un_codigo_postal():
@@ -838,7 +866,8 @@ async def test_ana_ve_como_fue_cada_entrega_y_nada_de_las_filas_de_otro(base):
     r = await server.mis_dnr(_conductor("d-ana"))
     a1 = _dnr(r, "TBAANA100")
     assert (a1["cp"], a1["como"], a1["lejos"]) == ("15704", "puerta", True)
-    assert (a1["llamada"], a1["segundos"], a1["fallo_contacto"]) == ("si", 12, None)
+    # 12 s es menos de los 30 de Dani: llamada corta y fallo de contacto (R9).
+    assert (a1["llamada"], a1["segundos"], a1["fallo_contacto"]) == ("corta", 12, True)
     assert (a1["foto"], a1["foto_motivo"]) == ("mal", "borrosa")
     # TBAANA200 comparte paquete con una fila de foto y otra de contacto de LUIS (con NO_CALL y un motivo de foto
     # conocido): no son de Ana y no cuentan.
@@ -1094,14 +1123,16 @@ def test_los_segundos_de_llamada_solo_entre_1_y_1800():
     for raro in (600123456, "600123456", 1801, -5, "600 123456x"):
         r = e({}, [], [{"tipo": "CALL", "segundos": raro}])
         assert (r["llamada"], r["segundos"]) == (None, None), raro
-    for bueno, s in ((1, 1), (1800, 1800), ("12", 12), ("12.7", 12)):
+    # Por debajo de 30 s la llamada es «corta» (R9); los segundos salen igual.
+    for bueno, s, llamada in ((1, 1, "corta"), (1800, 1800, "si"), ("12", 12, "corta"), ("12.7", 12, "corta"),
+                              ("30", 30, "si")):
         r = e({}, [], [{"tipo": "CALL", "segundos": bueno}])
-        assert (r["llamada"], r["segundos"]) == ("si", s), bueno
+        assert (r["llamada"], r["segundos"]) == (llamada, s), bueno
     r = e({}, [], [{"tipo": "NO_CALL", "segundos": 600123456}])
     assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == (None, None, None)
     # Una fila con segundos buenos y otra con un teléfono: los buenos.
     r = e({}, [], [{"tipo": "CALL", "segundos": 12}, {"tipo": "CALL", "segundos": 600123456}])
-    assert (r["llamada"], r["segundos"]) == ("si", 12)
+    assert (r["llamada"], r["segundos"]) == ("corta", 12)
     # Lo de siempre sigue igual.
     assert e({}, [], [{"tipo": "NO_CALL", "segundos": 0}])["llamada"] == "no"
     assert e({}, [], [{"tipo": "NO_CALL", "segundos": ""}])["llamada"] == "no"
