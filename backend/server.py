@@ -39896,10 +39896,16 @@ async def diarios_por_conductor(center: str, desde: str, hasta: str,
 #     ORIGINAL del token: si no es la ficha de la sesion ni una fusionada en
 #     ella, tambien 403 (R7/F1). El resto del portal sigue con ese agujero.
 #   · UN ID EN DOS PERSONAS. Si la regla de la oficina no decide (dos personas
-#     VIVAS con el ID en `transporter_id`, o ninguna ahi y dos en `driver_id`)
-#     no se le da a ninguna: `en_revision` (R7/F11, afinado el 11-11-2026 en
-#     _dnr_mis_ids). Antes ganaba la que Mongo devolviera primero. Si la oficina
-#     decide (uno solo en `transporter_id`), se queda lo de la oficina.
+#     VIVAS con el ID en `transporter_id`, o ninguna ficha ahi y dos personas en
+#     `driver_id`) no se le da a ninguna: `en_revision` (R7/F11, afinado el
+#     11-11-2026 en _dnr_mis_ids). Antes ganaba la que Mongo devolviera primero.
+#     Si la oficina decide (uno solo en `transporter_id`, aunque sea una ficha
+#     de baja), se queda lo de la oficina. Una ficha fusionada cuenta como la
+#     persona en la que acaba su cadena de fusiones, para TODOS (R8/G2): asi la
+#     disputa sale igual desde los dos lados.
+#   · TOPES. Si las fichas con ID llegan al tope de lectura, no se casa nada
+#     (R8/G1): «en revision» y sin semanas. Con la lectura cortada, el reparto
+#     de la oficina no se puede repetir y se le podia dar a uno lo de otro.
 #   · LOS IDS se le casan EXACTAMENTE como en la pantalla de la oficina
 #     (diarios_por_conductor): el `transporter_id` de la ficha (si dos fichas lo
 #     comparten, la activa) y, si ninguna lo reclama ahi, el `driver_id`. Nunca
@@ -39914,11 +39920,16 @@ async def diarios_por_conductor(center: str, desde: str, hasta: str,
 #   · SIN PARAMETROS. La persona sale del token; no hay nada que cambiar en la
 #     peticion para pedir lo de otro.
 #   · DONDE. Solo en las empresas con el modulo de la DNR diaria («diarios») y
-#     que hayan subido algun reporte (R7/F5); en las demas contesta como una
-#     ruta que no existe, y asi la casilla no le sale a quien no la usa.
+#     que hayan subido algun reporte (R7/F5); en las demas, 404 con su propio
+#     `detail` (_DNR_SIN_DNR_DIARIA, R8/G10), y asi la casilla no le sale a
+#     quien no la usa. Propio y no el «Not Found» generico: la web recuerda 12
+#     horas este 404, y el generico tambien lo da un servidor que todavia no
+#     tiene la ruta (mientras se publica, o tras volver atras).
 
 _DNR_SEMANAS_CONDUCTOR = 4
-# Topes (11-11-2026): ninguna consulta de esta ruta lee sin limite.
+_DNR_SIN_DNR_DIARIA = "Sin DNR diaria"
+# Topes (11-11-2026): ninguna consulta de esta ruta lee sin limite. Si las
+# fichas con ID llegan a su tope, no se casa nada (R8/G1, _dnr_mis_ids).
 _DNR_TOPE_FICHAS = 5000
 _DNR_TOPE_FILAS = 2000
 # Una N de hace MAS de estos dias ya esta decidida aunque ese dia nadie de su
@@ -39927,6 +39938,14 @@ _DNR_TOPE_FILAS = 2000
 # 7 un dia que sigue todo a N es un dia limpio, no uno sin clasificar. Sin esto,
 # en un centro con pocas DNR esa N se quedaba «sin clasificar» para siempre.
 _DNR_DIAS_PARA_DAR_POR_CLASIFICADA = 7
+# ...pero SOLO si la fila se guardo cuando Amazon ya debia haberla clasificado
+# (R8/G4, 11-11-2026): su `actualizado` (la ultima vez que la oficina la pego)
+# es de al menos estos dias despues de su dia. Un bloque pegado al dia
+# siguiente llega todo a N y la subida pide volver a pegarlo; si nadie lo
+# vuelve a pegar, esa N no dice nada y se queda «sin clasificar» (decirle «no
+# te cuenta» seria afirmar lo que puede ser al reves). 5 = el retraso de
+# Amazon (2 a 4 dias) y uno de margen.
+_DNR_DIAS_PARA_DAR_POR_REPEGADA = 5
 # El dia de la entrega solo si no es de mas de estos dias antes que la DNR (R7/F8).
 _DNR_DIAS_MAX_ENTREGA = 60
 
@@ -39937,8 +39956,13 @@ def _dnr_viva(d: dict) -> bool:
                 or d.get("status") in ("deleted", "fusionada"))
 
 
-async def _dnr_mis_ids(mis_fichas: set) -> tuple:
-    """({transporter_id: (id de la ficha, nombre)}, {IDs en disputa}).
+async def _dnr_mis_ids(mis_fichas: set) -> Optional[tuple]:
+    """({transporter_id: (id de la ficha, nombre)}, {IDs en disputa}), o None si
+    cualquiera de las dos lecturas de fichas llega a _DNR_TOPE_FICHAS (R8/G1,
+    11-11-2026). Se leen ordenadas por `active` ascendente, como la oficina, asi
+    que lo primero que corta el tope son las ACTIVAS: con la de Pedro fuera, otra
+    ficha viva con su ID en `driver_id` se lo quedaba y veia sus DNR. Con la
+    lectura cortada no se puede repetir el reparto de la oficina: no se casa nada.
 
     Lo primero son los IDs que la oficina casa con estas fichas: mismas
     consultas, mismo orden y mismas claves que diarios_por_conductor (las de
@@ -39950,44 +39974,83 @@ async def _dnr_mis_ids(mis_fichas: set) -> tuple:
     oficina no decide; antes bastaba con que dos fichas vivas tuvieran el ID, en
     cualquiera de los dos campos, y eso dejaba en revision (y sin sus DNR) a
     quien la oficina SI se las da: Luis con su `transporter_id` frente a Mar, que
-    tiene el mismo en `driver_id`. Para un ID, contando solo fichas VIVAS
-    (_dnr_viva) y con la ficha de la sesion y sus fusionadas como UNA persona:
+    tiene el mismo en `driver_id`. Para un ID, contando solo PERSONAS vivas:
+      · Una ficha viva (_dnr_viva) es su persona; la de la sesion y las
+        fusionadas en ella, una sola («yo»).
+      · Una ficha no viva con `merged_into` es la persona en la que acaba su
+        cadena de fusiones, para TODOS y no solo para la sesion (R8/G2,
+        11-11-2026): antes la ficha vieja de Ana solo contaba desde Ana, y la
+        disputa salia de un solo lado (Ana en revision y la otra viendolo).
+        Se resuelve con lo leido: si la cadena sale de ahi, la persona es la
+        ultima ficha a la que se llega. Si acaba en una ficha de baja sin
+        fusionar, esa persona ya no esta y no disputa, como cualquier baja.
       · T = las personas que lo tienen en `transporter_id`; D = las que lo
         tienen SOLO en `driver_id`.
       · T de 2 o mas: disputa, en revision las de T (la oficina lo decide por
         el orden en que salen). Las de D no lo ven, como en la oficina.
       · T de 1: es suyo, como en la oficina; las de D ni lo ven ni quedan en
         revision por eso.
-      · T vacio y D de 2 o mas: disputa, en revision las de D (era el caso del
-        hallazgo: ganaba la que Mongo devolviera primero).
+      · T vacio, NINGUNA ficha (ni de baja) con el en `transporter_id`, y D de
+        2 o mas: disputa, en revision las de D (era el caso del hallazgo: ganaba
+        la que Mongo devolviera primero).
+      · T vacio pero una ficha de BAJA con el en `transporter_id` (R8): la
+        oficina se lo da a ella y ninguna viva lo ve. Eso no es una disputa y
+        no deja a nadie «en revision», tenga D las personas que tenga.
       · T vacio y D de 1: es suyo.
     Fuera de la disputa lo que ve cada uno es lo de `mios`, la asignacion de la
     oficina tal cual (tambien cuando una ficha de BAJA tiene el ID en
     `transporter_id` y una viva en `driver_id`: es de la de baja y la viva no lo
     ve). La oficina sigue viendolo todo como siempre."""
-    mapa: dict = {}
-    en_t: dict = {}     # ID -> personas vivas con el en `transporter_id`
-    en_d: dict = {}     # ID -> personas vivas con el en `driver_id`
-
-    def persona(d):
-        # La sesion y lo fusionado en ella, una sola persona («yo»), aunque lo
-        # fusionado ya no este vivo; de las demas, solo las fichas vivas.
-        if d.get("id") in mis_fichas:
-            return "yo"
-        return d["id"] if d.get("id") and _dnr_viva(d) else None
-
+    con_t: list = []
     async for d in db.drivers.find(
             {"transporter_id": {"$nin": [None, ""]}},
             {"_id": 0, "name": 1, "transporter_id": 1, "id": 1, "active": 1, "merged_into": 1, "status": 1}
     ).sort("active", 1).limit(_DNR_TOPE_FICHAS):
-        clave = (d.get("transporter_id") or "").upper()
-        mapa[clave] = (d.get("id"), d.get("name") or "")
-        if clave and persona(d):
-            en_t.setdefault(clave, set()).add(persona(d))
+        con_t.append(d)
+    con_d: list = []
     async for d in db.drivers.find(
             {"driver_id": {"$nin": [None, ""]}},
             {"_id": 0, "name": 1, "driver_id": 1, "id": 1, "active": 1, "merged_into": 1, "status": 1}
     ).sort("active", 1).limit(_DNR_TOPE_FICHAS):
+        con_d.append(d)
+    if len(con_t) >= _DNR_TOPE_FICHAS or len(con_d) >= _DNR_TOPE_FICHAS:
+        return None
+
+    leidas = {d["id"]: d for d in con_t + con_d if d.get("id")}
+
+    def persona(d):
+        # Ver el docstring: «yo», el id de su persona viva, o None (no disputa).
+        vistas = set()
+        while True:
+            fid = d.get("id")
+            if fid in mis_fichas:
+                return "yo"
+            if not fid or fid in vistas or len(vistas) > 20:
+                return None
+            if _dnr_viva(d):
+                return fid
+            destino = d.get("merged_into")
+            if not destino:
+                return None             # de baja sin fusionar: no disputa
+            vistas.add(fid)
+            if destino in mis_fichas:
+                return "yo"
+            if destino not in leidas:
+                return destino          # la cadena sale de lo leido: la ultima a la que se llega
+            d = leidas[destino]
+
+    mapa: dict = {}
+    en_t: dict = {}     # ID -> personas vivas con el en `transporter_id`
+    en_d: dict = {}     # ID -> personas vivas con el en `driver_id`
+    claves_t = set()    # los IDs que alguna ficha (viva o no) tiene en `transporter_id`
+    for d in con_t:
+        clave = (d.get("transporter_id") or "").upper()
+        mapa[clave] = (d.get("id"), d.get("name") or "")
+        if clave:
+            claves_t.add(clave)
+        if clave and persona(d):
+            en_t.setdefault(clave, set()).add(persona(d))
+    for d in con_d:
         clave = str(d.get("driver_id") or "").strip().upper()
         if clave and clave not in mapa:
             mapa[clave] = (d.get("id"), d.get("name") or "")
@@ -40000,7 +40063,7 @@ async def _dnr_mis_ids(mis_fichas: set) -> tuple:
         d_solo = en_d.get(clave, set()) - t
         if len(t) >= 2:
             disputan = t
-        elif not t and len(d_solo) >= 2:
+        elif not t and clave not in claves_t and len(d_solo) >= 2:
             disputan = d_solo
         else:
             continue
@@ -40069,7 +40132,16 @@ async def _dnr_mis_fichas(ficha_id: str) -> set:
 #     «Delivery Exception» y «Simultaneous deliveries». De esos no sale nada.
 #   · El codigo postal: solo si lo parece (R7/F23-F24): al menos una cifra, de 3
 #     a 10 caracteres y como mucho un espacio o un guion («15704», «1000-001»,
-#     «SW1A 1AA»). Una palabra («SANTIAGO») o una calle no salen.
+#     «SW1A 1AA»). Una palabra («SANTIAGO») o una calle no salen. Y (R8/G11)
+#     como mucho 8 caracteres sin contar el espacio o el guion y nunca mas de 6
+#     cifras seguidas: un movil («600123456», «600 123456») no es un CP.
+#   · Los segundos de la llamada (R8/G11): un entero entre 1 y
+#     _DNR_SEGUNDOS_MAX; fuera de eso, null, y entonces no hay «Llamaste» por
+#     ellos (un telefono en esa celda salia como «Llamaste (600123456 s)»). Si
+#     traen algo que no se entiende, tampoco se afirma «No llamaste».
+#   · El paquete (R8/G11): solo si tiene forma de codigo (_DNR_PAQUETE); si no,
+#     la fila no sale. Al guardar solo se pide que la celda no este vacia, y con
+#     una tabla pegada descuadrada ahi puede ir cualquier texto.
 #   · El dia de la entrega (`entrega`, R7/F8-F9): `fecha_entrega` se guarda en
 #     crudo y su formato real no se ha visto; solo si empieza por una fecha ISO
 #     que existe, no es posterior a la DNR y no es de mas de 60 dias antes.
@@ -40103,8 +40175,18 @@ _DNR_FOTO_MOTIVO = {
     "NO_PHOTO": "sin_foto", "MISSING_PHOTO": "sin_foto", "PHOTO_MISSING": "sin_foto",
 }
 # El CP: de 3 a 10 caracteres, al menos una cifra y como mucho UN espacio o
-# guion entre dos trozos (R7/F23-F24).
+# guion entre dos trozos (R7/F23-F24); y ademas (R8/G11, en _dnr_cp) como mucho
+# _DNR_CP_MAX sin el separador y nunca 7 cifras seguidas.
 _DNR_CP = re.compile(r"^(?=.{3,10}$)(?=[^0-9]*[0-9])[0-9A-Z]+(?:[ \-][0-9A-Z]+)?$")
+_DNR_CP_MAX = 8
+_DNR_CP_CIFRAS_SEGUIDAS = re.compile(r"[0-9]{7}")
+# Una llamada de mas de media hora a un cliente no es real: es otra cosa en la
+# celda (R8/G11).
+_DNR_SEGUNDOS_MAX = 1800
+# El paquete (R8/G11): letras y cifras, con alguna cifra (los codigos de
+# Amazon, «TBA…», siempre las llevan; un nombre pegado sin espacios no), sin
+# espacios ni signos, de 8 a 30 caracteres.
+_DNR_PAQUETE = re.compile(r"^(?=[A-Za-z0-9]*[0-9])[A-Za-z0-9]{8,30}$")
 # «aaaa-mm-dd» al principio, sin una cifra pegada detras («2026-11-071» no).
 _DNR_FECHA_ISO = re.compile(r"^(\d{4}-\d{2}-\d{2})(?!\d)")
 
@@ -40138,11 +40220,38 @@ def _dnr_si_no(v):
     return True if t in _DNR_SI else False if t in _DNR_NO else None
 
 
+def _dnr_cp(v) -> Optional[str]:
+    """El CP si lo parece (R7/F23-F24 y R8/G11); si no, None."""
+    cp = _dia_celda(v).upper()
+    if not _DNR_CP.match(cp):
+        return None
+    if len(re.sub(r"[ \-]", "", cp)) > _DNR_CP_MAX or _DNR_CP_CIFRAS_SEGUIDAS.search(cp):
+        return None
+    return cp
+
+
+def _dnr_segundos(v) -> tuple:
+    """(segundos, raro) de la celda «Call duration (seconds)» (R8/G11).
+    `segundos`: un entero entre 1 y _DNR_SEGUNDOS_MAX, o None. `raro`: la celda
+    trae algo que no es eso ni un cero (un telefono, un texto, un negativo)."""
+    s = _dia_celda(v)
+    if not s:
+        return None, False
+    try:
+        n = int(float(s.replace(",", ".")))
+    except (ValueError, OverflowError):
+        return None, True
+    if n == 0:
+        return None, False
+    if 1 <= n <= _DNR_SEGUNDOS_MAX:
+        return n, False
+    return None, True
+
+
 def _dnr_entrega(fila: dict, pods: list, ccs: list) -> dict:
     """Como fue la entrega de UNA DNR, ya interpretado. `pods` y `ccs` son las
     filas de foto y de contacto de ese mismo paquete y ese mismo ID. Lo que no
     se entiende va a None y no sale de ninguna otra forma (R7/F22-F25)."""
-    cp = _dia_celda(fila.get("cp")).upper()
     como = _dnr_como(fila.get("scan"))
     if not como:
         # Sin escaneo en la fila, el motivo de su fila de foto o de contacto, que
@@ -40150,10 +40259,16 @@ def _dnr_entrega(fila: dict, pods: list, ccs: list) -> dict:
         como = next((c for c in (_dnr_como(r.get("motivo")) for r in pods + ccs) if c), None)
     lejos = _dnr_si_no(fila.get("mas_25m"))
 
-    segundos = max((_dia_num(r.get("segundos")) for r in ccs), default=0)
+    # Los segundos, solo entre 1 y _DNR_SEGUNDOS_MAX (R8/G11). Con algo raro en
+    # la celda y ningun segundo bueno no se afirma ni «Llamaste» ni «No llamaste».
+    lecturas = [_dnr_segundos(r.get("segundos")) for r in ccs]
+    segundos = max((s for s, _raro in lecturas if s), default=None)
+    raros = any(raro for _s, raro in lecturas)
     tipos = [_dnr_token(r.get("tipo")) for r in ccs if _dia_celda(r.get("tipo"))]
-    if segundos > 0:
+    if segundos:
         llamada = "si"
+    elif raros:
+        llamada = None
     elif tipos and any(t in _DNR_SIN_LLAMADA for t in tipos):
         llamada = "no"
     else:
@@ -40170,9 +40285,9 @@ def _dnr_entrega(fila: dict, pods: list, ccs: list) -> dict:
     else:
         foto = None
 
-    return {"cp": cp if _DNR_CP.match(cp) else None,
+    return {"cp": _dnr_cp(fila.get("cp")),
             "como": como, "lejos": lejos,
-            "llamada": llamada, "segundos": segundos if segundos > 0 else None,
+            "llamada": llamada, "segundos": segundos,
             # Solo si el tipo dice el fallo con todas las letras y no consta una
             # llamada (R7/F7): es justo cuando sale «No llamaste».
             "fallo_contacto": True if llamada == "no" else None,
@@ -40196,6 +40311,15 @@ async def _dnr_datos_hasta(centro_ficha: str, centros_filas: set) -> Optional[st
     hay reportes de tu centro» habiendolos. Es el mayor entre el ultimo
     `fecha_dnr` de daily_reports y la ultima `fecha_concesion` de dnr_rows, con
     los mismos centros en las dos.
+
+    LO QUE DEJA ENTREVER (R8/G19, se acepta, como lo de «clasificados» en
+    mis_dnr): con reportes pegados sin resumen (solo el bloque DNR) un dia sin
+    ninguna DNR no deja ninguna fila, asi que esta fecha es la del ultimo dia en
+    que ALGUIEN de su centro (o de la empresa, si su ficha no tiene un centro
+    reconocible) tuvo una DNR. A un conductor sin DNR ese dia le dice que un
+    compañero tuvo una; ni quien ni cuantas. Para cerrarlo, la subida tendria
+    que guardar una marca por (centro, dia) del reporte pegado aunque venga sin
+    filas, y leer esa marca aqui.
 
     Un distinct por coleccion, el de los centros (tantos como centros, con sus
     indices (center, fecha_dnr) y (center, fecha_concesion)), y una lectura con
@@ -40225,6 +40349,18 @@ async def _dnr_datos_hasta(centro_ficha: str, centros_filas: set) -> Optional[st
     return max(ultimos) if ultimos else None
 
 
+def _dnr_repegada(actualizado, dia) -> bool:
+    """¿Se guardo la fila (su `actualizado`, la ultima vez que la oficina la
+    pego) al menos _DNR_DIAS_PARA_DAR_POR_REPEGADA dias despues de su dia?
+    (R8/G4.) Sin `actualizado` o con una fecha que no se entiende, no."""
+    try:
+        guardada = datetime.strptime(str(actualizado or "")[:10], "%Y-%m-%d")
+        concesion = datetime.strptime(str(dia or ""), "%Y-%m-%d")
+    except ValueError:
+        return False
+    return (guardada - concesion).days >= _DNR_DIAS_PARA_DAR_POR_REPEGADA
+
+
 def _dnr_sub_original(credentials, user: dict):
     """El `sub` que FIRMA el token, antes de que get_current_user lo lleve a la
     ficha activa del mismo correo (R7/F1). Por HTTP siempre hay credenciales
@@ -40244,17 +40380,18 @@ async def mis_dnr(user: dict = Depends(get_current_user),
 
     Cada DNR: {dia, entrega, paquete, estado} y como fue la entrega
     (_dnr_entrega), con estado «cuenta» (DSC = Y), «no_cuenta» (DSC = N en un
-    dia que Amazon ya clasifico, o de hace mas de 7 dias) o «sin_clasificar»
-    (sin DSC, o una N reciente de un dia de ese centro sin una sola Y: es Amazon
-    que aun no lo ha hecho, la misma regla que el aviso de «sin clasificar» al
-    subir el reporte).
+    dia que Amazon ya clasifico, o de hace mas de 7 dias y vuelta a pegar cuando
+    ya debia estar clasificada) o «sin_clasificar» (sin DSC, o cualquier otra N
+    de un dia de ese centro sin una sola Y: es Amazon que aun no lo ha hecho, o
+    nadie ha vuelto a pegar el reporte; la misma regla que el aviso de «sin
+    clasificar» al subir el reporte).
 
     `credentials` es la cabecera de la MISMA sesion (FastAPI ya la tiene
     resuelta para get_current_user): no es un parametro que se pueda cambiar.
     """
     mods = await _rep_modulos_de(user)
     if isinstance(mods, list) and "diarios" not in mods:
-        raise HTTPException(status_code=404, detail="Not Found")
+        raise HTTPException(status_code=404, detail=_DNR_SIN_DNR_DIARIA)
     if user.get("role") != "driver":
         raise HTTPException(status_code=403, detail="Solo para conductores")
     # Sin ningun reporte subido, la empresa no usa la DNR diaria: como si la ruta
@@ -40263,7 +40400,7 @@ async def mis_dnr(user: dict = Depends(get_current_user),
     # daily_reports: eso tambien es un reporte subido.
     if not (await db.daily_reports.find_one({}, {"_id": 1})
             or await db.dnr_rows.find_one({}, {"_id": 1})):
-        raise HTTPException(status_code=404, detail="Not Found")
+        raise HTTPException(status_code=404, detail=_DNR_SIN_DNR_DIARIA)
 
     hoy = _dia_negocio()
     domingos = [_dia_menos(_dia_semana(hoy), 7 * i) for i in range(_DNR_SEMANAS_CONDUCTOR)]
@@ -40293,7 +40430,24 @@ async def mis_dnr(user: dict = Depends(get_current_user),
     # (es de get_current_user/_ficha_activa_de y se arregla aparte).
     if _dnr_sub_original(credentials, user) not in mis_fichas:
         raise HTTPException(status_code=403, detail="Tu ficha está de baja")
-    ids, en_disputa = await _dnr_mis_ids(mis_fichas)
+    casados = await _dnr_mis_ids(mis_fichas)
+    if casados is None:
+        # Las fichas con ID llegan al tope de lectura: no se casa nada (R8/G1,
+        # 11-11-2026). En el log, solo el tope (nada de quien pregunta). A quien
+        # no tiene ningun ID se le contesta como siempre: decirle que «su ID esta
+        # en revision» seria falso.
+        logger.warning("Mis DNR: las fichas con ID llegan al tope de lectura (%s); no se casa ninguna DNR",
+                       _DNR_TOPE_FICHAS)
+        tiene_id = False
+        async for d in db.drivers.find({"id": {"$in": sorted(mis_fichas)}},
+                                       {"_id": 0, "transporter_id": 1, "driver_id": 1}).limit(len(mis_fichas)):
+            tiene_id = tiene_id or bool(str(d.get("transporter_id") or "").strip()
+                                        or str(d.get("driver_id") or "").strip())
+        if not tiene_id:
+            return vacio
+        return {**vacio, "tiene_id": True, "en_revision": True,
+                "datos_hasta": await _dnr_datos_hasta(centro, set())}
+    ids, en_disputa = casados
     if not ids and not en_disputa:
         return vacio
     # Un ID en disputa (la regla de la oficina no decide entre dos personas
@@ -40306,7 +40460,10 @@ async def mis_dnr(user: dict = Depends(get_current_user),
     filas = await db.dnr_rows.find(
         {"transporter_id": {"$in": buenos}, "fecha_concesion": {"$gte": desde, "$lte": hasta}},
         {"_id": 0, "tracking_id": 1, "transporter_id": 1, "fecha_concesion": 1, "fecha_entrega": 1, "dsc": 1,
-         "center": 1, "cp": 1, "scan": 1, "mas_25m": 1}).to_list(_DNR_TOPE_FILAS)
+         "center": 1, "cp": 1, "scan": 1, "mas_25m": 1, "actualizado": 1}).to_list(_DNR_TOPE_FILAS)
+    # Solo las filas cuyo paquete tiene forma de codigo (R8/G11): las demas no
+    # salen, ni cuentan, ni se buscan en las tablas de foto y contacto.
+    filas = [f for f in filas if _DNR_PAQUETE.match(str(f.get("tracking_id") or ""))]
 
     # Los dias (de cada centro) que Amazon ya ha clasificado: los que tienen
     # alguna Y, sea de quien sea. Solo se guarda el par (centro, dia).
@@ -40317,7 +40474,9 @@ async def mis_dnr(user: dict = Depends(get_current_user),
     # Amazon lo haya clasificado seria peor. Para cerrarlo del todo, la subida
     # tendria que guardar una marca por (centro, dia) de «Amazon ya clasifico».
     # Y pasados _DNR_DIAS_PARA_DAR_POR_CLASIFICADA dias, una N ya no depende de
-    # eso: «no cuenta» aunque nadie de su centro tuviera una Y (R7/F12).
+    # eso: «no cuenta» aunque nadie de su centro tuviera una Y (R7/F12), pero
+    # solo si la fila se volvio a pegar cuando ya debia estar clasificada
+    # (R8/G4, _dnr_repegada).
     decidida_antes_de = _dia_menos(hoy, _DNR_DIAS_PARA_DAR_POR_CLASIFICADA)
     centros = sorted({f.get("center") for f in filas if f.get("center")})
     dias = sorted({f.get("fecha_concesion") for f in filas if f.get("fecha_concesion")})
@@ -40351,7 +40510,8 @@ async def mis_dnr(user: dict = Depends(get_current_user),
         dsc = f.get("dsc")
         if dsc == "Y":
             estado = "cuenta"
-        elif dsc == "N" and ((f.get("center"), dia) in clasificados or dia < decidida_antes_de):
+        elif dsc == "N" and ((f.get("center"), dia) in clasificados
+                             or (dia < decidida_antes_de and _dnr_repegada(f.get("actualizado"), dia))):
             estado = "no_cuenta"
         else:
             estado = "sin_clasificar"

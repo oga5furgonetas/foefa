@@ -181,8 +181,9 @@ export const tiendaFotoBlob = (id) =>
 export const tiendaPagar = (pedidoId) => api.post(`/tienda/pedido/${pedidoId}/pagar`)
 /* Turnos del propio conductor: su calendario y sus peticiones de día. */
 export const getMyShifts = (desde, hasta) => api.get('/shifts/mine', { params: { desde, hasta } })
-// Sus DNR de las 4 últimas semanas (11-11-2026): sin parámetros, la persona sale de la sesión. 404 si la empresa no
-// tiene la DNR diaria o aún no ha subido ningún reporte; 403 si no es un conductor o su ficha está de baja.
+// Sus DNR de las 4 últimas semanas (11-11-2026): sin parámetros, la persona sale de la sesión. 404 con
+// `{"detail": "Sin DNR diaria"}` si la empresa no tiene la DNR diaria o aún no ha subido ningún reporte (otro 404 es un
+// servidor sin la ruta: dnrVistas.js); 403 si no es un conductor o su ficha está de baja.
 export const getMisDnr = () => api.get('/diarios/mias')
 // Lo suyo, para el: sus numeros de Cortex y las ayudas del mes
 // Dias que este conductor NO puede pedir, y por que.

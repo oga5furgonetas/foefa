@@ -1,19 +1,16 @@
 /* «Mis DNR» en el portal del conductor (11-11-2026, tanda 2, zona «dnr»). Dani: «que cuando yo suba los daily report y
    aparezcan las DNRs ellos puedan ver la DNR que le cae a ellos».
 
-   La casilla del inicio sale solo si la empresa tiene la DNR diaria (si no, el servidor contesta 404), con el número rojo
-   de las NUEVAS desde la última vez (las actualizadas van aparte y no suman) y «Esta semana: N» debajo del nombre. La
-   pantalla, rehecha al verla Dani («que le ponga "esta semana llevas 1 DNR" y cuál es, o "llevas 5"»): arriba y en grande
-   la frase de esta semana con su número (singular, plural, «ninguna» SOLO si hay datos de esta semana, o qué falta),
-   debajo cuáles son, las semanas anteriores en una línea cada una con su desglose que se abre al tocarla, y qué es cada
-   estado al final; con la marca de «Nueva» o «Actualizada». Sin euros.
-   Y «más bonito y mejor» (Dani, 11-11-2026): cada DNR en su tarjeta con qué día es cada cosa (el de la entrega si se sabe y
-   el de la DNR), su CP, su paquete y su estado, y debajo qué pasó (solo lo que el servidor entiende: lo que llega a null
-   no se dice), lo que puede hacer la próxima vez, el recordatorio de la preferencia de entrega siempre bajo la frase
-   grande y «¿Alguna no es tuya? Díselo a la oficina.». La casilla del inicio no vuelve a pedir la ruta cada vez que se
-   vuelve. La revisión final (R7, F1 a F34) está en cada prueba con su número.
-   API simulada con la forma EXACTA del contrato de R7 (con `entrega`, sin `sin_interpretar`) y datos fijos: nada depende
-   del día de hoy (las semanas, su orden y hasta cuándo hay datos los decide el servidor). */
+   La casilla del inicio sale solo si la empresa tiene la DNR diaria (si no, el servidor contesta 404 «Sin DNR diaria»),
+   con el número rojo de las NUEVAS desde la última vez (las actualizadas van aparte y no suman) y «Esta semana: N» debajo
+   del nombre. La pantalla, V5 («es como demasiado texto… la gente pasa de leer»): el resumen de esta semana con el número
+   muy grande y sus contadores de color; el recordatorio con la condición arriba («Solo si el cliente tiene preferencia de
+   entrega») y los pasos debajo; una tarjeta por DNR con etiquetas cortas de qué pasó (la frase larga, para el lector de
+   pantalla); las semanas anteriores en filas con mini contadores; «Qué es cada color», plegado. Sin euros, nunca.
+   Cada arreglo de las revisiones (F1 a F34 de R7, G1 a G19 de R8) está en su prueba con su número.
+   API simulada con la forma EXACTA del contrato (R7 con los cambios de R8) y datos fijos: nada depende del día de hoy (las
+   semanas, su orden y hasta cuándo hay datos los decide el servidor; las marcas del móvil, relativas al reloj de la
+   página). */
 import { test, expect } from '@playwright/test'
 import { simularApi } from './api-simulada.js'
 
@@ -21,6 +18,9 @@ const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_
 const token = (sub, name) => `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub, role: 'driver', name, exp: 4102444800 })}.firma`
 const TOKEN = token('d1', 'ANA PEREZ')
 const json = (body, status = 200) => (route) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
+// El 404 propio de la ruta (R8, G10) y el genérico de un servidor que aún no la tiene.
+const SIN_DNR = { detail: 'Sin DNR diaria' }
+const NOT_FOUND = { detail: 'Not Found' }
 
 const semana = (desde, hasta, dnr) => ({
   semana: desde, hasta,
@@ -52,11 +52,17 @@ const DATOS = {
   ],
 }
 
-test('la API simulada tiene la forma exacta del contrato (R7)', () => {
+test('la API simulada tiene la forma exacta del contrato (R7 y R8)', () => {
   expect(Object.keys(DATOS).sort()).toEqual(['datos_hasta', 'en_revision', 'semanas', 'tiene_id'])
   for (const s of DATOS.semanas) {
     expect(Object.keys(s).sort()).toEqual(['cuentan', 'dnr', 'hasta', 'no_cuentan', 'semana', 'sin_clasificar'])
-    for (const x of s.dnr) expect(Object.keys(x).sort()).toEqual([...CLAVES_DNR].sort())
+    for (const x of s.dnr) {
+      expect(Object.keys(x).sort()).toEqual([...CLAVES_DNR].sort())
+      // R8: el paquete con forma de código (letras y cifras, de 8 a 30) y el CP de como mucho 8.
+      expect(x.paquete).toMatch(/^[A-Za-z0-9]{8,30}$/)
+      if (x.cp) expect(x.cp.replace(/[ -]/, '').length).toBeLessThanOrEqual(8)
+      if (x.segundos != null) expect(x.segundos >= 1 && x.segundos <= 1800).toBe(true)
+    }
   }
 })
 
@@ -69,8 +75,8 @@ function vigilar(page) {
   return fallos
 }
 
-async function entrar(page, { mias = DATOS, status = 200, antes } = {}) {
-  await page.addInitScript(({ tk, antes }) => {
+async function entrar(page, { mias = DATOS, status = 200, antes, vistas, url = '/conductor', ancla = true } = {}) {
+  await page.addInitScript(({ tk, antes, vistas }) => {
     // Solo la primera vez que se carga la página: lo que apunte la app después no se pisa al recargar.
     if (sessionStorage.getItem('ya_puesto')) return
     sessionStorage.setItem('ya_puesto', '1')
@@ -79,15 +85,22 @@ async function entrar(page, { mias = DATOS, status = 200, antes } = {}) {
     localStorage.setItem('cookie_consent', '1')
     // Marcas relativas al reloj de la página (nunca una fecha fija que caduque).
     for (const [k, v] of Object.entries(antes || {})) localStorage.setItem(k, typeof v === 'number' ? String(Date.now() + v) : v)
-  }, { tk: TOKEN, antes })
+    // Lo apuntado de «vistas», con su «cuándo» relativo al reloj de la página.
+    if (vistas) {
+      const m = {}
+      for (const [h, [e, hace]] of Object.entries(vistas.huellas)) m[h] = { e, t: Date.now() - hace }
+      localStorage.setItem('fds_dnr_sal', vistas.sal)
+      localStorage.setItem('fds_dnr_vistas_d1', JSON.stringify(m))
+    }
+  }, { tk: TOKEN, antes, vistas })
   await simularApi(page, 'vacio')
   const pedidas = []
   await page.route(/\/api\/diarios\/mias/, (route) => {
     pedidas.push(new URL(route.request().url()).search)
     return json(mias, status)(route)
   })
-  await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: /Hola, ANA/ })).toBeVisible({ timeout: 15000 })
+  await page.goto(url, { waitUntil: 'domcontentloaded' })
+  if (ancla) await expect(page.getByRole('heading', { name: /Hola, ANA/ })).toBeVisible({ timeout: 15000 })
   return pedidas
 }
 // Cambia lo que contesta el servidor a partir de ahora.
@@ -98,12 +111,15 @@ async function contesta(page, cuerpo, status = 200) {
 
 const casilla = (page) => page.getByRole('button', { name: /^Mis DNR/ })
 const numeroRojo = (page) => casilla(page).locator('.bg-ruta-peligro')
+// Lo que se VE de una etiqueta de un hecho (la frase larga va aparte, para el lector de pantalla).
+const corto = (l) => l.locator('[data-corto]')
+const abrirColores = (page) => page.getByRole('button', { name: 'Qué es cada color' }).click()
 
 // ESTA semana con las DNR que se le den (las anteriores, las de DATOS), para el singular, el plural y el «ninguna».
 const conEstaSemana = (dnr, mas = {}) => ({ ...DATOS, ...mas, semanas: [semana('2026-11-08', '2026-11-14', dnr), ...DATOS.semanas.slice(1)] })
 const paquetes = (n, estado = 'cuenta', pre = 'TBA99900000000') => Array.from({ length: n }, (_, k) => dnr('2026-11-09', `${pre}${k}`, estado))
 
-test('arriba y en grande, cuántas lleva esta semana; debajo, cuáles; las anteriores, una línea cada una con su desglose; y los estados, al final', async ({ page }) => {
+test('V5: arriba el resumen con el número grande y sus contadores; debajo, cuáles; las anteriores en filas con mini contadores; los colores, plegados', async ({ page }) => {
   const fallos = vigilar(page)
   const pedidas = await entrar(page)
   // La casilla dice lo mismo en corto, con el número rojo de las nuevas (la primera vez, todas: nunca las ha visto).
@@ -115,47 +131,63 @@ test('arriba y en grande, cuántas lleva esta semana; debajo, cuáles; las anter
 
   const pantalla = page.getByTestId('mis-dnr')
   await expect(pantalla.getByRole('heading', { name: 'Mis DNR' })).toBeVisible()
-  // 1. La frase de esta semana con su número (todas las DNR de la semana, cuenten o no), el desglose y hasta cuándo.
+  // 1. El resumen: «Esta semana llevas» arriba, el número muy grande y en rojo (una le cuenta), los contadores que no son
+  //    cero y hasta cuándo hay datos (F19: sin punto final).
   const frase = pantalla.getByTestId('dnr-frase')
   await expect(frase).toHaveText('Esta semana llevas 2 DNR')
+  await expect(pantalla.getByTestId('dnr-frase-arriba')).toHaveText('Esta semana llevas')
   await expect(pantalla.getByTestId('dnr-numero')).toHaveText('2')
-  await expect(pantalla.getByTestId('dnr-desglose')).toHaveText('1 te cuenta · 1 sin clasificar')
-  // F19: «Hay datos hasta el…», sin el punto final.
-  await expect(pantalla.getByTestId('dnr-hasta')).toHaveText('Hay datos hasta el martes, 10/11')
+  await expect(pantalla.getByTestId('dnr-numero')).toHaveClass(/text-ruta-peligro-texto/)
+  await expect(pantalla.getByTestId('dnr-rango')).toHaveText('Del 8/11 al 14/11')
+  await expect(pantalla.getByTestId('dnr-contador-cuentan')).toHaveText('1 te cuenta')
+  await expect(pantalla.getByTestId('dnr-contador-sin_clasificar')).toHaveText('1 pendiente')
+  await expect(pantalla.getByTestId('dnr-contador-no_cuentan')).toHaveCount(0)
+  await expect(pantalla.getByTestId('dnr-hasta')).toHaveText('Datos hasta el mar 10/11')
+  const tam = (l) => l.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))
+  expect(await tam(pantalla.getByTestId('dnr-numero'))).toBeGreaterThan(2 * await tam(pantalla.getByTestId('dnr-frase-arriba')))
 
-  // 2. Justo debajo, cuáles son: paquete, día, estado y la marca de nueva.
+  // 2. Justo debajo, cuáles son: paquete, día, estado con su nombre corto y la marca de nueva.
   const esta = pantalla.getByTestId('dnr-esta-semana')
   const filas = esta.getByTestId('dnr-fila')
   await expect(filas).toHaveCount(2)
-  await expect(filas.nth(0)).toContainText('TBA123456789012')
-  await expect(filas.nth(0)).toContainText('Sin clasificar')
-  await expect(filas.nth(0)).toContainText('Nueva')
-  await expect(filas.nth(1)).toContainText('TBA123456789011')
-  await expect(filas.nth(1)).toContainText('Te cuenta')
+  await expect(filas.nth(0).getByTestId('dnr-paquete')).toHaveText('TBA123456789012')
+  await expect(filas.nth(0).getByTestId('dnr-estado')).toHaveText('Pendiente')
+  await expect(filas.nth(0).getByTestId('dnr-nueva')).toHaveText('Nueva')
+  await expect(filas.nth(1).getByTestId('dnr-paquete')).toHaveText('TBA123456789011')
+  await expect(filas.nth(1).getByTestId('dnr-estado')).toHaveText('Te cuenta')
   await expect(pantalla.getByText('5 nuevas', { exact: true })).toBeVisible()
 
-  // 3. Las anteriores, una línea por semana con su recuento y su desglose (F17), cerradas; la vacía lo dice en su línea
-  // y no se abre.
+  // 3. Las anteriores, una fila por semana con sus mini contadores de color (el desglose en palabras, para el lector de
+  //    pantalla), cerradas; la vacía con datos de esa semana dice «Ninguna» con su marca verde y no se abre.
   const semanas = pantalla.getByTestId('dnr-anteriores').getByTestId('dnr-semana')
   await expect(semanas).toHaveCount(3)
   await expect(semanas.nth(0)).toContainText('La semana pasada')
-  await expect(semanas.nth(0).getByTestId('dnr-recuento')).toHaveText('2 DNR')
-  await expect(semanas.nth(0).getByTestId('dnr-semana-desglose')).toHaveText('1 te cuenta · 1 no te cuenta')
+  await expect(semanas.nth(0).getByTestId('dnr-mini-cuentan')).toHaveText('1')
+  await expect(semanas.nth(0).getByTestId('dnr-mini-no_cuentan')).toHaveText('1')
+  await expect(semanas.nth(0).getByTestId('dnr-mini-sin_clasificar')).toHaveCount(0)
+  await expect(semanas.nth(0).getByTestId('dnr-semana-desglose')).toHaveText('1 te cuenta · 1 no cuenta')
+  await expect(semanas.nth(0).getByRole('button')).toHaveAccessibleName(/1 te cuenta · 1 no cuenta/)
   await expect(semanas.nth(0).getByTestId('dnr-semana-nuevas')).toHaveText('2 nuevas')
   await expect(semanas.nth(0).getByRole('button')).toHaveAttribute('aria-expanded', 'false')
   await expect(semanas.nth(1)).toContainText(/^Del 25\/10 al 31\/10/)
   await expect(semanas.nth(1).getByTestId('dnr-recuento')).toHaveText('Ninguna')
-  await expect(semanas.nth(1).getByTestId('dnr-semana-desglose')).toHaveCount(0)
+  await expect(semanas.nth(1).getByTestId('dnr-recuento')).toHaveAttribute('data-vacia', 'ninguna')
   await expect(semanas.nth(1).getByRole('button')).toHaveCount(0)
-  await expect(semanas.nth(2).getByTestId('dnr-recuento')).toHaveText('1 DNR')
-  await expect(semanas.nth(2).getByTestId('dnr-semana-desglose')).toHaveText('1 no te cuenta')
+  await expect(semanas.nth(2).getByTestId('dnr-mini-no_cuentan')).toHaveText('1')
+  await expect(semanas.nth(2).getByTestId('dnr-semana-desglose')).toHaveText('1 no cuenta')
   await expect(pantalla.getByTestId('dnr-fila')).toHaveCount(2)
 
-  // 4. Qué es cada estado, al final.
+  // 4. Qué es cada color, al final y PLEGADO: un toque lo abre. «Pendiente» no dice que Amazon no la haya revisado.
   const estados = pantalla.getByTestId('dnr-estados')
-  await expect(estados).toContainText('Amazon te la apunta como fallo.')
-  await expect(estados).toContainText('suele tardar unos días')
-  // El orden en la pantalla: la frase, cuáles son, las anteriores y los estados.
+  const boton = estados.getByRole('button', { name: 'Qué es cada color' })
+  await expect(boton).toHaveAttribute('aria-expanded', 'false')
+  await expect(estados.getByTestId('dnr-estado-explica')).toHaveCount(0)
+  await boton.click()
+  await expect(boton).toHaveAttribute('aria-expanded', 'true')
+  await expect(estados.getByTestId('dnr-estado-explica')).toHaveText([
+    'Amazon te la apunta como fallo.', 'Amazon la revisó y no te la apunta.', 'Aún no se sabe si te cuenta.'])
+  await expect(estados).not.toContainText('aún no la ha revisado')
+  // El orden en la pantalla: la frase, cuáles son, las anteriores y los colores.
   const y = async (l) => (await l.boundingBox()).y
   expect(await y(frase)).toBeLessThan(await y(filas.first()))
   expect(await y(filas.last())).toBeLessThan(await y(semanas.first()))
@@ -177,44 +209,45 @@ test('arriba y en grande, cuántas lleva esta semana; debajo, cuáles; las anter
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
-test('con una sola, en singular y sin desglose', async ({ page }) => {
+test('con una sola, en singular y con su contador; sin ninguna que le cuente, el número no va en rojo', async ({ page }) => {
   const fallos = vigilar(page)
   await entrar(page, { mias: conEstaSemana(paquetes(1, 'sin_clasificar')) })
   await expect(casilla(page).getByTestId('dnr-casilla-semana')).toHaveText('Esta semana: 1')
   await casilla(page).click()
   await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana llevas 1 DNR')
   await expect(page.getByTestId('dnr-numero')).toHaveText('1')
-  await expect(page.getByTestId('dnr-desglose')).toHaveCount(0)
+  await expect(page.getByTestId('dnr-numero')).not.toHaveClass(/peligro/)
+  await expect(page.getByTestId('dnr-desglose').locator('span[data-testid]')).toHaveText(['1 pendiente'])
   const filas = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
   await expect(filas).toHaveCount(1)
-  await expect(filas).toContainText('TBA999000000000')
-  await expect(filas).toContainText('Sin clasificar')
+  await expect(filas.getByTestId('dnr-paquete')).toHaveText('TBA999000000000')
+  await expect(filas.getByTestId('dnr-estado')).toHaveText('Pendiente')
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
-test('con cinco, el número y el desglose en plural', async ({ page }) => {
+test('con cinco, el número y los contadores en plural', async ({ page }) => {
   const fallos = vigilar(page)
-  await entrar(page, { mias: conEstaSemana([...paquetes(3), ...paquetes(2, 'no_cuenta', 'TBA88800000000')]) })
-  await expect(casilla(page).getByTestId('dnr-casilla-semana')).toHaveText('Esta semana: 5')
+  await entrar(page, { mias: conEstaSemana([...paquetes(3), ...paquetes(2, 'no_cuenta', 'TBA88800000000'), ...paquetes(2, 'sin_clasificar', 'TBA77700000000')]) })
+  await expect(casilla(page).getByTestId('dnr-casilla-semana')).toHaveText('Esta semana: 7')
   await casilla(page).click()
-  await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana llevas 5 DNR')
-  await expect(page.getByTestId('dnr-numero')).toHaveText('5')
-  await expect(page.getByTestId('dnr-desglose')).toHaveText('3 te cuentan · 2 no te cuentan')
-  await expect(page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')).toHaveCount(5)
+  await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana llevas 7 DNR')
+  await expect(page.getByTestId('dnr-desglose').locator('span[data-testid]')).toHaveText(['3 te cuentan', '2 no cuentan', '2 pendientes'])
+  await expect(page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')).toHaveCount(7)
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
-test('sin ninguna esta semana y con datos de esta semana, lo dice en grande con la marca verde, y la casilla también', async ({ page }) => {
+test('sin ninguna esta semana y con datos de esta semana: «Esta semana, ninguna» con la marca verde, y la casilla también', async ({ page }) => {
   const fallos = vigilar(page)
   // datos_hasta (10/11) ya es de esta semana (desde el 8/11): se sabe que no lleva ninguna.
   await entrar(page, { mias: conEstaSemana([]) })
   await expect(casilla(page).getByTestId('dnr-casilla-semana')).toHaveText('Esta semana: ninguna')
   await casilla(page).click()
-  await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana no llevas ninguna')
+  await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana, ninguna')
   await expect(page.getByTestId('dnr-marca-verde')).toBeVisible()
   await expect(page.getByTestId('dnr-numero')).toHaveCount(0)
+  await expect(page.getByTestId('dnr-desglose')).toHaveCount(0)
   await expect(page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')).toHaveCount(0)
-  await expect(page.getByTestId('dnr-hasta')).toHaveText('Hay datos hasta el martes, 10/11')
+  await expect(page.getByTestId('dnr-hasta')).toHaveText('Datos hasta el mar 10/11')
   // Las anteriores siguen ahí, cerradas.
   await expect(page.getByTestId('dnr-anteriores').getByTestId('dnr-semana')).toHaveCount(3)
   await expect(page.getByRole('button', { name: /La semana pasada/ })).toHaveAttribute('aria-expanded', 'false')
@@ -225,12 +258,13 @@ test('F3/F6: un lunes sin datos de esta semana no dice «ninguna» ni pone la ma
   const fallos = vigilar(page)
   // Los datos acaban el sábado 7/11, antes del domingo 8/11 en que empieza esta semana: de esta semana no se sabe nada.
   await entrar(page, { mias: conEstaSemana([], { datos_hasta: '2026-11-07' }) })
-  await expect(casilla(page).getByTestId('dnr-casilla-semana')).toHaveText('Esta semana: aún sin datos')
+  await expect(casilla(page).getByTestId('dnr-casilla-semana')).toHaveText('Esta semana: sin datos')
   await casilla(page).click()
   await expect(page.getByTestId('dnr-frase')).toHaveText('De esta semana aún no hay reportes')
   await expect(page.getByTestId('dnr-marca-verde')).toHaveCount(0)
-  await expect(page.getByTestId('mis-dnr')).not.toContainText('no llevas ninguna')
-  await expect(page.getByTestId('dnr-hasta')).toHaveText('Hay datos hasta el sábado, 7/11')
+  await expect(page.getByTestId('dnr-sin-marca')).toBeVisible()
+  await expect(page.getByTestId('mis-dnr')).not.toContainText('ninguna')
+  await expect(page.getByTestId('dnr-hasta')).toHaveText('Datos hasta el sáb 7/11')
   // «La semana pasada», la que acaba de llegar, ABIERTA sin tocarla, con sus tarjetas; y se cierra al tocarla.
   const pasada = page.getByRole('button', { name: /La semana pasada/ })
   await expect(pasada).toHaveAttribute('aria-expanded', 'true')
@@ -245,19 +279,66 @@ test('F3/F6: un lunes sin datos de esta semana no dice «ninguna» ni pone la ma
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
-test('F3/F18: sin ningún reporte de su centro lo dice, sin «ninguna», sin marca verde y sin «hay datos hasta»', async ({ page }) => {
+test('F3/F18 y G5/G7: sin ningún reporte de su centro lo dice, sin «ninguna» ni marca verde en ninguna semana', async ({ page }) => {
   const fallos = vigilar(page)
   const vacias = { ...DATOS, datos_hasta: null, semanas: DATOS.semanas.map((s) => semana(s.semana, s.hasta, [])) }
   await entrar(page, { mias: vacias })
-  await expect(casilla(page).getByTestId('dnr-casilla-semana')).toHaveText('Esta semana: aún sin datos')
+  await expect(casilla(page).getByTestId('dnr-casilla-semana')).toHaveText('Esta semana: sin datos')
   await casilla(page).click()
   await expect(page.getByTestId('dnr-frase')).toHaveText('Aún no hay reportes de tu centro')
   await expect(page.getByTestId('dnr-marca-verde')).toHaveCount(0)
   await expect(page.getByTestId('dnr-hasta')).toHaveCount(0)
-  // Ya no acusa a la oficina de no subir nada.
+  // G5/G7: las semanas anteriores, sin datos, no aseguran «Ninguna» en verde: «Sin datos», neutras.
+  const recuentos = page.getByTestId('dnr-anteriores').getByTestId('dnr-recuento')
+  await expect(recuentos).toHaveText(['Sin datos', 'Sin datos', 'Sin datos'])
+  for (const r of await recuentos.all()) await expect(r).not.toHaveClass(/ruta-ok/)
+  await expect(page.getByTestId('mis-dnr')).not.toContainText('Ninguna')
+  // Ya no acusa a la oficina de no subir nada; el recordatorio sigue; «¿Alguna no es tuya?», no (G16: no hay ninguna).
   await expect(page.getByTestId('mis-dnr')).not.toContainText('La oficina aún no ha subido')
   await expect(page.getByTestId('dnr-recordatorio')).toBeVisible()
+  await expect(page.getByTestId('dnr-no-es-mia')).toHaveCount(0)
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('G5/G7: con datos que acaban antes de una semana anterior, esa semana dice «Sin datos» y la que sí los tiene, «Ninguna» en verde', async ({ page }) => {
+  // Los datos acaban el miércoles 28/10: de la semana del 1/11 no se sabe nada; la del 25/10 sí tiene datos.
+  const viejos = {
+    ...DATOS, datos_hasta: '2026-10-28',
+    semanas: [semana('2026-11-08', '2026-11-14', []), semana('2026-11-01', '2026-11-07', []), semana('2026-10-25', '2026-10-31', []),
+      semana('2026-10-18', '2026-10-24', [dnr('2026-10-20', 'TBA123456789008', 'no_cuenta')])],
+  }
+  await entrar(page, { mias: viejos })
+  await casilla(page).click()
+  const filas = page.getByTestId('dnr-anteriores').getByTestId('dnr-semana')
+  await expect(filas.nth(0).getByTestId('dnr-recuento')).toHaveText('Sin datos')
+  await expect(filas.nth(0).getByTestId('dnr-recuento')).toHaveAttribute('data-vacia', 'sin_datos')
+  await expect(filas.nth(1).getByTestId('dnr-recuento')).toHaveText('Ninguna')
+  await expect(filas.nth(1).getByTestId('dnr-recuento')).toHaveClass(/text-ruta-ok-texto/)
+})
+
+test('G3: con un ID en revisión no se afirma nada de esta semana: ni «ninguna» ni la marca verde, y la casilla dice «en revisión»', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrar(page, { mias: conEstaSemana([], { en_revision: true }) })
+  await expect(casilla(page).getByTestId('dnr-casilla-semana')).toHaveText('Esta semana: en revisión')
+  await casilla(page).click()
+  await expect(page.getByTestId('dnr-en-revision')).toContainText('puede que aquí falte alguna')
+  await expect(page.getByTestId('dnr-frase')).toHaveText('Tu ID de reparto está en revisión')
+  await expect(page.getByTestId('dnr-marca-verde')).toHaveCount(0)
+  await expect(page.getByTestId('mis-dnr')).not.toContainText('ninguna')
+  // Las semanas anteriores vacías tampoco se celebran en verde.
+  const vacia = page.getByTestId('dnr-anteriores').getByTestId('dnr-recuento').filter({ hasText: 'Ninguna' })
+  await expect(vacia).toHaveAttribute('data-vacia', 'neutra')
+  await expect(vacia).not.toHaveClass(/ruta-ok/)
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('G3: con un ID en revisión y DNR esta semana, se enseñan, pero el número no se presenta como el total', async ({ page }) => {
+  await entrar(page, { mias: conEstaSemana(paquetes(2), { en_revision: true }) })
+  await expect(casilla(page).getByTestId('dnr-casilla-semana')).toHaveText('Esta semana: en revisión')
+  await casilla(page).click()
+  await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana, sin las que están en revisión 2 DNR')
+  await expect(page.getByTestId('mis-dnr')).not.toContainText('llevas')
+  await expect(page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')).toHaveCount(2)
 })
 
 test('una semana anterior se abre al tocarla y enseña cuáles fueron; otro toque la cierra', async ({ page }) => {
@@ -271,11 +352,11 @@ test('una semana anterior se abre al tocarla y enseña cuáles fueron; otro toqu
   await expect(pasada).toHaveAttribute('aria-expanded', 'true')
   const filas = anteriores.getByTestId('dnr-fila')
   await expect(filas).toHaveCount(2)
-  await expect(filas.nth(0)).toContainText('TBA123456789010')
-  await expect(filas.nth(0)).toContainText('Te cuenta')
-  await expect(filas.nth(1)).toContainText('TBA123456789009')
-  await expect(filas.nth(1)).toContainText('No te cuenta')
-  await expect(filas.nth(1)).toContainText('Nueva')
+  await expect(filas.nth(0).getByTestId('dnr-paquete')).toHaveText('TBA123456789010')
+  await expect(filas.nth(0).getByTestId('dnr-estado')).toHaveText('Te cuenta')
+  await expect(filas.nth(1).getByTestId('dnr-paquete')).toHaveText('TBA123456789009')
+  await expect(filas.nth(1).getByTestId('dnr-estado')).toHaveText('No cuenta')
+  await expect(filas.nth(1).getByTestId('dnr-nueva')).toHaveText('Nueva')
   await pasada.click()
   await expect(pasada).toHaveAttribute('aria-expanded', 'false')
   await expect(anteriores.getByTestId('dnr-fila')).toHaveCount(0)
@@ -291,13 +372,12 @@ test('en inglés, el singular y el plural cambian («1 DNR» / «5 DNRs»)', asy
   await casillaEn.click()
   await expect(page.getByTestId('dnr-frase')).toHaveText('This week you have 1 DNR')
   await expect(page.getByTestId('dnr-hasta')).toContainText('Data up to')
-  await expect(page.getByTestId('dnr-anteriores').getByTestId('dnr-recuento').first()).toHaveText('2 DNRs')
-  await expect(page.getByTestId('dnr-anteriores').getByTestId('dnr-recuento').last()).toHaveText('1 DNR')
+  await expect(page.getByTestId('dnr-fila').first().getByTestId('dnr-estado')).toHaveText('Counts')
   await contesta(page, conEstaSemana(paquetes(5)))
   await page.getByRole('button', { name: 'Back' }).click()
   await page.getByRole('button', { name: /^My DNRs/ }).click()
   await expect(page.getByTestId('dnr-frase')).toHaveText('This week you have 5 DNRs')
-  await expect(page.getByTestId('dnr-desglose')).toHaveText('5 count')
+  await expect(page.getByTestId('dnr-contador-cuentan')).toHaveText('5 count')
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
@@ -313,7 +393,7 @@ test('F4/F16 y F13: las que solo cambiaron de estado van aparte como «actualiza
   await page.getByRole('button', { name: 'Volver' }).click()
   // F13: lo apuntado en el móvil, por conductor, sin ningún código de paquete.
   const apuntado = await page.evaluate(() => localStorage.getItem('fds_dnr_vistas_d1'))
-  expect(apuntado).not.toMatch(/TBA/)
+  expect(apuntado).not.toMatch(/TBA|12345/)
   expect(Object.keys(JSON.parse(apuntado))).toHaveLength(5)
 
   // Amazon clasifica las dos: ninguna DNR nueva. La casilla, sin número rojo y diciendo «2 actualizadas».
@@ -324,9 +404,9 @@ test('F4/F16 y F13: las que solo cambiaron de estado van aparte como «actualiza
   await expect(numeroRojo(page)).toHaveCount(0)
   await casilla(page).click()
   await expect(page.getByTestId('mis-dnr').getByText('2 actualizadas', { exact: true })).toBeVisible()
-  await expect(page.getByTestId('mis-dnr')).not.toContainText(/\bnuevas?\b/)
+  await expect(page.getByTestId('mis-dnr')).not.toContainText(/\bnuevas?\b/i)
   await expect(page.getByTestId('dnr-fila').filter({ hasText: 'TBA123456789011' }).getByTestId('dnr-nueva')).toHaveText('Actualizada')
-  // En la línea de la semana pasada, aparte y sin «nuevas».
+  // En la fila de la semana pasada, aparte y sin «nuevas».
   const pasada = page.getByTestId('dnr-anteriores').getByTestId('dnr-semana').first()
   await expect(pasada.getByTestId('dnr-semana-actualizadas')).toHaveText('1 actualizada')
   await expect(pasada.getByTestId('dnr-semana-nuevas')).toHaveCount(0)
@@ -345,9 +425,84 @@ test('F4/F16 y F13: las que solo cambiaron de estado van aparte como «actualiza
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
-test('sin el módulo de la DNR diaria no hay casilla, y no se vuelve a preguntar en 12 horas (F21)', async ({ page }) => {
+test('G17: «Nueva» va en el tono de marca y «Actualizada» en gris, también en la tarjeta', async ({ page }) => {
+  const antes = structuredClone(DATOS)
+  antes.semanas[0].dnr[1].estado = 'sin_clasificar'
+  await entrar(page, { mias: antes })
+  await casilla(page).click()
+  await page.getByRole('button', { name: 'Volver' }).click()
+  const despues = structuredClone(DATOS)
+  despues.semanas[0].dnr.unshift(dnr('2026-11-11', 'TBA123456789013', 'sin_clasificar'))
+  await contesta(page, despues)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await casilla(page).click()
+  const color = (l) => l.evaluate((el) => {
+    const [r, g, b] = getComputedStyle(el).backgroundColor.match(/\d+(\.\d+)?/g).map(Number)
+    return Math.max(r, g, b) - Math.min(r, g, b)   // cuánto color tiene el relleno: 0 = gris
+  })
+  const nueva = page.getByTestId('dnr-fila').filter({ hasText: 'TBA123456789013' }).getByTestId('dnr-nueva')
+  const actualizada = page.getByTestId('dnr-fila').filter({ hasText: 'TBA123456789011' }).getByTestId('dnr-nueva')
+  await expect(nueva).toHaveText('Nueva')
+  await expect(actualizada).toHaveText('Actualizada')
+  expect(await color(actualizada)).toBeLessThan(25)
+  expect(await color(nueva)).toBeGreaterThan(await color(actualizada))
+})
+
+test('G12: una DNR ya vista que deja de venir un rato y vuelve no sale otra vez como «Nueva»; lo de más de 5 semanas se poda', async ({ page }) => {
   const fallos = vigilar(page)
-  const pedidas = await entrar(page, { mias: { detail: 'Not Found' }, status: 404 })
+  // En el móvil, una huella vista hace 40 días (se poda) y otra hace un día (se queda), con una sal fija.
+  await entrar(page, { vistas: { sal: 'salprueba', huellas: { vieja1: ['cuenta', 40 * 864e5], reciente1: ['cuenta', 864e5] } } })
+  await casilla(page).click()
+  await expect(page.getByTestId('dnr-nueva')).toHaveCount(2)
+  await page.getByRole('button', { name: 'Volver' }).click()
+  const tras1 = JSON.parse(await page.evaluate(() => localStorage.getItem('fds_dnr_vistas_d1')))
+  expect(tras1.vieja1).toBeUndefined()
+  expect(tras1.reciente1).toBeDefined()
+  expect(Object.keys(tras1)).toHaveLength(6)
+  // La 011 deja de venir (su ID entra en revisión) y la abre así.
+  const sin011 = structuredClone(DATOS)
+  sin011.en_revision = true
+  sin011.semanas[0].dnr.splice(1, 1)
+  await contesta(page, sin011)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await casilla(page).click()
+  await expect(page.getByTestId('dnr-fila')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Volver' }).click()
+  // Vuelve: ya la había visto, así que ni «Nueva» ni número rojo.
+  await contesta(page, DATOS)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(casilla(page)).toBeVisible()
+  await expect(numeroRojo(page)).toHaveCount(0)
+  await expect(casilla(page)).not.toHaveAccessibleName(/nueva/)
+  await casilla(page).click()
+  await expect(page.getByTestId('dnr-fila').filter({ hasText: 'TBA123456789011' })).toBeVisible()
+  await expect(page.getByTestId('dnr-nueva')).toHaveCount(0)
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('G9: la huella lleva una sal de este móvil: el mismo paquete deja otra huella en otro móvil', async ({ browser, baseURL }) => {
+  const huellasDe = async () => {
+    const ctx = await browser.newContext({ baseURL })
+    const page = await ctx.newPage()
+    await entrar(page)
+    await casilla(page).click()
+    await expect(page.getByTestId('dnr-fila').first()).toBeVisible()
+    const r = await page.evaluate(() => ({ sal: localStorage.getItem('fds_dnr_sal'), vistas: localStorage.getItem('fds_dnr_vistas_d1') }))
+    await ctx.close()
+    return r
+  }
+  const [a, b] = [await huellasDe(), await huellasDe()]
+  expect(a.sal).toBeTruthy()
+  expect(a.sal).not.toBe(b.sal)
+  const ka = Object.keys(JSON.parse(a.vistas)).sort()
+  const kb = Object.keys(JSON.parse(b.vistas)).sort()
+  expect(ka).toHaveLength(5)
+  expect(ka.filter((k) => kb.includes(k))).toHaveLength(0)
+})
+
+test('sin el módulo de la DNR diaria («Sin DNR diaria») no hay casilla, y no se vuelve a preguntar en 12 horas (F21)', async ({ page }) => {
+  const fallos = vigilar(page)
+  const pedidas = await entrar(page, { mias: SIN_DNR, status: 404 })
   await expect(page.getByRole('button', { name: /Mis turnos/ })).toBeVisible()
   await expect.poll(() => pedidas.length).toBe(1)
   await expect(casilla(page)).toHaveCount(0)
@@ -358,6 +513,17 @@ test('sin el módulo de la DNR diaria no hay casilla, y no se vuelve a preguntar
   expect(pedidas).toHaveLength(1)
   await expect(casilla(page)).toHaveCount(0)
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('G10: el 404 genérico (un servidor que aún no tiene la ruta) esconde la casilla pero NO se recuerda 12 horas', async ({ page }) => {
+  const pedidas = await entrar(page, { mias: NOT_FOUND, status: 404 })
+  await expect.poll(() => pedidas.length).toBe(1)
+  await expect(casilla(page)).toHaveCount(0)
+  expect(await page.evaluate(() => localStorage.getItem('fds_dnr_no_d1'))).toBeNull()
+  // El servidor ya la tiene: al abrir el portal otra vez, la pide y sale la casilla.
+  await contesta(page, DATOS)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(casilla(page)).toBeVisible()
 })
 
 test('F21: pasadas 12 horas del 404 vuelve a preguntar, y un 200 borra el recuerdo', async ({ page }) => {
@@ -409,6 +575,26 @@ test('F20: con un 5xx y sin saber si la tiene, no sale', async ({ page }) => {
   await expect(casilla(page)).toHaveCount(0)
 })
 
+test('G8: abierta con ?vista=dnr en una empresa sin la DNR diaria, vuelve al inicio (sin «Reintentar») y lo apunta', async ({ page }) => {
+  const pedidas = await entrar(page, { mias: SIN_DNR, status: 404, url: '/conductor?vista=dnr', ancla: false })
+  await expect(page.getByRole('heading', { name: /Hola, ANA/ })).toBeVisible({ timeout: 15000 })
+  await expect(page.getByRole('button', { name: 'Reintentar' })).toHaveCount(0)
+  await expect(page.getByText('No se han podido cargar tus DNR.')).toHaveCount(0)
+  await expect(casilla(page)).toHaveCount(0)
+  // Apuntado como la casilla: el inicio no la vuelve a pedir.
+  expect(Number(await page.evaluate(() => localStorage.getItem('fds_dnr_no_d1')))).toBeGreaterThan(0)
+  await page.waitForLoadState('networkidle')
+  expect(pedidas).toHaveLength(1)
+})
+
+test('G8: abierta con ?vista=dnr y la ficha de baja (403), vuelve al inicio sin «Reintentar»', async ({ page }) => {
+  await entrar(page, { mias: { detail: 'Tu ficha está de baja' }, status: 403, url: '/conductor?vista=dnr', ancla: false })
+  await expect(page.getByRole('heading', { name: /Hola, ANA/ })).toBeVisible({ timeout: 15000 })
+  await expect(page.getByRole('button', { name: 'Reintentar' })).toHaveCount(0)
+  await expect(casilla(page)).toHaveCount(0)
+  expect(await page.evaluate(() => localStorage.getItem('fds_dnr_no_d1'))).toBeNull()
+})
+
 test('F2: al salir y entrar otro conductor en el mismo móvil, la casilla no enseña ni un momento lo del anterior', async ({ page }) => {
   const fallos = vigilar(page)
   await entrar(page)
@@ -438,7 +624,7 @@ test('F2: al salir y entrar otro conductor en el mismo móvil, la casilla no ens
   await page.locator('input[autocomplete="current-password"]').press('Enter')
   await expect(page.getByRole('heading', { name: /Hola, LUIS/ })).toBeVisible()
   await expect(casilla(page)).toHaveCount(0)
-  await expect(page.getByText('Esta semana: 2')).toHaveCount(0)
+  await expect(page.getByTestId('dnr-casilla-semana')).toHaveCount(0)
   soltar()
   await expect(casilla(page).getByTestId('dnr-casilla-semana')).toHaveText('Esta semana: 1')
   // Sus nuevas son las suyas (nunca las ha visto él), no las de Ana: lo apuntado va por conductor, también sin el id en
@@ -461,10 +647,13 @@ test('sin ID de reparto lo explica y no enseña semanas', async ({ page }) => {
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
-test('con el ID en revisión lo dice', async ({ page }) => {
-  await entrar(page, { mias: { tiene_id: true, en_revision: true, datos_hasta: null, semanas: [] } })
+test('con el ID en revisión y nada que enseñar (G1) lo dice, y sin «¿Alguna no es tuya?» (G16); la casilla, «en revisión»', async ({ page }) => {
+  await entrar(page, { mias: { tiene_id: true, en_revision: true, datos_hasta: '2026-11-10', semanas: [] } })
+  await expect(casilla(page).getByTestId('dnr-casilla-semana')).toHaveText('Esta semana: en revisión')
   await casilla(page).click()
   await expect(page.getByTestId('dnr-en-revision')).toContainText('La oficina está revisando tu ID de reparto')
+  await expect(page.getByTestId('dnr-no-es-mia')).toHaveCount(0)
+  await expect(page.getByTestId('dnr-recordatorio')).toHaveCount(0)
 })
 
 test('si falla la carga, lo dice y deja reintentar', async ({ page }) => {
@@ -479,28 +668,23 @@ test('si falla la carga, lo dice y deja reintentar', async ({ page }) => {
 })
 
 test('se abre directa con ?vista=dnr (para un aviso que lleve allí)', async ({ page }) => {
-  await page.addInitScript((tk) => {
-    localStorage.setItem('flota_driver_token', tk)
-    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA PÉREZ', center: 'OGA5' }))
-    localStorage.setItem('cookie_consent', '1')
-  }, TOKEN)
-  await simularApi(page, 'vacio')
-  await page.route(/\/api\/diarios\/mias/, json(DATOS))
-  await page.goto('/conductor?vista=dnr', { waitUntil: 'domcontentloaded' })
+  await entrar(page, { url: '/conductor?vista=dnr', ancla: false })
   await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana llevas 2 DNR', { timeout: 15000 })
   await expect(page.getByTestId('dnr-semana')).toHaveCount(3)
 })
 
-test('en el móvil la frase se ve sin bajar, nada se sale de lado y lo que se toca mide al menos 44', async ({ page }) => {
+test('en el móvil el resumen y el recordatorio se ven sin bajar, nada se sale de lado y lo que se toca mide al menos 44', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await entrar(page, { mias: conEstaSemana(paquetes(5)) })
   await casilla(page).click()
   await expect(page.getByTestId('dnr-semana')).toHaveCount(3)
-  // La frase grande, entera en la primera pantalla.
-  const frase = await page.getByTestId('dnr-frase').boundingBox()
-  expect(frase.y + frase.height).toBeLessThanOrEqual(844)
-  // Y con una semana anterior abierta, sus filas tampoco se salen.
+  for (const t of ['dnr-resumen', 'dnr-recordatorio']) {
+    const caja = await page.getByTestId(t).boundingBox()
+    expect(caja.y + caja.height).toBeLessThanOrEqual(844)
+  }
+  // Y con una semana anterior abierta y los colores abiertos, nada se sale.
   await page.getByRole('button', { name: /La semana pasada/ }).click()
+  await abrirColores(page)
   await expect(page.getByTestId('dnr-anteriores').getByTestId('dnr-fila')).toHaveCount(2)
   const ancho = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, ventana: window.innerWidth }))
   expect(ancho.doc).toBeLessThanOrEqual(ancho.ventana)
@@ -508,7 +692,7 @@ test('en el móvil la frase se ve sin bajar, nada se sale de lado y lo que se to
     const caja = await b.boundingBox()
     expect(caja.height).toBeGreaterThanOrEqual(44)
   }
-  // Ningún código de paquete ni estado queda cortado fuera de su fila.
+  // Ninguna tarjeta queda fuera de la pantalla.
   for (const f of await page.getByTestId('dnr-fila').all()) {
     const caja = await f.boundingBox()
     expect(caja.x).toBeGreaterThanOrEqual(0)
@@ -516,77 +700,111 @@ test('en el móvil la frase se ve sin bajar, nada se sale de lado y lo que se to
   }
 })
 
-test('cada DNR en su tarjeta con qué día es cada cosa, su CP y qué pasó; lo que no se sabe no se dice; la próxima vez, si toca', async ({ page }) => {
+test('V5: cada DNR con su estado y su día arriba, el paquete, el CP y qué pasó en etiquetas cortas (la frase larga, para el lector de pantalla)', async ({ page }) => {
   const fallos = vigilar(page)
   await entrar(page)
   await casilla(page).click()
   const esta = page.getByTestId('dnr-esta-semana')
   const [sinDatos, conTodo] = [esta.getByTestId('dnr-fila').nth(0), esta.getByTestId('dnr-fila').nth(1)]
 
-  // F8/F9: con el día de la entrega, ese arriba con el CP, y el de la DNR, más discreto, debajo del paquete.
-  await expect(conTodo.getByTestId('dnr-dia')).toHaveText('Entregado el sáb, 7/11 · CP 15704')
-  await expect(conTodo.getByTestId('dnr-concesion')).toHaveText('DNR del lun, 9/11')
+  // F8/F9: con el día de la entrega, ese arriba (con su furgoneta y su frase para el lector) y, abajo, el CP y el de la DNR.
+  await expect(conTodo.getByTestId('dnr-dia')).toHaveText('sáb 7/11')
+  await expect(conTodo.getByTestId('dnr-dia-frase')).toHaveText('Entregado el sáb 7/11')
+  await expect(conTodo.getByTestId('dnr-cp')).toHaveText('CP 15704')
+  await expect(conTodo.getByTestId('dnr-concesion')).toHaveText('DNR lun 9/11')
   await expect(conTodo.getByTestId('dnr-paquete')).toHaveText('TBA123456789011')
   const yDe = async (l) => (await l.boundingBox()).y
   expect(await yDe(conTodo.getByTestId('dnr-paquete'))).toBeLessThan(await yDe(conTodo.getByTestId('dnr-concesion')))
-  // Sin él, solo el de la DNR, dicho como lo que es.
-  await expect(sinDatos.getByTestId('dnr-dia')).toHaveText('DNR del mar, 10/11 · CP 15704')
+  // Sin él, arriba el de la DNR, dicho como lo que es; abajo, solo el CP.
+  await expect(sinDatos.getByTestId('dnr-dia')).toHaveText('DNR mar 10/11')
+  await expect(sinDatos.getByTestId('dnr-dia-frase')).toHaveCount(0)
   await expect(sinDatos.getByTestId('dnr-concesion')).toHaveCount(0)
-  await expect(sinDatos).not.toContainText('Entregado')
+  await expect(sinDatos.getByTestId('dnr-cp')).toHaveText('CP 15704')
 
-  // La que trae de todo: su CP, dónde la marcó, la distancia, que no llamó y la foto, cada cosa con su frase.
-  await expect(conTodo.getByTestId('dnr-cp')).toHaveText('CP 15704')
+  // La que trae de todo: cada cosa en su etiqueta corta, con su tono y su frase larga.
   await expect(conTodo.getByTestId('dnr-estado')).toHaveText('Te cuenta')
-  await expect(conTodo.getByTestId('dnr-hecho-como')).toHaveText('Lo marcaste en la puerta')
-  await expect(conTodo.getByTestId('dnr-hecho-lejos')).toHaveText('Lo marcaste a más de 25 m del sitio')
-  await expect(conTodo.getByTestId('dnr-hecho-llamada')).toHaveText('No llamaste al cliente')
-  await expect(conTodo.getByTestId('dnr-hecho-foto')).toHaveText('La foto no pasó la revisión: salió borrosa')
-  // «No llamaste» ya dice el fallo de contacto: no se repite, ni su consejo.
-  await expect(conTodo.getByTestId('dnr-hecho-contacto')).toHaveCount(0)
-  // Se sabe que no llamó y que la foto falló: «lo que puedes hacer la próxima vez», con las dos cosas.
-  const proxima = conTodo.getByTestId('dnr-proxima')
-  await expect(proxima.getByTestId('dnr-proxima-titulo')).toHaveText('Lo que puedes hacer la próxima vez')
-  await expect(proxima.getByTestId('dnr-consejo')).toHaveText([
-    'Llama al cliente antes de dejar el paquete.', 'Saca la foto con el paquete y el sitio bien a la vista.'])
-  // F29: el título manda sobre sus consejos (más peso y no más pequeño).
-  const letra = (l) => l.evaluate((el) => ({ peso: Number(getComputedStyle(el).fontWeight), tam: parseFloat(getComputedStyle(el).fontSize) }))
-  const [titulo, consejo] = [await letra(proxima.getByTestId('dnr-proxima-titulo')), await letra(proxima.getByTestId('dnr-consejo').first())]
-  expect(titulo.peso).toBeGreaterThan(consejo.peso)
-  expect(titulo.tam).toBeGreaterThanOrEqual(consejo.tam)
+  const hecho = (k) => conTodo.getByTestId(`dnr-hecho-${k}`)
+  const esperado = [
+    ['como', 'Puerta', 'dato', 'Lo marcaste en la puerta'],
+    ['lejos', 'A más de 25 m', 'fallo', 'Lo marcaste a más de 25 m del sitio'],
+    ['llamada', 'Sin llamada', 'fallo', 'No llamaste al cliente'],
+    ['foto', 'Foto borrosa', 'fallo', 'La foto no pasó la revisión: salió borrosa'],
+  ]
+  for (const [k, visible, tono, frase] of esperado) {
+    await expect(corto(hecho(k))).toHaveText(visible)
+    await expect(hecho(k)).toHaveAttribute('data-tono', tono)
+    await expect(hecho(k)).toHaveAttribute('title', frase)
+    await expect(hecho(k).locator('.sr-only')).toHaveText(frase)
+  }
+  // «Sin llamada» ya dice el fallo de contacto: no se repite. Y ya no hay bloque de consejos: lo dicen las etiquetas.
+  await expect(hecho('contacto')).toHaveCount(0)
+  await expect(page.getByTestId('mis-dnr')).not.toContainText('Lo que puedes hacer la próxima vez')
+  // La que le cuenta se distingue de un vistazo: su banda roja; las otras, sin ella.
+  await expect(conTodo).toHaveAttribute('data-cuenta', 'si')
+  const banda = (l) => l.evaluate((el) => parseFloat(getComputedStyle(el).borderLeftWidth))
+  expect(await banda(conTodo)).toBeGreaterThanOrEqual(4)
+  expect(await banda(sinDatos)).toBe(0)
 
   // La que no trae nada que se entienda: solo día, CP, paquete y estado.
-  await expect(sinDatos.getByTestId('dnr-cp')).toHaveText('CP 15704')
   await expect(sinDatos.getByTestId('dnr-que-paso')).toHaveCount(0)
-  await expect(sinDatos.getByTestId('dnr-proxima')).toHaveCount(0)
-  await expect(page.getByTestId('mis-dnr')).not.toContainText(/preferencia de entrega(?!, llama)/)
 
-  // El recordatorio, siempre bajo la frase grande y antes de las tarjetas; y quién decide qué es de quién, al final.
-  const recordatorio = page.getByTestId('dnr-recordatorio')
-  await expect(recordatorio).toHaveText('Recuerda: si el cliente tiene preferencia de entrega, llama y saca bien la foto; así no te cuenta.')
-  expect(await yDe(page.getByTestId('dnr-frase'))).toBeLessThan(await yDe(recordatorio))
-  expect(await yDe(recordatorio)).toBeLessThan(await yDe(sinDatos))
-  await expect(page.getByTestId('dnr-no-es-mia')).toHaveText('¿Alguna no es tuya? Díselo a la oficina.')
-  expect(await yDe(page.getByTestId('dnr-estados'))).toBeLessThan(await yDe(page.getByTestId('dnr-no-es-mia')))
-
-  // La semana pasada: la que llamó (12 s) con su fallo de contacto: F30, el consejo prudente (no afirma que no llamara);
-  // y la que no trae CP, sin CP.
+  // La semana pasada: la que llamó (12 s) con su fallo de contacto, y la que no trae CP, sin CP.
   await page.getByRole('button', { name: /La semana pasada/ }).click()
   const pasada = page.getByTestId('dnr-anteriores').getByTestId('dnr-fila')
-  await expect(pasada.nth(0).getByTestId('dnr-dia')).toHaveText('DNR del mié, 4/11 · CP 15704')
-  await expect(pasada.nth(0).getByTestId('dnr-hecho-como')).toHaveText('Lo marcaste en el buzón')
-  await expect(pasada.nth(0).getByTestId('dnr-hecho-lejos')).toHaveText('Lo marcaste a menos de 25 m del sitio')
-  await expect(pasada.nth(0).getByTestId('dnr-hecho-llamada')).toHaveText('Llamaste al cliente (12 s)')
-  await expect(pasada.nth(0).getByTestId('dnr-hecho-contacto')).toHaveText('Te apuntaron un fallo de contacto con el cliente')
-  await expect(pasada.nth(0).getByTestId('dnr-consejo')).toHaveText(['Contacta con el cliente antes de dejar el paquete.'])
-  await expect(pasada.nth(1)).toContainText('TBA123456789009')
+  await expect(pasada.nth(0).getByTestId('dnr-dia')).toHaveText('DNR mié 4/11')
+  await expect(corto(pasada.nth(0).getByTestId('dnr-hecho-como'))).toHaveText('Buzón')
+  await expect(corto(pasada.nth(0).getByTestId('dnr-hecho-lejos'))).toHaveText('En el sitio')
+  await expect(pasada.nth(0).getByTestId('dnr-hecho-lejos')).toHaveAttribute('data-tono', 'bien')
+  await expect(corto(pasada.nth(0).getByTestId('dnr-hecho-llamada'))).toHaveText('Llamaste · 12 s')
+  await expect(pasada.nth(0).getByTestId('dnr-hecho-llamada')).toHaveAttribute('title', 'Llamaste al cliente (12 s)')
+  await expect(corto(pasada.nth(0).getByTestId('dnr-hecho-contacto'))).toHaveText('Fallo de contacto')
+  await expect(pasada.nth(0).getByTestId('dnr-hecho-contacto')).toHaveAttribute('data-tono', 'fallo')
+  await expect(pasada.nth(1).getByTestId('dnr-paquete')).toHaveText('TBA123456789009')
   await expect(pasada.nth(1).getByTestId('dnr-cp')).toHaveCount(0)
-  await expect(pasada.nth(1).getByTestId('dnr-dia')).toHaveText('DNR del mar, 3/11')
-  // Sin euros, nunca; ni el ID.
+  await expect(pasada.nth(1).getByTestId('dnr-dia')).toHaveText('DNR mar 3/11')
+  // Sin euros, nunca.
   await expect(page.getByTestId('mis-dnr')).not.toContainText('€')
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
-test('F31: «Te cuenta» pesa más a la vista que «No te cuenta» (que ya no va en verde relleno)', async ({ page }) => {
+test('V5: el recordatorio pone la CONDICIÓN arriba y con peso, y debajo llama + foto clara → no te cuenta; el lector lee la frase entera', async ({ page }) => {
+  await entrar(page)
+  await casilla(page).click()
+  const r = page.getByTestId('dnr-recordatorio')
+  const condicion = r.getByTestId('dnr-recordatorio-condicion')
+  const pasos = r.getByTestId('dnr-recordatorio-pasos')
+  await expect(condicion).toHaveText('Solo si el cliente tiene preferencia de entrega')
+  await expect(pasos).toHaveText(/Llama\s*\+\s*Foto clara\s*No te cuenta/)
+  await expect(r.getByTestId('dnr-recordatorio-frase')).toHaveText(
+    'Recuerda: para que no te cuente, el cliente tiene que tener preferencia de entrega, y tú llamar y sacar bien la foto.')
+  // La condición, arriba y con la letra más grande del bloque.
+  const tam = (l) => l.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))
+  expect(await tam(condicion)).toBeGreaterThan(await tam(pasos))
+  const yDe = async (l) => (await l.boundingBox()).y
+  expect(await yDe(condicion)).toBeLessThan(await yDe(pasos))
+  // Con borde, para que destaque; bajo el resumen y antes de las tarjetas.
+  expect(await r.evaluate((el) => parseFloat(getComputedStyle(el).borderTopWidth))).toBeGreaterThan(0)
+  expect(await yDe(page.getByTestId('dnr-resumen'))).toBeLessThan(await yDe(r))
+  expect(await yDe(r)).toBeLessThan(await yDe(page.getByTestId('dnr-fila').first()))
+  // La frase vieja ya no está, y el botón del ejemplo, todavía no (falta la captura de Dani).
+  await expect(page.getByTestId('mis-dnr')).not.toContainText('así no te cuenta')
+  await expect(page.getByRole('button', { name: /entrega con preferencia/ })).toHaveCount(0)
+  // Y «díselo a la oficina», al final.
+  await expect(page.getByTestId('dnr-no-es-mia')).toHaveText('¿Alguna no es tuya? Díselo a la oficina.')
+  expect(await yDe(page.getByTestId('dnr-estados'))).toBeLessThan(await yDe(page.getByTestId('dnr-no-es-mia')))
+})
+
+test('G13/G18: si la entrega es el mismo día que la DNR, la fecha sale una sola vez', async ({ page }) => {
+  await entrar(page, { mias: conEstaSemana([dnr('2026-11-09', 'TBA123456789011', 'cuenta', { entrega: '2026-11-09' })]) })
+  await casilla(page).click()
+  const f = page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')
+  await expect(f.getByTestId('dnr-dia')).toHaveText('DNR lun 9/11')
+  await expect(f.getByTestId('dnr-concesion')).toHaveCount(0)
+  await expect(f.getByTestId('dnr-dia-frase')).toHaveCount(0)
+  await expect(f).not.toContainText(/9\/11.*9\/11/)
+})
+
+test('F31: «Te cuenta» pesa más a la vista que «No cuenta» (que no va en verde relleno)', async ({ page }) => {
   await entrar(page)
   await casilla(page).click()
   await page.getByRole('button', { name: /La semana pasada/ }).click()
@@ -598,7 +816,7 @@ test('F31: «Te cuenta» pesa más a la vista que «No te cuenta» (que ya no va
   const cuenta = filas.nth(0).getByTestId('dnr-estado')
   const noCuenta = filas.nth(1).getByTestId('dnr-estado')
   await expect(cuenta).toHaveText('Te cuenta')
-  await expect(noCuenta).toHaveText('No te cuenta')
+  await expect(noCuenta).toHaveText('No cuenta')
   // La buena, en gris; la que cuenta, con su color de peligro.
   expect(await fondo(noCuenta)).toBeLessThan(25)
   const color = (l) => l.evaluate((el) => {
@@ -608,67 +826,112 @@ test('F31: «Te cuenta» pesa más a la vista que «No te cuenta» (que ya no va
   expect(await color(cuenta)).toBeGreaterThan(await color(noCuenta))
 })
 
-test('F28: el foco del teclado se ve, por dentro, en los botones de las semanas anteriores', async ({ page }) => {
+test('F28: el foco del teclado se ve, por dentro, en los botones de las semanas anteriores y en «Qué es cada color»', async ({ page }) => {
   await entrar(page)
   await casilla(page).click()
-  const pasada = page.getByRole('button', { name: /La semana pasada/ })
-  await expect(pasada).toBeVisible()
-  let enfocado = false
-  for (let k = 0; k < 30 && !enfocado; k++) {
-    await page.keyboard.press('Tab')
-    enfocado = await pasada.evaluate((el) => document.activeElement === el)
+  for (const boton of [page.getByRole('button', { name: /La semana pasada/ }), page.getByRole('button', { name: 'Qué es cada color' })]) {
+    await expect(boton).toBeVisible()
+    let enfocado = false
+    for (let k = 0; k < 40 && !enfocado; k++) {
+      await page.keyboard.press('Tab')
+      enfocado = await boton.evaluate((el) => document.activeElement === el)
+    }
+    expect(enfocado).toBe(true)
+    expect(await boton.evaluate((el) => getComputedStyle(el).boxShadow)).toMatch(/inset/)
   }
-  expect(enfocado).toBe(true)
-  const sombra = await pasada.evaluate((el) => getComputedStyle(el).boxShadow)
-  expect(sombra).toMatch(/inset/)
 })
 
-test('F27 y F32: a 360 px en alemán y con «Letra más grande», el paquete entero en una línea y «Qué es cada estado» sin apretar', async ({ page }) => {
-  await page.setViewportSize({ width: 360, height: 780 })
-  await page.addInitScript(() => {
-    localStorage.setItem('fds_idioma', 'de')
-    localStorage.setItem('fds_letra', 'grande')
-    document.documentElement.setAttribute('data-letra', 'grande')
-  })
-  const largos = conEstaSemana([
-    dnr('2026-11-10', 'TBA319482771045', 'sin_clasificar'),
-    dnr('2026-11-09', 'TBA319400000009', 'no_cuenta', { entrega: '2026-11-07' }),
-  ])
-  await entrar(page, { mias: largos })
-  await page.getByRole('button', { name: /^Meine DNRs/ }).click()
-  await expect(page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')).toHaveCount(2)
-  for (const f of await page.getByTestId('dnr-fila').all()) {
-    const p = f.getByTestId('dnr-paquete')
-    const { alto, linea, derecha, fila } = await p.evaluate((el) => ({
-      alto: el.getBoundingClientRect().height,
-      linea: parseFloat(getComputedStyle(el).lineHeight),
-      derecha: el.getBoundingClientRect().right,
-      fila: el.closest('[data-testid="dnr-fila"]').getBoundingClientRect().right,
+for (const [idioma, nombre, entregado] of [['de', /^Meine DNRs/, 'Zugestellt am'], ['fr', /^Mes DNR/, 'Livré le']]) {
+  test(`F27, F32 y V5: a 360 px en ${idioma} y con «Letra más grande», el paquete entero en una línea, las etiquetas saltan sin cortarse y los colores sin apretar`, async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 780 })
+    await page.addInitScript((l) => {
+      localStorage.setItem('fds_idioma', l)
+      localStorage.setItem('fds_letra', 'grande')
+      document.documentElement.setAttribute('data-letra', 'grande')
+    }, idioma)
+    const largos = conEstaSemana([
+      dnr('2026-11-10', 'TBA319482771045', 'sin_clasificar', { como: 'puerta_trasera', lejos: false, llamada: 'si', segundos: 8, foto: 'bien' }),
+      dnr('2026-11-09', 'TBA319400000009', 'cuenta', { entrega: '2026-11-07', como: 'conserjeria', lejos: true, llamada: 'no', foto: 'mal', foto_motivo: 'en_furgoneta' }),
+    ])
+    await entrar(page, { mias: largos })
+    await page.getByRole('button', { name: nombre }).click()
+    await expect(page.getByTestId('dnr-esta-semana').getByTestId('dnr-fila')).toHaveCount(2)
+    for (const f of await page.getByTestId('dnr-fila').all()) {
+      const p = f.getByTestId('dnr-paquete')
+      const { alto, linea, derecha, fila } = await p.evaluate((el) => ({
+        alto: el.getBoundingClientRect().height,
+        linea: parseFloat(getComputedStyle(el).lineHeight),
+        derecha: el.getBoundingClientRect().right,
+        fila: el.closest('[data-testid="dnr-fila"]').getBoundingClientRect().right,
+      }))
+      expect(alto).toBeLessThan(linea * 1.5)          // una sola línea
+      expect(derecha).toBeLessThanOrEqual(fila)        // y dentro de su tarjeta
+      // Cada etiqueta de qué pasó, dentro de su tarjeta y entera (salta de línea, no se corta con «…»).
+      for (const h of await f.locator('[data-testid^="dnr-hecho-"]').all()) {
+        const r = await h.evaluate((el) => {
+          const c = el.querySelector('[data-corto]')
+          return { derecha: el.getBoundingClientRect().right, fila: el.closest('[data-testid="dnr-fila"]').getBoundingClientRect().right, cortada: c.scrollWidth > c.clientWidth + 1 }
+        })
+        expect(r.derecha).toBeLessThanOrEqual(r.fila)
+        expect(r.cortada).toBe(false)
+      }
+    }
+    await expect(page.getByTestId('dnr-fila').nth(1).getByTestId('dnr-dia-frase')).toContainText(entregado)
+    // Los pasos del recordatorio, dentro de su bloque.
+    const r = await page.getByTestId('dnr-recordatorio').evaluate((el) => ({
+      dentro: [...el.querySelectorAll('[data-testid="dnr-recordatorio-pasos"] > *')].every((x) => x.getBoundingClientRect().right <= el.getBoundingClientRect().right),
     }))
-    expect(alto).toBeLessThan(linea * 1.5)          // una sola línea
-    expect(derecha).toBeLessThanOrEqual(fila)        // y dentro de su tarjeta
-  }
-  // «Entregado» y el CP se leen juntos y en alemán; nada se sale de lado.
-  await expect(page.getByTestId('dnr-fila').nth(1).getByTestId('dnr-dia')).toContainText('Zugestellt am')
-  const ancho = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, ventana: window.innerWidth }))
-  expect(ancho.doc).toBeLessThanOrEqual(ancho.ventana)
-  // Cada explicación, debajo de su etiqueta y con todo el ancho: como mucho dos líneas (antes le quedaban ~130 px, en 3 o
-  // 4 líneas).
-  for (const dd of await page.getByTestId('dnr-estado-explica').all()) {
-    const { lineas, bajo } = await dd.evaluate((el) => {
-      const dt = el.previousElementSibling.getBoundingClientRect()
-      const r = el.getBoundingClientRect()
-      return { lineas: r.height / parseFloat(getComputedStyle(el).lineHeight), bajo: r.top >= dt.bottom - 1 }
+    expect(r.dentro).toBe(true)
+    // Cada explicación de los colores, debajo de su etiqueta y con todo el ancho: como mucho dos líneas.
+    await page.getByTestId('dnr-estados').getByRole('button').click()
+    for (const dd of await page.getByTestId('dnr-estado-explica').all()) {
+      const { lineas, bajo } = await dd.evaluate((el) => {
+        const dt = el.previousElementSibling.getBoundingClientRect()
+        const rr = el.getBoundingClientRect()
+        return { lineas: rr.height / parseFloat(getComputedStyle(el).lineHeight), bajo: rr.top >= dt.bottom - 1 }
+      })
+      expect(lineas).toBeLessThan(2.5)
+      expect(bajo).toBe(true)
+    }
+    const ancho = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, ventana: window.innerWidth }))
+    expect(ancho.doc).toBeLessThanOrEqual(ancho.ventana)
+  })
+}
+
+for (const [idioma, nombre, texto] of [['de', /^Meine DNRs/, 'Diese Woche: keine Daten'], ['fr', /^Mes DNR/, 'Cette semaine : pas de données']]) {
+  test(`G6: en ${idioma}, a 360 px y con «Letra más grande», la línea de la casilla va fuera del recorte del título y no se corta`, async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 780 })
+    await page.addInitScript((l) => {
+      localStorage.setItem('fds_idioma', l)
+      localStorage.setItem('fds_letra', 'grande')
+      document.documentElement.setAttribute('data-letra', 'grande')
+    }, idioma)
+    await entrar(page, { mias: conEstaSemana([], { datos_hasta: '2026-11-07' }) })
+    const linea = page.getByRole('button', { name: nombre }).getByTestId('dnr-casilla-semana')
+    await expect(linea).toHaveText(texto)
+    const r = await linea.evaluate((el) => {
+      const caja = el.parentElement
+      return { enTitulo: !!el.closest('.text-boton'), cortada: caja.scrollHeight > caja.clientHeight + 1 }
     })
-    expect(lineas).toBeLessThan(2.5)
-    expect(bajo).toBe(true)
-  }
+    expect(r.enTitulo).toBe(false)
+    expect(r.cortada).toBe(false)
+  })
+}
+
+test('G14: el número va pegado a sus dos puntos, y en francés los dos puntos a su palabra', async ({ page }) => {
+  await entrar(page)
+  expect(await casilla(page).getByTestId('dnr-casilla-semana').evaluate((el) => el.textContent)).toBe('Esta semana: 2')
+  await page.evaluate(() => localStorage.setItem('fds_idioma', 'fr'))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  const linea = page.getByRole('button', { name: /^Mes DNR/ }).getByTestId('dnr-casilla-semana')
+  await expect(linea).toHaveText('Cette semaine : 2')
+  expect(await linea.evaluate((el) => el.textContent)).toBe('Cette semaine : 2')
 })
 
-test('el recordatorio y «díselo a la oficina» también sin ninguna esta semana; sin ID, ninguno de los dos', async ({ page }) => {
+test('«díselo a la oficina» también sin ninguna esta semana si hay alguna en las anteriores; sin ID, ni el recordatorio ni eso', async ({ page }) => {
   await entrar(page, { mias: conEstaSemana([]) })
   await casilla(page).click()
-  await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana no llevas ninguna')
+  await expect(page.getByTestId('dnr-frase')).toHaveText('Esta semana, ninguna')
   await expect(page.getByTestId('dnr-recordatorio')).toBeVisible()
   await expect(page.getByTestId('dnr-no-es-mia')).toBeVisible()
   await page.getByRole('button', { name: 'Volver' }).click()

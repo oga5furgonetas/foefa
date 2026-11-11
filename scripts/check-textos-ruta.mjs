@@ -50,7 +50,9 @@ const LISTAS = ['MOTIVOS', 'DONDE', 'DONDE_CORTO', 'NAVEGADORES', 'HUECOS', 'PES
   // La portada (/): lo que hace la app, la IA y lo de la empresa.
   'PASOS_PORTADA', 'FUNCIONES_RUTA', 'PREGUNTAS_PORTADA', 'IA_PORTADA', 'MODULOS_EMPRESA',
   // La guía de iPhone (/iphone).
-  'PASOS', 'QUE_FUNCIONA']
+  'PASOS', 'QUE_FUNCIONA',
+  // «Mis DNR» (11-11-2026, V5): cómo la marcó y por qué no pasó la foto, [lo que se ve, la frase larga, …] (MisDnr.jsx).
+  'COMO', 'FOTO']
 
 const usadas = new Set(DE_DATOS)
 const cadenas = (trozo) => [...trozo.matchAll(/'((?:\\'|[^'])*)'/g)].map((m) => m[1].replace(/\\'/g, "'"))
