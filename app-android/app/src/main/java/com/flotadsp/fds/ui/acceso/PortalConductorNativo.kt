@@ -117,7 +117,7 @@ fun PortalConductorNativo(alCerrar: () -> Unit, abrir: String? = null, alAbierto
     }
     LaunchedEffect(pantalla) { if (pantalla == "inicio") runCatching { app.repo.avisos() }.onSuccess { sinLeer = it.sin_leer } }
     // «MIS DNR» (11-11-2026): la fila sale solo si la ruta contesta 200 (con 404 la empresa no tiene la DNR diaria y no
-    // existe), con cuántas hay nuevas desde la última vez que la abrió en este móvil y, debajo, las de esta semana
+    // existe; con 403 su ficha está de baja: misDnr() da null en los dos y la fila se quita), con cuántas hay nuevas desde la última vez que la abrió en este móvil y, debajo, las de esta semana
     // («Esta semana: 2»), como la casilla de la web. Se pregunta al volver al inicio, como los avisos; un fallo de red
     // deja la fila como estaba (null hasta el primer 200: no sale).
     var filaDnr by remember { mutableStateOf<FilaDnrInicio?>(null) }
