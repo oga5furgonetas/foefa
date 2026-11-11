@@ -234,26 +234,33 @@ test.describe('Horas · revisión del 11-11-2026', () => {
     await expect(page.getByRole('button', { name: 'Borrar' })).toHaveCount(0)
   })
 
-  test('si lo dicen solo las fichas, se puede guardar en el centro elegido de todas formas', async ({ page }) => {
+  /* G1/G9 (11-11-2026): LAS FICHAS SOLO AVISAN. El plan sin cabecera se guarda en
+     el centro elegido (como en main) y, si las fichas dicen otro, una nota ámbar
+     sin botones que guarden en otro sitio. Ni «de todas formas» ni `ignorar_fichas`. */
+  test('si lo dicen solo las fichas, se guarda en el centro elegido y solo se avisa', async ({ page }) => {
     await entrarComoAdmin(page)
     await simularApi(page, 'vacio')
     const cuerpos = []
     await page.route(/\/api\/whc\/estado/, json(ESTADO))
     await page.route(/\/api\/whc\/plan/, json({ hay: false, semana: '2026-11-08' }))
     await page.route(/\/api\/whc\/analizar/, (route) => {
-      const b = route.request().postDataJSON()
-      cuerpos.push(b)
-      if (b.ignorar_fichas) return json(ANALISIS())(route)
-      return json(ANALISIS({ guardado: false, otra_nave: { centro: 'SUR', por: 'fichas', casan_alli: 6, casan_aqui: 1 } }))(route)
+      cuerpos.push(route.request().postDataJSON())
+      // Como el servidor: guardado en NORTE, con lo de las fichas aparte.
+      return json(ANALISIS({ parece_de: { centro: 'SUR', casan_alli: 6, casan_aqui: 1 } }))(route)
     })
     await page.goto('/panel/horas', { waitUntil: 'domcontentloaded' })
     await page.locator('#horas-plan').fill(TEXTO)
     await page.getByRole('button', { name: 'Ver cómo vamos' }).click()
-    await expect(page.getByText(/Lo dicen las fichas: 6 de sus conductores son de SUR/)).toBeVisible({ timeout: 15000 })
-    await page.getByRole('button', { name: 'Guardarlo en NORTE de todas formas' }).click()
-    await expect(page.getByRole('button', { name: 'Borrar' })).toBeVisible({ timeout: 15000 })
-    await expect(page.getByText(/tienes elegido el centro/)).toHaveCount(0)
-    expect(cuerpos[1]).toMatchObject({ center: 'NORTE', ignorar_fichas: true })
+    await expect(page.getByText('Por las fichas de sus conductores, este plan parece de SUR. Si es de SUR, bórralo aquí y pégalo con SUR elegido arriba.'))
+      .toBeVisible({ timeout: 15000 })
+    // Está guardado en NORTE: sus botones de siempre, y nada que guarde en otro sitio.
+    await expect(page.getByRole('button', { name: 'Borrar' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Guardarlo en/ })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /de todas formas/ })).toHaveCount(0)
+    await expect(page.getByText(/tienes elegido el centro|No se ha guardado/)).toHaveCount(0)
+    expect(cuerpos).toHaveLength(1)
+    expect(cuerpos[0].center).toBe('NORTE')
+    expect('ignorar_fichas' in cuerpos[0]).toBe(false)
   })
 
   test('la respuesta que llega después de cambiar de centro se descarta', async ({ page }) => {
@@ -338,12 +345,18 @@ test.describe('Horas · segunda revisión del 11-11-2026', () => {
     await expect.poll(() => cuerpos.length).toBe(2)
     expect(cuerpos[1]).toHaveProperty('excepciones', null)
     expect(cuerpos[1].guardar).toBeUndefined()
+    // G8 (11-11-2026): «Recalcular» se marca para que el servidor conserve la hora
+    // del pegado; abrir la pantalla va con guardar=false y sin la marca.
+    expect(cuerpos[1].recalcular).toBe(true)
+    expect(cuerpos[0].guardar).toBe(false)
+    expect('recalcular' in cuerpos[0]).toBe(false)
     // Con una cifra, la cifra (como siempre).
     await expect(recalcular).toBeEnabled({ timeout: 15000 })
     await page.locator('#horas-excepciones').fill('1')
     await recalcular.click()
     await expect.poll(() => cuerpos.length).toBe(3)
     expect(cuerpos[2].excepciones).toBe(1)
+    expect(cuerpos[2].recalcular).toBe(true)
     // Un pegado nuevo con la casilla vacía no manda la clave: se conserva la del plan.
     await expect(recalcular).toBeEnabled({ timeout: 15000 })
     await page.locator('#horas-excepciones').fill('')
@@ -352,6 +365,8 @@ test.describe('Horas · segunda revisión del 11-11-2026', () => {
     await page.getByRole('button', { name: 'Ver cómo vamos' }).click()
     await expect.poll(() => cuerpos.length).toBe(4)
     expect('excepciones' in cuerpos[3]).toBe(false)
+    // G8: un pegado nuevo es de ahora aunque el texto sea el mismo: sin la marca.
+    expect('recalcular' in cuerpos[3]).toBe(false)
   })
 })
 

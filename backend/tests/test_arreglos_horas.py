@@ -138,19 +138,23 @@ async def test_cabecera_de_otra_nave_no_se_guarda_y_se_puede_mandar_alli(mundo):
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_sin_cabecera_mandan_las_fichas_si_hay_mayoria(mundo):
+async def test_sin_cabecera_las_fichas_solo_avisan_y_se_guarda_como_en_main(mundo):
+    # G1/G9 (11-11-2026): LAS FICHAS SOLO AVISAN. La petición es la de la web vieja
+    # en caché (sin ningún campo nuevo): se guarda en la elegida como en main, sin
+    # `aviso_guardado` ni `otra_nave`, y lo de las fichas va aparte en `parece_de`.
     r = await _analizar(texto=_plan(None), center="OGA5")
-    assert r["guardado"] is False
-    assert r["otra_nave"]["centro"] == "DGA1" and r["otra_nave"]["por"] == "fichas"
-    assert r["otra_nave"]["casan_alli"] == 6
-    assert mundo["whc_planes"].docs == []
+    assert r["guardado"] is True and r["centro"] == "OGA5"
+    assert r["otra_nave"] is None and r["aviso_guardado"] is None
+    assert r["parece_de"] == {"centro": "DGA1", "casan_alli": 6, "casan_aqui": 0}
+    assert [(d["center"], d["week"], d["n_conductores"]) for d in mundo["whc_planes"].docs] \
+        == [("OGA5", SEMANA, 6)]
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_sin_cabecera_ni_mayoria_se_guarda_como_siempre(mundo):
     # Tres de DGA1 no son mayoría clara: manda la nave elegida.
     r = await _analizar(texto=_plan(None, NOMBRES_DGA1[:3] + ["ANA OGA CINCO"]), center="OGA5")
-    assert r["guardado"] is True and r["otra_nave"] is None
+    assert r["guardado"] is True and r["otra_nave"] is None and r["parece_de"] is None
     assert mundo["whc_planes"].docs[0]["center"] == "OGA5"
 
 
@@ -273,10 +277,12 @@ async def test_un_plan_nuevo_sin_excepciones_no_guarda_un_cero(mundo):
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_por_fichas_se_puede_guardar_en_la_elegida_de_todas_formas(mundo):
-    # R44: las fichas pueden estar sin actualizar.
+async def test_ignorar_fichas_se_acepta_y_no_cambia_nada(mundo):
+    # G1/G9 (11-11-2026): el parámetro de la tanda anterior ya no hace nada; con
+    # él o sin él, el plan sin cabecera se guarda en la elegida y se avisa igual.
     r = await _analizar(texto=_plan(None), center="OGA5", ignorar_fichas=True)
-    assert r["guardado"] is True and r["otra_nave"] is None
+    assert r["guardado"] is True and r["otra_nave"] is None and r["aviso_guardado"] is None
+    assert r["parece_de"]["centro"] == "DGA1"
     assert mundo["whc_planes"].docs[0]["center"] == "OGA5"
 
 
@@ -287,20 +293,30 @@ async def test_ignorar_fichas_no_salta_la_cabecera(mundo):
     assert mundo["whc_planes"].docs == []
 
 
+@pytest.mark.asyncio(loop_scope="session")
+async def test_con_cabecera_de_otro_centro_sigue_sin_guardarse_aunque_las_fichas_digan_aqui(mundo):
+    # G1/G9: `otra_nave` (lo que impide guardar) queda SOLO para la cabecera, y
+    # manda aunque las fichas apunten a la elegida. Sin `parece_de` (no se miran).
+    r = await _analizar(texto=_plan("OGA5"), center="DGA1")
+    assert r["guardado"] is False and r["otra_nave"] == {"centro": "OGA5", "por": "cabecera"}
+    assert r["parece_de"] is None and "no se ha guardado" in r["aviso_guardado"]
+    assert mundo["whc_planes"].docs == []
+
+
 # ── S1 (11-11-2026): un plan ya guardado en la elegida no se juzga por las fichas ─
 @pytest.mark.asyncio(loop_scope="session")
-async def test_guardado_de_todas_formas_se_abre_y_se_recalcula_sin_aviso(mundo):
-    # Las fichas de esta gente dicen DGA1; la oficina de OGA5 lo guardó a sabiendas.
+async def test_guardado_sin_cabecera_se_abre_y_se_recalcula_sin_aviso(mundo):
+    # Las fichas de esta gente dicen DGA1; la oficina de OGA5 lo pega en OGA5.
     texto = _plan(None)
-    r = await _analizar(texto=texto, center="OGA5", ignorar_fichas=True)
-    assert r["guardado"] is True
-    # Abrir la pantalla (guardar=false, sin ignorar_fichas): ni «parece de DGA1».
+    r = await _analizar(texto=texto, center="OGA5")
+    assert r["guardado"] is True and r["parece_de"]["centro"] == "DGA1"
+    # Abrir la pantalla (guardar=false): no se miran las fichas, ni «parece de DGA1».
     r = await _analizar(texto=texto, center="OGA5", guardar=False)
     assert r["otra_nave"] is None and r["es_el_guardado"] is True
-    assert r["aviso_guardado"] is None
-    # «Recalcular» con la hoja de Amazon: se guarda la cifra.
-    r = await _analizar(texto=texto, center="OGA5", excepciones=1)
-    assert r["otra_nave"] is None and r["guardado"] is True
+    assert r["aviso_guardado"] is None and r["parece_de"] is None
+    # «Recalcular» con la hoja de Amazon: se guarda la cifra, sin fichas.
+    r = await _analizar(texto=texto, center="OGA5", excepciones=1, recalcular=True)
+    assert r["otra_nave"] is None and r["guardado"] is True and r["parece_de"] is None
     assert [(d["center"], d.get("excepciones")) for d in mundo["whc_planes"].docs] == [("OGA5", 1)]
 
 
@@ -312,11 +328,14 @@ async def test_un_plan_sin_cabecera_guardado_antes_se_abre_sin_aviso(mundo):
     mundo["whc_planes"].docs.append({"center": "OGA5", "week": SEMANA, "texto": texto,
                                      "n_conductores": 6, "pegado_en": _pegado(2, "08:00")})
     r = await _analizar(texto=texto, center="OGA5", guardar=False)
-    assert r["otra_nave"] is None and r["es_el_guardado"] is True
-    # Un pegado NUEVO con esas fichas sí se para, como antes.
-    r = await _analizar(texto=_plan(None, NOMBRES_DGA1 + ["ANA OGA CINCO"]), center="OGA5")
-    assert r["otra_nave"]["por"] == "fichas" and r["guardado"] is False
-    assert mundo["whc_planes"].docs[0]["texto"] == texto
+    assert r["otra_nave"] is None and r["es_el_guardado"] is True and r["parece_de"] is None
+    # Un pegado NUEVO con esas fichas se guarda en la elegida (G1/G9: las fichas
+    # solo avisan) y lo de las fichas va en `parece_de`.
+    nuevo = _plan(None, NOMBRES_DGA1 + ["ANA OGA CINCO"]).strip()
+    r = await _analizar(texto=nuevo, center="OGA5")
+    assert r["otra_nave"] is None and r["guardado"] is True and r["aviso_guardado"] is None
+    assert r["parece_de"] == {"centro": "DGA1", "casan_alli": 6, "casan_aqui": 1}
+    assert mundo["whc_planes"].docs[0]["texto"] == nuevo
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -363,10 +382,33 @@ async def test_recalcular_el_mismo_plan_no_cambia_cuando_se_pego(mundo):
     pegado = _pegado(2, "08:00")
     mundo["whc_planes"].docs.append({"center": "DGA1", "week": SEMANA, "texto": texto,
                                      "n_conductores": 6, "pegado_en": pegado, "updated_at": pegado})
-    r = await _analizar(texto=texto, center="DGA1", excepciones=1)
+    # G8 (11-11-2026): «Recalcular» de la pantalla nueva manda `recalcular`.
+    r = await _analizar(texto=texto, center="DGA1", excepciones=1, recalcular=True)
     assert r["guardado"] is True
+    assert r["pegado_en"] == pegado and r["pegado_hoy"] is False and r["ritmo"]["dia_semana"] == 3
     doc = mundo["whc_planes"].docs[0]
     assert doc["pegado_en"] == pegado and doc["excepciones"] == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_mismo_texto_pegado_otra_vez_es_de_ahora(mundo):
+    # G8 (11-11-2026): el portal da el mismo texto el martes temprano que el lunes
+    # por la noche. Un pegado nuevo (o cualquier petición que guarda sin
+    # `recalcular`, como la web vieja) cuenta como pegado ahora, igual que en main:
+    # día de hoy, «Pegado hoy», y se guarda esa hora.
+    texto = _plan("DGA1").strip()
+    pegado = _pegado(2, "08:00")                    # martes
+    mundo["whc_planes"].docs.append({"center": "DGA1", "week": SEMANA, "texto": texto,
+                                     "n_conductores": 6, "pegado_en": pegado, "updated_at": pegado})
+    antes = datetime.now(timezone.utc).isoformat()
+    r = await _analizar(texto=texto, center="DGA1")
+    assert r["guardado"] is True and r["es_el_guardado"] is True
+    assert r["pegado_hoy"] is True and r["pegado_en"] >= antes
+    assert r["ritmo"]["dia_semana"] == 5            # el jueves de hoy, no el martes
+    assert mundo["whc_planes"].docs[0]["pegado_en"] == r["pegado_en"]
+    # Con `recalcular: false` (o cualquier cosa que no sea true), lo mismo.
+    r = await _analizar(texto=texto, center="DGA1", recalcular="si")
+    assert r["pegado_hoy"] is True and r["ritmo"]["dia_semana"] == 5
 
 
 @pytest.mark.asyncio(loop_scope="session")
