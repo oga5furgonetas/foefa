@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, UserPlus, Trash2, Save, ShieldCheck, Mail, KeyRound, ChevronDown, Users as UsersIcon, X, Check, ImagePlus, CornerDownRight, Lock, Table2, List } from 'lucide-react'
 import { getAdmins, createAdmin, updateAdmin, deleteAdmin, subirFotoAdmin } from '../api'
-import { getAdmin, isSuperAdmin, SIEMPRE_VISIBLES, esPlataforma } from '../auth'
+import { useOutletContext } from 'react-router-dom'
+import { getAdmin, isSuperAdmin, isCenterManager, SIEMPRE_VISIBLES, esPlataforma } from '../auth'
 import { useT } from '../../i18n'
 import { lista } from '../../lib/lista'
 
@@ -275,15 +276,18 @@ function QuienVe({ users, onEditar }) {
   )
 }
 
-/* Selector de centros. null = todos. */
-function CenterPicker({ centers, value, onChange, t }) {
+/* Selector de centros. null = todos. `todas` (11-11-2026, equipo-2): un jefe de centro con naves no puede dar «Todos
+   los centros» (el servidor lo rechaza), así que a él no se le ofrece. */
+function CenterPicker({ centers, value, onChange, t, todas = true }) {
   if (!centers.length) return null
   return (
     <div className="flex flex-wrap gap-1.5">
-      <button type="button" onClick={() => onChange(null)}
-        className={`rounded-lg px-2.5 py-1 text-xs font-medium ${value === null ? 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40' : 'bg-dark-800 text-dark-300 hover:text-dark-300'}`}>
-        {t('usr.all.centers')}
-      </button>
+      {todas && (
+        <button type="button" onClick={() => onChange(null)}
+          className={`rounded-lg px-2.5 py-1 text-xs font-medium ${value === null ? 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40' : 'bg-dark-800 text-dark-300 hover:text-dark-300'}`}>
+          {t('usr.all.centers')}
+        </button>
+      )}
       {centers.map((c) => {
         const active = Array.isArray(value) && value.includes(c)
         return (
@@ -329,8 +333,18 @@ export default function Usuarios() {
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
-  const allOrgCenters = sa ? (me?.centers || []) : (me?.allowed_centers || [])
-  const emptyForm = { name: '', username: '', password: '', perms: ALL_KEYS, centers: null, admin_role: null }
+  /* Jefes de centro (11-11-2026, equipo-2). Uno con naves solo reparte las suyas y nunca «todas»; uno sin restricción
+     ve todas, así que se le ofrecen las de la empresa (antes no le salía ningún selector). */
+  const jefe = !sa && isCenterManager()
+  const jefeLimitado = jefe && Array.isArray(me?.allowed_centers) && me.allowed_centers.length > 0
+  const allOrgCenters = sa || (jefe && !jefeLimitado) ? (me?.centers || []) : (me?.allowed_centers || [])
+  const roleOptions = sa ? [null, 'center_manager', 'dispatcher'] : ['dispatcher']
+  /* Al crear, la nave elegida arriba sale ya marcada (11-11-2026, equipo-2: si se olvidaba marcarla, la persona veía
+     todas). Un jefe con naves parte de las suyas; y el rol, del primero que se le ofrece (al jefe, «Dispatcher»). */
+  const { center: centroArriba } = useOutletContext() || {}
+  const centrosDePartida = allOrgCenters.includes(centroArriba) ? [centroArriba]
+    : jefeLimitado ? [...allOrgCenters] : null
+  const emptyForm = { name: '', username: '', password: '', perms: ALL_KEYS, centers: centrosDePartida, admin_role: roleOptions[0] }
   const [form, setForm] = useState(emptyForm)
   const [editing, setEditing] = useState(null) // {id, perms, centers, admin_role, email, newPassword}
   // «Por usuario» (la lista de siempre) o «Quién ve cada pantalla» (la tabla).
@@ -364,8 +378,6 @@ export default function Usuarios() {
       setMsg({ ok: false, t: e?.response?.data?.detail || 'No se pudo subir la foto.' })
     } finally { setSubiendoFotoId(null) }
   }
-
-  const roleOptions = sa ? [null, 'center_manager', 'dispatcher'] : ['dispatcher']
 
   async function create() {
     if (!form.name || !form.username || form.password.length < 6) {
@@ -467,7 +479,10 @@ export default function Usuarios() {
 
           {allOrgCenters.length > 0 && (
             <Section title={t('usr.centers')}>
-              <CenterPicker centers={allOrgCenters} value={form.centers} onChange={(centers) => setForm({ ...form, centers })} t={t} />
+              <CenterPicker centers={allOrgCenters} value={form.centers} onChange={(centers) => setForm({ ...form, centers })} t={t} todas={!jefeLimitado} />
+              {form.centers === null && (
+                <p className="mt-1.5 text-[11px] text-amber-300">{t('usr.all.centers.warn')}</p>
+              )}
             </Section>
           )}
 
@@ -554,7 +569,7 @@ export default function Usuarios() {
 
                     {allOrgCenters.length > 0 && (
                       <Section title={t('usr.centers.visible')}>
-                        <CenterPicker centers={allOrgCenters} value={editing.centers} onChange={(centers) => setEditing((s) => ({ ...s, centers }))} t={t} />
+                        <CenterPicker centers={allOrgCenters} value={editing.centers} onChange={(centers) => setEditing((s) => ({ ...s, centers }))} t={t} todas={!jefeLimitado} />
                       </Section>
                     )}
 

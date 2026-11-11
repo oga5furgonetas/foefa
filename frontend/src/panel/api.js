@@ -291,6 +291,8 @@ export const getOrgCenters = () => api.get('/org/centers')
 export const getCentrosGeo = () => api.get('/org/centros-geo') // {centros: {OGA5: {lat, lng, origen}}}
 export const enlaceTaller = (workshopId) => api.post(`/workshops/${workshopId}/enlace`) // enlace fijo por taller
 export const addOrgCenter = (name) => api.post('/org/centers', { name })
+// Quitar una nave vacía (11-11-2026, equipo-10): 409 {mensaje, conductores, furgonetas, usuarios} si tiene algo.
+export const deleteOrgCenter = (name) => api.delete(`/org/centers/${encodeURIComponent(name)}`)
 /* WhatsApp Business. Las credenciales NO pasan por aqui: viven en los secretos
    de Fly. Estos endpoints solo dicen que falta, encienden cada aviso y prueban. */
 export const getWhatsappEstado = () => api.get('/whatsapp/estado')

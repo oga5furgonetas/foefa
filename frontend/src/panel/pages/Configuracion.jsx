@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useT } from '../../i18n'
-import { Loader2, Plus, Building, Send, CreditCard, Check, BellRing, Pencil, Trash2, Clock, MessageCircle } from 'lucide-react'
+import { Loader2, Plus, Building, Send, CreditCard, Check, BellRing, Pencil, Trash2, Clock, MessageCircle, X } from 'lucide-react'
 import { stripePortal } from '../api'
-import { getOrgCenters, addOrgCenter, getTelegramConfig,
+import { getOrgCenters, addOrgCenter, deleteOrgCenter, getTelegramConfig,
   getWhatsappEstado, getWhatsappPendientes, marcarWhatsappHecho, setWhatsappConfig, probarWhatsapp, crearPlantillasWhatsapp, getOrgBilling, getBillingUso, listarDestinatarios, guardarDestinatario, borrarDestinatario, enviarResumenDiario, getHorariosAvisos, setHorariosAvisos } from '../api'
 import { lista } from '../../lib/lista'
-import { getAdmin, isSuperAdmin } from '../auth'
+import { getAdmin, isSuperAdmin, puedeTocarNaves } from '../auth'
 import { usePlan } from '../../lib/usePlan'
 import { voces, esReparto } from '../../lib/sector'
 import { sinPagos } from '../../lib/plataforma'
@@ -615,6 +615,24 @@ export default function Configuracion() {
     } finally { setBusy(false) }
   }
 
+  /* Quitar una nave añadida por error (11-11-2026, equipo-10). El servidor solo la quita si está vacía; si no, dice
+     cuántos conductores, furgonetas y usuarios tiene. El selector de arriba sale de la sesión: la deja de enseñar al
+     volver a entrar (igual que una nave nueva aparece entonces). */
+  async function quitar(c) {
+    if (!window.confirm(t('cfg.center.remove.confirm').replace('{c}', c))) return
+    setBusy(true); setMsg(null)
+    try {
+      const r = await deleteOrgCenter(c)
+      setCenters(r.data?.centers || [])
+      const a = getAdmin(); if (a) { a.centers = r.data?.centers || []; localStorage.setItem('flota_admin', JSON.stringify(a)) }
+      setMsg({ ok: true, t: t('cfg.center.removed').replace('{c}', c) })
+    } catch (e) {
+      const d = e?.response?.data?.detail
+      setMsg({ ok: false, t: (typeof d === 'string' ? d : d?.mensaje) || t('cfg.center.remove.err') })
+    } finally { setBusy(false) }
+  }
+  const tocaNaves = puedeTocarNaves()
+
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       <h1 className="rise font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">{t('cfg.title')}</h1>
@@ -641,14 +659,29 @@ export default function Configuracion() {
           <>
             <div className="mb-3 flex flex-wrap gap-2">
               {centers.length === 0 ? <span className="text-sm text-dark-500">{t('cfg.no.centers')}</span> :
-                centers.map((c) => <span key={c} className="rounded-lg bg-dark-800 px-3 py-1.5 text-sm font-medium">{c}</span>)}
+                centers.map((c) => (
+                  <span key={c} className="inline-flex items-center gap-1 rounded-lg bg-dark-800 px-3 py-1.5 text-sm font-medium">
+                    {c}
+                    {tocaNaves && centers.length > 1 && (
+                      <button type="button" onClick={() => quitar(c)} disabled={busy}
+                        aria-label={t('cfg.center.remove').replace('{c}', c)} title={t('cfg.center.remove').replace('{c}', c)}
+                        className="-my-1 -mr-2 ml-0.5 rounded p-1.5 text-dark-500 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50">
+                        <X size={13} />
+                      </button>
+                    )}
+                  </span>
+                ))}
             </div>
-            <div className="flex gap-2">
-              <input className="input flex-1" placeholder={vz ? vz.nuevoCentro : t('cfg.new.center')} value={nuevo} onChange={(e) => setNuevo(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
-              <button onClick={add} disabled={busy || !nuevo.trim()} className="btn-primary flex items-center gap-1.5 disabled:opacity-50">
-                {busy ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} {t('cfg.add')}
-              </button>
-            </div>
+            {tocaNaves ? (
+              <div className="flex gap-2">
+                <input className="input flex-1" placeholder={vz ? vz.nuevoCentro : t('cfg.new.center')} value={nuevo} onChange={(e) => setNuevo(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
+                <button onClick={add} disabled={busy || !nuevo.trim()} className="btn-primary flex items-center gap-1.5 disabled:opacity-50">
+                  {busy ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} {t('cfg.add')}
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-dark-400">{t('cfg.centers.only.admin')}</p>
+            )}
             <p className="mt-2 text-xs text-dark-500">
               {reparte ? `Cada ${vz.centro.toLowerCase()} tiene sus propios repartidores, vehículos y avisos.`
                 : 'Cada sede tiene sus propios conductores, vehículos, turnos y avisos.'}
