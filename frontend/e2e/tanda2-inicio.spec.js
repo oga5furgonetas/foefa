@@ -259,8 +259,18 @@ test.describe('I6 · Cómo va cada centro', () => {
     // El reloj de la página lo lleva la prueba: el minuto se adelanta, no se espera.
     await page.clock.install()
     let vez = 0
+    // La barrera de la 3.ª vuelta: /stats/hoy se retiene hasta que el 500 de centros-hoy ha llegado entero a la página;
+    // luego contesta con OGA5 revisada. Ver ese cambio en pantalla asegura que el fallo ya se procesó antes de mirar.
+    let retenerHoy = false
+    let soltarHoy
+    const hoyRetenida = new Promise((ok) => { soltarHoy = ok })
     await entrar(page)
-    await page.route(/\/api\/stats\/hoy/, json(STATS_HOY))
+    await page.route(/\/api\/stats\/hoy/, (r) => {
+      if (!retenerHoy) return json(STATS_HOY)(r)
+      retenerHoy = false
+      soltarHoy(r)
+      return undefined
+    })
     await page.route(/\/api\/stats\/centros-hoy/, (r) => {
       vez += 1
       if (vez === 1) return json({ ...CENTROS_HOY, centros: [{ ...CENTROS_HOY.centros[0], plantilla: null }, CENTROS_HOY.centros[1]] })(r)
@@ -275,10 +285,15 @@ test.describe('I6 · Cómo va cada centro', () => {
     await page.clock.fastForward(61000)
     await expect(oga5.getByRole('button', { name: 'Plantilla del día: guardada hoy por María' })).toBeVisible()
     // Al otro minuto el servidor falla: no se borra lo que ya se sabía.
-    const fallo = page.waitForResponse((res) => /\/stats\/centros-hoy/.test(res.url()) && res.status() === 500)
+    retenerHoy = true
+    // `requestfinished`: el 500 ya lo tiene la página entero (no solo sus cabeceras).
+    const fallo = page.waitForEvent('requestfinished', (req) => /\/stats\/centros-hoy/.test(req.url()))
     await page.clock.fastForward(61000)
     await fallo
-    await page.evaluate(() => new Promise((ok) => requestAnimationFrame(() => ok())))
+    const hoy = await hoyRetenida
+    await json({ ...STATS_HOY, por_centro: [{ ...STATS_HOY.por_centro[0], revisadas: 1 }, STATS_HOY.por_centro[1]] })(hoy)
+    // Las salidas nuevas llegan DESPUÉS del fallo: cuando se ven, el fallo ya pasó por la pantalla.
+    await expect(oga5.getByRole('button', { name: 'Salidas revisadas 1/1' })).toBeVisible()
     await expect(oga5.getByRole('button', { name: 'Plantilla del día: guardada hoy por María' })).toBeVisible()
     expect(vez).toBeGreaterThanOrEqual(3)
   })
@@ -335,6 +350,19 @@ test.describe('I6 · Cómo va cada centro', () => {
     await expect(oga5.getByRole('button', { name: 'Salidas revisadas 0/1' })).toBeVisible({ timeout: 30000 })
     await expect(oga5.getByRole('button', { name: /^Plantilla/ })).toHaveCount(0)
     expect(fallos).toEqual([])
+  })
+
+  test('en el móvil, si /stats/centros-hoy falla, el resumen plegado no dice «Todo al día»: dice solo las salidas', async ({ page }) => {
+    await page.setViewportSize(MOVIL)
+    await entrar(page)
+    await page.route(/\/api\/stats\/hoy/, json(STATS_HOY))
+    await page.route(/\/api\/stats\/centros-hoy/, (r) => r.fulfill({ status: 500, contentType: 'application/json', body: '{"detail":"caído"}' }))
+    await page.goto('/panel', { waitUntil: 'domcontentloaded' })
+    const bloque = page.getByTestId('como-va-cada-centro')
+    // DGA1 tiene sus salidas revisadas, pero de la plantilla, las horas, la DNR y el cuadrante no se sabe nada.
+    await expect(bloque.locator('[data-centro="DGA1"] button[aria-expanded]')).toHaveText('Salidas 1/1', { timeout: 30000 })
+    await expect(bloque.locator('[data-centro="OGA5"] button[aria-expanded]')).toHaveText('Salidas 0/1')
+    await expect(bloque.getByText('Todo al día')).toHaveCount(0)
   })
 })
 
@@ -517,6 +545,28 @@ test.describe('I11 · detalles de las fotos', () => {
     expect(hueco).toBeGreaterThanOrEqual(b.height)
     await page.setViewportSize({ width: 1440, height: 900 })
     await expect(burbuja).toBeVisible()
+  })
+
+  test('en el Chat del móvil, con un aviso pendiente, la furgoneta de avisos sube con la burbuja y tampoco tapa Enviar', async ({ page }) => {
+    await page.setViewportSize(MOVIL)
+    await entrar(page, { centro: 'OGA5', escenario: 'vacio' })
+    await page.goto('/panel/chat', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: /OGA5/ })).toBeVisible({ timeout: 30000 })
+    // Un aviso pendiente de otra pantalla (los de la propia pantalla se cierran solos al entrar). Se deja DESPUÉS de la
+    // primera entrada: al entrar, `aislarSesion` borra los avisos guardados por otra sesión.
+    await page.evaluate(() => localStorage.setItem('ln_pending', JSON.stringify([
+      { key: 'cand-1', icon: 'candidato', title: 'Candidato nuevo · OGA5', body: '', to: '/panel/candidatos', ts: Date.now() }])))
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: /OGA5/ })).toBeVisible({ timeout: 30000 })
+    const furgoneta = page.getByTitle('1 aviso', { exact: true })
+    await expect(furgoneta).toBeVisible()
+    const f = await furgoneta.boundingBox()
+    const b = await page.getByTitle(/IA$/).last().boundingBox()
+    const enviar = await page.getByRole('button', { name: 'Enviar' }).boundingBox()
+    const caja = await page.getByPlaceholder(/@flota/).boundingBox()
+    expect(f.y + f.height).toBeLessThanOrEqual(Math.min(enviar.y, caja.y))
+    // Pegada a la burbuja, a su misma altura.
+    expect(Math.abs((f.y + f.height) - (b.y + b.height))).toBeLessThanOrEqual(1)
   })
 
   test('el botón de menú de la cabecera del móvil se ve igual (36 px) pero responde en 44 px', async ({ page }) => {
