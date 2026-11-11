@@ -242,10 +242,11 @@ async def test_la_previa_lista_lo_que_cambia_en_los_proximos_14_dias(base):
             for p in r["personas"]] == [
         ("d1", "Ana", [(MAN, "trabajas", "libras", "lunes 19/10: libras")]),
         ("d4", "Sara", [(PAS, "sin turno", "trabajas", "martes 20/10: trabajas")])]
-    # Cada celda tocada de hoy en adelante queda apuntada con lo que el conductor sabía (también la de dentro de 20
-    # días y la de 1 → T, que no se enseñan); la previa no manda nada ni marca nada.
+    # Cada celda que cambia de hoy en adelante queda apuntada con lo que el conductor sabía (también la de dentro de 20
+    # días, que no se enseña); la de 1 → T no, porque para él no cambia nada (tercera ronda, V8). La previa no manda
+    # nada ni marca nada.
     assert sorted((d["driver_id"], d["fecha"], d["dicho"]) for d in base.t[PEND].docs) == [
-        ("d1", MAN, "trabajas"), ("d2", MAN, "trabajas"), ("d3", LEJOS, "sin turno"), ("d4", PAS, "sin turno")]
+        ("d1", MAN, "trabajas"), ("d3", LEJOS, "sin turno"), ("d4", PAS, "sin turno")]
     assert base.avisos == [] and base.t["avisos_movil"].docs == []
     assert not any(d.get("avisado_en") or d.get("visto") for d in base.t[PEND].docs)
 
@@ -485,6 +486,9 @@ async def test_si_apuntar_falla_el_cuadrante_se_guarda_y_se_deshace_igual(base):
         async def update_one(self, *a, **k):
             raise RuntimeError("base caída")
 
+        async def delete_many(self, *a, **k):                              # el borrado de días pasados (V8)
+            raise RuntimeError("base caída")
+
     base.t[PEND] = Rota()
     await _celdas(base.t, [("d1", MAN, "N/T")])
     assert _celda(base.t, "d1", MAN)["cod"] == "N/T"
@@ -547,3 +551,240 @@ def test_el_texto_del_aviso_lleva_como_mucho_seis_dias():
     assert server._cua_aviso_etiqueta({"cod": "1", "extra": True}) == "trabajas (extra)"
     assert {server._cua_aviso_etiqueta({"cod": c}) for c in ("1", "T", "X")} == {"trabajas"}
     assert server._cua_aviso_etiqueta({"type": "libre"}) == "libras"
+
+
+# ── Tercera ronda (11-11-2026): lo que sacó la comprobación de «Avisar a los conductores» ─────────────────────────────
+
+AYER = "2026-10-17"
+
+
+class _Contada(Col):
+    """Una colección que cuenta lo que se le pide: lecturas, lotes y escrituras sueltas."""
+
+    def __init__(self, docs=None):
+        super().__init__(docs)
+        self.n = {"find": 0, "bulk_write": 0, "ops": 0, "update_one": 0, "delete_many": 0}
+        self._en_lote = False
+
+    def find(self, *a, **k):
+        self.n["find"] += 1
+        return super().find(*a, **k)
+
+    async def bulk_write(self, ops, ordered=True):
+        self.n["bulk_write"] += 1
+        self.n["ops"] += len(ops)
+        self._en_lote = True
+        try:
+            return await super().bulk_write(ops, ordered)
+        finally:
+            self._en_lote = False
+
+    async def update_one(self, *a, **k):
+        if not self._en_lote:
+            self.n["update_one"] += 1
+        return await super().update_one(*a, **k)
+
+    async def delete_many(self, *a, **k):
+        self.n["delete_many"] += 1
+        return await super().delete_many(*a, **k)
+
+
+def _dias(n, desde=HOY):
+    from datetime import date, timedelta
+    d0 = date.fromisoformat(desde)
+    return [(d0 + timedelta(days=i)).isoformat() for i in range(n)]
+
+
+def _rejilla(t, ids, fechas, cod="1"):
+    """Una nave con todos sus días puestos (lo que hay antes de sincronizar la hoja)."""
+    t["shifts"] = _Contada([{"driver_id": d, "date": f, "type": "trabaja" if cod in ("1", "T") else "libre",
+                             "cod": cod, "center": "OGA5"} for d in ids for f in fechas])
+
+
+async def _como_la_hoja(t, celdas, center="OGA5"):
+    """Un cambio como la sincronización con la hoja de Google: TODAS las celdas de la hoja pasan por _CuaCambio,
+    cambien o no (server.py, la sincronización: anota cada celda y la escribe por lotes)."""
+    from pymongo import UpdateOne
+    cambio = server._CuaCambio(center, {"name": "Google Sheets"}, "Sincronizar con Google Sheets")
+    ops = []
+    for did, f, cod in celdas:
+        filtro = {"driver_id": did, "date": f}
+        cambio.anota("shifts", filtro, _celda(t, did, f))
+        ops.append(UpdateOne(filtro, {"$set": {"driver_id": did, "date": f, "center": center, "cod": cod,
+                                               "type": "trabaja" if cod in ("1", "T") else "libre"}}, upsert=True))
+    await t["shifts"].bulk_write(ops)
+    return await cambio.guardar()
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v8_una_sincronizacion_que_no_cambia_nada_no_apunta_ni_toca_nada(base):
+    ids, fechas = ["d1", "d2", "d3", "d4"], _dias(50)
+    _rejilla(base.t, ids, fechas)
+    await _celdas(base.t, [("d1", MAN, "N/T")])                           # un cambio de verdad, de antes
+    antes = [dict(d) for d in base.t[PEND].docs]
+    assert len(antes) == 1
+    base.t[PEND] = _Contada(antes)
+    # La hoja vuelve a escribir las 200 celdas tal como están (la de Ana, ya con su libre).
+    await _como_la_hoja(base.t, [(d, f, "N/T" if (d, f) == ("d1", MAN) else "1") for d in ids for f in fechas])
+    assert base.t[PEND].docs == antes                                         # ni uno nuevo, ni un `tocado` movido
+    assert base.t[PEND].n["ops"] == 0 and base.t[PEND].n["update_one"] == 0
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v8_una_sincronizacion_que_cambia_3_de_200_apunta_3(base):
+    ids, fechas = ["d1", "d2", "d3", "d4"], _dias(50)
+    _rejilla(base.t, ids, fechas)
+    cambian = {("d1", fechas[1]): "N/T", ("d2", fechas[3]): "V", ("d4", fechas[40]): "L"}
+    # «T» en vez de «1» se escribe distinto pero para el conductor es lo mismo («trabajas»): tampoco se apunta.
+    await _como_la_hoja(base.t, [(d, f, cambian.get((d, f), "T" if f == fechas[2] else "1"))
+                                 for d in ids for f in fechas])
+    assert sorted((p["driver_id"], p["fecha"], p["dicho"]) for p in base.t[PEND].docs) == [
+        ("d1", fechas[1], "trabajas"), ("d2", fechas[3], "trabajas"), ("d4", fechas[40], "trabajas")]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v8_300_celdas_cambiadas_son_una_lectura_y_escrituras_por_lotes(base):
+    ids, fechas = ["d1", "d2", "d3", "d4"], _dias(75)
+    _rejilla(base.t, ids, fechas)
+    base.t[PEND] = _Contada()
+    lecturas = base.t["shifts"].n["find"]
+    await _como_la_hoja(base.t, [(d, f, "N/T") for d in ids for f in fechas])
+    assert len(base.t[PEND].docs) == 300
+    assert base.t["shifts"].n["find"] - lecturas == 1                       # lo de ahora, en UNA consulta
+    assert base.t[PEND].n["find"] == 0 and base.t[PEND].n["update_one"] == 0
+    assert 1 <= base.t[PEND].n["bulk_write"] <= 2                            # por lotes de 500
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v8_los_dias_pasados_se_van_al_apuntar(base):
+    base.t[PEND].docs += [
+        {"_id": f"OGA5|d2|{AYER}", "center": "OGA5", "driver_id": "d2", "fecha": AYER, "dicho": "trabajas",
+         "tocado": "t0"},
+        {"_id": f"DGA1|d9|{AYER}", "center": "DGA1", "driver_id": "d9", "fecha": AYER, "dicho": "trabajas",
+         "tocado": "t0"}]
+    await _celdas(base.t, [("d1", MAN, "N/T")])                              # sin abrir la previa
+    assert sorted((p["center"], p["fecha"]) for p in base.t[PEND].docs) == [("DGA1", AYER), ("OGA5", MAN)]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("antes", ["avisado", "descartado"])
+async def test_v1_un_extra_concedido_y_anulado_en_el_cuadrante_sale_con_lo_que_le_dijo_la_aprobacion(base, antes):
+    await _celdas(base.t, [("d1", MAN, "N/T")])                              # la oficina le quita el lunes…
+    if antes == "avisado":                                                    # …y se lo avisa: sabe «libras»
+        await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI)
+        assert _pend(base.t, "d1", MAN)["dicho"] == "libras"
+    else:                                                                     # …o decide no avisarle
+        await server.cuadrante_avisos_enviar({"center": "OGA5", "driver_ids": [], "descartar_ids": ["d1"]}, OFI)
+        assert _pend(base.t, "d1", MAN)["visto"] == "libras"
+    # Pide trabajar ese lunes y se lo conceden: se entera por el aviso de la aprobación, no por aquí.
+    _peticion(base.t, "r1", MAN, did="d1", tipo="extra", estado="aprobado")
+    await server._turno_aprobado({"id": "r1", "driver_id": "d1", "driver_name": "Ana", "date": MAN, "type": "extra",
+                                  "center": "OGA5"})
+    assert server._cua_aviso_etiqueta(_celda(base.t, "d1", MAN)) == "trabajas (extra)"
+    assert await _previa() == []
+    # La oficina se lo anula desde el cuadrante (le quita el candado y lo vuelve a poner libre): eso sí hay que avisarlo.
+    await server.cuadrante_celdas({"center": "OGA5", "cambios": [
+        {"driver_id": "d1", "fecha": MAN, "desbloquear": True}]}, OFI)
+    await _celdas(base.t, [("d1", MAN, "N/T")])
+    assert await _previa() == [("d1", [(MAN, "trabajas (extra)", "libras")])]
+    assert "visto" not in _pend(base.t, "d1", MAN)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v6_descartado_deshecho_y_vuelto_a_poner_lo_mismo_vuelve_a_salir(base):
+    await _celdas(base.t, [("d1", MAN, "N/T")])
+    await server.cuadrante_avisos_enviar({"center": "OGA5", "driver_ids": [], "descartar_ids": ["d1"]}, OFI)
+    assert await _previa() == []
+    await server.cuadrante_deshacer({"center": "OGA5"}, OFI)                 # vuelve a trabajar: lo que ella sabe
+    assert "visto" not in _pend(base.t, "d1", MAN)
+    # Más tarde, por otro motivo y sin abrir la previa entre medias, se le vuelve a dar libre: la oficina no ha visto
+    # este cambio, así que sale.
+    await _celdas(base.t, [("d1", MAN, "N/T")])
+    assert await _previa() == [("d1", [(MAN, "trabajas", "libras")])]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v6_tambien_si_vuelve_por_fuera_del_cuadrante(base):
+    """La rejilla escondida de Turnos no pasa por el cuadrante: lo olvida la previa al ver que el día volvió a lo que
+    el conductor sabe."""
+    await _celdas(base.t, [("d1", MAN, "N/T")])
+    await server.cuadrante_avisos_enviar({"center": "OGA5", "driver_ids": [], "descartar_ids": ["d1"]}, OFI)
+    _celda(base.t, "d1", MAN).update({"cod": "1", "type": "trabaja"})
+    assert await _previa() == []
+    assert "visto" not in _pend(base.t, "d1", MAN)
+    _celda(base.t, "d1", MAN).update({"cod": "N/T", "type": "libre"})
+    assert await _previa() == [("d1", [(MAN, "trabajas", "libras")])]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v9_un_dia_que_ya_es_de_otra_nave_lo_avisa_la_suya_y_no_esta(base):
+    await _celdas(base.t, [("d1", MAN, "N/T")])                              # OGA5 le da libre el lunes
+    # La hoja de DGA1 se lo lleva ese lunes (la sincronización escribe la celda con su nave).
+    await _como_la_hoja(base.t, [("d1", MAN, "V")], center="DGA1")
+    assert _celda(base.t, "d1", MAN)["center"] == "DGA1"
+    assert await _previa() == []                                              # OGA5 ya no lo enseña ni lo avisa
+    r = await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI)
+    assert r["avisados"] == 0 and base.t["avisos_movil"].docs == []
+    dga1 = await server.cuadrante_avisos_previa({"center": "DGA1"}, OFI)
+    assert [(p["driver_id"], [d["ahora"] for d in p["dias"]]) for p in dga1["personas"]] == [("d1", ["vacaciones"])]
+    # Un turno sin nave apuntada (datos viejos) sigue saliendo donde se apuntó.
+    _celda(base.t, "d1", MAN).pop("center")
+    assert await _previa() == [("d1", [(MAN, "trabajas", "vacaciones")])]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v7_si_la_bandeja_no_guarda_el_aviso_sus_dias_siguen_pendientes(base):
+    """_avisar_usuarios nunca lanza (se traga sus errores): se comprueba que el aviso está de verdad en la bandeja."""
+    class BandejaQueFallaConAna(Col):
+        async def insert_many(self, docs, **k):
+            if any(d["user_id"] == "d1" for d in docs):
+                raise RuntimeError("la base no responde")
+            return await super().insert_many(docs, **k)
+
+    base.t["avisos_movil"] = BandejaQueFallaConAna()
+    await _aceptar(base.t, CAMBIOS)
+    r = await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI)
+    assert r["avisados"] == 1 and [p["driver_id"] for p in r["personas"]] == ["d4"] and _bandeja(base.t) == ["d4"]
+    ana = _pend(base.t, "d1", MAN)
+    assert ana["dicho"] == "trabajas" and not ana.get("avisado_en") and not ana.get("avisado_lote")
+    assert await _previa() == [("d1", [(MAN, "trabajas", "libras")])]
+    # Cuando la bandeja vuelve, se le avisa con normalidad.
+    base.t["avisos_movil"] = Col()
+    assert (await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI))["avisados"] == 1
+    assert _bandeja(base.t) == ["d1"] and await _previa() == []
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v10a_una_celda_sin_apuntar_que_se_deshace_sale_en_la_previa(base):
+    """Lo sujeta el apunte de `cuadrante_deshacer`: el cambio original no quedó apuntado (anterior a publicar esto, o
+    un apunte que falló), y deshacerlo también cambia lo que el conductor tiene ese día."""
+    await _celdas(base.t, [("d1", MAN, "N/T")])
+    base.t[PEND].docs.clear()                                                 # como un cambio de antes de publicar
+    await server.cuadrante_deshacer({"center": "OGA5"}, OFI)
+    assert _celda(base.t, "d1", MAN)["cod"] == "1"
+    assert await _previa() == [("d1", [(MAN, "libras", "trabajas")])]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v10b_previa_deshacer_y_envio_con_el_descartado_no_guarda_lo_que_no_vio(base):
+    await _celdas(base.t, [("d1", MAN, "N/T")])
+    base.t["cuadrante_cambios"].docs[0]["en"] = "2026-10-18T08:00:00+00:00"  # el reloj de Windows puede repetir la hora
+    await _celdas(base.t, [("d1", MAN, "V")])
+    marcas = await _marcas()                                                  # la oficina ve «vacaciones»
+    assert await _previa() == [("d1", [(MAN, "trabajas", "vacaciones")])]
+    await server.cuadrante_deshacer({"center": "OGA5"}, OFI)                 # con la ventana abierta: vuelve a libre
+    r = await server.cuadrante_avisos_enviar({"center": "OGA5", "driver_ids": [], "descartar_ids": ["d1"],
+                                              "vistas": marcas["d1"]}, OFI)
+    assert (r["avisados"], r["descartados"]) == (0, 0) and base.t["avisos_movil"].docs == []
+    assert "visto" not in _pend(base.t, "d1", MAN)
+    assert await _previa() == [("d1", [(MAN, "trabajas", "libras")])]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v10c_un_cambio_de_un_dia_de_ayer_no_se_apunta(base):
+    base.t["shifts"].docs.append({"driver_id": "d1", "date": AYER, "type": "trabaja", "cod": "1", "center": "OGA5"})
+    await _celdas(base.t, [("d1", AYER, "N/T"), ("d2", AYER, "V")])
+    assert _celda(base.t, "d1", AYER)["cod"] == "N/T"                        # el cambio se guarda…
+    assert base.t[PEND].docs == []                                            # …pero no se apunta para avisar
+    await server.cuadrante_deshacer({"center": "OGA5"}, OFI)
+    assert base.t[PEND].docs == []                                            # ni al deshacerlo
