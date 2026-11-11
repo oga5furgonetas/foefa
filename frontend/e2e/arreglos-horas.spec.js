@@ -35,6 +35,15 @@ const ANALISIS = (extra) => ({
   ...extra,
 })
 
+/* Hace dos días de CALENDARIO, a las 9:00 (S10, 11-11-2026). Restando 48 h, el martes
+   siguiente al cambio de hora de marzo, entre las 0:00 y la 1:00, caía en el sábado. */
+const haceDosDias = () => {
+  const d = new Date()
+  d.setDate(d.getDate() - 2)
+  d.setHours(9, 0, 0, 0)
+  return d
+}
+
 const ESTADO = { semana_en_curso: '2026-11-08', faltan: [], como_se_arregla: '',
   naves: [{ centro: 'NORTE', semana: '2026-11-08', al_dia: true, conductores: 2, semanas_atras: 0 }] }
 const TEXTO = 'ANA PÉREZ\n55h 00m / 60h\n'.repeat(4)
@@ -43,9 +52,7 @@ test.describe('Horas · arreglos del 10-11-2026', () => {
   test('al abrir, el plan guardado se analiza sin guardar y dice cuándo se pegó', async ({ page }) => {
     await entrarComoAdmin(page)
     await simularApi(page, 'vacio')
-    const hace2 = new Date(Date.now() - 2 * 86400000)
-    hace2.setHours(9, 0, 0, 0)
-    const pegado = hace2.toISOString()
+    const pegado = haceDosDias().toISOString()
     const cuerpos = []
     await page.route(/\/api\/whc\/estado/, json(ESTADO))
     await page.route(/\/api\/whc\/plan/, json({ hay: true, semana: '2026-11-08', week: '2026-11-08', texto: TEXTO,
@@ -157,8 +164,7 @@ test.describe('Horas · revisión del 11-11-2026', () => {
   test('un plan de otro centro guardado aquí antes: lo dice y ofrece quitarlo, no guardarlo encima', async ({ page }) => {
     await entrarComoAdmin(page)
     await simularApi(page, 'vacio')
-    const hace2 = new Date(Date.now() - 2 * 86400000)
-    hace2.setHours(9, 0, 0, 0)
+    const hace2 = haceDosDias()
     const borrados = []
     await page.route(/\/api\/whc\/estado/, json(ESTADO))
     await page.route(/\/api\/whc\/plan/, (route) => {
@@ -260,16 +266,28 @@ test.describe('Horas · revisión del 11-11-2026', () => {
         ? { hay: true, semana: '2026-11-08', texto: TEXTO, excepciones: null, updated_at: new Date().toISOString() }
         : { hay: false, semana: '2026-11-08' })(route)
     })
+    /* S12 (11-11-2026): la respuesta de NORTE se retiene hasta DESPUÉS de cambiar a
+       SUR, sin esperas fijas. Con 2 s de espera, en una máquina cargada llegaba
+       antes del clic y la prueba pasaba sin probar nada. */
+    let soltar
+    const suelta = new Promise((ok) => { soltar = ok })
     await page.route(/\/api\/whc\/analizar/, async (route) => {
-      await new Promise((ok) => { setTimeout(ok, 2000) })
+      await suelta
       return json(ANALISIS({ guardado: false }))(route)
     })
-    const respuesta = page.waitForResponse(/\/api\/whc\/analizar/, { timeout: 15000 })
+    const terminada = page.waitForEvent('requestfinished',
+      { predicate: (r) => /\/api\/whc\/analizar/.test(r.url()), timeout: 15000 })
     await page.goto('/panel/horas', { waitUntil: 'domcontentloaded' })
     await page.waitForRequest(/\/api\/whc\/analizar/, { timeout: 15000 })
+    // Ya en SUR: la pantalla ha pedido el plan de SUR (lo hace al cambiar de centro).
+    const planSur = page.waitForRequest((r) => /\/api\/whc\/plan/.test(r.url())
+      && new URL(r.url()).searchParams.get('center') === 'SUR', { timeout: 15000 })
     await page.getByRole('button', { name: 'SUR', exact: true }).click()
-    await respuesta
-    await page.waitForTimeout(500)
+    await planSur
+    soltar()
+    await terminada
+    // Una vuelta del navegador (un fotograma y una tarea) para que la respuesta se procese.
+    await page.evaluate(() => new Promise((ok) => { requestAnimationFrame(() => setTimeout(ok, 0)) }))
     await expect(page.getByText(/Cómo vamos/)).toHaveCount(0)
     await expect(page.locator('#horas-plan')).toBeVisible()
   })
@@ -277,8 +295,7 @@ test.describe('Horas · revisión del 11-11-2026', () => {
   test('la línea «Pegado el…» no se parte en dos columnas', async ({ page }) => {
     await entrarComoAdmin(page)
     await simularApi(page, 'vacio')
-    const hace2 = new Date(Date.now() - 2 * 86400000)
-    hace2.setHours(9, 0, 0, 0)
+    const hace2 = haceDosDias()
     await page.route(/\/api\/whc\/estado/, json(ESTADO))
     await page.route(/\/api\/whc\/plan/, json({ hay: true, semana: '2026-11-08', texto: TEXTO, excepciones: null,
       pegado_en: hace2.toISOString(), updated_at: hace2.toISOString() }))
@@ -294,6 +311,47 @@ test.describe('Horas · revisión del 11-11-2026', () => {
     })
     // O cabe en el mismo renglón (escritorio) o baja entera al siguiente (móvil).
     expect(caja.izq < 2 || caja.alto < caja.lh * 1.5).toBe(true)
+  })
+})
+
+/* SEGUNDA REVISIÓN DEL 11-11-2026 (S9): la casilla vaciada al recalcular quita la cifra. */
+test.describe('Horas · segunda revisión del 11-11-2026', () => {
+  test('«Recalcular» con la casilla vaciada manda null; un pegado nuevo con la casilla vacía no manda nada', async ({ page }) => {
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const cuerpos = []
+    await page.route(/\/api\/whc\/estado/, json(ESTADO))
+    await page.route(/\/api\/whc\/plan/, json({ hay: true, semana: '2026-11-08', texto: TEXTO, excepciones: 2,
+      updated_at: new Date().toISOString() }))
+    await page.route(/\/api\/whc\/analizar/, (route) => {
+      const b = route.request().postDataJSON()
+      cuerpos.push(b)
+      return json(ANALISIS({ guardado: b.guardar !== false }))(route)
+    })
+    await page.goto('/panel/horas', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('#horas-excepciones')).toHaveValue('2', { timeout: 15000 })
+    const recalcular = page.getByRole('button', { name: 'Recalcular' })
+    await expect(recalcular).toBeEnabled({ timeout: 15000 })
+    // La casilla vaciada a propósito: null, que en el servidor quita la cifra.
+    await page.locator('#horas-excepciones').fill('')
+    await recalcular.click()
+    await expect.poll(() => cuerpos.length).toBe(2)
+    expect(cuerpos[1]).toHaveProperty('excepciones', null)
+    expect(cuerpos[1].guardar).toBeUndefined()
+    // Con una cifra, la cifra (como siempre).
+    await expect(recalcular).toBeEnabled({ timeout: 15000 })
+    await page.locator('#horas-excepciones').fill('1')
+    await recalcular.click()
+    await expect.poll(() => cuerpos.length).toBe(3)
+    expect(cuerpos[2].excepciones).toBe(1)
+    // Un pegado nuevo con la casilla vacía no manda la clave: se conserva la del plan.
+    await expect(recalcular).toBeEnabled({ timeout: 15000 })
+    await page.locator('#horas-excepciones').fill('')
+    await page.getByRole('button', { name: 'Pegar uno nuevo' }).click()
+    await page.locator('#horas-plan').fill(TEXTO)
+    await page.getByRole('button', { name: 'Ver cómo vamos' }).click()
+    await expect.poll(() => cuerpos.length).toBe(4)
+    expect('excepciones' in cuerpos[3]).toBe(false)
   })
 })
 

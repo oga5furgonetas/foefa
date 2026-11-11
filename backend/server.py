@@ -40995,6 +40995,11 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
     # limite, quien lleva un bloque de once horas, a que ritmo va— se sigue
     # calculando y es lo util del dia a dia.
     excepciones_conocidas = "excepciones" in data and data.get("excepciones") is not None
+    # Tres casos (11-11-2026): la clave no viene («Guardarlo en DGA1», la web vieja
+    # con la casilla vacía) -> se conservan las del plan; viene un número -> se
+    # guarda; viene null A PROPÓSITO (la casilla vaciada al recalcular) -> se quitan.
+    # Antes null también conservaba y no había forma de volver a «no se sabe».
+    quitar_excepciones = "excepciones" in data and data.get("excepciones") is None
     try:
         excepciones = _entero(data.get("excepciones"), "excepciones", defecto=0, minimo=0)
     except (TypeError, ValueError):
@@ -41035,12 +41040,6 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
     otra_nave = None
     if center and del_texto and del_texto != center:
         otra_nave = {"centro": del_texto, "por": "cabecera"}
-    elif center and not del_texto and data.get("ignorar_fichas") is not True:
-        # `ignorar_fichas` (opcional, 11-11-2026): «Guardarlo aquí de todas formas».
-        # Las fichas pueden estar sin actualizar (la gente de DGA2 con la ficha aún
-        # en OGA5) y no pueden impedir que la oficina guarde su plan. La cabecera,
-        # en cambio, sí manda siempre.
-        otra_nave = await _whc_nave_por_fichas(conductores, center)
 
     # CUÁNDO SE PEGÓ (10-11-2026). Al abrir la pantalla, el plan guardado se
     # volvía a analizar con la fecha de HOY: un plan del martes abierto el jueves
@@ -41056,13 +41055,26 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
     # Si el texto es el guardado en la elegida, se dice (`es_el_guardado`) y se
     # cuenta desde cuando se pegó allí.
     es_el_guardado = False
+    previo = None
     if center:
         previo = await db.whc_planes.find_one(
             {"center": center, "week": sun_plan},
-            {"_id": 0, "texto": 1, "pegado_en": 1, "updated_at": 1})
+            {"_id": 0, "texto": 1, "pegado_en": 1, "updated_at": 1, "excepciones": 1})
         if previo and previo.get("texto") == texto[:400000]:
             pegado_en = previo.get("pegado_en") or previo.get("updated_at")
             es_el_guardado = True
+    if center and not otra_nave and not del_texto and not es_el_guardado \
+            and data.get("ignorar_fichas") is not True:
+        # `ignorar_fichas` (opcional, 11-11-2026): «Guardarlo aquí de todas formas».
+        # Las fichas pueden estar sin actualizar (la gente de DGA2 con la ficha aún
+        # en OGA5) y no pueden impedir que la oficina guarde su plan. La cabecera,
+        # en cambio, sí manda siempre.
+        # Y NO CON EL PLAN YA GUARDADO EN LA ELEGIDA (11-11-2026): alguien lo guardó
+        # ahí a sabiendas. Mirar las fichas cada vez que se abría o se recalculaba
+        # lo sacaba como «parece de OGA5 · Quitarlo de DGA2» y el «Recalcular» no
+        # guardaba las excepciones. Las fichas quedan para los pegados nuevos, que
+        # tienen el «de todas formas»; un plan guardado solo lo señala su cabecera.
+        otra_nave = await _whc_nave_por_fichas(conductores, center)
     dia_pegado = _whc_dia_local(pegado_en) if pegado_en else None
     if not pegado_en:
         pegado_en = datetime.now(timezone.utc).isoformat()
@@ -41122,8 +41134,11 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
             # DGA1» no se lleva las de OGA5, y no se guarda un 0 que nadie ha dicho.
             if excepciones_conocidas:
                 cambios["excepciones"] = excepciones
+            orden = {"$set": cambios}
+            if quitar_excepciones:
+                orden["$unset"] = {"excepciones": ""}
             await db.whc_planes.update_one(
-                {"center": center, "week": sun}, {"$set": cambios}, upsert=True)
+                {"center": center, "week": sun}, orden, upsert=True)
             guardado = True
         else:
             aviso_guardado = (
@@ -41139,6 +41154,15 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
     # Validado: S31 de OGA5, 69 conductores con horas y 2 excepciones ->
     # 67/69 = 97,101 %, que es el 97,1 % impreso en el PDF.
     con_actividad = sum(1 for c in ev if c["trabajado"] > 0)
+    # Sin la clave, las que conserva el plan (11-11-2026): tras «Guardarlo en
+    # DGA1» la pantalla decía «no se sabe» aunque DGA1 tuviera su cifra guardada,
+    # y al volver a abrirlo salía el porcentaje. Solo si este texto es el que queda
+    # guardado (`previo` es ese mismo documento, leído antes de guardar).
+    if not excepciones_conocidas and not quitar_excepciones and (guardado or es_el_guardado):
+        conservadas = (previo or {}).get("excepciones")
+        if isinstance(conservadas, (int, float)) and not isinstance(conservadas, bool):
+            excepciones = int(conservadas)
+            excepciones_conocidas = True
     whc = None
     if con_actividad and not excepciones_conocidas:
         # Lo unico honesto: el denominador SI lo sabemos, el numerador no.
