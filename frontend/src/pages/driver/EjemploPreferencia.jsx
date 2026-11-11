@@ -14,11 +14,15 @@
    correos», «Caseta», «Más opciones», «Notas», «Entregar a:»), se queda en español en los demás idiomas, entre comillas y
    con lo que significa al lado (`literal`): no se sabe cómo lo escribe esa app en cada idioma y no se inventa.
 
+   R12 (Dani, 11-11-2026): «cuando el cliente no tiene preferencia sale normal, como siempre: debería salir "Miembro del
+   hogar"; pero la primera siempre debe ser la preferencia de entrega». Bajo la lista, una línea apagada con «Sin
+   preferencia» y «Miembro del hogar» (también literal de la app) como lo primero.
+
    La Hoja no cierra con Escape ni mueve el foco: lo hace esta pantalla (foco a «Cerrar» al abrir, Escape cierra y el
    tabulador no sale de la hoja); quien la abre devuelve el foco a su botón al cerrarla. */
 import { useEffect, useId, useRef } from 'react'
 import {
-  ArrowRight, Camera, Check, ChevronDown, CircleCheck, CircleX, KeyRound, MapPin, MessageSquare, Phone, StickyNote, Truck,
+  ArrowRight, Camera, Check, ChevronDown, CircleCheck, CircleMinus, CircleX, KeyRound, MapPin, MessageSquare, Phone, StickyNote, Truck,
 } from 'lucide-react'
 import { idioma, tx } from '../../lib/idioma'
 import { Etiqueta, EtiquetaHecho, Hoja } from './piezas'
@@ -47,6 +51,10 @@ function literal(es, significa) {
   if (idioma() === 'es') return es
   return significa && significa !== es ? `"${es}" (${significa})` : `"${es}"`
 }
+// «Miembro del hogar», lo primero que sale cuando el cliente NO tiene preferencia (R12). Como opción, igual que las de la
+// lista; dentro de la frase del lector (`enFrase`), entre comillas también en español.
+const miembroDelHogar = (enFrase = false) => (idioma() === 'es' && enFrase
+  ? '"Miembro del hogar"' : literal('Miembro del hogar', tx('Miembro del hogar')))
 
 // El redondel de cada opción, como en la app: el de la preferencia, marcado y en verde; los demás, vacíos.
 function Redondel({ marcado = false }) {
@@ -129,6 +137,25 @@ export default function EjemploPreferencia({ onClose }) {
               </span>
             </li>
           </ul>
+          {/* R12 (Dani, 11-11-2026): «cuando el cliente no tiene preferencia sale normal, como siempre: debería salir
+              "Miembro del hogar"; pero la primera siempre debe ser la preferencia de entrega». Una línea corta y apagada
+              debajo de la lista: si lo primero es un sitio que eligió el cliente, hay preferencia; si es «Miembro del
+              hogar», no. Lo visible es para la vista; el lector lee la frase entera. */}
+          {/* Como la opción destacada de arriba, pero apagada: la etiqueta encima y, debajo, la opción con su redondel
+              alineado con los de la lista. */}
+          <div data-testid="ejemplo-pref-sin" className="mt-3 border-t border-dark-800 pt-3">
+            <p className="sr-only">{tx('Sin preferencia, lo primero es {opcion}', { opcion: miembroDelHogar(true) })}</p>
+            <div aria-hidden="true" className="flex flex-col items-start gap-2 text-dark-400">
+              <span className="flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 text-sec">
+                <Etiqueta testid="ejemplo-pref-sin-etiqueta" tono="neutro" icono={CircleMinus} texto={tx('Sin preferencia')} />
+                <span className="min-w-0 break-words">{tx('lo primero es')}</span>
+              </span>
+              <span className="flex max-w-full items-center gap-2 px-2 text-texto">
+                <Redondel />
+                <span data-testid="ejemplo-pref-sin-texto" className="min-w-0 break-words">{miembroDelHogar()}</span>
+              </span>
+            </div>
+          </div>
         </section>
 
         {/* 2. Más ABAJO, las notas: apagadas, y ninguna es la preferencia. */}

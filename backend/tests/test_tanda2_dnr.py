@@ -253,6 +253,10 @@ def _dnr(r, paquete):
 # R7 (11-11-2026): `entrega` es nueva y `sin_interpretar` ya no sale (F22/F25).
 CLAVES_DNR = {"dia", "entrega", "paquete", "estado", "cp", "como", "lejos", "llamada", "segundos", "fallo_contacto",
               "foto", "foto_motivo"}
+# R14 (11-11-2026): las 7 nuevas, de las columnas de la tabla DNR que Dani decidió usar.
+CLAVES_R14 = {"contacto_como", "preferencia", "buzon_otro", "varios_a_la_vez", "a_distancia", "cliente_no_confirma",
+              "alto_valor"}
+CLAVES_DNR = CLAVES_DNR | CLAVES_R14
 
 
 # ── Lo suyo, por semana y con su estado ────────────────────────────────────────
@@ -302,8 +306,9 @@ async def test_solo_lo_minimo_ni_euros_ni_el_id_ni_otros(base):
             assert set(x) == CLAVES_DNR, set(x) ^ CLAVES_DNR
     texto = json.dumps(r, ensure_ascii=False)
     # Ni euros, ni su ID, ni nada de otros conductores (ni sus filas de foto o contacto), ni las columnas que no se
-    # entienden (PHR, la excepción, las simultáneas).
-    for prohibido in ("25.4", "25.40", "€", "valor", "AANA000001", "AANAVIEJA1", "ALUIS", "TBLUIS", "TBEVA", "TBPACO",
+    # entienden (PHR, la excepción, las simultáneas). Desde R14 hay una clave «alto_valor» (un sí, nunca el importe): lo
+    # prohibido es la clave «valor» y «valor_eur», no la palabra.
+    for prohibido in ("25.4", "25.40", "€", '"valor"', "valor_eur", "AANA000001", "AANAVIEJA1", "ALUIS", "TBLUIS", "TBEVA", "TBPACO",
                       "TBFANT", "TBJUAN", "TBPEDR", "LUIS", "PACKAGE_NOT_VISIBLE", "GARDEN", "jardin", "NO_CALL",
                       "PHRSECRETO", "EXCSECRETA", "phr", "excepcion", "simultaneas"):
         assert prohibido not in texto, prohibido
@@ -724,12 +729,16 @@ def test_cada_dato_interpretado_y_lo_que_no_se_entiende_a_null():
     r = e({"mas_25m": "1", "scan": "DELIVERED_TO_MOON"}, [], [])
     assert (r["como"], r["lejos"]) == (None, None)
 
-    # «No llamaste» solo si el tipo lo dice con todas las letras y sin segundos; con 0 s y un tipo desconocido, no se sabe.
-    assert e({}, [], [{"tipo": "NO_CALL", "segundos": 0}])["llamada"] == "no"
-    # Con segundos manda lo medido: 9 s es una llamada, corta (R9).
+    # «No llamaste» por el tipo solo si lo dice con todas las letras y la fila no trae ningún segundo.
+    assert e({}, [], [{"tipo": "NO_CALL", "segundos": ""}])["llamada"] == "no"
+    # Con segundos manda lo medido: 9 s es una llamada, corta (R9). El 0 no es una medida (retoque de R12, 11-11-2026):
+    # con NO_CALL y 0 s, «no», como sin segundos.
     assert e({}, [], [{"tipo": "NO_CALL", "segundos": 9}])["llamada"] == "corta"
-    sin_saber = e({}, [], [{"tipo": "SMS", "segundos": 0}])
-    assert (sin_saber["llamada"], sin_saber["segundos"], sin_saber["fallo_contacto"]) == (None, None, None)
+    assert e({}, [], [{"tipo": "NO_CALL", "segundos": 0}])["llamada"] == "no"
+    # Una fila de la tabla de fallos de contacto es fallo diga lo que diga el tipo; con un mensaje y 0 s, de la llamada
+    # no se afirma nada (ni «0 s»).
+    con_cero = e({}, [], [{"tipo": "SMS", "segundos": 0}])
+    assert (con_cero["llamada"], con_cero["segundos"], con_cero["fallo_contacto"]) == (None, None, True)
 
     assert e({}, [{"fallo": "PASS"}], [])["foto"] == "bien"
     assert e({}, [{"fallo": ""}, {"fallo": "-"}], [])["foto"] is None
@@ -739,32 +748,40 @@ def test_cada_dato_interpretado_y_lo_que_no_se_entiende_a_null():
     assert e({"scan": ""}, [], [{"motivo": "DELIVERED_TO_NEIGHBOR", "segundos": 0}])["como"] == "vecino"
 
 
-def test_la_foto_mal_solo_con_un_motivo_conocido():
-    """R7/F7: «La foto no pasó la revisión» es decir algo malo de una persona; solo con un motivo que se reconoce. Un
-    valor que no se entiende («N», «Y», «PENDING», un código raro) no dice nada: null, nunca «mal» ni «bien»."""
+def test_la_foto_mal_con_cualquier_fallo_y_el_motivo_solo_si_se_conoce():
+    """R7/F7 decía: «mal» solo con un motivo que se reconoce, y lo demás null. R12 (11-11-2026, con un reporte real): la
+    tabla de «POD Audit» es la de los FALLOS de foto, así que cualquier valor que no sea PASS/PASSED es «mal»; el motivo,
+    solo si se reconoce (si no, «mal» SIN motivo)."""
     e = server._dnr_entrega
     for raro in ("N", "Y", "PENDING", "WEIRD_AUDIT", "OK", "Accepted"):
         r = e({}, [{"fallo": raro}], [])
-        assert (r["foto"], r["foto_motivo"]) == (None, None), raro
+        assert (r["foto"], r["foto_motivo"]) == ("mal", None), raro
     assert (e({}, [{"fallo": "BLURRY"}], [])["foto"], e({}, [{"fallo": "TOO_DARK"}], [])["foto_motivo"]) == (
         "mal", "oscura")
-    # «bien» solo si TODO lo que dice es PASS/PASSED; con uno que no se entiende al lado, no se sabe.
+    # «bien» solo si TODO lo que dice es PASS/PASSED; con un fallo al lado, «mal».
     assert e({}, [{"fallo": "PASSED"}, {"fallo": "PASS"}], [])["foto"] == "bien"
-    assert e({}, [{"fallo": "PASS"}, {"fallo": "PENDING"}], [])["foto"] is None
+    assert (e({}, [{"fallo": "PASS"}, {"fallo": "PENDING"}], [])["foto"],
+            e({}, [{"fallo": "PASS"}, {"fallo": "PENDING"}], [])["foto_motivo"]) == ("mal", None)
     # Un motivo conocido manda aunque haya otras filas.
     r = e({}, [{"fallo": "PASS"}, {"fallo": "NO_PHOTO"}], [])
     assert (r["foto"], r["foto_motivo"]) == ("mal", "sin_foto")
 
 
-def test_el_fallo_de_contacto_solo_si_el_tipo_lo_dice_o_la_llamada_es_corta():
-    """R7/F7: estar en la tabla de contacto ya NO basta para «Te apuntaron un fallo de contacto». Solo un tipo que lo
-    dice con todas las letras (los NO_CALL… que dan «No llamaste») o, desde R9, una llamada de menos de 30 s."""
+def test_el_fallo_de_contacto_si_esta_en_la_tabla_o_contact_compliance_es_n():
+    """R7/F7 decía que estar en la tabla de contacto no bastaba (no se había visto nunca un reporte real). R12
+    (11-11-2026): en el reporte real esa tabla es la de los FALLOS de contacto (sus filas suman «CC Fails»), así que
+    estar en ella ES el fallo, diga lo que diga el tipo y aunque la llamada llegue a 30 s."""
     e = server._dnr_entrega
-    for tipo, segundos in (("CALL", 30), ("SMS", 0), ("Y", 0), ("", 0), ("CONTACTED", 30), ("CALL", 1800)):
-        assert e({}, [], [{"tipo": tipo, "segundos": segundos}])["fallo_contacto"] is None, (tipo, segundos)
+    for tipo, segundos in (("CALL", 30), ("SMS", 0), ("Y", 0), ("", 0), ("CONTACTED", 30), ("CALL", 1800),
+                           ("Calls to Customer", 0)):
+        assert e({}, [], [{"tipo": tipo, "segundos": segundos}])["fallo_contacto"] is True, (tipo, segundos)
+    # Los NO_CALL… puestos a ojo siguen diciendo «no» cuando la fila no trae ningún segundo.
     for tipo in ("NO_CALL", "no call made", "CALL_NOT_MADE", "NOT_CALLED"):
-        r = e({}, [], [{"tipo": tipo, "segundos": 0}])
+        r = e({}, [], [{"tipo": tipo, "segundos": ""}])
         assert (r["llamada"], r["fallo_contacto"]) == ("no", True), tipo
+    # Sin fila, «Contact Compliance» N también es fallo; Y no.
+    assert (e({"contacto": "N"}, [], [])["fallo_contacto"], e({"contacto": "Y"}, [], [])["fallo_contacto"]) == (
+        True, None)
     # Dice NO_CALL pero hay 9 s medidos: manda lo medido, y es corta (R9).
     assert e({}, [], [{"tipo": "NO_CALL", "segundos": 9}])["fallo_contacto"] is True
     # Sin fila de contacto, no se sabe (nunca false).
@@ -773,29 +790,33 @@ def test_el_fallo_de_contacto_solo_si_el_tipo_lo_dice_o_la_llamada_es_corta():
 
 def test_la_llamada_minimo_30_segundos():
     """R9 (Dani, 11-11-2026): «dando tono no podemos colgar nosotros la llamada y mínimo deben ser 30 segundos».
-    Menos de 30 s medidos es «corta» y es fallo de contacto; 30 o más, «si» y sin fallo. Los demás casos, igual."""
+    Menos de 30 s medidos es «corta»; 30 o más, «si». Desde R12 (11-11-2026) cualquier fila de la tabla de contacto es
+    fallo de contacto (es la tabla de los fallos), también con 30 s o más. El 0 no es una medida (retoque de R12): una
+    fila de tipo llamada con 0 s es «corta» SIN cifra."""
     e = server._dnr_entrega
     assert server._DNR_SEGUNDOS_MIN_LLAMADA == 30
-    for segundos, llamada, fallo in ((1, "corta", True), (29, "corta", True), ("29.9", "corta", True),
-                                     (30, "si", None), (31, "si", None), (1800, "si", None)):
+    for segundos, llamada in ((1, "corta"), (29, "corta"), ("29.9", "corta"),
+                              (30, "si"), (31, "si"), (1800, "si")):
         r = e({}, [], [{"tipo": "CALL", "segundos": segundos}])
-        assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == (llamada, int(float(segundos)), fallo), segundos
-    # NO_CALL sin segundos: «no», como siempre.
-    for vacio in (0, "", None, "0"):
+        assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == (llamada, int(float(segundos)), True), segundos
+    r = e({}, [], [{"tipo": "CALL", "segundos": 0}])
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("corta", None, True)
+    # NO_CALL con 0 s o sin ningún segundo: «no», sin cifra.
+    for vacio in (0, "0", "", None, "-"):
         r = e({}, [], [{"tipo": "NO_CALL", "segundos": vacio}])
         assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("no", None, True), vacio
     # NO_CALL con 12 s: los datos se contradicen y manda lo medido.
     r = e({}, [], [{"tipo": "NO_CALL", "segundos": 12}])
     assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("corta", 12, True)
-    # Dos filas: vale la llamada más larga (si una llega a 30, no es corta).
+    # Dos filas: vale la llamada más larga (si una llega a 30, no es corta; el fallo sigue: está en la tabla).
     r = e({}, [], [{"tipo": "CALL", "segundos": 12}, {"tipo": "CALL", "segundos": 45}])
-    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("si", 45, None)
-    # Sin fila de contacto: todo null.
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("si", 45, True)
+    # Sin fila de contacto (ni «Contact Compliance»): todo null.
     r = e({}, [], [])
     assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == (None, None, None)
-    # Segundos raros: ni «si», ni «corta», ni «no».
+    # Segundos raros (retoque de R12): no son una medida y manda el tipo; con NO_CALL, «no» sin cifra. El fallo, sí.
     r = e({}, [], [{"tipo": "NO_CALL", "segundos": 600123456}])
-    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == (None, None, None)
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("no", None, True)
 
 
 def test_el_cp_solo_si_parece_un_codigo_postal():
@@ -822,7 +843,10 @@ def test_nada_que_parezca_texto_libre_sale_tal_cual():
     texto = json.dumps(r, ensure_ascii=False)
     for libre in ("Calle", "Mayor", "Maria", "Lopez", "600", "JUAN", "PEREZ"):
         assert libre not in texto, libre
-    assert set(r.values()) == {None}
+    # Desde R12 (11-11-2026) estar en la tabla de fallos de foto y en la de contacto ya dice algo (fallo de foto sin
+    # motivo y fallo de contacto), pero nada del texto libre; lo demás, null (un tipo que no se reconoce con 0 s no dice
+    # nada de la llamada).
+    assert {k: v for k, v in r.items() if v is not None} == {"fallo_contacto": True, "foto": "mal"}
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -1161,25 +1185,27 @@ async def test_la_n_que_nunca_se_volvio_a_pegar_sigue_sin_clasificar(base):
 
 def test_los_segundos_de_llamada_solo_entre_1_y_1800():
     """G11: un teléfono en la celda de los segundos («600123456») salía como «Llamaste al cliente (600123456 s)».
-    Ahora, entero entre 1 y 1800; fuera de eso, null, y entonces `llamada` no es «si» por los segundos. Y si los
-    segundos traen algo que no se entiende, tampoco se afirma «No llamaste» aunque el tipo lo diga."""
+    Ahora, entero entre 1 y 1800 (el 0 no se manda: retoque de R12, 11-11-2026); fuera de eso, null, y entonces
+    `llamada` no es «si» por los segundos: manda el tipo (con CALL, «corta» sin cifra)."""
     e = server._dnr_entrega
-    for raro in (600123456, "600123456", 1801, -5, "600 123456x"):
+    for raro in (600123456, "600123456", 1801, -5, "600 123456x", 0, "0"):
         r = e({}, [], [{"tipo": "CALL", "segundos": raro}])
-        assert (r["llamada"], r["segundos"]) == (None, None), raro
+        assert (r["llamada"], r["segundos"]) == ("corta", None), raro
+        assert server._dnr_segundos(raro)[0] is None, raro
     # Por debajo de 30 s la llamada es «corta» (R9); los segundos salen igual.
     for bueno, s, llamada in ((1, 1, "corta"), (1800, 1800, "si"), ("12", 12, "corta"), ("12.7", 12, "corta"),
                               ("30", 30, "si")):
         r = e({}, [], [{"tipo": "CALL", "segundos": bueno}])
         assert (r["llamada"], r["segundos"]) == (llamada, s), bueno
     r = e({}, [], [{"tipo": "NO_CALL", "segundos": 600123456}])
-    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == (None, None, None)
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("no", None, True)     # R12: la fila es el fallo
     # Una fila con segundos buenos y otra con un teléfono: los buenos.
     r = e({}, [], [{"tipo": "CALL", "segundos": 12}, {"tipo": "CALL", "segundos": 600123456}])
     assert (r["llamada"], r["segundos"]) == ("corta", 12)
-    # Lo de siempre sigue igual.
-    assert e({}, [], [{"tipo": "NO_CALL", "segundos": 0}])["llamada"] == "no"
-    assert e({}, [], [{"tipo": "NO_CALL", "segundos": ""}])["llamada"] == "no"
+    # Con NO_CALL, ni el 0 ni la celda vacía son una medida: «no», sin cifra.
+    for vacio in (0, ""):
+        r = e({}, [], [{"tipo": "NO_CALL", "segundos": vacio}])
+        assert (r["llamada"], r["segundos"]) == ("no", None), vacio
 
 
 def test_un_movil_no_es_un_codigo_postal():
@@ -1209,3 +1235,408 @@ async def test_el_paquete_solo_si_tiene_forma_de_codigo(base):
     for p in raros:
         assert p not in paquetes and p not in texto, p
     assert r["semanas"][0]["cuentan"] == 3                # TBAANA100 y las dos con forma de código
+
+
+# ── R12 (11-11-2026): ajustado con un Daily Report real (OGA5, 09-11-2026) y su leyenda ─────────────────────────────
+# Dani mandó un informe de verdad: de él se ha tomado SOLO el vocabulario de sus columnas y lo que dice su leyenda
+# (ningún paquete, ID ni dato de nadie). Los paquetes y los IDs de aquí son inventados, con la misma forma que los reales
+# («ES» + 10 cifras). La tabla de foto y la de contacto son tablas de FALLOS: estar en ellas ya es un fallo.
+
+# Las ocho frases de la leyenda de «POD Audit» (unas veces dice «Package» y otras «Parcel»), con su motivo.
+LEYENDA_FOTO = (
+    ("Blurred photo", "borrosa"), ("Person apparent in photo", "persona"), ("No {p} detected in photo", "sin_paquete"),
+    ("{P} in car", "en_furgoneta"), ("{P} in hand", "en_mano"), ("{P} in letterbox", "en_buzon"),
+    ("{P} too close", "muy_cerca"), ("Photo too dark", "oscura"))
+
+
+def test_r12_cada_frase_de_la_leyenda_de_la_foto_con_package_y_con_parcel():
+    e = server._dnr_entrega
+    for frase, motivo in LEYENDA_FOTO:
+        for palabra in ("Package", "Parcel"):
+            texto = frase.format(p=palabra.lower(), P=palabra)
+            variantes = {texto, texto.upper(), texto.lower(), texto.replace(" ", "_").upper()}
+            # «in photo» o sin él (la leyenda lo pone en unas y en otras no).
+            if texto.endswith(" in photo"):
+                variantes.add(texto[:-len(" in photo")])
+            elif "photo" not in texto.lower():
+                variantes.add(texto + " in photo")
+            for v in variantes:
+                r = e({}, [{"fallo": v}], [])
+                assert (r["foto"], r["foto_motivo"]) == ("mal", motivo), v
+    # Lo que se vio escrito en las filas del informe real, y las otras formas de la leyenda.
+    for v, motivo in (("Package in car", "en_furgoneta"), ("No package detected", "sin_paquete"),
+                      ("No parcel detected", "sin_paquete"), ("Person in photo", "persona"),
+                      ("Parcel in mailbox", "en_buzon"), ("Package in mailbox", "en_buzon")):
+        r = e({}, [{"fallo": v}], [])
+        assert (r["foto"], r["foto_motivo"]) == ("mal", motivo), v
+
+
+def test_r12_la_tabla_de_foto_es_de_fallos_un_motivo_que_no_se_reconoce_es_mal_sin_motivo():
+    """Es la tabla de FALLOS de foto (sus filas suman la columna «POD Fails» del resumen): una fila con «POD Audit»
+    relleno es un fallo aunque no se reconozca el motivo. «bien» solo con PASS/PASSED; sin fila, no se sabe."""
+    e = server._dnr_entrega
+    for raro in ("Some new reason", "WEIRD_AUDIT", "N", "PENDING"):
+        r = e({}, [{"fallo": raro}], [])
+        assert (r["foto"], r["foto_motivo"]) == ("mal", None), raro
+    assert (e({}, [{"fallo": "PASS"}], [])["foto"], e({}, [{"fallo": "PASSED"}], [])["foto"]) == ("bien", "bien")
+    assert (e({}, [], [])["foto"], e({}, [{"fallo": ""}], [])["foto"]) == (None, None)
+    # Un motivo reconocido manda sobre uno que no, en cualquier orden.
+    r = e({}, [{"fallo": "Some new reason"}, {"fallo": "Parcel in hand"}], [])
+    assert (r["foto"], r["foto_motivo"]) == ("mal", "en_mano")
+
+
+def test_r12_la_tabla_de_contacto_es_de_fallos_y_el_0_no_es_una_medida():
+    """En el informe real, «CC Type» es «Calls to Customer» o vacío y «Call Duration (Seconds)» es 0 en TODAS las
+    filas, también en las que apuntan una llamada. Estar en esa tabla ya es un fallo de contacto. Retoque de R12
+    (11-11-2026): el 0 no se manda (sería afirmar «0 s», una medida que el informe no da; y la subida guarda como 0 una
+    celda vacía). Sin segundos válidos manda el tipo: una llamada → «corta» sin cifra; vacío → «no»; un mensaje u otro
+    tipo → no se sabe."""
+    e = server._dnr_entrega
+    for cero in (0, "0", 0.0, "", None, "-"):
+        r = e({}, [], [{"tipo": "Calls to Customer", "segundos": cero}])
+        assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("corta", None, True), cero
+        r = e({}, [], [{"tipo": "", "segundos": cero}])
+        assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("no", None, True), cero
+        for mensaje in ("SMS", "Texts to Customer", "Message"):
+            r = e({}, [], [{"tipo": mensaje, "segundos": cero}])
+            assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == (None, None, True), (mensaje, cero)
+    r = e({}, [], [{"tipo": "Calls to Customer", "segundos": 45}])
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("si", 45, True)
+    for corta in (12, 29):
+        r = e({}, [], [{"tipo": "Calls to Customer", "segundos": corta}])
+        assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("corta", corta, True), corta
+    # Con segundos válidos mandan ellos, aunque el tipo venga vacío.
+    r = e({}, [], [{"tipo": "", "segundos": 12}])
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("corta", 12, True)
+    # La fila manda sobre «Contact Compliance» de la propia DNR.
+    r = e({"contacto": "Y"}, [], [{"tipo": "Calls to Customer", "segundos": 0}])
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("corta", None, True)
+    r = e({"contacto": "Y"}, [], [{"tipo": "", "segundos": 0}])
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("no", None, True)
+    # Con algo raro en la celda tampoco hay cifra: manda el tipo.
+    for raro in (600123456, 1801, -5, "600 123456x"):
+        r = e({"contacto": "Y"}, [], [{"tipo": "Calls to Customer", "segundos": raro}])
+        assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("corta", None, True), raro
+    # Varias filas: si alguna apunta una llamada, «corta»; un tipo que no se reconoce junto a uno vacío, no se sabe.
+    r = e({}, [], [{"tipo": "", "segundos": 0}, {"tipo": "Calls to Customer", "segundos": 0}])
+    assert (r["llamada"], r["segundos"]) == ("corta", None)
+    r = e({}, [], [{"tipo": "", "segundos": 0}, {"tipo": "SMS", "segundos": 0}])
+    assert (r["llamada"], r["segundos"]) == (None, None)
+    # Los NO_CALL… llevan CALL en su código pero no son una llamada.
+    for tipo in ("NO_CALL", "no call made", "CALL_NOT_MADE", "NOT_CALLED"):
+        r = e({}, [], [{"tipo": tipo, "segundos": 0}])
+        assert (r["llamada"], r["segundos"]) == ("no", None), tipo
+
+
+def test_r12_por_la_subida_una_celda_de_segundos_vacia_no_es_0_s():
+    """M1 de la revisión de R12: la subida del .html guarda «Call Duration (Seconds)» con _dia_num, que deja en 0 una
+    celda vacía, «-», «N/A» o «12s». Eso no puede salir como «Llamada corta · 0 s»: sin cifra. (Cómo se guarda no se
+    cambia.)"""
+    html = _HTML_R12.replace(
+        "<td>Calls to Customer</td><td>0</td>", "<td>Calls to Customer</td><td></td>").replace(
+        "<td>DELIVERED_TO_MAIL_SLOT</td><td></td><td>0</td>", "<td>DELIVERED_TO_MAIL_SLOT</td><td></td><td>-</td>")
+    assert html.count("<td>0</td>") == 0
+    p = server._parsea_diario_html(html)
+    assert len(p["cc"]) == 2
+    for fila in p["dnr"]:
+        ccs = [x for x in p["cc"] if (x["tracking_id"], x["transporter_id"]) == (fila["tracking_id"], "AINVENTA0001")]
+        if not ccs:
+            continue
+        r = server._dnr_entrega(fila, [], ccs)
+        assert r["segundos"] is None and r["fallo_contacto"] is True, fila["tracking_id"]
+        assert r["llamada"] == {"ES2600000001": "corta", "ES2600000004": "no"}[fila["tracking_id"]]
+
+
+def test_r12_sin_fila_de_contacto_manda_contact_compliance():
+    """La leyenda: «Contact Compliance» Y = se intentó una llamada o un mensaje; N = no. Solo cuando el paquete no
+    tiene fila en la tabla de fallos de contacto. Lo que no sea Y/N, no se sabe."""
+    e = server._dnr_entrega
+    r = e({"contacto": "Y"}, [], [])
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("si", None, None)
+    r = e({"contacto": "N"}, [], [])
+    assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("no", None, True)
+    for raro in ("", "-", "1", "0", "PENDING", None):
+        r = e({"contacto": raro}, [], [])
+        assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == (None, None, None), raro
+
+
+_HTML_R12 = """<html><body>
+<h1>ES TDSL OGA5 Daily Report 2026-11-09</h1>
+<h2>DNR (2026-11-07)</h2>
+<table>
+<tr><th>Tracking ID</th><th>Transporter ID</th><th>Delivery Date</th><th>Delivery Scan</th><th>DSC</th>
+<th>Delivered &ge; 25m</th><th>Contact Compliance</th><th>PHR</th><th>Postal Code</th></tr>
+<tr><td>ES2600000001</td><td>AINVENTA0001</td><td>2026-11-02</td><td>DELIVERED_TO_HOUSEHOLD_MEMBER</td><td>Y</td>
+<td>N</td><td>Y</td><td>N</td><td>15701</td></tr>
+<tr><td>ES2600000002</td><td>AINVENTA0001</td><td>2026-11-03</td><td>DELIVERED_TO_DOORSTEP</td><td>N</td>
+<td>Y</td><td>N</td><td>N</td><td>15702</td></tr>
+<tr><td>ES2600000003</td><td>AINVENTA0001</td><td>2026-10-30</td><td>DELIVERED_TO_SAFE_LOCATION</td><td>Y</td>
+<td>N</td><td>Y</td><td>Y</td><td>15703</td></tr>
+<tr><td>ES2600000004</td><td>AINVENTA0001</td><td>2026-11-04</td><td>DELIVERED_TO_MAIL_SLOT</td><td>Y</td>
+<td>N</td><td>Y</td><td>Y</td><td>15704</td></tr>
+</table>
+<table>
+<tr><th>Tracking ID</th><th>Transporter ID</th><th>Delivery/Attempt Reason</th><th>POD Audit</th></tr>
+<tr><td>ES2600000001</td><td>AINVENTA0001</td><td>DELIVERED_TO_HOUSEHOLD_MEMBER</td><td>Package in car</td></tr>
+<tr><td>ES2600000002</td><td>AINVENTA0001</td><td>DELIVERED_TO_DOORSTEP</td><td>No package detected</td></tr>
+</table>
+<table>
+<tr><th>Tracking ID</th><th>Transporter ID</th><th>Delivery/Attempt Reason</th><th>CC Type</th>
+<th>Call Duration (Seconds)</th></tr>
+<tr><td>ES2600000001</td><td>AINVENTA0001</td><td>DELIVERED_TO_HOUSEHOLD_MEMBER</td><td>Calls to Customer</td><td>0</td></tr>
+<tr><td>ES2600000004</td><td>AINVENTA0001</td><td>DELIVERED_TO_MAIL_SLOT</td><td></td><td>0</td></tr>
+</table>
+</body></html>"""
+
+
+def test_r12_de_un_informe_con_la_forma_real_a_lo_que_ve_el_conductor():
+    """Lo mismo, pasando por la lectura del .html tal como se guarda (sin cambiarla): «0» en la celda llega como 0, y
+    ese 0 no sale como «0 s» (retoque de R12): «Calls to Customer» es «corta» sin cifra y el tipo vacío, «no»."""
+    p = server._parsea_diario_html(_HTML_R12)
+    assert p["fecha_dnr"] == "2026-11-07" and len(p["dnr"]) == 4 and len(p["pod"]) == 2 and len(p["cc"]) == 2
+
+    def suyas(tabla, paquete):
+        return [x for x in p[tabla] if (x["tracking_id"], x["transporter_id"]) == (paquete, "AINVENTA0001")]
+
+    vista = {f["tracking_id"]: server._dnr_entrega(f, suyas("pod", f["tracking_id"]), suyas("cc", f["tracking_id"]))
+             for f in p["dnr"]}
+    campos = ("como", "lejos", "llamada", "segundos", "fallo_contacto", "foto", "foto_motivo")
+    assert {k: tuple(v[c] for c in campos) for k, v in vista.items()} == {
+        "ES2600000001": ("familiar", False, "corta", None, True, "mal", "en_furgoneta"),
+        "ES2600000002": ("puerta", True, "no", None, True, "mal", "sin_paquete"),
+        "ES2600000003": ("lugar_seguro", False, "si", None, None, None, None),
+        "ES2600000004": ("buzon", False, "no", None, True, None, None),
+    }
+    assert [x["segundos"] for x in p["cc"]] == [0, 0]       # se guarda como siempre; lo que cambia es lo que se manda
+    assert all(server._DNR_PAQUETE.match(k) for k in vista)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_r12_un_paquete_es_sale_y_contact_compliance_llega_de_lo_guardado(base):
+    """Por la ruta: un paquete «ES» + 10 cifras sale, y «Contact Compliance» se lee de la fila guardada (la proyección
+    de dnr_rows vuelve a pedir `contacto`). Sin euros, sin el ID y sin el PHR, como siempre."""
+    base["dnr_rows"].docs += [
+        _fila("ES2600000001", "AANA000001", "2026-11-09", "Y", scan="DELIVERED_TO_HOUSEHOLD_MEMBER", contacto="Y"),
+        _fila("ES2600000002", "AANA000001", "2026-11-09", "Y", scan="DELIVERED_TO_DOORSTEP", contacto="N"),
+        _fila("ES2600000003", "AANA000001", "2026-11-09", "Y", contacto="Y")]
+    base["cc_rows"].docs.append({"tracking_id": "ES2600000003", "transporter_id": "AANA000001",
+                                 "fecha_reporte": "2026-11-09", "motivo": "DELIVERED_TO_DOORSTEP",
+                                 "tipo": "Calls to Customer", "segundos": 0})
+    base["pod_rows"].docs.append({"tracking_id": "ES2600000002", "transporter_id": "AANA000001",
+                                  "fecha_reporte": "2026-11-09", "motivo": "DELIVERED_TO_DOORSTEP",
+                                  "fallo": "Parcel in letterbox"})
+    r = await server.mis_dnr(_conductor("d-ana"))
+    assert {"ES2600000001", "ES2600000002", "ES2600000003"} <= _paquetes(r)
+    campos = ("llamada", "segundos", "fallo_contacto", "foto", "foto_motivo")
+    assert tuple(_dnr(r, "ES2600000001")[c] for c in campos) == ("si", None, None, None, None)
+    assert tuple(_dnr(r, "ES2600000002")[c] for c in campos) == ("no", None, True, "mal", "en_buzon")
+    assert tuple(_dnr(r, "ES2600000003")[c] for c in campos) == ("corta", None, True, None, None)
+    assert set(_dnr(r, "ES2600000001")) == CLAVES_DNR
+    texto = json.dumps(r, ensure_ascii=False)
+    for secreto in ("AANA000001", "PHRSECRETO", "EXCSECRETA", "25.4", "€"):
+        assert secreto not in texto, secreto
+
+
+# ── R14 (11-11-2026): más información útil de la tabla DNR ─────────────────────
+# Dani: «monta lo que consideres necesario, que dé buena información y sea útil; si consideras lo de preferencia
+# respetada, mételo, y lo de la columna esa de Mailbox Eligible, delivered elsewhere, también». Cada marca solo se dice
+# con Y (con N, vacío o algo raro, null: la pantalla no dice nada); nunca euros ni la nota del cliente.
+
+# (columna guardada en la fila, clave que sale)
+MARCAS_R14 = (("phr", "preferencia"), ("buzon_otro", "buzon_otro"), ("simultaneas", "varios_a_la_vez"),
+              ("excepcion", "a_distancia"), ("escaneo_falso", "cliente_no_confirma"), ("alto_valor", "alto_valor"))
+
+
+def test_r14_cada_marca_solo_con_y_y_nunca_false():
+    e = server._dnr_entrega
+    base_r12 = e({}, [], [])
+    for columna, clave in MARCAS_R14:
+        for si in ("Y", "y", "Yes", "TRUE", " Y "):
+            r = e({columna: si}, [], [])
+            assert r[clave] is True, (columna, si)
+            # Las demás claves no cambian por esta columna.
+            assert {k: v for k, v in r.items() if k != clave} == {k: v for k, v in base_r12.items() if k != clave}
+        for nada in ("N", "No", "false", "", "-", "N/A", None, "1", "0", "PENDING", "PHRSECRETO", "€33.05"):
+            assert e({columna: nada}, [], [])[clave] is None, (columna, nada)
+    # Una fila de antes de R14 (sin las columnas nuevas): las 7 claves nuevas a null.
+    assert {k: base_r12[k] for k in CLAVES_R14} == dict.fromkeys(CLAVES_R14)
+
+
+def test_r14_contacto_como_de_contact_details():
+    e = server._dnr_entrega
+    for valor, como in (("Calls to Customer", "llamada"), ("CALL", "llamada"), ("Call", "llamada"),
+                        ("Text", "mensaje"), ("SMS", "mensaje"), ("Texts to Customer", "mensaje"),
+                        ("", None), (None, None), ("-", None), ("Email", None), ("1", None), ("Y", None),
+                        # Las dos cosas, o que no lo hubo: no se adivina.
+                        ("Text or call", None), ("No call attempted", None), ("Call not made", None),
+                        ("Not called", None), ("No text sent", None),
+                        # Las formas que trae el informe real además de «Calls to Customer» y vacío (revisión de R14,
+                        # 11-11-2026): con el prefijo entre corchetes; NOTIFY no es una negación.
+                        ("[NOTIFY_OF_ARRIVAL] Text to Customer", "mensaje"),
+                        ("[NOTIFY_OF_ARRIVAL] Calls to Customer / Text to Customer", None),
+                        ("[OTHER] Calls to Customer / Text to Customer", None)):
+        assert e({"contacto_detalle": valor}, [], [])["contacto_como"] == como, valor
+    # Sale de la fila de la DNR, no de la tabla de fallos de contacto.
+    assert e({}, [], [{"tipo": "Calls to Customer", "segundos": 0}])["contacto_como"] is None
+
+
+def test_r14_un_tipo_con_call_que_dice_que_no_la_hubo_es_no_y_no_corta():
+    """Retoque de R12: «habla de una llamada» era «el código contiene CALL», y «No call attempted» salía «corta». Un
+    tipo cuya negación va pegada a CALL (NO_CALL…, CALL_NOT…, NOT_CALLED, NEVER_CALLED, WITHOUT_CALL) es «no»."""
+    e = server._dnr_entrega
+    for tipo in ("No call attempted", "Call not made", "Not called", "Never called", "Delivered without call",
+                 "Customer not called", "NO_CALL_ATTEMPTED", "no-call", "CALL NEVER MADE"):
+        for cero in (0, "", None):
+            r = e({"contacto": "Y"}, [], [{"tipo": tipo, "segundos": cero}])
+            assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("no", None, True), (tipo, cero)
+    # Con segundos válidos siguen mandando ellos.
+    r = e({}, [], [{"tipo": "No call attempted", "segundos": 45}])
+    assert (r["llamada"], r["segundos"]) == ("si", 45)
+    # Si otra fila apunta una llamada de verdad, «corta» (como con NO_CALL).
+    r = e({}, [], [{"tipo": "No call attempted", "segundos": 0}, {"tipo": "Calls to Customer", "segundos": 0}])
+    assert (r["llamada"], r["segundos"]) == ("corta", None)
+    # «Calls to Customer» sigue siendo una llamada: CALLS no es una negación, ni CUSTOMER, ni NOTES.
+    for tipo in ("Calls to Customer", "CALL", "Call notes"):
+        assert e({}, [], [{"tipo": tipo, "segundos": 0}])["llamada"] == "corta", tipo
+    # Revisión de R14 (11-11-2026): la negación solo hace «no» cuando niega la LLAMADA. «Calls to Customer - No
+    # answer» apunta una llamada que sí se hizo y nadie cogió: «corta» sin segundos, como «Calls to Customer».
+    for cero in (0, "", None):
+        r = e({}, [], [{"tipo": "Calls to Customer - No answer", "segundos": cero}])
+        assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == ("corta", None, True), cero
+    # Un tipo SIN CALL con una negación no afirma «Sin llamada»: no se sabe qué fue (null), como cualquier otro tipo
+    # que no habla de una llamada. Sigue siendo un fallo de contacto (estar en la tabla lo es).
+    for tipo in ("Customer not available", "No answer", "Text not delivered", "NOT_AVAILABLE", "Never home",
+                 "Left without signature"):
+        for cero in (0, "", None):
+            r = e({}, [], [{"tipo": tipo, "segundos": cero}])
+            assert (r["llamada"], r["segundos"], r["fallo_contacto"]) == (None, None, True), (tipo, cero)
+        # Junto a una fila que sí niega la llamada, tampoco: no TODAS dicen que no la hubo.
+        r = e({}, [], [{"tipo": tipo, "segundos": 0}, {"tipo": "No call attempted", "segundos": 0}])
+        assert r["llamada"] is None, tipo
+
+
+# Las claves que la subida del .html ya guardaba en cada fila DNR antes de R14 (no cambian).
+CLAVES_FILA_ANTES = {"tracking_id", "transporter_id", "fecha_entrega", "dsc", "scan", "phr", "mas_25m", "simultaneas",
+                     "contacto", "excepcion", "valor", "valor_eur", "cp"}
+CLAVES_FILA_R14 = {"contacto_detalle", "escaneo_falso", "buzon_otro", "alto_valor"}
+
+# La tabla DNR con las cabeceras del informe real y valores INVENTADOS con su forma. Trae también lo que no se usa nunca
+# (el importe, la nota del cliente, el Place ID, OTP/SIG, Next / Same Day), para ver que no sale.
+_HTML_R14 = """<html><body>
+<h1>ES TDSL OGA5 Daily Report 2026-11-09</h1>
+<h2>DNR (2026-11-07)</h2>
+<table>
+<tr><th>Tracking ID</th><th>Transporter ID</th><th>Delivery Date</th><th>Delivery Scan</th><th>DSC</th>
+<th>Delivered &ge; 25m</th><th>Simultaneous Deliveries</th><th>Contact Compliance</th><th>Contact Details</th>
+<th>PHR</th><th>Feedback False Scan Indicator</th><th>Delivery Exception</th>
+<th>Mailbox Eligible, Delivered Elsewhere</th><th>High Value</th><th>Value</th><th>Delivery Hint / Customer Note</th>
+<th>Place ID</th><th>OTP/SIG</th><th>Next / Same Day</th><th>Postal Code</th></tr>
+<tr><td>ES2600000011</td><td>AANA000001</td><td>2026-11-02</td><td>DELIVERED_TO_MAIL_SLOT</td><td>Y</td>
+<td>Y</td><td>Y</td><td>Y</td><td>Calls to Customer</td>
+<td>Y</td><td>Y</td><td>Y</td>
+<td>Y</td><td>Y</td><td>&euro;33.05</td><td>Dejar en el portal 3B, preguntar por Marta</td>
+<td>PLACEINVENT01</td><td>N</td><td>Next Day</td><td>15701</td></tr>
+<tr><td>ES2600000012</td><td>AANA000001</td><td>2026-11-03</td><td>DELIVERED_TO_DOORSTEP</td><td>Y</td>
+<td>N</td><td>N</td><td>N</td><td></td>
+<td>N</td><td>N</td><td>N</td>
+<td>N</td><td>N</td><td>&euro;33.05</td><td>Dejar en el portal 3B, preguntar por Marta</td>
+<td>PLACEINVENT02</td><td>N</td><td>Same Day</td><td>15702</td></tr>
+</table>
+</body></html>"""
+
+
+def test_r14_la_subida_guarda_las_cuatro_columnas_nuevas_sin_cambiar_las_de_antes():
+    p = server._parsea_diario_html(_HTML_R14)
+    assert p["fecha_dnr"] == "2026-11-07" and len(p["dnr"]) == 2
+    uno, dos = p["dnr"]
+    assert set(uno) == CLAVES_FILA_ANTES | CLAVES_FILA_R14, set(uno) ^ (CLAVES_FILA_ANTES | CLAVES_FILA_R14)
+    assert {k: uno[k] for k in CLAVES_FILA_R14} == {"contacto_detalle": "Calls to Customer", "escaneo_falso": "Y",
+                                                    "buzon_otro": "Y", "alto_valor": "Y"}
+    assert {k: dos[k] for k in CLAVES_FILA_R14} == {"contacto_detalle": "", "escaneo_falso": "N", "buzon_otro": "N",
+                                                    "alto_valor": "N"}
+    # Las de antes, igual que siempre.
+    assert {k: uno[k] for k in CLAVES_FILA_ANTES} == {
+        "tracking_id": "ES2600000011", "transporter_id": "AANA000001", "fecha_entrega": "2026-11-02", "dsc": "Y",
+        "scan": "DELIVERED_TO_MAIL_SLOT", "phr": "Y", "mas_25m": "Y", "simultaneas": "Y", "contacto": "Y",
+        "excepcion": "Y", "valor": "€33.05", "valor_eur": 33.05, "cp": "15701"}
+    # Un informe sin esas columnas (el de R12) guarda las de antes y las nuevas vacías.
+    viejo = server._parsea_diario_html(_HTML_R12)["dnr"][0]
+    assert set(viejo) == CLAVES_FILA_ANTES | CLAVES_FILA_R14
+    assert {k: viejo[k] for k in CLAVES_FILA_R14} == dict.fromkeys(CLAVES_FILA_R14, "")
+    # El pegado de texto no cambia: sigue sin estas columnas.
+    pegado = server._parsea_diario("DNR (2026-11-07)\nTracking ID\tTransporter ID\tDSC\tHigh Value\n"
+                                   "ES2600000013\tAANA000001\tY\tY\n")
+    assert set(pegado["dnr"][0]) == CLAVES_FILA_ANTES
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_r14_de_la_subida_a_lo_que_ve_el_conductor_con_las_19_claves(base):
+    """Por la ruta de la oficina (pegar_diario con el .html) y después la del conductor: cada DNR lleva exactamente 19
+    claves, las marcas nuevas llegan de lo guardado (la proyección de dnr_rows las pide: el doble de Mongo respeta las
+    proyecciones de inclusión) y siguen sin salir ni un euro ni la nota del cliente."""
+    r = await server.pegar_diario({"texto": _HTML_R14, "confirmar": True}, DANI)
+    assert r["guardado"] is True and r["dnr_guardados"] == 2
+    vista = await server.mis_dnr(_conductor("d-ana"))
+    for s in vista["semanas"]:
+        for x in s["dnr"]:
+            assert set(x) == CLAVES_DNR and len(x) == 19, set(x) ^ CLAVES_DNR
+    uno, dos = _dnr(vista, "ES2600000011"), _dnr(vista, "ES2600000012")
+    assert {k: uno[k] for k in CLAVES_R14} == {
+        "contacto_como": "llamada", "preferencia": True, "buzon_otro": True, "varios_a_la_vez": True,
+        "a_distancia": True, "cliente_no_confirma": True, "alto_valor": True}
+    assert {k: dos[k] for k in CLAVES_R14} == dict.fromkeys(CLAVES_R14)
+    # Las de antes, como en R12: «Contact Compliance» Y sin fila de contacto → «si» sin segundos.
+    assert (uno["como"], uno["lejos"], uno["llamada"], uno["segundos"], uno["fallo_contacto"]) == (
+        "buzon", True, "si", None, None)
+    assert (dos["como"], dos["lejos"], dos["llamada"], dos["fallo_contacto"]) == ("puerta", False, "no", True)
+    # Una DNR guardada antes de R14 (sin las columnas nuevas) sale con las 7 a null.
+    assert {k: _dnr(vista, "TBAANA100")[k] for k in CLAVES_R14} == dict.fromkeys(CLAVES_R14)
+    texto = json.dumps(vista, ensure_ascii=False)
+    for prohibido in ("33.05", "€", '"valor"', "valor_eur", "Marta", "portal 3B", "PLACEINVENT", "Next Day",
+                      "Same Day", "AANA000001", "Calls to Customer"):
+        assert prohibido not in texto, prohibido
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_r14_la_proyeccion_de_dnr_rows_pide_las_columnas_nuevas_y_ningun_euro(base):
+    await server.mis_dnr(_conductor("d-ana"))
+    proyecciones = [c.proyeccion for c in base["dnr_rows"].cursores
+                    if isinstance(c.proyeccion, dict) and "tracking_id" in c.proyeccion]
+    assert proyecciones
+    p = proyecciones[0]
+    for campo in ("phr", "simultaneas", "excepcion", "contacto_detalle", "escaneo_falso", "buzon_otro", "alto_valor"):
+        assert p.get(campo) == 1, campo
+    assert "valor" not in p and "valor_eur" not in p
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_r14_lo_que_ve_la_oficina_no_cambia(base):
+    """Las rutas de la oficina que devuelven algo de las filas DNR (la subida, en su previa y al guardar, y la tabla por
+    conductor) contestan lo mismo con las columnas nuevas que sin ellas: el detalle de la oficina va escrito campo a
+    campo y las columnas nuevas no salen ahí."""
+    sin_r14 = _HTML_R14
+    for cabecera in ("Contact Details", "Feedback False Scan Indicator", "Mailbox Eligible, Delivered Elsewhere",
+                     "High Value"):
+        sin_r14 = sin_r14.replace("<th>%s</th>" % cabecera, "<th>Otra columna %d</th>" % len(cabecera))
+    assert server._parsea_diario_html(sin_r14)["dnr"][0]["alto_valor"] == ""
+
+    async def oficina():
+        return await server.diarios_por_conductor("OGA5", "2026-10-18", "2026-11-14", DANI)
+
+    previa_sin = await server.pegar_diario({"texto": sin_r14}, DANI)
+    previa_con = await server.pegar_diario({"texto": _HTML_R14}, DANI)
+    assert previa_sin == previa_con
+    guardado_sin = await server.pegar_diario({"texto": sin_r14, "confirmar": True}, DANI)
+    tabla_sin = await oficina()
+    guardado_con = await server.pegar_diario({"texto": _HTML_R14, "confirmar": True}, DANI)
+    tabla_con = await oficina()
+    assert {k: v for k, v in guardado_sin.items() if k != "clasificados_ahora"} == {
+        k: v for k, v in guardado_con.items() if k != "clasificados_ahora"}
+    assert tabla_sin == tabla_con
+    # Y se guardó de verdad con las columnas nuevas (no es que no llegaran).
+    fila = next(d for d in base["dnr_rows"].docs if d["tracking_id"] == "ES2600000011")
+    assert (fila["contacto_detalle"], fila["alto_valor"]) == ("Calls to Customer", "Y")
+    detalle = [d for c in tabla_con["conductores"] for d in c["detalle"] if d["tracking_id"].startswith("ES26")]
+    assert len(detalle) == 2
+    for d in detalle:
+        assert set(d) == {"tracking_id", "fecha_concesion", "fecha_entrega", "dsc", "scan", "valor", "cp", "valor_eur"}

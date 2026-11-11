@@ -39416,7 +39416,16 @@ def _parsea_diario_html(texto: str) -> dict:
                         "excepcion": _dia_celda(col(f, "delivery exception")),
                         "valor": _dia_celda(col(f, "value")),
                         "valor_eur": _dia_euros(col(f, "value")),
-                        "cp": _dia_celda(col(f, "postal code"))}
+                        "cp": _dia_celda(col(f, "postal code")),
+                        # R14 (11-11-2026): cuatro columnas mas de la tabla DNR,
+                        # para «Mis DNR» (Dani: «monta lo que consideres necesario,
+                        # que de buena informacion y sea util»). Se guardan en
+                        # crudo, como las de arriba; se interpretan al leerlas
+                        # (_dnr_entrega). Las filas de antes no las tienen.
+                        "contacto_detalle": _dia_celda(col(f, "contact details")),
+                        "escaneo_falso": _dia_celda(col(f, "feedback false scan indicator")),
+                        "buzon_otro": _dia_celda(col(f, "mailbox eligible, delivered elsewhere")),
+                        "alto_valor": _dia_celda(col(f, "high value"))}
                 # El '1' de los reportes de mayo NO se traduce a 'Y'. Es lo mas
                 # probable, pero no esta demostrado (docs/REPORTES_DIARIOS.md) y
                 # convertirlo inventaria defectos que nadie ha confirmado.
@@ -40217,48 +40226,98 @@ async def _dnr_mis_fichas(ficha_id: str) -> set:
 # Lo que se sabe del vocabulario:
 #   · Delivery Scan: los DELIVERED_TO_* que FlotaDSP midio en produccion (la
 #     oficina los pinta quitando «DELIVERED_TO_»). Se aceptan con o sin el
-#     prefijo y en cualquier forma de escribirlos («Delivered to doorstep»).
-#   · Delivered ≥ 25m: es una pregunta de si o no; solo Y/Yes/True y N/No/False.
-#     Un «1» o un «0» NO (como con la DSC: no esta demostrado que sea si).
-#   · Llamada: los segundos de «Call duration (seconds)» de su fila de contacto;
-#     mas de cero es que hubo llamada y de cuanto. «No llamaste» solo si el tipo
-#     lo dice con todas las letras (NO_CALL…) y no hay segundos. Y desde R9
-#     (11-11-2026) la llamada tiene un minimo, _DNR_SEGUNDOS_MIN_LLAMADA: por
-#     debajo es «corta», y eso tambien es un fallo de contacto.
-#   · Fallo de contacto: cuando el tipo lo dice con todas las letras (los
-#     mismos NO_CALL… de «No llamaste», y sin segundos que lo contradigan) o la
-#     llamada medida es «corta» (R9). Estar
-#     en la tabla de contacto ya NO basta (R7/F7, 11-11-2026): no se ha visto
-#     nunca su vocabulario real y con «CALL» y 12 s salia a la vez «Llamaste» y
-#     «Te apuntaron un fallo». Por el tipo, en la practica ira a null hasta
-#     calibrarlo con un reporte real; por los segundos (R9) ya sale, porque es
-#     una regla de Dani y no una lectura del vocabulario.
-#   · Foto: «mal» SOLO si el «POD audit» es uno de los motivos conocidos
-#     (_DNR_FOTO_MOTIVO); «bien» solo si todo lo que dice es PASS/PASSED. Con
-#     cualquier otro valor («N», «Y», «PENDING», un codigo raro) no se sabe si es
-#     un fallo o un aprobado: null (R7/F7). Antes cualquier valor relleno que no
-#     fuera PASS daba «La foto no paso la revision».
-#   · NO se interpretan, porque en el repo no hay ni un valor real y admiten dos
-#     lecturas o no se sabe que son: «Contact Compliance» (una Y puede ser
-#     «cumplio» o, como en la DSC, «es un fallo»), «PHR» (quiza la preferencia de
-#     entrega: NO se afirma de ningun paquete hasta que Dani lo confirme),
-#     «Delivery Exception» y «Simultaneous deliveries». De esos no sale nada.
+#     prefijo y en cualquier forma de escribirlos («Delivered to doorstep»). En
+#     el reporte real del 09-11-2026 salen HOUSEHOLD_MEMBER, DOORSTEP,
+#     SAFE_LOCATION y MAIL_SLOT: los de siempre.
+#   · Delivered ≥ 25m: es una pregunta de si o no; solo Y/Yes/True y N/No/False
+#     (en el reporte real, Y/N). Un «1» o un «0» NO (como con la DSC: no esta
+#     demostrado que sea si).
+#   · VISTO EN UN REPORTE REAL (R12, 11-11-2026): Dani mando el Daily Report de
+#     OGA5 del 09-11-2026 y se miraron SOLO los valores de sus columnas y la
+#     leyenda que trae el propio informe (aqui no se copia ni un paquete ni un
+#     ID). Lo que cambio con el: la tabla de foto y la de contacto son tablas de
+#     FALLOS (sus filas suman justo las columnas «POD Fails» y «CC Fails» del
+#     resumen), «Contact Compliance» ya tiene lectura (la de su leyenda) y el 0
+#     de los segundos es un valor de verdad. Hasta R11 todo esto era «nunca
+#     visto» y se leia con miedo: con ese informe no salia ni un fallo de
+#     contacto y 4 de cada 10 fallos de foto se quedaban sin decir.
+#   · Llamada (R12, retocada el mismo 11-11-2026): si el paquete tiene fila en
+#     la tabla de fallos de contacto, mandan los segundos de «Call Duration
+#     (Seconds)» si son validos (de 1 a _DNR_SEGUNDOS_MAX): 30 o mas
+#     (_DNR_SEGUNDOS_MIN_LLAMADA, la regla de Dani de R9) es «si»; de 1 a 29,
+#     «corta». Sin segundos validos (un 0, vacio o algo raro) manda «CC Type»:
+#     si habla de una llamada (su codigo lleva CALL, como «Calls to Customer»)
+#     y no dice que no la hubo (un NO_CALL… o una negacion pegada a CALL, como
+#     «No call attempted»: _dnr_dice_sin_llamada), «corta» sin cifra (el reporte
+#     apunta una llamada que no basto; tambien «Calls to Customer - No answer»);
+#     vacio o una negacion de la llamada, «no»; otro tipo (un «No answer», un
+#     mensaje, algo que no se reconoce), null. En el informe real «CC Type» es «Calls to
+#     Customer» o vacio y los segundos son 0 en TODAS las filas, tambien en
+#     las que apuntan una llamada: por eso el 0 no se toma como una medida (ver
+#     _dnr_segundos). Sin fila ahi, manda «Contact Compliance» de la propia
+#     DNR; su leyenda dice que Y es que se intento una llamada o un mensaje
+#     («a call or text has been attempted»): Y es «si» (sin segundos: no se
+#     sabe si fue llamada o mensaje) y N es «no». En la tabla DNR del informe,
+#     la Y va con «Calls to Customer» y la N con el tipo vacio: vacio es «no».
+#   · Fallo de contacto (R12): true si el paquete esta en la tabla de fallos de
+#     contacto (estar ahi ES el fallo, lo diga como lo diga el tipo) o si
+#     «Contact Compliance» es N. Nunca false.
+#   · Foto (R12): la tabla de «POD Audit» es la de los FALLOS de foto: una fila
+#     con algo escrito que no sea PASS/PASSED es «mal», se reconozca o no el
+#     motivo; el motivo solo si es uno de los de la leyenda (_dnr_foto_motivo,
+#     que entiende «Package» y «Parcel», con «in photo» o sin el). «bien» solo
+#     si todo lo que dice es PASS/PASSED. Sin fila, null.
+#   · Mas columnas de la tabla DNR (R14, 11-11-2026). Dani, tras ver el informe
+#     real: «monta lo que consideres necesario, que de buena informacion y sea
+#     util; si consideras lo de preferencia respetada, metelo, y lo de la
+#     columna esa de Mailbox Eligible, delivered elsewhere, tambien». Es SU
+#     decision usarlas. Cada una es un si/no (el mismo lector que «Delivered ≥
+#     25m») y solo se afirma la Y; con N, vacio o algo raro, null (la pantalla
+#     no dice nada). Lo que dice la leyenda del informe de cada una:
+#       - «PHR»: Y = el escaneo casa con la preferencia del cliente
+#         (`preferencia`). La N no dice si no habia preferencia o si no se
+#         respeto: por eso nunca false.
+#       - «Mailbox Eligible, Delivered Elsewhere»: Y = cabia en el buzon y se
+#         dejo en otro sitio (`buzon_otro`).
+#       - «Simultaneous Deliveries»: Y = varios paquetes marcados a la vez
+#         (`varios_a_la_vez`).
+#       - «Delivery Exception»: Y = marcado como entregado sin estar en la
+#         direccion del cliente (`a_distancia`).
+#       - «Feedback False Scan Indicator»: Y = el cliente dice que la entrega
+#         no fue como se marco (`cliente_no_confirma`).
+#       - «High Value»: Y = de alto valor y no entregado al cliente
+#         (`alto_valor`). El importe («Value») NO sale nunca.
+#       - «Contact Details» (en el informe real: «Calls to Customer»,
+#         «[NOTIFY_OF_ARRIVAL] Text to Customer», las mixtas «[NOTIFY_OF_ARRIVAL]
+#         Calls to Customer / Text to Customer» y «[OTHER] Calls to Customer /
+#         Text to Customer», o vacio; revision de R14, 11-11-2026): de
+#         que fue el contacto (`contacto_como`): CALL en su codigo, «llamada»;
+#         TEXT o SMS, «mensaje»; si dice las dos cosas, que NO hubo llamada
+#         (_dnr_dice_sin_llamada) o no se reconoce, null.
+#     Nunca se usan: la nota del cliente («Delivery Hint / Customer Note», texto
+#     libre), «Value», «Place ID», «OTP/SIG» ni «Next / Same Day».
 #   · El codigo postal: solo si lo parece (R7/F23-F24): al menos una cifra, de 3
 #     a 10 caracteres y como mucho un espacio o un guion («15704», «1000-001»,
 #     «SW1A 1AA»). Una palabra («SANTIAGO») o una calle no salen. Y (R8/G11)
 #     como mucho 8 caracteres sin contar el espacio o el guion y nunca mas de 6
 #     cifras seguidas: un movil («600123456», «600 123456») no es un CP.
-#   · Los segundos de la llamada (R8/G11): un entero entre 1 y
+#   · Los segundos de la llamada (R8/G11 y R12): un entero entre 1 y
 #     _DNR_SEGUNDOS_MAX; fuera de eso, null, y entonces no hay «Llamaste» por
-#     ellos (un telefono en esa celda salia como «Llamaste (600123456 s)»). Si
-#     traen algo que no se entiende, tampoco se afirma «No llamaste».
+#     ellos (un telefono en esa celda salia como «Llamaste (600123456 s)»). El 0
+#     NO se manda (11-11-2026, tras la revision de R12): en el reporte real
+#     TODAS las filas traen 0, tambien las que apuntan una llamada, y la subida
+#     del .html guarda la celda con _dia_num, que deja tambien en 0 una celda
+#     vacia, un «-» o un texto. Un «0 s» en pantalla afirmaria una medida que
+#     el informe no da. Como se guarda no se cambia.
 #   · El paquete (R8/G11): solo si tiene forma de codigo (_DNR_PAQUETE); si no,
 #     la fila no sale. Al guardar solo se pide que la celda no este vacia, y con
-#     una tabla pegada descuadrada ahi puede ir cualquier texto.
+#     una tabla pegada descuadrada ahi puede ir cualquier texto. En el reporte
+#     real es «ES» + 10 cifras, que ya tiene esa forma.
 #   · El dia de la entrega (`entrega`, R7/F8-F9): `fecha_entrega` se guarda en
-#     crudo y su formato real no se ha visto; solo si empieza por una fecha ISO
-#     que existe, no es posterior a la DNR y no es de mas de 60 dias antes.
-#     Nunca se adivina el dia y el mes de un «07/11/2026».
+#     crudo; solo si empieza por una fecha ISO que existe, no es posterior a la
+#     DNR y no es de mas de 60 dias antes. Nunca se adivina el dia y el mes de un
+#     «07/11/2026». En el reporte real viene en ISO y casi nunca es el dia de
+#     la DNR (entregas de 3 a 9 dias antes).
 
 def _dnr_token(v) -> str:
     """'Delivered to doorstep' -> 'DELIVERED_TO_DOORSTEP'."""
@@ -40276,6 +40335,18 @@ _DNR_COMO = {
 _DNR_SI = {"Y", "YES", "TRUE"}
 _DNR_NO = {"N", "NO", "FALSE"}
 _DNR_SIN_LLAMADA = {"NO_CALL", "NO_CALL_MADE", "CALL_NOT_MADE", "NOT_CALLED"}
+# Un tipo que lleva CALL pero dice que NO la hubo (11-11-2026, tras R12): «No call
+# attempted», «Call not made», «Not called», «Never called», «Delivered without
+# call»… La lista de arriba no las cubre todas. Tras la revision de R14 (11-11-2026)
+# solo cuenta la negacion pegada a CALL (_DNR_NIEGA_LLAMADA: NO_CALL…, CALL_NOT…,
+# NOT_CALLED, NEVER_CALLED, WITHOUT_CALL): «Customer not available», «No answer» o
+# «Text not delivered» no hablan de una llamada (null, no «Sin llamada»), y «Calls
+# to Customer - No answer» apunta una llamada que si se hizo y nadie cogio («corta»).
+_DNR_NIEGA_LLAMADA = re.compile(r"(?:^|_)(?:NO|NOT|NEVER|WITHOUT)_CALL|CALL(?:S|ED|ING)?_(?:NOT|NEVER)(?:_|$)")
+# Cualquier negacion en el codigo (empieza por NO_ o NOT_, o lleva _NO_, _NOT_,
+# NEVER o WITHOUT): solo para «Contact Details» (_dnr_contacto_como), donde «No
+# text sent» tampoco es un «mensaje».
+_DNR_NEGACION = re.compile(r"^NOT?_|_NOT?_|NEVER|WITHOUT")
 _DNR_FOTO_BIEN = {"PASS", "PASSED"}
 _DNR_FOTO_MOTIVO = {
     "BLURRY": "borrosa", "BLURRY_PHOTO": "borrosa", "PHOTO_BLURRY": "borrosa", "BLURRED_PHOTO": "borrosa",
@@ -40286,6 +40357,17 @@ _DNR_FOTO_MOTIVO = {
     "HUMAN_IN_PHOTO": "persona", "PERSON_IN_PHOTO": "persona", "PEOPLE_IN_PHOTO": "persona",
     "PACKAGE_IN_CAR": "en_furgoneta", "PACKAGE_IN_VEHICLE": "en_furgoneta",
     "NO_PHOTO": "sin_foto", "MISSING_PHOTO": "sin_foto", "PHOTO_MISSING": "sin_foto",
+    # R12 (11-11-2026): la leyenda del reporte real del 09-11-2026 da la lista
+    # entera de motivos (1 Blurred photo, 2 Person apparent in photo, 3 No parcel
+    # detected in photo, 4 Parcel in car, 5 Parcel in hand, 6 Parcel in
+    # letterbox, 7 Parcel too close, 8 Photo too dark) y en las filas se vio
+    # «Package in car» y «No package detected». «Parcel» se lee como «Package» y
+    # el «in photo» del final puede ir o no (_dnr_foto_motivo).
+    "PERSON_APPARENT_IN_PHOTO": "persona", "PERSON_APPARENT": "persona",
+    "NO_PACKAGE_DETECTED_IN_PHOTO": "sin_paquete", "NO_PACKAGE_DETECTED": "sin_paquete",
+    "PACKAGE_IN_HAND": "en_mano",
+    "PACKAGE_IN_LETTERBOX": "en_buzon", "PACKAGE_IN_LETTER_BOX": "en_buzon",
+    "PACKAGE_IN_MAILBOX": "en_buzon", "PACKAGE_IN_MAIL_BOX": "en_buzon",
 }
 # El CP: de 3 a 10 caracteres, al menos una cifra y como mucho UN espacio o
 # guion entre dos trozos (R7/F23-F24); y ademas (R8/G11, en _dnr_cp) como mucho
@@ -40341,6 +40423,47 @@ def _dnr_si_no(v):
     return True if t in _DNR_SI else False if t in _DNR_NO else None
 
 
+def _dnr_solo_si(v):
+    """True solo con Y/YES/TRUE; con N, vacio o algo raro, None (R14,
+    11-11-2026): estas marcas del informe solo se dicen cuando son Y."""
+    return True if _dnr_si_no(v) is True else None
+
+
+def _dnr_dice_sin_llamada(t: str) -> bool:
+    """¿Este tipo (ya pasado por _dnr_token) dice que NO hubo llamada? Los de
+    _DNR_SIN_LLAMADA y cualquiera que niegue la LLAMADA (_DNR_NIEGA_LLAMADA,
+    revision de R14, 11-11-2026): una negacion de otra cosa («No answer»,
+    «Customer not available») no lo dice."""
+    return t in _DNR_SIN_LLAMADA or bool(_DNR_NIEGA_LLAMADA.search(t))
+
+
+def _dnr_contacto_como(v):
+    """«llamada», «mensaje» o None, de la columna «Contact Details» (R14,
+    11-11-2026). Si dice las dos cosas, o lleva una negacion («No call
+    attempted», «No text sent»), None: no se adivina."""
+    t = _dnr_token(v)
+    if not t or _dnr_dice_sin_llamada(t) or _DNR_NEGACION.search(t):
+        return None
+    llamada = "CALL" in t
+    mensaje = "TEXT" in t or "SMS" in t
+    if llamada and not mensaje:
+        return "llamada"
+    if mensaje and not llamada:
+        return "mensaje"
+    return None
+
+
+def _dnr_foto_motivo(t: str) -> Optional[str]:
+    """El motivo de un «POD Audit» ya pasado por _dnr_token, o None (R12,
+    11-11-2026). La leyenda dice unas veces «Parcel» y otras «Package», y el
+    «in photo» del final lo pone en unas frases y en otras no."""
+    t = re.sub(r"(^|_)PARCEL(?=_|$)", r"\1PACKAGE", t)
+    motivo = _DNR_FOTO_MOTIVO.get(t)
+    if not motivo and t.endswith("_IN_PHOTO"):
+        motivo = _DNR_FOTO_MOTIVO.get(t[:-len("_IN_PHOTO")])
+    return motivo
+
+
 def _dnr_cp(v) -> Optional[str]:
     """El CP si lo parece (R7/F23-F24 y R8/G11); si no, None."""
     cp = _dia_celda(v).upper()
@@ -40353,9 +40476,15 @@ def _dnr_cp(v) -> Optional[str]:
 
 def _dnr_segundos(v) -> tuple:
     """(segundos, raro) de la celda «Call duration (seconds)» (R8/G11).
-    `segundos`: un entero entre 1 y _DNR_SEGUNDOS_MAX, o None. `raro`: la celda
-    trae algo que no es eso ni un cero (un telefono, un texto, un negativo)."""
-    s = _dia_celda(v)
+    `segundos`: un entero entre 1 y _DNR_SEGUNDOS_MAX, o None. El 0 es None
+    (11-11-2026, tras la revision de R12): en el reporte real lo traen TODAS
+    las filas de la tabla de fallos de contacto, tambien las que apuntan una
+    llamada, y la subida guarda como 0 una celda vacia (_dia_num); un «0 s»
+    seria una medida que el informe no da. `raro`: la celda trae algo que no
+    es un numero de 0 a _DNR_SEGUNDOS_MAX (un telefono, un texto, un negativo)."""
+    # Un 0 numerico (lo que guarda la subida) no es «raro»: _dia_celda(0)
+    # daria «» porque el 0 es falso en Python.
+    s = str(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else _dia_celda(v)
     if not s:
         return None, False
     try:
@@ -40364,7 +40493,7 @@ def _dnr_segundos(v) -> tuple:
         return None, True
     if n == 0:
         return None, False
-    if 1 <= n <= _DNR_SEGUNDOS_MAX:
+    if 0 < n <= _DNR_SEGUNDOS_MAX:
         return n, False
     return None, True
 
@@ -40380,30 +40509,46 @@ def _dnr_entrega(fila: dict, pods: list, ccs: list) -> dict:
         como = next((c for c in (_dnr_como(r.get("motivo")) for r in pods + ccs) if c), None)
     lejos = _dnr_si_no(fila.get("mas_25m"))
 
-    # Los segundos, solo entre 1 y _DNR_SEGUNDOS_MAX (R8/G11). Con algo raro en
-    # la celda y ningun segundo bueno no se afirma ni «Llamaste» ni «No llamaste».
+    # La llamada (R12, retocada el 11-11-2026). 1) Con fila en la tabla de
+    # fallos de contacto mandan sus segundos validos, de 1 a _DNR_SEGUNDOS_MAX
+    # (el 0 no es una medida: ver _dnr_segundos): por debajo del minimo de
+    # Dani (R9) es «corta». Sin segundos validos manda el tipo: si alguna fila
+    # habla de una llamada (CALL en su codigo, como «Calls to Customer») que
+    # no sea un NO_CALL…, «corta» sin cifra; si todas vienen vacias o con
+    # NO_CALL…, «no»; con otro tipo (un mensaje, algo que no se reconoce) no se
+    # afirma nada. 2) Sin fila ahi, «Contact Compliance» de la propia DNR: Y
+    # (se intento una llamada o un mensaje) es «si», sin segundos; N es «no».
     lecturas = [_dnr_segundos(r.get("segundos")) for r in ccs]
-    segundos = max((s for s, _raro in lecturas if s), default=None)
-    raros = any(raro for _s, raro in lecturas)
+    segundos = max((s for s, _raro in lecturas if s is not None), default=None)
     tipos = [_dnr_token(r.get("tipo")) for r in ccs if _dia_celda(r.get("tipo"))]
-    # Con segundos manda lo medido, aunque el tipo diga NO_CALL; y por debajo del
-    # minimo de Dani (R9) la llamada es «corta».
-    if segundos:
-        llamada = "si" if segundos >= _DNR_SEGUNDOS_MIN_LLAMADA else "corta"
-    elif raros:
-        llamada = None
-    elif tipos and any(t in _DNR_SIN_LLAMADA for t in tipos):
+    cumplio = _dnr_si_no(fila.get("contacto"))
+    if ccs:
+        if segundos is not None:
+            llamada = "si" if segundos >= _DNR_SEGUNDOS_MIN_LLAMADA else "corta"
+        # Un tipo con CALL que dice que NO la hubo («No call attempted») es «no»,
+        # no «corta» (_dnr_dice_sin_llamada, 11-11-2026).
+        elif any("CALL" in t and not _dnr_dice_sin_llamada(t) for t in tipos):
+            llamada = "corta"
+        elif all(_dnr_dice_sin_llamada(t) for t in tipos):
+            llamada = "no"
+        else:
+            llamada = None
+    elif cumplio is True:
+        llamada = "si"
+    elif cumplio is False:
         llamada = "no"
     else:
         llamada = None
 
-    # La foto (R7/F7): «mal» solo con un motivo conocido; «bien» solo si todo lo
-    # que dice es PASS/PASSED; cualquier otra cosa, no se sabe.
+    # La foto (R12): la tabla de «POD Audit» es la de los FALLOS de foto. Algo
+    # escrito que no sea PASS/PASSED es «mal», con su motivo si es uno de la
+    # leyenda y sin el si no; «bien» solo si todo lo que dice es PASS/PASSED.
     fallos = [_dnr_token(r.get("fallo")) for r in pods if _dia_celda(r.get("fallo"))]
-    motivo = next((m for m in (_DNR_FOTO_MOTIVO.get(f) for f in fallos) if m), None)
-    if motivo:
+    malos = [f for f in fallos if f not in _DNR_FOTO_BIEN]
+    motivo = next((m for m in (_dnr_foto_motivo(f) for f in malos) if m), None)
+    if malos:
         foto = "mal"
-    elif fallos and all(f in _DNR_FOTO_BIEN for f in fallos):
+    elif fallos:
         foto = "bien"
     else:
         foto = None
@@ -40411,11 +40556,20 @@ def _dnr_entrega(fila: dict, pods: list, ccs: list) -> dict:
     return {"cp": _dnr_cp(fila.get("cp")),
             "como": como, "lejos": lejos,
             "llamada": llamada, "segundos": segundos,
-            # Solo si el tipo dice el fallo con todas las letras y no consta una
-            # llamada (R7/F7), o si la llamada no llego a 30 s (R9): es justo
-            # cuando sale «Sin llamada» o «Llamada corta». Nunca false.
-            "fallo_contacto": True if llamada in ("no", "corta") else None,
-            "foto": foto, "foto_motivo": motivo}
+            # Estar en la tabla de fallos de contacto ES el fallo, o «Contact
+            # Compliance» es N (R12). Nunca false.
+            "fallo_contacto": True if (ccs or cumplio is False) else None,
+            "foto": foto, "foto_motivo": motivo,
+            # R14 (11-11-2026): lo demas que trae la tabla DNR, solo cuando es Y
+            # (y el contacto, solo si se reconoce). Las filas guardadas antes no
+            # tienen las columnas nuevas: null, y la pantalla no dice nada.
+            "contacto_como": _dnr_contacto_como(fila.get("contacto_detalle")),
+            "preferencia": _dnr_solo_si(fila.get("phr")),
+            "buzon_otro": _dnr_solo_si(fila.get("buzon_otro")),
+            "varios_a_la_vez": _dnr_solo_si(fila.get("simultaneas")),
+            "a_distancia": _dnr_solo_si(fila.get("excepcion")),
+            "cliente_no_confirma": _dnr_solo_si(fila.get("escaneo_falso")),
+            "alto_valor": _dnr_solo_si(fila.get("alto_valor"))}
 
 
 async def _dnr_datos_hasta(centro_ficha: str, centros_filas: set) -> Optional[str]:
@@ -40584,7 +40738,12 @@ async def mis_dnr(user: dict = Depends(get_current_user),
     filas = await db.dnr_rows.find(
         {"transporter_id": {"$in": buenos}, "fecha_concesion": {"$gte": desde, "$lte": hasta}},
         {"_id": 0, "tracking_id": 1, "transporter_id": 1, "fecha_concesion": 1, "fecha_entrega": 1, "dsc": 1,
-         "center": 1, "cp": 1, "scan": 1, "mas_25m": 1, "actualizado": 1}).to_list(_DNR_TOPE_FILAS)
+         "center": 1, "cp": 1, "scan": 1, "mas_25m": 1, "contacto": 1,   # «Contact Compliance» (R12)
+         # R14 (11-11-2026): las columnas que se enseñan como si/no y «Contact
+         # Details». Ni «valor» ni «valor_eur»: los euros no se leen aqui.
+         "phr": 1, "simultaneas": 1, "excepcion": 1, "contacto_detalle": 1, "escaneo_falso": 1,
+         "buzon_otro": 1, "alto_valor": 1,
+         "actualizado": 1}).to_list(_DNR_TOPE_FILAS)
     # Solo las filas cuyo paquete tiene forma de codigo (R8/G11): las demas no
     # salen, ni cuentan, ni se buscan en las tablas de foto y contacto.
     filas = [f for f in filas if _DNR_PAQUETE.match(str(f.get("tracking_id") or ""))]

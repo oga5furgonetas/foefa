@@ -445,7 +445,6 @@ export const A = {
   "A más de 25 m": ["Over 25 m away", "A mais de 25 m", "À plus de 25 m", "A più di 25 m", "Über 25 m entfernt"],
   "En el sitio": ["On site", "No local", "Sur place", "Sul posto", "Vor Ort"],
   "Llamaste · {n} s": ["Called · {n} s", "Ligaste · {n} s", "Appelé · {n} s", "Chiamato · {n} s", "Angerufen · {n} s"],
-  "Llamaste": ["Called", "Ligaste", "Appelé", "Chiamato", "Angerufen"],
   "Sin llamada": ["No call", "Sem chamada", "Pas d’appel", "Nessuna chiamata", "Kein Anruf"],
   "Fallo de contacto": ["Contact failure", "Falha de contacto", "Échec de contact", "Contatto mancato", "Kontakt fehlgeschlagen"],
   "Foto borrosa": ["Blurry photo", "Foto desfocada", "Photo floue", "Foto sfocata", "Unscharfes Foto"],
@@ -494,4 +493,40 @@ export const A = {
   "No lo es, clave de acceso": ["Not a preference, access code", "Não é preferência, código de acesso", "Pas une préférence, code d’accès", "Non è una preferenza, codice di accesso", "Keine Präferenz, Zugangscode"],
   "Código del portal: 1234": ["Door code: 1234", "Código do portão: 1234", "Code de l’immeuble : 1234", "Codice del portone: 1234", "Türcode: 1234"],
   "Con preferencia de entrega": ["With a delivery preference", "Com preferência de entrega", "Avec une préférence de livraison", "Con una preferenza di consegna", "Mit Zustellpräferenz"],
+  // R12 (11-11-2026, con un Daily Report real): el informe dice si hubo «llamada o mensaje» sin decir cuál («Contactaste»),
+  // dos motivos más de la foto (en la mano, en el buzón) y, en el ejemplo, cómo se ve SIN preferencia: lo primero es
+  // «Miembro del hogar» (literal de la app, como los de arriba: en los demás idiomas, entre comillas y con lo que significa).
+  "Contactaste": ["Contacted", "Contactaste", "Contacté", "Contattato", "Kontaktiert"],
+  "Llamaste o escribiste al cliente": ["You called or messaged the customer", "Ligaste ou escreveste ao cliente", "Tu as appelé le client ou tu lui as écrit", "Hai chiamato o scritto al cliente", "Du hast den Kunden angerufen oder ihm geschrieben"],
+  "Paquete en la mano": ["Parcel in hand", "Encomenda na mão", "Colis en main", "Pacco in mano", "Paket in der Hand"],
+  "el paquete estaba en la mano": ["the parcel was in your hand", "a encomenda estava na mão", "le colis était dans ta main", "il pacco era in mano", "das Paket war in der Hand"],
+  "Paquete en el buzón": ["Parcel in letterbox", "Encomenda na caixa de correio", "Colis dans la boîte aux lettres", "Pacco nella cassetta", "Paket im Briefkasten"],
+  "el paquete estaba en el buzón": ["the parcel was in the letterbox", "a encomenda estava na caixa de correio", "le colis était dans la boîte aux lettres", "il pacco era nella cassetta delle lettere", "das Paket war im Briefkasten"],
+  "Sin preferencia": ["No preference", "Sem preferência", "Sans préférence", "Senza preferenza", "Keine Präferenz"],
+  "lo primero es": ["the first one is", "a primeira é", "la première est", "la prima è", "zuerst steht"],
+  "Sin preferencia, lo primero es {opcion}": ["No preference: the first one is {opcion}", "Sem preferência, a primeira é {opcion}", "Sans préférence, la première est {opcion}", "Senza preferenza, la prima è {opcion}", "Ohne Präferenz steht zuerst {opcion}"],
+  "Miembro del hogar": ["Household member", "Membro do agregado familiar", "Membre du foyer", "Familiare convivente", "Haushaltsmitglied"],
+  // R12, retoque (11-11-2026, revisión M1/M2): la llamada que Amazon apunta sin segundos (el informe trae 0, que no es una
+  // medida): «Llamada corta» a secas, sin afirmar cuánto duró.
+  "Llamada corta": ["Short call", "Chamada curta", "Appel court", "Chiamata breve", "Kurzer Anruf"],
+  "Tu llamada al cliente fue demasiado corta; tiene que durar 30 segundos como mínimo": ["Your call to the customer was too short; it must last at least 30 seconds", "A tua chamada ao cliente foi demasiado curta; tem de durar pelo menos 30 segundos", "Ton appel au client était trop court ; il doit durer au moins 30 secondes", "La tua chiamata al cliente è stata troppo breve; deve durare almeno 30 secondi", "Dein Anruf beim Kunden war zu kurz; er muss mindestens 30 Sekunden dauern"],
+  // R14 (Dani, 11-11-2026: «monta lo que consideres necesario, que dé buena información y sea útil»): lo demás que dice el
+  // Daily Report de cada DNR, en etiquetas (la preferencia respetada, cabía en el buzón, varios a la vez, marcado a
+  // distancia, lo que dice el cliente, el alto valor sin su importe) y si el contacto fue una llamada o un mensaje.
+  // Revisión N3 (11-11-2026): «Fuera de la dirección», no «Marcado a distancia» (sonaba a lo mismo que los 25 m).
+  "Fuera de la dirección": ["Not at the address", "Fora da morada", "Pas à l’adresse", "Non all’indirizzo", "Nicht an der Adresse"],
+  "Lo marcaste como entregado sin estar en la dirección del cliente": ["You marked it as delivered without being at the customer’s address", "Marcaste-a como entregue sem estar na morada do cliente", "Tu l’as marqué comme livré sans être à l’adresse du client", "L’hai segnato come consegnato senza essere all’indirizzo del cliente", "Du hast es als zugestellt markiert, ohne an der Adresse des Kunden zu sein"],
+  "Llamaste": ["Called", "Ligaste", "Appelé", "Chiamato", "Angerufen"],
+  "Escribiste": ["Messaged", "Mensagem enviada", "Message envoyé", "Messaggio inviato", "Nachricht gesendet"],
+  "Escribiste al cliente": ["You messaged the customer", "Escreveste ao cliente", "Tu as écrit au client", "Hai scritto al cliente", "Du hast dem Kunden geschrieben"],
+  "Preferencia respetada": ["Preference followed", "Preferência respeitada", "Préférence respectée", "Preferenza rispettata", "Präferenz beachtet"],
+  "Lo entregaste donde el cliente pedía": ["You delivered it where the customer asked", "Entregaste-a onde o cliente pediu", "Tu l’as livré là où le client le demandait", "L’hai consegnato dove chiedeva il cliente", "Du hast es dort zugestellt, wo der Kunde es wollte"],
+  "Cabía en el buzón": ["Fits letterbox", "Cabia na caixa de correio", "Tenait dans la boîte aux lettres", "Entrava nella buca", "Passte in den Briefkasten"],
+  "Se podía dejar en el buzón y lo dejaste en otro sitio": ["It could go in the letterbox and you left it somewhere else", "Podia ficar na caixa de correio e deixaste-a noutro sítio", "Il pouvait aller dans la boîte aux lettres et tu l’as laissé ailleurs", "Si poteva lasciare nella cassetta e l’hai lasciato altrove", "Es hätte in den Briefkasten gepasst und du hast es woanders gelassen"],
+  "Varios a la vez": ["Several at once", "Várias de uma vez", "Plusieurs à la fois", "Più pacchi insieme", "Mehrere auf einmal"],
+  "Marcaste varios paquetes como entregados a la vez": ["You marked several parcels as delivered at once", "Marcaste várias encomendas como entregues de uma vez", "Tu as marqué plusieurs colis comme livrés en même temps", "Hai segnato più pacchi come consegnati insieme", "Du hast mehrere Pakete gleichzeitig als zugestellt markiert"],
+  "El cliente dice otra cosa": ["Customer disagrees", "O cliente diz outra coisa", "Le client dit autre chose", "Il cliente dice altro", "Kunde sagt etwas anderes"],
+  "El cliente dice que la entrega no fue como la marcaste": ["The customer says the delivery wasn’t as you marked it", "O cliente diz que a entrega não foi como a marcaste", "Le client dit que la livraison ne s’est pas passée comme tu l’as marquée", "Il cliente dice che la consegna non è andata come l’hai segnata", "Der Kunde sagt, die Zustellung war nicht so, wie du sie markiert hast"],
+  "Alto valor, no en mano": ["High value, not to customer", "Valor alto, não em mão", "Grande valeur, pas en main propre", "Alto valore, non a mano", "Hoher Wert, nicht persönlich"],
+  "Era un paquete de alto valor y no se entregó al cliente en mano": ["It was a high-value parcel and wasn’t handed to the customer", "Era uma encomenda de valor alto e não foi entregue em mão ao cliente", "C’était un colis de grande valeur et il n’a pas été remis en main propre au client", "Era un pacco di alto valore e non è stato consegnato a mano al cliente", "Es war ein Paket mit hohem Wert und wurde dem Kunden nicht persönlich übergeben"],
 }
