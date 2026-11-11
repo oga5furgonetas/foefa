@@ -185,14 +185,41 @@ async def test_si_para_a_la_mitad_avisa_lo_hecho_y_al_reintentar_no_lo_avisa_otr
     # Lo que ya se contestó se dice, y solo eso.
     [aviso] = base.conductores
     assert aviso.titulo == "Tu petición del 16/11: aprobada"
-    # La oficina vuelve a pulsar (la misma lista, sin refrescar): el 16 no se vuelve a avisar, y el 17, que se quedó
-    # aprobado a medias, entra en el cuadrante.
+    # Segunda revisión (11-11-2026, S4): el 17, que se cortó, sigue «pendiente» (no «aprobado» sin su turno).
+    assert [q["status"] for q in base.t.shift_requests.docs] == ["aprobado", "pendiente", "pendiente"]
+    # La oficina vuelve a pulsar con lo que le queda en la bandeja tras refrescarla (el panel solo lee las
+    # pendientes): el 16 no se vuelve a avisar, y el 17 entra en el cuadrante y se avisa una vez.
     monkeypatch.setattr(server, "_turno_aprobado", de_verdad)
-    r = await server.resolver_grupo_peticiones({"ids": ["r0", "r1", "r2"], "action": "aprobar"}, OFI)
-    assert r["resueltas"] == ["r0", "r1", "r2"]
-    assert [a.titulo for a in base.conductores] == ["Tu petición del 16/11: aprobada", "Tu petición del 18/11: aprobada"]
+    bandeja = [q["id"] for q in base.t.shift_requests.docs if q["status"] == "pendiente"]
+    r = await server.resolver_grupo_peticiones({"ids": bandeja, "action": "aprobar"}, OFI)
+    assert r["resueltas"] == ["r1", "r2"]
+    assert [a.titulo for a in base.conductores] == ["Tu petición del 16/11: aprobada", "Tus días 17/11 y 18/11: aprobados"]
     for f in ("2026-11-16", "2026-11-17", "2026-11-18"):
         assert _turno(base.t, "d1", f)["cod"] == "N/T APROB"
+    assert {q["status"] for q in base.t.shift_requests.docs} == {"aprobado"}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_si_para_tras_poner_el_turno_y_se_rechaza_el_cuadrante_vuelve_a_lo_de_antes(base, monkeypatch):
+    # Segunda revisión (11-11-2026, S4): el turno se escribe antes que el estado. Si se corta justo entre las dos, el
+    # día sigue pendiente con su «N/T APROB» puesto; si la oficina lo rechaza después, la celda vuelve a lo que había.
+    base.t.shifts.docs.append({"driver_id": "d1", "date": "2026-11-16", "type": "trabaja", "cod": "1", "center": "OGA5"})
+    _peticion(base.t, "r0", "2026-11-16")
+    de_verdad = base.t.shift_requests.update_one
+
+    async def se_corta(*a, **k):
+        raise RuntimeError("la máquina se reinicia")
+
+    monkeypatch.setattr(base.t.shift_requests, "update_one", se_corta)
+    with pytest.raises(RuntimeError):
+        await server.resolver_grupo_peticiones({"ids": ["r0"], "action": "aprobar"}, OFI)
+    assert base.t.shift_requests.docs[0]["status"] == "pendiente" and base.conductores == []
+    assert _turno(base.t, "d1", "2026-11-16")["cod"] == "N/T APROB"
+    monkeypatch.setattr(base.t.shift_requests, "update_one", de_verdad)
+    r = await server.resolver_grupo_peticiones({"ids": ["r0"], "action": "rechazar", "motivo": "Ese día no"}, OFI)
+    assert r["resueltas"] == ["r0"]
+    t = _turno(base.t, "d1", "2026-11-16")
+    assert (t["cod"], t["type"], t.get("aprobado_req")) == ("1", "trabaja", None)
 
 
 @pytest.mark.asyncio(loop_scope="session")

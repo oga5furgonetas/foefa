@@ -827,9 +827,14 @@ export default function Cuadrante() {
      nueva, la respuesta buena se tiraba y la tabla de NORTE quedaba bajo SUR. */
   const naveRef = useRef(center)
   naveRef.current = center
+  /* Y el periodo (segunda revisión, 11-11-2026): con un guardado por el aire y
+     «Semana siguiente», el cargar viejo pedía las fechas de antes y su tabla
+     quedaba bajo las de ahora (máximas vacías, otras personas). */
+  const vistaRef = useRef('')
+  vistaRef.current = `${center}|${rango.desde}|${rango.hasta}`
 
   const cargar = useCallback(async (silencio = false) => {
-    if (noCenter || naveRef.current !== center) return
+    if (noCenter || vistaRef.current !== `${center}|${rango.desde}|${rango.hasta}`) return
     const n = ++pedida.current
     if (!silencio) setCargando(true)
     try {
@@ -942,7 +947,10 @@ export default function Cuadrante() {
     try {
       await cuadranteMaximas(center, { [f]: v === '' ? null : v })
       cargar(true)
-    } catch (e) { setErr(e?.response?.data?.detail || 'No se ha podido guardar la máxima.') }
+    } catch (e) {
+      if (naveRef.current !== center) return        // como en guardarCeldas: su error no va en otra nave
+      setErr(e?.response?.data?.detail || 'No se ha podido guardar la máxima.')
+    }
   }
 
   const guardarRefuerzo = async (f) => {
@@ -951,7 +959,10 @@ export default function Cuadrante() {
     try {
       await cuadranteAjuste({ center, tipo: 'refuerzo_dia', fecha: f, refuerzo: v === '' ? 0 : Number(v) })
       cargar(true)
-    } catch (e) { setErr(e?.response?.data?.detail || 'No se ha podido guardar.') }
+    } catch (e) {
+      if (naveRef.current !== center) return
+      setErr(e?.response?.data?.detail || 'No se ha podido guardar.')
+    }
   }
 
   const aceptar = async () => {
