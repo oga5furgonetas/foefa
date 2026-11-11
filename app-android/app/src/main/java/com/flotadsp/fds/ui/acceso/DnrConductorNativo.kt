@@ -135,6 +135,18 @@ internal enum class DibujoHecho { PUERTA, BUZON, MANO, RECEPCION, VECINO, LOCKER
 /** Una frase de «qué pasó»: `clave` dice de qué habla (como, lejos, llamada, contacto o foto). */
 internal data class Hecho(val clave: String, val texto: String, val dibujo: DibujoHecho, val color: ColorHecho)
 
+/** EN PAUSA (11-11-2026). La pantalla nativa «Mis DNR» está construida y probada, pero NO se enseña: la web cambió
+ *  después (la versión visual con etiquetas, el aviso de los 30 segundos de llamada y, en pausa por decisión de Dani, la
+ *  entrega con preferencia y el «te cuenta / no cuenta») y esta pantalla todavía no se ha puesto al día ni se ha visto en
+ *  un móvil. Mientras sea `false`: la fila del inicio no sale, la ruta no se pide y un aviso con `vista=dnr` va a la
+ *  bandeja de avisos. Para encenderla: igualarla a `frontend/src/pages/driver/MisDnr.jsx` (y a sus pausas,
+ *  `dnrPausas.js`), verla en el emulador y pasar esto a `true`. */
+const val MIS_DNR_NATIVA = false
+
+/** A dónde se va de verdad: con «Mis DNR» nativa en pausa, su destino cae en la bandeja de avisos. */
+internal fun destinoPermitido(destino: String, activa: Boolean = MIS_DNR_NATIVA): String =
+    if (destino == "dnr" && !activa) "avisos" else destino
+
 /** Lo que se calcula sin pintar nada, aparte para probarlo (DnrConductorTest): las frases con su singular y su plural,
  *  las fechas, qué pasó con cada DNR y qué hay de nuevo. */
 internal object DnrConductor {

@@ -127,6 +127,18 @@ class DnrConductorTest {
         assertThat(destinoDeAviso("/conductor", "Tienes 2 DNR nuevas")).isEqualTo("avisos")
     }
 
+    /** EN PAUSA (11-11-2026): la pantalla nativa no se enseña hasta ponerla al día con la web. Mientras, su destino cae en
+     *  la bandeja de avisos y lo demás no cambia; al encenderla, vuelve a abrirse. */
+    @Test
+    fun con_mis_dnr_nativa_en_pausa_su_destino_va_a_la_bandeja() {
+        assertThat(MIS_DNR_NATIVA).isFalse()
+        assertThat(destinoPermitido("dnr")).isEqualTo("avisos")
+        assertThat(destinoPermitido(destinoDeAviso("/conductor?vista=dnr"))).isEqualTo("avisos")
+        assertThat(destinoPermitido("turnos")).isEqualTo("turnos")
+        assertThat(destinoPermitido("auditoria")).isEqualTo("auditoria")
+        assertThat(destinoPermitido("dnr", activa = true)).isEqualTo("dnr")
+    }
+
     @Test
     fun con_404_la_empresa_no_tiene_la_dnr_diaria_y_no_hay_mis_dnr() = runBlocking {
         servidor.enqueue(MockResponse().setResponseCode(404).setBody("""{"detail":"Not Found"}"""))
