@@ -385,6 +385,10 @@ export const cuadranteDescartar = (id) => api.post(`/cuadrante/propuestas/${id}/
 // persona, el servidor dice que no (Ctrl+Z en la hoja no pisa lo de nadie).
 export const cuadranteDeshacer = (center, soloSi) =>
   api.post('/cuadrante/deshacer', { center, ...(soloSi ? { solo_si: soloSi } : {}) }, { timeout: 120000 })
+// «Avisar a los conductores» (11-11-2026): quién tiene cambios sin avisar y, al pulsar, se les avisa (solo a los marcados).
+export const cuadranteAvisosPrevia = (center) => api.post('/cuadrante/avisos/previa', { center })
+export const cuadranteAvisosEnviar = (center, driverIds) =>
+  api.post('/cuadrante/avisos/enviar', { center, driver_ids: driverIds }, { timeout: 60000 })
 // La hoja del cuadrante: los apuntes del DIARIO y el registro de DEBER HORAS.
 export const getDiario = (center, fecha) => api.get('/cuadrante/diario', { params: { center, fecha } })
 export const guardarDiario = (center, fecha, cambios, notas) =>
@@ -440,6 +444,9 @@ export const getRouteDemand = (center, desde, hasta) => api.get('/route-demand',
 export const setRouteDemand = (center, items) => api.post('/route-demand', { center, items })
 export const getShiftRequests = (center, status, extra = {}) =>
   api.get('/shift-requests', { params: { ...centerParam(center), ...(status ? { status } : {}), ...extra } })
+// Cómo queda la nave cada día si se concede lo pendiente (11-11-2026): los chips de la bandeja. Solo una nave.
+export const getCoberturaPeticiones = (center, desde, hasta) =>
+  api.get('/shift-requests/cobertura', { params: { center, desde, hasta } })
 // Solo el numero, para el aviso del menu: la lista de arriba devuelve hasta
 // mil documentos enteros y esto lo pide el panel cada dos minutos.
 export const contarPeticionesPendientes = (center) =>
