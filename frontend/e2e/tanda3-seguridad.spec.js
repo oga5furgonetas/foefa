@@ -80,13 +80,29 @@ test.describe('S1 · el alta de «otra persona», en dos pasos', () => {
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
-  test('Cancelar y luego Aceptar crea la ficha nueva con ?nueva=true', async ({ page }) => {
+  /* Revisión P13 (11-11-2026): el segundo paso manda las DOS señales; `nueva=true` a secas es lo que manda el panel
+     viejo en caché, y con eso el servidor no cede nada. */
+  test('Cancelar y luego Aceptar crea la ficha nueva con ?nueva=true&otra_persona=true', async ({ page }) => {
     const llamadas = await alta(page)
     const preguntas = respuestas(page, [false, true])
     await guardar(page)
     await expect(page.getByPlaceholder('Nombre Apellido')).toHaveCount(0)
     expect(preguntas).toHaveLength(2)
-    expect(llamadas).toEqual(['POST /api/drivers', 'POST /api/drivers?nueva=true'])
+    expect(llamadas).toEqual(['POST /api/drivers', 'POST /api/drivers?nueva=true&otra_persona=true'])
+  })
+
+  test('si la ficha de baja es de una nave que no ve, el 403 se enseña en la ficha y no se cierra', async ({ page }) => {
+    const llamadas = await alta(page)
+    const msg = 'La ficha dada de baja con este correo es de OGA5, que no tienes asignada: pide a quien lleve esa nave que dé el alta.'
+    await page.route(/\/api\/drivers\?nueva=true&otra_persona=true$/, (route) => {
+      llamadas.push('POST 403')
+      return json({ detail: msg }, 403)(route)
+    })
+    respuestas(page, [false, true])
+    await guardar(page)
+    await expect(page.getByText(msg)).toBeVisible()
+    await expect(page.getByPlaceholder('Nombre Apellido')).toHaveCount(1)
+    expect(llamadas).toEqual(['POST /api/drivers', 'POST 403'])
   })
 
   test('Aceptar en el primero reactiva su ficha, como siempre, sin segunda pregunta', async ({ page }) => {
@@ -153,6 +169,17 @@ test.describe('S1 · «No es la misma persona» en Fichas duplicadas', () => {
     expect(enviados).toEqual([])
     await expect(page.locator('label', { hasText: 'JUAN REY' }).getByText('se conserva')).toBeVisible()
     await expect(page.getByRole('button', { name: /Fusionar 2 fichas en una/ })).toBeVisible()
+  })
+
+  /* Revisión P30 (11-11-2026): si el servidor no ha separado nada contesta 409, y se enseña eso, no «ya no entra». */
+  test('si el servidor contesta 409 (nada separado) sale su error y no «ya no entra»', async ({ page }) => {
+    const msg = 'No se ha separado ninguna ficha: vuelve a cargar «Fichas duplicadas» y míralo otra vez.'
+    await duplicadas(page)
+    await page.route(/\/api\/drivers\/separar/, json({ detail: msg }, 409))
+    respuestas(page, [true])
+    await page.getByRole('button', { name: 'No es la misma persona' }).click()
+    await expect(page.getByText(msg)).toBeVisible()
+    await expect(page.getByText(/ya no entra con/)).toHaveCount(0)
   })
 
   test('con un servidor que no manda `activa` (el de antes), no sale el botón', async ({ page }) => {

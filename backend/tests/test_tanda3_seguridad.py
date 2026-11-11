@@ -235,10 +235,11 @@ def _cuenta(tenant, cid):
     return next(c for c in tenant["driver_accounts"].docs if c["id"] == cid)
 
 
-async def _alta_pedro(nueva=True):
+async def _alta_pedro(nueva=True, otra_persona=True, admin=ADMIN):
+    # Revisión P13 (11-11-2026): ceder el correo pide las DOS señales del panel nuevo (`nueva` y `otra_persona`).
     return await server.create_driver(
         server.DriverCreate(name="Pedro", email="Repartos3@Empresa.test", center="OGA5", password="clave-de-pedro"),
-        nueva=nueva, admin=ADMIN)
+        nueva=nueva, admin=admin, otra_persona=otra_persona)
 
 
 async def _login(clave, correo=CORREO):
@@ -382,3 +383,254 @@ def test_s1_separar_va_antes_que_las_rutas_con_id():
     rutas = [getattr(r, "path", "") for r in server.api_router.routes]
     sep = rutas.index("/api/drivers/separar") if "/api/drivers/separar" in rutas else rutas.index("/drivers/separar")
     assert all(not p.startswith(("/api/drivers/{", "/drivers/{")) for p in rutas[:sep])
+
+
+# ══════════════════════════════════════════════════════════ Revisión 1 (11-11-2026, noche)
+# P3 + P14 · _ceder_correo solo cierra las cuentas de las fichas que CEDEN y las huérfanas con ese correo: nunca la de
+#             una ficha (activa o de baja) que se queda con él.
+
+@pytest.fixture
+def trio(s1):
+    """El grupo de tres: Pedro, activo y SIN cuenta propia (entra con la de su ficha vieja); la ficha vieja de Pedro, de
+    baja y con su cuenta («pedro-buena»); y la de Juan, de baja, con la suya. Más dos cuentas huérfanas con el correo."""
+    s1["drivers"].docs += [
+        {"id": "d-pedro", "name": "PEDRO", "email": CORREO.upper(), "center": "OGA5", "active": True,
+         "created_at": "2026-11-01"},
+        {"id": "d-pedro-vieja", "name": "PEDRO", "email": CORREO, "center": "OGA5", "active": False,
+         "created_at": "2026-02-01"},
+    ]
+    s1["driver_accounts"].docs += [
+        {"id": "c-pedro-vieja", "driver_id": "d-pedro-vieja", "email": CORREO,
+         "hashed_password": server.hash_password("pedro-buena"), "active": True,
+         "password_changed_at": "2026-06-01T00:00:00+00:00", "created_at": "2026-02-01"},
+        {"id": "c-sin-ficha", "email": CORREO, "hashed_password": server.hash_password("x-1"), "active": True},
+        {"id": "c-ficha-borrada", "driver_id": "d-no-existe", "email": " " + CORREO.upper() + " ",
+         "hashed_password": server.hash_password("x-2"), "active": True},
+    ]
+    return s1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p3_p14_separar_a_juan_no_cierra_la_cuenta_de_la_ficha_vieja_de_pedro(trio):
+    antes = dict(_cuenta(trio, "c-pedro-vieja"))
+    assert (await _login("pedro-buena")).id == "d-pedro"            # hoy: entra con la de su ficha vieja
+    server._login_fails.clear()
+    r = await server.drivers_separar({"queda": "d-pedro", "ceden": ["d-juan"]}, ADMIN)
+    assert set(r["cedidas"]) == {"d-juan", "d-juan-vieja"}
+    # La cuenta de la ficha vieja de Pedro (de baja, NO separada) sigue exactamente igual…
+    assert _cuenta(trio, "c-pedro-vieja") == antes
+    # …y Pedro sigue entrando con su contraseña de siempre, como Pedro.
+    assert (await _login("pedro-buena")).id == "d-pedro"
+    # La de Juan, cerrada; las huérfanas con el correo (sin ficha, o con una que no existe), también.
+    assert _cuenta(trio, "c-juan")["active"] is False and "email" not in _cuenta(trio, "c-juan")
+    for cid in ("c-sin-ficha", "c-ficha-borrada"):
+        assert _cuenta(trio, cid)["active"] is False and "email" not in _cuenta(trio, cid)
+    # La de Luis (ficha activa con otro correo en la ficha) no se toca nunca.
+    assert _cuenta(trio, "c-luis")["active"] is True and "correo_cedido" not in _cuenta(trio, "c-luis")
+
+
+# P27 + P30 · El correo se casa recortado y sin mayúsculas, como «Fichas duplicadas»; y si no se cede nada, 409.
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p27_separar_con_el_correo_guardado_con_espacios_y_mayusculas(pareja):
+    _ficha(pareja, "d-juan")["email"] = "  " + CORREO.upper() + " "
+    _cuenta(pareja, "c-juan")["email"] = " " + CORREO + "  "
+    r = await server.drivers_separar({"queda": "d-pedro", "ceden": ["d-juan"]}, ADMIN)
+    assert set(r["cedidas"]) == {"d-juan", "d-juan-vieja"}
+    assert "email" not in _ficha(pareja, "d-juan") and _ficha(pareja, "d-juan")["correo_cedido"]["email"].strip()
+    assert _cuenta(pareja, "c-juan")["active"] is False and "email" not in _cuenta(pareja, "c-juan")
+    server._FICHA_ACTIVA_CACHE.clear()
+    assert (await _sub_del_token_de("d-juan"))["sub"] == "d-juan"
+    with pytest.raises(HTTPException):
+        await _login("clave-de-juan")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p30_separar_sin_nada_cedido_da_409_y_no_ok(pareja, monkeypatch):
+    async def _nada(*_a, **_k):
+        return []
+    monkeypatch.setattr(server, "_ceder_correo", _nada)
+    with pytest.raises(HTTPException) as e:
+        await server.drivers_separar({"queda": "d-pedro", "ceden": ["d-juan"]}, ADMIN)
+    assert e.value.status_code == 409 and "ninguna" in e.value.detail
+
+
+# P13 + P28 · Ceder el correo en el alta va SOLO con `?nueva=true&otra_persona=true` (el segundo paso del panel nuevo).
+#             Con `nueva=true` a secas (el «Cancelar» del único aviso del panel viejo en caché), lo de main.
+
+def _foto(tenant):
+    return ([dict(f) for f in tenant["drivers"].docs], [dict(c) for c in tenant["driver_accounts"].docs])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p13_con_nueva_a_secas_la_ficha_de_baja_conserva_correo_y_cuenta(s1):
+    juan, cuenta = dict(_ficha(s1, "d-juan")), dict(_cuenta(s1, "c-juan"))
+    pedro = await _alta_pedro(nueva=True, otra_persona=False)
+    assert _ficha(s1, pedro.id)["email"] == "Repartos3@Empresa.test"           # la ficha nueva se crea, como en main
+    assert _ficha(s1, "d-juan") == juan and _ficha(s1, "d-juan-vieja")["email"] == CORREO
+    assert _cuenta(s1, "c-juan") == cuenta
+    assert server.global_db.audit_log.docs == []
+    assert (await _login("clave-de-juan")).id                                   # Juan sigue entrando, como en main
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p13_con_las_dos_senales_cede(s1):
+    await _alta_pedro(nueva=True, otra_persona=True)
+    assert "email" not in _ficha(s1, "d-juan") and _cuenta(s1, "c-juan")["active"] is False
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p27_el_alta_cede_tambien_la_ficha_guardada_con_espacios(s1):
+    _ficha(s1, "d-juan")["email"] = " " + CORREO.upper() + "  "
+    await _alta_pedro()
+    assert "email" not in _ficha(s1, "d-juan") and _cuenta(s1, "c-juan")["active"] is False
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p13_ficha_conductor_desde_incorporaciones_con_nueva_cede(s1):
+    """La ruta nueva de «fichas»: su `nueva: true` solo lo manda el panel nuevo tras el segundo paso."""
+    s1["incorporaciones"] = Col([{"id": "p-pedro", "nombre": "PEDRO", "email": CORREO, "centro": "OGA5"}])
+    r = await server.onb_ficha_conductor("p-pedro", {"usar_correo": True, "nueva": True}, ADMIN)
+    assert r["ya_tenia"] is False
+    assert "email" not in _ficha(s1, "d-juan") and _cuenta(s1, "c-juan")["active"] is False
+
+
+# P29 + P31 · La nave de quien lo hace: separar, o ceder en el alta, solo fichas de naves que ve.
+
+JEFE_DGA1 = {**ADMIN, "sub": "a2", "name": "Marta", "allowed_centers": ["DGA1"]}
+JEFE_OGA5 = {**ADMIN, "sub": "a3", "name": "Rosa", "allowed_centers": ["OGA5"]}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p31_alta_otra_persona_con_una_baja_de_otra_nave_da_403_sin_escribir_nada(s1):
+    antes = _foto(s1)
+    with pytest.raises(HTTPException) as e:
+        await _alta_pedro(admin=JEFE_DGA1)
+    assert e.value.status_code == 403 and "OGA5" in e.value.detail
+    assert _foto(s1) == antes and server.global_db.audit_log.docs == []
+    # Quien sí ve esa nave, como siempre.
+    await _alta_pedro(admin=JEFE_OGA5)
+    assert "email" not in _ficha(s1, "d-juan")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p31_con_nueva_a_secas_no_se_mira_la_nave_como_en_main(s1):
+    pedro = await _alta_pedro(nueva=True, otra_persona=False, admin={**JEFE_DGA1, "allowed_centers": ["OGA5"]})
+    assert _ficha(s1, pedro.id)["email"] and _ficha(s1, "d-juan")["email"] == CORREO
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("centros", [{"d-pedro": "DGA1"}, {"d-juan": "DGA1"}])
+async def test_p29_separar_fichas_de_una_nave_que_no_ve_da_403_sin_tocar_nada(pareja, centros):
+    for fid, c in centros.items():
+        _ficha(pareja, fid)["center"] = c
+    antes = _foto(pareja)
+    with pytest.raises(HTTPException) as e:
+        await server.drivers_separar({"queda": "d-pedro", "ceden": ["d-juan"]}, JEFE_OGA5)
+    assert e.value.status_code == 403
+    assert _foto(pareja) == antes and server.global_db.audit_log.docs == []
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p29_separar_en_su_nave_y_sin_naves_asignadas_como_hasta_ahora(pareja):
+    r = await server.drivers_separar({"queda": "d-pedro", "ceden": ["d-juan"]}, JEFE_OGA5)
+    assert "d-juan" in r["cedidas"]
+    sin_naves = {**ADMIN, "allowed_centers": []}
+    r = await server.drivers_separar({"queda": "d-pedro", "ceden": ["d-juana"]}, sin_naves)
+    assert r["cedidas"] == ["d-juana"]
+
+
+# P11 + P20 · _user_can_see_center: el centro pedido tiene que estar en el permitido como PALABRA ENTERA. Antes un trozo
+#             («GA», «1», «M») pasaba por el `c in p.upper()` y la consulta casaba otras naves.
+
+def _limitado(*centros):
+    return {"sub": "a9", "role": "admin", "account_type": "dsp", "allowed_centers": list(centros)}
+
+
+@pytest.mark.parametrize("permitidos,pedido,ve", [
+    # Los trozos del código permitido: fuera.
+    (["OGA5"], "GA", False), (["OGA5"], "5", False), (["OGA5"], "OGA", False), (["OGA5"], "O", False),
+    (["DGA1"], "1", False), (["DGA1"], "GA", False), (["DGA1", "DGA2"], "DGA", False),
+    (["AMZL OGA5 SANTIAGO XPT"], "M", False), (["AMZL OGA5 SANTIAGO XPT"], "GA5", False),
+    (["AMZL OGA5 SANTIAGO XPT"], "SANT", False),
+    # Otra nave: fuera, como siempre.
+    (["OGA5"], "DGA1", False),
+    # El código exacto, en mayúsculas o minúsculas.
+    (["OGA5"], "OGA5", True), (["OGA5"], "oga5", True), (["oga5"], "OGA5", True), (["OGA5", "DGA1"], "dga1", True),
+    # El permitido con el nombre largo y el pedido, el código.
+    (["AMZL OGA5 SANTIAGO XPT"], "OGA5", True), (["AMZL OGA5 SANTIAGO XPT"], "oga5", True),
+    (["AMZL OGA5 SANTIAGO XPT"], " OGA5 ", True), (["AMZL OGA5 SANTIAGO XPT"], " ", False),
+    # La otra dirección, que se queda como estaba: el código permitido dentro de un nombre sucio de la base.
+    (["OGA5"], "AMZL OGA5 SANTIAGO XPT", True), (["OGA5"], "amzl oga5 santiago xpt", True),
+    (["DGA1"], "AMZL OGA5 SANTIAGO XPT", False),
+])
+def test_p11_solo_el_codigo_entero(permitidos, pedido, ve):
+    assert server._user_can_see_center(_limitado(*permitidos), pedido) is ve
+
+
+@pytest.mark.parametrize("user", [
+    {"sa": True, "allowed_centers": ["OGA5"]},
+    {"account_type": "owner", "allowed_centers": ["OGA5"]},
+    {"account_type": "dsp", "allowed_centers": []},
+    {"account_type": "dsp"},
+])
+@pytest.mark.parametrize("pedido", ["GA", "1", "DGA1", "OGA5", ""])
+def test_p11_superadmin_dueno_y_sin_naves_ven_todo_como_antes(user, pedido):
+    assert server._user_can_see_center(user, pedido) is True
+
+
+def test_p11_centro_vacio_como_antes():
+    assert server._user_can_see_center(_limitado("OGA5"), "") is True
+    assert server._user_can_see_center(_limitado("OGA5"), None) is True
+
+
+@pytest.fixture
+def naves(monkeypatch):
+    tenant = Db()
+    tenant["drivers"] = Col([
+        {"id": "d-o", "name": "ANA OGA", "center": "OGA5", "active": True},
+        {"id": "d-g", "name": "BEA DGA", "center": "AMZL DGA1 CORUNA", "active": True},
+    ])
+    for col in ("vehicles", "shift_requests", "shifts", "daily_assignments", "suspensiones", "cuadrante_config",
+                "dias_concedidos"):
+        tenant[col] = Col([])
+    monkeypatch.setattr(server, "db", tenant)
+    return tenant
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("pedido", ["GA", "1", "A", "DGA"])
+async def test_p11_drivers_con_un_trozo_da_403(naves, pedido):
+    with pytest.raises(HTTPException) as e:
+        await server.get_drivers(pedido, _limitado("OGA5"))
+    assert e.value.status_code == 403
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p11_drivers_de_su_nave_como_siempre(naves):
+    assert [d["id"] for d in await server.get_drivers("OGA5", _limitado("OGA5"))] == ["d-o"]
+    assert [d["id"] for d in await server.get_drivers("oga5", _limitado("AMZL OGA5 SANTIAGO XPT"))] == ["d-o"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p11_cobertura_con_un_trozo_da_403(naves):
+    with pytest.raises(HTTPException) as e:
+        await server.cobertura_peticiones("GA", None, None, _limitado("OGA5"))
+    assert e.value.status_code == 403
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p11_plantilla_validar_con_un_trozo_da_403(naves):
+    with pytest.raises(HTTPException) as e:
+        await server.plantilla_validar({"rows": [], "center": "GA", "date": "2026-11-11"}, _limitado("OGA5"))
+    assert e.value.status_code == 403
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p31_ficha_conductor_desde_incorporaciones_con_una_baja_de_otra_nave_da_403(s1):
+    s1["incorporaciones"] = Col([{"id": "p-pedro", "nombre": "PEDRO", "email": CORREO, "centro": ""}])
+    antes = _foto(s1)
+    with pytest.raises(HTTPException) as e:
+        await server.onb_ficha_conductor("p-pedro", {"usar_correo": True, "nueva": True}, JEFE_DGA1)
+    assert e.value.status_code == 403
+    assert _foto(s1) == antes and "driver_id" not in s1["incorporaciones"].docs[0]

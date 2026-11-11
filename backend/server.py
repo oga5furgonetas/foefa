@@ -12171,17 +12171,22 @@ async def _ceder_correo(email: str, a_id: str, ids: list, user: dict) -> list:
     deja de cumplir su premisa: las fichas de `ids` se quedan SIN correo (guardado en `correo_cedido`, para la
     historia) y sus cuentas, desactivadas y sin correo.
 
-    NUNCA toca una ficha activa ni la cuenta de una ficha activa: solo las de `active: False`. Devuelve los ids de
-    las fichas que ha cedido."""
+    NUNCA toca una ficha activa, ni la cuenta de ninguna ficha que no esté en `ids` (activa o de baja): solo las
+    fichas de `ids` con `active: False`, sus cuentas y las huérfanas con ese correo. Devuelve los ids de las fichas
+    que ha cedido."""
     email = (email or "").strip()
     ids = [i for i in (ids or []) if i and i != a_id]
     if not email or not ids:
         return []
     ahora = datetime.now(timezone.utc).isoformat()
-    re_correo = {"$regex": "^%s$" % re.escape(email), "$options": "i"}
+    # El correo se casa como en drivers_duplicados: recortado y sin mayúsculas (11-11-2026, revisión P27). Con el
+    # `^correo$` exacto, una ficha guardada con espacios no se cedía y la oficina recibía un «ya no entra» falso.
+    re_correo = {"$regex": r"^\s*%s\s*$" % re.escape(email), "$options": "i"}
     cedidas = []
-    for f in await db.drivers.find({"id": {"$in": ids}, "active": False, "email": re_correo},
+    for f in await db.drivers.find({"id": {"$in": ids}, "active": False},
                                    {"_id": 0, "id": 1, "email": 1}).to_list(50):
+        if str(f.get("email") or "").strip().lower() != email.lower():
+            continue
         await db.drivers.update_one(
             {"id": f["id"], "active": False},
             {"$set": {"correo_cedido": {"email": f.get("email"), "a": a_id, "en": ahora,
@@ -12190,17 +12195,19 @@ async def _ceder_correo(email: str, a_id: str, ids: list, user: dict) -> list:
         cedidas.append(f["id"])
     if not cedidas:
         return []
-    # Las cuentas: las de esas fichas y cualquier otra con ese correo cuya ficha no esté activa (o ya no exista).
+    # Las cuentas: las de esas fichas y las HUÉRFANAS con ese correo (sin ficha, o con una que ya no existe).
     # Sin correo nadie llega a ellas por el login; desactivadas, tampoco por un correo de recuperación.
+    # NUNCA la de otra ficha que exista, activa o de baja (11-11-2026, revisión P3/P14): la ficha vieja de baja de
+    # Pedro, que no se separa, guarda la contraseña con la que Pedro entra; cerrarla le dejaba fuera a él.
     cuentas = await db.driver_accounts.find(
         {"$or": [{"driver_id": {"$in": cedidas}}, {"email": re_correo}]},
         {"_id": 0, "id": 1, "driver_id": 1}).to_list(50)
     otras = [c.get("driver_id") for c in cuentas if c.get("driver_id") and c.get("driver_id") not in cedidas]
-    vivas = {f["id"] for f in await db.drivers.find(
-        {"id": {"$in": otras}, "active": {"$ne": False}}, {"_id": 0, "id": 1}).to_list(50)} if otras else set()
+    existen = {f["id"] for f in await db.drivers.find(
+        {"id": {"$in": otras}}, {"_id": 0, "id": 1}).to_list(50)} if otras else set()
     for c in cuentas:
         did = c.get("driver_id")
-        if did == a_id or did in vivas:
+        if did == a_id or (did and did not in cedidas and did in existen):
             continue
         filtro = {"id": c["id"]} if c.get("id") else ({"driver_id": did} if did else None)
         if not filtro:
@@ -12215,7 +12222,7 @@ async def _ceder_correo(email: str, a_id: str, ids: list, user: dict) -> list:
 
 @api_router.post("/drivers", response_model=Driver)
 async def create_driver(data: DriverCreate, nueva: bool = False,
-                        admin: dict = Depends(require_admin)):
+                        admin: dict = Depends(require_admin), otra_persona: bool = False):
     driver_data = data.model_dump()
     password = driver_data.pop("password", None)
     if not str(driver_data.get("center") or "").strip():
@@ -12274,6 +12281,25 @@ async def create_driver(data: DriverCreate, nueva: bool = False,
                                "Reactivala para conservar su historial." % (baja.get("name") or email),
                     "reactivar_id": baja["id"], "nombre": baja.get("name") or "",
                 })
+    # «ES OTRA PERSONA» (11-11-2026, tanda 3, S1; revisión P13/P28/P31): las fichas de baja con este correo dejan de
+    # ser «la misma persona» (_ceder_correo, más abajo). SOLO con `otra_persona=true`, que manda el segundo paso del
+    # panel nuevo: el «Cancelar» del único aviso del panel viejo en caché manda `nueva=true` a secas, y con él se
+    # hace lo de siempre (crear la ficha sin tocar nada). Y solo si quien da el alta ve la nave de cada ficha que
+    # cedería: si no, 403 ANTES de escribir nada.
+    de_baja = []
+    if nueva and otra_persona and email:
+        try:
+            de_baja = await db.drivers.find(
+                {"email": {"$regex": r"^\s*%s\s*$" % re.escape(email), "$options": "i"}, "active": False,
+                 "id": {"$ne": driver.id}}, {"_id": 0, "id": 1, "center": 1}).to_list(50)
+        except Exception:                                        # noqa: BLE001
+            logger.exception("No se pudieron buscar las fichas de baja con el correo del alta")
+            de_baja = []
+        ajenas = sorted({str(f.get("center") or "").strip() for f in de_baja
+                         if not _user_can_see_center(admin, str(f.get("center") or ""))})
+        if ajenas:
+            raise HTTPException(403, "La ficha dada de baja con este correo es de %s, que no tienes asignada: "
+                                     "pide a quien lleve esa nave que dé el alta." % ", ".join(ajenas))
     doc = serialize_doc(driver.model_dump())
     try:
         await db.drivers.insert_one(doc)
@@ -12286,17 +12312,14 @@ async def create_driver(data: DriverCreate, nueva: bool = False,
         await _apuntar_cambio_tid(driver.transporter_id, [], {"ficha_id": driver.id, "ficha": driver.name},
                                   admin.get("name") or admin.get("sub"), "ficha_alta")
 
-    # «ES OTRA PERSONA» (11-11-2026, tanda 3, S1): la oficina lo ha dicho con `?nueva=true` tras el 409 de
-    # reactivar. Las fichas de baja con este correo dejan de ser «la misma persona» (_ceder_correo): si no, el
-    # token, la contraseña y la renovación de la app de quien se fue le llevaban a esta ficha nueva. Sin
-    # `nueva`, o sin fichas de baja con este correo, no cambia nada. Si falla, se apunta y el alta sigue.
-    if nueva and email:
+    # «ES OTRA PERSONA» (11-11-2026, tanda 3, S1): la oficina lo ha dicho con `?nueva=true&otra_persona=true` tras
+    # el 409 de reactivar. Las fichas de baja con este correo (buscadas arriba) dejan de ser «la misma persona»
+    # (_ceder_correo): si no, el token, la contraseña y la renovación de la app de quien se fue le llevaban a esta
+    # ficha nueva. Sin las dos señales, o sin fichas de baja con este correo, no cambia nada. Si falla, se apunta y
+    # el alta sigue.
+    if de_baja:
         try:
-            de_baja = await db.drivers.find(
-                {"email": {"$regex": "^%s$" % re.escape(email), "$options": "i"}, "active": False,
-                 "id": {"$ne": driver.id}}, {"_id": 0, "id": 1}).to_list(50)
-            if de_baja:
-                await _ceder_correo(email, driver.id, [f["id"] for f in de_baja], admin)
+            await _ceder_correo(email, driver.id, [f["id"] for f in de_baja], admin)
         except Exception:                                        # noqa: BLE001
             logger.exception("No se pudo ceder el correo de las fichas de baja al dar de alta a otra persona")
 
@@ -12485,12 +12508,17 @@ async def drivers_separar(data: dict = Body(...), user: dict = Depends(require_a
     ceden = [str(c or "").strip() for c in ceden]
     if any(not c or c == queda for c in ceden):
         raise HTTPException(400, "Indica la ficha que se queda el correo y las de baja que no son la misma persona.")
-    activa = await db.drivers.find_one({"id": queda}, {"_id": 0, "id": 1, "active": 1, "email": 1})
+    activa = await db.drivers.find_one({"id": queda}, {"_id": 0, "id": 1, "active": 1, "email": 1, "center": 1})
     correo = str((activa or {}).get("email") or "").strip()
     if not activa or activa.get("active") is False or not correo:
         raise HTTPException(400, "La ficha que se queda el correo tiene que estar activa y tener correo.")
     fichas = {f["id"]: f for f in await db.drivers.find(
-        {"id": {"$in": ceden}}, {"_id": 0, "id": 1, "active": 1, "email": 1, "merged_into": 1}).to_list(50)}
+        {"id": {"$in": ceden}}, {"_id": 0, "id": 1, "active": 1, "email": 1, "merged_into": 1, "center": 1}).to_list(50)}
+    # La nave de quien lo hace (11-11-2026, revisión P29/P31): un usuario limitado a una nave no separa (ni deja sin
+    # acceso) fichas de otra. Para el dueño, el super-admin y quien no tiene naves asignadas, nada cambia.
+    for f in [activa] + [fichas[c] for c in ceden if c in fichas]:
+        if not _user_can_see_center(user, str(f.get("center") or "")):
+            raise HTTPException(403, "Esa ficha es de %s, que no tienes asignada." % str(f.get("center") or "").strip())
     for c in ceden:
         f = fichas.get(c)
         if not f or f.get("active") is not False:
@@ -12512,6 +12540,10 @@ async def drivers_separar(data: dict = Body(...), user: dict = Depends(require_a
         todas += hijas
         frontera = hijas
     cedidas = await _ceder_correo(correo, queda, todas, user)
+    if not cedidas:
+        # Nada cedido (la ficha cambió entre la lista y el clic): un «ok» haría decir al panel «ya no entra» sin ser
+        # verdad (11-11-2026, revisión P30).
+        raise HTTPException(409, "No se ha separado ninguna ficha: vuelve a cargar «Fichas duplicadas» y míralo otra vez.")
     return {"ok": True, "cedidas": cedidas}
 
 
@@ -16181,7 +16213,26 @@ def _user_can_see_center(user: dict, center: str) -> bool:
     # Los centros en BD vienen sucios ('AMZL OGA5 SANTIAGO XPT'), así que se
     # compara por código contenido, no por igualdad exacta.
     c = (center or "").upper()
-    return any(p.upper() in c or c in p.upper() for p in ac if p)
+    if not c:
+        return any(p for p in ac)          # centro vacío: como siempre ("" está dentro de cualquier permitido)
+    # El pedido, dentro del permitido SOLO como palabra entera (11-11-2026, revisión P11/P20): con el `c in p` a
+    # secas, alguien limitado a «OGA5» pedía «GA» (o a «DGA1», «1») y la consulta casaba otras naves. La otra
+    # dirección (el código permitido dentro de un nombre sucio de la base) se queda como estaba.
+    return any(p.upper() in c or _palabra_entera_en(c.strip(), p.upper()) for p in ac if p)
+
+
+def _palabra_entera_en(trozo: str, texto: str) -> bool:
+    """True si `trozo` está en `texto` sin una letra ni una cifra pegada delante o detrás («OGA5» en
+    «AMZL OGA5 SANTIAGO XPT» sí; «GA» en «OGA5», no)."""
+    if not trozo:
+        return False
+    i = texto.find(trozo)
+    while i >= 0:
+        fin = i + len(trozo)
+        if (i == 0 or not texto[i - 1].isalnum()) and (fin == len(texto) or not texto[fin].isalnum()):
+            return True
+        i = texto.find(trozo, i + 1)
+    return False
 
 
 async def _filtro_por_vehiculos(user: dict, center: Optional[str] = None) -> dict:
@@ -38234,7 +38285,10 @@ async def onb_ficha_conductor(pid: str, body: dict = Body(default={}), user: dic
     correo = _texto_cuerpo(p.get("email"), 80) if body.get("usar_correo") is True else ""
     alta = DriverCreate(name=nombre, phone=_texto_cuerpo(p.get("telefono"), 30) or None,
                         dni=_texto_cuerpo(p.get("dni"), 20) or None, center=centro or None, email=correo or None)
-    creada = await create_driver(alta, nueva=body.get("nueva") is True, admin=user)
+    # `nueva: true` solo lo manda el panel nuevo tras su segundo paso («es OTRA persona»): es la señal de ceder el
+    # correo (11-11-2026, revisión P13). Esta ruta es nueva: ningún panel viejo la llama.
+    otra = body.get("nueva") is True
+    creada = await create_driver(alta, nueva=otra, admin=user, otra_persona=otra)
     await db[_ONB_COL].update_one({"id": pid}, {"$set": {
         "driver_id": creada.id, "ficha_en": datetime.now(timezone.utc).isoformat(),
         "ficha_por": user.get("name") or user.get("sub") or ""}})

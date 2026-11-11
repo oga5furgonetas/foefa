@@ -1399,7 +1399,9 @@ Cancelar: ver otras opciones.`)) {
 La ficha dada de baja dejará de entrar con este correo.
 Aceptar: crear una ficha nueva.
 Cancelar: no hacer nada.`)) {
-          await createDriver(data, { nueva: true })
+          /* Las DOS señales (revisión P13): con `nueva` a secas, que es lo que manda el panel viejo en caché al
+             pulsar Cancelar, el servidor crea la ficha sin quitarle el correo a nadie. */
+          await createDriver(data, { nueva: true, otra_persona: true })
         } else {
           setModal(null)
           return
