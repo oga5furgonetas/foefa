@@ -80,8 +80,10 @@ export default function Horas() {
      guardarlo (antes cada apertura reescribía «guardado» con la hora de abrir).
      `centro`: «Guardarlo en DGA1» cuando el plan es de otro centro que el elegido.
      `sustituir`: false = si ese centro ya tiene otro plan de la semana, no lo pisa.
-     `ignorarFichas`: «Guardarlo aquí de todas formas» cuando lo dicen solo las fichas. */
-  const analizar = useCallback(async (txt, exc, { carga = false, centro = null, sustituir = null, ignorarFichas = false } = {}) => {
+     `ignorarFichas`: «Guardarlo aquí de todas formas» cuando lo dicen solo las fichas.
+     `quitarVacia` (11-11-2026): «Recalcular» con la casilla vacía manda null, que
+     quita la cifra guardada; sin él, la casilla vacía no manda nada y se conserva. */
+  const analizar = useCallback(async (txt, exc, { carga = false, centro = null, sustituir = null, ignorarFichas = false, quitarVacia = false } = {}) => {
     const cuerpo = txt ?? texto
     const e = exc ?? excepciones
     const n = ++peticion.current
@@ -89,7 +91,7 @@ export default function Horas() {
     try {
       const r = await whcAnalizar({
         texto: cuerpo, limite_horas: LIMITE_H,
-        ...(e === '' || e == null ? {} : { excepciones: Number(e) }),
+        ...(e === '' || e == null ? (quitarVacia ? { excepciones: null } : {}) : { excepciones: Number(e) }),
         center: centro || center,
         ...(carga ? { guardar: false } : {}),
         ...(sustituir == null ? {} : { sustituir }),
@@ -240,7 +242,7 @@ export default function Horas() {
             </button>
           ) : (
             <>
-              <button onClick={() => analizar()} disabled={cargando}
+              <button onClick={() => analizar(null, null, { quitarVacia: true })} disabled={cargando}
                 className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-2 text-xs text-dark-300 hover:bg-dark-800 disabled:opacity-40">
                 {cargando ? <Loader2 size={13} className="animate-spin" /> : <Clock size={13} />} Recalcular
               </button>

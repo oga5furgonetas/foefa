@@ -5,7 +5,7 @@
 
 Sin MongoDB: la base de mentira de las pruebas vecinas (`base_de_mentira`).
 """
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from fastapi import HTTPException
@@ -66,8 +66,36 @@ def _conductor(nombre, horas="20h 10m"):
 NOMBRES_DGA1 = ["LAURA PEREZ CASTRO", "MARTA RIAL SOUTO", "PEDRO LOPEZ VARELA",
                 "IRENE OTERO DIAZ", "BRAIS GOMEZ SILVA", "NURIA CASAL PENA"]
 
-CABECERA = "Programación\nOpciones\n%s\nIr a esta semana\n\nSemana 46:\n\nnov. 08 - nov. 14, 2026\n\n"
-DIAS = "dom., nov. 08\n\nlun., nov. 09\n\nmar., nov. 10\n\nmié., nov. 11\n\njue., nov. 12\n\nvie., nov. 13\n\nsáb., nov. 14\n\n"
+# LA SEMANA DEL PLAN SALE DE LA DE HOY, NO ES FIJA (11-11-2026). `_whc_semana_del_plan`
+# le pone el año con el reloj REAL (el más cercano a hoy, a 200 días o menos): con
+# «nov. 08» fijo, desde el 22-04-2027 el plan pasaba a ser de 2027 y las pruebas que
+# buscan su documento dejaban de encontrarlo. El plan es el de la semana en curso
+# (domingo DOM) y el día de negocio de las pruebas es su jueves; las horas de
+# «pegado» van a las 7-8 UTC, que en España son del mismo día con y sin horario de verano.
+_MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+_NOMBRES_DIA = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"]
+_HOY_REAL = datetime.now(timezone.utc).date()
+DOM = _HOY_REAL - timedelta(days=(_HOY_REAL.weekday() + 1) % 7)
+SEMANA = DOM.isoformat()
+
+
+def _dia(n):
+    return DOM + timedelta(days=n)
+
+
+def _mes_dia(n):
+    f = _dia(n)
+    return "%s. %02d" % (_MESES[f.month - 1], f.day)
+
+
+def _pegado(n, hora):
+    """El instante ISO (UTC) del día `n` de la semana del plan (0 = domingo)."""
+    return "%sT%s:00+00:00" % (_dia(n).isoformat(), hora)
+
+
+CABECERA = ("Programación\nOpciones\n%s\nIr a esta semana\n\nSemana 46:\n\n"
+            + "%s - %s, %d\n\n" % (_mes_dia(0), _mes_dia(6), _dia(6).year))
+DIAS = "".join("%s., %s\n\n" % (_NOMBRES_DIA[i], _mes_dia(i)) for i in range(7))
 
 
 def _plan(nave=None, nombres=NOMBRES_DGA1):
@@ -87,7 +115,7 @@ def mundo(monkeypatch):
                                "centers": ["OGA5", "DGA1", "DGA2"]}])
     monkeypatch.setattr(server, "db", t)
     monkeypatch.setattr(server, "global_db", g)
-    monkeypatch.setattr(server, "_dia_negocio", lambda: "2026-11-12")   # jueves
+    monkeypatch.setattr(server, "_dia_negocio", lambda: _dia(4).isoformat())   # jueves
     return t
 
 
@@ -106,7 +134,7 @@ async def test_cabecera_de_otra_nave_no_se_guarda_y_se_puede_mandar_alli(mundo):
     # «Guardarlo en DGA1»: el mismo pegado con la nave buena.
     r2 = await _analizar(texto=_plan("DGA1"), center="DGA1")
     assert r2["guardado"] is True and r2["otra_nave"] is None
-    assert [(d["center"], d["week"]) for d in mundo["whc_planes"].docs] == [("DGA1", "2026-11-08")]
+    assert [(d["center"], d["week"]) for d in mundo["whc_planes"].docs] == [("DGA1", SEMANA)]
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -148,8 +176,8 @@ async def test_un_plan_de_otra_nave_guardado_aqui_antes_no_se_abre_como_de_hoy(m
     # R8/R12: el plan de DGA1 quedó guardado en OGA5 el martes (antes del
     # arreglo) y se abre el jueves. Está guardado (en OGA5) y es del martes.
     texto = _plan("DGA1").strip()
-    pegado = "2026-11-10T08:00:00+00:00"
-    mundo["whc_planes"].docs.append({"center": "OGA5", "week": "2026-11-08", "texto": texto,
+    pegado = _pegado(2, "08:00")                    # martes
+    mundo["whc_planes"].docs.append({"center": "OGA5", "week": SEMANA, "texto": texto,
                                      "n_conductores": 6, "pegado_en": pegado, "updated_at": pegado})
     r = await _analizar(texto=texto, center="OGA5", guardar=False)
     assert r["otra_nave"]["centro"] == "DGA1" and r["guardado"] is False
@@ -165,14 +193,14 @@ async def test_guardarlo_en_otra_nave_no_pisa_sin_preguntar(mundo):
     # R8: DGA1 ya tiene OTRO plan de esa semana (más nuevo). «Guardarlo en DGA1»
     # manda sustituir=false: no se pisa y se dice qué hay.
     nuevo = _plan("DGA1", OTROS_DGA1).strip()
-    mundo["whc_planes"].docs.append({"center": "DGA1", "week": "2026-11-08", "texto": nuevo,
+    mundo["whc_planes"].docs.append({"center": "DGA1", "week": SEMANA, "texto": nuevo,
                                      "n_conductores": 6, "excepciones": 1,
-                                     "pegado_en": "2026-11-11T07:00:00+00:00",
-                                     "updated_at": "2026-11-11T07:00:00+00:00"})
+                                     "pegado_en": _pegado(3, "07:00"),
+                                     "updated_at": _pegado(3, "07:00")})
     viejo = _plan("DGA1").strip()
     r = await _analizar(texto=viejo, center="DGA1", sustituir=False)
     assert r["guardado"] is False
-    assert r["ya_hay_plan"] == {"pegado_en": "2026-11-11T07:00:00+00:00", "n_conductores": 6}
+    assert r["ya_hay_plan"] == {"pegado_en": _pegado(3, "07:00"), "n_conductores": 6}
     assert mundo["whc_planes"].docs[0]["texto"] == nuevo
     # Confirmado en la pantalla: se sustituye.
     r = await _analizar(texto=viejo, center="DGA1", sustituir=True)
@@ -183,7 +211,7 @@ async def test_guardarlo_en_otra_nave_no_pisa_sin_preguntar(mundo):
 @pytest.mark.asyncio(loop_scope="session")
 async def test_sin_sustituir_se_pisa_como_siempre_y_el_mismo_texto_se_guarda(mundo):
     # La web vieja (sin el campo) y el pegado normal sustituyen, como antes.
-    mundo["whc_planes"].docs.append({"center": "DGA1", "week": "2026-11-08",
+    mundo["whc_planes"].docs.append({"center": "DGA1", "week": SEMANA,
                                      "texto": _plan("DGA1", OTROS_DGA1), "n_conductores": 6})
     r = await _analizar(texto=_plan("DGA1"), center="DGA1")
     assert r["guardado"] is True and r["ya_hay_plan"] is None
@@ -195,15 +223,47 @@ async def test_sin_sustituir_se_pisa_como_siempre_y_el_mismo_texto_se_guarda(mun
 @pytest.mark.asyncio(loop_scope="session")
 async def test_sin_excepciones_se_conservan_las_del_plan(mundo):
     # R9/R10: «Guardarlo en DGA1» no manda excepciones; las de DGA1 se quedan.
-    mundo["whc_planes"].docs.append({"center": "DGA1", "week": "2026-11-08",
+    mundo["whc_planes"].docs.append({"center": "DGA1", "week": SEMANA,
                                      "texto": _plan("DGA1"), "n_conductores": 6, "excepciones": 3})
-    await _analizar(texto=_plan("DGA1", OTROS_DGA1), center="DGA1")
+    r = await _analizar(texto=_plan("DGA1", OTROS_DGA1), center="DGA1")
+    assert r["guardado"] is True
     assert mundo["whc_planes"].docs[0]["excepciones"] == 3
-    await _analizar(texto=_plan("DGA1"), center="DGA1", excepciones=None)
-    assert mundo["whc_planes"].docs[0]["excepciones"] == 3
+    # S9 (11-11-2026): y la respuesta usa esa cifra, no «no se sabe».
+    assert r["whc"]["excepciones_conocidas"] is True and r["whc"]["excepciones"] == 3
+    assert r["whc"]["porcentaje"] == 50.0               # 6 con horas, 3 excepciones
     # Con la cifra, se guarda la cifra (como siempre).
     await _analizar(texto=_plan("DGA1"), center="DGA1", excepciones=1)
     assert mundo["whc_planes"].docs[0]["excepciones"] == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_null_explicito_quita_las_excepciones(mundo):
+    # S9: la casilla vaciada a propósito al recalcular manda null y la cifra se
+    # quita (antes null conservaba: no había forma de volver a «no se sabe»).
+    texto = _plan("DGA1").strip()
+    mundo["whc_planes"].docs.append({"center": "DGA1", "week": SEMANA, "texto": texto,
+                                     "n_conductores": 6, "excepciones": 2})
+    r = await _analizar(texto=texto, center="DGA1", excepciones=None)
+    assert r["guardado"] is True
+    assert "excepciones" not in mundo["whc_planes"].docs[0]
+    assert r["whc"]["excepciones_conocidas"] is False and r["whc"]["porcentaje"] is None
+    # Y al volver a abrirlo (sin la clave), sigue sin saberse.
+    r = await _analizar(texto=texto, center="DGA1", guardar=False)
+    assert r["whc"]["excepciones_conocidas"] is False
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_abrir_sin_la_clave_usa_la_cifra_del_plan_guardado(mundo):
+    # S9: el plan guardado tiene su cifra; si la petición no la trae, el WHC sale
+    # con ella. Un pegado de OTRO centro no se lleva la cifra de la elegida.
+    texto = _plan("DGA1").strip()
+    mundo["whc_planes"].docs.append({"center": "DGA1", "week": SEMANA, "texto": texto,
+                                     "n_conductores": 6, "excepciones": 1})
+    r = await _analizar(texto=texto, center="DGA1", guardar=False)
+    assert r["whc"]["excepciones"] == 1 and r["whc"]["excepciones_conocidas"] is True
+    r = await _analizar(texto=_plan("OGA5"), center="DGA1", guardar=False)
+    assert r["otra_nave"]["centro"] == "OGA5"
+    assert r["whc"]["excepciones_conocidas"] is False
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -227,12 +287,55 @@ async def test_ignorar_fichas_no_salta_la_cabecera(mundo):
     assert mundo["whc_planes"].docs == []
 
 
+# ── S1 (11-11-2026): un plan ya guardado en la elegida no se juzga por las fichas ─
+@pytest.mark.asyncio(loop_scope="session")
+async def test_guardado_de_todas_formas_se_abre_y_se_recalcula_sin_aviso(mundo):
+    # Las fichas de esta gente dicen DGA1; la oficina de OGA5 lo guardó a sabiendas.
+    texto = _plan(None)
+    r = await _analizar(texto=texto, center="OGA5", ignorar_fichas=True)
+    assert r["guardado"] is True
+    # Abrir la pantalla (guardar=false, sin ignorar_fichas): ni «parece de DGA1».
+    r = await _analizar(texto=texto, center="OGA5", guardar=False)
+    assert r["otra_nave"] is None and r["es_el_guardado"] is True
+    assert r["aviso_guardado"] is None
+    # «Recalcular» con la hoja de Amazon: se guarda la cifra.
+    r = await _analizar(texto=texto, center="OGA5", excepciones=1)
+    assert r["otra_nave"] is None and r["guardado"] is True
+    assert [(d["center"], d.get("excepciones")) for d in mundo["whc_planes"].docs] == [("OGA5", 1)]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_un_plan_sin_cabecera_guardado_antes_se_abre_sin_aviso(mundo):
+    # Los planes sin cabecera que ya hay en producción (guardados sin comprobar
+    # fichas) no se señalan al abrirlos aunque las fichas digan otro centro.
+    texto = _plan(None).strip()
+    mundo["whc_planes"].docs.append({"center": "OGA5", "week": SEMANA, "texto": texto,
+                                     "n_conductores": 6, "pegado_en": _pegado(2, "08:00")})
+    r = await _analizar(texto=texto, center="OGA5", guardar=False)
+    assert r["otra_nave"] is None and r["es_el_guardado"] is True
+    # Un pegado NUEVO con esas fichas sí se para, como antes.
+    r = await _analizar(texto=_plan(None, NOMBRES_DGA1 + ["ANA OGA CINCO"]), center="OGA5")
+    assert r["otra_nave"]["por"] == "fichas" and r["guardado"] is False
+    assert mundo["whc_planes"].docs[0]["texto"] == texto
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_un_plan_guardado_con_cabecera_de_otro_centro_sigue_avisando(mundo):
+    texto = _plan("DGA1").strip()
+    mundo["whc_planes"].docs.append({"center": "OGA5", "week": SEMANA, "texto": texto,
+                                     "n_conductores": 6, "pegado_en": _pegado(2, "08:00")})
+    r = await _analizar(texto=texto, center="OGA5", guardar=False)
+    assert r["otra_nave"] == {"centro": "DGA1", "por": "cabecera"} and r["es_el_guardado"] is True
+    r = await _analizar(texto=texto, center="OGA5", excepciones=1)
+    assert r["guardado"] is False and "excepciones" not in mundo["whc_planes"].docs[0]
+
+
 # ── H3 · un plan viejo no se ve como de ahora ────────────────────────────────
 @pytest.mark.asyncio(loop_scope="session")
 async def test_abrir_un_plan_guardado_no_lo_reescribe_y_cuenta_desde_que_se_pego(mundo):
     texto = _plan("DGA1").strip()
-    pegado = "2026-11-10T08:00:00+00:00"           # martes, 9:00 en España
-    mundo["whc_planes"].docs.append({"center": "DGA1", "week": "2026-11-08", "texto": texto,
+    pegado = _pegado(2, "08:00")                    # martes, 9:00 (o 10:00) en España
+    mundo["whc_planes"].docs.append({"center": "DGA1", "week": SEMANA, "texto": texto,
                                      "n_conductores": 6, "excepciones": 2,
                                      "pegado_en": pegado, "updated_at": pegado})
     r = await _analizar(texto=texto, center="DGA1", guardar=False, excepciones=2)
@@ -247,18 +350,18 @@ async def test_abrir_un_plan_guardado_no_lo_reescribe_y_cuenta_desde_que_se_pego
 @pytest.mark.asyncio(loop_scope="session")
 async def test_un_plan_guardado_antes_usa_su_updated_at(mundo):
     texto = _plan("DGA1").strip()
-    mundo["whc_planes"].docs.append({"center": "DGA1", "week": "2026-11-08", "texto": texto,
-                                     "n_conductores": 6, "updated_at": "2026-11-09T07:30:00+00:00"})
+    mundo["whc_planes"].docs.append({"center": "DGA1", "week": SEMANA, "texto": texto,
+                                     "n_conductores": 6, "updated_at": _pegado(1, "07:30")})
     r = await _analizar(texto=texto, center="DGA1", guardar=False)
-    assert r["pegado_en"] == "2026-11-09T07:30:00+00:00" and r["pegado_hoy"] is False
+    assert r["pegado_en"] == _pegado(1, "07:30") and r["pegado_hoy"] is False
     assert r["ritmo"]["dia_semana"] == 2
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_recalcular_el_mismo_plan_no_cambia_cuando_se_pego(mundo):
     texto = _plan("DGA1").strip()
-    pegado = "2026-11-10T08:00:00+00:00"
-    mundo["whc_planes"].docs.append({"center": "DGA1", "week": "2026-11-08", "texto": texto,
+    pegado = _pegado(2, "08:00")
+    mundo["whc_planes"].docs.append({"center": "DGA1", "week": SEMANA, "texto": texto,
                                      "n_conductores": 6, "pegado_en": pegado, "updated_at": pegado})
     r = await _analizar(texto=texto, center="DGA1", excepciones=1)
     assert r["guardado"] is True
@@ -278,7 +381,9 @@ async def test_un_pegado_nuevo_es_de_hoy(mundo):
 
 # ── H4 · ver y borrar el plan de una semana concreta ─────────────────────────
 @pytest.mark.asyncio(loop_scope="session")
-async def test_get_y_delete_con_semana(mundo):
+async def test_get_y_delete_con_semana(mundo, monkeypatch):
+    # Esta no pasa por la semana del plan: su propio «hoy», fijo.
+    monkeypatch.setattr(server, "_dia_negocio", lambda: "2026-11-12")
     col = mundo["whc_planes"]
     col.docs += [{"center": "OGA5", "week": "2026-11-01", "texto": "pasada"},
                  {"center": "OGA5", "week": "2026-11-08", "texto": "esta"}]
