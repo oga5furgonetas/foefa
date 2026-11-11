@@ -6750,27 +6750,40 @@ async def quitar_org_center(nombre: str, user: dict = Depends(require_admin)):
     guardado = next((c for c in centers if buscado and str(c or "").strip().upper() == buscado), None)
     if guardado is None:
         raise HTTPException(status_code=404, detail="Ese centro no está en tu empresa")
+    # Para quitarla hay que verla (11-11-2026, corrección P32): un «Admin completo» limitado a DGA1 de una empresa
+    # cliente quitaba OGA5. En la cuenta dueña, para el super-admin y sin naves asignadas, pasa como antes.
+    if not _user_can_see_center(user, guardado):
+        raise HTTPException(status_code=403, detail="No tienes acceso a ese centro")
     if len([c for c in centers if str(c or "").strip()]) <= 1:
         # Sin ninguna, las listas caerían a las naves que salgan en los datos (`_centros_de_la_empresa`).
         raise HTTPException(status_code=409, detail={
             "mensaje": "Tu empresa tiene que tener al menos un centro: añade el bueno antes de quitar este.",
-            "conductores": 0, "furgonetas": 0, "usuarios": 0})
+            "conductores": 0, "furgonetas": 0, "usuarios": 0, "traslados": 0})
     rx = {"$regex": r"(?<![A-Z0-9])%s(?![A-Z0-9])" % re.escape(buscado), "$options": "i"}
     conductores = await db.drivers.count_documents(
         {"center": rx, "status": {"$ne": "deleted"}, "active": {"$ne": False}})
+    # Y los que tienen un cambio de centro PROGRAMADO a ella (11-11-2026, corrección P15): el bucle de traslados
+    # (`aplicar_traslados`) los mete el día que toca aunque la nave ya no sea de la empresa, y se quedan fuera de
+    # todos los selectores.
+    traslados = await db.drivers.count_documents(
+        {"traslado.centro": rx, "status": {"$ne": "deleted"}, "active": {"$ne": False}})
     furgonetas = await db.vehicles.count_documents({"center": rx, "status": {"$ne": "deleted"}})
     usuarios = 0
     async for a in global_db.admin_users.find({"org_id": org["id"]}, {"_id": 0, "allowed_centers": 1}):
         if any(str(c or "").strip().upper() == buscado for c in (a.get("allowed_centers") or [])):
             usuarios += 1
-    if conductores or furgonetas or usuarios:
+    if conductores or furgonetas or usuarios or traslados:
         trozos = [("%d %s" % (n, uno if n == 1 else varios)) for n, uno, varios in (
             (conductores, "conductor", "conductores"), (furgonetas, "furgoneta", "furgonetas"),
-            (usuarios, "usuario", "usuarios")) if n]
+            (usuarios, "usuario", "usuarios"),
+            (traslados, "conductor con un cambio de centro programado a él",
+             "conductores con un cambio de centro programado a él")) if n]
         texto = trozos[0] if len(trozos) == 1 else ", ".join(trozos[:-1]) + " y " + trozos[-1]
+        que_hacer = ("muévelos a otro centro, o cambia o cancela esos cambios de centro, antes de quitarlo" if traslados
+                     else "muévelos a otro centro antes de quitarlo")
         raise HTTPException(status_code=409, detail={
-            "mensaje": "%s tiene %s: muévelos a otro centro antes de quitarlo." % (guardado, texto),
-            "conductores": conductores, "furgonetas": furgonetas, "usuarios": usuarios})
+            "mensaje": "%s tiene %s: %s." % (guardado, texto, que_hacer),
+            "conductores": conductores, "furgonetas": furgonetas, "usuarios": usuarios, "traslados": traslados})
     await global_db.organizations.update_one({"id": org["id"]}, {"$pull": {"centers": guardado}})
     await _audit(user, "centro_quitado", {"centro": guardado})
     org = await get_org(org["id"])
@@ -8787,6 +8800,24 @@ def _can_manage_user(actor: dict, target_centers: Optional[list]) -> bool:
     # center_manager solo puede gestionar usuarios cuyos centros son subconjunto de los suyos
     return target_set.issubset(actor_centers)
 
+def _jefe_gestiona_rol(target: dict) -> bool:
+    """Un jefe de centro solo gestiona DISPATCHERS (11-11-2026, corrección P16/P17 de equipo-2): nunca a un «Admin
+    completo» (admin_role vacío, que puede más que él: p. ej. añadir naves) ni a otro jefe. Antes, con la regla de
+    naves sola, un jefe le cambiaba la contraseña a un «Admin completo» de su nave y entraba con su cuenta."""
+    return target.get("admin_role") == "dispatcher"
+
+def _puede_gestionar_a(actor: dict, target: dict) -> bool:
+    """¿Puede `actor` editar, cambiar la contraseña, borrar o poner la foto de `target`? Lo mismo que piden esas rutas:
+    nunca a un super-admin; el super-admin a cualquiera; un jefe, solo a dispatchers de sus naves (`_can_manage_user`);
+    nadie más. Lo usan la lista de Usuarios (qué filas llevan botones) y POST /auth/reset-admin-password."""
+    if target.get("super_admin"):
+        return False
+    if actor.get("sa"):
+        return True
+    if not _is_center_manager(actor):
+        return False
+    return _jefe_gestiona_rol(target) and _can_manage_user(actor, target.get("allowed_centers"))
+
 def _clamp_permissions(actor: dict, permissions: Optional[list]) -> Optional[list]:
     """center_manager no puede dar más permisos de los que él mismo tiene."""
     if actor.get("sa"):
@@ -8859,6 +8890,8 @@ async def update_admin_permissions(admin_id: str, data: dict = Body(...), _admin
             raise HTTPException(403, "No tienes acceso para modificar este usuario")
         if target.get("admin_role") == "center_manager":
             raise HTTPException(403, "No puedes modificar a otro gestor de centro")
+        if not _jefe_gestiona_rol(target):          # un «Admin completo» (11-11-2026, corrección P16/P17)
+            raise HTTPException(403, "Solo el super-admin puede modificar a un Admin completo")
     elif not _admin.get("sa") and not _is_center_manager(_admin):
         raise HTTPException(403, "Sin permisos para modificar usuarios")
 
@@ -8880,9 +8913,8 @@ async def update_admin_permissions(admin_id: str, data: dict = Body(...), _admin
             # center_manager no puede crear otros center_managers
             if ar == "center_manager" and not _admin.get("sa"):
                 raise HTTPException(403, "Solo super-admin puede asignar rol de gestor de centro")
-            # Ni subir a «Admin completo» a un dispatcher (11-11-2026, equipo-2). Si el usuario YA era «Admin
-            # completo» se le deja (null sobre null no cambia nada): la pantalla manda siempre el rol actual al
-            # guardar los permisos, y la web vieja no puede quedarse sin guardar.
+            # Ni subir a «Admin completo» a un dispatcher (11-11-2026, equipo-2). A un «Admin completo» un jefe ya no
+            # llega aquí (corrección P16/P17, más arriba), así que esta condición solo ve dispatchers.
             if ar is None and _is_center_manager(_admin) and target.get("admin_role") is not None:
                 raise HTTPException(403, "Solo super-admin puede dar el rol de Admin completo")
             patch["admin_role"] = ar
@@ -8929,6 +8961,8 @@ async def delete_admin(admin_id: str, _admin: dict = Depends(require_admin)):
             raise HTTPException(403, "No tienes acceso para eliminar este usuario")
         if target.get("admin_role") == "center_manager":
             raise HTTPException(403, "No puedes eliminar a otro gestor de centro")
+        if not _jefe_gestiona_rol(target):          # un «Admin completo» (11-11-2026, corrección P16/P17)
+            raise HTTPException(403, "Solo el super-admin puede eliminar a un Admin completo")
     elif not _admin.get("sa") and not _is_center_manager(_admin):
         raise HTTPException(403, "Sin permisos para eliminar usuarios")
 
@@ -8959,6 +8993,9 @@ async def subir_foto_admin(admin_id: str, file: UploadFile = File(...), _admin: 
             raise HTTPException(403, "No puedes modificar a un super-admin")
         if not _admin.get("sa") and _is_center_manager(_admin):
             if not _can_manage_user(_admin, target.get("allowed_centers")):
+                raise HTTPException(403, "No tienes acceso para modificar este usuario")
+            # Solo dispatchers: ni otro jefe ni un «Admin completo» (11-11-2026, corrección P16/P17).
+            if not _jefe_gestiona_rol(target):
                 raise HTTPException(403, "No tienes acceso para modificar este usuario")
         elif not _admin.get("sa") and not _is_center_manager(_admin):
             raise HTTPException(403, "Sin permisos para modificar usuarios")
@@ -9199,12 +9236,25 @@ async def reset_admin_password(data: dict, _admin: dict = Depends(require_admin)
     if not username or len(new_password) < 6:
         raise HTTPException(status_code=400, detail="Usuario y contraseña (mín. 6 caracteres) requeridos")
     # Filtra por org_id para evitar que un admin de un DSP resetee cuentas de otro DSP.
+    target = await global_db.admin_users.find_one({"username": username, "org_id": _admin.get("org_id")}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Admin no encontrado")
+    # Lo mismo que cambiar la contraseña de otro por PATCH /auth/admins/{id} (11-11-2026, corrección P4): aquí no se
+    # miraba nada, así que cualquier usuario de la oficina, un dispatcher incluido, le cambiaba la contraseña a
+    # cualquiera de su empresa, también al dueño y al super-admin, y entraba con su cuenta. Ningún cliente la usa.
+    if target.get("super_admin"):
+        raise HTTPException(status_code=403, detail="No puedes modificar a un super-admin")
+    if not _admin.get("sa") and not _is_center_manager(_admin):
+        raise HTTPException(403, "Sin permisos para modificar usuarios")
+    if not _puede_gestionar_a(_admin, target):
+        raise HTTPException(403, "No tienes acceso para modificar este usuario")
     result = await global_db.admin_users.update_one(
-        {"username": username, "org_id": _admin.get("org_id")},
+        {"id": target.get("id"), "username": username, "org_id": _admin.get("org_id")},
         {"$set": {"hashed_password": hash_password(new_password)}}
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Admin no encontrado")
+    _ADMIN_EXISTS_CACHE.pop(target.get("id"), None)
     logger.info(f"Contraseña de admin '{username}' cambiada por {_admin['name']}")
     return {"success": True}
 
@@ -9272,13 +9322,19 @@ async def list_admins(_admin: dict = Depends(require_admin)):
     admins = await global_db.admin_users.find(q, {"_id": 0, "hashed_password": 0}).to_list(200)
     # center_manager solo ve usuarios en sus centros (+ a sí mismo)
     if not _admin.get("sa") and _is_center_manager(_admin):
-        # La misma regla que para gestionarlos (11-11-2026, equipo-2): un jefe con naves deja de ver a los usuarios
-        # sin restricción (antes «todas» contaba como dentro de las suyas); uno sin restricción los ve a todos.
+        # Ve lo de siempre (sus naves y los de «todas», que «caben» en cualquiera) MÁS los dispatchers que puede
+        # gestionar (un jefe sin naves, los de cualquier nave). Y cada fila lleva `puede_gestionar` (campo nuevo,
+        # 11-11-2026, corrección P16/P17): la pantalla no pone «Editar» ni la papelera a quien no gestiona. No se
+        # esconde a nadie que se viera antes.
+        my_centers = set(_admin.get("allowed_centers") or [])
         admins = [
             a for a in admins
             if a["id"] == _admin.get("sub")
-            or _can_manage_user(_admin, a.get("allowed_centers"))
+            or set(a.get("allowed_centers") or []).issubset(my_centers)
+            or _puede_gestionar_a(_admin, a)
         ]
+        for a in admins:
+            a["puede_gestionar"] = a["id"] != _admin.get("sub") and _puede_gestionar_a(_admin, a)
     return admins
 
 
@@ -12864,6 +12920,9 @@ async def drivers_importar(file: UploadFile = File(...), center: str = Form(""),
         else:
             nombres_bd.add(_imp_norm(p["name"]))
 
+    # El centro FINAL de cada alta (el del mapa, el de su columna, el del formulario o el único de la empresa), antes
+    # de escribir nada (11-11-2026, corrección P33).
+    _centros_finales_que_ve(user, [d.get("center") for d in nuevos])
     metidos = len(nuevos)
     if nuevos:
         try:
@@ -28717,6 +28776,17 @@ def _destinos_que_ve(user: dict, destino: dict) -> None:
         raise HTTPException(403, "No tienes acceso a estos centros: %s." % ", ".join(ajenos))
 
 
+def _centros_finales_que_ve(user: dict, centros) -> None:
+    """403 si alguna fila que se va a ESCRIBIR acaba en una nave que quien importa no ve (11-11-2026, corrección P33).
+    Mirar solo el `mapa` no bastaba: sin vista previa el centro sale de la columna de cada fila, o del `center` /
+    `center_filter` del formulario. Se llama con el centro final de cada fila ANTES de escribir nada. Una fila sin
+    centro no es «otra nave». En la cuenta dueña, para el super-admin y para quien no tiene naves no rechaza nada."""
+    ajenos = sorted({str(c).strip() for c in (centros or ()) if c and str(c).strip()
+                     and not _user_can_see_center(user, str(c).strip())})
+    if ajenos:
+        raise HTTPException(403, "No tienes acceso a estos centros: %s." % ", ".join(ajenos))
+
+
 def _eleccion_centros(centros, mapa, conocidos):
     """(elegidos, destino) de lo que la persona marco en la vista previa.
 
@@ -28894,7 +28964,7 @@ async def import_vehicles(
     unico = next(iter(conocidos)) if len(conocidos) == 1 else ""
 
     imported = updated = sin_cambios = skipped = no_estaban = fuera_seleccion = 0
-    errors, vistas = [], set()
+    errors, vistas, pendientes = [], set(), []
     ahora = datetime.now(timezone.utc).isoformat()
     for r in filas_crudas:
         f = _veh_fila(cols, r)
@@ -28919,6 +28989,11 @@ async def import_vehicles(
             campos["center"] = centro
         elif f["centro_texto"]:
             campos["center"] = f["centro_texto"]
+        pendientes.append((f, k, campos))
+    # Primero se decide qué se escribe y después se escribe (11-11-2026, corrección P33): así se mira el centro FINAL
+    # de cada fila que va a tocar la base (dar de alta, o una que ya está y cambia de nave) ANTES de escribir nada.
+    _centros_finales_que_ve(user, [c.get("center") for _f, k, c in pendientes if flota.get(k) or crear])
+    for f, k, campos in pendientes:
         try:
             existing = flota.get(k)
             if existing:

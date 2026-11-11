@@ -153,24 +153,26 @@ async def test_jefe_no_sube_a_admin_completo_a_un_dispatcher(base):
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_jefe_guarda_a_un_admin_completo_suyo_sin_cambiarle_el_rol(base):
-    # La pantalla manda el rol que ya tiene (null): no puede quedarse sin guardar.
-    r = await server.update_admin_permissions(
-        "dga1-completo", {"permissions": ["chat"], "allowed_centers": ["DGA1"], "admin_role": None}, _admin=JEFE_DGA1)
-    assert r == {"success": True}
+async def test_jefe_no_toca_a_un_admin_completo_de_su_nave(base):
+    # Corrección P16/P17 (11-11-2026): antes se le guardaba (la regla de naves sola lo dejaba). Un jefe solo gestiona
+    # dispatchers: a un «Admin completo», aunque sea de su nave, ni los permisos.
+    await _no_puede(server.update_admin_permissions(
+        "dga1-completo", {"permissions": ["chat"], "allowed_centers": ["DGA1"], "admin_role": None}, _admin=JEFE_DGA1))
     d = _doc(base, "dga1-completo")
-    assert d["permissions"] == ["chat"] and d["admin_role"] is None
+    assert d["permissions"] is None and d["admin_role"] is None
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_jefe_sin_restriccion_gestiona_a_cualquier_no_jefe(base):
-    for uid in ("todo", "oga5", "disp1"):
+async def test_jefe_sin_restriccion_gestiona_a_cualquier_dispatcher(base):
+    # Corrección P16/P17: «cualquier no-jefe» pasa a ser «cualquier dispatcher»; el «Admin completo» ya no.
+    for uid in ("oga5", "disp1"):
         r = await server.update_admin_permissions(uid, {"permissions": ["chat"]}, _admin=JEFE_TODAS)
         assert r == {"success": True}
     r = await server.update_admin_permissions("oga5", {"allowed_centers": None}, _admin=JEFE_TODAS)
     assert r == {"success": True} and _doc(base, "oga5")["allowed_centers"] is None
     assert (await server.delete_admin("vacio", _admin=JEFE_TODAS)) == {"success": True}
     await _no_puede(server.update_admin_permissions("jefe1", {"permissions": []}, _admin=JEFE_TODAS))
+    await _no_puede(server.update_admin_permissions("todo", {"permissions": ["chat"]}, _admin=JEFE_TODAS))
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -186,15 +188,19 @@ async def test_super_admin_edita_y_borra_como_hoy(base):
 # ── equipo-2 · la lista ─────────────────────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_jefe_limitado_no_ve_a_los_usuarios_de_todas_las_naves(base):
-    ids = {a["id"] for a in await server.list_admins(_admin=JEFE_DGA1)}
-    assert ids == {"jefe1", "disp1", "dga1-completo"}
+async def test_jefe_limitado_ve_lo_de_siempre_con_botones_solo_en_quien_gestiona(base):
+    # Corrección P16/P17: la lista no esconde a nadie que se viera antes (sus naves y los de «todas»); a quien no
+    # puede gestionar le llega `puede_gestionar: False` y la pantalla no le pone ni «Editar» ni la papelera.
+    lista = {a["id"]: a for a in await server.list_admins(_admin=JEFE_DGA1)}
+    assert set(lista) == {"jefe1", "disp1", "dga1-completo", "sa", "jefe0", "todo", "vacio"}
+    assert {i for i, a in lista.items() if a["puede_gestionar"]} == {"disp1"}
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_jefe_sin_restriccion_ve_a_todos(base):
-    ids = {a["id"] for a in await server.list_admins(_admin=JEFE_TODAS)}
-    assert ids == {d["id"] for d in base["admin_users"].docs}
+async def test_jefe_sin_restriccion_ve_los_de_todas_y_los_dispatchers_que_gestiona(base):
+    lista = {a["id"]: a for a in await server.list_admins(_admin=JEFE_TODAS)}
+    assert set(lista) == {"sa", "jefe0", "todo", "vacio", "disp1", "oga5"}
+    assert {i for i, a in lista.items() if a["puede_gestionar"]} == {"disp1", "oga5", "vacio"}
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -202,6 +208,7 @@ async def test_super_admin_ve_a_todos_como_hoy(base):
     lista = await server.list_admins(_admin=SA)
     assert len(lista) == len(base["admin_users"].docs)
     assert all("hashed_password" not in a for a in lista)
+    assert all("puede_gestionar" not in a for a in lista)      # el campo nuevo solo va a los jefes
 
 
 # ── equipo-10 · añadir y quitar naves ───────────────────────────────────────────────────────────────────────────────
@@ -279,7 +286,7 @@ async def test_no_se_quita_una_nave_con_conductores_furgonetas_o_usuarios(naves)
         await server.quitar_org_center("OGA5", user=COMPLETO)       # escrita sucia en la ficha: «AMZL OGA5 …»
     assert e.value.status_code == 409
     assert e.value.detail == {"mensaje": "OGA5 tiene 1 conductor y 1 furgoneta: muévelos a otro centro antes de quitarlo.",
-                              "conductores": 1, "furgonetas": 1, "usuarios": 0}
+                              "conductores": 1, "furgonetas": 1, "usuarios": 0, "traslados": 0}
     with pytest.raises(HTTPException) as e:
         await server.quitar_org_center("dga2", user=COMPLETO)       # «dga2 » en la furgoneta y un usuario con DGA2
     assert e.value.status_code == 409
@@ -378,3 +385,267 @@ async def test_los_destinos_de_las_furgonetas_tambien(importar):
     assert server._destinos_que_ve(CLIENTE_DGA1, {"AMZL DGA1": "DGA1"}) is None
     assert server._destinos_que_ve(OWNER_DGA1, {"AMZL OGA5": "OGA5"}) is None
     assert server._destinos_que_ve(CLIENTE_TODAS, {"AMZL OGA5": "OGA5"}) is None
+
+
+# ══ CORRECCIONES de la primera revisión (11-11-2026) ════════════════════════════════════════════════════════════════
+
+# Los mismos actores en una empresa cliente (account_type «dsp»): las reglas de gestionar usuarios no miran la cuenta.
+def _en_cliente(actor):
+    return {**actor, "account_type": "dsp"}
+
+
+CUENTAS = [pytest.param(lambda a: a, id="cuenta-duena"), pytest.param(_en_cliente, id="empresa-cliente")]
+
+
+async def _reset(actor, uid, clave="otra-1234"):
+    return await server.reset_admin_password({"username": uid, "password": clave}, _admin=actor)
+
+
+# ── P4 · POST /auth/reset-admin-password pide lo mismo que cambiar la contraseña por PATCH ──────────────────────────
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("cuenta", CUENTAS)
+async def test_p4_un_dispatcher_no_cambia_contrasenas_ajenas(base, cuenta):
+    for uid in ("todo", "oga5", "sa", "jefe1"):
+        await _no_puede(_reset(cuenta(DISPATCHER), uid))
+        assert _doc(base, uid)["hashed_password"] == "h"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("cuenta", CUENTAS)
+async def test_p4_un_jefe_no_cambia_la_de_un_admin_completo_otro_jefe_ni_el_dueno(base, cuenta):
+    for jefe in (JEFE_DGA1, JEFE_TODAS):
+        for uid in ("todo", "dga1-completo", "jefe1", "jefe0", "sa"):
+            await _no_puede(_reset(cuenta(jefe), uid))
+            assert _doc(base, uid)["hashed_password"] == "h"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("cuenta", CUENTAS)
+async def test_p4_un_jefe_si_cambia_la_de_un_dispatcher_suyo(base, cuenta):
+    assert await _reset(cuenta(JEFE_DGA1), "disp1") == {"success": True}
+    assert _doc(base, "disp1")["hashed_password"] == "h:otra-1234"
+    await _no_puede(_reset(cuenta(JEFE_DGA1), "oga5"))          # dispatcher de otra nave
+    assert await _reset(cuenta(JEFE_TODAS), "oga5") == {"success": True}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p4_el_super_admin_si_y_nunca_sobre_un_super_admin(base):
+    for uid in ("todo", "jefe1", "disp1"):
+        assert await _reset(SA, uid) == {"success": True}
+        assert _doc(base, uid)["hashed_password"] == "h:otra-1234"
+    await _no_puede(_reset(SA, "sa"))
+    assert _doc(base, "sa")["hashed_password"] == "h"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p4_sigue_igual_lo_de_antes(base):
+    # Cuerpo incompleto: 400; usuario que no existe o de otra empresa: 404, como hoy.
+    for cuerpo in ({"username": "disp1", "password": "123"}, {"password": "123456"}):
+        with pytest.raises(HTTPException) as e:
+            await server.reset_admin_password(cuerpo, _admin=SA)
+        assert e.value.status_code == 400
+    with pytest.raises(HTTPException) as e:
+        await _reset(SA, "nadie")
+    assert e.value.status_code == 404
+    with pytest.raises(HTTPException) as e:
+        await _reset({**SA, "org_id": "o2"}, "disp1")
+    assert e.value.status_code == 404
+    assert _doc(base, "disp1")["hashed_password"] == "h"
+
+
+# ── P16 + P17 · un jefe de centro solo gestiona dispatchers (permisos, contraseña, borrar y foto) ────────────────────
+
+def _foto():
+    import io
+    from starlette.datastructures import UploadFile
+    return UploadFile(file=io.BytesIO(b"\xff\xd8foto"), filename="cara.jpg")
+
+
+def _las_cuatro(actor, uid):
+    """Las cuatro rutas de gestionar a otro usuario, como corutinas."""
+    return [server.update_admin_permissions(uid, {"permissions": ["chat"]}, _admin=actor),
+            server.update_admin_permissions(uid, {"new_password": "otra-123"}, _admin=actor),
+            server.subir_foto_admin(uid, file=_foto(), _admin=actor),
+            server.delete_admin(uid, _admin=actor)]                 # la última: si entra, ya no está
+
+
+@pytest.fixture
+def con_foto(base, monkeypatch):
+    async def _guarda(content, nombre):
+        return "/fotos/%s.jpg" % nombre, content
+    monkeypatch.setattr(server, "process_and_save_image", _guarda)
+    return base
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("cuenta", CUENTAS)
+async def test_p16_un_jefe_no_gestiona_a_un_admin_completo_de_su_nave(con_foto, cuenta):
+    for corutina in _las_cuatro(cuenta(JEFE_DGA1), "dga1-completo"):
+        await _no_puede(corutina)
+    d = _doc(con_foto, "dga1-completo")
+    assert d["hashed_password"] == "h" and d["permissions"] is None and "photo_url" not in d
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("cuenta", CUENTAS)
+async def test_p17_un_jefe_sin_naves_tampoco_con_admin_completo_ni_otro_jefe(con_foto, cuenta):
+    for uid in ("todo", "dga1-completo", "jefe1"):
+        for corutina in _las_cuatro(cuenta(JEFE_TODAS), uid):
+            await _no_puede(corutina)
+        assert _doc(con_foto, uid) is not None and _doc(con_foto, uid)["hashed_password"] == "h"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("cuenta", CUENTAS)
+async def test_p16_un_jefe_si_gestiona_a_sus_dispatchers(con_foto, cuenta):
+    jefe = cuenta(JEFE_DGA1)
+    assert await server.update_admin_permissions("disp1", {"permissions": ["chat"]}, _admin=jefe) == {"success": True}
+    assert await server.update_admin_permissions("disp1", {"new_password": "otra-123"}, _admin=jefe) == {"success": True}
+    r = await server.subir_foto_admin("disp1", file=_foto(), _admin=jefe)
+    assert r["success"] and _doc(con_foto, "disp1")["photo_url"] == r["photo_url"]
+    assert await server.delete_admin("disp1", _admin=jefe) == {"success": True}
+    assert _doc(con_foto, "disp1") is None
+    # Su propia foto la sigue poniendo él (es uno mismo, no gestionar a otro).
+    assert (await server.subir_foto_admin("jefe1", file=_foto(), _admin=jefe))["success"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p16_el_super_admin_y_el_dispatcher_como_hoy(con_foto):
+    for corutina in _las_cuatro(SA, "todo"):
+        assert (await corutina)["success"]
+    for corutina in _las_cuatro(DISPATCHER, "oga5"):
+        await _no_puede(corutina)
+
+
+# ── P15 + P32 · quitar una nave: los cambios de centro programados a ella, y verla para poder quitarla ──────────────
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p15_no_se_quita_una_nave_con_un_cambio_de_centro_programado_a_ella(naves):
+    # LUIS (DGA1, vivo) pasa a OGA9 un día de estos; el de baja con otro a OGA9 no cuenta. El día no importa: el bucle
+    # de traslados lo aplica en cuanto llega, y si OGA9 ya no es de la empresa se queda en una nave fantasma.
+    fichas = {d["id"]: d for d in server.db["drivers"].docs}
+    fichas["d2"]["traslado"] = {"centro": "OGA9", "desde": "2030-01-01", "por": "Oficina"}
+    fichas["d3"]["traslado"] = {"centro": "oga9", "desde": "2030-01-01"}
+    with pytest.raises(HTTPException) as e:
+        await server.quitar_org_center("OGA9", user=COMPLETO)
+    assert e.value.status_code == 409
+    d = e.value.detail
+    assert (d["conductores"], d["furgonetas"], d["usuarios"], d["traslados"]) == (0, 0, 0, 1)
+    assert "1 conductor con un cambio de centro programado a él" in d["mensaje"]
+    assert "OGA9" in _naves_de(naves)
+    # Escrito sucio en el traslado también cuenta; sin ninguno, se quita como antes.
+    fichas["d2"]["traslado"] = {"centro": "amzl oga9 lugo", "desde": "2030-01-01"}
+    with pytest.raises(HTTPException) as e:
+        await server.quitar_org_center("OGA9", user=COMPLETO)
+    assert e.value.detail["traslados"] == 1
+    del fichas["d2"]["traslado"]
+    assert "OGA9" not in (await server.quitar_org_center("OGA9", user=COMPLETO))["centers"]
+
+
+COMPLETO_DGA1_CLIENTE = {**COMPLETO, "account_type": "dsp", "allowed_centers": ["DGA1"]}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p32_para_quitar_una_nave_hay_que_verla(naves):
+    detalle = await _no_puede(server.quitar_org_center("OGA9", user=COMPLETO_DGA1_CLIENTE))
+    assert detalle == "No tienes acceso a ese centro"
+    assert "OGA9" in _naves_de(naves)
+    # La que sí ve sigue el camino de siempre (aquí, 409 porque tiene a LUIS).
+    with pytest.raises(HTTPException) as e:
+        await server.quitar_org_center("DGA1", user=COMPLETO_DGA1_CLIENTE)
+    assert e.value.status_code == 409
+    # En la cuenta dueña las naves asignadas no recortan el servidor: igual que antes.
+    r = await server.quitar_org_center("OGA9", user={**COMPLETO_DGA1_CLIENTE, "account_type": "owner"})
+    assert "OGA9" not in r["centers"]
+
+
+# ── P33 · las importaciones: ninguna fila acaba en una nave que quien importa no ve ─────────────────────────────────
+
+def _csv(texto, nombre="plantilla.csv"):
+    import io
+    from starlette.datastructures import UploadFile
+    return UploadFile(file=io.BytesIO(texto.encode()), filename=nombre)
+
+
+async def _importar_conductores(user, texto=None, center="", centros=None, mapa=None):
+    return await server.drivers_importar(file=_csv(texto or CSV.decode()), center=center, centros=centros, mapa=mapa,
+                                         user=user)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p33_conductores_por_su_propia_columna_sin_vista_previa(importar):
+    # Sin vista previa (la web vieja, o una pestaña de antes): el centro sale de la columna de cada fila.
+    detalle = await _no_puede(_importar_conductores(CLIENTE_DGA1))
+    assert "OGA5" in detalle and "DGA1" not in detalle
+    assert importar["drivers"].docs == []                          # ni la fila de DGA1: antes de escribir nada
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p33_conductores_con_el_centro_del_formulario(importar):
+    sin_columna = "Nombre,Email\nAna Ruiz,ana@x.es\n"
+    detalle = await _no_puede(_importar_conductores(CLIENTE_DGA1, sin_columna, center="OGA5"))
+    assert "OGA5" in detalle and importar["drivers"].docs == []
+    r = await _importar_conductores(CLIENTE_DGA1, sin_columna, center="DGA1")
+    assert r["importados"] == 1 and importar["drivers"].docs[0]["center"] == "DGA1"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p33_conductores_eligiendo_solo_su_nave_entran(importar):
+    import json
+    r = await _importar_conductores(CLIENTE_DGA1, centros=json.dumps(["AMZL DGA1 CORUNA"]), mapa=json.dumps({}))
+    assert r["importados"] == 1 and r["fuera_seleccion"] == 1
+    assert [d["center"] for d in importar["drivers"].docs] == ["DGA1"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p33_conductores_ya_dados_de_alta_no_cuentan(importar):
+    # La de OGA5 ya está: no se escribe nada en OGA5, así que no hay nada que rechazar.
+    importar["drivers"].docs.append({"id": "x", "name": "ANA RUIZ", "email": "ana@x.es", "center": "OGA5",
+                                     "active": True})
+    r = await _importar_conductores(CLIENTE_DGA1)
+    assert r["importados"] == 1 and r["ya_estaban"] == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("actor", [CLIENTE_TODAS, OWNER_DGA1, SA], ids=["sin-naves", "cuenta-duena", "super-admin"])
+async def test_p33_conductores_igual_que_antes_sin_naves_en_la_cuenta_duena_y_el_super_admin(importar, actor):
+    r = await _importar_conductores(actor)
+    assert r["importados"] == 2
+    assert sorted(d["center"] for d in importar["drivers"].docs) == ["DGA1", "OGA5"]
+
+
+FLOTA = "Matrícula,Centro\n1111AAA,AMZL OGA5 SANTIAGO XPT\n2222BBB,AMZL DGA1 CORUNA\n"
+
+
+async def _importar_furgonetas(user, texto=FLOTA, center_filter=None, crear=True, centros=None, mapa=None):
+    return await server.import_vehicles(file=_csv(texto), center_filter=center_filter, crear=crear, centros=centros,
+                                        mapa=mapa, columnas=None, user=user)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p33_furgonetas_por_su_propia_columna_y_por_el_filtro(importar):
+    detalle = await _no_puede(_importar_furgonetas(CLIENTE_DGA1))
+    assert "OGA5" in detalle and importar["vehicles"].docs == []
+    await _no_puede(_importar_furgonetas(CLIENTE_DGA1, center_filter="OGA5"))
+    assert importar["vehicles"].docs == []
+    r = await _importar_furgonetas(CLIENTE_DGA1, center_filter="DGA1")
+    assert r["imported"] == 1 and [v["center"] for v in importar["vehicles"].docs] == ["DGA1"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_p33_furgonetas_mover_una_que_ya_esta_a_otra_nave_tampoco(importar):
+    importar["vehicles"].docs.append({"id": "v1", "license_plate": "1111AAA", "center": "DGA1", "status": "active"})
+    await _no_puede(_importar_furgonetas(CLIENTE_DGA1, texto="Matrícula,Centro\n1111AAA,OGA5\n", crear=False))
+    assert importar["vehicles"].docs[0]["center"] == "DGA1"
+    # Sin dar de alta, una de OGA5 que no está no se escribe: no hay nada que rechazar.
+    r = await _importar_furgonetas(CLIENTE_DGA1, texto="Matrícula,Centro\n9999ZZZ,OGA5\n", crear=False)
+    assert r["no_estaban"] == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("actor", [CLIENTE_TODAS, OWNER_DGA1, SA], ids=["sin-naves", "cuenta-duena", "super-admin"])
+async def test_p33_furgonetas_igual_que_antes_sin_naves_en_la_cuenta_duena_y_el_super_admin(importar, actor):
+    r = await _importar_furgonetas(actor)
+    assert r["imported"] == 2
+    assert sorted(v["center"] for v in importar["vehicles"].docs) == ["DGA1", "OGA5"]
