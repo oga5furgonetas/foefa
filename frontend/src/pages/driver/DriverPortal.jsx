@@ -422,7 +422,9 @@ export default function DriverPortal() {
             sub={portal?.motivo === 'suspendido' ? 'Hoy no trabajas' : noLeToca ? 'Hoy no sales a ruta'
               : hoyFurgo?.enviada ? (hoyFurgo.matricula ? tx('Enviada hoy · {matricula}', { matricula: hoyFurgo.matricula }) : tx('Enviada hoy'))
                 : hoyFurgo?.matricula ? tx('Hoy: {matricula}', { matricula: hoyFurgo.matricula }) : 'Antes de salir a ruta'}
-            principal={!esDemo}
+            /* Ya enviada hoy, en el tono de las demás y no en el de marca (11-11-2026, revisión de la tanda 2): turquesa y a
+               todo lo ancho parecía que aún faltaba. Se puede seguir abriendo, por si hay que repetirla. */
+            principal={!esDemo && !hoyFurgo?.enviada}
             bloqueado={noLeToca || esDemo}
             onClick={() => setVista('auditoria')}
           />

@@ -408,6 +408,8 @@ export const DICT = {
   'drv.f.sinAcceso':  { es: 'sin acceso', en: 'no access', fr: 'sans accès', de: 'ohne Zugang', it: 'senza accesso', pt: 'sem acesso' },
   'drv.f.sinTel':     { es: 'sin teléfono', en: 'no phone', fr: 'sans téléphone', de: 'ohne Telefon', it: 'senza telefono', pt: 'sem telefone' },
   'drv.f.quitar':     { es: 'Ver todos', en: 'Show all', fr: 'Voir tous', de: 'Alle zeigen', it: 'Vedi tutti', pt: 'Ver todos' },
+  // La pestaña del ranking, corta en el móvil para que las tres quepan en una línea (11-11-2026, revisión de la tanda 2).
+  'drv.tabRanking':   { es: 'Ranking', en: 'Ranking', fr: 'Classement', de: 'Ranking', it: 'Classifica', pt: 'Ranking' },
 
   // ── Inspecciones ─────────────────────────────────────────────────────────
   'insp.title':       { es: 'Inspecciones',   en: 'Inspections',  fr: 'Inspections',   de: 'Inspektionen', it: 'Ispezioni',      pt: 'Inspeções' },
