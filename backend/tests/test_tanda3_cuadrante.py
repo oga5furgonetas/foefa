@@ -186,12 +186,22 @@ async def test_el_cuadrante_trae_las_pendientes_del_rango_y_de_su_gente(base):
 async def test_sin_peticiones_pendientes_la_clave_va_vacia_y_lo_demas_no_cambia(base):
     r = await server.cuadrante_ver("OGA5", MAN, PAS, OFI)
     assert r["pendientes"] == {}
+    # `avisar_activo` (11-11-2026): el interruptor de «Avisar a los conductores», otra clave que la web vieja ignora.
     assert set(r) == {"center", "desde", "hasta", "hoy", "personas", "celdas", "maximas", "objetivos", "config",
-                      "ajustes", "aprobados", "propuesta", "ultimo_cambio", "tipos", "pendientes"}
+                      "ajustes", "aprobados", "propuesta", "ultimo_cambio", "tipos", "pendientes", "avisar_activo"}
     assert sorted(p["id"] for p in r["personas"]) == ["d1", "d2", "d3", "d4"]
 
 
 # ── cuadrante-8: «Avisar a los conductores» (previa y envío, nunca solo) ───────────────────────────────────────────
+
+@pytest.fixture
+def avisos_encendidos(monkeypatch):
+    """El aviso lleva un interruptor en el servidor (11-11-2026) y en el fichero va APAGADO: estas pruebas son las de lo
+    construido, con el interruptor ENCENDIDO solo para ellas. Las del interruptor apagado van al final."""
+    monkeypatch.setattr(server, "_CUA_AVISOS_ACTIVO", True)
+
+
+ENCENDIDO = pytest.mark.usefixtures("avisos_encendidos")
 
 LEJOS = "2026-11-07"        # hoy + 20: fuera de los 14 días
 
@@ -233,6 +243,7 @@ def _bandeja(t):
 PEND = "cuadrante_avisos_pendientes"
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_la_previa_lista_lo_que_cambia_en_los_proximos_14_dias(base):
     assert (await _aceptar(base.t, CAMBIOS))["aplicadas"] == 4
@@ -251,6 +262,7 @@ async def test_la_previa_lista_lo_que_cambia_en_los_proximos_14_dias(base):
     assert not any(d.get("avisado_en") or d.get("visto") for d in base.t[PEND].docs)
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_un_cambio_deshecho_o_devuelto_a_como_estaba_no_avisa(base):
     await _aceptar(base.t, CAMBIOS)
@@ -262,6 +274,7 @@ async def test_un_cambio_deshecho_o_devuelto_a_como_estaba_no_avisa(base):
     assert await _previa() == []
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_enviar_manda_un_aviso_por_persona_y_no_lo_repite(base):
     await _aceptar(base.t, CAMBIOS)
@@ -283,6 +296,7 @@ async def test_enviar_manda_un_aviso_por_persona_y_no_lo_repite(base):
     assert len(base.t["avisos_movil"].docs) == 2
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_garantia_a_35_cambios_seguidos_no_pierden_ningun_aviso(base):
     """(a) «Deshacer» guarda los 30 últimos registros por nave; el aviso ya no sale de ahí y no pierde nada."""
@@ -294,6 +308,7 @@ async def test_garantia_a_35_cambios_seguidos_no_pierden_ningun_aviso(base):
     assert await _previa() == [("d1", [(MAN, "trabajas", "libras")]), ("d2", [(PAS, "sin turno", "libras")])]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_garantia_b_un_dia_lejano_sale_cuando_entra_aunque_el_cambio_tenga_un_mes(base, monkeypatch):
     lejisimo = "2026-11-27"                                                   # hoy + 40
@@ -306,6 +321,7 @@ async def test_garantia_b_un_dia_lejano_sale_cuando_entra_aunque_el_cambio_tenga
     assert await _previa() == [("d3", [(lejisimo, "sin turno", "libras")])]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_garantia_c_un_cambio_entre_la_previa_y_el_envio_no_queda_como_avisado(base):
     await _aceptar(base.t, CAMBIOS)
@@ -317,6 +333,7 @@ async def test_garantia_c_un_cambio_entre_la_previa_y_el_envio_no_queda_como_avi
     assert await _previa() == [("d2", [(MAN, "trabajas", "vacaciones")])]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_garantia_d_el_desmarcado_no_se_avisa_ni_vuelve_y_si_se_deshace_no_recibe_nada(base):
     await _aceptar(base.t, CAMBIOS)
@@ -332,6 +349,7 @@ async def test_garantia_d_el_desmarcado_no_se_avisa_ni_vuelve_y_si_se_deshace_no
     assert ("d1", [(MAN, "trabajas", "vacaciones")]) in await _previa()
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_garantia_d_desmarcado_y_cambiado_a_otra_cosa_dice_lo_que_sabia(base):
     await _aceptar(base.t, CAMBIOS)
@@ -353,6 +371,7 @@ def _pend(t, did, fecha):
     return next(d for d in t[PEND].docs if (d["driver_id"], d["fecha"]) == (did, fecha))
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_fleco1_la_previa_da_una_marca_por_dia(base):
     await _aceptar(base.t, CAMBIOS)
@@ -363,6 +382,7 @@ async def test_fleco1_la_previa_da_una_marca_por_dia(base):
     assert (await _marcas())["d1"] != marcas["d1"]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_fleco1_un_desmarcado_que_cambia_entre_la_previa_y_el_envio_vuelve_a_salir(base):
     await _aceptar(base.t, CAMBIOS)
@@ -376,6 +396,7 @@ async def test_fleco1_un_desmarcado_que_cambia_entre_la_previa_y_el_envio_vuelve
     assert await _previa() == [("d1", [(MAN, "trabajas", "vacaciones")])]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_fleco1_lo_que_vio_se_descarta_y_un_dia_nuevo_del_mismo_conductor_no(base):
     await _aceptar(base.t, CAMBIOS)
@@ -388,6 +409,7 @@ async def test_fleco1_lo_que_vio_se_descarta_y_un_dia_nuevo_del_mismo_conductor_
     assert await _previa() == [("d1", [(PAS, "sin turno", "vacaciones")])]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_fleco1_un_cambio_por_fuera_del_cuadrante_entre_la_previa_y_el_envio_tampoco_se_descarta(base):
     """Lo que no pasa por el cuadrante (la rejilla escondida de Turnos) cambia el turno sin cambiar `tocado`: la marca
@@ -401,6 +423,7 @@ async def test_fleco1_un_cambio_por_fuera_del_cuadrante_entre_la_previa_y_el_env
     assert await _previa() == [("d1", [(MAN, "trabajas", "vacaciones")])]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_fleco1_sin_vistas_como_antes(base):
     """Sin `vistas` en el cuerpo se descarta lo que hay al enviar (lo de la primera ronda)."""
@@ -412,6 +435,7 @@ async def test_fleco1_sin_vistas_como_antes(base):
     assert await _previa() == []
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_garantia_e_dos_envios_a_la_vez_no_avisan_dos_veces(base, monkeypatch):
     await _aceptar(base.t, CAMBIOS)
@@ -432,6 +456,7 @@ async def test_garantia_e_dos_envios_a_la_vez_no_avisan_dos_veces(base, monkeypa
     assert _bandeja(base.t) == ["d1", "d4"]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_garantia_e_avisado_y_deshecho_despues_se_avisa_otra_vez(base):
     await _aceptar(base.t, CAMBIOS)
@@ -444,6 +469,7 @@ async def test_garantia_e_avisado_y_deshecho_despues_se_avisa_otra_vez(base):
     assert await _previa() == []
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_driver_ids_limita_y_quien_no_esta_en_ninguna_lista_sigue_pendiente(base):
     await _aceptar(base.t, CAMBIOS)
@@ -456,6 +482,7 @@ async def test_driver_ids_limita_y_quien_no_esta_en_ninguna_lista_sigue_pendient
     assert await _previa() == [("d1", [(MAN, "trabajas", "libras")])]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_si_el_envio_a_uno_falla_sus_dias_siguen_pendientes(base, monkeypatch):
     await _aceptar(base.t, CAMBIOS)
@@ -474,6 +501,7 @@ async def test_si_el_envio_a_uno_falla_sus_dias_siguen_pendientes(base, monkeypa
     assert ana["dicho"] == "trabajas" and not ana.get("avisado_en")
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_si_apuntar_falla_el_cuadrante_se_guarda_y_se_deshace_igual(base):
     class Rota(Col):
@@ -498,6 +526,7 @@ async def test_si_apuntar_falla_el_cuadrante_se_guarda_y_se_deshace_igual(base):
     assert base.t["cuadrante_cambios"].docs[0]["deshecho"] is True
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_la_previa_borra_lo_pendiente_de_dias_ya_pasados(base, monkeypatch):
     await _aceptar(base.t, CAMBIOS)
@@ -506,6 +535,7 @@ async def test_la_previa_borra_lo_pendiente_de_dias_ya_pasados(base, monkeypatch
     assert sorted({d["fecha"] for d in base.t[PEND].docs}) == [PAS, LEJOS]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_una_ficha_de_baja_o_fusionada_no_se_avisa(base):
     base.t["drivers"].docs[0]["active"] = False                           # Ana, de baja
@@ -514,6 +544,7 @@ async def test_una_ficha_de_baja_o_fusionada_no_se_avisa(base):
     assert await _previa() == []
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_avisar_pide_un_centro_y_que_sea_tuyo(base):
     for centro in ("", "Todos"):
@@ -527,6 +558,7 @@ async def test_avisar_pide_un_centro_y_que_sea_tuyo(base):
         assert e.value.status_code == 403
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_un_cambio_lejano_sale_cuando_entra_en_los_14_dias(base, monkeypatch):
     await _aceptar(base.t, CAMBIOS)
@@ -536,6 +568,7 @@ async def test_un_cambio_lejano_sale_cuando_entra_en_los_14_dias(base, monkeypat
     assert await _previa() == [("d3", [(LEJOS, "sin turno", "libras")])]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_un_dia_concedido_no_se_avisa_por_aqui(base):
     await _aceptar(base.t, CAMBIOS)
@@ -616,6 +649,7 @@ async def _como_la_hoja(t, celdas, center="OGA5"):
     return await cambio.guardar()
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_v8_una_sincronizacion_que_no_cambia_nada_no_apunta_ni_toca_nada(base):
     ids, fechas = ["d1", "d2", "d3", "d4"], _dias(50)
@@ -630,6 +664,7 @@ async def test_v8_una_sincronizacion_que_no_cambia_nada_no_apunta_ni_toca_nada(b
     assert base.t[PEND].n["ops"] == 0 and base.t[PEND].n["update_one"] == 0
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_v8_una_sincronizacion_que_cambia_3_de_200_apunta_3(base):
     ids, fechas = ["d1", "d2", "d3", "d4"], _dias(50)
@@ -642,6 +677,7 @@ async def test_v8_una_sincronizacion_que_cambia_3_de_200_apunta_3(base):
         ("d1", fechas[1], "trabajas"), ("d2", fechas[3], "trabajas"), ("d4", fechas[40], "trabajas")]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_v8_300_celdas_cambiadas_son_una_lectura_y_escrituras_por_lotes(base):
     ids, fechas = ["d1", "d2", "d3", "d4"], _dias(75)
@@ -655,6 +691,7 @@ async def test_v8_300_celdas_cambiadas_son_una_lectura_y_escrituras_por_lotes(ba
     assert 1 <= base.t[PEND].n["bulk_write"] <= 2                            # por lotes de 500
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_v8_los_dias_pasados_se_van_al_apuntar(base):
     base.t[PEND].docs += [
@@ -666,6 +703,7 @@ async def test_v8_los_dias_pasados_se_van_al_apuntar(base):
     assert sorted((p["center"], p["fecha"]) for p in base.t[PEND].docs) == [("DGA1", AYER), ("OGA5", MAN)]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 @pytest.mark.parametrize("antes", ["avisado", "descartado"])
 async def test_v1_un_extra_concedido_y_anulado_en_el_cuadrante_sale_con_lo_que_le_dijo_la_aprobacion(base, antes):
@@ -690,6 +728,7 @@ async def test_v1_un_extra_concedido_y_anulado_en_el_cuadrante_sale_con_lo_que_l
     assert "visto" not in _pend(base.t, "d1", MAN)
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_v6_descartado_deshecho_y_vuelto_a_poner_lo_mismo_vuelve_a_salir(base):
     await _celdas(base.t, [("d1", MAN, "N/T")])
@@ -703,6 +742,7 @@ async def test_v6_descartado_deshecho_y_vuelto_a_poner_lo_mismo_vuelve_a_salir(b
     assert await _previa() == [("d1", [(MAN, "trabajas", "libras")])]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_v6_tambien_si_vuelve_por_fuera_del_cuadrante(base):
     """La rejilla escondida de Turnos no pasa por el cuadrante: lo olvida la previa al ver que el día volvió a lo que
@@ -716,6 +756,7 @@ async def test_v6_tambien_si_vuelve_por_fuera_del_cuadrante(base):
     assert await _previa() == [("d1", [(MAN, "trabajas", "libras")])]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_v9_un_dia_que_ya_es_de_otra_nave_lo_avisa_la_suya_y_no_esta(base):
     await _celdas(base.t, [("d1", MAN, "N/T")])                              # OGA5 le da libre el lunes
@@ -732,6 +773,7 @@ async def test_v9_un_dia_que_ya_es_de_otra_nave_lo_avisa_la_suya_y_no_esta(base)
     assert await _previa() == [("d1", [(MAN, "trabajas", "vacaciones")])]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_v7_si_la_bandeja_no_guarda_el_aviso_sus_dias_siguen_pendientes(base):
     """_avisar_usuarios nunca lanza (se traga sus errores): se comprueba que el aviso está de verdad en la bandeja."""
@@ -754,6 +796,7 @@ async def test_v7_si_la_bandeja_no_guarda_el_aviso_sus_dias_siguen_pendientes(ba
     assert _bandeja(base.t) == ["d1"] and await _previa() == []
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_v10a_una_celda_sin_apuntar_que_se_deshace_sale_en_la_previa(base):
     """Lo sujeta el apunte de `cuadrante_deshacer`: el cambio original no quedó apuntado (anterior a publicar esto, o
@@ -765,6 +808,7 @@ async def test_v10a_una_celda_sin_apuntar_que_se_deshace_sale_en_la_previa(base)
     assert await _previa() == [("d1", [(MAN, "libras", "trabajas")])]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_v10b_previa_deshacer_y_envio_con_el_descartado_no_guarda_lo_que_no_vio(base):
     await _celdas(base.t, [("d1", MAN, "N/T")])
@@ -780,6 +824,7 @@ async def test_v10b_previa_deshacer_y_envio_con_el_descartado_no_guarda_lo_que_n
     assert await _previa() == [("d1", [(MAN, "trabajas", "libras")])]
 
 
+@ENCENDIDO
 @pytest.mark.asyncio(loop_scope="session")
 async def test_v10c_un_cambio_de_un_dia_de_ayer_no_se_apunta(base):
     base.t["shifts"].docs.append({"driver_id": "d1", "date": AYER, "type": "trabaja", "cod": "1", "center": "OGA5"})
@@ -788,3 +833,103 @@ async def test_v10c_un_cambio_de_un_dia_de_ayer_no_se_apunta(base):
     assert base.t[PEND].docs == []                                            # …pero no se apunta para avisar
     await server.cuadrante_deshacer({"center": "OGA5"}, OFI)
     assert base.t[PEND].docs == []                                            # ni al deshacerlo
+
+
+# ── El interruptor (11-11-2026): «Avisar a los conductores» va APAGADO hasta que Dani lo encienda ───────────────────
+# Apagado, el servidor tiene que hacer EXACTAMENTE lo de main: ni apunta, ni lee de más al deshacer, ni contesta a las
+# dos rutas. Estas pruebas NO llevan @ENCENDIDO: usan el valor del fichero.
+
+class _Apuntes:
+    """El doble de Mongo de siempre, apuntando cada llamada que le hace el servidor: (colección, operación)."""
+
+    def __init__(self, t):
+        self.t, self.log = t, []
+
+    def __getitem__(self, nombre):
+        return _ColApuntada(self, nombre)
+
+    def __getattr__(self, nombre):
+        return _ColApuntada(self, nombre)
+
+
+class _ColApuntada:
+    def __init__(self, apuntes, nombre):
+        self._apuntes, self._nombre = apuntes, nombre
+
+    def __getattr__(self, op):
+        real = getattr(self._apuntes.t[self._nombre], op)
+        if not callable(real):
+            return real
+
+        def llamada(*a, **k):
+            self._apuntes.log.append((self._nombre, op))
+            return real(*a, **k)
+        return llamada
+
+
+async def _cambiar_y_deshacer(base, monkeypatch):
+    """Un cambio a mano en la rejilla y su «Deshacer», con el flujo de verdad: (llamadas del cambio, del deshacer)."""
+    apuntes = _Apuntes(base.t)
+    monkeypatch.setattr(server, "db", apuntes)
+    await _celdas(base.t, [("d1", MAN, "N/T"), ("d4", PAS, "1")])
+    cambio, apuntes.log = apuntes.log, []
+    await server.cuadrante_deshacer({"center": "OGA5"}, OFI)
+    deshacer = apuntes.log
+    monkeypatch.setattr(server, "db", base.t)
+    return cambio, deshacer
+
+
+def test_el_interruptor_del_aviso_sigue_apagado_en_el_fichero():
+    import io
+    import os
+    import re
+    fuente = io.open(os.path.join(os.path.dirname(server.__file__), "server.py"), encoding="utf-8-sig").read()
+    linea = re.findall(r"^_CUA_AVISOS_ACTIVO = .*$", fuente, flags=re.M)
+    assert linea == ["_CUA_AVISOS_ACTIVO = False"] and server._CUA_AVISOS_ACTIVO is False, (
+        "«Avisar a los conductores» manda avisos a móviles de verdad y tiene casos raros sin cerrar (docs/ESTADO.md, "
+        "punto -37): encenderlo (_CUA_AVISOS_ACTIVO = True) es una decisión de Dani, no se deja encendido sin querer.")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_apagado_un_cambio_y_un_deshacer_no_apuntan_ni_leen_de_mas(base, monkeypatch):
+    cambio, deshacer = await _cambiar_y_deshacer(base, monkeypatch)
+    assert _celda(base.t, "d1", MAN)["cod"] == "1" and _celda(base.t, "d4", PAS) is None      # deshecho entero
+    # Ni una llamada a la colección de pendientes (ni leer, ni borrar días pasados, ni escribir).
+    assert PEND not in base.t and not [x for x in cambio + deshacer if x[0] == PEND]
+    # Guardar el cambio: tras apuntar el registro de «Deshacer» viene directamente su recorte a 30, como en main.
+    i = cambio.index(("cuadrante_cambios", "insert_one"))
+    assert cambio[i + 1] == ("cuadrante_cambios", "find")
+    # Deshacer: lo de main y nada más (sin la lectura de los turnos de antes de deshacer, ni el apunte de después).
+    assert deshacer == [("cuadrante_cambios", "find_one"), ("shifts", "bulk_write"),
+                        ("cuadrante_cambios", "update_one")]
+    # Con el interruptor encendido el mismo recorrido sí lee y apunta: la prueba sabe ver la diferencia.
+    monkeypatch.setattr(server, "_CUA_AVISOS_ACTIVO", True)
+    cambio_on, deshacer_on = await _cambiar_y_deshacer(base, monkeypatch)
+    assert (PEND, "bulk_write") in cambio_on and ("shifts", "find") in deshacer_on and len(deshacer_on) > len(deshacer)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_apagado_las_rutas_de_avisos_dan_404_antes_de_hacer_nada(base, monkeypatch):
+    await _celdas(base.t, [("d1", MAN, "N/T")])
+    apuntes = _Apuntes(base.t)
+    monkeypatch.setattr(server, "db", apuntes)
+    for ruta in (server.cuadrante_avisos_previa, server.cuadrante_avisos_enviar):
+        # También con un centro malo o de otra nave: el 404 va antes que todo (como un servidor que no la tiene).
+        for cuerpo, quien in (({"center": "OGA5"}, OFI), ({"center": ""}, OFI), ({"center": "OGA5"}, SOLO_DGA1)):
+            with pytest.raises(HTTPException) as e:
+                await ruta(dict(cuerpo), quien)
+            assert (e.value.status_code, e.value.detail) == (404, "No disponible")
+    assert apuntes.log == [] and base.avisos == [] and base.t["avisos_movil"].docs == [] and PEND not in base.t
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_apagado_el_cuadrante_dice_avisar_activo_false(base):
+    r = await server.cuadrante_ver("OGA5", MAN, PAS, OFI)
+    assert r["avisar_activo"] is False
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_encendido_el_cuadrante_dice_avisar_activo_true(base):
+    r = await server.cuadrante_ver("OGA5", MAN, PAS, OFI)
+    assert r["avisar_activo"] is True

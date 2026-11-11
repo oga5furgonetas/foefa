@@ -335,6 +335,9 @@ test('cuadrante-1: sin `pendientes` (un servidor de antes) el Cuadrante, el Asis
 
 // ── cuadrante-8 · «Avisar a los conductores» ─────────────────────────────────────────────────────────────────────
 
+// El botón lleva un interruptor en el servidor (11-11-2026): estas pruebas son las del interruptor ENCENDIDO.
+const conAvisar = (dia, extra = {}) => cuadrante(dia, { avisar_activo: true, ...extra })
+
 const previa = (dia) => ({
   hasta: dia(14),
   personas: [
@@ -356,7 +359,7 @@ test('cuadrante-8: el botón enseña la lista antes de mandar; desmarcar a uno m
   const { dia } = await reloj(page)
   await entrarComoAdmin(page)
   await simularApi(page, 'vacio')
-  await page.route(/\/api\/cuadrante\?/, json(cuadrante(dia)))
+  await page.route(/\/api\/cuadrante\?/, json(conAvisar(dia)))
   let pedidaPrevia = 0
   await page.route(/\/api\/cuadrante\/avisos\/previa/, (route) => { pedidaPrevia += 1; return json(previa(dia))(route) })
   let enviado = null
@@ -395,7 +398,7 @@ test('cuadrante-8: con todos desmarcados, el botón dice «No avisar a nadie», 
   const { dia } = await reloj(page)
   await entrarComoAdmin(page)
   await simularApi(page, 'vacio')
-  await page.route(/\/api\/cuadrante\?/, json(cuadrante(dia)))
+  await page.route(/\/api\/cuadrante\?/, json(conAvisar(dia)))
   await page.route(/\/api\/cuadrante\/avisos\/previa/, json(previa(dia)))
   let enviado = null
   await page.route(/\/api\/cuadrante\/avisos\/enviar/, (route) => {
@@ -428,7 +431,7 @@ test('cuadrante-8: si al mandar no se pudo avisar a nadie (otra persona acababa 
   const { dia } = await reloj(page)
   await entrarComoAdmin(page)
   await simularApi(page, 'vacio')
-  await page.route(/\/api\/cuadrante\?/, json(cuadrante(dia)))
+  await page.route(/\/api\/cuadrante\?/, json(conAvisar(dia)))
   // Un servidor sin marcas: el panel no manda `vistas` (lo de antes).
   await page.route(/\/api\/cuadrante\/avisos\/previa/, json(previaSinMarcas(dia)))
   let enviado = null
@@ -452,7 +455,7 @@ test('cuadrante-8: sin cambios por avisar lo dice y no deja mandar; con un servi
   const { dia } = await reloj(page)
   await entrarComoAdmin(page)
   await simularApi(page, 'vacio')
-  await page.route(/\/api\/cuadrante\?/, json(cuadrante(dia)))
+  await page.route(/\/api\/cuadrante\?/, json(conAvisar(dia)))
   let respuesta = json({ personas: [], hasta: dia(14) })
   await page.route(/\/api\/cuadrante\/avisos\/previa/, (route) => respuesta(route))
   let enviado = 0
@@ -483,7 +486,7 @@ test('cuadrante-8: al aceptar una propuesta, el aviso verde lleva el mismo botó
   const propuesta = { id: 'pr1', center: 'NORTE', desde: dia(2), hasta: dia(13), n_cambios: 1, extras: 0, resumen_dias: [], avisos: [],
     faltan_conductores: 0, cambios: [{ driver_id: 'p1', nombre: 'A', fecha: dia(3), antes: '1', valor: 'N/T', extra: false, antes_extra: false }] }
   let aceptada = false
-  await page.route(/\/api\/cuadrante\?/, (route) => json(cuadrante(dia, aceptada ? {} : { propuesta }))(route))
+  await page.route(/\/api\/cuadrante\?/, (route) => json(conAvisar(dia, aceptada ? {} : { propuesta }))(route))
   await page.route(/\/api\/cuadrante\/propuestas\/pr1\/aceptar/, (route) => { aceptada = true; return json({ ok: true, aplicadas: 1, n_saltadas: 0 })(route) })
   await page.route(/\/api\/cuadrante\/avisos\/previa/, json(previa(dia)))
   await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
@@ -506,7 +509,7 @@ test('cuadrante-8: en el móvil la lista cabe sin deslizar de lado', async ({ pa
   const { dia } = await reloj(page)
   await entrarComoAdmin(page)
   await simularApi(page, 'vacio')
-  await page.route(/\/api\/cuadrante\?/, json(cuadrante(dia)))
+  await page.route(/\/api\/cuadrante\?/, json(conAvisar(dia)))
   await page.route(/\/api\/cuadrante\/avisos\/previa/, json(previa(dia)))
   await page.setViewportSize({ width: 375, height: 812 })
   await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
@@ -518,3 +521,37 @@ test('cuadrante-8: en el móvil la lista cabe sin deslizar de lado', async ({ pa
   expect(anchos[0]).toBeLessThanOrEqual(anchos[1] + 1)
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
+
+// El interruptor APAGADO (11-11-2026): sin `avisar_activo` (un servidor de antes, o el de producción) o con false, ni
+// el botón de arriba ni el del aviso verde de aceptar, y «Deshacer» queda donde estaba, sin envoltorio (como en main).
+for (const [caso, extra] of [['sin el campo', {}], ['con false', { avisar_activo: false }]]) {
+  test(`cuadrante-8: con el aviso apagado (${caso}) no hay botón ni ventana y la barra queda como antes`, async ({ page }) => {
+    const fallos = vigilar(page)
+    const { dia } = await reloj(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const propuesta = { id: 'pr1', center: 'NORTE', desde: dia(2), hasta: dia(13), n_cambios: 1, extras: 0, resumen_dias: [], avisos: [],
+      faltan_conductores: 0, cambios: [{ driver_id: 'p1', nombre: 'A', fecha: dia(3), antes: '1', valor: 'N/T', extra: false, antes_extra: false }] }
+    const ultimo = { id: 'c1', que: 'Celdas', en: `${dia(0)}T10:00:00Z`, por: 'Oficina', n: 1 }
+    let aceptada = false
+    await page.route(/\/api\/cuadrante\?/, (route) => json(cuadrante(dia, { ultimo_cambio: ultimo, ...(aceptada ? {} : { propuesta }), ...extra }))(route))
+    await page.route(/\/api\/cuadrante\/propuestas\/pr1\/aceptar/, (route) => { aceptada = true; return json({ ok: true, aplicadas: 1, n_saltadas: 0 })(route) })
+    let pedidas = 0
+    await page.route(/\/api\/cuadrante\/avisos\//, (route) => { pedidas += 1; return json({ detail: 'No disponible' }, 404)(route) })
+    await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+    const deshacer = page.getByRole('button', { name: 'Deshacer último cambio' })
+    await expect(deshacer).toBeVisible({ timeout: 15000 })
+    await expect(page.getByRole('button', { name: 'Avisar a los conductores' })).toHaveCount(0)
+    // «Deshacer» va directo en la barra de las pestañas, empujado a la derecha, como en main.
+    expect(await deshacer.evaluate((b) => [b.classList.contains('ml-auto'), b.parentElement.textContent.includes('Personas y notas')]))
+      .toEqual([true, true])
+    await page.getByRole('button', { name: 'Aceptar', exact: true }).click()
+    await expect(page.getByText('Propuesta aplicada: 1 celdas.')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByTestId('avisar-tras-aceptar')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Avisar a los conductores' })).toHaveCount(0)
+    await expect(page.getByRole('dialog', { name: 'Avisar a los conductores' })).toHaveCount(0)
+    expect(pedidas).toBe(0)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize().width)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+}
