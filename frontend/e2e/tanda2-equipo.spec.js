@@ -41,20 +41,48 @@ const CUENTAS = [{ driver_id: 'd1', email: 'antonio@ejemplo.es' }, { driver_id: 
 const LARGO = { id: 'd5', name: 'MARÍA DEL CARMEN FERNÁNDEZ RODRÍGUEZ', center: 'SUR', active: true, email: 'maria@ejemplo.es',
   phone: '611222333', transporter_id: 'M1N2O3P4Q5R6S7', contrato: 'empresa' }
 
-// `antes`: rutas propias de una prueba que tienen que estar antes de abrir la pantalla (la previa se pide al montarla).
-async function conductores(page, { modulos, cuentasFallan = false, mas = [], antes } = {}) {
+// Las siete columnas por las que se ordena, en el orden de la cabecera de la tabla (tercera revisión, M1).
+const SIETE = ['Nombre', 'Centro', 'Alojamiento', 'Teléfono', 'Correo', 'Contrato', 'Nivel']
+// Fichas con contrato, nivel y alojamiento, para ordenar por lo que la tarjeta no enseña. Por nivel no hay empates.
+const CON_DATOS = [
+  { id: 'a1', name: 'BEATRIZ RUIZ MORA', center: 'NORTE', active: true, email: 'beatriz@ejemplo.es', phone: '611000001',
+    contrato: 'ett', nivel: 'L2', alojamiento: 'Piso de empresa, Calle Mayor 12' },
+  { id: 'a2', name: 'CARLOS PEÑA SOTO', center: 'SUR', active: true, email: '', phone: '611000002', contrato: 'empresa', nivel: 'pleno' },
+  { id: 'a3', name: 'ANTONIO GARCÍA LÓPEZ', center: 'NORTE', active: true, email: 'antonio@ejemplo.es', phone: '611000003', nivel: 'L1' },
+  { id: 'a4', name: 'DAVID ORTEGA VIDAL', center: 'SUR', active: true, email: 'david@ejemplo.es', phone: '', contrato: 'ett' },
+  { id: 'a5', name: 'ELENA CASTRO RÍOS', center: 'NORTE', active: true, email: 'elena@ejemplo.es', phone: '611000005',
+    contrato: 'empresa', nivel: 'L3', alojamiento: 'Hostal' },
+]
+// Un correo y un alojamiento de los que no caben en una línea a 360 px.
+const CORREO_LARGO = { id: 'a6', name: 'FRANCISCO JAVIER MORENO', center: 'SUR', active: true, phone: '611000006',
+  email: 'franciscojavier.moreno.delgado.recursoshumanos@transportes-y-logistica-del-norte.es',
+  alojamiento: 'Apartamento compartido de la empresa, Avenida de la Constitución 145, escalera B, 3.º izquierda, Getafe' }
+
+// `antes`: rutas propias de una prueba que tienen que estar antes de abrir la pantalla (la previa se pide al montarla);
+// van después de las de aquí, así que mandan sobre ellas (la de una previa que falla a propósito, por ejemplo).
+// `idioma`: el del panel (entrarComoAdmin lo deja en español). `lista`: los conductores, si no son los de siempre.
+async function conductores(page, { modulos, cuentasFallan = false, mas = [], antes, idioma, lista = CONDUCTORES } = {}) {
   await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
-  await page.addInitScript(() => localStorage.setItem('panel_center', 'Todos'))
+  await page.addInitScript((l) => {
+    localStorage.setItem('panel_center', 'Todos')
+    if (l) localStorage.setItem('flota_lang', l)
+  }, idioma || '')
   await simularApi(page, 'vacio')
-  await page.route(/\/api\/drivers(\?|$)/, json([...CONDUCTORES, ...mas]))
+  await page.route(/\/api\/drivers(\?|$)/, json([...lista, ...mas]))
   await page.route(/\/api\/auth\/driver-accounts\/contrasena-inicial/, json({ definida: true, desde: '2026-10-29T10:00:00Z', por: 'DANIEL MARTÍN' }))
-  await page.route(/\/api\/auth\/driver-accounts\/previa/, json({ actualizadas: 2, naves: { NORTE: 1, SUR: 1 }, respetadas: 1, sin_email: 1, cuentas_inactivas: 0, sin_centro_fuera: 0 }))
+  // La previa de verdad (tercera revisión, M2): antes se simulaba en /driver-accounts/previa, que no es la ruta que pide
+  // el panel, y todas las pruebas trabajaban sin querer con la previa fallida.
+  await page.route(/\/api\/auth\/driver-accounts\/generar\/previa/, json(PREVIA))
   await page.route(/\/api\/auth\/driver-accounts(\?|$)/, cuentasFallan ? json({ detail: 'x' }, 500)
     : json([...CUENTAS, ...mas.map((d) => ({ driver_id: d.id, email: d.email }))]))
   if (modulos !== undefined) await page.route(/\/api\/org\/billing/, json({ plan: 'pro', status: 'active', modulos }))
   if (antes) await antes()
   await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('ANTONIO GARCÍA LÓPEZ')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText(lista[0].name, { exact: true })).toBeVisible({ timeout: 15000 })
+  // El <main> del panel entra con una animación de 0,3 s con `transform`: mientras dura, lo `fixed` de dentro se coloca
+  // respecto al <main> y no a la pantalla. Antes de medir nada, que acabe (como `abrir()` en tanda2-dia.spec.js).
+  await page.locator('main.animate-fade-in').first()
+    .evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {}))))
 }
 
 test.describe('E1 · Conductores en el móvil', () => {
@@ -117,6 +145,8 @@ test.describe('E1 · Conductores en el móvil', () => {
     await conductores(page)
     const texto = page.getByText(/Contraseña temporal común: se aplica a/)
     await expect(texto).toBeVisible()
+    // Con la previa de verdad (tercera revisión, M2) el aviso lleva también «· 1 sin correo», y aun así no se aplasta.
+    await expect(texto).toContainText('1 sin correo')
     // Antes medía unos 60 px de ancho (una palabra por línea); ahora casi toda la tarjeta.
     expect(await texto.evaluate((el) => el.offsetWidth)).toBeGreaterThan(220)
     const inicial = page.getByText(/Contraseña inicial de los conductores nuevos/)
@@ -136,7 +166,8 @@ test.describe('E1 · Conductores en el móvil', () => {
     // Y los campos donde se escribe la clave (segunda revisión, U5).
     expect(await alto(page.getByLabel('Contraseña inicial de los conductores nuevos'))).toBeGreaterThanOrEqual(44)
     await page.getByRole('button', { name: 'Establecer contraseña temporal común' }).click()
-    await expect(page.getByRole('button', { name: /^Aplicar contraseña temporal/ })).toBeVisible()
+    // Con la previa de verdad (tercera revisión, M2), el botón dice a cuántos y se puede pulsar: se mide el de uso real.
+    await expect(page.getByRole('button', { name: 'Aplicar contraseña temporal a 2' })).toBeEnabled()
     expect(await alto(page.getByRole('button', { name: /^Aplicar contraseña temporal/ }))).toBeGreaterThanOrEqual(44)
     expect(await alto(page.getByRole('button', { name: 'Dejarlo como está' }))).toBeGreaterThanOrEqual(44)
     const casilla = page.locator('label').filter({ hasText: 'Cambiársela también a quien ya se ha puesto la suya' })
@@ -165,7 +196,6 @@ test.describe('E1 · Conductores en el móvil', () => {
   test('al girar el móvil, la clave a medio escribir y el resultado de aplicarla siguen ahí', async ({ page }) => {
     const fallos = vigilar(page)
     await conductores(page, { antes: async () => {
-      await page.route(/\/api\/auth\/driver-accounts\/generar\/previa/, json(PREVIA))
       await page.route(/\/api\/auth\/driver-accounts\/generar(\?|$)/, json({ actualizadas: 2, sin_email: 1, cuentas_inactivas: 0,
         aviso: 'A 1 que ya tenía la suya se le ha respetado.' }))
     } })
@@ -198,8 +228,8 @@ test.describe('E1 · Conductores en el móvil', () => {
     await expect(primero()).toContainText('ANTONIO GARCÍA LÓPEZ')
     const selector = page.getByLabel('Ordenar por')
     expect(await alto(selector)).toBeGreaterThanOrEqual(44)
-    // Solo por lo que enseña la tarjeta (segunda revisión, U6): por contrato o nivel cambiaría sin que se viera por qué.
-    expect(await selector.locator('option').allTextContents()).toEqual(['Nombre', 'Centro', 'Teléfono'])
+    // Por las siete columnas de la tabla, como antes de las tarjetas (tercera revisión, M1).
+    expect(await selector.locator('option').allTextContents()).toEqual(SIETE)
     await selector.selectOption('center')
     // Por centro: primero la que no tiene (vacío), luego NORTE (Antonio, Nuria) y SUR (Miguel Ángel, María del Carmen).
     await expect(primero()).toContainText('ESTELA ALEN LAGE')
@@ -216,16 +246,11 @@ test.describe('E1 · Conductores en el móvil', () => {
 
   // Segunda revisión de la tanda 2, U6: con el panel en otro idioma, la barra de orden y la pestaña corta, traducidas.
   test('en inglés, el selector de orden y la pestaña corta van en inglés', async ({ page }) => {
-    await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
-    // Después de entrarComoAdmin, que deja el panel en español.
-    await page.addInitScript(() => { localStorage.setItem('panel_center', 'Todos'); localStorage.setItem('flota_lang', 'en') })
-    await simularApi(page, 'vacio')
-    await page.route(/\/api\/drivers(\?|$)/, json(CONDUCTORES))
-    await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('ANTONIO GARCÍA LÓPEZ')).toBeVisible({ timeout: 15000 })
+    await conductores(page, { idioma: 'en' })
     const selector = page.getByLabel('Sort by')
     await expect(selector).toBeVisible()
-    expect(await selector.locator('option').allTextContents()).toEqual(['Name', 'Site', 'Phone'])
+    expect(await selector.locator('option').allTextContents())
+      .toEqual(['Name', 'Site', 'Accommodation', 'Phone', 'Email', 'Contract', 'Level'])
     await expect(page.getByRole('button', { name: 'A to Z' })).toHaveAttribute('title', 'Reverse the order')
     await expect(page.getByRole('button', { name: 'Duplicates', exact: true })).toBeVisible()
   })
@@ -257,6 +282,97 @@ test.describe('E1 · Conductores en el móvil', () => {
     }
     const ancho = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, ventana: window.innerWidth }))
     expect(ancho.doc).toBeLessThanOrEqual(ancho.ventana)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  /* Tercera revisión de la tanda 2, M1: en el móvil se ordena por las siete columnas, como cuando se deslizaba la tabla.
+     Por lo que la tarjeta no enseña (contrato, nivel, correo, alojamiento), la tarjeta lo enseña; el orden, el de la
+     tabla del ordenador con los mismos datos. */
+  const leerTarjetas = (page) => page.getByRole('list', { name: 'Conductores' }).getByRole('listitem').evaluateAll((lis) => lis.map((li) => ({
+    nombre: li.querySelector('button span span').textContent.trim(),
+    dato: li.querySelector('[data-testid="dato-orden"]')?.textContent.replace(/^·\s*/, '').trim() ?? null,
+  })))
+  // Las filas de la tabla: nombre y el texto de la celda de la columna (Contrato es la 7.ª celda, Nivel la 8.ª).
+  const leerTabla = (page, celda) => page.locator('table tbody tr').evaluateAll((trs, i) => trs.map((tr) => ({
+    nombre: tr.cells[1].textContent.trim(), dato: tr.cells[i].textContent.trim(),
+  })), celda)
+
+  for (const [valor, opcion, celda, esperado] of [
+    ['contrato', 'Contrato', 6, [['ANTONIO GARCÍA LÓPEZ', '—'], ['CARLOS PEÑA SOTO', 'Empresa'], ['ELENA CASTRO RÍOS', 'Empresa'],
+      ['BEATRIZ RUIZ MORA', 'ETT'], ['DAVID ORTEGA VIDAL', 'ETT']]],
+    ['nivel', 'Nivel', 7, [['DAVID ORTEGA VIDAL', '—'], ['ANTONIO GARCÍA LÓPEZ', 'L1'], ['BEATRIZ RUIZ MORA', 'L2'],
+      ['ELENA CASTRO RÍOS', 'L3'], ['CARLOS PEÑA SOTO', 'Pleno']]],
+  ]) {
+    test(`por ${valor}: cada tarjeta lo enseña y el orden es el de la tabla del ordenador`, async ({ page }) => {
+      const fallos = vigilar(page)
+      await conductores(page, { lista: CON_DATOS })
+      const selector = page.getByLabel('Ordenar por')
+      expect(await selector.locator('option').allTextContents()).toEqual(SIETE)
+      // Por nombre (lo de siempre), la tarjeta no enseña ni contrato ni nivel.
+      await expect(page.getByTestId('dato-orden')).toHaveCount(0)
+      await selector.selectOption({ label: opcion })
+      await expect(page.getByTestId('dato-orden')).toHaveCount(5)
+      const movil = await leerTarjetas(page)
+      expect(movil.map((f) => [f.nombre, f.dato])).toEqual(esperado)
+      // La etiqueta, la misma que en la tabla y con su color, no un texto suelto.
+      if (valor === 'contrato') await expect(page.getByTestId('dato-orden').filter({ hasText: 'ETT' }).first()).toHaveClass(/bg-purple-500/)
+      // Al revés, justo al revés (sin empates por nivel; por contrato, los grupos al revés).
+      await page.getByRole('button', { name: 'De la A a la Z' }).click()
+      await expect(page.getByRole('button', { name: 'De la Z a la A' })).toBeVisible()
+      const alReves = await leerTarjetas(page)
+      expect(alReves.map((f) => f.dato)).toEqual([...esperado].reverse().map((e) => e[1]))
+      // Al volver a «Nombre», la tarjeta queda como siempre.
+      await selector.selectOption({ label: 'Nombre' })
+      await expect(page.getByTestId('dato-orden')).toHaveCount(0)
+      await expect(page.getByRole('list', { name: 'Conductores' }).getByRole('listitem').first()).toContainText('ANTONIO GARCÍA LÓPEZ')
+      // La tabla del ordenador con los mismos datos, ordenada tocando su cabecera: el mismo orden y los mismos textos.
+      await page.setViewportSize({ width: 1440, height: 900 })
+      await expect(page.locator('table')).toHaveCount(1)
+      await page.getByRole('columnheader', { name: opcion }).getByRole('button').click()
+      await expect(page.getByRole('columnheader', { name: opcion })).toContainText('▲')
+      expect(await leerTabla(page, celda)).toEqual(movil)
+      expect(fallos, fallos.join(' | ')).toHaveLength(0)
+    })
+  }
+
+  test('por correo y por alojamiento, a 360 px un dato largo no saca la tarjeta de la pantalla', async ({ page }) => {
+    const fallos = vigilar(page)
+    await page.setViewportSize({ width: 360, height: 780 })
+    await conductores(page, { lista: CON_DATOS, mas: [CORREO_LARGO] })
+    const selector = page.getByLabel('Ordenar por')
+    const tarjetas = page.getByRole('list', { name: 'Conductores' }).getByRole('listitem')
+    const largo = tarjetas.filter({ hasText: CORREO_LARGO.name })
+    // Nada más ancho que la pantalla, y nada de dentro de una tarjeta pasa de su borde derecho.
+    const cabe = () => page.evaluate(() => {
+      const fuera = [...document.querySelectorAll('ul[aria-label="Conductores"] li')].filter((li) => li.scrollWidth > li.clientWidth
+        || [...li.querySelectorAll('*')].some((el) => el.getBoundingClientRect().right > li.getBoundingClientRect().right + 0.5))
+      return { doc: document.documentElement.scrollWidth, ventana: window.innerWidth, fuera: fuera.length }
+    })
+    await selector.selectOption({ label: 'Correo' })
+    // El correo entero (en el texto y en el `title`), partido en líneas dentro de la tarjeta.
+    const correo = largo.getByTestId('dato-orden')
+    await expect(correo).toHaveText(`· ${CORREO_LARGO.email}`)
+    await expect(correo).toHaveAttribute('title', `Correo: ${CORREO_LARGO.email}`)
+    let medida = await cabe()
+    expect(medida.doc).toBeLessThanOrEqual(medida.ventana)
+    expect(medida.fuera).toBe(0)
+    // Quien no tiene correo, «—».
+    await expect(tarjetas.filter({ hasText: 'CARLOS PEÑA SOTO' }).getByTestId('dato-orden')).toHaveText('· —')
+    // El botón de llamar sigue de 44 al lado del correo largo.
+    const llamar = largo.getByRole('link', { name: /^Llamar/ })
+    await expect(llamar).toBeVisible()
+    expect(await alto(llamar)).toBeGreaterThanOrEqual(44)
+    expect(await llamar.evaluate((el) => el.offsetWidth)).toBeGreaterThanOrEqual(44)
+
+    await selector.selectOption({ label: 'Alojamiento' })
+    const aloj = largo.getByTestId('dato-orden')
+    await expect(aloj).toHaveAttribute('title', `Alojamiento: ${CORREO_LARGO.alojamiento}`)
+    // Dos líneas como mucho: la tarjeta sigue siendo cómoda.
+    const lineas = await aloj.evaluate((el) => Math.round(el.offsetHeight / parseFloat(getComputedStyle(el).lineHeight)))
+    expect(lineas).toBeLessThanOrEqual(2)
+    medida = await cabe()
+    expect(medida.doc).toBeLessThanOrEqual(medida.ventana)
+    expect(medida.fuera).toBe(0)
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })

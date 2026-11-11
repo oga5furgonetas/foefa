@@ -946,7 +946,7 @@ function ContrasenaInicial() {
    móvil había que deslizar de lado para ver el teléfono. Debajo de `sm` va esto: el nombre y su centro; el teléfono, a
    un toque para llamar (aparte de la tarjeta, que abre la ficha: un enlace dentro de un botón no vale); y lo que le
    falta. El ordenador sigue con la tabla. */
-function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, onAbrir }) {
+function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, onAbrir }) {
   const { t } = useT()
   const faltan = faltasQueCuentan({ conIdReparto, cuentasOk }).filter((f) => f.id !== 'centro' && f.falta(d, accounts))
   const tel = String(d.phone || '').replace(/[^\d+]/g, '')
@@ -963,6 +963,7 @@ function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, onAbrir }) {
               ? <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-amber-300">sin centro</span>
               : <span>{d.center}</span>}
             {tel && <span className="cifra text-dark-400">· {verTelefono(d.phone)}</span>}
+            {datoOrden && <DatoDeOrden d={d} col={datoOrden} nombre={t(COLUMNA_ORDEN[datoOrden])} />}
             {d.traslado?.centro && (
               <span className="whitespace-nowrap rounded-full bg-sky-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-sky-300">
                 → {d.traslado.centro} {fechaCorta(d.traslado.desde).slice(0, 5)}
@@ -987,11 +988,42 @@ function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, onAbrir }) {
   )
 }
 
-// Por qué se puede ordenar en el móvil: solo lo que enseña la tarjeta (11-11-2026, segunda revisión de la tanda 2). Por
-// contrato o por nivel la lista cambiaba de orden sin ninguna pista de por qué, porque la tarjeta no lo dice. Si se viene
-// del ordenador con otra columna elegida en la cabecera (al girar una tableta), esa sigue en la lista con el nombre de su
-// cabecera, para que el selector no diga una cosa y la lista haga otra.
-const CABECERA_ORDEN = { alojamiento: 'Alojamiento', email: 'Correo', contrato: 'Contrato', nivel: 'Nivel' }
+/* POR QUÉ SE PUEDE ORDENAR EN EL MÓVIL: por lo mismo que en la tabla (11-11-2026, tercera revisión de la tanda 2, M1).
+   Antes de las tarjetas, el móvil deslizaba la tabla de lado y ordenaba tocando cualquier cabecera; dejar solo nombre,
+   centro y teléfono le quitaba algo que tenía. Las siete columnas, en el orden de la tabla, con la clave de su nombre.
+   Las cuatro que la tarjeta no enseña (alojamiento, correo, contrato y nivel), al elegirlas, la tarjeta las enseña en su
+   línea de datos (DatoDeOrden): sin eso la lista cambiaba de orden sin ninguna pista de por qué. */
+const COLUMNA_ORDEN = { name: 'drv.o.nombre', center: 'drv.o.centro', alojamiento: 'drv.o.alojamiento', phone: 'drv.o.telefono',
+  email: 'drv.o.correo', contrato: 'drv.o.contrato', nivel: 'drv.o.nivel' }
+const NO_SALE_EN_TARJETA = ['alojamiento', 'email', 'contrato', 'nivel']
+
+/* El dato por el que se ordena, con el mismo texto que la celda de la tabla: la etiqueta de contrato o de nivel, el
+   correo o el alojamiento tal cual, y «—» si la ficha no lo tiene. Discreto, como el teléfono. El correo puede partirse
+   detrás de la «@» y, si aun así no cabe, por donde haga falta; el alojamiento, en dos líneas como mucho (entero en el
+   `title`). Así nada empuja la tarjeta de lado a 360 px. */
+function DatoDeOrden({ d, col, nombre }) {
+  if (col === 'contrato' || col === 'nivel') {
+    const [l, c] = (col === 'nivel' ? NIVEL : CONTRATO)[d[col]] || []
+    return c
+      ? <span data-testid="dato-orden" title={nombre} className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${c}`}>{l}</span>
+      : <span data-testid="dato-orden" title={nombre} className="text-dark-500">· —</span>
+  }
+  const v = d[col] || ''
+  if (!v) return <span data-testid="dato-orden" title={nombre} className="text-dark-500">· —</span>
+  if (col === 'email') {
+    // Se parte detrás de la «@» y de cada «.», no en mitad de una palabra; el «·» de delante va pegado (espacio duro)
+    // para no quedarse solo en una línea.
+    const trozos = v.replace(/[@.]/g, (c) => `${c}\n`).split('\n')
+    return (
+      <span data-testid="dato-orden" title={`${nombre}: ${v}`} className="min-w-0 max-w-full text-dark-500 [overflow-wrap:anywhere]">
+        {'· '}{trozos.flatMap((x, i) => (i ? [<wbr key={i} />, x] : [x]))}
+      </span>
+    )
+  }
+  return (
+    <span data-testid="dato-orden" title={`${nombre}: ${v}`} className="line-clamp-2 min-w-0 max-w-full text-dark-500 [overflow-wrap:anywhere]">· {v}</span>
+  )
+}
 
 // Pantalla estrecha (por debajo de `sm`, 640 px): sigue al giro del móvil y al tamaño de la ventana.
 const ESTRECHO = '(max-width: 639.98px)'
@@ -1012,8 +1044,7 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
   const { t } = useT()
   const estrecho = useEstrecho()
   const [orden, setOrden] = useState({ col: 'name', asc: true })
-  const opcionesOrden = [['name', t('drv.o.nombre')], ['center', t('drv.o.centro')], ['phone', t('drv.o.telefono')]]
-  if (CABECERA_ORDEN[orden.col]) opcionesOrden.push([orden.col, CABECERA_ORDEN[orden.col]])
+  const datoOrden = NO_SALE_EN_TARJETA.includes(orden.col) ? orden.col : null
 
   const filas = useMemo(() => {
     const { col, asc } = orden
@@ -1050,7 +1081,7 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
         <label htmlFor="orden-conductores">{t('drv.ordenarPor')}</label>
         <select id="orden-conductores" value={orden.col} onChange={(e) => setOrden({ col: e.target.value, asc: true })}
           className="min-h-[44px] min-w-0 flex-1 rounded-lg border border-dark-700 bg-dark-950 px-2 text-[13px] text-dark-100">
-          {opcionesOrden.map(([col, nombre]) => <option key={col} value={col}>{nombre}</option>)}
+          {Object.entries(COLUMNA_ORDEN).map(([col, clave]) => <option key={col} value={col}>{t(clave)}</option>)}
         </select>
         <button type="button" onClick={() => setOrden((o) => ({ ...o, asc: !o.asc }))}
           aria-label={orden.asc ? t('drv.ordenAZ') : t('drv.ordenZA')} title={t('drv.ordenVuelta')}
@@ -1060,7 +1091,8 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
       </div>
       <ul aria-label="Conductores">
         {filas.map((d) => (
-          <TarjetaConductor key={d.id} d={d} accounts={accounts} cuentasOk={cuentasOk} conIdReparto={conIdReparto} onAbrir={onAbrir} />
+          <TarjetaConductor key={d.id} d={d} accounts={accounts} cuentasOk={cuentasOk} conIdReparto={conIdReparto}
+            datoOrden={datoOrden} onAbrir={onAbrir} />
         ))}
       </ul>
       </>
