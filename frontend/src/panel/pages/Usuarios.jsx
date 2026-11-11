@@ -351,10 +351,13 @@ export default function Usuarios() {
   const [editing, setEditing] = useState(null) // {id, perms, centers, admin_role, email, newPassword}
   // «Por usuario» (la lista de siempre) o «Quién ve cada pantalla» (la tabla).
   const [vista, setVista] = useState('usuarios')
+  /* El de rol vacío que el jefe dio de alta con el formulario de antes (11-11-2026, tercera ronda V4): el servidor se
+     lo deja gestionar y, con cualquier cambio, lo pasa a Dispatcher. Se abre ya como Dispatcher y se dice. */
+  const pasaADispatcher = (u) => jefe && !u.admin_role
   const abrirEditor = (u) => setEditing({
     id: u.id, perms: Array.isArray(u.permissions) ? u.permissions : ALL_KEYS,
     centers: Array.isArray(u.allowed_centers) ? u.allowed_centers : null,
-    admin_role: u.admin_role ?? null, email: u.email || '', newPassword: '',
+    admin_role: pasaADispatcher(u) ? 'dispatcher' : (u.admin_role ?? null), email: u.email || '', newPassword: '',
   })
   // Desde la tabla: a la lista, con ese usuario abierto y a la vista.
   const editarDesdeTabla = (u) => {
@@ -572,6 +575,7 @@ export default function Usuarios() {
                         ))}
                       </div>
                       <p className="mt-1.5 text-[11px] text-dark-500">{ROLE_DESCS[editing.admin_role] ?? ROLE_DESCS[null]}</p>
+                      {pasaADispatcher(u) && <p className="mt-1.5 text-[11px] text-amber-300">{t('usr.own.to.dispatcher')}</p>}
                     </Section>
 
                     <Section title={t('usr.perms')}>
