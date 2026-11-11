@@ -25,6 +25,8 @@ function vigilar(page) {
 }
 
 const alto = (loc) => loc.evaluate((el) => el.offsetHeight)
+// La previa de la contraseña temporal común (GET /auth/driver-accounts/generar/previa), bien calculada.
+const PREVIA = { actualizadas: 2, naves: { NORTE: 1, SUR: 1 }, respetadas: 1, sin_email: 1, cuentas_inactivas: 0, sin_centro_fuera: 0 }
 const json = (body, status = 200) => (route) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
 
 const CONDUCTORES = [
@@ -39,7 +41,8 @@ const CUENTAS = [{ driver_id: 'd1', email: 'antonio@ejemplo.es' }, { driver_id: 
 const LARGO = { id: 'd5', name: 'MARÍA DEL CARMEN FERNÁNDEZ RODRÍGUEZ', center: 'SUR', active: true, email: 'maria@ejemplo.es',
   phone: '611222333', transporter_id: 'M1N2O3P4Q5R6S7', contrato: 'empresa' }
 
-async function conductores(page, { modulos, cuentasFallan = false, mas = [] } = {}) {
+// `antes`: rutas propias de una prueba que tienen que estar antes de abrir la pantalla (la previa se pide al montarla).
+async function conductores(page, { modulos, cuentasFallan = false, mas = [], antes } = {}) {
   await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
   await page.addInitScript(() => localStorage.setItem('panel_center', 'Todos'))
   await simularApi(page, 'vacio')
@@ -49,6 +52,7 @@ async function conductores(page, { modulos, cuentasFallan = false, mas = [] } = 
   await page.route(/\/api\/auth\/driver-accounts(\?|$)/, cuentasFallan ? json({ detail: 'x' }, 500)
     : json([...CUENTAS, ...mas.map((d) => ({ driver_id: d.id, email: d.email }))]))
   if (modulos !== undefined) await page.route(/\/api\/org\/billing/, json({ plan: 'pro', status: 'active', modulos }))
+  if (antes) await antes()
   await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('ANTONIO GARCÍA LÓPEZ')).toBeVisible({ timeout: 15000 })
 }
@@ -129,12 +133,58 @@ test.describe('E1 · Conductores en el móvil', () => {
     await page.getByRole('button', { name: 'Cambiarla' }).click()
     expect(await alto(page.getByRole('button', { name: 'Guardar' }))).toBeGreaterThanOrEqual(44)
     expect(await alto(page.getByRole('button', { name: 'Cancelar' }))).toBeGreaterThanOrEqual(44)
+    // Y los campos donde se escribe la clave (segunda revisión, U5).
+    expect(await alto(page.getByLabel('Contraseña inicial de los conductores nuevos'))).toBeGreaterThanOrEqual(44)
     await page.getByRole('button', { name: 'Establecer contraseña temporal común' }).click()
     await expect(page.getByRole('button', { name: /^Aplicar contraseña temporal/ })).toBeVisible()
     expect(await alto(page.getByRole('button', { name: /^Aplicar contraseña temporal/ }))).toBeGreaterThanOrEqual(44)
     expect(await alto(page.getByRole('button', { name: 'Dejarlo como está' }))).toBeGreaterThanOrEqual(44)
     const casilla = page.locator('label').filter({ hasText: 'Cambiársela también a quien ya se ha puesto la suya' })
     expect(await alto(casilla)).toBeGreaterThanOrEqual(44)
+    expect(await alto(page.getByPlaceholder('Escribe la contraseña temporal'))).toBeGreaterThanOrEqual(44)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  // Segunda revisión de la tanda 2, U5: si la previa falla, «Reintentar» es lo único que deja seguir; también de 44.
+  test('si no se puede calcular a quién afecta, «Reintentar» mide 44 y vuelve a pedirlo', async ({ page }) => {
+    let veces = 0
+    await conductores(page, { antes: () => page.route(/\/api\/auth\/driver-accounts\/generar\/previa/, (route) => {
+      veces += 1
+      return veces === 1 ? json({ detail: 'x' }, 500)(route) : json(PREVIA)(route)
+    }) })
+    await page.getByRole('button', { name: 'Establecer contraseña temporal común' }).click()
+    const reintentar = page.getByRole('button', { name: 'Reintentar' })
+    await expect(reintentar).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Aplicar contraseña temporal/ })).toBeDisabled()
+    expect(await alto(reintentar)).toBeGreaterThanOrEqual(44)
+    await reintentar.click()
+    await expect(page.getByRole('button', { name: 'Aplicar contraseña temporal a 2' })).toBeEnabled()
+  })
+
+  // Segunda revisión de la tanda 2, U7: los avisos se pintan una sola vez; girar el móvil no los vacía.
+  test('al girar el móvil, la clave a medio escribir y el resultado de aplicarla siguen ahí', async ({ page }) => {
+    const fallos = vigilar(page)
+    await conductores(page, { antes: async () => {
+      await page.route(/\/api\/auth\/driver-accounts\/generar\/previa/, json(PREVIA))
+      await page.route(/\/api\/auth\/driver-accounts\/generar(\?|$)/, json({ actualizadas: 2, sin_email: 1, cuentas_inactivas: 0,
+        aviso: 'A 1 que ya tenía la suya se le ha respetado.' }))
+    } })
+    await page.getByRole('button', { name: 'Establecer contraseña temporal común' }).click()
+    const clave = page.getByPlaceholder('Escribe la contraseña temporal')
+    await clave.fill('Temporal2026')
+    // En horizontal pasa de 640 px (lo de `sm`) y vuelve: la confirmación y lo escrito, intactos.
+    await page.setViewportSize({ width: 844, height: 390 })
+    await expect(clave).toHaveValue('Temporal2026')
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(clave).toHaveValue('Temporal2026')
+    await page.getByRole('button', { name: 'Aplicar contraseña temporal a 2' }).click()
+    const hecho = page.getByText('2 conductores ya tienen acceso temporal')
+    await expect(hecho).toBeVisible()
+    await page.setViewportSize({ width: 844, height: 390 })
+    await expect(hecho).toBeVisible()
+    await expect(page.getByText('1 se han quedado fuera por no tener correo', { exact: false })).toBeVisible()
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(hecho).toBeVisible()
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
@@ -148,6 +198,8 @@ test.describe('E1 · Conductores en el móvil', () => {
     await expect(primero()).toContainText('ANTONIO GARCÍA LÓPEZ')
     const selector = page.getByLabel('Ordenar por')
     expect(await alto(selector)).toBeGreaterThanOrEqual(44)
+    // Solo por lo que enseña la tarjeta (segunda revisión, U6): por contrato o nivel cambiaría sin que se viera por qué.
+    expect(await selector.locator('option').allTextContents()).toEqual(['Nombre', 'Centro', 'Teléfono'])
     await selector.selectOption('center')
     // Por centro: primero la que no tiene (vacío), luego NORTE (Antonio, Nuria) y SUR (Miguel Ángel, María del Carmen).
     await expect(primero()).toContainText('ESTELA ALEN LAGE')
@@ -162,6 +214,22 @@ test.describe('E1 · Conductores en el móvil', () => {
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
+  // Segunda revisión de la tanda 2, U6: con el panel en otro idioma, la barra de orden y la pestaña corta, traducidas.
+  test('en inglés, el selector de orden y la pestaña corta van en inglés', async ({ page }) => {
+    await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
+    // Después de entrarComoAdmin, que deja el panel en español.
+    await page.addInitScript(() => { localStorage.setItem('panel_center', 'Todos'); localStorage.setItem('flota_lang', 'en') })
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/drivers(\?|$)/, json(CONDUCTORES))
+    await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('ANTONIO GARCÍA LÓPEZ')).toBeVisible({ timeout: 15000 })
+    const selector = page.getByLabel('Sort by')
+    await expect(selector).toBeVisible()
+    expect(await selector.locator('option').allTextContents()).toEqual(['Name', 'Site', 'Phone'])
+    await expect(page.getByRole('button', { name: 'A to Z' })).toHaveAttribute('title', 'Reverse the order')
+    await expect(page.getByRole('button', { name: 'Duplicates', exact: true })).toBeVisible()
+  })
+
   // Revisión de la tanda 2, T27: al abrir Conductores en el móvil se ve algún conductor sin bajar. Los avisos de
   // contraseñas van debajo de la lista y las pestañas caben en una línea.
   test('al abrir se ve la lista sin bajar; los avisos de claves, debajo', async ({ page }) => {
@@ -170,8 +238,8 @@ test.describe('E1 · Conductores en el móvil', () => {
     const lista = page.getByRole('list', { name: 'Conductores' })
     const aviso = page.getByText(/Contraseña inicial de los conductores nuevos/)
     await expect(aviso).toBeAttached()
-    // El aviso, después de la lista en la página.
-    expect(await lista.evaluate((ul, av) => !!(ul.compareDocumentPosition(av) & Node.DOCUMENT_POSITION_FOLLOWING),
+    // El aviso, debajo de la lista en la pantalla (lo baja el CSS: en la página está una sola vez, segunda revisión U7).
+    expect(await lista.evaluate((ul, av) => av.getBoundingClientRect().top >= ul.getBoundingClientRect().bottom,
       await aviso.elementHandle())).toBe(true)
     // La primera tarjeta, entera dentro de la pantalla y por encima de la barra fija de abajo del panel.
     const caja = await lista.getByRole('listitem').first().evaluate((el) => {
@@ -210,6 +278,9 @@ test.describe('E1 · Conductores en el ordenador, como antes', () => {
     const aviso = page.getByText(/Contraseña inicial de los conductores nuevos/)
     await expect(aviso).toBeVisible()
     expect(await page.locator('table').evaluate((tb, av) => !!(tb.compareDocumentPosition(av) & Node.DOCUMENT_POSITION_PRECEDING),
+      await aviso.elementHandle())).toBe(true)
+    // Y encima también en la pantalla (el `order-last` del móvil no llega al ordenador).
+    expect(await page.locator('table').evaluate((tb, av) => av.getBoundingClientRect().bottom <= tb.getBoundingClientRect().top,
       await aviso.elementHandle())).toBe(true)
     await expect(page.getByLabel('Ordenar por')).toHaveCount(0)
     // Las pestañas, con su nombre entero.
