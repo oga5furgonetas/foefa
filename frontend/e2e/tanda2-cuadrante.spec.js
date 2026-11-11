@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import vm from 'node:vm'
 import { test, expect } from '@playwright/test'
 import { simularApi, entrarComoAdmin } from './api-simulada.js'
 
@@ -8,12 +11,23 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
    · C4 (historia-8): los códigos de la hoja que la app no conoce se enseñan desde el cuadro de Google Sheets.
    · C5 (portal_inicio-9): un botón por centro en vez de «Elige un centro arriba».
    · C6 (fotos): el título dice «Días libres» y el mes, «Noviembre de 2026».
-   Nada depende de la fecha de hoy: los días se calculan desde el lunes de esta semana. */
+   Nada depende de la fecha de hoy: los días se calculan desde el lunes de esta semana, y cada prueba fija su «ahora»
+   en el navegador (`reloj`), así que Node y la pantalla hablan siempre de la misma semana y del mismo día. */
 
 const json = (body) => (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-const lunes = (() => { const d = new Date(); d.setHours(12); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d })()
-const dia = (n) => { const d = new Date(lunes); d.setDate(d.getDate() + n); return iso(d) }
+/* (revisión U2) El «ahora» de cada prueba, el mismo para Node y para el navegador: si el lunes se calculara una vez al
+   cargar el fichero y la batería pasara la medianoche del domingo, la pantalla abriría otra semana que la de los datos.
+   El token no caduca: `exp` es la hora real más una hora, y el navegador queda parado en esa misma hora real. */
+async function reloj(page) {
+  const ahora = new Date()
+  await page.clock.setFixedTime(ahora)
+  const lunes = new Date(ahora)
+  lunes.setHours(12, 0, 0, 0)
+  lunes.setDate(lunes.getDate() - ((lunes.getDay() + 6) % 7))
+  const dia = (n) => { const d = new Date(lunes); d.setDate(d.getDate() + n); return iso(d) }
+  return { dia, hoy: iso(ahora), diaDelMes: ahora.getDate() }
+}
 
 function vigilar(page) {
   const fallos = []
@@ -30,7 +44,7 @@ function vigilar(page) {
 const persona = (id, nombre, extra = {}) => ({ id, nombre, tipo: 'normal', ficha_activa: true, apodos: [], nota: '', reglas: {},
   entendido: [], sin_entender: '', reglas_fijas: [], ...extra })
 
-function cuadrante() {
+function cuadrante(dia) {
   const personas = [
     persona('p1', 'ANTONIO GARCÍA LÓPEZ'),
     persona('p2', 'JOSÉ MANUEL PÉREZ CASTRO', { tipo: 'empresa' }),
@@ -48,7 +62,7 @@ function cuadrante() {
   }
 }
 
-const PETICIONES = [
+const peticiones = (dia) => [
   { id: 'r1', grupo: 'g1', center: 'NORTE', driver_id: 'd1', driver_name: 'ANA PÉREZ', date: dia(9), type: 'libre',
     status: 'pendiente', motivo: 'asuntos', motivo_label: 'Asuntos propios', note: 'Boda de mi hermano', created_at: '2026-11-01T10:00:00Z' },
   { id: 'r2', grupo: 'g2', center: 'SUR', driver_id: 'd2', driver_name: 'LUIS GÓMEZ', date: dia(10), type: 'libre',
@@ -65,9 +79,10 @@ async function enTodos(page) {
 
 test('C1: el buscador del Cuadrante filtra por nombre o apodo y los totales siguen contando a todos', async ({ page }) => {
   const fallos = vigilar(page)
+  const { dia } = await reloj(page)
   await entrarComoAdmin(page)
   await simularApi(page, 'vacio')
-  await page.route(/\/api\/cuadrante\?/, json(cuadrante()))
+  await page.route(/\/api\/cuadrante\?/, json(cuadrante(dia)))
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('Rutas (cuenta de 1)')).toBeVisible({ timeout: 15000 })
@@ -108,9 +123,10 @@ test('C1: el buscador del Cuadrante filtra por nombre o apodo y los totales sigu
 
 test('C2: en el móvil la columna de nombres se estrecha, caben bastantes días y el nombre completo sale al tocarlo', async ({ page }) => {
   const fallos = vigilar(page)
+  const { dia } = await reloj(page)
   await entrarComoAdmin(page)
   await simularApi(page, 'vacio')
-  await page.route(/\/api\/cuadrante\?/, json(cuadrante()))
+  await page.route(/\/api\/cuadrante\?/, json(cuadrante(dia)))
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('Rutas (cuenta de 1)')).toBeVisible({ timeout: 15000 })
@@ -129,6 +145,11 @@ test('C2: en el móvil la columna de nombres se estrecha, caben bastantes días 
     if (b && b.x + b.width <= 390) enPantalla += 1
   }
   expect(enPantalla).toBeGreaterThanOrEqual(6)
+  // La página no se desliza de lado: la fila de fechas cabe y la flecha «Semana siguiente» se ve entera (revisión T1/T8).
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  const siguiente = await page.getByRole('button', { name: 'Semana siguiente' }).boundingBox()
+  expect(siguiente.x).toBeGreaterThanOrEqual(0)
+  expect(siguiente.x + siguiente.width).toBeLessThanOrEqual(390)
   // Al tocar el nombre se abre su ficha, con el nombre entero.
   await page.getByText('ANTONIO G.', { exact: true }).click()
   await expect(page.getByRole('heading', { name: 'ANTONIO GARCÍA LÓPEZ' })).toBeVisible()
@@ -136,9 +157,10 @@ test('C2: en el móvil la columna de nombres se estrecha, caben bastantes días 
 })
 
 test('C2: en el ordenador la columna de nombres sigue como siempre', async ({ page }) => {
+  const { dia } = await reloj(page)
   await entrarComoAdmin(page)
   await simularApi(page, 'vacio')
-  await page.route(/\/api\/cuadrante\?/, json(cuadrante()))
+  await page.route(/\/api\/cuadrante\?/, json(cuadrante(dia)))
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('Rutas (cuenta de 1)')).toBeVisible({ timeout: 15000 })
@@ -151,11 +173,41 @@ test('C2: en el ordenador la columna de nombres sigue como siempre', async ({ pa
   expect(largo.height).toBeLessThan(26)
 })
 
-test('C2: en el móvil las pestañas de Días libres caben y se tocan con el dedo; en el ordenador, en una fila', async ({ page }) => {
+test('C2 (revisión T7): en el móvil dos nombres cortos nunca salen iguales, y las partículas no dan la inicial', async ({ page }) => {
   const fallos = vigilar(page)
+  const { dia } = await reloj(page)
   await entrarComoAdmin(page)
   await simularApi(page, 'vacio')
-  await page.route(/\/api\/shift-requests(\?|$)/, json({ requests: PETICIONES.slice(0, 1) }))
+  const c = cuadrante(dia)
+  c.personas = [
+    persona('p1', 'JOSÉ GARCÍA PÉREZ'), persona('p2', 'JOSÉ GARCÍA LÓPEZ'),
+    persona('p3', 'MARÍA DE LOS ÁNGELES RUIZ'), persona('p4', 'MARÍA DE LA O SANZ'),
+    persona('p5', 'JOSÉ MANUEL PÉREZ CASTRO'), persona('p6', 'JOSÉ MARÍA RIVAS COUTO'), persona('p7', 'LAURA SÁNCHEZ GIL'),
+  ]
+  c.celdas = {}
+  await page.route(/\/api\/cuadrante\?/, json(c))
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Rutas (cuenta de 1)')).toBeVisible({ timeout: 15000 })
+  // Lo que se VE en la columna de nombres (el corto), fila a fila.
+  const vistos = await page.locator('tbody td:first-child button span.sm\\:hidden').allInnerTexts()
+  expect(vistos).toHaveLength(7)
+  expect(new Set(vistos).size, vistos.join(' | ')).toBe(7)
+  expect(vistos).toEqual(expect.arrayContaining(['JOSÉ G. P.', 'JOSÉ G. L.', 'MARÍA Á.', 'MARÍA O.', 'JOSÉ MANUEL',
+    'JOSÉ MARÍA', 'LAURA S.']))
+  // Y caben sin cortarse con «…» (si se cortara la inicial del final, volverían a verse iguales).
+  const cortados = await page.locator('tbody td:first-child button span.sm\\:hidden').evaluateAll((els) =>
+    els.filter((e) => e.parentElement.scrollWidth > e.parentElement.clientWidth + 1).map((e) => e.textContent))
+  expect(cortados).toEqual([])
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('C2: en el móvil las pestañas de Días libres caben y se tocan con el dedo; en el ordenador, en una fila', async ({ page }) => {
+  const fallos = vigilar(page)
+  const { dia } = await reloj(page)
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/shift-requests(\?|$)/, json({ requests: peticiones(dia).slice(0, 1) }))
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/panel/turnos', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('Boda de mi hermano')).toBeVisible({ timeout: 15000 })
@@ -181,12 +233,13 @@ test('C2: en el móvil las pestañas de Días libres caben y se tocan con el ded
 
 test('C3: con «Todos», Peticiones enseña las de todos los centros con su centro, y se pueden contestar', async ({ page }) => {
   const fallos = vigilar(page)
+  const { dia } = await reloj(page)
   await enTodos(page)
   await simularApi(page, 'vacio')
   const pedidas = []
   await page.route(/\/api\/shift-requests(\?|$)/, (route) => {
     pedidas.push(new URL(route.request().url()).searchParams)
-    return json({ requests: PETICIONES })(route)
+    return json({ requests: peticiones(dia) })(route)
   })
   let resuelto = null
   await page.route(/\/api\/shift-requests\/resolver-grupo/, (route) => {
@@ -208,9 +261,10 @@ test('C3: con «Todos», Peticiones enseña las de todos los centros con su cent
 
 test('C3: con «Todos», el Calendario funciona con el centro de cada uno, y Refuerzos pide el centro con un botón', async ({ page }) => {
   const fallos = vigilar(page)
+  const { dia } = await reloj(page)
   await enTodos(page)
   await simularApi(page, 'vacio')
-  await page.route(/\/api\/shift-requests(\?|$)/, json({ requests: PETICIONES }))
+  await page.route(/\/api\/shift-requests(\?|$)/, json({ requests: peticiones(dia) }))
   await page.goto('/panel/turnos', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('Boda de mi hermano')).toBeVisible({ timeout: 15000 })
   await page.getByRole('button', { name: 'Calendario', exact: true }).click()
@@ -232,16 +286,159 @@ test('C3: con «Todos», el Calendario funciona con el centro de cada uno, y Ref
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
+// Hoy (el calendario abre en el mes de hoy): las casillas de días que existen son botones, en orden, del 1 al último.
+const casillaDeHoy = (page, diaDelMes) => page.locator('div.grid.grid-cols-7 > button').nth(diaDelMes - 1)
+// Cuánto se pasa del borde derecho de la casilla lo que lleva dentro (0 = nada se sale).
+const sobraDe = (casilla) => casilla.evaluate((el) => {
+  const borde = el.getBoundingClientRect().right
+  return Math.max(0, ...[...el.querySelectorAll('span, i')].map((s) => s.getBoundingClientRect().right - borde))
+})
+
+test('C3 (revisión T11): con «Todos», un día cerrado de un centro no pinta la casilla de rojo para todos y se dicen todos los que cierran', async ({ page }) => {
+  const fallos = vigilar(page)
+  const { hoy, diaDelMes } = await reloj(page)
+  await enTodos(page)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/shift-requests(\?|$)/, json({ requests: [] }))
+  await page.route(/\/api\/shift-blocks(\?|$)/, json({ bloqueos: [
+    { id: 'b1', center: 'SUR', desde: hoy, hasta: hoy, motivo: 'Inventario' },
+    { id: 'b2', center: 'NORTE', desde: hoy, hasta: hoy, motivo: 'Fiesta local' },
+  ], pasados: [] }))
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/panel/turnos', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Días libres', { timeout: 15000 })
+  await page.getByRole('button', { name: 'Calendario', exact: true }).click()
+  const casilla = casillaDeHoy(page, diaDelMes)
+  // En el ordenador, la casilla dice qué centros cierran.
+  await expect(casilla.getByText('SUR · NORTE', { exact: true })).toBeVisible()
+  // La casilla no lleva el rojo entero de «cerrado» (eso diría que cierran todos los centros).
+  await expect(casilla).not.toHaveClass(/border-red-500/)
+  await casilla.click()
+  await expect(page.getByText('Día cerrado en SUR: Inventario')).toBeVisible()
+  await expect(page.getByText('Día cerrado en NORTE: Fiesta local')).toBeVisible()
+  // En el móvil, solo el punto rojo (el código no cabe): nada se sale de la casilla, y el código queda para el lector.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(casilla.getByTestId('cierre-centros')).toHaveText('SUR · NORTE')
+  expect(await casilla.getByText('SUR · NORTE', { exact: true }).evaluate((e) => e.getBoundingClientRect().width)).toBeLessThanOrEqual(1)
+  expect(await sobraDe(casilla)).toBeLessThanOrEqual(0.5)
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('C3 (revisión T12/T14): en el móvil «sin contestar» no se sale de la casilla del Calendario; en el ordenador, como siempre', async ({ page }) => {
+  const fallos = vigilar(page)
+  const { hoy, diaDelMes } = await reloj(page)
+  await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/shift-requests(\?|$)/, json({ requests: [
+    { id: 'r9', grupo: 'g9', center: 'NORTE', driver_id: 'd9', driver_name: 'ANA PÉREZ', date: hoy, type: 'libre',
+      status: 'pendiente', motivo: 'asuntos', motivo_label: 'Asuntos propios', note: 'Boda de mi hermano', created_at: '2026-11-01T10:00:00Z' },
+  ] }))
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/panel/turnos', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Boda de mi hermano')).toBeVisible({ timeout: 15000 })
+  await page.getByRole('button', { name: 'Calendario', exact: true }).click()
+  await expect(page.getByText('Quién ha pedido días')).toBeVisible()
+  const casilla = casillaDeHoy(page, diaDelMes)
+  // En el móvil, el número y el punto ámbar; la frase entera no se pinta (queda para el lector de pantalla).
+  await expect(casilla.getByText('1 sin contestar', { exact: true })).toBeHidden()
+  await expect(casilla.locator('span.inline-flex').filter({ hasText: /^1/ })).toBeVisible()
+  // Nada de lo que hay dentro pasa del borde derecho de la casilla.
+  expect(await sobraDe(casilla)).toBeLessThanOrEqual(0.5)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await expect(casilla.getByText('1 sin contestar', { exact: true })).toBeVisible()
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+// ── C3 · el service worker reaprovecha la pestaña abierta (revisión T9/T10/T13) ─────────────────────────────────────
+
+function cargarSw(pestanas) {
+  const codigo = readFileSync(fileURLToPath(new URL('../public/sw.js', import.meta.url)), 'utf8')
+  const oyentes = {}
+  const abiertas = []
+  const self = {
+    location: { origin: 'https://panel.ejemplo.test' },
+    addEventListener: (tipo, f) => { oyentes[tipo] = f },
+    registration: { showNotification: async () => {} },
+    clients: { matchAll: async () => pestanas, openWindow: async (u) => { abiertas.push(u); return null }, claim: async () => {} },
+    skipWaiting: () => {},
+  }
+  vm.runInNewContext(codigo, { self, URL, caches: {}, fetch: () => Promise.reject(new Error('sin red')), Response: class {}, setTimeout, console })
+  const tocar = async (url) => {
+    let espera = null
+    oyentes.notificationclick({ notification: { close: () => {}, data: { url } }, waitUntil: (p) => { espera = p } })
+    await espera
+  }
+  return { tocar, abiertas }
+}
+const pestana = (url) => {
+  const p = { url, enfocada: 0, idaA: null }
+  p.focus = async () => { p.enfocada += 1; return p }
+  p.navigate = async (u) => { p.idaA = u; p.url = u; return p }
+  return p
+}
+
+test('C3 (revisión T9/T10/T13): tocar un aviso con ?centro= usa la pestaña de Días libres abierta, sin abrir otra', async () => {
+  // Abierta en Días libres (el panel ya quitó `centro` de la dirección): se trae al frente y va a la del aviso.
+  const dias = pestana('https://panel.ejemplo.test/panel/turnos')
+  let sw = cargarSw([pestana('https://panel.ejemplo.test/panel/cuadrante'), dias])
+  await sw.tocar('/panel/turnos?centro=OGA5')
+  expect(sw.abiertas).toEqual([])
+  expect(dias.enfocada).toBe(1)
+  expect(dias.idaA).toBe('https://panel.ejemplo.test/panel/turnos?centro=OGA5')
+  // Lo mismo con la pestaña en Refuerzos y el aviso de un refuerzo.
+  const refuerzos = pestana('https://panel.ejemplo.test/panel/turnos?vista=refuerzos')
+  sw = cargarSw([refuerzos])
+  await sw.tocar('/panel/turnos?vista=refuerzos&centro=DGA1')
+  expect(sw.abiertas).toEqual([])
+  expect(refuerzos.idaA).toBe('https://panel.ejemplo.test/panel/turnos?vista=refuerzos&centro=DGA1')
+  // Como siempre: si ya hay una pestaña con esa dirección, solo se enfoca (no se recarga).
+  const panel = pestana('https://panel.ejemplo.test/panel')
+  sw = cargarSw([panel])
+  await sw.tocar('/panel')
+  expect([panel.enfocada, panel.idaA, sw.abiertas]).toEqual([1, null, []])
+  // Y si no hay ninguna en esa pantalla, se abre una, como siempre.
+  const otra = pestana('https://panel.ejemplo.test/panel/asignacion')
+  sw = cargarSw([otra])
+  await sw.tocar('/panel/turnos?centro=OGA5')
+  expect(sw.abiertas).toEqual(['/panel/turnos?centro=OGA5'])
+  expect([otra.enfocada, otra.idaA]).toEqual([0, null])
+})
+
+test('C3 (revisión U1): los avisos sin centro del panel, del portal del conductor y de la app de reparto no tocan la pestaña abierta, como siempre', async () => {
+  /* El conductor puede estar subiendo las fotos de la inspección en `/conductor`: llevar esa pestaña a otra dirección la
+     recargaría. Como en main: si ninguna pestaña contiene la dirección del aviso, se abre una nueva y las abiertas no se tocan. */
+  for (const [abierta, aviso] of [
+    ['https://panel.ejemplo.test/conductor', '/conductor?vista=extra'],
+    ['https://panel.ejemplo.test/conductor', '/conductor?vista=ruta'],
+    ['https://panel.ejemplo.test/conductor', '/conductor?vista=extra&centro=OGA5'],
+    ['https://panel.ejemplo.test/ruta', '/ruta?utm_source=push&utm_campaign=x'],
+    ['https://panel.ejemplo.test/panel/turnos', '/panel/turnos?vista=refuerzos'],
+  ]) {
+    const p = pestana(abierta)
+    const sw = cargarSw([p])
+    await sw.tocar(aviso)
+    expect([p.enfocada, p.idaA, sw.abiertas], `${abierta} ← ${aviso}`).toEqual([0, null, [aviso]])
+  }
+  // Y si una pestaña ya contiene la dirección del aviso, solo se enfoca, como en main.
+  const conductor = pestana('https://panel.ejemplo.test/conductor?vista=extra')
+  const sw = cargarSw([conductor])
+  await sw.tocar('/conductor?vista=extra')
+  expect([conductor.enfocada, conductor.idaA, sw.abiertas]).toEqual([1, null, []])
+})
+
 // ── C5 · un botón por centro en el Cuadrante ─────────────────────────────────────────────────────────────────────
 
 test('C5: con «Todos», el Cuadrante pide el centro con un botón por centro, y al pulsarlo lo carga', async ({ page }) => {
   const fallos = vigilar(page)
+  const { dia } = await reloj(page)
   await enTodos(page)
   await simularApi(page, 'vacio')
   const pedidos = []
   await page.route(/\/api\/cuadrante\?/, (route) => {
     pedidos.push(new URL(route.request().url()).searchParams.get('center'))
-    return json(cuadrante())(route)
+    return json(cuadrante(dia))(route)
   })
   await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
   const elegir = page.getByTestId('elegir-centro')
@@ -256,10 +453,11 @@ test('C5: con «Todos», el Cuadrante pide el centro con un botón por centro, y
 
 test('C4: los códigos que la app no conoce se enseñan desde el cuadro de Google Sheets, sin «Ignorar»', async ({ page }) => {
   const fallos = vigilar(page)
+  const { dia } = await reloj(page)
   await entrarComoAdmin(page)
   await simularApi(page, 'vacio')
   let guardado = null
-  await page.route(/\/api\/cuadrante\?/, json(cuadrante()))
+  await page.route(/\/api\/cuadrante\?/, json(cuadrante(dia)))
   await page.route(/\/api\/cuadrante\/sync\?/, json({
     conectado: true, modo: 'activo', hoja_nombre: 'Cuadrante NORTE', ultimo_contacto: '2026-11-10T08:00:00Z',
     ultima: { en: '2026-11-10T08:00:00Z', modo: 'activo', mensaje: 'Sin cambios.', pestanas: [], saltadas: [], ambiguos: [],

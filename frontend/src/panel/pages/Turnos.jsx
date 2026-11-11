@@ -298,7 +298,10 @@ function CalendarioDiasLibres({ center }) {
 
   const hoyK = claveDia(hoyRef)
 
-  const cerrado = (k) => bloqueos.find((b) => b.desde <= k && k <= b.hasta && !b.driver_id)
+  /* Con «Todos» llegan los días cerrados de todos los centros (11-11-2026): un cierre de DGA1 no puede pintar la casilla
+     de rojo como si cerraran todos, y si cierran dos el mismo día se dicen los dos. `cerrados` da todos los de ese día. */
+  const cerrados = (k) => bloqueos.filter((b) => b.desde <= k && k <= b.hasta && !b.driver_id)
+  const cerrado = (k) => cerrados(k)[0]
 
   /* Quién ha pedido días, con los suyos de HOY EN ADELANTE.
      Solo futuro a propósito: un día que ya pasó no se puede dar ni quitar, y
@@ -378,7 +381,9 @@ function CalendarioDiasLibres({ center }) {
               const dia = porDia[k] || []
               const apro = dia.filter((x) => x.status === 'aprobado')
               const pend = dia.filter((x) => x.status === 'pendiente')
-              const bloq = cerrado(k)
+              const bloqs = cerrados(k)
+              // Con «Todos», el cierre no pinta la casilla entera: lleva debajo el centro que cierra (11-11-2026).
+              const bloq = todos ? null : bloqs[0]
               /* Con una persona elegida, sus días se marcan y el resto se
                  apaga. Apagar y no esconder: si los demás desaparecieran no se
                  vería que ese día ya hay otros tres fuera, que es justo lo que
@@ -387,7 +392,7 @@ function CalendarioDiasLibres({ center }) {
               const apagado = suyos && !esSuyo
               return (
                 <button key={k} onClick={() => setAbierto(abierto === k ? null : k)}
-                  className={`min-h-[62px] rounded-lg border p-1.5 text-left transition-colors ${
+                  className={`min-h-[62px] rounded-lg border p-1.5 text-left transition-colors max-sm:overflow-hidden ${
                     esSuyo ? 'border-brand-400 bg-brand-500/20 ring-1 ring-brand-400/50'
                       : abierto === k ? 'border-brand-500 bg-brand-500/10'
                         : bloq ? 'border-red-500/40 bg-red-500/[0.07]'
@@ -422,13 +427,28 @@ function CalendarioDiasLibres({ center }) {
                       {apro.length > 2 && (
                         <span className="block text-[10.5px] text-emerald-400/80">+{apro.length - 2} más</span>
                       )}
+                      {/* En el móvil la casilla no cabe «1 sin contestar» («contestar» se montaba en la de al lado):
+                          allí, el número y el punto ámbar de la leyenda; desde sm, como siempre (11-11-2026). */}
                       {pend.length > 0 && (
                         <span className="mt-0.5 block text-[10.5px] leading-tight text-amber-300">
-                          {pend.length} sin contestar
+                          <span className="inline-flex items-center gap-1 sm:hidden">
+                            {pend.length}<i aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                            <span className="sr-only">sin contestar</span>
+                          </span>
+                          <span className="max-sm:hidden">{pend.length} sin contestar</span>
                         </span>
                       )}
                       {bloq && !apro.length && !pend.length && (
                         <span className="mt-0.5 block truncate text-[10.5px] leading-tight text-red-300">cerrado</span>
+                      )}
+                      {todos && bloqs.length > 0 && (
+                        <span data-testid="cierre-centros"
+                          className="mt-0.5 flex items-center gap-1 text-[10.5px] leading-tight text-red-300">
+                          <i aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+                          {/* En el móvil la casilla no da para el código (salía «D…»): allí solo el punto rojo (el del
+                              «día cerrado» de la leyenda), y al tocarla el detalle dice qué centro cierra. */}
+                          <span className="truncate max-sm:sr-only">{bloqs.map((b) => b.center || 'cerrado').join(' · ')}</span>
+                        </span>
                       )}
                     </>
                   )}
@@ -517,11 +537,12 @@ function CalendarioDiasLibres({ center }) {
           {abierto && (
             <div className="mt-3 rounded-lg border border-dark-700 bg-dark-900/60 p-3">
               <p className="mb-2 text-[13px] font-bold text-dark-100">{abierto}</p>
-              {cerrado(abierto) && (
-                <p className="mb-2 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[12.5px] text-red-300">
-                  Día cerrado{todos && cerrado(abierto).center ? ` en ${cerrado(abierto).center}` : ''}: {cerrado(abierto).motivo}
+              {/* Con «Todos», una línea por centro que cierra ese día; con un centro, como siempre (11-11-2026). */}
+              {(todos ? cerrados(abierto) : [cerrado(abierto)].filter(Boolean)).map((b, i) => (
+                <p key={b.id || i} className="mb-2 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[12.5px] text-red-300">
+                  Día cerrado{todos && b.center ? ` en ${b.center}` : ''}: {b.motivo}
                 </p>
-              )}
+              ))}
               {(porDia[abierto] || []).length === 0 ? (
                 <p className="text-[13px] text-dark-500">Nadie tiene día ese día.</p>
               ) : (

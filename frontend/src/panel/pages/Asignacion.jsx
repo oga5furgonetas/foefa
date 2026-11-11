@@ -733,8 +733,9 @@ export default function Asignacion() {
   )
 
   return (
-    // `max-sm:pb-16`: el hueco para que la barra de Guardar del móvil no tape la última fila.
-    <div className="mx-auto max-w-4xl max-sm:pb-16">
+    // `max-sm:pb-24`: el hueco para que la barra de Guardar del móvil (con «Cambios sin guardar» encima) no tape la
+    // última fila.
+    <div className="mx-auto max-w-4xl max-sm:pb-24">
       {/* Toast overlay — fuera del flujo, encima de todo */}
       <Toasts toasts={toasts} />
 
@@ -800,10 +801,12 @@ export default function Asignacion() {
         {/* En el móvil este mismo grupo va abajo, fijo encima de la barra de navegación (60 px + la zona segura),
             como la barra de Incorporaciones: `fixed` y no `sticky`, porque en el móvil se desliza la página y no el
             <main>. A la derecha deja sitio a la burbuja del asistente, que si no tapaba la punta del botón. Es el
-            MISMO grupo (no una copia): «Cambios sin guardar» y Guardar están una sola vez en la página. */}
+            MISMO grupo (no una copia): «Cambios sin guardar» y Guardar están una sola vez en la página. En el móvil
+            «Cambios sin guardar» va ENCIMA del botón (11-11-2026): al lado se comía la mitad del hueco y «Guardar
+            asignación» partía en dos líneas (en francés, peor). */}
         <div data-testid="asgn-guardar"
-          className="ml-auto flex items-center gap-2 max-sm:fixed max-sm:bottom-[calc(60px+env(safe-area-inset-bottom,0px))] max-sm:left-3 max-sm:right-[76px] max-sm:z-30 max-sm:ml-0 max-sm:rounded-xl max-sm:border max-sm:border-dark-700 max-sm:bg-dark-900/95 max-sm:p-2 max-sm:shadow-lg max-sm:backdrop-blur">
-          {cambios && <span className="shrink-0 text-xs font-semibold text-amber-400">{t('asgn.unsaved')}</span>}
+          className="ml-auto flex items-center gap-2 max-sm:fixed max-sm:bottom-[calc(60px+env(safe-area-inset-bottom,0px))] max-sm:left-3 max-sm:right-[76px] max-sm:z-30 max-sm:ml-0 max-sm:flex-col max-sm:items-stretch max-sm:gap-1 max-sm:rounded-xl max-sm:border max-sm:border-dark-700 max-sm:bg-dark-900/95 max-sm:p-2 max-sm:shadow-lg max-sm:backdrop-blur">
+          {cambios && <span className="shrink-0 text-xs font-semibold text-amber-400 max-sm:text-center">{t('asgn.unsaved')}</span>}
           {botonGuardar}
         </div>
       </div>
@@ -819,7 +822,7 @@ export default function Asignacion() {
       {!loading && issues > 0 && (
         <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-sm text-amber-200">
           <AlertTriangle size={14} className="shrink-0" />
-          {issues} {t('asgn.incomplete.rows')} — {t('asgn.complete.before.save')}
+          {issues} {t(issues === 1 ? 'asgn.incomplete.rows.one' : 'asgn.incomplete.rows.many')} — {t('asgn.complete.before.save')}
         </div>
       )}
 

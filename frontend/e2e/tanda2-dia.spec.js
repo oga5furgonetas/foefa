@@ -35,15 +35,21 @@ test.describe('Asignación · en el móvil, cada fila en dos líneas', () => {
   const DRIVERS = NOMBRES.map((name, i) => ({ id: `d${i + 1}`, name, center: 'NORTE' }))
   const SLOTS = DRIVERS.map((d, i) => ({ vehicle_id: `v${i + 1}`, vehicle_plate: VEHICULOS[i].license_plate, driver_id: d.id, driver_name: d.name }))
 
-  async function abrir(page) {
+  async function abrir(page, idioma) {
     await page.clock.setFixedTime(AHORA)
     await entrarComoAdmin(page)
+    if (idioma) await page.addInitScript((l) => localStorage.setItem('flota_lang', l), idioma)
     await simularApi(page, 'vacio')
     await page.route(/\/api\/vehicles(\?|$)/, json(VEHICULOS))
     await page.route(/\/api\/drivers(\?|$)/, json(DRIVERS))
     await page.route(/\/api\/assignments\/daily/, json({ date: HOY, slots: SLOTS }))
     await page.goto('/panel/asignacion', { waitUntil: 'domcontentloaded' })
     await expect(page.getByTestId('asgn-fila')).toHaveCount(12, { timeout: 45000 })
+    // La página entra con una animación de 0,3 s que lleva un `transform` (animate-fade-in en el <main>), y mientras
+    // dura, lo `fixed` de dentro (la barra de Guardar del móvil) se coloca respecto al <main> y no a la pantalla. Antes
+    // de medir nada se espera a que acabe: con la batería entera y el PC cargado, la medida caía a veces en medio.
+    await page.locator('main.animate-fade-in').first()
+      .evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {}))))
   }
 
   test('el conductor se lee entero en el móvil y la fila de siempre en el ordenador', async ({ page, isMobile }) => {
@@ -115,6 +121,47 @@ test.describe('Asignación · en el móvil, cada fila en dos líneas', () => {
       const [cajaG, cajaPegar] = await Promise.all([guardar.boundingBox(), page.getByRole('button', { name: 'Pegar roster' }).boundingBox()])
       expect(Math.abs(cajaG.y - cajaPegar.y)).toBeLessThan(6)
     }
+  })
+
+  // Revisión 1, T16: con cambios, «Cambios sin guardar» al lado se comía medio hueco y el botón partía en dos líneas.
+  for (const idioma of ['es', 'fr']) {
+    test(`con cambios, la marca va encima de Guardar y el botón en una línea (${idioma})`, async ({ page, isMobile }) => {
+      await abrir(page, idioma)
+      await page.getByRole('button', { name: DICT['asgn.add.row'][idioma] }).click()
+      const barra = page.getByTestId('asgn-guardar')
+      const marca = barra.getByText(DICT['asgn.unsaved'][idioma])
+      const guardar = barra.getByRole('button', { name: DICT['asgn.save'][idioma] })
+      await expect(marca).toBeVisible()
+      const [cajaM, cajaG] = await Promise.all([marca.boundingBox(), guardar.boundingBox()])
+      if (isMobile) {
+        expect(cajaM.y + cajaM.height).toBeLessThanOrEqual(cajaG.y + 1)
+        // Una sola línea: el texto del botón mide lo que una línea de su letra.
+        const lineas = await guardar.evaluate((b) => {
+          const tops = new Set()
+          const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT)
+          while (w.nextNode()) {
+            if (!w.currentNode.textContent.trim()) continue
+            const r = document.createRange(); r.selectNodeContents(w.currentNode)
+            for (const x of r.getClientRects()) if (x.width > 0) tops.add(Math.round(x.top))
+          }
+          return tops.size
+        })
+        expect(lineas).toBe(1)
+        expect(cajaG.height).toBeLessThan(52)
+        const vista = page.viewportSize()
+        expect(cajaG.y + cajaG.height).toBeLessThanOrEqual(vista.height)
+      } else {
+        // En el ordenador, como siempre: al lado.
+        expect(Math.abs(cajaM.y + cajaM.height / 2 - (cajaG.y + cajaG.height / 2))).toBeLessThan(6)
+      }
+    })
+  }
+
+  test('con una fila sin completar dice «1 fila sin completar» (revisión 1, T22)', async ({ page }) => {
+    await abrir(page)
+    await page.getByRole('button', { name: 'Añadir fila' }).click()
+    await expect(page.getByText(/^1 fila sin completar —/)).toBeVisible()
+    await expect(page.getByText(/1 filas/)).toHaveCount(0)
   })
 })
 
@@ -229,11 +276,107 @@ test.describe('Furgonetas fijas · vetadas y golpes', () => {
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
+  async function abrirFijas(page, afinidad) {
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/afinidad\?/, json(afinidad))
+    const guardados = []
+    await page.route(/\/api\/afinidad\/conductor\//, (route) => {
+      guardados.push(route.request().postDataJSON())
+      return json({ ok: true, fija: {} })(route)
+    })
+    await page.addInitScript(() => localStorage.setItem('plantilla.vista', JSON.stringify('fijas')))
+    await page.goto('/panel/plantilla', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Ana López')).toBeVisible({ timeout: 45000 })
+    return guardados
+  }
+
+  // Revisión 1, T17: la sugerencia se quedaba y «Asignársela» daba error (no puede ser su principal y estar vetada).
+  test('al apartar la furgoneta que se le sugiere, la sugerencia se va', async ({ page }) => {
+    const fallos = vigilar(page)
+    const c1 = { ...AFINIDAD.conductores[0], sugerencia: { furgo: 'v3', matricula: '9012GHI', veces: 9, de: 12 } }
+    const guardados = await abrirFijas(page, { ...AFINIDAD, conductores: [c1], resumen: { ...AFINIDAD.resumen, sugerencias: 1 } })
+    const asignar = page.getByRole('button', { name: 'Asignársela' })
+    await expect(asignar).toBeVisible()
+    await expect(page.getByRole('button', { name: /Con sugerencia/ })).toContainText('1')
+    await page.getByRole('button', { name: /Editar/ }).first().click()
+    await page.getByLabel('Furgonetas que no debe llevar').selectOption('v3')
+    await expect.poll(() => guardados.length).toBe(1)
+    expect(guardados[0]).toEqual({ vetadas: ['v3'] })
+    await expect(asignar).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Con sugerencia/ })).toContainText('0')
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('apartar otra furgoneta no quita la sugerencia', async ({ page }) => {
+    const c1 = { ...AFINIDAD.conductores[0], sugerencia: { furgo: 'v3', matricula: '9012GHI', veces: 9, de: 12 } }
+    const guardados = await abrirFijas(page, { ...AFINIDAD, conductores: [c1] })
+    await page.getByRole('button', { name: /Editar/ }).first().click()
+    await page.getByLabel('Furgonetas que no debe llevar').selectOption('v2')
+    await expect.poll(() => guardados.length).toBe(1)
+    await expect(page.getByRole('button', { name: 'Asignársela' })).toBeVisible()
+  })
+
+  // Revisión 1, T18: una vetada que se dio de baja ya no viene en `furgos` y salía su id interno en la placa.
+  test('una vetada que ya no está no enseña su id: no cuenta en la marca y en la ficha se dice con palabras', async ({ page }) => {
+    const c1 = { ...AFINIDAD.conductores[0], fija: { ...AFINIDAD.conductores[0].fija, vetadas: ['3f2a9c1e-baja', 'v3'] } }
+    const guardados = await abrirFijas(page, { ...AFINIDAD, conductores: [c1] })
+    const marca = page.getByTestId('ff-marca-vetadas-c1')
+    await expect(marca).toContainText('9012 GHI')
+    await expect(page.getByText(/3f2a9c1e/)).toHaveCount(0)
+    expect(await marca.getAttribute('title')).toBe('9012GHI')
+    await page.getByRole('button', { name: /Editar/ }).first().click()
+    const fuera = page.getByRole('button', { name: 'Quitar De baja o de otro centro de las que no debe llevar' })
+    await expect(fuera).toContainText('De baja o de otro centro')
+    await expect(page.getByText(/3f2a9c1e/)).toHaveCount(0)
+    // Y se puede quitar igual.
+    await fuera.click()
+    await expect.poll(() => guardados.length).toBe(1)
+    expect(guardados[0]).toEqual({ vetadas: ['v3'] })
+  })
+
+  test('solo vetadas que ya no están: sin marca en la línea', async ({ page }) => {
+    const c1 = { ...AFINIDAD.conductores[0], fija: { ...AFINIDAD.conductores[0].fija, vetadas: ['3f2a9c1e-baja'] } }
+    await abrirFijas(page, { ...AFINIDAD, conductores: [c1] })
+    await expect(page.getByTestId('ff-marca-vetadas-c1')).toHaveCount(0)
+  })
+
+  // Revisión 1, T22: «1 días este mes».
+  test('con un día dice «1 día este mes»', async ({ page }) => {
+    const c1 = { ...AFINIDAD.conductores[0], dias_30: 1 }
+    await abrirFijas(page, { ...AFINIDAD, conductores: [c1] })
+    await expect(page.getByText('1 día este mes', { exact: true })).toBeVisible()
+    await expect(page.getByText(/1 días/)).toHaveCount(0)
+  })
+
+  test('«¿A quién se la doy?» dice «1 día» con uno y «12 días» con más', async ({ page }) => {
+    await abrirFijas(page, AFINIDAD)
+    // Después de simularApi, que si no la pisa.
+    await page.route(/\/api\/afinidad\/a-quien/, json({ candidatos: [
+      { conductor: 'c1', nombre: 'Ana López', dias: 1, golpes_seguros: 0, golpes_posibles: 0, responsabilidad: null },
+      { conductor: 'c2', nombre: 'Luis Gómez', dias: 12, golpes_seguros: 0, golpes_posibles: 0, responsabilidad: null },
+    ] }))
+    await page.getByRole('tab', { name: /^Furgonetas\s*\d+$/ }).click()
+    await page.getByRole('button', { name: '¿A quién se la doy?' }).first().click()
+    const dialogo = page.getByRole('dialog')
+    await expect(dialogo.getByText('1 día', { exact: true })).toBeVisible()
+    await expect(dialogo.getByText('12 días', { exact: true })).toBeVisible()
+    await expect(dialogo.getByText('1 días', { exact: true })).toHaveCount(0)
+  })
+
+  // Revisión 1, T19: la ayuda nombra el botón como se llama de verdad, en cada idioma.
+  test('la ayuda de las vetadas llama al botón por su nombre en los seis idiomas', () => {
+    for (const l of ['es', 'en', 'fr', 'de', 'it', 'pt']) {
+      expect(DICT['ff.vetadasAyuda'][l], l).toContain(DICT['pg.ff.poner'][l])
+    }
+  })
+
   test('los textos nuevos están en los seis idiomas', () => {
     for (const clave of ['ff.vetadas', 'ff.vetadasAnadir', 'ff.vetadasOtra', 'ff.vetadasQuitar', 'ff.vetadasAyuda', 'ff.noLleva',
       'ff.golpesSeg.one', 'ff.golpesSeg.many', 'ff.golpesPos.one', 'ff.golpesPos.many', 'ff.ed.dias.one', 'ff.ed.dias.many',
       'pk.vacioDia', 'pk.comoAyer', 'pk.comoAyerTip', 'pk.comoAyerOk.one', 'pk.comoAyerOk.many', 'pk.comoAyerParte',
-      'pk.comoAyerNada', 'chk.pick.center', 'asgn.save']) {
+      'pk.comoAyerNada', 'chk.pick.center', 'asgn.save', 'ff.vetadaFuera', 'ff.diasMes.one', 'ff.diasMes.many',
+      'ff.dias.one', 'ff.dias.many', 'asgn.incomplete.rows.one', 'asgn.incomplete.rows.many', 'pg.avisoCentro']) {
       expect(Object.keys(DICT[clave]).sort(), clave).toEqual(['de', 'en', 'es', 'fr', 'it', 'pt'])
     }
     expect(DICT['asgn.save'].es).toBe('Guardar asignación')
@@ -276,6 +419,8 @@ test.describe('Aparcamiento · «Como ayer», el texto y la leyenda', () => {
     })
     await page.goto('/panel/aparcamiento', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { level: 1 })).toContainText('NORTE', { timeout: 45000 })
+    // Otra persona coloca una furgoneta sin que esta pantalla se entere (no recarga).
+    pedidos.otroColoca = (fila) => { estado = [...estado, { status: 'asignada', center: 'NORTE', day: HOY, ...fila }] }
     return pedidos
   }
 
@@ -299,6 +444,18 @@ test.describe('Aparcamiento · «Como ayer», el texto y la leyenda', () => {
     await expect(page.getByText(/No hay plazas de días anteriores que repetir/)).toBeVisible()
     expect(pedidos.asignar).toHaveLength(1)
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  // Revisión 1, T20: con lo que había en pantalla, una furgoneta que otra persona acababa de colocar se movía sin aviso.
+  test('«Como ayer» no mueve una furgoneta que otra persona colocó después de cargar la pantalla', async ({ page }) => {
+    const pedidos = await abrir(page, [{ vehicle_id: 'v1', spot: '1', status: 'asignada', center: 'NORTE', day: HOY }])
+    // El plano ya cargó con v1 en la 1 (la zona de dentro: 1 de 3 ocupadas).
+    await expect(page.getByText(/1\/3 ocupadas/)).toBeVisible()
+    pedidos.otroColoca({ vehicle_id: 'v3', spot: '5' })
+    await page.getByRole('button', { name: 'Como ayer' }).click()
+    await expect(page.getByText('1 furgoneta colocada en su última plaza')).toBeVisible()
+    // v3 ya está en la 5: no se toca. Su plaza de ayer (la 3) queda libre y se la lleva v4, la siguiente que la tuvo.
+    expect(pedidos.asignar).toEqual([{ center: 'NORTE', day: HOY, vehicle_id: 'v4', spot: '3' }])
   })
 
   test('la leyenda se ve (también en el móvil) y los nombres de zona caben', async ({ page, isMobile }) => {
@@ -345,4 +502,69 @@ test('Plantilla · la ruta y el conductor se leen enteros, en el móvil y en el 
     const caja = await conductores.nth(0).boundingBox()
     expect(caja.x + caja.width).toBeLessThanOrEqual(page.viewportSize().width)
   }
+})
+
+// Revisión 1, T2: en el móvil el conductor llena la caja y nada decía que la tabla sigue a la derecha (Móvil, Vehículo…).
+test('Plantilla · en el móvil una sombra dice que hay más columnas y se va al llegar al final', async ({ page, isMobile }) => {
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  const FILA = (ruta, conductor) => ({ ruta, conductor, movil: '641100000', furgo: '1234ABC', h_llegada: '08:40', h_bajada: '09:05',
+    h_salida: '09:20', observaciones: '' })
+  await page.route(/\/api\/tools\/plantilla-compartida/, json({ id: 'b1', revision: 1, updated_by: 'Admin Test',
+    state: { week: '42', date: '14/10/2026', rows: [FILA('CX12', 'MIGUEL ÁNGEL TORRES BLANCO'), FILA('CX15', 'JOSÉ MANUEL PÉREZ CASTRO')] } }))
+  await page.goto('/panel/plantilla', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('textbox', { name: 'Conductor', exact: true })).toHaveCount(2, { timeout: 45000 })
+  const mas = page.getByTestId('pg-tabla-mas')
+  if (!isMobile) {
+    // En el ordenador la hoja cabe: ni sombra ni nada nuevo.
+    await expect(mas).toHaveCount(0)
+    return
+  }
+  await expect(mas).toBeVisible()
+  // La sombra está en el borde derecho de la caja y el Vehículo, fuera de ella.
+  const caja = page.getByRole('table').locator('xpath=..')
+  const [cajaMas, cajaTabla] = await Promise.all([mas.boundingBox(), caja.boundingBox()])
+  const bordeDerecho = cajaTabla.x + cajaTabla.width
+  expect(Math.abs(cajaMas.x + cajaMas.width - bordeDerecho)).toBeLessThan(3)
+  expect(await page.getByRole('textbox', { name: 'Vehículo' }).first().evaluate((el) => {
+    const r = el.getBoundingClientRect(); const c = el.closest('table').parentElement.getBoundingClientRect()
+    return r.left >= c.right
+  })).toBe(true)
+  // Revisión 2, U3: un nombre largo llega justo al borde de la caja, así que la sombra roza sus últimas letras. Lo que
+  // se sujeta es lo que se puede prometer: (1) el TEXTO de cada nombre acaba dentro de la caja (se miden las letras con
+  // la fuente del campo; el campo en sí siempre llega al borde y no dice nada), y (2) la sombra es estrecha (24 px como
+  // mucho) y tenue (negro al 20 % como mucho), para que esas letras se lean limpias. Con la de antes (32 px, al 35 %) falla.
+  const finDeLosNombres = await page.getByRole('textbox', { name: 'Conductor', exact: true }).evaluateAll((campos) => {
+    const lienzo = document.createElement('canvas').getContext('2d')
+    return campos.map((el) => {
+      const cs = getComputedStyle(el)
+      lienzo.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`
+      const espaciado = cs.letterSpacing === 'normal' ? 0 : parseFloat(cs.letterSpacing) * el.value.length
+      return { nombre: el.value, fin: el.getBoundingClientRect().left + parseFloat(cs.borderLeftWidth)
+        + parseFloat(cs.paddingLeft) + lienzo.measureText(el.value).width + espaciado }
+    })
+  })
+  for (const { nombre, fin } of finDeLosNombres) expect(fin, nombre).toBeLessThanOrEqual(bordeDerecho - 1)
+  expect(cajaMas.width).toBeLessThanOrEqual(24)
+  const oscuridad = await mas.evaluate((el) => {
+    const m = getComputedStyle(el).backgroundImage.match(/rgba?\(0,\s*0,\s*0(?:,\s*([\d.]+))?\)/)
+    return m ? Number(m[1] ?? 1) : null
+  })
+  expect(oscuridad).not.toBeNull()
+  expect(oscuridad).toBeLessThanOrEqual(0.2)
+  // Deslizada hasta el final, ya no hay más: la sombra se va. Y vuelve al volver al principio.
+  await caja.evaluate((el) => { el.scrollLeft = el.scrollWidth })
+  await expect(mas).toHaveCount(0)
+  await caja.evaluate((el) => { el.scrollLeft = 0 })
+  await expect(mas).toBeVisible()
+})
+
+// Revisión 1, T21: con «Todos», el aviso del paso 1 mandaba «arriba» y los botones de centro están en la misma pantalla.
+test('Plantilla con «Todos»: el aviso de guardar en el historial ya no manda «arriba»', async ({ page }) => {
+  await entrarConTodos(page)
+  await simularApi(page, 'vacio')
+  await page.goto('/panel/plantilla', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Para que se guarde sola en el historial, elige un centro.')).toBeVisible({ timeout: 45000 })
+  await expect(page.getByText(/centro arriba/)).toHaveCount(0)
+  for (const l of ['es', 'en', 'de', 'it', 'pt']) expect(DICT['pg.avisoCentro'][l], l).not.toMatch(/arriba|above|oben|sopra|acima/)
 })

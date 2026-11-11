@@ -276,10 +276,14 @@ export default function Aparcamiento() {
   async function comoAyer() {
     setBusy(true)
     try {
-      const r = await parkingUltimas(center, day)
+      /* Lo que hay en pantalla puede estar desfasado (11-11-2026): otra persona coloca una furgoneta después de que
+         esto cargara, o se cambió de día y el plano nuevo no ha llegado. Como /parking/assign pisa la plaza de esa
+         furgoneta sin preguntar, el plan se hace con el estado de este día pedido AHORA, no con `data`. */
+      const [r, ahora] = await Promise.all([parkingUltimas(center, day), parkingState(center, day)])
       const ultimas = lista(r.data?.vehicles).slice().sort((a, b) => String(b.day || '').localeCompare(String(a.day || '')))
-      const validas = new Set(zones.flatMap((z) => (z.spots || []).map((s) => String(s.code))))
-      const filas = data?.assignments || []
+      const zonasAhora = lista(ahora.data?.layout?.zones)
+      const validas = new Set((zonasAhora.length ? zonasAhora : zones).flatMap((z) => (z.spots || []).map((s) => String(s.code))))
+      const filas = lista(ahora.data?.assignments)
       const ocupadas = new Set(filas.flatMap((a) => [a.spot, a.reported_spot]).filter(Boolean).map(String))
       const puestas = new Set(filas.map((a) => a.vehicle_id))
       const conocidas = new Set(vehicles.map((v) => v.id))

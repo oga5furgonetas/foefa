@@ -34,6 +34,8 @@ const FICHEROS = [
   'pages/driver/SituarParada.jsx',
   // «¿Dónde?» corto (06-11-2026, diseño compacto): la etiqueta corta de los chips de «Prueba de entrega» y de la memoria.
   'lib/dejar.js',
+  // «Mis DNR» del portal del conductor (11-11-2026, tanda 2): la pantalla y lo que comparte con su casilla del inicio.
+  'pages/driver/MisDnr.jsx', 'pages/driver/dnrVistas.js',
 ]
 // Las piezas de la app de reparto (06-11-2026, diseño compacto): todo pages/driver/piezas/, sin nombrarlas una a una; si
 // no, sus textos no se comprueban y las claves que se mudan a ellas se dan por muertas.

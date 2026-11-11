@@ -16,6 +16,8 @@ import PedirDias from './PedirDias'
 import TrabajarMas from './TrabajarMas'
 import Tienda from './Tienda'
 import MiRuta from './MiRuta'
+import MisDnr from './MisDnr'
+import { useCasillaDnr, IconoDnr } from './dnrVistas'
 import { Boton, Aviso, Etiqueta } from './piezas'
 import DriverReferralWallet from './DriverReferralWallet'
 import Mercadillo from '../mercadillo/Mercadillo'
@@ -175,7 +177,7 @@ export default function DriverPortal() {
   // ?vista=mercadillo: el enlace del correo de «tienes un mensaje» (17-10-2026).
   const [vista, setVista] = useState(() => {
     const v = new URLSearchParams(window.location.search).get('vista')
-    return v === 'ruta' || v === 'mercadillo' || v === 'extra' ? v : 'inicio'
+    return v === 'ruta' || v === 'mercadillo' || v === 'extra' || v === 'dnr' ? v : 'inicio'
   })
   useEffect(() => {
     if (driver?.configurar_cuenta) setVista('clave')
@@ -284,6 +286,8 @@ export default function DriverPortal() {
         ? { matricula: r.data.vehicle.license_plate || '', enviada: !!r.data.already_inspected } : null))
       .catch(() => setHoyFurgo(null))
   }, [driver, vista])
+  // «Mis DNR» (11-11-2026): null si su empresa no tiene la DNR diaria; si no, con cuántas hay nuevas.
+  const casillaDnr = useCasillaDnr(driver, vista)
 
   const login = (d) => {
     localStorage.setItem(DRIVER_KEY, JSON.stringify(d))
@@ -316,6 +320,7 @@ export default function DriverPortal() {
   if (vista === 'dias') return <PedirDias onBack={() => setVista('inicio')} />
   if (vista === 'extra') return <TrabajarMas onBack={() => setVista('inicio')} />
   if (vista === 'turnos') return <MisTurnos onBack={() => setVista('inicio')} />
+  if (vista === 'dnr') return <MisDnr driverId={driver.id} onBack={() => setVista('inicio')} />
   if (vista === 'clave') return <MiClave obligatoria={!!driver.configurar_cuenta} onSalir={logout}
     onBack={() => {
       if (driver.configurar_cuenta) {
@@ -422,7 +427,9 @@ export default function DriverPortal() {
             sub={portal?.motivo === 'suspendido' ? 'Hoy no trabajas' : noLeToca ? 'Hoy no sales a ruta'
               : hoyFurgo?.enviada ? (hoyFurgo.matricula ? tx('Enviada hoy · {matricula}', { matricula: hoyFurgo.matricula }) : tx('Enviada hoy'))
                 : hoyFurgo?.matricula ? tx('Hoy: {matricula}', { matricula: hoyFurgo.matricula }) : 'Antes de salir a ruta'}
-            principal={!esDemo}
+            /* Ya enviada hoy, en el tono de las demás y no en el de marca (11-11-2026, revisión de la tanda 2): turquesa y a
+               todo lo ancho parecía que aún faltaba. Se puede seguir abriendo, por si hay que repetirla. */
+            principal={!esDemo && !hoyFurgo?.enviada}
             bloqueado={noLeToca || esDemo}
             onClick={() => setVista('auditoria')}
           />
@@ -495,6 +502,10 @@ export default function DriverPortal() {
                 : extrasProximos ? `${extrasProximos} día${extrasProximos > 1 ? 's' : ''} extra` : 'Sin vacantes ahora'}
               onClick={() => setVista('extra')}
             />
+          )}
+          {casillaDnr && (
+            <Casilla icono={IconoDnr} titulo={casillaDnr.titulo} detalle={casillaDnr.detalle} aviso={casillaDnr.nuevas}
+              onClick={() => setVista('dnr')} />
           )}
           {/* Sin «Comparte y gana» en la app de iPhone (09-11-2026): allí no hay invitaciones, bonos ni cartera. */}
           {!sinPagos() && <Casilla

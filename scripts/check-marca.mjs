@@ -60,6 +60,21 @@ const PERMITIDO = [
   ['i18nDict.js', "'nav.dnr'", 'nombre del menu de la DNR diaria'],
   // «Cómo va cada centro» del Inicio (11-11-2026) nombra la pantalla con su nombre del menú, y solo a quien la tiene.
   ['panel/pages/Dashboard.jsx', "t('nav.dnr')", 'el nombre del menu de la DNR diaria en «Cómo va cada centro»'],
+  // «Mis DNR» del portal del conductor (11-11-2026, tanda 2): la misma DNR diaria vista por cada conductor. Solo sale en
+  // las empresas que tienen ese módulo (el servidor contesta 404 a las demás y la casilla no se pinta).
+  ['pages/driver/MisDnr.jsx', '*', 'las DNR del propio conductor, parte de la DNR diaria'],
+  ['pages/driver/dnrVistas.js', '*', 'la casilla de «Mis DNR», parte de la DNR diaria'],
+  ['pages/driver/DriverPortal.jsx', "'dnr'", 'nombre interno de la vista «Mis DNR» del portal'],
+  ['lib/textosRutaA.js', '"mis dnr"', 'texto de «Mis DNR», parte de la DNR diaria'],
+  ['lib/textosRutaA.js', 'tus dnr.', 'textos de «Mis DNR», parte de la DNR diaria'],
+  // La frase grande de la semana, el recuento de las anteriores y qué es cada estado (rehecha el 11-11-2026).
+  ['lib/textosRutaA.js', '"esta semana llevas {', 'texto de «Mis DNR», parte de la DNR diaria'],
+  ['lib/textosRutaA.js', '"esta semana no llevas ninguna"', 'texto de «Mis DNR», parte de la DNR diaria'],
+  ['lib/textosRutaA.js', '"1 dnr"', 'texto de «Mis DNR», parte de la DNR diaria'],
+  ['lib/textosRutaA.js', '"{n} dnr"', 'texto de «Mis DNR», parte de la DNR diaria'],
+  ['lib/textosRutaA.js', '"amazon te la apunta como fallo."', 'texto de «Mis DNR», parte de la DNR diaria'],
+  ['lib/textosRutaA.js', '"amazon la revisó y no te la apunta."', 'texto de «Mis DNR», parte de la DNR diaria'],
+  ['lib/textosRutaA.js', '"amazon aún no la ha revisado;', 'texto de «Mis DNR», parte de la DNR diaria'],
 ]
 
 function ficheros(dir, out = []) {

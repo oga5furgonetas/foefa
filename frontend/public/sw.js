@@ -23,7 +23,8 @@ const ES_ICONO = /^\/(favicon\.svg|favicon\.png|icon-192\.png|icon-512\.png|appl
 self.addEventListener('push', (event) => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch (e) { data = {} }
-  const title = data.title || 'FlotaDSP'
+  // Un aviso sin título lleva la marca de hoy (11-11-2026): decía la de antes, y la marca es FDS en todo desde el 29-10.
+  const title = data.title || 'FDS'
   const options = {
     body: data.body || '',
     icon: '/favicon.svg',
@@ -43,6 +44,21 @@ self.addEventListener('notificationclick', (event) => {
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const c of list) {
         if (c.url.includes(url) && 'focus' in c) return c.focus()
+      }
+      /* (11-11-2026) Los avisos de días libres y refuerzos llevan su centro (`/panel/turnos?centro=OGA5`) y el panel
+         quita `centro` de la dirección al leerlo, así que ninguna pestaña abierta lo contiene: cada toque abría una
+         pestaña nueva. Si hay una abierta en la misma pantalla (la misma ruta), se usa esa: al frente y a la dirección
+         del aviso, para que el panel lea su centro. Si no se puede llevar (no la controla este SW), al menos al frente.
+         SOLO para los avisos del panel con `centro=` (revisión del 11-11-2026): el portal del conductor y la app de
+         reparto cambian de vista sin tocar la dirección, y llevar su pestaña a otra la recargaría entera (le cortaría
+         la subida de las fotos de la inspección). Para cualquier otro aviso, como siempre: se abre una pestaña nueva. */
+      const ruta = conCentroDelPanel(url) ? soloRuta(url) : ''
+      for (const c of list) {
+        if (ruta && soloRuta(c.url) === ruta && 'focus' in c) {
+          return c.focus()
+            .then((w) => ('navigate' in (w || c) ? (w || c).navigate(new URL(url, self.location.origin).href) : w))
+            .catch(() => null)
+        }
       }
       if (self.clients.openWindow) return self.clients.openWindow(url)
     })
@@ -67,6 +83,19 @@ self.addEventListener('activate', (event) => {
       .then(() => self.clients.claim())
   )
 })
+
+// La ruta de una dirección, sin `?…` ni `#…` ('/panel/turnos?centro=OGA5' → '/panel/turnos'); '' si no se entiende.
+function soloRuta(u) {
+  try { return new URL(u, self.location.origin).pathname.replace(/\/+$/, '') } catch (e) { return '' }
+}
+
+// ¿Es un aviso del panel que lleva su centro ('/panel/turnos?centro=OGA5')? Solo esos reaprovechan la pestaña abierta.
+function conCentroDelPanel(u) {
+  try {
+    const d = new URL(u, self.location.origin)
+    return /^\/panel(\/|$)/.test(d.pathname) && d.searchParams.has('centro')
+  } catch (e) { return false }
+}
 
 function esHtml(r) {
   return !!r && r.ok && (r.headers.get('content-type') || '').toLowerCase().includes('text/html')

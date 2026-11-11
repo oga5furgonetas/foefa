@@ -9,7 +9,7 @@ import {
   subirDiarios, verificarTransporterIds,
 } from '../api'
 import { lista } from '../../lib/lista'
-import { useOrden } from '../../lib/orden'
+import { useOrden, flechaOrden, claseOrden } from '../../lib/orden'
 import ThOrden from '../components/ThOrden'
 import AvisoIdAmazon from '../components/AvisoIdAmazon'
 import ElegirNave from '../components/ElegirNave'
@@ -63,6 +63,30 @@ function useEstrecha() {
   }, [])
   return si
 }
+
+/* ORDENAR EN EL MÓVIL (11-11-2026). Las tarjetas no tienen cabecera que pulsar: una
+   fila de botones con los mismos campos que la tabla y el mismo orden en tres pasos. */
+function OrdenMovil({ campos, orden, pulsar }) {
+  return (
+    <div role="group" aria-label="Ordenar por" className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] text-dark-500">Ordenar por</span>
+      {campos.map(([campo, txt]) => {
+        const activa = orden?.campo === campo
+        return (
+          <button key={campo} type="button" onClick={() => pulsar(campo)} aria-pressed={activa}
+            className={`inline-flex min-h-[44px] items-center gap-1 rounded-lg border px-2.5 text-xs ${
+              activa ? 'border-brand-500/50 bg-brand-500/15 text-brand-200' : 'border-dark-700 text-dark-400'}`}>
+            {txt}
+            <span className={`text-[11px] leading-none ${claseOrden(orden, campo)}`}>{flechaOrden(orden, campo)}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/* «06/11» de «2026-11-06» (las fechas del detalle); lo que no sea una fecha, tal cual. */
+const ddmm = (s) => (/^\d{4}-\d{2}-\d{2}/.test(s || '') ? `${s.slice(8, 10)}/${s.slice(5, 7)}` : (s || '—'))
 
 export default function Diarios() {
   const { center, centers, setCenter } = useOutletContext()
@@ -129,7 +153,12 @@ export default function Diarios() {
   const [textoIds, setTextoIds] = useState('')
   const [previaIds, setPreviaIds] = useState(null)
 
+  /* Cada carga lleva su número (11-11-2026): con ‹ › pulsadas seguidas, la respuesta
+     de una semana que llega tarde enseñaba sus cifras bajo las fechas de otra. Solo
+     cuenta la de la última petición. */
+  const peticion = useRef(0)
   const cargar = useCallback(async () => {
+    const n = ++peticion.current
     if (noCenter) return
     setCargando(true); setErr('')
     try {
@@ -137,13 +166,14 @@ export default function Diarios() {
         diariosPorConductor(center, rango.desde, rango.hasta),
         getDrivers(center),
       ])
+      if (n !== peticion.current) return
       setDatos(r.data)
       setConductores(lista(rd.data)
         .filter((d) => d.active !== false)
         .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })))
     } catch (e) {
-      setErr(e?.response?.data?.detail || 'No se pudieron cargar los diarios.')
-    } finally { setCargando(false) }
+      if (n === peticion.current) setErr(e?.response?.data?.detail || 'No se pudieron cargar los diarios.')
+    } finally { if (n === peticion.current) setCargando(false) }
   }, [center, rango, noCenter])
 
   useEffect(() => { cargar() }, [cargar])
@@ -189,7 +219,7 @@ export default function Diarios() {
       const centros = Object.keys(porCentro)
       const dondeTxt = centros.length === 1 ? ` en ${centros[0]}`
         : centros.length > 1 ? ` (${centros.map((c) => `${porCentro[c]} en ${c}`).join(', ')})` : ''
-      const msg = `${tot.reportes} reportes guardados${dondeTxt}: ${tot.dnr} DNR y ${tot.otras} filas de RTS, POD y contacto.`
+      const msg = `${tot.reportes} ${tot.reportes === 1 ? 'reporte guardado' : 'reportes guardados'}${dondeTxt}: ${tot.dnr} DNR y ${tot.otras} filas de RTS, POD y contacto.`
       setAviso(msg); setGuardadoEn({ aviso: msg, centros })
       // Colocarse donde están los datos que se acaban de subir.
       if (r.data.ultimo_dia) { yaColocado.current = true; setRango(semanaDe(r.data.ultimo_dia)) }
@@ -314,7 +344,17 @@ export default function Diarios() {
   }, [datos, busca, ordenar])
 
   // Con «Todos», un botón por centro ahí mismo (11-11-2026, portal_inicio-9).
-  if (noCenter) return <ElegirNave texto="Elige un centro para ver sus DNR." />
+  // Con su título encima, como Asignación y las demás pantallas (11-11-2026).
+  if (noCenter) {
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="flex items-center gap-2 font-display text-[clamp(22px,2.6vw,30px)] font-semibold tracking-[-0.02em] text-dark-50">
+          <AlertTriangle size={22} /> DNR diaria
+        </h1>
+        <ElegirNave texto="Elige un centro para ver sus DNR." />
+      </div>
+    )
+  }
 
   const t = datos?.totales || {}
   // El centro de la lista de la empresa que corresponde a uno escrito en un fichero.
@@ -359,15 +399,15 @@ export default function Diarios() {
         </div>
         <div className="ml-auto flex flex-wrap gap-2">
           <button onClick={() => setVerIds((v) => !v)}
-            className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-1.5 text-[12.5px] font-semibold text-dark-300 hover:text-dark-100">
+            className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-1.5 text-[12.5px] font-semibold text-dark-300 hover:text-dark-100 max-sm:min-h-[44px]">
             <IdCard size={15} /> Transporter IDs
           </button>
           <button onClick={() => setVerPegar((v) => !v)}
-            className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-1.5 text-[12.5px] font-semibold text-dark-300 hover:text-dark-100">
+            className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-1.5 text-[12.5px] font-semibold text-dark-300 hover:text-dark-100 max-sm:min-h-[44px]">
             <ClipboardPaste size={15} /> Pegar
           </button>
           <button onClick={() => ficheroRef.current?.click()} disabled={subiendo}
-            className="btn-primary flex items-center gap-1.5 text-[12.5px] disabled:opacity-50">
+            className="btn-primary flex items-center gap-1.5 text-[12.5px] disabled:opacity-50 max-sm:min-h-[44px]">
             {subiendo ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
             Subir Daily Report
           </button>
@@ -584,7 +624,7 @@ export default function Diarios() {
           <button onClick={confirmarSubida} disabled={subiendo || !previaSubida.totales?.reportes}
             className="btn-primary mt-3 flex items-center gap-1.5 text-sm disabled:opacity-40">
             {subiendo ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-            Guardar {previaSubida.totales?.reportes} reportes
+            Guardar {previaSubida.totales?.reportes} {previaSubida.totales?.reportes === 1 ? 'reporte' : 'reportes'}
           </button>
         </div>
       )}
@@ -884,6 +924,9 @@ export default function Diarios() {
       ) : estrecha ? (
         /* EN EL MÓVIL, UNA TARJETA POR CONDUCTOR (11-11-2026, horas_dnr-7): arriba el
            nombre y lo que cuenta (€ que puntúan · defectos · DNR); al tocarla, el resto. */
+        <>
+        <OrdenMovil orden={orden} pulsar={pulsar} campos={[['driver_name', 'Nombre'], ['dnr_total', 'DNR'],
+          ['defectos', 'Defectos'], ['euros_defectos', '€ que puntúan'], ['rts', 'RTS'], ['pod_fails', 'POD'], ['cc_fails', 'CC']]} />
         <ul className="space-y-2" data-testid="dnr-tarjetas">
           {filas.map((c) => {
             const abierta = abierto === c.transporter_id
@@ -912,9 +955,10 @@ export default function Diarios() {
                     </span>
                   </span>
                   <span className="flex shrink-0 items-start gap-1.5">
+                    {/* Sin € que puntúen, «nada puntúa» y no «— que puntúan» (11-11-2026). */}
                     <span className={`text-right text-base font-bold tabular-nums ${c.euros_defectos ? 'text-red-300' : 'text-dark-600'}`}>
                       {c.euros_defectos ? eur(c.euros_defectos) : '—'}
-                      <span className="block text-[10px] font-normal text-dark-500">que puntúan</span>
+                      <span className="block text-[10px] font-normal text-dark-500">{c.euros_defectos ? 'que puntúan' : 'nada puntúa'}</span>
                     </span>
                     {abierta ? <ChevronUp size={14} className="mt-1 text-dark-500" /> : <ChevronDown size={14} className="mt-1 text-dark-500" />}
                   </span>
@@ -953,7 +997,8 @@ export default function Diarios() {
                         {c.detalle.map((d) => (
                           <li key={d.tracking_id} className="px-2.5 py-1.5 text-[12px] text-dark-400">
                             <span className="flex items-center justify-between gap-2">
-                              <span className="tabular-nums">{d.fecha_concesion}</span>
+                              {/* La entrega también: es la que se coteja con quién llevaba la ruta (11-11-2026). */}
+                              <span className="tabular-nums">conc. {ddmm(d.fecha_concesion)} · entr. {ddmm(d.fecha_entrega)}</span>
                               <span className="flex items-center gap-2">
                                 <span className="tabular-nums text-dark-300">{d.valor || '—'}</span>
                                 <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
@@ -1002,6 +1047,7 @@ export default function Diarios() {
             )
           })}
         </ul>
+        </>
       ) : (
         <div className="card overflow-x-auto">
           <table className="w-full text-left text-[13px]">

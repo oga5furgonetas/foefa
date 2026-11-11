@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import {
   Upload, FileSpreadsheet, Loader2, AlertCircle, X, CheckCircle2,
-  Download, RotateCcw, Plus, ChevronDown, ChevronUp, Trash2, FolderOpen,
+  Download, RotateCcw, Plus, ChevronDown, ChevronUp, ChevronRight, Trash2, FolderOpen,
   Copy, ClipboardPaste, Car, Info, ClipboardCheck, Wand2, AlertTriangle, Smartphone,
 } from 'lucide-react'
 import { getToken } from '../auth'
@@ -993,7 +993,9 @@ export default function PlantillaGenerador() {
           {/* En el móvil la hoja se apretaba al ancho de la pantalla y no se leía ni la ruta entera («CX1») ni el nombre
               (11-11-2026): ahora cada celda tiene su mínimo y la tabla se desliza de lado, con la ruta y el conductor
               a la vista al entrar. */}
-          <div className="overflow-x-auto rounded-xl border border-dark-700">
+          {/* Y como el conductor llena la caja, en el móvil una sombra en el borde derecho dice que hay más columnas
+              (Móvil, Vehículo, las horas…) deslizando; se va al llegar al final (11-11-2026). */}
+          <TablaDeslizable>
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-[#FFD966] text-black">
@@ -1093,7 +1095,7 @@ export default function PlantillaGenerador() {
                 })}
               </tbody>
             </table>
-          </div>
+          </TablaDeslizable>
 
           <div className="mt-2">
             <button onClick={addRow} className="btn-ghost flex items-center gap-1.5 text-xs text-dark-400 hover:text-brand-300">
@@ -1274,6 +1276,42 @@ function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePi
               ))}
             </>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* La caja de la hoja, que se desliza de lado. En el móvil el conductor llena el ancho y Móvil, Vehículo y las horas
+   quedaban fuera sin ninguna pista: la tabla parecía de dos columnas (11-11-2026). Mientras quede algo a la derecha,
+   una sombra con una flecha en ese borde (solo por debajo de sm: en el ordenador la hoja cabe y nada cambia).
+   La sombra es estrecha y tenue (w-6, negro al 20 %): un nombre largo llega justo al borde y con una más ancha y
+   oscura sus últimas letras se leían oscurecidas; la flecha es la que avisa (11-11-2026). */
+function TablaDeslizable({ children }) {
+  const ref = useRef(null)
+  const [mas, setMas] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const medir = () => setMas(el.scrollLeft + el.clientWidth < el.scrollWidth - 2)
+    medir()
+    el.addEventListener('scroll', medir, { passive: true })
+    const ro = new ResizeObserver(medir)
+    ro.observe(el)
+    if (el.firstElementChild) ro.observe(el.firstElementChild)
+    return () => { el.removeEventListener('scroll', medir); ro.disconnect() }
+  }, [])
+  return (
+    <div className="relative">
+      <div ref={ref} className="overflow-x-auto rounded-xl border border-dark-700">
+        {children}
+      </div>
+      {mas && (
+        <div aria-hidden="true" data-testid="pg-tabla-mas"
+          className="pointer-events-none absolute inset-y-px right-px w-6 rounded-r-xl bg-gradient-to-l from-black/20 to-transparent sm:hidden">
+          <span className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white">
+            <ChevronRight size={15} />
+          </span>
         </div>
       )}
     </div>

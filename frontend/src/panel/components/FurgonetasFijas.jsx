@@ -209,13 +209,18 @@ function Vetadas({ c, furgos, placaDe, cambiar }) {
       <label htmlFor={`ff-v-${c.id}`} className="mb-1 block text-[12px] font-semibold uppercase tracking-wider text-dark-400">{t('ff.vetadas')}</label>
       {vetadas.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1.5" data-testid={`ff-vetadas-${c.id}`}>
-          {vetadas.map((id) => (
-            <button key={id} type="button" onClick={() => cambiar(c, { vetadas: vetadas.filter((x) => x !== id) })}
-              aria-label={txt(t('ff.vetadasQuitar'), { p: placaDe[id] || id })} title={txt(t('ff.vetadasQuitar'), { p: placaDe[id] || id })}
-              className="flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/[0.06] px-1.5 py-1 text-red-300 hover:bg-red-500/15 max-sm:min-h-[44px]">
-              <Placa p={placaDe[id] || id} pequena /> <X size={13} />
-            </button>
-          ))}
+          {/* Una vetada que ya no está en la lista (de baja o movida a otro centro) no tiene matrícula aquí: se dice
+              con palabras en lugar de enseñar su id interno (11-11-2026), y se puede quitar igual. */}
+          {vetadas.map((id) => {
+            const p = placaDe[id] || t('ff.vetadaFuera')
+            return (
+              <button key={id} type="button" onClick={() => cambiar(c, { vetadas: vetadas.filter((x) => x !== id) })}
+                aria-label={txt(t('ff.vetadasQuitar'), { p })} title={txt(t('ff.vetadasQuitar'), { p })}
+                className="flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/[0.06] px-1.5 py-1 text-red-300 hover:bg-red-500/15 max-sm:min-h-[44px]">
+                {placaDe[id] ? <Placa p={p} pequena /> : <span className="px-1 text-[12px] font-medium">{p}</span>} <X size={13} />
+              </button>
+            )
+          })}
         </div>
       )}
       <select id={`ff-v-${c.id}`} value="" onChange={(e) => e.target.value && cambiar(c, { vetadas: [...vetadas, e.target.value] })}
@@ -234,6 +239,7 @@ function Conductor({ c, furgos, placaDe, furgoDe, nombreDe, abierto, abrir, camb
   const { t } = useT()
   const f = c.fija
   const comparten = f.principal ? (furgoDe[f.principal]?.principal_de || []).filter((x) => x !== c.id) : []
+  const vetadasVivas = lista(f.vetadas).filter((id) => placaDe[id])
   return (
     <li className={`rounded-xl border transition ${abierto ? 'border-brand-500/40 bg-white/[0.03]' : 'border-dark-800 hover:border-dark-700'}`}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3.5 py-3">
@@ -242,7 +248,7 @@ function Conductor({ c, furgos, placaDe, furgoDe, nombreDe, abierto, abrir, camb
           <div className="min-w-0">
             <div className="truncate text-[14px] font-semibold text-dark-50">{c.nombre}</div>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-dark-400">
-              <span>{txt(t('ff.diasMes'), { n: c.dias_30 })}</span>
+              <span>{cuenta1(t, 'ff.diasMes', c.dias_30)}</span>
               {f.responsabilidad != null && (
                 <span className={`rounded px-1.5 font-semibold ${tonoNota(f.responsabilidad)}`}>{txt(t('ff.notaN'), { n: f.responsabilidad })}</span>
               )}
@@ -275,13 +281,15 @@ function Conductor({ c, furgos, placaDe, furgoDe, nombreDe, abierto, abrir, camb
             <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[12px] font-semibold text-amber-300">{t('ff.filtro.sinFurgo')}</span>
           )}
           {/* La marca de las vetadas en su línea (11-11-2026): se ve sin abrir la ficha. */}
-          {lista(f.vetadas).length > 0 && (
+          {/* Solo las que siguen en el centro (11-11-2026): una vetada que luego se dio de baja no sale en la lista de
+              furgonetas y en su placa se leía su id interno. */}
+          {vetadasVivas.length > 0 && (
             <span className="flex items-center gap-1.5" data-testid={`ff-marca-vetadas-${c.id}`}
-              title={lista(f.vetadas).map((id) => placaDe[id] || id).join(' · ')}>
+              title={vetadasVivas.map((id) => placaDe[id]).join(' · ')}>
               <Ban size={13} className="text-red-300" aria-hidden="true" />
               <span className="text-[11px] uppercase tracking-wider text-dark-500">{t('ff.noLleva')}</span>
-              {lista(f.vetadas).slice(0, 2).map((id) => <Placa key={id} p={placaDe[id] || id} pequena apagada />)}
-              {lista(f.vetadas).length > 2 && <span className="text-[11px] font-semibold text-dark-400">+{lista(f.vetadas).length - 2}</span>}
+              {vetadasVivas.slice(0, 2).map((id) => <Placa key={id} p={placaDe[id]} pequena apagada />)}
+              {vetadasVivas.length > 2 && <span className="text-[11px] font-semibold text-dark-400">+{vetadasVivas.length - 2}</span>}
             </span>
           )}
           {guardadoEn && <span className="flex items-center gap-1 text-[12px] text-emerald-300"><Check size={13} /> {t('ff.guardado')}</span>}
@@ -361,8 +369,11 @@ function Conductores({ datos, placaDe, furgoDe, nombreDe, recargar }) {
 
   async function cambiar(c, cambios) {
     const antes = filas
+    // Al apartar la furgoneta que se le sugería, la sugerencia se va también (11-11-2026): se quedaba, el filtro la
+    // seguía contando y «Asignársela» daba error (no puede ser su principal y estar vetada).
+    const fuera = (x) => 'principal' in cambios || ('vetadas' in cambios && lista(cambios.vetadas).includes(x.sugerencia?.furgo))
     setFilas((fs) => fs.map((x) => (x.id === c.id ? { ...x, fija: { ...x.fija, ...cambios },
-      sugerencia: 'principal' in cambios ? null : x.sugerencia } : x)))
+      sugerencia: fuera(x) ? null : x.sugerencia } : x)))
     try {
       await guardarFijaConductor(c.id, cambios)
       setGuardado(c.id)
@@ -509,7 +520,7 @@ function Furgonetas({ datos, center, nombreDe, recargar }) {
                     <div className="text-[13.5px] font-semibold text-dark-50">{c.nombre}</div>
                     <div className="flex flex-wrap gap-x-2 text-[12px] text-dark-400">
                       {c.responsabilidad != null && <span className={`rounded px-1.5 font-semibold ${tonoNota(c.responsabilidad)}`}>{txt(t('ff.notaN'), { n: c.responsabilidad })}</span>}
-                      <span>{c.dias} {t('ff.dias')}</span>
+                      <span>{cuenta1(t, 'ff.dias', c.dias)}</span>
                       <span>{golpesTxt(t, c.golpes_seguros || 0, c.golpes_posibles || 0)}</span>
                       {c.tiene_fija && <span>· {t('ff.tieneFija')}</span>}
                     </div>
