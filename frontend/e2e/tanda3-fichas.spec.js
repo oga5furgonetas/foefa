@@ -447,7 +447,7 @@ const PERSONAS_ONB = [
   { id: 'p4', nombre: 'EVA SIN NAVE', telefono: '600000004', centro: '', columna: 'pendiente', fase: 'por_pedir', ficha: null },
 ]
 
-async function incorporaciones(page, { personas = PERSONAS_ONB, ficha, todos = false } = {}) {
+async function incorporaciones(page, { personas = PERSONAS_ONB, ficha, reactivar, todos = false } = {}) {
   await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
   if (todos) await page.addInitScript(() => localStorage.setItem('panel_center', 'Todos'))
   await simularApi(page, 'vacio')
@@ -462,8 +462,9 @@ async function incorporaciones(page, { personas = PERSONAS_ONB, ficha, todos = f
       : json({ ya_tenia: false, ficha: { id: 'd-nueva', name: 'LUIS NUEVO', center: body.centro || '' } })(route)
   })
   await page.route(/\/api\/drivers\/[^/]+\/reactivar/, (route) => {
-    llamadas.push({ url: new URL(route.request().url()).pathname, body: route.request().postDataJSON() })
-    return json({ ok: true, driver: { id: 'd-juan', active: true } })(route)
+    const body = route.request().postDataJSON()
+    llamadas.push({ url: new URL(route.request().url()).pathname, body })
+    return reactivar ? reactivar(route, body) : json({ ok: true, driver: { id: 'd-juan', active: true } })(route)
   })
   await page.goto('/panel/incorporaciones', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('LUIS NUEVO')).toBeVisible({ timeout: 45000 })
@@ -534,7 +535,9 @@ test.describe('equipo-11 · de Incorporaciones a ficha de conductor', () => {
     await fila.getByRole('button', { name: 'Dar de alta como conductor' }).click()
     await fila.getByRole('button', { name: 'Crear la ficha' }).click()
     await expect.poll(() => vistos.length).toBe(2)
-    expect(vistos[1]).toContain('¿Es OTRA persona con el mismo correo?')
+    // Sin la casilla del correo no se le quita nada a la de baja: la pregunta no lo dice (segunda revisión, F2).
+    expect(vistos[1]).toContain('¿Es OTRA persona?')
+    expect(vistos[1]).not.toContain('dejará de entrar')
     expect(llamadas).toHaveLength(1)
     await expect(fila.getByTestId('ficha-creada')).toHaveCount(0)
   })
@@ -576,5 +579,170 @@ test.describe('equipo-11 · de Incorporaciones a ficha de conductor', () => {
     await expect(page.getByRole('button', { name: 'Dar de alta como conductor' })).toHaveCount(0)
     await expect(page.getByTestId('con-ficha')).toHaveCount(0)
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
+/* ── SEGUNDA REVISIÓN (11-11-2026): F2, F5/F6, F9, F10 y F12 ── */
+const CON_BAJA = { id: 'p5', nombre: 'ROSA VUELVE', telefono: '600000005', centro: 'NORTE', columna: 'pendiente',
+  fase: 'por_pedir', dni: '22222222J', ficha: { id: 'd-rosa', nombre: 'ROSA VUELVE', centro: 'SUR', por: 'dni', baja: true } }
+const OTRA_NAVE = { id: 'p6', nombre: 'PEPE OTRA NAVE', telefono: '600000006', centro: 'NORTE', columna: 'pendiente',
+  fase: 'por_pedir', ficha: { por: 'dni', centro: 'SUR' } }
+const REACTIVAR_409 = (route, body, n) => (n === 1
+  ? json({ detail: { mensaje: 'ROSA VUELVE ya tiene una ficha dada de baja (mismo DNI). Reactívala para conservar su historial.',
+    reactivar_id: 'd-rosa', nombre: 'ROSA VUELVE' } }, 409)(route)
+  : json({ ya_tenia: true, ficha: { id: 'd-rosa', name: 'ROSA VUELVE', center: 'NORTE' }, por: 'dni' })(route))
+
+test.describe('F2 y F10 · Incorporaciones dice las fichas de baja y no enseña las de otra nave', () => {
+  test('una ficha de baja se dice como tal (no «con ficha») y deja darle de alta', async ({ page }) => {
+    const fallos = vigilar(page)
+    await incorporaciones(page, { personas: [...PERSONAS_ONB, CON_BAJA] })
+    const fila = page.locator('.card', { hasText: 'ROSA VUELVE' })
+    await expect(fila.getByTestId('ficha-de-baja')).toHaveText('ficha de baja')
+    await expect(fila.getByTestId('con-ficha')).toHaveCount(0)
+    await abrirPersona(page, 'ROSA VUELVE')
+    await expect(fila.getByTestId('tiene-ficha-de-baja')).toContainText('Tiene una ficha de conductor dada de baja (SUR)')
+    await expect(fila.getByTestId('ya-tiene-ficha')).toHaveCount(0)
+    await expect(fila.getByRole('button', { name: 'Dar de alta como conductor' })).toBeVisible()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('con la casilla del correo, el segundo paso sigue diciendo que la de baja deja de entrar con él', async ({ page }) => {
+    const llamadas = await incorporaciones(page, {
+      ficha: json({ detail: { mensaje: 'Ya tiene una ficha dada de baja con este correo.', reactivar_id: 'd-juan' } }, 409),
+    })
+    const vistos = dialogos(page, [false, false])
+    const fila = page.locator('.card', { hasText: 'LUIS NUEVO' })
+    await abrirPersona(page, 'LUIS NUEVO')
+    await fila.getByRole('button', { name: 'Dar de alta como conductor' }).click()
+    await fila.getByRole('checkbox').check()
+    await fila.getByRole('button', { name: 'Crear la ficha' }).click()
+    await expect.poll(() => vistos.length).toBe(2)
+    expect(vistos[1]).toContain('¿Es OTRA persona con el mismo correo?')
+    expect(vistos[1]).toContain('dejará de entrar con este correo')
+    expect(llamadas).toHaveLength(1)
+  })
+
+  test('de otra nave que no ve: dice que tiene ficha, pero sin «Abrir»', async ({ page }) => {
+    const fallos = vigilar(page)
+    await incorporaciones(page, { personas: [...PERSONAS_ONB, OTRA_NAVE] })
+    const fila = page.locator('.card', { hasText: 'PEPE OTRA NAVE' })
+    await expect(fila.getByTestId('con-ficha')).toHaveText('con ficha')
+    await abrirPersona(page, 'PEPE OTRA NAVE')
+    await expect(fila.getByTestId('ya-tiene-ficha')).toContainText('Ya tiene ficha de conductor (SUR)')
+    await expect(fila.getByRole('link', { name: 'Abrir' })).toHaveCount(0)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
+test.describe('F9 · reactivar desde Incorporaciones, como en Conductores', () => {
+  test('con el ID de reparto en otra ficha pregunta y la reactiva sin él, en la nave de la persona, y la enlaza', async ({ page }) => {
+    const llamadas = await incorporaciones(page, {
+      personas: [...PERSONAS_ONB, CON_BAJA], ficha: REACTIVAR_409,
+      reactivar: (route, body) => (body.quitar_id
+        ? json({ ok: true, driver: { id: 'd-rosa', active: true } })(route)
+        : json({ detail: { mensaje: 'ANA CON FICHA ya tiene ficha (ID de reparto AAAAA11111BB), centro NORTE.', abrir_id: 'd9',
+          conflicto: 'id_reparto', transporter_id: 'AAAAA11111BB' } }, 409)(route)),
+    })
+    const vistos = dialogos(page, [true, true])
+    const fila = page.locator('.card', { hasText: 'ROSA VUELVE' })
+    await abrirPersona(page, 'ROSA VUELVE')
+    await fila.getByRole('button', { name: 'Dar de alta como conductor' }).click()
+    await fila.getByRole('button', { name: 'Crear la ficha' }).click()
+    await expect(fila.getByTestId('ficha-creada')).toContainText('Ficha de conductor lista (NORTE)')
+    expect(vistos[0]).toContain('Aceptar: reactivar su ficha')
+    expect(vistos[1]).toContain('SIN ese ID de reparto')
+    expect(llamadas).toEqual([
+      { url: '/api/incorporaciones/personas/p5/ficha-conductor', body: { usar_correo: false, centro: 'NORTE' } },
+      { url: '/api/drivers/d-rosa/reactivar', body: { center: 'NORTE' } },
+      { url: '/api/drivers/d-rosa/reactivar', body: { center: 'NORTE', quitar_id: true } },
+      { url: '/api/incorporaciones/personas/p5/ficha-conductor', body: { usar_correo: false, centro: 'NORTE' } }])
+  })
+
+  test('con el ID de reparto en otra ficha y «Cancelar», no reactiva ni crea nada', async ({ page }) => {
+    const llamadas = await incorporaciones(page, {
+      personas: [...PERSONAS_ONB, CON_BAJA], ficha: REACTIVAR_409,
+      reactivar: json({ detail: { mensaje: 'ANA CON FICHA ya tiene ficha (ID de reparto AAAAA11111BB).', abrir_id: 'd9',
+        conflicto: 'id_reparto', transporter_id: 'AAAAA11111BB' } }, 409),
+    })
+    const vistos = dialogos(page, [true, false])
+    const fila = page.locator('.card', { hasText: 'ROSA VUELVE' })
+    await abrirPersona(page, 'ROSA VUELVE')
+    await fila.getByRole('button', { name: 'Dar de alta como conductor' }).click()
+    await fila.getByRole('button', { name: 'Crear la ficha' }).click()
+    await expect.poll(() => vistos.length).toBe(2)
+    await expect(fila.getByRole('button', { name: 'Crear la ficha' })).toBeEnabled()
+    expect(llamadas.map((l) => l.url)).toEqual(['/api/incorporaciones/personas/p5/ficha-conductor', '/api/drivers/d-rosa/reactivar'])
+    await expect(fila.getByTestId('ficha-creada')).toHaveCount(0)
+  })
+
+  test('con el correo en otra ficha activa no reactiva y ofrece abrirla en Conductores', async ({ page }) => {
+    const llamadas = await incorporaciones(page, {
+      personas: [...PERSONAS_ONB, CON_BAJA], ficha: REACTIVAR_409,
+      reactivar: json({ detail: { mensaje: 'ANA CON FICHA ya tiene ficha (correo rosa@ejemplo.es), centro NORTE.', abrir_id: 'd9',
+        conflicto: 'correo' } }, 409),
+    })
+    const vistos = dialogos(page, [true, true])
+    await abrirPersona(page, 'ROSA VUELVE')
+    const fila = page.locator('.card', { hasText: 'ROSA VUELVE' })
+    await fila.getByRole('button', { name: 'Dar de alta como conductor' }).click()
+    await fila.getByRole('button', { name: 'Crear la ficha' }).click()
+    await expect(page).toHaveURL(/\/panel\/conductores\?open=d9/)
+    expect(vistos[1]).toContain('No se reactiva')
+    expect(llamadas).toHaveLength(2)
+  })
+
+  test('con el correo en una ficha de otra nave (sin abrir_id) lo dice y no hace nada más', async ({ page }) => {
+    const llamadas = await incorporaciones(page, {
+      personas: [...PERSONAS_ONB, CON_BAJA], ficha: REACTIVAR_409,
+      reactivar: json({ detail: { mensaje: 'Ese correo (rosa@ejemplo.es) ya lo tiene una ficha activa de SUR, que no tienes asignada.',
+        centro: 'SUR', conflicto: 'correo' } }, 409),
+    })
+    const vistos = dialogos(page, [true])
+    await abrirPersona(page, 'ROSA VUELVE')
+    const fila = page.locator('.card', { hasText: 'ROSA VUELVE' })
+    await fila.getByRole('button', { name: 'Dar de alta como conductor' }).click()
+    await fila.getByRole('button', { name: 'Crear la ficha' }).click()
+    await expect.poll(() => vistos.length).toBe(2)
+    expect(vistos[1]).toContain('que no tienes asignada')
+    expect(vistos[1]).toContain('No se reactiva')
+    await expect(page).toHaveURL(/\/panel\/incorporaciones/)
+    expect(llamadas).toHaveLength(2)
+    await expect(fila.getByTestId('ficha-creada')).toHaveCount(0)
+  })
+})
+
+test.describe('F5/F6 · quién dio la baja lo dice el servidor', () => {
+  test('una que sacó la hoja y luego dio de baja la oficina dice «de baja desde…»', async ({ page }) => {
+    const fallos = vigilar(page)
+    await conBajas(page, { bajas: [
+      { ...BAJAS[0], desactivada_por: 'hoja', origen: 'oficina' },
+      { ...BAJAS[1], origen: 'hoja' }] })
+    await page.getByRole('button', { name: 'Bajas (2)' }).click()
+    const juan = page.getByTestId('baja-desde').filter({ hasText: 'de baja desde 05/11/2026' })
+    await expect(juan).toHaveCount(1)
+    await expect(page.getByTestId('baja-desde').filter({ hasText: 'la sacó la hoja de Google' })).toHaveCount(1)
+    await abrirFicha(page, 'JUAN REY')
+    await expect(page.getByTestId('ficha-de-baja')).toContainText('de baja desde 05/11/2026 (por Dani)')
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
+test.describe('F12 · el chip «Bajas» sin ningún activo o sin coincidencias', () => {
+  test('sin ningún conductor activo sale el chip y lleva a las bajas', async ({ page }) => {
+    const fallos = vigilar(page)
+    await panel(page, { lista: [], antes: () => page.route(/\/api\/drivers\/bajas/, json(BAJAS)) })
+    await expect(page.getByText('No hay conductores', { exact: false }).first()).toBeVisible({ timeout: 45000 })
+    await page.getByRole('button', { name: 'Bajas (2)' }).click()
+    await expect(page.getByTestId('aviso-bajas')).toBeVisible()
+    await expect(page.getByText('JUAN REY').first()).toBeVisible()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('si la búsqueda no casa con ningún activo, el chip sigue ahí', async ({ page }) => {
+    await conBajas(page)
+    await page.getByPlaceholder('Buscar conductor…').fill('juan rey')
+    await expect(page.getByText('Nadie coincide con «juan rey»')).toBeVisible()
+    await page.getByRole('button', { name: 'Bajas (1)' }).click()
+    await expect(page.getByText('JUAN REY').first()).toBeVisible()
   })
 })
