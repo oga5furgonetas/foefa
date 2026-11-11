@@ -402,8 +402,9 @@ export const cuadranteDeshacer = (center, soloSi) =>
 // «Avisar a los conductores» (11-11-2026): quién tiene cambios sin avisar y, al pulsar, se les avisa (solo a los marcados).
 export const cuadranteAvisosPrevia = (center) => api.post('/cuadrante/avisos/previa', { center })
 // Los desmarcados (los que la oficina vio y quitó) van aparte: no se les avisa y no vuelven mientras su día siga igual.
-export const cuadranteAvisosEnviar = (center, driverIds, descartarIds = []) =>
-  api.post('/cuadrante/avisos/enviar', { center, driver_ids: driverIds, descartar_ids: descartarIds }, { timeout: 60000 })
+// `vistas` (opcional): las marcas de los días que se enseñaron; solo se descarta lo visto.
+export const cuadranteAvisosEnviar = (center, driverIds, descartarIds = [], vistas) =>
+  api.post('/cuadrante/avisos/enviar', { center, driver_ids: driverIds, descartar_ids: descartarIds, ...(vistas ? { vistas } : {}) }, { timeout: 60000 })
 // La hoja del cuadrante: los apuntes del DIARIO y el registro de DEBER HORAS.
 export const getDiario = (center, fecha) => api.get('/cuadrante/diario', { params: { center, fecha } })
 export const guardarDiario = (center, fecha, cambios, notas) =>

@@ -340,6 +340,77 @@ async def test_garantia_d_desmarcado_y_cambiado_a_otra_cosa_dice_lo_que_sabia(ba
     assert await _previa() == [("d1", [(MAN, "trabajas", "vacaciones")])]
 
 
+# Fleco 1 (11-11-2026, segunda ronda): la oficina solo descarta lo que VIO. La previa da una `marca` por día y el
+# panel la devuelve en `vistas`; lo que cambió después de la previa no se descarta y vuelve a salir.
+
+async def _marcas():
+    r = await server.cuadrante_avisos_previa({"center": "OGA5"}, OFI)
+    return {p["driver_id"]: [d["marca"] for d in p["dias"]] for p in r["personas"]}
+
+
+def _pend(t, did, fecha):
+    return next(d for d in t[PEND].docs if (d["driver_id"], d["fecha"]) == (did, fecha))
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_fleco1_la_previa_da_una_marca_por_dia(base):
+    await _aceptar(base.t, CAMBIOS)
+    marcas = await _marcas()
+    assert set(marcas) == {"d1", "d4"} and all(isinstance(m, str) and m for ms in marcas.values() for m in ms)
+    # Cambia con cada cambio de la celda.
+    await _celdas(base.t, [("d1", MAN, "V")])
+    assert (await _marcas())["d1"] != marcas["d1"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_fleco1_un_desmarcado_que_cambia_entre_la_previa_y_el_envio_vuelve_a_salir(base):
+    await _aceptar(base.t, CAMBIOS)
+    marcas = await _marcas()
+    # Con la ventana abierta, el día de Ana cambia otra vez: la oficina vio «libras» y ahora es «vacaciones».
+    await _celdas(base.t, [("d1", MAN, "V")])
+    r = await server.cuadrante_avisos_enviar({"center": "OGA5", "driver_ids": ["d4"], "descartar_ids": ["d1"],
+                                              "vistas": marcas["d1"]}, OFI)
+    assert (r["avisados"], r["descartados"]) == (1, 0) and _bandeja(base.t) == ["d4"]
+    assert "visto" not in _pend(base.t, "d1", MAN)
+    assert await _previa() == [("d1", [(MAN, "trabajas", "vacaciones")])]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_fleco1_lo_que_vio_se_descarta_y_un_dia_nuevo_del_mismo_conductor_no(base):
+    await _aceptar(base.t, CAMBIOS)
+    marcas = await _marcas()
+    await _celdas(base.t, [("d1", PAS, "V")])                                # un día más de Ana, después de la previa
+    r = await server.cuadrante_avisos_enviar({"center": "OGA5", "driver_ids": [], "descartar_ids": ["d1", "d4"],
+                                              "vistas": marcas["d1"] + marcas["d4"]}, OFI)
+    assert (r["avisados"], r["descartados"]) == (0, 2) and base.t["avisos_movil"].docs == []
+    assert _pend(base.t, "d1", MAN)["visto"] == "libras" and "visto" not in _pend(base.t, "d1", PAS)
+    assert await _previa() == [("d1", [(PAS, "sin turno", "vacaciones")])]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_fleco1_un_cambio_por_fuera_del_cuadrante_entre_la_previa_y_el_envio_tampoco_se_descarta(base):
+    """Lo que no pasa por el cuadrante (la rejilla escondida de Turnos) cambia el turno sin cambiar `tocado`: la marca
+    lleva también lo que se enseñó, así que tampoco se descarta lo que nadie vio."""
+    await _aceptar(base.t, CAMBIOS)
+    marcas = await _marcas()
+    _celda(base.t, "d1", MAN).update({"cod": "V", "type": "vacaciones"})
+    r = await server.cuadrante_avisos_enviar({"center": "OGA5", "driver_ids": ["d4"], "descartar_ids": ["d1"],
+                                              "vistas": marcas["d1"]}, OFI)
+    assert r["descartados"] == 0 and "visto" not in _pend(base.t, "d1", MAN)
+    assert await _previa() == [("d1", [(MAN, "trabajas", "vacaciones")])]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_fleco1_sin_vistas_como_antes(base):
+    """Sin `vistas` en el cuerpo se descarta lo que hay al enviar (lo de la primera ronda)."""
+    await _aceptar(base.t, CAMBIOS)
+    await _marcas()
+    await _celdas(base.t, [("d1", MAN, "V")])
+    r = await server.cuadrante_avisos_enviar({"center": "OGA5", "driver_ids": ["d4"], "descartar_ids": ["d1"]}, OFI)
+    assert r["descartados"] == 1 and _pend(base.t, "d1", MAN)["visto"] == "vacaciones"
+    assert await _previa() == []
+
+
 @pytest.mark.asyncio(loop_scope="session")
 async def test_garantia_e_dos_envios_a_la_vez_no_avisan_dos_veces(base, monkeypatch):
     await _aceptar(base.t, CAMBIOS)
