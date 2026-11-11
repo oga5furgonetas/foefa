@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import {
   Loader2, Search, UserPlus, ClipboardPaste, Send, Check, MessageSquare, AlertTriangle, X,
@@ -129,10 +129,16 @@ export default function Incorporaciones() {
      lo mismo hacen dudar de los dos. Ahora lo que se ve ES el paso elegido. */
   const [paso, setPaso] = useState('papeles')
 
+  /* EL CENTRO QUE SE ESTÁ MIRANDO (10-11-2026, segunda revisión S8). Tras «Ponerla en X», un alta o cualquier
+     edición se recarga con el `cargar` del clic, que pide el centro de ENTONCES. Si arriba se cambió de centro mientras
+     iba la petición, esa lista llegaba después y pisaba la del centro nuevo (arriba DGA1, abajo las personas de OGA5).
+     Ahora la respuesta de un centro que ya no es el de arriba se tira. */
+  const centroMirado = useRef(center)
+  useEffect(() => { centroMirado.current = center }, [center])
   const cargar = useCallback(() => {
     getIncorporaciones(center)
-      .then((r) => { setD(normaliza(r.data)); setErr('') })
-      .catch((e) => setErr(e?.response?.data?.detail || 'No se ha podido cargar.'))
+      .then((r) => { if (centroMirado.current === center) { setD(normaliza(r.data)); setErr('') } })
+      .catch((e) => { if (centroMirado.current === center) setErr(e?.response?.data?.detail || 'No se ha podido cargar.') })
   }, [center])
   useEffect(() => { cargar() }, [cargar])
 

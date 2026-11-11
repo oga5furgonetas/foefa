@@ -9251,15 +9251,6 @@ async def _temporal_comun(admin: dict, center: Optional[str], incluir_propias: b
     acotado = _filtro_centro(admin, center)
     filtro = {"status": {"$ne": "deleted"}, "active": {"$ne": False}, **acotado}
     conductores = await db.drivers.find(filtro, {"_id": 0, "id": 1, "name": 1, "email": 1, "center": 1}).to_list(5000)
-    # LOS SIN CENTRO QUE SE QUEDAN FUERA (10-11-2026, revisión de la corrección, R40/R42): la lista de Conductores los
-    # enseña en cualquier centro (get_drivers), pero la temporal acotada a un centro no los toca. Se cuentan para que la
-    # confirmación lo diga y no sea una sorpresa. Con «Todos» y sin límites entran y no hay nadie fuera.
-    sin_centro_fuera = 0
-    if acotado:
-        sin_centro_fuera = len(await db.drivers.find(
-            {"status": {"$ne": "deleted"}, "active": {"$ne": False},
-             "$or": [{"center": {"$in": [None, ""]}}, {"center": {"$regex": r"^\s*$"}}]},
-            {"_id": 0, "id": 1}).to_list(5000))
     # El desglose por centro, con el código limpio ('AMZL OGA5 SANTIAGO XPT', 'oga5' y 'OGA5 ' son OGA5; R43).
     conocidos = await _centros_conocidos()
     todas = await db.driver_accounts.find(
@@ -9272,21 +9263,50 @@ async def _temporal_comun(admin: dict, center: Optional[str], incluir_propias: b
         if e:
             por_correo.setdefault(e, []).append(a)
 
+    def _por_que_no(c: dict) -> str:
+        """Por qué la temporal NO tocaría a este conductor ('' si sí lo tocaría). Un solo sitio para el bucle y para los
+        «sin centro que se quedan fuera» (10-11-2026, segunda revisión S7): así los dos cuentan con la misma regla."""
+        email = (c.get("email") or "").strip().lower()
+        if not email:
+            return "sin_email"
+        cuenta = cuentas.get(c["id"])
+        if cuenta and not cuenta.get("active", True):
+            return "inactiva"
+        if not incluir_propias and _ya_eligio_la_suya(([cuenta] if cuenta else []) + por_correo.get(email, [])):
+            return "respetada"
+        return ""
+
+    # LOS SIN CENTRO QUE SE QUEDAN FUERA (10-11-2026, revisión de la corrección, R40/R42): la lista de Conductores los
+    # enseña en cualquier centro (get_drivers), pero la temporal acotada a un centro no los toca. Se cuentan para que la
+    # confirmación lo diga y no sea una sorpresa. Con «Todos» y sin límites entran y no hay nadie fuera.
+    # Segunda revisión (S7): solo cuentan los que la temporal SÍ tocaría si entraran (con correo, sin el acceso
+    # desactivado y, salvo `incluir_propias`, sin la suya); los demás se quedarían fuera igual con «Todos». Y
+    # `con_todos_entran` dice si «Todos» los incluiría: a un usuario limitado a sus centros, nunca.
+    sin_centro_fuera = 0
+    if acotado:
+        sin_centro = await db.drivers.find(
+            {"status": {"$ne": "deleted"}, "active": {"$ne": False},
+             "$or": [{"center": {"$in": [None, ""]}}, {"center": {"$regex": r"^\s*$"}}]},
+            {"_id": 0, "id": 1, "email": 1}).to_list(5000)
+        sin_centro_fuera = sum(1 for c in sin_centro if not _por_que_no(c))
+    con_todos_entran = not _filtro_centro(admin, None)
+
     actualizadas, sin_email, omitidas_inactivas, respetadas = 0, 0, 0, 0
     naves = {}
     ahora = datetime.now(timezone.utc).isoformat()
     for c in conductores:
         email = (c.get("email") or "").strip().lower()
-        if not email:
+        motivo = _por_que_no(c)
+        if motivo == "sin_email":
             # Sin correo no hay con que entrar. Se cuentan y se dicen: si no,
             # el numero de altas no cuadra con la plantilla y no se sabe por que.
             sin_email += 1
             continue
         cuenta = cuentas.get(c["id"])
-        if cuenta and not cuenta.get("active", True):
+        if motivo == "inactiva":
             omitidas_inactivas += 1
             continue
-        if not incluir_propias and _ya_eligio_la_suya(([cuenta] if cuenta else []) + por_correo.get(email, [])):
+        if motivo == "respetada":
             respetadas += 1                           # la suya sigue valiendo: ni se toca ni se desbloquea
             continue
         nave = _centro_norm(c.get("center"), conocidos) or "sin centro"
@@ -9316,7 +9336,8 @@ async def _temporal_comun(admin: dict, center: Optional[str], incluir_propias: b
         naves[nave] = naves.get(nave, 0) + 1
     return {"actualizadas": actualizadas, "ya_tenian": len(cuentas), "sin_email": sin_email,
             "cuentas_inactivas": omitidas_inactivas, "respetadas": respetadas,
-            "naves": dict(sorted(naves.items())), "sin_centro_fuera": sin_centro_fuera}
+            "naves": dict(sorted(naves.items())), "sin_centro_fuera": sin_centro_fuera,
+            "con_todos_entran": con_todos_entran}
 
 
 @auth_router.get("/driver-accounts/generar/previa")
