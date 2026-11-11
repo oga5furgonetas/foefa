@@ -41378,10 +41378,10 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
         center = ""
     # LA NAVE DEL PLAN SE MIRA SIEMPRE, no solo con «Todos» (10-11-2026). Con OGA5
     # elegido, el plan de DGA1 —con «DGA1» en su cabecera— se guardaba como el de
-    # OGA5 y pisaba el bueno. Ahora: si el plan dice otra nave (por su cabecera o,
-    # si no la trae, por las fichas de sus conductores, con mayoría clara), no se
+    # OGA5 y pisaba el bueno. Ahora: si la CABECERA del plan dice otra nave, no se
     # guarda y se contesta `otra_nave` para que la pantalla ofrezca guardarlo
-    # allí. Si no se puede saber, como siempre: manda la elegida.
+    # allí. Sin cabecera, manda la elegida, como siempre (las fichas solo avisan,
+    # en `parece_de`, más abajo).
     del_texto = await _whc_centro_del_texto(texto)
     # Si quien lo manda no dice la nave, se saca de la cabecera del propio plan.
     deducido = ""
@@ -41407,25 +41407,36 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
     # cuenta desde cuando se pegó allí.
     es_el_guardado = False
     previo = None
+    # LA HORA DEL PEGADO GUARDADO, SOLO AL ABRIR Y AL RECALCULAR (11-11-2026). Un
+    # pegado nuevo («Ver cómo vamos») es de AHORA aunque el texto sea idéntico al
+    # guardado: el portal da el mismo texto el martes temprano que el lunes por la
+    # noche, y salía «Pegado ayer» con el ritmo del lunes. Se conserva con
+    # guardar=false (abrir la pantalla) o con `recalcular` (opcional, lo manda
+    # «Recalcular» de la pantalla nueva). Sin ninguno de los dos (la web vieja),
+    # cada petición que guarda cuenta como pegada ahora, como siempre.
+    conservar_pegado = data.get("guardar") is False or data.get("recalcular") is True
     if center:
         previo = await db.whc_planes.find_one(
             {"center": center, "week": sun_plan},
             {"_id": 0, "texto": 1, "pegado_en": 1, "updated_at": 1, "excepciones": 1})
         if previo and previo.get("texto") == texto[:400000]:
-            pegado_en = previo.get("pegado_en") or previo.get("updated_at")
+            if conservar_pegado:
+                pegado_en = previo.get("pegado_en") or previo.get("updated_at")
             es_el_guardado = True
-    if center and not otra_nave and not del_texto and not es_el_guardado \
-            and data.get("ignorar_fichas") is not True:
-        # `ignorar_fichas` (opcional, 11-11-2026): «Guardarlo aquí de todas formas».
-        # Las fichas pueden estar sin actualizar (la gente de DGA2 con la ficha aún
-        # en OGA5) y no pueden impedir que la oficina guarde su plan. La cabecera,
-        # en cambio, sí manda siempre.
-        # Y NO CON EL PLAN YA GUARDADO EN LA ELEGIDA (11-11-2026): alguien lo guardó
-        # ahí a sabiendas. Mirar las fichas cada vez que se abría o se recalculaba
-        # lo sacaba como «parece de OGA5 · Quitarlo de DGA2» y el «Recalcular» no
-        # guardaba las excepciones. Las fichas quedan para los pegados nuevos, que
-        # tienen el «de todas formas»; un plan guardado solo lo señala su cabecera.
-        otra_nave = await _whc_nave_por_fichas(conductores, center)
+    # LAS FICHAS SOLO AVISAN, NUNCA IMPIDEN GUARDAR (11-11-2026). Pueden estar sin
+    # poner al día (la gente de DGA2 con la ficha aún en OGA5, o conductores que
+    # comparten nave), y la web vieja en caché no tenía forma de guardar el plan:
+    # un plan sin cabecera se guarda en la elegida como siempre, y si las fichas
+    # apuntan con mayoría clara a otra nave se cuenta aparte en `parece_de`, que
+    # no es `otra_nave` (eso, solo la cabecera, que es fiable). `ignorar_fichas`
+    # se sigue aceptando y ya no hace nada. Un plan ya guardado en la elegida (al
+    # abrirlo o recalcularlo) no se mira por las fichas.
+    parece_de = None
+    if center and not otra_nave and not del_texto and not es_el_guardado:
+        por_fichas = await _whc_nave_por_fichas(conductores, center)
+        if por_fichas:
+            parece_de = {"centro": por_fichas["centro"], "casan_alli": por_fichas["casan_alli"],
+                         "casan_aqui": por_fichas["casan_aqui"]}
     dia_pegado = _whc_dia_local(pegado_en) if pegado_en else None
     if not pegado_en:
         pegado_en = datetime.now(timezone.utc).isoformat()
@@ -41627,12 +41638,16 @@ async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
         # Por que no se ha guardado, cuando no es simplemente que faltara la nave.
         "aviso_guardado": aviso_guardado,
         # 10-11-2026. `otra_nave`: el plan es de otra nave que la elegida ({centro,
-        # por: "cabecera"|"fichas"}) y no se ha guardado; la pantalla ofrece
-        # mandarlo allí. `pegado_en`/`pegado_hoy`: cuándo se pegó este texto, para
+        # por: "cabecera"}, solo por su cabecera desde el 11-11-2026) y no se ha
+        # guardado; la pantalla ofrece mandarlo allí. `parece_de` (11-11-2026): sin
+        # cabecera, las fichas de sus conductores apuntan con mayoría clara a otra
+        # nave ({centro, casan_alli, casan_aqui}); solo es un aviso: el plan se ha
+        # guardado igual. `pegado_en`/`pegado_hoy`: cuándo se pegó este texto, para
         # no presentar como de hoy lo que dice «ahora» un plan de otro día.
         # `solo_analisis`: se pidió guardar=false (abrir la pantalla), no es un
         # pegado nuevo que se haya quedado sin guardar.
         "otra_nave": otra_nave,
+        "parece_de": parece_de,
         # 11-11-2026. `es_el_guardado`: el texto es el que ya hay guardado en la
         # nave pedida (con `otra_nave`, un plan mal guardado de antes). `ya_hay_plan`:
         # con sustituir=false, el plan distinto que ya tenía ({pegado_en, n_conductores}).
