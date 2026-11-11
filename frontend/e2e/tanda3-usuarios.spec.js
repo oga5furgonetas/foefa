@@ -285,3 +285,69 @@ test.describe('Usuarios · el jefe no gestiona a quien puede más (P16/P17)', ()
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })
+
+/* V4 (tercera ronda): el usuario de rol vacío que un jefe dio de alta con el formulario de main («Admin completo» sin
+   querer). El servidor le pone `puede_gestionar: true` al jefe que lo creó; la pantalla le dice que al guardar pasa a
+   Dispatcher, y lo guarda como Dispatcher. */
+test.describe('Usuarios · el jefe y la gente que él mismo dio de alta (V4)', () => {
+  const USUARIOS = [
+    { id: 'a1', name: 'Jefe DGA1', username: 'jefe', admin_role: 'center_manager', allowed_centers: ['DGA1'], puede_gestionar: false },
+    { id: 'a2', name: 'Mery', username: 'mery', admin_role: 'dispatcher', allowed_centers: ['DGA1'], permissions: ['chat'], puede_gestionar: true },
+    { id: 'a4', name: 'Pepe Alta', username: 'pepe', admin_role: null, allowed_centers: ['DGA1'], permissions: ['chat'], puede_gestionar: true },
+    { id: 'a5', name: 'Rosa Oficina', username: 'rosa', admin_role: null, allowed_centers: ['DGA1'], puede_gestionar: false },
+  ]
+  const AVISO = 'Al guardar cualquier cambio pasa a Dispatcher'
+
+  async function abrir(page, opciones, usuarios = USUARIOS) {
+    await entrarCon(page, opciones)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/auth\/admins$/, json(usuarios))
+    await page.goto('/panel/usuarios', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Pepe Alta', { exact: true })).toBeVisible({ timeout: 45000 })
+  }
+
+  test('lo puede editar, se le dice que pasa a Dispatcher y se guarda como Dispatcher', async ({ page }) => {
+    const fallos = vigilar(page)
+    await abrir(page, { rol: 'center_manager', mias: ['DGA1'] })
+    let enviado = null
+    await page.route(/\/api\/auth\/admins\/a4$/, (route) => {
+      enviado = route.request().postDataJSON()
+      return json({ success: true })(route)
+    })
+    await expect(page.locator('#usuario-a5').getByRole('button', { name: 'Editar' })).toHaveCount(0)
+    const fila = page.locator('#usuario-a4')
+    await fila.getByRole('button', { name: 'Editar' }).click()
+    await expect(fila.getByText(AVISO, { exact: false })).toBeVisible()
+    await fila.getByRole('button', { name: 'Guardar permisos' }).click()
+    await expect.poll(() => enviado).not.toBeNull()
+    expect(enviado.admin_role).toBe('dispatcher')
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('a un dispatcher, y para el super-admin, sin el aviso', async ({ page }) => {
+    const fallos = vigilar(page)
+    await abrir(page, { rol: 'center_manager', mias: ['DGA1'] })
+    await page.locator('#usuario-a2').getByRole('button', { name: 'Editar' }).click()
+    await expect(page.locator('#usuario-a2').getByRole('button', { name: 'Guardar permisos' })).toBeVisible()
+    await expect(page.getByText(AVISO, { exact: false })).toHaveCount(0)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('el super-admin abre al de rol vacío como «Admin completo» y sin el aviso', async ({ page }) => {
+    const fallos = vigilar(page)
+    await abrir(page, { superAdmin: true }, USUARIOS.map(({ puede_gestionar: _, ...u }) => u))
+    let enviado = null
+    await page.route(/\/api\/auth\/admins\/a4$/, (route) => {
+      enviado = route.request().postDataJSON()
+      return json({ success: true })(route)
+    })
+    const fila = page.locator('#usuario-a4')
+    await fila.getByRole('button', { name: 'Editar' }).click()
+    await expect(fila.getByRole('button', { name: 'Guardar permisos' })).toBeVisible()
+    await expect(page.getByText(AVISO, { exact: false })).toHaveCount(0)
+    await fila.getByRole('button', { name: 'Guardar permisos' }).click()
+    await expect.poll(() => enviado).not.toBeNull()
+    expect(enviado.admin_role).toBeNull()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})

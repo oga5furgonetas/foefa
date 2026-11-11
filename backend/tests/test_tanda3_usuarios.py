@@ -604,7 +604,8 @@ async def test_p33_conductores_ya_dados_de_alta_no_cuentan(importar):
     importar["drivers"].docs.append({"id": "x", "name": "ANA RUIZ", "email": "ana@x.es", "center": "OGA5",
                                      "active": True})
     r = await _importar_conductores(CLIENTE_DGA1)
-    assert r["importados"] == 1 and r["ya_estaban"] == 1
+    # Tercera ronda V5: como su ficha está en una nave que no ve, cuenta «de otros centros sin tocar», no «ya estaba».
+    assert r["importados"] == 1 and r["ya_estaban"] == 0 and r["fuera_seleccion"] == 1
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -649,3 +650,218 @@ async def test_p33_furgonetas_igual_que_antes_sin_naves_en_la_cuenta_duena_y_el_
     r = await _importar_furgonetas(actor)
     assert r["imported"] == 2
     assert sorted(v["center"] for v in importar["vehicles"].docs) == ["DGA1", "OGA5"]
+
+
+# ══ TERCERA RONDA (11-11-2026, 23:0x) ════════════════════════════════════════════════════════════════════════════════
+
+# ── V4 · el jefe y la gente que él mismo dio de alta con el formulario de main (rol vacío = «Admin completo») ──────────
+# En main el formulario salía con el rol vacío: lo que un jefe creó sin tocarlo es «Admin completo» sin querer. Puede
+# con ellos si los creó ÉL (`created_by`) y están dentro de sus naves; y en esa misma escritura pasan a dispatcher.
+
+@pytest.fixture
+def propios(con_foto):
+    con_foto["admin_users"].docs.extend([
+        _usuario("suyo", ["DGA1"], created_by="jefe1"),          # lo creó el jefe de DGA1 con el formulario de main
+        _usuario("de-otro", ["DGA1"], created_by="jefe0"),       # rol vacío en DGA1, pero lo creó otro
+        _usuario("suyo-fuera", ["OGA5"], created_by="jefe1"),    # lo creó él, pero ya no está en sus naves
+        _usuario("suyo-todas", None, created_by="jefe1"),        # lo creó él con «todas»
+        _usuario("del-jefe0", ["OGA5"], created_by="jefe0"),     # lo creó el jefe sin naves
+    ])
+    return con_foto
+
+
+def _rol(base, uid):
+    return _doc(base, uid)["admin_role"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("cuenta", CUENTAS)
+async def test_v4_contrasena_por_las_dos_rutas_y_pasa_a_dispatcher(propios, cuenta):
+    jefe = cuenta(JEFE_DGA1)
+    assert await server.update_admin_permissions("suyo", {"new_password": "otra-123"}, _admin=jefe) == {"success": True}
+    d = _doc(propios, "suyo")
+    assert d["hashed_password"] == "h:otra-123" and d["admin_role"] == "dispatcher"
+    # Por la ruta vieja, en otro de rol vacío que creó él (lo cambiamos de vuelta para probarla desde cero).
+    d["admin_role"] = None
+    assert await _reset(jefe, "suyo") == {"success": True}
+    assert d["hashed_password"] == "h:otra-1234" and d["admin_role"] == "dispatcher"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("cuenta", CUENTAS)
+async def test_v4_permisos_correo_y_foto_tambien_lo_pasan_a_dispatcher(propios, cuenta):
+    jefe = cuenta(JEFE_DGA1)
+    # Lo que manda la web vieja en caché al «Guardar permisos» de un rol vacío: admin_role null.
+    r = await server.update_admin_permissions(
+        "suyo", {"permissions": ["chat"], "allowed_centers": ["DGA1"], "admin_role": None}, _admin=jefe)
+    assert r == {"success": True}
+    d = _doc(propios, "suyo")
+    assert d["permissions"] == ["chat"] and d["admin_role"] == "dispatcher"
+    for cambio in ({"email": "suyo@x.es"}, {"name": "Otro nombre"}, {"allowed_centers": ["DGA1"]}):
+        d["admin_role"] = None
+        assert await server.update_admin_permissions("suyo", cambio, _admin=jefe) == {"success": True}
+        assert d["admin_role"] == "dispatcher", cambio
+    d["admin_role"] = None
+    r = await server.subir_foto_admin("suyo", file=_foto(), _admin=jefe)
+    assert r["success"] and d["photo_url"] == r["photo_url"] and d["admin_role"] == "dispatcher"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("cuenta", CUENTAS)
+async def test_v4_el_jefe_borra_a_quien_creo(propios, cuenta):
+    assert await server.delete_admin("suyo", _admin=cuenta(JEFE_DGA1)) == {"success": True}
+    assert _doc(propios, "suyo") is None
+    # El jefe sin naves, al que creó él en cualquier nave.
+    assert await server.update_admin_permissions("del-jefe0", {"new_password": "otra-123"},
+                                                 _admin=cuenta(JEFE_TODAS)) == {"success": True}
+    assert _rol(propios, "del-jefe0") == "dispatcher"
+    assert await server.delete_admin("del-jefe0", _admin=cuenta(JEFE_TODAS)) == {"success": True}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("cuenta", CUENTAS)
+async def test_v4_el_que_creo_otro_o_fuera_de_sus_naves_sigue_en_403(propios, cuenta):
+    jefe = cuenta(JEFE_DGA1)
+    for uid in ("de-otro", "suyo-fuera", "suyo-todas"):
+        await _no_puede(_reset(jefe, uid))
+        for corutina in _las_cuatro(jefe, uid):
+            await _no_puede(corutina)
+        d = _doc(propios, uid)
+        assert d is not None and d["hashed_password"] == "h" and d["admin_role"] is None and "photo_url" not in d
+    # Un dispatcher no gestiona a nadie, aunque figure como quien lo creó.
+    _doc(propios, "de-otro")["created_by"] = "disp1"
+    for corutina in _las_cuatro(cuenta(DISPATCHER), "de-otro"):
+        await _no_puede(corutina)
+    assert _rol(propios, "de-otro") is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v4_el_super_admin_como_siempre(propios):
+    # El super-admin no los pasa a dispatcher: guarda lo que manda, como hoy.
+    assert await server.update_admin_permissions("suyo", {"new_password": "otra-123"}, _admin=SA) == {"success": True}
+    assert await _reset(SA, "suyo") == {"success": True}
+    assert (await server.subir_foto_admin("suyo", file=_foto(), _admin=SA))["success"]
+    assert _rol(propios, "suyo") is None
+    assert await server.delete_admin("suyo-todas", _admin=SA) == {"success": True}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v4_la_lista_le_pone_los_botones_a_los_suyos(propios):
+    lista = {a["id"]: a for a in await server.list_admins(_admin=JEFE_DGA1)}
+    assert lista["suyo"]["puede_gestionar"] is True
+    assert lista["de-otro"]["puede_gestionar"] is False and lista["suyo-todas"]["puede_gestionar"] is False
+    assert "suyo-fuera" not in lista                      # como en main: de otra nave, no sale
+    assert {i for i, a in lista.items() if a["puede_gestionar"]} == {"disp1", "suyo"}
+    lista = {a["id"]: a for a in await server.list_admins(_admin=JEFE_TODAS)}
+    assert lista["del-jefe0"]["puede_gestionar"] is True and lista["suyo-todas"]["puede_gestionar"] is False
+
+
+# ── V5 · importar sobre lo que HOY está en una nave que quien importa no ve: se salta y se cuenta «de otros centros» ──
+# P33 mira la nave en la que ACABA cada fila; faltaba la nave en la que ESTÁ lo que se actualiza. No es un 403: el
+# Excel regional con todas las naves le sigue sirviendo para las suyas.
+
+IGUALES = pytest.mark.parametrize("actor", [CLIENTE_TODAS, OWNER_DGA1, SA], ids=["sin-naves", "cuenta-duena", "super-admin"])
+
+
+def _flota_de_dos(importar):
+    importar["vehicles"].docs.extend([
+        {"id": "v1", "license_plate": "1111AAA", "center": "OGA5", "status": "active", "brand": "Ford"},
+        {"id": "v2", "license_plate": "2222BBB", "center": "DGA1", "status": "active", "brand": "Ford"},
+    ])
+    return {v["id"]: v for v in importar["vehicles"].docs}
+
+
+MARCAS = "Matrícula,Marca\n1111AAA,Renault\n2222BBB,Renault\n"
+MARCAS_CON_CENTRO = ("Matrícula,Marca,Centro\n1111AAA,Renault,AMZL OGA5 SANTIAGO XPT\n"
+                     "2222BBB,Renault,AMZL DGA1 CORUNA\n")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v5_furgonetas_sin_columna_y_mapa_a_su_nave(importar):
+    import json
+    furgos = _flota_de_dos(importar)
+    r = await _importar_furgonetas(CLIENTE_DGA1, texto=MARCAS, crear=False,
+                                   centros=json.dumps([""]), mapa=json.dumps({"": "DGA1"}))
+    assert (r["updated"], r["fuera_seleccion"]) == (1, 1)
+    assert "1 de otros centros sin tocar" in r["message"]
+    assert furgos["v1"] == {"id": "v1", "license_plate": "1111AAA", "center": "OGA5", "status": "active", "brand": "Ford"}
+    assert furgos["v2"]["brand"] == "Renault" and furgos["v2"]["center"] == "DGA1"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v5_furgonetas_con_columna_el_excel_regional_sirve_para_las_suyas(importar):
+    furgos = _flota_de_dos(importar)
+    for crear in (False, True):
+        furgos["v2"]["brand"] = "Ford"
+        r = await _importar_furgonetas(CLIENTE_DGA1, texto=MARCAS_CON_CENTRO, crear=crear)
+        assert (r["updated"], r["fuera_seleccion"], r["imported"]) == (1, 1, 0)
+        assert furgos["v1"]["brand"] == "Ford" and furgos["v1"]["center"] == "OGA5"
+        assert furgos["v2"]["brand"] == "Renault"
+    assert len(importar["vehicles"].docs) == 2
+    # Llevarse a otra nave una furgoneta SUYA sigue siendo 403 (P33).
+    await _no_puede(_importar_furgonetas(CLIENTE_DGA1, texto="Matrícula,Centro\n2222BBB,OGA5\n"))
+    assert furgos["v2"]["center"] == "DGA1"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@IGUALES
+async def test_v5_furgonetas_igual_que_antes_sin_naves_en_la_cuenta_duena_y_el_super_admin(importar, actor):
+    import json
+    furgos = _flota_de_dos(importar)
+    r = await _importar_furgonetas(actor, texto=MARCAS, crear=False,
+                                   centros=json.dumps([""]), mapa=json.dumps({"": "DGA1"}))
+    assert (r["updated"], r["fuera_seleccion"]) == (2, 0)
+    assert furgos["v1"]["center"] == "DGA1" and furgos["v1"]["brand"] == "Renault"
+    for v in furgos.values():
+        v["brand"], v["center"] = "Ford", {"v1": "OGA5", "v2": "DGA1"}[v["id"]]
+    r = await _importar_furgonetas(actor, texto=MARCAS_CON_CENTRO, crear=False)
+    assert (r["updated"], r["fuera_seleccion"]) == (2, 0)
+    assert furgos["v1"]["brand"] == "Renault"
+
+
+def _fichas_de_otra_nave(importar):
+    importar["drivers"].docs.extend([
+        {"id": "x1", "name": "ANA RUIZ", "email": "ana@x.es", "center": "AMZL OGA5 SANTIAGO XPT", "active": True},
+        {"id": "x2", "name": "PACO BAJA", "email": "paco@x.es", "center": "OGA5", "active": False},
+        {"id": "x3", "name": "SIN CORREO", "center": "OGA5", "active": True},
+    ])
+
+
+PERSONAS = "Nombre,Email\nAna Ruiz,ana@x.es\nPaco Baja,paco@x.es\nSin Correo,\nMarta Gil,marta@x.es\n"
+PERSONAS_CON_CENTRO = ("Nombre,Email,Centro\nAna Ruiz,ana@x.es,AMZL OGA5 SANTIAGO XPT\n"
+                       "Paco Baja,paco@x.es,OGA5\nSin Correo,,OGA5\nMarta Gil,marta@x.es,AMZL DGA1 CORUNA\n")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v5_conductores_sin_columna_y_mapa_a_su_nave(importar):
+    import json
+    _fichas_de_otra_nave(importar)
+    r = await _importar_conductores(CLIENTE_DGA1, PERSONAS, centros=json.dumps([""]), mapa=json.dumps({"": "DGA1"}))
+    assert (r["importados"], r["ya_estaban"], r["fuera_seleccion"], r["de_baja"]) == (1, 0, 3, 0)
+    assert r["nombres_de_baja"] == []                      # el nombre de una baja de otra nave no se enseña
+    assert [d["name"] for d in importar["drivers"].docs][3:] == ["MARTA GIL"]
+    assert {d["id"]: d["center"] for d in importar["drivers"].docs}["x1"] == "AMZL OGA5 SANTIAGO XPT"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_v5_conductores_con_columna(importar):
+    _fichas_de_otra_nave(importar)
+    r = await _importar_conductores(CLIENTE_DGA1, PERSONAS_CON_CENTRO)
+    assert (r["importados"], r["ya_estaban"], r["fuera_seleccion"]) == (1, 0, 3)
+    assert len(importar["drivers"].docs) == 4              # nunca una segunda ficha de la de otra nave
+    # Una ficha de SU nave sigue contando como «ya estaba».
+    importar["drivers"].docs.append({"id": "x4", "name": "LUIS", "email": "luis@x.es", "center": "DGA1", "active": True})
+    r = await _importar_conductores(CLIENTE_DGA1, "Nombre,Email,Centro\nLuis,luis@x.es,DGA1\n")
+    assert (r["importados"], r["ya_estaban"], r["fuera_seleccion"]) == (0, 1, 0)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@IGUALES
+async def test_v5_conductores_igual_que_antes_sin_naves_en_la_cuenta_duena_y_el_super_admin(importar, actor):
+    import json
+    _fichas_de_otra_nave(importar)
+    r = await _importar_conductores(actor, PERSONAS, centros=json.dumps([""]), mapa=json.dumps({"": "DGA1"}))
+    assert (r["importados"], r["ya_estaban"], r["fuera_seleccion"], r["de_baja"]) == (1, 3, 0, 1)
+    assert r["nombres_de_baja"] == ["PACO BAJA"]
+    r = await _importar_conductores(actor, PERSONAS_CON_CENTRO)
+    assert (r["importados"], r["ya_estaban"], r["fuera_seleccion"]) == (0, 4, 0)

@@ -8800,11 +8800,24 @@ def _can_manage_user(actor: dict, target_centers: Optional[list]) -> bool:
     # center_manager solo puede gestionar usuarios cuyos centros son subconjunto de los suyos
     return target_set.issubset(actor_centers)
 
-def _jefe_gestiona_rol(target: dict) -> bool:
+def _jefe_gestiona_rol(target: dict, actor: Optional[dict] = None) -> bool:
     """Un jefe de centro solo gestiona DISPATCHERS (11-11-2026, corrección P16/P17 de equipo-2): nunca a un «Admin
     completo» (admin_role vacío, que puede más que él: p. ej. añadir naves) ni a otro jefe. Antes, con la regla de
-    naves sola, un jefe le cambiaba la contraseña a un «Admin completo» de su nave y entraba con su cuenta."""
-    return target.get("admin_role") == "dispatcher"
+    naves sola, un jefe le cambiaba la contraseña a un «Admin completo» de su nave y entraba con su cuenta.
+    Salvo (11-11-2026, tercera ronda V4) el de rol vacío que creó ÉL (`created_by`): en main el formulario salía con el
+    rol vacío y lo que un jefe daba de alta sin tocarlo era «Admin completo» sin querer. Con esos puede, pero en la misma
+    escritura pasan a dispatcher (`_jefe_lo_pasa_a_dispatcher`), así que nunca entra con la cuenta de un Admin completo.
+    La regla de naves (`_can_manage_user`) se sigue pidiendo aparte."""
+    if target.get("admin_role") == "dispatcher":
+        return True
+    return bool(actor and _is_center_manager(actor) and not target.get("admin_role") and actor.get("sub")
+                and target.get("created_by") == actor.get("sub"))
+
+
+def _jefe_lo_pasa_a_dispatcher(actor: dict, target: dict) -> bool:
+    """True si quien escribe es un jefe y el usuario tiene el rol vacío: si ha llegado hasta aquí es uno que creó él
+    (`_jefe_gestiona_rol`), y en esa misma escritura pasa a 'dispatcher' (11-11-2026, tercera ronda V4)."""
+    return _is_center_manager(actor) and not target.get("admin_role")
 
 def _puede_gestionar_a(actor: dict, target: dict) -> bool:
     """¿Puede `actor` editar, cambiar la contraseña, borrar o poner la foto de `target`? Lo mismo que piden esas rutas:
@@ -8816,7 +8829,7 @@ def _puede_gestionar_a(actor: dict, target: dict) -> bool:
         return True
     if not _is_center_manager(actor):
         return False
-    return _jefe_gestiona_rol(target) and _can_manage_user(actor, target.get("allowed_centers"))
+    return _jefe_gestiona_rol(target, actor) and _can_manage_user(actor, target.get("allowed_centers"))
 
 def _clamp_permissions(actor: dict, permissions: Optional[list]) -> Optional[list]:
     """center_manager no puede dar más permisos de los que él mismo tiene."""
@@ -8890,7 +8903,7 @@ async def update_admin_permissions(admin_id: str, data: dict = Body(...), _admin
             raise HTTPException(403, "No tienes acceso para modificar este usuario")
         if target.get("admin_role") == "center_manager":
             raise HTTPException(403, "No puedes modificar a otro gestor de centro")
-        if not _jefe_gestiona_rol(target):          # un «Admin completo» (11-11-2026, corrección P16/P17)
+        if not _jefe_gestiona_rol(target, _admin):  # un «Admin completo» (11-11-2026, corrección P16/P17; V4)
             raise HTTPException(403, "Solo el super-admin puede modificar a un Admin completo")
     elif not _admin.get("sa") and not _is_center_manager(_admin):
         raise HTTPException(403, "Sin permisos para modificar usuarios")
@@ -8914,7 +8927,8 @@ async def update_admin_permissions(admin_id: str, data: dict = Body(...), _admin
             if ar == "center_manager" and not _admin.get("sa"):
                 raise HTTPException(403, "Solo super-admin puede asignar rol de gestor de centro")
             # Ni subir a «Admin completo» a un dispatcher (11-11-2026, equipo-2). A un «Admin completo» un jefe ya no
-            # llega aquí (corrección P16/P17, más arriba), así que esta condición solo ve dispatchers.
+            # llega aquí (corrección P16/P17, más arriba), así que esta condición solo ve dispatchers; el de rol vacío
+            # que creó él sí llega, y más abajo pasa a dispatcher (tercera ronda V4).
             if ar is None and _is_center_manager(_admin) and target.get("admin_role") is not None:
                 raise HTTPException(403, "Solo super-admin puede dar el rol de Admin completo")
             patch["admin_role"] = ar
@@ -8931,6 +8945,10 @@ async def update_admin_permissions(admin_id: str, data: dict = Body(...), _admin
         patch["hashed_password"] = hash_password(new_pw)
     if not patch:
         raise HTTPException(status_code=400, detail="Nada que actualizar")
+    # El de rol vacío que creó el jefe pasa a dispatcher con cualquier cambio (11-11-2026, tercera ronda V4): la web
+    # vieja en caché manda admin_role null al guardar sus permisos, y aquí no puede quedarse así.
+    if _jefe_lo_pasa_a_dispatcher(_admin, target):
+        patch["admin_role"] = "dispatcher"
     await global_db.admin_users.update_one({"id": admin_id}, {"$set": patch})
     # Se tire lo que se tire (permisos, centros, rol o contraseña), la caché de
     # `_admin_cacheado` queda vieja. Antes solo se limpiaba al resetear la clave,
@@ -8961,7 +8979,7 @@ async def delete_admin(admin_id: str, _admin: dict = Depends(require_admin)):
             raise HTTPException(403, "No tienes acceso para eliminar este usuario")
         if target.get("admin_role") == "center_manager":
             raise HTTPException(403, "No puedes eliminar a otro gestor de centro")
-        if not _jefe_gestiona_rol(target):          # un «Admin completo» (11-11-2026, corrección P16/P17)
+        if not _jefe_gestiona_rol(target, _admin):  # un «Admin completo» (11-11-2026, corrección P16/P17; V4)
             raise HTTPException(403, "Solo el super-admin puede eliminar a un Admin completo")
     elif not _admin.get("sa") and not _is_center_manager(_admin):
         raise HTTPException(403, "Sin permisos para eliminar usuarios")
@@ -8994,8 +9012,9 @@ async def subir_foto_admin(admin_id: str, file: UploadFile = File(...), _admin: 
         if not _admin.get("sa") and _is_center_manager(_admin):
             if not _can_manage_user(_admin, target.get("allowed_centers")):
                 raise HTTPException(403, "No tienes acceso para modificar este usuario")
-            # Solo dispatchers: ni otro jefe ni un «Admin completo» (11-11-2026, corrección P16/P17).
-            if not _jefe_gestiona_rol(target):
+            # Solo dispatchers: ni otro jefe ni un «Admin completo» (11-11-2026, corrección P16/P17), salvo el de rol
+            # vacío que creó él (tercera ronda V4), que pasa a dispatcher al guardar la foto.
+            if not _jefe_gestiona_rol(target, _admin):
                 raise HTTPException(403, "No tienes acceso para modificar este usuario")
         elif not _admin.get("sa") and not _is_center_manager(_admin):
             raise HTTPException(403, "Sin permisos para modificar usuarios")
@@ -9009,7 +9028,10 @@ async def subir_foto_admin(admin_id: str, file: UploadFile = File(...), _admin: 
         photo_url, _bytes = await process_and_save_image(content, f"admin-{admin_id}")
     except Exception as e:
         raise HTTPException(500, f"Error procesando imagen: {e}")
-    await global_db.admin_users.update_one({"id": admin_id}, {"$set": {"photo_url": photo_url}})
+    cambio = {"photo_url": photo_url}
+    if not es_uno_mismo and _jefe_lo_pasa_a_dispatcher(_admin, target):    # 11-11-2026, tercera ronda V4
+        cambio["admin_role"] = "dispatcher"
+    await global_db.admin_users.update_one({"id": admin_id}, {"$set": cambio})
     _ADMIN_EXISTS_CACHE.pop(admin_id, None)
     return {"success": True, "photo_url": photo_url}
 
@@ -9248,9 +9270,12 @@ async def reset_admin_password(data: dict, _admin: dict = Depends(require_admin)
         raise HTTPException(403, "Sin permisos para modificar usuarios")
     if not _puede_gestionar_a(_admin, target):
         raise HTTPException(403, "No tienes acceso para modificar este usuario")
+    cambio = {"hashed_password": hash_password(new_password)}
+    if _jefe_lo_pasa_a_dispatcher(_admin, target):     # el de rol vacío que creó el jefe (11-11-2026, tercera ronda V4)
+        cambio["admin_role"] = "dispatcher"
     result = await global_db.admin_users.update_one(
         {"id": target.get("id"), "username": username, "org_id": _admin.get("org_id")},
-        {"$set": {"hashed_password": hash_password(new_password)}}
+        {"$set": cambio}
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Admin no encontrado")
@@ -12933,15 +12958,26 @@ async def drivers_importar(file: UploadFile = File(...), center: str = Form(""),
     correos = [p["email"] for p in r["personas"] if p["email"]]
     ya = set()
     vivas = _ImpVivasYBajas()
+    naves_ya = {}       # (correo o nombre) -> naves de las fichas con las que casa (11-11-2026, tercera ronda V5)
     async for d in db.drivers.find({"email": {"$in": correos}},
-                                   {"_id": 0, "email": 1, "active": 1, "status": 1, "merged_into": 1}):
+                                   {"_id": 0, "email": 1, "active": 1, "status": 1, "merged_into": 1, "center": 1}):
         ya.add(str(d.get("email") or "").lower())
         vivas.anota(d, correo=True)
+        naves_ya.setdefault(("e", str(d.get("email") or "").lower()), set()).add(str(d.get("center") or ""))
     nombres_bd = set()
-    async for d in db.drivers.find({}, {"_id": 0, "name": 1, "active": 1, "status": 1, "merged_into": 1}):
+    async for d in db.drivers.find({}, {"_id": 0, "name": 1, "active": 1, "status": 1, "merged_into": 1,
+                                        "center": 1}):
         if d.get("name"):
             nombres_bd.add(_imp_norm(d["name"]))
             vivas.anota(d, correo=False)
+            naves_ya.setdefault(("n", _imp_norm(d["name"])), set()).add(str(d.get("center") or ""))
+
+    def _de_naves_que_no_ve(p) -> bool:
+        """La fila casa SOLO con fichas de naves que quien importa no ve (11-11-2026, tercera ronda V5): no se toca y
+        cuenta como «de otros centros sin tocar», no como «ya estaba» (ni sale su nombre en las bajas). Sigue sin
+        darse de alta: nunca una segunda ficha de la misma persona. Para quien ve todas, siempre False."""
+        naves = naves_ya.get(("e", p["email"]) if p["email"] else ("n", _imp_norm(p["name"])))
+        return bool(naves) and not any(_user_can_see_center(user, c) for c in naves)
     de_baja = []
 
     ahora = datetime.now(timezone.utc).isoformat()
@@ -12977,6 +13013,9 @@ async def drivers_importar(file: UploadFile = File(...), center: str = Form(""),
         existe = (p["email"] and p["email"] in ya) or \
             (not p["email"] and _imp_norm(p["name"]) in nombres_bd)
         if existe:
+            if _de_naves_que_no_ve(p):
+                fuera_seleccion += 1
+                continue
             # NO se actualiza la ficha que ya está. Importar es dar de alta lo
             # que falta; pisar datos buenos con los de un Excel viejo es la
             # forma más rápida de que se deje de confiar en la aplicación.
@@ -29241,6 +29280,13 @@ async def import_vehicles(
             continue
         centro = destino.get(clave) or _veh_centro_de(clave, conocidos) or (unico if not clave else "")
         if elegidos is None and filtro and centro != filtro:
+            fuera_seleccion += 1
+            continue
+        # La que YA está en una nave que quien importa no ve no se toca (11-11-2026, tercera ronda V5): se salta y
+        # cuenta como «de otros centros sin tocar». Sin esto, un usuario de DGA1 cambiaba km, ITV o renting de las de
+        # OGA5, o se las llevaba a la suya con el mapa. En la cuenta dueña, para el super-admin y para quien no tiene
+        # naves asignadas `_user_can_see_center` da siempre True: lo de antes.
+        if flota.get(k) and not _user_can_see_center(user, flota[k].get("center") or ""):
             fuera_seleccion += 1
             continue
         campos = dict(f["campos"])
