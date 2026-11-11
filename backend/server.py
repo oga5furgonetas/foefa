@@ -39995,9 +39995,11 @@ async def diarios_por_conductor(center: str, desde: str, hasta: str,
 #     mismo correo (aunque sea otra persona), la ruta vuelve a leer el `sub`
 #     ORIGINAL del token: si no es la ficha de la sesion ni una fusionada en
 #     ella, tambien 403 (R7/F1). El resto del portal sigue con ese agujero.
-#   · UN ID EN DOS PERSONAS. Si un ID lo tienen dos fichas VIVAS (activas y sin
-#     fusionar) no se le da a ninguna: `en_revision` (R7/F11). Antes ganaba la
-#     que Mongo devolviera primero.
+#   · UN ID EN DOS PERSONAS. Si la regla de la oficina no decide (dos personas
+#     VIVAS con el ID en `transporter_id`, o ninguna ahi y dos en `driver_id`)
+#     no se le da a ninguna: `en_revision` (R7/F11, afinado el 11-11-2026 en
+#     _dnr_mis_ids). Antes ganaba la que Mongo devolviera primero. Si la oficina
+#     decide (uno solo en `transporter_id`), se queda lo de la oficina.
 #   · LOS IDS se le casan EXACTAMENTE como en la pantalla de la oficina
 #     (diarios_por_conductor): el `transporter_id` de la ficha (si dos fichas lo
 #     comparten, la activa) y, si ninguna lo reclama ahi, el `driver_id`. Nunca
@@ -40043,22 +40045,45 @@ async def _dnr_mis_ids(mis_fichas: set) -> tuple:
     baja primero para que la activa las pise en `transporter_id`; en `driver_id`
     solo entra lo que no reclamo nadie antes).
 
-    Lo segundo (R7/F11, 11-11-2026): los IDs de estas fichas que tienen, en
-    `transporter_id` o en `driver_id`, DOS o mas fichas VIVAS distintas. Dos
-    fichas vivas nunca son la misma persona para esta ruta (la misma persona es
-    la ficha y lo fusionado en ella, que ya no esta vivo), asi que es un ID mal
-    puesto en alguna: se aparta de las dos en vez de darselo a la que Mongo
-    devuelva primero. La oficina sigue viendolo como siempre."""
+    Lo segundo (R7/F11, afinado el 11-11-2026, S1): los IDs en disputa en los
+    que esta persona queda «en revision». SOLO hay disputa cuando la regla de la
+    oficina no decide; antes bastaba con que dos fichas vivas tuvieran el ID, en
+    cualquiera de los dos campos, y eso dejaba en revision (y sin sus DNR) a
+    quien la oficina SI se las da: Luis con su `transporter_id` frente a Mar, que
+    tiene el mismo en `driver_id`. Para un ID, contando solo fichas VIVAS
+    (_dnr_viva) y con la ficha de la sesion y sus fusionadas como UNA persona:
+      · T = las personas que lo tienen en `transporter_id`; D = las que lo
+        tienen SOLO en `driver_id`.
+      · T de 2 o mas: disputa, en revision las de T (la oficina lo decide por
+        el orden en que salen). Las de D no lo ven, como en la oficina.
+      · T de 1: es suyo, como en la oficina; las de D ni lo ven ni quedan en
+        revision por eso.
+      · T vacio y D de 2 o mas: disputa, en revision las de D (era el caso del
+        hallazgo: ganaba la que Mongo devolviera primero).
+      · T vacio y D de 1: es suyo.
+    Fuera de la disputa lo que ve cada uno es lo de `mios`, la asignacion de la
+    oficina tal cual (tambien cuando una ficha de BAJA tiene el ID en
+    `transporter_id` y una viva en `driver_id`: es de la de baja y la viva no lo
+    ve). La oficina sigue viendolo todo como siempre."""
     mapa: dict = {}
-    vivas: dict = {}
+    en_t: dict = {}     # ID -> personas vivas con el en `transporter_id`
+    en_d: dict = {}     # ID -> personas vivas con el en `driver_id`
+
+    def persona(d):
+        # La sesion y lo fusionado en ella, una sola persona («yo»), aunque lo
+        # fusionado ya no este vivo; de las demas, solo las fichas vivas.
+        if d.get("id") in mis_fichas:
+            return "yo"
+        return d["id"] if d.get("id") and _dnr_viva(d) else None
+
     async for d in db.drivers.find(
             {"transporter_id": {"$nin": [None, ""]}},
             {"_id": 0, "name": 1, "transporter_id": 1, "id": 1, "active": 1, "merged_into": 1, "status": 1}
     ).sort("active", 1).limit(_DNR_TOPE_FICHAS):
         clave = (d.get("transporter_id") or "").upper()
         mapa[clave] = (d.get("id"), d.get("name") or "")
-        if clave and d.get("id") and _dnr_viva(d):
-            vivas.setdefault(clave, set()).add(d["id"])
+        if clave and persona(d):
+            en_t.setdefault(clave, set()).add(persona(d))
     async for d in db.drivers.find(
             {"driver_id": {"$nin": [None, ""]}},
             {"_id": 0, "name": 1, "driver_id": 1, "id": 1, "active": 1, "merged_into": 1, "status": 1}
@@ -40066,10 +40091,24 @@ async def _dnr_mis_ids(mis_fichas: set) -> tuple:
         clave = str(d.get("driver_id") or "").strip().upper()
         if clave and clave not in mapa:
             mapa[clave] = (d.get("id"), d.get("name") or "")
-        if clave and d.get("id") and _dnr_viva(d):
-            vivas.setdefault(clave, set()).add(d["id"])
+        if clave and persona(d):
+            en_d.setdefault(clave, set()).add(persona(d))
     mios = {tid: (fid, nombre) for tid, (fid, nombre) in mapa.items() if tid and fid and fid in mis_fichas}
-    en_disputa = {tid for tid, fichas in vivas.items() if len(fichas) > 1 and fichas & mis_fichas}
+    en_disputa = set()
+    for clave in set(en_t) | set(en_d):
+        t = en_t.get(clave, set())
+        d_solo = en_d.get(clave, set()) - t
+        if len(t) >= 2:
+            disputan = t
+        elif not t and len(d_solo) >= 2:
+            disputan = d_solo
+        else:
+            continue
+        if "yo" in disputan:
+            en_disputa.add(clave)
+        # Un ID disputado no se le da a nadie, este o no en revision (si T tiene
+        # 2 o mas, las de D tampoco lo ven: ya no lo veian por la oficina).
+        mios.pop(clave, None)
     return mios, en_disputa
 
 
@@ -40252,26 +40291,38 @@ async def _dnr_datos_hasta(centro_ficha: str, centros_filas: set) -> Optional[st
     (R7/F18): no se puede afirmar que su centro no tenga reportes. None solo si
     su centro se reconoce y no tiene ninguno.
 
-    Un unico distinct, el de los centros (tantos como centros, con el indice
-    (center, fecha_dnr)), y una lectura con limit(1)."""
+    Y no solo daily_reports (S2, 11-11-2026): un pegado de solo el bloque DNR
+    guarda filas en dnr_rows y NINGUN daily_report, y el conductor leia «Aun no
+    hay reportes de tu centro» habiendolos. Es el mayor entre el ultimo
+    `fecha_dnr` de daily_reports y la ultima `fecha_concesion` de dnr_rows, con
+    los mismos centros en las dos.
+
+    Un distinct por coleccion, el de los centros (tantos como centros, con sus
+    indices (center, fecha_dnr) y (center, fecha_concesion)), y una lectura con
+    limit(1) en cada una."""
+    fuentes = ((db.daily_reports, "fecha_dnr"), (db.dnr_rows, "fecha_concesion"))
     mio = (centro_ficha or "").strip().upper()
     con_codigo = set(_CENTRO_RE.findall(mio))
     codigos = con_codigo | ({mio} if mio else set())
     suyos = set(c for c in centros_filas if c)
     todos = None
-    if codigos:
-        todos = [c for c in await db.daily_reports.distinct("center") if c]
+    if codigos or not (suyos or con_codigo):
+        todos = set()
+        for col, _campo in fuentes:
+            todos |= {c for c in await col.distinct("center") if c}
         suyos |= {c for c in todos if _centro_norm(c) in codigos}
     if not suyos and not con_codigo:
-        if todos is None:
-            todos = [c for c in await db.daily_reports.distinct("center") if c]
-        suyos = set(todos)
+        suyos = set(todos or ())
     if not suyos:
         return None
-    ult = await db.daily_reports.find(
-        {"center": {"$in": sorted(suyos)}, "fecha_dnr": {"$nin": [None, ""]}},
-        {"_id": 0, "fecha_dnr": 1}).sort("fecha_dnr", -1).limit(1).to_list(1)
-    return ult[0].get("fecha_dnr") if ult else None
+    ultimos = []
+    for col, campo in fuentes:
+        ult = await col.find(
+            {"center": {"$in": sorted(suyos)}, campo: {"$nin": [None, ""]}},
+            {"_id": 0, campo: 1}).sort(campo, -1).limit(1).to_list(1)
+        if ult and ult[0].get(campo):
+            ultimos.append(str(ult[0][campo]))
+    return max(ultimos) if ultimos else None
 
 
 def _dnr_sub_original(credentials, user: dict):
@@ -40345,8 +40396,8 @@ async def mis_dnr(user: dict = Depends(get_current_user),
     ids, en_disputa = await _dnr_mis_ids(mis_fichas)
     if not ids and not en_disputa:
         return vacio
-    # Un ID que tienen dos fichas vivas no se le da a ninguna (R7/F11): la oficina
-    # lo revisa. (El «no coincide» de _amazon_nombres ya no se mira aqui: F14/F15.)
+    # Un ID en disputa (la regla de la oficina no decide entre dos personas
+    # vivas) no se le da a ninguna (R7/F11): la oficina lo revisa. (El «no coincide» de _amazon_nombres ya no se mira aqui: F14/F15.)
     buenos = sorted(set(ids) - en_disputa)
     if not buenos:
         return {**vacio, "tiene_id": True, "en_revision": True,

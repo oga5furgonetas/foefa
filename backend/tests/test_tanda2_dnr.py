@@ -285,10 +285,13 @@ async def test_cada_uno_ve_solo_lo_suyo(base):
     vistos = {sub: _paquetes(await server.mis_dnr(_conductor(sub))) for sub in
               ("d-ana", "d-luis", "d-eva", "d-mar", "d-paco", "d-sin", "d-pedro", "d-diez")}
     assert vistos["d-ana"] == {"TBAANA1", "TBAANA2", "TBAANA3", "TBAANA4", "TBAANA5", "TBAANAV"}  # con la fusionada
-    # R7/F11: Mar (viva) tiene en `driver_id` el ID de Luis (vivo): dos personas lo reclaman y no gana ninguna.
-    assert vistos["d-luis"] == set()
+    # Mar (viva) tiene en `driver_id` el ID que Luis (vivo) tiene en `transporter_id`: la oficina se lo da a Luis
+    # (manda el `transporter_id`), y aquí igual. No es una disputa (R7/F11 afinado, S1): ninguno queda «en revisión».
+    assert vistos["d-luis"] == {"TBLUIS1"}
     assert vistos["d-eva"] == {"TBEVA01"}                    # por su `driver_id`, con espacios y en minúsculas
     assert vistos["d-mar"] == set()                          # su `driver_id` lo tiene Luis en `transporter_id`
+    for sub in ("d-luis", "d-mar"):
+        assert (await server.mis_dnr(_conductor(sub)))["en_revision"] is False, sub
     assert vistos["d-paco"] == {"TBPACO1"}                   # dos fichas con el mismo ID: manda la activa
     assert vistos["d-sin"] == set()                          # mismo nombre que el del historial: nunca por nombre
     assert vistos["d-pedro"] == {"TBPEDR1"}                  # el mismo correo que Juan no le da lo de Juan
@@ -327,23 +330,34 @@ async def test_de_baja_o_fusionada_no_puede_usar_la_ruta(base):
 async def test_se_casan_igual_que_en_la_pantalla_de_la_oficina(base):
     """La oficina (diarios_por_conductor) pone a cada ID el `driver_id` de su ficha. Lo que ve cada persona tiene que ser
     exactamente lo que la oficina le pone a su ficha y a las fusionadas en ella, en las 4 semanas. (Además de esta
-    comparación, test_cada_uno_ve_solo_lo_suyo dice a mano qué tiene que ver cada uno.) La única excepción es la de R7/F11:
-    un ID que reclaman dos fichas vivas no se enseña a ninguna (Luis y Mar; la oficina se lo pone a Luis)."""
+    comparación, test_cada_uno_ve_solo_lo_suyo dice a mano qué tiene que ver cada uno.) Aquí no hay ninguna disputa
+    (R7/F11 afinado, S1): Luis tiene su ID en `transporter_id` y Mar el mismo SOLO en `driver_id`; la oficina se lo da a
+    Luis y Luis lo ve."""
+    de_la_oficina = await _de_la_oficina()
+    personas = {"d-ana": {"d-ana", "d-ana-vieja"}, "d-luis": {"d-luis"}, "d-eva": {"d-eva"}, "d-mar": {"d-mar"},
+                "d-paco": {"d-paco"}, "d-sin": {"d-sin"}, "d-pedro": {"d-pedro"}, "d-diez": {"d-diez"}}
+    await _como_la_oficina(de_la_oficina, personas)
+    assert "TBLUIS1" in de_la_oficina.get("d-luis", set())
+    # El ID sin ficha, la oficina lo enseña con el nombre del historial pero sin ficha (driver_id None).
+    assert "TBFANT1" in de_la_oficina.get(None, set())
+
+
+async def _de_la_oficina(centros=("OGA5", "DGA1", "DGA10")) -> dict:
+    """{id de ficha (o None): paquetes} según la pantalla de la oficina, en las 4 semanas."""
     de_la_oficina: dict = {}
-    for centro in ("OGA5", "DGA1", "DGA10"):
+    for centro in centros:
         r = await server.diarios_por_conductor(centro, "2026-10-18", "2026-11-14", DANI)
         for c in r["conductores"]:
             for d in c["detalle"]:
                 de_la_oficina.setdefault(c.get("driver_id"), set()).add(d["tracking_id"])
-    personas = {"d-ana": {"d-ana", "d-ana-vieja"}, "d-luis": {"d-luis"}, "d-eva": {"d-eva"}, "d-mar": {"d-mar"},
-                "d-paco": {"d-paco"}, "d-sin": {"d-sin"}, "d-pedro": {"d-pedro"}, "d-diez": {"d-diez"}}
-    en_disputa = {"TBLUIS1"}
+    return de_la_oficina
+
+
+async def _como_la_oficina(de_la_oficina: dict, personas: dict, en_disputa=frozenset()):
+    """Lo que ve cada persona es EXACTAMENTE lo que la oficina pone a su ficha y a las fusionadas, menos lo disputado."""
     for sub, fichas in personas.items():
-        esperado = set().union(*(de_la_oficina.get(f, set()) for f in fichas)) - en_disputa
+        esperado = set().union(*(de_la_oficina.get(f, set()) for f in fichas)) - set(en_disputa)
         assert _paquetes(await server.mis_dnr(_conductor(sub))) == esperado, sub
-    assert "TBLUIS1" in de_la_oficina.get("d-luis", set())
-    # El ID sin ficha, la oficina lo enseña con el nombre del historial pero sin ficha (driver_id None).
-    assert "TBFANT1" in de_la_oficina.get(None, set())
 
 
 def test_no_hay_parametro_que_cambiar_para_ver_lo_de_otro(base, monkeypatch):
@@ -372,52 +386,124 @@ async def test_solo_para_conductores(base):
     assert e.value.status_code == 403
 
 
+# ── Un ID en dos personas (R7/F11, afinado el 11-11-2026, S1) ─────────────────────────────────────────────────
+# SOLO hay disputa cuando la regla de la oficina no decide. Para un ID X, contando solo fichas VIVAS y tomando como
+# UNA persona la ficha de la sesión con las fusionadas en ella: T = las que lo tienen en `transporter_id`, D = las que
+# lo tienen SOLO en `driver_id`. T >= 2: disputa (a ninguna; «en revisión» las de T). T = 1: es suyo, como en la
+# oficina, y las de D ni lo ven ni quedan en revisión. T vacío y D >= 2: disputa («en revisión» las de D). T vacío y
+# D = 1: es suyo. Fuera de la disputa, lo que ve cada uno es EXACTAMENTE lo que le da la oficina.
+
+def _ficha(fid, **mas):
+    return {"id": fid, "name": fid.upper(), "email": f"{fid}@ejemplo.test", "center": "OGA5", "active": True, **mas}
+
+
 @pytest.mark.asyncio(loop_scope="session")
-async def test_un_id_en_dos_fichas_vivas_no_se_ensena_a_ninguna(base, monkeypatch):
-    """R7/F11. Si dos fichas VIVAS (activas y sin fusionar), que no son la misma persona, tienen el mismo ID (en
-    `transporter_id` o en `driver_id`), sus DNR no se enseñan a ninguna: `en_revision`. Antes ganaba la que Mongo
-    devolviera primero. Las de su otro ID (la ficha fusionada de Ana) sí se ven. Y ya no se mira el «no coincide» de
-    _amazon_nombres (F14/F15): aunque dijera algo, no se le llama."""
+async def test_con_el_id_en_el_transporter_id_de_una_sola_persona_es_suyo(base, monkeypatch):
+    """T = 1. Otra persona viva tiene el ID de Ana SOLO en `driver_id`: la oficina se lo da a Ana (manda el
+    `transporter_id`), y aquí igual; ninguna de las dos queda «en revisión». Y ya no se mira el «no coincide» de
+    _amazon_nombres (F14/F15): aunque dijera algo, no se le llama (la oficina sí, y se compara al final)."""
+    original = server._amazon_nombres
+
     async def no_se_llama(*a, **k):
         raise AssertionError("mis_dnr ya no usa _amazon_nombres")
     monkeypatch.setattr(server, "_amazon_nombres", no_se_llama)
-    # Otra persona, viva, con el ID de Ana en `driver_id`.
-    base["drivers"].docs.append({"id": "d-copia", "name": "OTRA PERSONA", "email": "otra@ejemplo.test",
-                                 "center": "OGA5", "active": True, "driver_id": "aana000001"})
+    base["drivers"].docs.append(_ficha("d-copia", driver_id="aana000001"))
     r = await server.mis_dnr(_conductor("d-ana"))
-    assert r["tiene_id"] is True and r["en_revision"] is True
-    assert _paquetes(r) == {"TBAANAV"}
+    assert r["tiene_id"] is True and r["en_revision"] is False
+    assert _paquetes(r) == {"TBAANA1", "TBAANA2", "TBAANA3", "TBAANA4", "TBAANA5", "TBAANAV"}
     r = await server.mis_dnr(_conductor("d-copia"))
-    assert r["en_revision"] is True and _paquetes(r) == set()
-    # Si esa otra ficha está de baja, ya no es viva: manda la de Ana, como en la oficina.
-    base["drivers"].docs[-1]["active"] = False
-    r = await server.mis_dnr(_conductor("d-ana"))
-    assert r["en_revision"] is False and "TBAANA1" in _paquetes(r)
-    # Y si estuviera fusionada (en Ana o en quien sea), tampoco.
-    base["drivers"].docs[-1].update(active=True, merged_into="d-ana")
-    assert (await server.mis_dnr(_conductor("d-ana")))["en_revision"] is False
+    assert r["en_revision"] is False and _paquetes(r) == set()
+    monkeypatch.setattr(server, "_amazon_nombres", original)
+    await _como_la_oficina(await _de_la_oficina(), {"d-ana": {"d-ana", "d-ana-vieja"}, "d-copia": {"d-copia"}})
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_dos_fichas_vivas_con_el_mismo_transporter_id_tampoco(base):
-    """El empate que más se ve: el mismo `transporter_id` en dos fichas activas. Antes lo decidía el orden."""
-    base["drivers"].docs.append({"id": "d-gemela", "name": "OTRA ANA", "email": "gemela@ejemplo.test",
-                                 "center": "OGA5", "active": True, "transporter_id": "AANA000001"})
+async def test_dos_personas_con_el_mismo_transporter_id_es_una_disputa(base):
+    """T >= 2. El empate que más se ve: el mismo `transporter_id` en dos fichas activas (antes lo decidía el orden).
+    Las dos «en revisión» y sin esas DNR (Ana sigue viendo la de su ficha fusionada). Una tercera que lo tiene SOLO en
+    `driver_id` tampoco lo ve, pero NO queda en revisión: no es de las que lo reclaman donde manda la oficina."""
+    base["drivers"].docs += [_ficha("d-gemela", transporter_id="AANA000001"),
+                             _ficha("d-tercera", driver_id="AANA000001")]
+    disputadas = {"TBAANA1", "TBAANA2", "TBAANA3", "TBAANA4", "TBAANA5"}
     for sub in ("d-ana", "d-gemela"):
         r = await server.mis_dnr(_conductor(sub))
         assert r["en_revision"] is True, sub
-        assert not ({"TBAANA1", "TBAANA2", "TBAANA3"} & _paquetes(r)), sub
+        assert not (disputadas & _paquetes(r)), sub
+    assert _paquetes(await server.mis_dnr(_conductor("d-ana"))) == {"TBAANAV"}
+    r = await server.mis_dnr(_conductor("d-tercera"))
+    assert r["en_revision"] is False and _paquetes(r) == set()
+    await _como_la_oficina(await _de_la_oficina(), {"d-ana": {"d-ana", "d-ana-vieja"}, "d-gemela": {"d-gemela"},
+                                                   "d-tercera": {"d-tercera"}}, disputadas)
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_si_todos_sus_ids_estan_en_duda_no_ve_nada(base):
-    """Luis (vivo, `transporter_id`) y Mar (viva, el mismo en `driver_id`): los dos en revisión y sin ninguna DNR."""
-    for sub in ("d-luis", "d-mar"):
+    """T >= 2 con todos sus IDs: Luis y otra ficha viva con su mismo `transporter_id`, los dos en revisión y sin
+    ninguna DNR (pero con datos_hasta). Mar, que lo tiene SOLO en `driver_id`, ni lo ve ni queda en revisión."""
+    base["drivers"].docs.append(_ficha("d-luis-dos", transporter_id="ALUIS00001"))
+    for sub in ("d-luis", "d-luis-dos"):
         r = await server.mis_dnr(_conductor(sub))
         assert r["tiene_id"] is True and r["en_revision"] is True and r["semanas"] == [], sub
         assert "TBLUIS1" not in json.dumps(r)
     # datos_hasta, el de su centro (OGA5), como a cualquiera.
     assert (await server.mis_dnr(_conductor("d-luis")))["datos_hasta"] == "2026-11-10"
+    r = await server.mis_dnr(_conductor("d-mar"))
+    assert r["en_revision"] is False and _paquetes(r) == set()
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sin_transporter_id_y_dos_con_el_mismo_driver_id_es_una_disputa(base):
+    """T vacío y D >= 2: nadie lo tiene en `transporter_id` y dos personas vivas en `driver_id`. Era el caso del
+    hallazgo (ganaba la que Mongo devolviera primero): las dos en revisión y ninguna lo ve."""
+    base["drivers"].docs.append(_ficha("d-eva-dos", center="DGA1", driver_id="AEVA000001"))
+    for sub in ("d-eva", "d-eva-dos"):
+        r = await server.mis_dnr(_conductor(sub))
+        assert r["tiene_id"] is True and r["en_revision"] is True and r["semanas"] == [], sub
+        assert r["datos_hasta"] == "2026-11-11", sub
+        assert "TBEVA01" not in json.dumps(r)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sin_transporter_id_y_uno_solo_con_el_driver_id_es_suyo(base):
+    """T vacío y D = 1: Eva, la única viva con ese `driver_id`, lo ve y no está en revisión."""
+    r = await server.mis_dnr(_conductor("d-eva"))
+    assert r["en_revision"] is False and _paquetes(r) == {"TBEVA01"}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_las_fichas_de_baja_no_disputan_y_se_queda_lo_que_hace_la_oficina(base):
+    """Las de baja no cuentan para la disputa, pero lo que ve cada uno sigue siendo lo que da la oficina:
+    · Una ficha de BAJA con el ID en `transporter_id` y una viva que lo tiene en `driver_id`: la oficina se lo da a la
+      de baja y la viva no lo ve (se queda igual), sin quedar en revisión.
+    · Lo mismo si la de baja lo tiene en `driver_id` (en ese campo la oficina se queda con la primera, y las de baja van
+      primero): Eva deja de verlo, como en la oficina, y tampoco queda en revisión."""
+    base["drivers"].docs += [_ficha("d-xavi-baja", active=False, transporter_id="AXAVI00001"),
+                             _ficha("d-xavi", driver_id="AXAVI00001"),
+                             _ficha("d-eva-baja", center="DGA1", active=False, driver_id="AEVA000001")]
+    base["dnr_rows"].docs.append(_fila("TBXAVI1", "AXAVI00001", "2026-11-05", "Y"))
+    oficina = await _de_la_oficina()
+    assert "TBXAVI1" in oficina["d-xavi-baja"] and "TBEVA01" in oficina["d-eva-baja"]
+    for sub in ("d-xavi", "d-eva"):
+        r = await server.mis_dnr(_conductor(sub))
+        assert r["en_revision"] is False and _paquetes(r) == set(), sub
+    await _como_la_oficina(oficina, {"d-xavi": {"d-xavi"}, "d-eva": {"d-eva"}, "d-ana": {"d-ana", "d-ana-vieja"},
+                                     "d-luis": {"d-luis"}})
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_sesion_y_sus_fusionadas_son_una_sola_persona(base):
+    """La ficha de la sesión con las fusionadas en ella cuenta como UNA persona viva. Ana tiene en `driver_id` el ID de
+    su ficha fusionada (que lo tiene en `transporter_id`) y otra persona viva lo tiene en `driver_id`: para Ana, T es
+    ella sola, así que es suyo (como en la oficina, que se lo da a su ficha fusionada) y no está en revisión.
+    Y si otra persona viva lo tiene en `transporter_id`, son dos en T: disputa, y Ana en revisión."""
+    base["drivers"].docs[0]["driver_id"] = "AANAVIEJA1"
+    base["drivers"].docs.append(_ficha("d-otra", driver_id="AANAVIEJA1"))
+    r = await server.mis_dnr(_conductor("d-ana"))
+    assert r["en_revision"] is False and "TBAANAV" in _paquetes(r)
+    assert _paquetes(await server.mis_dnr(_conductor("d-otra"))) == set()
+    base["drivers"].docs[-1] = _ficha("d-otra", transporter_id="AANAVIEJA1")
+    r = await server.mis_dnr(_conductor("d-ana"))
+    assert r["en_revision"] is True and "TBAANAV" not in _paquetes(r) and "TBAANA1" in _paquetes(r)
 
 
 # ── Sin ID, sin módulo ─────────────────────────────────────────────────────────
@@ -506,26 +592,61 @@ async def test_sin_centro_reconocible_el_ultimo_de_la_empresa(base):
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_una_empresa_solo_con_filas_pegadas_tambien_dice_hasta_cuando(base):
+    """S2 (11-11-2026): un pegado de solo el bloque DNR guarda filas en `dnr_rows` y NINGÚN documento en
+    `daily_reports`. datos_hasta tiene que mirar también esas filas (su `fecha_concesion`), o el conductor leería «Aún
+    no hay reportes de tu centro» habiéndolos. Los centros, casados por código exacto, como con los reportes."""
+    base["daily_reports"].docs = []
+    base["dnr_rows"].docs.append(_fila("TBOTRO1", "AFANTASMA1", "2026-11-11", "", center="DGA1"))
+    base["drivers"].docs += [
+        {"id": "d-nada", "name": "NADA DE CENTRO", "email": "nada@ejemplo.test", "active": True,
+         "transporter_id": "ANADA00001"},
+        {"id": "d-oga5", "name": "SIN FILAS EN OGA5", "email": "oga5@ejemplo.test", "center": "AMZL OGA5 XPT",
+         "active": True, "transporter_id": "AOGA500001"},
+    ]
+    assert (await server.mis_dnr(_conductor("d-ana")))["datos_hasta"] == "2026-11-10"     # su centro, OGA5
+    assert (await server.mis_dnr(_conductor("d-oga5")))["datos_hasta"] == "2026-11-10"    # sin filas suyas: su ficha
+    assert (await server.mis_dnr(_conductor("d-diez")))["datos_hasta"] == "2026-11-04"    # DGA10, no DGA1
+    assert (await server.mis_dnr(_conductor("d-nada")))["datos_hasta"] == "2026-11-11"    # toda la empresa
+    # Con las dos cosas, el mayor de los dos: el reporte de OGA5 llega al 09 y las filas pegadas, al 10.
+    base["daily_reports"].docs = [{"center": "OGA5", "fecha": "2026-11-11", "fecha_dnr": "2026-11-09"}]
+    assert (await server.mis_dnr(_conductor("d-oga5")))["datos_hasta"] == "2026-11-10"
+    # Y al revés: el reporte de DGA10 va por delante de sus filas.
+    base["daily_reports"].docs.append({"center": "DGA10", "fecha": "2026-11-09", "fecha_dnr": "2026-11-07"})
+    assert (await server.mis_dnr(_conductor("d-diez")))["datos_hasta"] == "2026-11-07"
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_ninguna_consulta_lee_sin_tope(base):
     """D7 y R7/F14: cada consulta de la ruta lleva su tope (limit o to_list(n)), mirando TODAS las colecciones que toca:
     las de las fichas, las filas, la foto, el contacto, los reportes y la empresa. Lo que no es un cursor: find_one (uno),
-    y un único distinct, el de los centros de daily_reports (tantos como centros, con su índice). Y ya no toca las
-    colecciones heredadas del «no coincide» (cortex_resumen, route_history, whc_api, app_meta), que leía sin tope."""
-    tocadas: dict = {}
-    await server.mis_dnr(_conductor("d-ana"))
-    for nombre, col in list(base.items()):
-        if col.cursores or col.otras:
-            tocadas[nombre] = col
-    assert set(tocadas) == {"drivers", "dnr_rows", "pod_rows", "cc_rows", "daily_reports"}, set(tocadas)
-    for nombre, col in tocadas.items():
-        assert all(c.con_tope for c in col.cursores), nombre
-        assert not [o for o in col.otras if o not in ("find_one", "distinct:center")], (nombre, col.otras)
-    assert base["daily_reports"].otras.count("distinct:center") <= 1
-    for heredada in ("cortex_resumen", "route_history", "whc_api", "app_meta"):
-        assert not base[heredada].cursores and not base[heredada].otras, heredada
-    # La empresa (la base global): solo find_one.
-    org = server.global_db["organizations"]
-    assert not org.cursores and set(org.otras) <= {"find_one"}
+    y un único distinct por colección, el de los centros de daily_reports y el de dnr_rows (tantos como centros, con su
+    índice (center, fecha): S2). Y ya no toca las colecciones heredadas del «no coincide» (cortex_resumen, route_history,
+    whc_api, app_meta), que leía sin tope. Por cada camino: lo normal, una ficha sin centro (el último de la empresa) y
+    todos sus IDs en disputa."""
+    base["drivers"].docs += [
+        {"id": "d-nada", "name": "NADA DE CENTRO", "email": "nada@ejemplo.test", "active": True,
+         "transporter_id": "ANADA00001"},
+        {"id": "d-luis-dos", "name": "OTRO LUIS", "email": "luis2@ejemplo.test", "center": "OGA5", "active": True,
+         "transporter_id": "ALUIS00001"},
+    ]
+    for sub in ("d-ana", "d-nada", "d-luis"):
+        for col in list(base.values()) + [server.global_db["organizations"]]:
+            col.cursores.clear()
+            col.otras.clear()
+        await server.mis_dnr(_conductor(sub))
+        tocadas = {nombre: col for nombre, col in list(base.items()) if col.cursores or col.otras}
+        assert set(tocadas) <= {"drivers", "dnr_rows", "pod_rows", "cc_rows", "daily_reports"}, (sub, set(tocadas))
+        for nombre, col in tocadas.items():
+            assert all(c.con_tope for c in col.cursores), (sub, nombre)
+            assert not [o for o in col.otras if o not in ("find_one", "distinct:center")], (sub, nombre, col.otras)
+        for nombre in ("daily_reports", "dnr_rows"):
+            assert base[nombre].otras.count("distinct:center") <= 1, (sub, nombre)
+        for heredada in ("cortex_resumen", "route_history", "whc_api", "app_meta"):
+            assert not base[heredada].cursores and not base[heredada].otras, (sub, heredada)
+        # La empresa (la base global): solo find_one.
+        org = server.global_db["organizations"]
+        assert not org.cursores and set(org.otras) <= {"find_one"}, sub
 
 
 # ── Cómo fue la entrega (R4) ───────────────────────────────────────────────────
