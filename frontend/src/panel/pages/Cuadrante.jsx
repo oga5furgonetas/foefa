@@ -12,7 +12,7 @@ import {
   cuadranteExportar, cuadranteImportar, getSyncHoja, cuadranteAvisosPrevia, cuadranteAvisosEnviar,
 } from '../api'
 import { lista } from '../../lib/lista'
-import { hoyLocal } from '../../lib/fecha'
+import { hoyLocal, diaMesLocal } from '../../lib/fecha'
 import { canSee } from '../auth'
 import CuadranteChat from '../components/CuadranteChat'
 import SincronizarSheets from '../components/SincronizarSheets'
@@ -160,7 +160,34 @@ function Modal({ titulo, onCerrar, children, ancho = 'max-w-2xl' }) {
    14 días, solo lo que de verdad cambia para él), se desmarca a quien no se quiera avisar, y se manda UN aviso por
    persona (a la bandeja de la app y como notificación). El servidor lo vuelve a calcular al mandar: no se fía de esta
    lista. Van los marcados y los desmarcados por separado (11-11-2026, revisión): a quien aparezca después de abrir la
-   ventana no se le toca nada y sale la próxima vez. */
+   ventana no se le toca nada y sale la próxima vez.
+   12-11-2026 (X2, X6): cada día dice lo de ahora, lo de antes (lo que el conductor sabe) y desde cuándo está sin avisar;
+   y van las marcas de TODO lo que se enseñó, también de los marcados, para que a nadie se le diga lo que la oficina no
+   vio (lo que cambió con la ventana abierta sale la próxima vez). */
+/* A quién no se avisó y por qué (12-11-2026, X7), con nombres: «A Juan no se le ha avisado: su día cambió mientras
+   tenías la ventana abierta. Vuelve a abrirla.». El servidor manda `no_avisados` [{nombre, motivo, parcial, nave?}]; uno de
+   antes no lo manda y la pantalla dice lo de siempre. */
+const conY = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}` : xs[0] || '')
+function textoNoAvisados(noAvisados) {
+  const grupos = new Map()
+  for (const x of lista(noAvisados)) {
+    // `otra_nave` (12-11-2026, revisión 5) lleva la nave que ahora lo enseña y lo avisa: van juntos los de la misma.
+    const nave = x?.motivo === 'otra_nave' ? String(x?.nave || '') : ''
+    const k = `${x?.motivo || ''}|${x?.parcial ? 1 : 0}|${nave}`
+    if (!grupos.has(k)) grupos.set(k, { motivo: x?.motivo, parcial: !!x?.parcial, nave, nombres: [] })
+    grupos.get(k).nombres.push(x?.nombre || x?.driver_id || '?')
+  }
+  return [...grupos.values()].map(({ motivo, parcial, nave, nombres }) => {
+    const varios = nombres.length > 1
+    const por = motivo === 'ya_avisado' ? `otra persona acababa de avisar${varios ? 'les' : 'le'}`
+      : motivo === 'no_guardado' ? 'no se ha podido guardar el aviso. Inténtalo otra vez'
+        : motivo === 'otra_nave'
+          ? `${varios ? 'sus días han pasado' : 'su día ha pasado'} a otra nave${nave ? ` (${nave})` : ''} y se ${varios ? 'avisan' : 'avisa'} desde allí`
+          : `${varios ? 'sus días cambiaron' : 'su día cambió'} mientras tenías la ventana abierta. Vuelve a abrirla`
+    return `A ${conY(nombres)} no se ${varios ? 'les' : 'le'} ha avisado${parcial ? ' de algún día' : ''}: ${por}.`
+  }).join(' ')
+}
+
 function AvisarConductores({ center, onCerrar, onHecho }) {
   const [previa, setPrevia] = useState(null)
   const [err, setErr] = useState('')
@@ -187,9 +214,10 @@ function AvisarConductores({ center, onCerrar, onHecho }) {
     setEnviando(true); setErr('')
     try {
       const desmarcados = lista(previa?.personas).filter((p) => !marcados.has(p.driver_id))
-      // Las marcas de los días que se enseñaron de los desmarcados (11-11-2026, segunda ronda): el servidor solo
-      // descarta lo que la oficina vio; lo que cambió después vuelve a salir. Sin marcas (un servidor anterior), no van.
-      const dias = desmarcados.flatMap((p) => lista(p.dias))
+      // Las marcas de los días que se enseñaron (11-11-2026, segunda ronda; de todos desde el 12-11-2026, X2): el
+      // servidor solo descarta, y solo dice, lo que la oficina vio; lo que cambió después vuelve a salir. Sin marcas (un
+      // servidor anterior), no van.
+      const dias = lista(previa?.personas).flatMap((p) => lista(p.dias))
       const vistas = dias.length > 0 && dias.every((d) => d?.marca) ? dias.map((d) => d.marca) : undefined
       const { data } = await cuadranteAvisosEnviar(center, [...marcados], desmarcados.map((p) => p.driver_id), vistas)
       onHecho(data, { pedidos: marcados.size })
@@ -220,9 +248,17 @@ function AvisarConductores({ center, onCerrar, onHecho }) {
                       aria-label={`Avisar a ${p.nombre}`} />
                     <span className="min-w-0">
                       <span className="block font-semibold text-dark-100">{p.nombre}</span>
-                      <span className="block text-[12px] text-dark-400">
-                        {lista(p.dias).map((d) => `${DIA[wd(d.fecha)].slice(0, 3)} ${fmt(d.fecha)}: ${d.ahora}`).join(' · ')}
-                      </span>
+                      {/* Un día por línea (12-11-2026, X6): «sáb 14/11: libras (antes: trabajas)» y, debajo, desde
+                          cuándo está sin avisar. Se parte en dos líneas si no cabe: en el móvil no se desliza de lado. */}
+                      {lista(p.dias).map((d) => (
+                        <span key={d.fecha} className="mt-0.5 block break-words text-[12px] text-dark-400" data-testid="avisar-dia">
+                          <span className="text-dark-200">{`${DIA[wd(d.fecha)].slice(0, 3)} ${fmt(d.fecha)}: ${d.ahora}`}</span>
+                          {d.antes && <span>{` (antes: ${d.antes})`}</span>}
+                          {diaMesLocal(d.desde) && (
+                            <span className="block text-[11px] text-dark-500">{`cambiado el ${diaMesLocal(d.desde)}`}</span>
+                          )}
+                        </span>
+                      ))}
                     </span>
                   </label>
                 </li>
@@ -1863,15 +1899,19 @@ export default function Cuadrante() {
             setAvisar(false)
             const n = r?.avisados ?? 0
             const d = r?.descartados ?? 0
+            // A quién no se avisó y por qué, con nombres (12-11-2026, X7); un servidor de antes no lo dice.
+            const noAvisados = textoNoAvisados(r?.no_avisados)
             // Sin avisar a nadie, lo que pasó de verdad (11-11-2026, segunda ronda): se pidió avisar y no se pudo coger
             // ningún día (otra persona acababa de avisar, o cambiaron), o se quitó a todos de la lista.
             setAviso(n > 0
-              ? `Avisado${n === 1 ? '' : 's'} ${n === 1 ? '1 conductor' : `${n} conductores`}: ${lista(r?.personas).map((p) => p.nombre).join(', ')}.`
-              : pedidos > 0
-                ? 'No se ha avisado a nadie: otra persona acababa de avisar de estos cambios, o han cambiado mientras tanto. Abre otra vez «Avisar a los conductores» para ver lo que quede.'
-                : d > 0
-                  ? `No se ha avisado a nadie: ${d === 1 ? '1 conductor sale' : `${d} conductores salen`} de la lista hasta que su cuadrante cambie otra vez.`
-                  : 'No se ha avisado a nadie y nadie ha salido de la lista: sus días han cambiado mientras tanto. Ábrela otra vez para verlos.')
+              ? `Avisado${n === 1 ? '' : 's'} ${n === 1 ? '1 conductor' : `${n} conductores`}: ${lista(r?.personas).map((p) => p.nombre).join(', ')}.${noAvisados ? ` ${noAvisados}` : ''}`
+              : noAvisados
+                ? noAvisados + (d > 0 ? ` ${d === 1 ? '1 conductor sale' : `${d} conductores salen`} de la lista hasta que su cuadrante cambie otra vez.` : '')
+                : pedidos > 0
+                  ? 'No se ha avisado a nadie: otra persona acababa de avisar de estos cambios, o han cambiado mientras tanto. Abre otra vez «Avisar a los conductores» para ver lo que quede.'
+                  : d > 0
+                    ? `No se ha avisado a nadie: ${d === 1 ? '1 conductor sale' : `${d} conductores salen`} de la lista hasta que su cuadrante cambie otra vez.`
+                    : 'No se ha avisado a nadie y nadie ha salido de la lista: sus días han cambiado mientras tanto. Ábrela otra vez para verlos.')
           }} />
       )}
 

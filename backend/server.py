@@ -52869,14 +52869,27 @@ async def cuadrante_deshacer(data: dict = Body(...), user: dict = Depends(requir
 # Rehecho el 11-11-2026 (revisión, P8-P10 y P22): ya NO sale del historial de «Deshacer», que guarda solo los 30
 # últimos registros por nave y se saltaba cambios sin decirlo. Ahora todo cambio del cuadrante (_CuaCambio.guardar y
 # el deshacer) apunta cada celda que cambia de hoy en adelante en su propia colección, un documento por celda:
-#   cuadrante_avisos_pendientes {_id: "nave|conductor|fecha", center, driver_id, fecha, dicho, visto?, en, tocado,
-#                                avisado_en?, avisado_por?, avisado_lote?}
+#   cuadrante_avisos_pendientes {_id: "conductor|fecha", center, driver_id, fecha, dicho, visto?, en, tocado, desde?,
+#                                forzar?, avisado_en?, avisado_por?, avisado_lote?}
 # `dicho` es lo que el conductor SABE de ese día (lo que había antes del primer cambio sin avisar, o lo último que se le
 # avisó) y no se pisa al apuntar; `tocado` cambia con cada cambio de la celda; `visto` es lo que había cuando la oficina
 # la vio y la desmarcó. Se avisa si lo que hay AHORA se lee distinto («trabajas», «libras»…) de `dicho` y de `visto`, de
 # hoy a 14 días: un cambio deshecho o devuelto a como estaba no avisa, uno avisado y deshecho después sí, y uno lejano
 # sale cuando su día entra en los 14, tenga la edad que tenga. Lo que no pasa por el cuadrante (un día concedido, una
 # suspensión, la rejilla escondida de Turnos) tiene su propio camino o no se avisa por aquí.
+# Terminado el 12-11-2026 (los siete casos del repaso final, X1 a X7):
+#   · la etiqueta dice la nave cuando no es la de la ficha del conductor («trabajas en DGA1»; decisión de Dani: «Sí, que
+#     lo diga»), así que pasar a alguien de OGA5 a DGA1 un día se apunta y se avisa (X4);
+#   · un documento por CELDA, no por nave (antes «nave|conductor|fecha»): `center` es la última nave que la tocó, y cada
+#     celda la enseña UNA nave, la de su turno de ahora (o, vacía, la última que la tocó), con un solo `dicho` (X5);
+#   · `forzar`: lo que el propio cuadrante deja como día concedido o de una suspensión (un «Deshacer» que lo devuelve) y
+#     no es lo que el conductor sabe sí sale; lo concedido por su camino sigue sin salir (X1);
+#   · `desde`: cuándo se hizo el primer cambio que sigue sin avisar (X6); y lo de las fichas fusionadas pasa a la buena
+#     al calcular (X3). A un marcado solo se le dice lo que la oficina vio (X2) y el envío dice a quién no se avisó (X7).
+# Revisión 5 (12-11-2026): `dicho` y `visto` se guardan como CLAVE sin la nave de la ficha («trabajas@DGA1»,
+# _cua_aviso_clave) y se comparan y se dicen con la nave de la ficha de AHORA (_cua_aviso_igual, _cua_aviso_decir): un
+# traslado de nave ya no vuelve a sacar días que no han cambiado ni esconde los que cambiaron de nave.
+# La colección estaba VACÍA en producción (el aviso se publicó apagado y apagado no apunta nada): no hay nada que migrar.
 _CUA_AVISOS_PEND = "cuadrante_avisos_pendientes"
 _CUA_AVISO_DIAS = 14
 # EL INTERRUPTOR (11-11-2026): APAGADO. El repaso final sacó casos raros sin cerrar (un día concedido que se anula, se
@@ -52894,8 +52907,23 @@ _CUA_AVISO_ETIQUETA = {"1": "trabajas", "T": "trabajas", "X": "trabajas", "EXTRA
                        "SUSP": "suspendido", "N/P": "no presentado"}
 
 
-def _cua_aviso_etiqueta(doc: Optional[dict]) -> str:
-    """Lo que se le dice al conductor de una celda. 1, T y X son lo mismo para él: «trabajas»."""
+def _cua_aviso_nave(valor) -> str:
+    """El código limpio de una nave para el texto del aviso: «AMZL DGA1 SANTIAGO XPT» → «DGA1» (_CENTRO_RE, si dentro
+    hay un solo código); si no, el nombre tal cual, en mayúsculas."""
+    s = str(valor or "").strip().upper()
+    codigos = set(_CENTRO_RE.findall(s))
+    return codigos.pop() if len(codigos) == 1 else s
+
+
+def _cua_misma_nave(a, b) -> bool:
+    """La misma nave, como en el resto del cuadrante (_cua_es_centro) y en los dos sentidos: los nombres de la base
+    vienen sucios («OGA5», «AMZL OGA5 SANTIAGO XPT»). Sin una de las dos, no se sabe: False."""
+    a, b = str(a or "").strip(), str(b or "").strip()
+    return bool(a and b) and (_cua_es_centro(a, b) or _cua_es_centro(b, a))
+
+
+def _cua_aviso_base(doc: Optional[dict]) -> str:
+    """Lo que es el día, sin nave. 1, T y X son lo mismo para el conductor: «trabajas»."""
     cod = _cua_cod_turno(doc) if doc else ""
     if not cod:
         return "sin turno"
@@ -52905,6 +52933,73 @@ def _cua_aviso_etiqueta(doc: Optional[dict]) -> str:
         return _CUA_AVISO_ETIQUETA[cod]
     info = CODIGOS_CUADRANTE_INFO.get(cod)
     return info[1].lower() if info else cod
+
+
+def _cua_aviso_clave(doc: Optional[dict], casa=None) -> str:
+    """Lo que el conductor sabe (o sabría) de una celda, tal como se GUARDA (`dicho`, `visto`) y se compara (12-11-2026,
+    revisión 5): sin depender de la nave de su ficha. Un día de ir a un sitio lleva «@» y la nave del turno
+    («trabajas@DGA1»); un turno de trabajo sin nave apuntada (datos viejos) es de la nave de casa, como siempre. Antes se
+    guardaba ya dicho con la nave de la ficha de ESE momento, y un traslado (la ficha cambia de nave) hacía que un día que
+    no había cambiado volviera a salir y que uno que sí había cambiado de nave se escondiera."""
+    texto = _cua_aviso_base(doc)
+    if not doc or _cua_cod_turno(doc) not in _cm.TRABAJO:
+        return texto
+    nave = str(doc.get("center") or "").strip() or str(casa or "").strip()
+    return f"{texto}@{nave}" if nave else texto
+
+
+def _cua_aviso_decir(clave, casa=None) -> str:
+    """Cómo se le dice al conductor una clave de _cua_aviso_clave con la nave de su ficha de AHORA (X4; decisión de
+    Dani: «Sí, que lo diga»): un día de ir a un sitio en OTRA nave lleva la nave, «trabajas en DGA1» («en la oficina de
+    DGA1» para la oficina, que «en oficina en DGA1» repite «en»; revisión 5). Libras, vacaciones, baja y demás nunca la
+    llevan; sin la nave de casa, tampoco (no se sabe cuál es «la suya»)."""
+    texto, _, nave = str(clave or "sin turno").partition("@")
+    if not nave or not str(casa or "").strip() or _cua_misma_nave(nave, casa):
+        return texto
+    if texto == "en oficina":
+        return f"en la oficina de {_cua_aviso_nave(nave)}"
+    return f"{texto} en {_cua_aviso_nave(nave)}"
+
+
+def _cua_aviso_igual(a, b, casa=None) -> bool:
+    """¿Se le dice lo mismo, con la nave de su ficha de ahora? (revisión 5). Es lo que decide si hay algo que avisar."""
+    a, b = str(a or "sin turno"), str(b or "sin turno")
+    return a == b or _cua_aviso_decir(a, casa) == _cua_aviso_decir(b, casa)
+
+
+def _cua_aviso_iguales(clave: str, casa=None) -> list:
+    """Las claves guardadas que se leen como `clave` (_cua_aviso_igual), para las condiciones de la base al apuntar: ella
+    misma y, si se dice sin nave, también sin nave apuntada o con la de casa. Nombres sucios de una misma nave no
+    entran: entonces la condición no casa y como mucho queda un `desde` de más o de menos (lo que se avisa lo decide la
+    previa, que compara con _cua_aviso_igual)."""
+    texto, _, nave = clave.partition("@")
+    out = {clave}
+    if nave and _cua_aviso_decir(clave, casa) == texto:
+        out.add(texto)
+        if str(casa or "").strip():
+            out.add(f"{texto}@{str(casa).strip()}")
+    return sorted(out)
+
+
+def _cua_aviso_etiqueta(doc: Optional[dict], casa=None) -> str:
+    """Lo que se le dice al conductor de una celda. `casa` (12-11-2026, X4): la nave de su ficha (_cua_aviso_decir)."""
+    return _cua_aviso_decir(_cua_aviso_clave(doc, casa), casa)
+
+
+def _cua_aviso_crudo(doc: Optional[dict]) -> Tuple[str, str]:
+    """Lo que decide la etiqueta sin la nave de casa: si esto no cambia, la etiqueta no cambia para nadie. Sirve para no
+    leer las fichas cuando una sincronización con la hoja no cambia nada (12-11-2026)."""
+    trabajo = bool(doc) and _cua_cod_turno(doc) in _cm.TRABAJO
+    return _cua_aviso_etiqueta(doc), (str((doc or {}).get("center") or "").strip().upper() if trabajo else "")
+
+
+async def _cua_aviso_casas(ids) -> dict:
+    """{driver_id: la nave de su ficha}, en UNA consulta."""
+    ids = sorted({str(i) for i in ids if i})
+    if not ids:
+        return {}
+    return {d["id"]: d.get("center") for d in await db.drivers.find(
+        {"id": {"$in": ids}}, {"_id": 0, "id": 1, "center": 1}).to_list(5000)}
 
 
 def _cua_aviso_celdas(cambio: dict):
@@ -52945,34 +53040,64 @@ async def _cua_avisos_apuntar(center: str, celdas) -> None:
         if not antes:
             return
         ahora_turnos = await _cua_turnos_de(set(antes))                  # lo de ahora, en UNA consulta
-        cambiadas = {k: doc for k, doc in antes.items()
-                     if _cua_aviso_etiqueta(doc) != _cua_aviso_etiqueta(ahora_turnos.get(k))}
+        # La etiqueta depende también de la nave de la ficha (12-11-2026, X4). Primero sin ella: si ni el código ni, en
+        # un día de trabajo, la nave cambian, la etiqueta no cambia para nadie. Así una sincronización que no cambia
+        # nada no lee ni las fichas; con cambios, las fichas de esas celdas en UNA consulta.
+        posibles = {k: doc for k, doc in antes.items() if _cua_aviso_crudo(doc) != _cua_aviso_crudo(ahora_turnos.get(k))}
+        if not posibles:
+            return
+        casas = await _cua_aviso_casas({k[0] for k in posibles})
+        cambiadas = {}
+        for k, doc in posibles.items():
+            # Se guarda la clave (sin la nave de la ficha, revisión 5) y se decide con lo que se le diría hoy.
+            de_antes = _cua_aviso_clave(doc, casas.get(k[0]))
+            de_ahora = _cua_aviso_clave(ahora_turnos.get(k), casas.get(k[0]))
+            if not _cua_aviso_igual(de_antes, de_ahora, casas.get(k[0])):
+                cambiadas[k] = (doc, de_antes, de_ahora, _cua_aviso_iguales(de_ahora, casas.get(k[0])))
         if not cambiadas:
             return
         marca, ahora = str(uuid.uuid4()), datetime.now(timezone.utc).isoformat()
-        # Un documento por celda con `_id` fijo: dos cambios a la vez sobre la misma celda no la duplican.
+        # Un documento por CELDA con `_id` fijo «conductor|fecha» (12-11-2026, X5; antes uno por nave): dos cambios a la
+        # vez, o de dos naves, sobre la misma celda no la duplican, y lo que el conductor sabe (`dicho`) es uno solo.
+        # Sin leer los pendientes: con cambios son una lectura de turnos, una de fichas y escrituras por lotes. Las de una
+        # celda casan con condiciones sobre lo que dejan las anteriores, así que el lote va EN ORDEN (12-11-2026).
         ops = []
-        for (did, f), doc in cambiadas.items():
-            nuevo = {"center": center, "driver_id": did, "fecha": f, "en": ahora}
-            if doc and (doc.get("aprobado_req") or doc.get("suspension_id")):
-                # Lo de antes era un día concedido o de una suspensión (tercera ronda, V1): eso se lo dijo su propio
+        for (did, f), (doc, de_antes, de_ahora, iguales) in cambiadas.items():
+            _id = f"{did}|{f}"
+            nuevo_doc = ahora_turnos.get((did, f))
+            concedido_antes = bool(doc and (doc.get("aprobado_req") or doc.get("suspension_id")))
+            # Lo que queda AHORA es un día concedido o de una suspensión puesto por el cuadrante (un «Deshacer» que lo
+            # devuelve): la previa se saltaba eso («lo avisa su camino») y no es verdad aquí. Se marca (`forzar`) si no
+            # es lo que el conductor sabe (12-11-2026, X1); se quita cuando un apunte deja otra cosa, y al avisar.
+            concedido_ahora = bool(nuevo_doc and (nuevo_doc.get("aprobado_req") or nuevo_doc.get("suspension_id")))
+            # 1. La celda: entra con `dicho` = lo de antes; si ya estaba, solo cambia `tocado` y la nave que la tocó.
+            op = {"$set": {"tocado": marca, "center": center},
+                  "$setOnInsert": {"driver_id": did, "fecha": f, "en": ahora, "dicho": de_antes, "desde": ahora}}
+            if not concedido_antes and not concedido_ahora:
+                op["$unset"] = {"forzar": ""}
+            ops.append(UpdateOne({"_id": _id}, op, upsert=True))
+            if concedido_antes:
+                # 2. Lo de antes era un día concedido o de una suspensión (tercera ronda, V1): eso se lo dijo su propio
                 # camino (el aviso de la aprobación, la suspensión), así que es lo que sabe aunque ya hubiera algo
-                # apuntado; y lo que la oficina hubiera descartado antes ya no vale.
-                ops.append(UpdateOne({"_id": f"{center}|{did}|{f}"},
-                                     {"$set": {"tocado": marca, "dicho": _cua_aviso_etiqueta(doc)},
-                                      "$setOnInsert": nuevo, "$unset": {"visto": ""}}, upsert=True))
-                continue
-            ops.append(UpdateOne({"_id": f"{center}|{did}|{f}"},
-                                 {"$set": {"tocado": marca},
-                                  "$setOnInsert": {**nuevo, "dicho": _cua_aviso_etiqueta(doc)}}, upsert=True))
-            # Si el día vuelve a lo que el conductor sabe, lo que la oficina descartó deja de valer (tercera ronda,
-            # V6): si más tarde se le vuelve a poner eso mismo, es un cambio nuevo que nadie ha visto. Sin leer nada:
-            # solo casa si `dicho` es lo de ahora. Las dos operaciones no se pisan, vayan en el orden que vayan.
-            ops.append(UpdateOne({"_id": f"{center}|{did}|{f}", "visto": {"$exists": True},
-                                  "dicho": _cua_aviso_etiqueta(ahora_turnos.get((did, f)))},
-                                 {"$unset": {"visto": ""}}))
+                # apuntado; y lo que la oficina hubiera descartado antes ya no vale. Lo sin avisar empieza ahora.
+                # SALVO si estaba marcado (`forzar`, X1): entonces lo puso ahí el cuadrante y no se le dijo nadie.
+                ops.append(UpdateOne({"_id": _id, "forzar": {"$exists": False}},
+                                     {"$set": {"dicho": de_antes, "desde": ahora}, "$unset": {"visto": ""}}))
+            # 3. Si el día vuelve a lo que el conductor sabe, lo que la oficina descartó deja de valer (tercera ronda,
+            # V6): si más tarde se le vuelve a poner eso mismo, es un cambio nuevo que nadie ha visto. Y ya no hay nada
+            # sin avisar (`desde`) ni que forzar. Solo casa si `dicho` se lee como lo de ahora (`iguales`, revisión 5).
+            ops.append(UpdateOne({"_id": _id, "dicho": {"$in": iguales}},
+                                 {"$unset": {"visto": "", "desde": "", "forzar": ""}}))
+            # 4. Si no es lo que sabe y no había nada sin avisar (se le avisó, o había vuelto a lo suyo), empieza ahora (X6).
+            ops.append(UpdateOne({"_id": _id, "dicho": {"$nin": iguales}, "desde": {"$exists": False}},
+                                 {"$set": {"desde": ahora}}))
+            # 5. La marca de X1: se pone si lo concedido de ahora no es lo que sabe; se quita si ya no es concedido.
+            if concedido_ahora:
+                ops.append(UpdateOne({"_id": _id, "dicho": {"$nin": iguales}}, {"$set": {"forzar": True}}))
+            elif concedido_antes:
+                ops.append(UpdateOne({"_id": _id, "forzar": {"$exists": True}}, {"$unset": {"forzar": ""}}))
         for i in range(0, len(ops), 500):
-            await db[_CUA_AVISOS_PEND].bulk_write(ops[i:i + 500], ordered=False)
+            await db[_CUA_AVISOS_PEND].bulk_write(ops[i:i + 500], ordered=True)
     except Exception as e:                                           # noqa: BLE001
         logger.warning("Avisos del cuadrante: no se ha podido apuntar un cambio de %s: %s", center, e)
 
@@ -52984,38 +53109,119 @@ def _cua_aviso_marca(pendiente: dict, ahora: str) -> str:
     return f"{pendiente.get('tocado') or ''}|{ahora}"
 
 
-async def _cua_avisos_calcular(center: str) -> Tuple[list, str, dict]:
-    """(personas, hasta, leido): lo pendiente de la nave de hoy a 14 días comparado con lo que hay AHORA en los turnos.
-    `leido` es {(driver_id, fecha): el documento pendiente tal como se leyó}, para «coger» cada celda al mandar."""
+_CUA_AVISO_OPCIONALES = ("visto", "desde", "forzar", "avisado_en", "avisado_por", "avisado_lote")
+
+
+async def _cua_avisos_fusionadas(leido: dict, movidas: dict, ahora: dict, fichas: dict) -> None:
+    """Lo pendiente de una ficha que se ha fusionado en otra pasa a la buena (12-11-2026, X3): se borra el documento
+    viejo y queda el de «buena|fecha». Si la buena ya tenía uno, se queda el que avisa (si solo uno de los dos tiene algo
+    que decirle al conductor, ese: quedarse el otro perdería el aviso) y, si los dos o ninguno, el `dicho` más antiguo.
+    Todo condicionado a cómo se leyó; si algo cambió entre medias o falla, se deja para la próxima vez. Cambia `leido`."""
+    col = db[_CUA_AVISOS_PEND]
+    for (did, f), buena in sorted(movidas.items()):
+        p = leido.pop((did, f))
+        try:
+            q = leido.get((buena, f))
+            casa = (fichas.get(buena) or {}).get("center")
+            de_ahora = _cua_aviso_clave(ahora.get((buena, f)), casa)
+
+            def avisa(x):
+                return not _cua_aviso_igual(de_ahora, x.get("dicho"), casa) \
+                    and (x.get("visto") is None or not _cua_aviso_igual(de_ahora, x.get("visto"), casa))
+
+            destino = f"{buena}|{f}"
+            if q is None:
+                doc = {k: v for k, v in p.items() if k != "_id"}
+                doc["driver_id"] = buena
+                await col.update_one({"_id": destino}, {"$setOnInsert": doc}, upsert=True)
+            else:
+                destino = q["_id"]
+                if min((q, p), key=lambda x: (not avisa(x), str(x.get("en") or ""))) is p:
+                    poner = {k: p[k] for k in ("dicho", "en", "tocado", "center") if k in p}
+                    poner.update({k: p[k] for k in _CUA_AVISO_OPCIONALES if k in p})
+                    op = {"$set": poner}
+                    quitar = {k: "" for k in _CUA_AVISO_OPCIONALES if k not in p}
+                    if quitar:
+                        op["$unset"] = quitar
+                    r = await col.update_one({"_id": q["_id"], "tocado": q.get("tocado"), "dicho": q.get("dicho")}, op)
+                    if not getattr(r, "matched_count", 0):
+                        continue                                     # la buena cambió entre medias: la próxima vez
+            await col.delete_one({"_id": p["_id"], "tocado": p.get("tocado")})
+            junto = await col.find_one({"_id": destino})
+            if junto:
+                leido[(buena, f)] = junto
+        except Exception as e:                                       # noqa: BLE001
+            logger.warning("Avisos del cuadrante: no se ha podido pasar a %s lo pendiente de %s: %s", buena, did, e)
+
+
+async def _cua_avisos_calcular(center: str) -> Tuple[list, str, dict, dict]:
+    """(personas, hasta, leido, estado): lo pendiente de la nave de hoy a 14 días comparado con lo que hay AHORA en los
+    turnos. `leido` es {(driver_id, fecha): el documento pendiente tal como se leyó}, para «coger» cada celda al mandar.
+    `estado` (12-11-2026, X7): {"etiquetas": {(driver_id, fecha): lo de ahora, como clave (_cua_aviso_clave)} de las
+    celdas de ESTA nave que se han mirado, salgan o no; "casas": {driver_id: la nave de su ficha}; "otras":
+    {(driver_id, fecha): {nave, dice}} de las celdas de OTRA nave (revisión 5); "nombres": {driver_id: nombre}}, para
+    guardar lo avisado y decir a quién no se avisó y por qué.
+    Una celda es de la nave de su turno de AHORA; si está vacía (o el turno no dice nave), de la última nave que la
+    tocó (12-11-2026, X5): por eso se leen los pendientes de todas las naves, y cada celda sale en UNA."""
     hoy, hasta = _cua_aviso_ventana()
     leido: dict = {}
-    for p in await db[_CUA_AVISOS_PEND].find({"center": center, "fecha": {"$gte": hoy, "$lte": hasta}}).to_list(5000):
+    estado: dict = {"etiquetas": {}, "nombres": {}, "casas": {}, "otras": {}}
+    for p in await db[_CUA_AVISOS_PEND].find({"fecha": {"$gte": hoy, "$lte": hasta}}).to_list(None):
         if isinstance(p.get("driver_id"), str) and isinstance(p.get("fecha"), str) and p.get("_id") is not None:
             leido[(p["driver_id"], p["fecha"])] = p
     if not leido:
-        return [], hasta, {}
-    ahora = await _cua_turnos_de(set(leido))
+        return [], hasta, {}, estado
     ids = sorted({k[0] for k in leido})
-    fichas = {d["id"]: d for d in await db.drivers.find(
-        {"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1, "active": 1, "merged_into": 1}).to_list(5000)}
+    campos = {"_id": 0, "id": 1, "name": 1, "active": 1, "merged_into": 1, "center": 1}
+    fichas = {d["id"]: d for d in await db.drivers.find({"id": {"$in": ids}}, campos).to_list(5000)}
+
+    def viva(did) -> bool:
+        ficha = fichas.get(did)
+        return bool(ficha) and ficha.get("active") is not False and not ficha.get("merged_into")
+
+    # Fichas fusionadas (12-11-2026, X3): lo suyo pasa a la buena, si la buena existe y está viva.
+    buenas = sorted({str(d["merged_into"]) for d in fichas.values() if d.get("merged_into")} - set(fichas))
+    if buenas:
+        fichas.update({d["id"]: d for d in await db.drivers.find({"id": {"$in": buenas}}, campos).to_list(5000)})
+    movidas = {k: str(fichas[k[0]]["merged_into"]) for k in leido
+               if (fichas.get(k[0]) or {}).get("merged_into") and viva(str(fichas[k[0]]["merged_into"]))}
+    ahora = await _cua_turnos_de(set(leido) | {(b, k[1]) for k, b in movidas.items()})
+    if movidas:
+        await _cua_avisos_fusionadas(leido, movidas, ahora, fichas)
     por: dict = {}
     for did, f in sorted(leido):
         ficha = fichas.get(did)
-        # Fichas de baja, fusionadas o que no existen: no se avisa a nadie que ya no está.
-        if not ficha or ficha.get("active") is False or ficha.get("merged_into"):
+        # Fichas de baja, fusionadas (en una buena que no está) o que no existen: no se avisa a nadie que ya no está.
+        if not viva(did):
             continue
         doc = ahora.get((did, f))
-        # Un día concedido o de una suspensión tiene su propio camino (y su aviso, o su conversación): aquí no.
-        if doc and (doc.get("aprobado_req") or doc.get("suspension_id")):
-            continue
-        # Ese día ya es de otra nave (tercera ronda, V9): lo enseña y lo avisa la suya, no esta (si no, dos avisos, y
-        # un jefe de esta nave viendo un día de otra). Un turno sin nave apuntada (datos viejos) sigue saliendo aquí.
-        if doc and doc.get("center") and not _cua_es_centro(doc.get("center"), center):
-            continue
         p = leido[(did, f)]
+        # De qué nave es esta celda (12-11-2026, X5; antes V9 solo saltaba la que ya era de otra): la del turno de
+        # AHORA y, vacía o sin nave apuntada (datos viejos), la última que la tocó. Así sale en una sola.
+        nave = doc.get("center") if doc and str(doc.get("center") or "").strip() else p.get("center")
+        # Lo de ahora, como se guarda (la clave, sin la nave de la ficha) y comparado con la nave de su ficha de AHORA
+        # (revisión 5): un traslado no cambia lo que sabe de cada día.
+        casa = ficha.get("center")
+        nuevo = _cua_aviso_clave(doc, casa)
         dicho = str(p.get("dicho") or "sin turno")
-        nuevo = _cua_aviso_etiqueta(doc)
-        if nuevo == dicho and p.get("visto") is not None:
+        # Un día concedido o de una suspensión tiene su propio camino (y su aviso, o su conversación): aquí no. Salvo
+        # que lo haya dejado ahí el propio cuadrante sin ser lo que el conductor sabe (`forzar`, 12-11-2026, X1).
+        su_camino = bool(doc and (doc.get("aprobado_req") or doc.get("suspension_id")) and not p.get("forzar"))
+        if not _cua_misma_nave(nave, center):
+            # De otra nave: lo enseña y lo avisa la suya. Se anota si allí tiene algo que decirle, para nombrar a un
+            # marcado de aquí cuyo día pasó allí con la ventana abierta (revisión 5, X7).
+            estado["otras"][(did, f)] = {
+                "nave": _cua_aviso_nave(nave),
+                "dice": not su_camino and not _cua_aviso_igual(nuevo, dicho, casa)
+                and (p.get("visto") is None or not _cua_aviso_igual(nuevo, p.get("visto"), casa))}
+            estado["nombres"][did] = ficha.get("name") or did
+            continue
+        estado["etiquetas"][(did, f)] = nuevo
+        estado["nombres"][did] = ficha.get("name") or did
+        estado["casas"][did] = casa
+        if su_camino:
+            continue
+        if _cua_aviso_igual(nuevo, dicho, casa) and p.get("visto") is not None:
             # Volvió a lo que él sabe por fuera del cuadrante (tercera ronda, V6; por el cuadrante lo hace el apunte):
             # lo descartado deja de valer. Solo si la celda sigue como se leyó.
             try:
@@ -53025,13 +53231,17 @@ async def _cua_avisos_calcular(center: str) -> Tuple[list, str, dict]:
             except Exception as e:                                       # noqa: BLE001
                 logger.warning("Avisos del cuadrante: no se ha podido olvidar un descarte de %s: %s", center, e)
         # Volvió a lo que él sabe, o la oficina ya vio esto mismo y decidió no avisar: nada.
-        if nuevo == dicho or nuevo == p.get("visto"):
+        if _cua_aviso_igual(nuevo, dicho, casa) or (p.get("visto") is not None
+                                                     and _cua_aviso_igual(nuevo, p.get("visto"), casa)):
             continue
+        # `desde` (12-11-2026, X6): cuándo se hizo el primer cambio que sigue sin avisar («cambiado el 03/11»). El
+        # «antes» y el «ahora», dichos con la nave de su ficha de ahora; la marca, con la clave (revisión 5).
+        antes_txt, ahora_txt = _cua_aviso_decir(dicho, casa), _cua_aviso_decir(nuevo, casa)
         por.setdefault(did, {"driver_id": did, "nombre": ficha.get("name") or did, "dias": []})["dias"].append(
-            {"fecha": f, "antes": dicho, "ahora": nuevo, "texto": f"{_refuerzo_dia(f)}: {nuevo}",
-             "marca": _cua_aviso_marca(p, nuevo)})
+            {"fecha": f, "antes": antes_txt, "ahora": ahora_txt, "texto": f"{_refuerzo_dia(f)}: {ahora_txt}",
+             "marca": _cua_aviso_marca(p, nuevo), "desde": str(p.get("desde") or "")})
     personas = sorted(por.values(), key=lambda p: _clave_nombre(p["nombre"]))
-    return personas, hasta, leido
+    return personas, hasta, leido, estado
 
 
 def _cua_aviso_texto(dias: list) -> str:
@@ -53042,7 +53252,9 @@ def _cua_aviso_texto(dias: list) -> str:
 
 @api_router.post("/cuadrante/avisos/previa")
 async def cuadrante_avisos_previa(data: dict = Body(...), user: dict = Depends(require_admin)):
-    """A quién se avisaría y de qué (no manda nada). body: {center}. De paso borra lo apuntado de días ya pasados."""
+    """A quién se avisaría y de qué (no manda nada). body: {center}. De paso borra lo apuntado de días ya pasados.
+    Respuesta: {personas: [{driver_id, nombre, dias: [{fecha, antes, ahora, texto, marca, desde}]}], hasta}; `desde`
+    (12-11-2026) es cuándo se hizo el primer cambio sin avisar de ese día (ISO; vacío si no se sabe)."""
     if not _CUA_AVISOS_ACTIVO:                       # apagado (11-11-2026): como un servidor que no la tiene
         raise HTTPException(404, "No disponible")
     center = _cua_centro(data.get("center"))
@@ -53052,17 +53264,35 @@ async def cuadrante_avisos_previa(data: dict = Body(...), user: dict = Depends(r
         await db[_CUA_AVISOS_PEND].delete_many({"center": center, "fecha": {"$lt": hoy}})
     except Exception as e:                                           # noqa: BLE001
         logger.warning("Avisos del cuadrante: no se han podido borrar los días pasados de %s: %s", center, e)
-    personas, hasta, _leido = await _cua_avisos_calcular(center)
+    personas, hasta, _leido, _estado = await _cua_avisos_calcular(center)
     return {"personas": personas, "hasta": hasta}
+
+
+async def _cua_aviso_ya_avisado(perdidas: list, lote: str) -> bool:
+    """¿Alguna de estas celdas, que no se pudieron coger, la acaba de avisar otra persona? (12-11-2026, X7)."""
+    for q in perdidas:
+        try:
+            ya = await db[_CUA_AVISOS_PEND].find_one({"_id": q["_id"]})
+        except Exception:                                            # noqa: BLE001
+            continue
+        if ya and ya.get("avisado_lote") not in (None, lote) and ya.get("dicho") != q.get("dicho"):
+            return True
+    return False
 
 
 @api_router.post("/cuadrante/avisos/enviar")
 async def cuadrante_avisos_enviar(data: dict = Body(...), user: dict = Depends(require_admin)):
-    """Manda UN aviso por persona con sus días cambiados. body: {center, driver_ids?, descartar_ids?}. Lo vuelve a
+    """Manda UN aviso por persona con sus días cambiados. body: {center, driver_ids?, descartar_ids?, vistas?,
+    vistas_completas?}. Lo vuelve a
     calcular aquí (no se fía de lo que enseñó la pantalla). Se avisa a `driver_ids` (sin esa clave, a todos menos a
     `descartar_ids`); a los de `descartar_ids` (los que la oficina vio y desmarcó) no se les avisa y se guarda lo que
     vieron (`visto`), para que no vuelvan a salir mientras su día siga igual; a quien no está en ninguna de las dos
-    (apareció después de la previa) no se le toca nada y sale la próxima vez."""
+    (apareció después de la previa) no se le toca nada y sale la próxima vez.
+    Respuesta: {avisados, personas, descartados, no_avisados}. `no_avisados` (12-11-2026, X7): [{driver_id, nombre,
+    motivo, parcial}] de quien se pidió avisar y no se le avisó (de nada, o con `parcial` de algún día): `motivo` es
+    "ya_avisado" (otra persona acababa de avisarle), "cambiado" (su día cambió mientras la ventana estaba abierta),
+    "no_guardado" (no se pudo guardar el aviso en su bandeja) u "otra_nave" (revisión 5: su día ha pasado a otra nave,
+    que lo enseña y lo avisa; solo esta lleva además `nave`, el código de esa nave o varios separados por comas)."""
     if not _CUA_AVISOS_ACTIVO:                       # apagado (11-11-2026): como un servidor que no la tiene
         raise HTTPException(404, "No disponible")
     center = _cua_centro(data.get("center"))
@@ -53077,10 +53307,15 @@ async def cuadrante_avisos_enviar(data: dict = Body(...), user: dict = Depends(r
     marcas_vistas = None
     if data.get("vistas") is not None:
         marcas_vistas = {str(x) for x in _lista_cuerpo(data.get("vistas"), 5000) if x}
-    personas, _hasta, leido = await _cua_avisos_calcular(center)
+    # `vistas_completas: true` (12-11-2026, X2; opcional): `vistas` trae las marcas de TODO lo que se enseñó, también de
+    # los marcados, y a un marcado solo se le dice eso. Va aparte porque el panel de antes (una pestaña abierta con la
+    # web vieja) manda en `vistas` solo las de los desmarcados: leído así, no avisaría nunca a ningún marcado. Sin la
+    # señal, los marcados como antes.
+    solo_lo_visto = marcas_vistas is not None and data.get("vistas_completas") is True
+    personas, _hasta, leido, estado = await _cua_avisos_calcular(center)
     col = db[_CUA_AVISOS_PEND]
     ahora_iso, lote, por_quien = datetime.now(timezone.utc).isoformat(), str(uuid.uuid4()), user.get("name") or ""
-    enviados, avisados, descartados = [], 0, 0
+    enviados, avisados, descartados, no_avisados = [], 0, 0, []
     for p in personas:
         did = p["driver_id"]
         avisar = (did in solo) if solo is not None else (did not in descartar)
@@ -53094,22 +53329,36 @@ async def cuadrante_avisos_enviar(data: dict = Body(...), user: dict = Depends(r
                 if marcas_vistas is not None and d["marca"] not in marcas_vistas:
                     continue
                 q = leido[(did, d["fecha"])]
-                r = await col.update_one({"_id": q["_id"], "tocado": q.get("tocado")}, {"$set": {"visto": d["ahora"]}})
+                # Se guarda la clave, no el texto (revisión 5): un traslado posterior no lo hace volver.
+                r = await col.update_one({"_id": q["_id"], "tocado": q.get("tocado")},
+                                         {"$set": {"visto": estado["etiquetas"][(did, d["fecha"])]}})
                 vistas += 1 if getattr(r, "matched_count", 0) else 0
             descartados += 1 if vistas else 0
             continue
+        # A un marcado solo se le dice lo que la oficina vio (12-11-2026, X2): con `vistas`, los días cuya marca está
+        # ahí. Lo que cambió con la ventana abierta (otra marca, o un día nuevo) no se le dice y sale la próxima vez.
+        dias_vistos, sin_ver = p["dias"], []
+        if solo_lo_visto:
+            dias_vistos = [d for d in p["dias"] if d["marca"] in marcas_vistas]
+            sin_ver = [d for d in p["dias"] if d["marca"] not in marcas_vistas]
         # Se «coge» cada celda con la condición de que siga como se leyó (lo que sabe y su último cambio): si otra
         # persona pulsa a la vez, o la celda cambia en ese instante, no entra en este aviso y se queda pendiente.
-        cogidas = []
-        for d in p["dias"]:
+        cogidas, perdidas = [], []
+        for d in dias_vistos:
             q = leido[(did, d["fecha"])]
+            # Lo que sabe a partir de ahora, como clave (revisión 5): lo que se le dice, sin depender de su ficha.
             r = await col.update_one(
                 {"_id": q["_id"], "dicho": q.get("dicho"), "tocado": q.get("tocado")},
-                {"$set": {"dicho": d["ahora"], "avisado_en": ahora_iso, "avisado_por": por_quien, "avisado_lote": lote},
-                 "$unset": {"visto": ""}})
+                {"$set": {"dicho": estado["etiquetas"][(did, d["fecha"])], "avisado_en": ahora_iso,
+                          "avisado_por": por_quien, "avisado_lote": lote},
+                 "$unset": {"visto": "", "desde": "", "forzar": ""}})
             if getattr(r, "matched_count", 0):
                 cogidas.append((q, d))
+            else:
+                perdidas.append(q)
+        motivo = "ya_avisado" if perdidas and await _cua_aviso_ya_avisado(perdidas, lote) else "cambiado"
         if not cogidas:
+            no_avisados.append({"driver_id": did, "nombre": p["nombre"], "motivo": motivo, "parcial": False})
             continue
         dias = [d for _q, d in cogidas]
         titulo = "Cambios en tu cuadrante"
@@ -53129,7 +53378,7 @@ async def cuadrante_avisos_enviar(data: dict = Body(...), user: dict = Depends(r
             for q, _d in cogidas:
                 vuelta: dict = {"$set": {"dicho": q.get("dicho")}}
                 quitar = {}
-                for campo in ("avisado_en", "avisado_por", "avisado_lote", "visto"):
+                for campo in _CUA_AVISO_OPCIONALES:
                     if campo in q:
                         vuelta["$set"][campo] = q[campo]
                     else:
@@ -53140,11 +53389,38 @@ async def cuadrante_avisos_enviar(data: dict = Body(...), user: dict = Depends(r
                     await col.update_one({"_id": q["_id"], "avisado_lote": lote}, vuelta)
                 except Exception as e2:                              # noqa: BLE001
                     logger.warning("Avisos del cuadrante: no se ha podido devolver una celda de %s: %s", did, e2)
+            no_avisados.append({"driver_id": did, "nombre": p["nombre"], "motivo": "no_guardado", "parcial": False})
             continue
         enviados.append({**p, "dias": dias})
+        if perdidas or sin_ver:
+            no_avisados.append({"driver_id": did, "nombre": p["nombre"], "motivo": motivo, "parcial": True})
+    # Marcados en la ventana que al mandar ya no tienen nada que decir (12-11-2026, X7): otra persona acababa de
+    # avisarles de lo mismo que se vio, o su día cambió (volvió a lo que sabe). Solo los que tienen algo apuntado en
+    # esta nave: un id que nunca salió en la lista no se nombra.
+    # Y (revisión 5) los que aquí ya no tienen nada porque su día ha pasado a OTRA nave, donde sí hay algo que decirle:
+    # motivo "otra_nave", con `nave` (la que lo enseña y lo avisa ahora). Antes no se les nombraba.
+    if solo is not None:
+        for did in sorted(solo - {p["driver_id"] for p in personas}):
+            celdas = [(k, q) for k, q in leido.items() if k[0] == did and k in estado["etiquetas"]]
+            if not celdas:
+                fuera = sorted(k for k, o in estado["otras"].items() if k[0] == did and o["dice"])
+                if fuera:
+                    no_avisados.append({"driver_id": did, "nombre": estado["nombres"].get(did) or did,
+                                        "motivo": "otra_nave", "parcial": False,
+                                        "nave": ", ".join(sorted({estado["otras"][k]["nave"] for k in fuera}))})
+                continue
+            casa = estado["casas"].get(did)
+            ya = any(q.get("avisado_lote") not in (None, lote)
+                     and _cua_aviso_igual(q.get("dicho"), estado["etiquetas"][k], casa)
+                     and (not solo_lo_visto or _cua_aviso_marca(q, estado["etiquetas"][k]) in marcas_vistas)
+                     for k, q in celdas)
+            no_avisados.append({"driver_id": did, "nombre": estado["nombres"].get(did) or did,
+                                "motivo": "ya_avisado" if ya else "cambiado", "parcial": False})
+    no_avisados.sort(key=lambda x: _clave_nombre(x["nombre"]))
     await _audit(user, "cuadrante_avisar", {"center": center, "avisados": avisados, "descartados": descartados,
-                                            "sin_tocar": len(personas) - len(enviados) - descartados})
-    return {"avisados": avisados, "personas": enviados, "descartados": descartados}
+                                            "sin_tocar": len(personas) - len(enviados) - descartados,
+                                            "no_avisados": len(no_avisados)})
+    return {"avisados": avisados, "personas": enviados, "descartados": descartados, "no_avisados": no_avisados}
 
 
 # ── EL CHAT DEL CUADRANTE ────────────────────────────────────────────────────

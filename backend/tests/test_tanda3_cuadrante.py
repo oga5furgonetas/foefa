@@ -255,9 +255,9 @@ async def test_la_previa_lista_lo_que_cambia_en_los_proximos_14_dias(base):
         ("d4", "Sara", [(PAS, "sin turno", "trabajas", "martes 20/10: trabajas")])]
     # Cada celda que cambia de hoy en adelante queda apuntada con lo que el conductor sabía (también la de dentro de 20
     # días, que no se enseña); la de 1 → T no, porque para él no cambia nada (tercera ronda, V8). La previa no manda
-    # nada ni marca nada.
+    # nada ni marca nada. Lo sabido se guarda como clave, con la nave del turno si es de ir a un sitio (revisión 5).
     assert sorted((d["driver_id"], d["fecha"], d["dicho"]) for d in base.t[PEND].docs) == [
-        ("d1", MAN, "trabajas"), ("d3", LEJOS, "sin turno"), ("d4", PAS, "sin turno")]
+        ("d1", MAN, "trabajas@OGA5"), ("d3", LEJOS, "sin turno"), ("d4", PAS, "sin turno")]
     assert base.avisos == [] and base.t["avisos_movil"].docs == []
     assert not any(d.get("avisado_en") or d.get("visto") for d in base.t[PEND].docs)
 
@@ -498,7 +498,7 @@ async def test_si_el_envio_a_uno_falla_sus_dias_siguen_pendientes(base, monkeypa
     assert r["avisados"] == 1 and [p["driver_id"] for p in r["personas"]] == ["d4"]
     assert await _previa() == [("d1", [(MAN, "trabajas", "libras")])]
     ana = next(d for d in base.t[PEND].docs if (d["driver_id"], d["fecha"]) == ("d1", MAN))
-    assert ana["dicho"] == "trabajas" and not ana.get("avisado_en")
+    assert ana["dicho"] == "trabajas@OGA5" and not ana.get("avisado_en")
 
 
 @ENCENDIDO
@@ -674,7 +674,7 @@ async def test_v8_una_sincronizacion_que_cambia_3_de_200_apunta_3(base):
     await _como_la_hoja(base.t, [(d, f, cambian.get((d, f), "T" if f == fechas[2] else "1"))
                                  for d in ids for f in fechas])
     assert sorted((p["driver_id"], p["fecha"], p["dicho"]) for p in base.t[PEND].docs) == [
-        ("d1", fechas[1], "trabajas"), ("d2", fechas[3], "trabajas"), ("d4", fechas[40], "trabajas")]
+        ("d1", fechas[1], "trabajas@OGA5"), ("d2", fechas[3], "trabajas@OGA5"), ("d4", fechas[40], "trabajas@OGA5")]
 
 
 @ENCENDIDO
@@ -768,9 +768,11 @@ async def test_v9_un_dia_que_ya_es_de_otra_nave_lo_avisa_la_suya_y_no_esta(base)
     assert r["avisados"] == 0 and base.t["avisos_movil"].docs == []
     dga1 = await server.cuadrante_avisos_previa({"center": "DGA1"}, OFI)
     assert [(p["driver_id"], [d["ahora"] for d in p["dias"]]) for p in dga1["personas"]] == [("d1", ["vacaciones"])]
-    # Un turno sin nave apuntada (datos viejos) sigue saliendo donde se apuntó.
+    # Un turno sin nave apuntada (datos viejos) sale en la nave que tocó la celda la última vez (12-11-2026, X5: un
+    # pendiente por celda; antes, uno por nave, salía en cada nave que lo había apuntado). Aquí, DGA1; en OGA5, no.
     _celda(base.t, "d1", MAN).pop("center")
-    assert await _previa() == [("d1", [(MAN, "trabajas", "vacaciones")])]
+    assert await _previa() == []
+    assert await _previa_de("DGA1") == [("d1", [(MAN, "trabajas", "vacaciones")])]
 
 
 @ENCENDIDO
@@ -788,7 +790,7 @@ async def test_v7_si_la_bandeja_no_guarda_el_aviso_sus_dias_siguen_pendientes(ba
     r = await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI)
     assert r["avisados"] == 1 and [p["driver_id"] for p in r["personas"]] == ["d4"] and _bandeja(base.t) == ["d4"]
     ana = _pend(base.t, "d1", MAN)
-    assert ana["dicho"] == "trabajas" and not ana.get("avisado_en") and not ana.get("avisado_lote")
+    assert ana["dicho"] == "trabajas@OGA5" and not ana.get("avisado_en") and not ana.get("avisado_lote")
     assert await _previa() == [("d1", [(MAN, "trabajas", "libras")])]
     # Cuando la bandeja vuelve, se le avisa con normalidad.
     base.t["avisos_movil"] = Col()
@@ -933,3 +935,566 @@ async def test_apagado_el_cuadrante_dice_avisar_activo_false(base):
 async def test_encendido_el_cuadrante_dice_avisar_activo_true(base):
     r = await server.cuadrante_ver("OGA5", MAN, PAS, OFI)
     assert r["avisar_activo"] is True
+
+
+# ── Terminar «Avisar a los conductores» (12-11-2026): los siete casos del repaso final (X1 a X7) ─────────────────────
+# (f) X4 la etiqueta dice la nave cuando no es la del conductor · (g) X5 un pendiente por celda, avisado desde UNA nave ·
+# (h) X1 lo concedido que devuelve el propio cuadrante · (i) X2 a un marcado solo lo que la oficina vio · (j) X3 fichas
+# fusionadas · (k) X6 `desde` y X7 `no_avisados` · (l) la vuelta larga.
+
+async def _celdas_en(center, cambios):
+    return await server.cuadrante_celdas({"center": center, "cambios": [
+        {"driver_id": d, "fecha": f, "cod": c} for d, f, c in cambios]}, OFI)
+
+
+async def _previa_de(center):
+    r = await server.cuadrante_avisos_previa({"center": center}, OFI)
+    return [(p["driver_id"], [(d["fecha"], d["antes"], d["ahora"]) for d in p["dias"]]) for p in r["personas"]]
+
+
+def _cuerpos(t):
+    """Lo que ha llegado a la bandeja de cada uno, en el orden en que llegó."""
+    return [(a["user_id"], a["cuerpo"]) for a in t["avisos_movil"].docs]
+
+
+async def _enviar(center="OGA5", **cuerpo):
+    return await server.cuadrante_avisos_enviar({"center": center, **cuerpo}, OFI)
+
+
+async def _conceder(did, fecha, tipo, rid="r1", nombre="Ana"):
+    """Un día pedido y concedido por SU camino (no por el cuadrante): la celda lleva `aprobado_req` y candado."""
+    await server._turno_aprobado({"id": rid, "driver_id": did, "driver_name": nombre, "date": fecha, "type": tipo,
+                                  "center": "OGA5"})
+
+
+async def _desbloquear(did, fecha):
+    await server.cuadrante_celdas({"center": "OGA5", "cambios": [
+        {"driver_id": did, "fecha": fecha, "desbloquear": True}]}, OFI)
+
+
+def _envejecer(t):
+    """Los cambios de antes, más viejos que el siguiente: «Deshacer» deshace el de `en` más reciente, y el reloj de
+    Windows puede repetir la hora entre dos cambios seguidos (como en test_v10b)."""
+    for c in t["cuadrante_cambios"].docs:
+        c["en"] = "2026-10-18T08:00:00+00:00"
+
+
+def _duplicada(t):
+    """La ficha repetida de Ana que crea la hoja (mismo correo): lo que hace falta para poder fusionarla."""
+    t["drivers"].docs[0]["email"] = "ana@x.es"
+    t["drivers"].docs.append({"id": "d5", "name": "ANA (hoja)", "center": "OGA5", "active": True, "email": "ana@x.es"})
+
+
+# (f) X4 · la etiqueta dice el centro cuando no es el del conductor (decisión de Dani: «Sí, que lo diga»).
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_f_x4_de_oga5_a_dga1_con_la_misma_etiqueta_se_apunta_y_el_aviso_dice_la_nave(base):
+    # La hoja de DGA1 se lleva el lunes de Ana, que trabajaba en OGA5: sigue siendo «trabajas», pero en otra nave.
+    await _como_la_hoja(base.t, [("d1", MAN, "1")], center="DGA1")
+    assert _celda(base.t, "d1", MAN)["center"] == "DGA1"
+    assert await _previa_de("DGA1") == [("d1", [(MAN, "trabajas", "trabajas en DGA1")])]
+    assert await _previa_de("OGA5") == []
+    r = await _enviar("DGA1")
+    assert r["avisados"] == 1 and _cuerpos(base.t) == [("d1", "lunes 19/10: trabajas en DGA1")]
+    assert await _previa_de("DGA1") == [] and await _previa_de("OGA5") == []
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_f_x4_en_su_nave_sin_nave_libras_nunca_y_ficha_sin_nave_tampoco(base):
+    # Diego es de DGA1 y trabaja en DGA1: sin nave.
+    await _celdas_en("DGA1", [("d9", PAS, "1")])
+    assert await _previa_de("DGA1") == [("d9", [(PAS, "sin turno", "trabajas")])]
+    # Libras, aunque sea el cuadrante de otra nave el que se lo pone: nunca lleva nave.
+    await _como_la_hoja(base.t, [("d2", MAN, "N/T")], center="DGA1")
+    assert ("d2", [(MAN, "trabajas", "libras")]) in await _previa_de("DGA1")
+    # Una ficha sin nave: no se sabe cuál es «la suya», así que sin nave (y pasar de OGA5 a DGA1 no se apunta).
+    base.t["drivers"].docs[2]["center"] = ""
+    await _como_la_hoja(base.t, [("d3", MAN, "T")], center="DGA1")
+    assert not [p for p in base.t[PEND].docs if p["driver_id"] == "d3"]
+    et = server._cua_aviso_etiqueta
+    assert et({"cod": "1", "center": "DGA1"}, "OGA5") == "trabajas en DGA1"
+    # Los nombres de la base vienen sucios: la misma nave se decide en los dos sentidos y se escribe el código limpio.
+    assert et({"cod": "1", "center": "AMZL DGA1 SANTIAGO XPT"}, "OGA5") == "trabajas en DGA1"
+    assert et({"cod": "1", "center": "DGA1"}, "AMZL DGA1 SANTIAGO XPT") == "trabajas"
+    assert et({"cod": "1", "center": "AMZL DGA1 SANTIAGO XPT"}, "dga1") == "trabajas"
+    assert et({"cod": "EXTRA", "center": "DGA1"}, "OGA5") == "trabajas (extra) en DGA1"
+    assert et({"cod": "1", "extra": True, "center": "DGA1"}, "OGA5") == "trabajas (extra) en DGA1"
+    assert et({"cod": "BKP", "center": "DGA1"}, "OGA5") == "de reserva en DGA1"
+    assert et({"cod": "S", "center": "DGA1"}, "OGA5") == "en la oficina de DGA1"     # no «en oficina en» (revisión 5)
+    assert et({"cod": "RA", "center": "DGA1"}, "OGA5") == "de acompañante en DGA1"
+    for cod in ("N/T", "L", "N/T APROB", "V", "COMP", "N/D", "BAJA", "SUSP", "N/P"):
+        assert et({"cod": cod, "center": "DGA1"}, "OGA5") == et({"cod": cod}), cod
+    # Sin la nave de casa, o sin la del turno: sin nave, como antes.
+    assert et({"cod": "1", "center": "DGA1"}, "") == et({"cod": "1", "center": "DGA1"}) == "trabajas"
+    assert et({"cod": "1"}, "OGA5") == "trabajas"
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_f_x4_las_fichas_se_leen_una_vez_y_solo_si_algo_puede_haber_cambiado(base):
+    """La nave de casa sale de la ficha: con cambios, UNA lectura de fichas por lote (no una por celda); una
+    sincronización de la hoja que no cambia nada no lee ni las fichas ni escribe nada."""
+    ids, fechas = ["d1", "d2", "d3", "d4"], _dias(75)
+    _rejilla(base.t, ids, fechas)
+    base.t["drivers"] = _Contada(base.t["drivers"].docs)
+    base.t[PEND] = _Contada()
+    await _como_la_hoja(base.t, [(d, f, "1") for d in ids for f in fechas])          # 300 celdas, ninguna cambia
+    assert base.t["drivers"].n["find"] == 0 and base.t[PEND].n["ops"] == 0 and base.t[PEND].docs == []
+    lecturas = base.t["shifts"].n["find"]
+    await _como_la_hoja(base.t, [(d, f, "1") for d in ids for f in fechas], center="DGA1")   # 300 pasan a DGA1
+    assert base.t["drivers"].n["find"] == 1 and base.t["shifts"].n["find"] - lecturas == 1
+    assert len(base.t[PEND].docs) == 300 and base.t[PEND].n["find"] == 0 and base.t[PEND].n["update_one"] == 0
+    assert 1 <= base.t[PEND].n["bulk_write"] <= 2
+    assert {p["dicho"] for p in base.t[PEND].docs} == {"trabajas@OGA5"}             # la clave (revisión 5)
+
+
+# (g) X5 · un pendiente por CELDA: cada celda se enseña y se avisa desde UNA sola nave, con lo que el conductor sabe.
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_g_x5_oga5_se_lo_quita_y_dga1_se_lo_pone_sale_solo_en_dga1(base):
+    await _celdas_en("OGA5", [("d1", MAN, "")])
+    await _celdas_en("DGA1", [("d1", MAN, "1")])
+    assert await _previa_de("OGA5") == []
+    assert await _previa_de("DGA1") == [("d1", [(MAN, "trabajas", "trabajas en DGA1")])]
+    await _enviar("OGA5")
+    await _enviar("DGA1")
+    assert _cuerpos(base.t) == [("d1", "lunes 19/10: trabajas en DGA1")]
+    assert [p["_id"] for p in base.t[PEND].docs] == [f"d1|{MAN}"]
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_g_x5_y_despues_dga1_se_lo_quita_sale_solo_en_dga1(base):
+    await _celdas_en("OGA5", [("d1", MAN, "")])
+    await _celdas_en("DGA1", [("d1", MAN, "1")])
+    await _celdas_en("DGA1", [("d1", MAN, "")])
+    assert await _previa_de("OGA5") == []
+    assert await _previa_de("DGA1") == [("d1", [(MAN, "trabajas", "sin turno")])]
+    await _enviar("OGA5")
+    await _enviar("DGA1")
+    assert _cuerpos(base.t) == [("d1", "lunes 19/10: sin turno")]
+    assert await _previa_de("OGA5") == [] and await _previa_de("DGA1") == []
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_g_x5_si_solo_oga5_se_lo_quito_sale_en_oga5(base):
+    await _celdas_en("OGA5", [("d1", MAN, "")])
+    assert await _previa_de("OGA5") == [("d1", [(MAN, "trabajas", "sin turno")])]
+    assert await _previa_de("DGA1") == []
+    await _enviar("DGA1")
+    await _enviar("OGA5")
+    assert _cuerpos(base.t) == [("d1", "lunes 19/10: sin turno")]
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_g_x5_con_avisos_entre_medias_cada_nave_dice_lo_que_el_sabe(base):
+    await _celdas_en("OGA5", [("d1", MAN, "")])
+    await _enviar("OGA5")                                                     # sabe «sin turno»
+    await _celdas_en("DGA1", [("d1", MAN, "1")])
+    assert await _previa_de("DGA1") == [("d1", [(MAN, "sin turno", "trabajas en DGA1")])]
+    assert await _previa_de("OGA5") == []
+    await _celdas_en("DGA1", [("d1", MAN, "")])                              # vuelve a lo que sabe: nada
+    assert await _previa_de("DGA1") == [] and await _previa_de("OGA5") == []
+    assert _cuerpos(base.t) == [("d1", "lunes 19/10: sin turno")]
+
+
+# (h) X1 · un día concedido (o una suspensión) que el propio cuadrante devuelve sí se avisa.
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_h_x1_extra_concedido_anulado_avisado_y_deshecho_sale_libras_a_trabajas_extra(base):
+    _peticion(base.t, "r1", MAN, did="d4", tipo="extra", estado="aprobado")
+    await _conceder("d4", MAN, "extra", nombre="Sara")                       # Sara libraba: le conceden el extra
+    assert await _previa() == []                                              # eso lo avisa su propio camino
+    await _desbloquear("d4", MAN)
+    _envejecer(base.t)
+    await _celdas(base.t, [("d4", MAN, "N/T")])                              # la oficina se lo anula en el cuadrante
+    assert await _previa() == [("d4", [(MAN, "trabajas (extra)", "libras")])]
+    await _enviar()
+    assert _cuerpos(base.t) == [("d4", "lunes 19/10: libras")]
+    await server.cuadrante_deshacer({"center": "OGA5"}, OFI)                 # y lo deshace: vuelve el extra concedido
+    assert _celda(base.t, "d4", MAN)["aprobado_req"] == "r1"
+    assert await _previa() == [("d4", [(MAN, "libras", "trabajas (extra)")])]
+    await _enviar()
+    assert _cuerpos(base.t)[-1] == ("d4", "lunes 19/10: trabajas (extra)")
+    assert await _previa() == [] and "forzar" not in _pend(base.t, "d4", MAN)
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_h_x1_un_dia_concedido_por_su_camino_sin_que_el_cuadrante_lo_toque_sigue_sin_salir(base):
+    await _celdas(base.t, [("d1", MAN, "N/T")])                              # pendiente: trabajas → libras
+    _peticion(base.t, "r1", MAN, did="d1", tipo="extra", estado="aprobado")
+    await _conceder("d1", MAN, "extra")
+    assert await _previa() == []
+    _peticion(base.t, "r2", MAN, did="d2", tipo="libre", estado="aprobado")
+    await _conceder("d2", MAN, "libre", rid="r2", nombre="Luis")
+    assert await _previa() == [] and not [p for p in base.t[PEND].docs if p.get("forzar")]
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_h_x1_la_marca_se_quita_si_un_cambio_posterior_deja_algo_que_no_es_concedido(base):
+    _peticion(base.t, "r1", MAN, did="d4", tipo="extra", estado="aprobado")
+    await _conceder("d4", MAN, "extra", nombre="Sara")
+    await _desbloquear("d4", MAN)
+    _envejecer(base.t)
+    await _celdas(base.t, [("d4", MAN, "N/T")])
+    await _enviar()
+    await server.cuadrante_deshacer({"center": "OGA5"}, OFI)
+    assert _pend(base.t, "d4", MAN).get("forzar") is True
+    await _celdas(base.t, [("d4", MAN, "V")])                                # ya no es lo concedido
+    assert "forzar" not in _pend(base.t, "d4", MAN)
+    assert await _previa() == [("d4", [(MAN, "libras", "vacaciones")])]
+
+
+# (i) X2 · a un marcado solo se le dice lo que la oficina vio.
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_i_x2_a_un_marcado_no_se_le_dice_el_dia_que_cambio_con_la_ventana_abierta(base):
+    await _aceptar(base.t, CAMBIOS)
+    marcas = await _marcas()
+    await _celdas(base.t, [("d1", PAS, "V")])                                # otro día de Ana, con la ventana abierta
+    r = await _enviar(driver_ids=["d1", "d4"], descartar_ids=[], vistas=marcas["d1"] + marcas["d4"],
+                      vistas_completas=True)
+    assert sorted(_cuerpos(base.t)) == [("d1", "lunes 19/10: libras"), ("d4", "martes 20/10: trabajas")]
+    assert await _previa() == [("d1", [(PAS, "sin turno", "vacaciones")])]   # sale en la previa siguiente
+    assert r["no_avisados"] == [{"driver_id": "d1", "nombre": "Ana", "motivo": "cambiado", "parcial": True}]
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_i_x2_si_cambia_el_mismo_dia_que_vio_no_se_le_avisa_y_sale_despues(base):
+    await _aceptar(base.t, CAMBIOS)
+    marcas = await _marcas()
+    await _celdas(base.t, [("d1", MAN, "V")])                                # la oficina vio «libras»; ahora es otra cosa
+    r = await _enviar(driver_ids=["d1", "d4"], descartar_ids=[], vistas=marcas["d1"] + marcas["d4"],
+                      vistas_completas=True)
+    assert _cuerpos(base.t) == [("d4", "martes 20/10: trabajas")]
+    assert await _previa() == [("d1", [(MAN, "trabajas", "vacaciones")])]
+    assert r["no_avisados"] == [{"driver_id": "d1", "nombre": "Ana", "motivo": "cambiado", "parcial": False}]
+
+
+# (j) X3 · fichas fusionadas: lo pendiente de la absorbida pasa a la buena.
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_j_x3_fusionar_una_ficha_con_un_cambio_pendiente_avisa_a_la_buena_una_vez(base):
+    _duplicada(base.t)
+    await _celdas(base.t, [("d5", PAS, "1")])
+    assert await _previa() == [("d5", [(PAS, "sin turno", "trabajas")])]
+    await server.drivers_fusionar({"conservar": "d1", "absorber": ["d5"]}, OFI)
+    assert await _previa() == [("d1", [(PAS, "sin turno", "trabajas")])]
+    assert sorted(p["_id"] for p in base.t[PEND].docs) == [f"d1|{PAS}"]
+    assert (await _enviar())["avisados"] == 1
+    assert (await _enviar())["avisados"] == 0
+    assert _cuerpos(base.t) == [("d1", "martes 20/10: trabajas")] and await _previa() == []
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_j_x3_si_la_buena_ya_tenia_ese_dia_apuntado_no_se_pierde_el_aviso(base):
+    _duplicada(base.t)
+    await _celdas(base.t, [("d1", MAN, "N/T")])                              # Ana (la buena): trabajas → libras
+    # La absorbida tenía ese mismo día apuntado de antes, con otra cosa como sabida (y más antigua).
+    base.t[PEND].docs.append({"_id": f"d5|{MAN}", "center": "OGA5", "driver_id": "d5", "fecha": MAN,
+                              "dicho": "libras", "tocado": "t0", "en": "2026-10-01T08:00:00+00:00",
+                              "desde": "2026-10-01T08:00:00+00:00"})
+    await server.drivers_fusionar({"conservar": "d1", "absorber": ["d5"]}, OFI)
+    assert await _previa() == [("d1", [(MAN, "trabajas", "libras")])]
+    assert sorted(p["_id"] for p in base.t[PEND].docs) == [f"d1|{MAN}"]
+    assert (await _enviar())["avisados"] == 1 and _cuerpos(base.t) == [("d1", "lunes 19/10: libras")]
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_j_x3_si_las_dos_lo_tenian_por_avisar_se_queda_lo_sabido_mas_antiguo(base):
+    _duplicada(base.t)
+    await _celdas(base.t, [("d1", MAN, "V")])                                # la buena: trabajas → vacaciones
+    base.t[PEND].docs.append({"_id": f"d5|{MAN}", "center": "OGA5", "driver_id": "d5", "fecha": MAN,
+                              "dicho": "libras", "tocado": "t0", "en": "2026-10-01T08:00:00+00:00",
+                              "desde": "2026-10-01T08:00:00+00:00"})
+    await server.drivers_fusionar({"conservar": "d1", "absorber": ["d5"]}, OFI)
+    assert await _previa() == [("d1", [(MAN, "libras", "vacaciones")])]
+    assert sorted(p["_id"] for p in base.t[PEND].docs) == [f"d1|{MAN}"]
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_j_x3_si_la_buena_esta_de_baja_se_descarta(base):
+    _duplicada(base.t)
+    await _celdas(base.t, [("d5", PAS, "1")])
+    await server.drivers_fusionar({"conservar": "d1", "absorber": ["d5"]}, OFI)
+    base.t["drivers"].docs[0]["active"] = False
+    assert await _previa() == [] and (await _enviar())["avisados"] == 0
+
+
+# (k) X6 · la previa dice desde cuándo · X7 · el envío dice a quién no se avisó y por qué.
+
+async def _dias_previa(center="OGA5"):
+    r = await server.cuadrante_avisos_previa({"center": center}, OFI)
+    return {(p["driver_id"], d["fecha"]): d for p in r["personas"] for d in p["dias"]}
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_k_x6_la_previa_trae_desde_cuando_esta_sin_avisar(base):
+    await _celdas(base.t, [("d1", MAN, "N/T")])
+    assert (await _dias_previa())[("d1", MAN)]["desde"] == _pend(base.t, "d1", MAN)["desde"]
+    _pend(base.t, "d1", MAN)["desde"] = "2026-10-03T09:00:00+00:00"          # el primer cambio, hace dos semanas
+    await _celdas(base.t, [("d1", MAN, "V")])                                # otro cambio sin avisar: no lo mueve
+    assert (await _dias_previa())[("d1", MAN)]["desde"] == "2026-10-03T09:00:00+00:00"
+    await _enviar()
+    assert "desde" not in _pend(base.t, "d1", MAN)                            # avisado: ya no hay nada sin avisar
+    await _celdas(base.t, [("d1", MAN, "N/T")])
+    nuevo = (await _dias_previa())[("d1", MAN)]["desde"]
+    assert nuevo and nuevo > "2026-10-03T09:00:00+00:00"
+    await _celdas(base.t, [("d1", MAN, "V")])                                # vuelve a lo que sabe: tampoco
+    assert "desde" not in _pend(base.t, "d1", MAN) and await _previa() == []
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_k_x7_no_avisados_otra_persona_acababa_de_avisarle(base, monkeypatch):
+    await _aceptar(base.t, CAMBIOS)
+    original = server._cua_avisos_calcular
+    dentro = []
+
+    async def otro_pulsa_a_la_vez(center):
+        leido = await original(center)
+        if not dentro:
+            dentro.append(1)
+            await server.cuadrante_avisos_enviar({"center": "OGA5"}, OFI)
+        return leido
+
+    monkeypatch.setattr(server, "_cua_avisos_calcular", otro_pulsa_a_la_vez)
+    r = await _enviar()
+    assert r["avisados"] == 0 and r["no_avisados"] == [
+        {"driver_id": "d1", "nombre": "Ana", "motivo": "ya_avisado", "parcial": False},
+        {"driver_id": "d4", "nombre": "Sara", "motivo": "ya_avisado", "parcial": False}]
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_k_x7_no_avisados_tambien_si_ya_no_estan_en_la_lista_al_mandar(base):
+    await _aceptar(base.t, CAMBIOS)
+    marcas = await _marcas()
+    await _enviar()                                                           # otra persona avisa a los dos…
+    await _celdas(base.t, [("d1", MAN, "1")])                                # …y a Ana se le devuelve el día
+    r = await _enviar(driver_ids=["d1", "d4"], descartar_ids=[], vistas=marcas["d1"] + marcas["d4"],
+                      vistas_completas=True)
+    assert r["avisados"] == 0 and len(_cuerpos(base.t)) == 2
+    assert r["no_avisados"] == [
+        {"driver_id": "d1", "nombre": "Ana", "motivo": "cambiado", "parcial": False},
+        {"driver_id": "d4", "nombre": "Sara", "motivo": "ya_avisado", "parcial": False}]
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_k_x7_no_avisados_no_se_pudo_guardar_el_aviso(base):
+    class BandejaQueFallaConAna(Col):
+        async def insert_many(self, docs, **k):
+            if any(d["user_id"] == "d1" for d in docs):
+                raise RuntimeError("la base no responde")
+            return await super().insert_many(docs, **k)
+
+    base.t["avisos_movil"] = BandejaQueFallaConAna()
+    await _aceptar(base.t, CAMBIOS)
+    r = await _enviar()
+    assert r["avisados"] == 1 and r["no_avisados"] == [
+        {"driver_id": "d1", "nombre": "Ana", "motivo": "no_guardado", "parcial": False}]
+    assert await _previa() == [("d1", [(MAN, "trabajas", "libras")])]
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_k_x7_si_todo_va_bien_no_avisados_va_vacio(base):
+    await _aceptar(base.t, CAMBIOS)
+    marcas = await _marcas()
+    r = await _enviar(driver_ids=["d1", "d4"], descartar_ids=[], vistas=marcas["d1"] + marcas["d4"],
+                      vistas_completas=True)
+    assert r["avisados"] == 2 and r["no_avisados"] == []
+
+
+# (l) La vuelta larga: tras cada paso, la previa dice exactamente lo que el conductor sabe y lo que hay.
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_l_vuelta_larga(base):
+    t = base.t
+    llegado = []
+
+    async def ver(oga5, dga1=()):
+        assert await _previa_de("OGA5") == oga5
+        assert await _previa_de("DGA1") == list(dga1)
+        assert _cuerpos(t) == llegado
+
+    async def avisar(center, *nuevos):
+        r = await _enviar(center)
+        llegado.extend(nuevos)
+        assert r["avisados"] == len(nuevos) and r["no_avisados"] == []
+
+    # 1. Cambiar.
+    await _celdas(t, [("d1", MAN, "N/T")])
+    await ver([("d1", [(MAN, "trabajas", "libras")])])
+    # 2. Avisar.
+    await avisar("OGA5", ("d1", "lunes 19/10: libras"))
+    await ver([])
+    # 3. Cambiar otra vez.
+    _envejecer(t)
+    await _celdas(t, [("d1", MAN, "V")])
+    await ver([("d1", [(MAN, "libras", "vacaciones")])])
+    # 4. Deshacer: vuelve a lo que se le dijo.
+    await server.cuadrante_deshacer({"center": "OGA5"}, OFI)
+    await ver([])
+    # 5. Cambiar y descartar (la oficina lo ve y decide no avisar).
+    await _celdas(t, [("d1", MAN, "1")])
+    await ver([("d1", [(MAN, "libras", "trabajas")])])
+    marcas = await _marcas()
+    r = await _enviar(driver_ids=[], descartar_ids=["d1"], vistas=marcas["d1"])
+    assert r["descartados"] == 1
+    await ver([])
+    # 6. Sincronizar la hoja sin cambios: no escribe nada.
+    antes = [dict(p) for p in t[PEND].docs]
+    await _como_la_hoja(t, [(s["driver_id"], s["date"], s["cod"]) for s in t["shifts"].docs if s.get("center") == "OGA5"])
+    assert t[PEND].docs == antes
+    await ver([])
+    # 7. Pasar a otra nave: la hoja de DGA1 se lo lleva. Sale en DGA1 con lo que sabe («libras»), y solo allí.
+    await _como_la_hoja(t, [("d1", MAN, "1")], center="DGA1")
+    await ver([], [("d1", [(MAN, "libras", "trabajas en DGA1")])])
+    await avisar("DGA1", ("d1", "lunes 19/10: trabajas en DGA1"))
+    await ver([])
+    # 8. Volver a OGA5.
+    await _como_la_hoja(t, [("d1", MAN, "1")], center="OGA5")
+    await ver([("d1", [(MAN, "trabajas en DGA1", "trabajas")])])
+    await avisar("OGA5", ("d1", "lunes 19/10: trabajas"))
+    await ver([])
+    # 9. Conceder por su camino (no sale aquí) y anular en el cuadrante (sale, con lo que le dijo la aprobación).
+    _peticion(t, "r1", MAN, did="d1", tipo="libre", estado="aprobado")
+    await _conceder("d1", MAN, "libre")
+    await ver([])
+    await _desbloquear("d1", MAN)
+    _envejecer(t)
+    await _celdas(t, [("d1", MAN, "1")])
+    await ver([("d1", [(MAN, "libras", "trabajas")])])
+    await avisar("OGA5", ("d1", "lunes 19/10: trabajas"))
+    await ver([])
+    #    …y deshacer la anulación: vuelve el libre concedido, que ya no es lo que se le dijo.
+    await server.cuadrante_deshacer({"center": "OGA5"}, OFI)
+    await ver([("d1", [(MAN, "trabajas", "libras")])])
+    await avisar("OGA5", ("d1", "lunes 19/10: libras"))
+    await ver([])
+    # 10. Fusionar: un cambio de la ficha repetida le llega a la buena, una vez.
+    _duplicada(t)
+    await _celdas(t, [("d5", PAS, "1")])
+    await ver([("d5", [(PAS, "sin turno", "trabajas")])])
+    await server.drivers_fusionar({"conservar": "d1", "absorber": ["d5"]}, OFI)
+    await ver([("d1", [(PAS, "sin turno", "trabajas")])])
+    await avisar("OGA5", ("d1", "martes 20/10: trabajas"))
+    await ver([])
+    # 11. Trasladar su ficha a DGA1: ningún día ha cambiado, así que nada que decir en ninguna nave (revisión 5).
+    t["drivers"].docs[0]["center"] = "DGA1"
+    await ver([])
+
+
+# Revisión 5 (12-11-2026) · un traslado de nave (la ficha cambia) no cambia lo que el conductor sabe de cada día: lo
+# guardado no depende de la nave de su ficha y se compara y se dice con la de AHORA.
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_r5_traslado_no_vuelve_a_avisar_un_dia_que_no_ha_cambiado(base):
+    await _celdas(base.t, [("d1", PAS, "1")])
+    await _enviar()
+    assert _cuerpos(base.t) == [("d1", "martes 20/10: trabajas")]
+    base.t["drivers"].docs[0]["center"] = "DGA1"                             # Ana pasa a DGA1; su martes sigue en OGA5
+    assert await _previa_de("OGA5") == [] and await _previa_de("DGA1") == []
+    assert (await _enviar("OGA5"))["avisados"] == 0 and (await _enviar("DGA1"))["avisados"] == 0
+    assert _cuerpos(base.t) == [("d1", "martes 20/10: trabajas")]
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_r5_traslado_no_esconde_un_dia_que_cambio_de_nave(base):
+    await _celdas(base.t, [("d1", MAN, "")])                                 # OGA5 le quita el lunes…
+    await _celdas_en("DGA1", [("d1", MAN, "1")])                             # …y DGA1 se lo pone
+    assert await _previa_de("DGA1") == [("d1", [(MAN, "trabajas", "trabajas en DGA1")])]
+    base.t["drivers"].docs[0]["center"] = "DGA1"                             # y luego su ficha pasa a DGA1
+    # Sigue saliendo, en DGA1 y solo allí, dicho desde su nave de ahora: antes en OGA5, ahora en la suya.
+    assert await _previa_de("DGA1") == [("d1", [(MAN, "trabajas en OGA5", "trabajas")])]
+    assert await _previa_de("OGA5") == []
+    assert (await _enviar("DGA1"))["avisados"] == 1 and _cuerpos(base.t) == [("d1", "lunes 19/10: trabajas")]
+    assert await _previa_de("DGA1") == [] and await _previa_de("OGA5") == []
+    base.t["drivers"].docs[0]["center"] = "OGA5"                             # y si vuelve a OGA5, tampoco hay nada
+    assert await _previa_de("DGA1") == [] and await _previa_de("OGA5") == []
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_r5_traslado_antes_de_tocar_el_dia_dice_la_nave_de_verdad(base):
+    base.t["drivers"].docs[0]["center"] = "DGA1"                             # la ficha cambia ANTES
+    await _celdas(base.t, [("d1", MAN, "")])
+    await _celdas_en("DGA1", [("d1", MAN, "1")])
+    # Lo que sabía es que el lunes iba a OGA5 (dicho desde su nave de ahora, DGA1); ahora va a la suya.
+    assert await _previa_de("DGA1") == [("d1", [(MAN, "trabajas en OGA5", "trabajas")])]
+    assert await _previa_de("OGA5") == []
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_r5_lo_descartado_sigue_descartado_tras_un_traslado(base):
+    await _celdas(base.t, [("d1", MAN, "")])
+    await _celdas_en("DGA1", [("d1", MAN, "1")])
+    r = await server.cuadrante_avisos_previa({"center": "DGA1"}, OFI)
+    marcas = [d["marca"] for p in r["personas"] for d in p["dias"]]
+    assert (await _enviar("DGA1", driver_ids=[], descartar_ids=["d1"], vistas=marcas))["descartados"] == 1
+    base.t["drivers"].docs[0]["center"] = "DGA1"
+    assert await _previa_de("DGA1") == [] and await _previa_de("OGA5") == []
+    await _celdas_en("DGA1", [("d1", MAN, "V")])                             # un cambio de verdad sí sale
+    assert await _previa_de("DGA1") == [("d1", [(MAN, "trabajas en OGA5", "vacaciones")])]
+
+
+# Revisión 5 · X7: a un marcado cuyo día pasa a otra nave con la ventana abierta se le nombra, con la nave.
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_r5_x7_un_marcado_cuyo_dia_pasa_a_otra_nave_se_nombra(base):
+    await _celdas(base.t, [("d1", MAN, ""), ("d4", PAS, "1")])
+    marcas = await _marcas()
+    await _celdas_en("DGA1", [("d1", MAN, "1")])                             # con la ventana abierta
+    r = await _enviar(driver_ids=["d1", "d4"], descartar_ids=[], vistas=marcas["d1"] + marcas["d4"],
+                      vistas_completas=True)
+    assert r["avisados"] == 1 and _cuerpos(base.t) == [("d4", "martes 20/10: trabajas")]
+    assert r["no_avisados"] == [{"driver_id": "d1", "nombre": "Ana", "motivo": "otra_nave", "parcial": False,
+                                 "nave": "DGA1"}]
+    assert await _previa_de("DGA1") == [("d1", [(MAN, "trabajas", "trabajas en DGA1")])]   # y sale allí
+
+
+@ENCENDIDO
+@pytest.mark.asyncio(loop_scope="session")
+async def test_r5_x7_tambien_si_era_el_unico_marcado_y_sin_vistas(base):
+    await _celdas(base.t, [("d1", MAN, "")])
+    marcas = await _marcas()
+    await _celdas_en("DGA1", [("d1", MAN, "1")])
+    r = await _enviar(driver_ids=["d1"], descartar_ids=[], vistas=marcas["d1"], vistas_completas=True)
+    assert r["avisados"] == 0 and r["no_avisados"] == [
+        {"driver_id": "d1", "nombre": "Ana", "motivo": "otra_nave", "parcial": False, "nave": "DGA1"}]
+    r = await _enviar(driver_ids=["d1"], descartar_ids=[])                    # el panel de antes, sin marcas
+    assert r["avisados"] == 0 and [x["motivo"] for x in r["no_avisados"]] == ["otra_nave"]
+    # Quien no tiene nada en ninguna ventana sigue sin nombrarse.
+    r = await _enviar(driver_ids=["d2"], descartar_ids=[])
+    assert r["no_avisados"] == []
+
+
+# Revisión 5 · en oficina en otra nave se dice «en la oficina de DGA1», no «en oficina en DGA1».
+
+def test_r5_en_oficina_en_otra_nave_se_dice_en_la_oficina_de():
+    et = server._cua_aviso_etiqueta
+    assert et({"cod": "S", "center": "DGA1"}, "OGA5") == "en la oficina de DGA1"
+    assert et({"cod": "S", "center": "OGA5"}, "OGA5") == "en oficina"
+    assert et({"cod": "BKP", "center": "DGA1"}, "OGA5") == "de reserva en DGA1"

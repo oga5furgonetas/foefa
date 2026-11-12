@@ -338,13 +338,15 @@ test('cuadrante-1: sin `pendientes` (un servidor de antes) el Cuadrante, el Asis
 // El botón lleva un interruptor en el servidor (11-11-2026): estas pruebas son las del interruptor ENCENDIDO.
 const conAvisar = (dia, extra = {}) => cuadrante(dia, { avisar_activo: true, ...extra })
 
+// `desde` (12-11-2026, X6): cuándo se hizo el primer cambio sin avisar, un instante ISO del servidor (a las 10:00 UTC,
+// el mismo día en hora de España).
 const previa = (dia) => ({
   hasta: dia(14),
   personas: [
     { driver_id: 'p1', nombre: 'ANTONIO GARCÍA LÓPEZ', dias: [
-      { fecha: dia(3), antes: 'trabajas', ahora: 'libras', texto: 'x', marca: 'm3|libras' },
-      { fecha: dia(4), antes: 'libras', ahora: 'trabajas', texto: 'x', marca: 'm4|trabajas' }] },
-    { driver_id: 'p2', nombre: 'LAURA SÁNCHEZ GIL', dias: [{ fecha: dia(5), antes: 'sin turno', ahora: 'vacaciones', texto: 'x', marca: 'm5|vacaciones' }] },
+      { fecha: dia(3), antes: 'trabajas', ahora: 'libras', texto: 'x', marca: 'm3|libras', desde: `${dia(0)}T10:00:00Z` },
+      { fecha: dia(4), antes: 'libras', ahora: 'trabajas', texto: 'x', marca: 'm4|trabajas', desde: `${dia(1)}T10:00:00Z` }] },
+    { driver_id: 'p2', nombre: 'LAURA SÁNCHEZ GIL', dias: [{ fecha: dia(5), antes: 'sin turno', ahora: 'vacaciones', texto: 'x', marca: 'm5|vacaciones', desde: '' }] },
   ],
 })
 // La misma lista de un servidor sin marcas (antes de la segunda ronda): el panel no manda `vistas`.
@@ -374,8 +376,9 @@ test('cuadrante-8: el botón enseña la lista antes de mandar; desmarcar a uno m
   await page.getByRole('button', { name: 'Avisar a los conductores' }).click()
   const ventana = page.getByRole('dialog', { name: 'Avisar a los conductores' })
   await expect(ventana).toContainText(`Tienen cambios sin avisar de hoy al ${fmt(dia(14))}`)
-  await expect(ventana).toContainText(`${fmt(dia(3))}: libras · `)
-  await expect(ventana).toContainText(`${fmt(dia(5))}: vacaciones`)
+  // Un día por línea, con lo que el conductor sabía (12-11-2026, X6): antes iban todos en una, separados por « · ».
+  await expect(ventana).toContainText(`${fmt(dia(3))}: libras (antes: trabajas)`)
+  await expect(ventana).toContainText(`${fmt(dia(5))}: vacaciones (antes: sin turno)`)
   await expect(ventana.getByRole('checkbox')).toHaveCount(2)
   await expect(ventana.getByRole('button', { name: 'Avisar a 2' })).toBeEnabled()
   // Dice cómo le llega de verdad (P23): la bandeja es de la app; en el portal web, solo con las notificaciones.
@@ -386,8 +389,10 @@ test('cuadrante-8: el botón enseña la lista antes de mandar; desmarcar a uno m
   expect(enviado).toBeNull()
   await ventana.getByRole('button', { name: 'Avisar a 1' }).click()
   // Los marcados y los desmarcados, por separado (P8): a quien apareciera después de abrir la ventana no se le toca.
-  // Y las marcas de lo que se vio de los desmarcados (segunda ronda, fleco 1): solo se descarta eso.
-  await expect.poll(() => enviado).toEqual({ center: 'NORTE', driver_ids: ['p2'], descartar_ids: ['p1'], vistas: ['m3|libras', 'm4|trabajas'] })
+  // Y las marcas de lo que se vio (segunda ronda, fleco 1): solo se descarta eso. Desde el 12-11-2026 (X2) van también
+  // las de los marcados, con `vistas_completas`: a un marcado solo se le dice lo que se vio.
+  await expect.poll(() => enviado).toEqual({ center: 'NORTE', driver_ids: ['p2'], descartar_ids: ['p1'],
+    vistas: ['m3|libras', 'm4|trabajas', 'm5|vacaciones'], vistas_completas: true })
   await expect(ventana).toHaveCount(0)
   await expect(page.getByText('Avisado 1 conductor: LAURA SÁNCHEZ GIL.')).toBeVisible()
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
@@ -419,7 +424,8 @@ test('cuadrante-8: con todos desmarcados, el botón dice «No avisar a nadie», 
   expect(enviado).toBeNull()
   await boton.click()
   await expect.poll(() => enviado).toEqual({
-    center: 'NORTE', driver_ids: [], descartar_ids: ['p1', 'p2'], vistas: ['m3|libras', 'm4|trabajas', 'm5|vacaciones'] })
+    center: 'NORTE', driver_ids: [], descartar_ids: ['p1', 'p2'], vistas: ['m3|libras', 'm4|trabajas', 'm5|vacaciones'],
+    vistas_completas: true })
   await expect(ventana).toHaveCount(0)
   await expect(page.getByText('No se ha avisado a nadie: 2 conductores salen de la lista hasta que su cuadrante cambie otra vez.')).toBeVisible()
   await expect(page.getByText('no había cambios por avisar')).toHaveCount(0)
@@ -519,6 +525,109 @@ test('cuadrante-8: en el móvil la lista cabe sin deslizar de lado', async ({ pa
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375)
   const anchos = await ventana.evaluate((el) => [el.scrollWidth, el.clientWidth])
   expect(anchos[0]).toBeLessThanOrEqual(anchos[1] + 1)
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+// ── Terminar «Avisar a los conductores» (12-11-2026): el «antes» y desde cuándo (X6), y a quién no se avisó (X7) ──────
+
+test('cuadrante-8 (X6): cada día dice lo de ahora, lo que el conductor sabía y desde cuándo está sin avisar', async ({ page }) => {
+  const fallos = vigilar(page)
+  const { dia } = await reloj(page)
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/cuadrante\?/, json(conAvisar(dia)))
+  await page.route(/\/api\/cuadrante\/avisos\/previa/, json(previa(dia)))
+  await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Avisar a los conductores' }).click()
+  const ventana = page.getByRole('dialog', { name: 'Avisar a los conductores' })
+  const dias = ventana.getByTestId('avisar-dia')
+  await expect(dias).toHaveCount(3, { timeout: 15000 })
+  // dia(3) es jueves, dia(4) viernes y dia(5) sábado (los días salen del lunes de esta semana).
+  await expect(dias.nth(0)).toContainText(`jue ${fmt(dia(3))}: libras (antes: trabajas)`)
+  await expect(dias.nth(0)).toContainText(`cambiado el ${fmt(dia(0))}`)
+  await expect(dias.nth(1)).toContainText(`vie ${fmt(dia(4))}: trabajas (antes: libras)`)
+  await expect(dias.nth(1)).toContainText(`cambiado el ${fmt(dia(1))}`)
+  // Sin `desde` (no se sabe), no se inventa una fecha.
+  await expect(dias.nth(2)).toContainText(`sáb ${fmt(dia(5))}: vacaciones (antes: sin turno)`)
+  await expect(dias.nth(2)).not.toContainText('cambiado el')
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('cuadrante-8 (X7): al acabar dice con nombres a quién no se avisó y por qué', async ({ page }) => {
+  const fallos = vigilar(page)
+  const { dia } = await reloj(page)
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/cuadrante\?/, json(conAvisar(dia)))
+  await page.route(/\/api\/cuadrante\/avisos\/previa/, json(previa(dia)))
+  const [ana, laura] = previa(dia).personas
+  const no = (p, motivo, parcial = false) => ({ driver_id: p.driver_id, nombre: p.nombre, motivo, parcial })
+  let respuesta = { avisados: 1, personas: [laura], descartados: 0, no_avisados: [no(ana, 'cambiado')] }
+  await page.route(/\/api\/cuadrante\/avisos\/enviar/, (route) => json(respuesta)(route))
+  await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+  const ventana = page.getByRole('dialog', { name: 'Avisar a los conductores' })
+  const avisar = async () => {
+    await page.getByRole('button', { name: 'Avisar a los conductores' }).first().click()
+    await ventana.getByRole('button', { name: 'Avisar a 2' }).click({ timeout: 15000 })
+    await expect(ventana).toHaveCount(0)
+  }
+  await avisar()
+  await expect(page.getByText('Avisado 1 conductor: LAURA SÁNCHEZ GIL. A ANTONIO GARCÍA LÓPEZ no se le ha avisado: su día ' +
+    'cambió mientras tenías la ventana abierta. Vuelve a abrirla.', { exact: true })).toBeVisible()
+  // Los otros dos motivos, sin avisar a nadie.
+  respuesta = { avisados: 0, personas: [], descartados: 0, no_avisados: [no(ana, 'ya_avisado'), no(laura, 'no_guardado')] }
+  await avisar()
+  await expect(page.getByText('A ANTONIO GARCÍA LÓPEZ no se le ha avisado: otra persona acababa de avisarle. A LAURA SÁNCHEZ ' +
+    'GIL no se le ha avisado: no se ha podido guardar el aviso. Inténtalo otra vez.', { exact: true })).toBeVisible()
+  await expect(page.getByText('No se ha avisado a nadie')).toHaveCount(0)
+  // Varios con el mismo motivo van juntos; y a quien se le avisó de una parte se le dice «de algún día».
+  respuesta = { avisados: 2, personas: [ana, laura], descartados: 0, no_avisados: [no(ana, 'cambiado', true), no(laura, 'cambiado', true)] }
+  await avisar()
+  await expect(page.getByText('Avisados 2 conductores: ANTONIO GARCÍA LÓPEZ, LAURA SÁNCHEZ GIL. A ANTONIO GARCÍA LÓPEZ y LAURA ' +
+    'SÁNCHEZ GIL no se les ha avisado de algún día: sus días cambiaron mientras tenías la ventana abierta. Vuelve a abrirla.',
+  { exact: true })).toBeVisible()
+  // Revisión 5: a un marcado cuyo día pasó a otra nave con la ventana abierta se le nombra, con la nave.
+  respuesta = { avisados: 1, personas: [laura], descartados: 0, no_avisados: [{ ...no(ana, 'otra_nave'), nave: 'DGA1' }] }
+  await avisar()
+  await expect(page.getByText('Avisado 1 conductor: LAURA SÁNCHEZ GIL. A ANTONIO GARCÍA LÓPEZ no se le ha avisado: su día ha ' +
+    'pasado a otra nave (DGA1) y se avisa desde allí.', { exact: true })).toBeVisible()
+  // Sin `no_avisados` (un servidor de antes), lo de siempre.
+  respuesta = { avisados: 2, personas: [ana, laura], descartados: 0 }
+  await avisar()
+  await expect(page.getByText('Avisados 2 conductores: ANTONIO GARCÍA LÓPEZ, LAURA SÁNCHEZ GIL.', { exact: true })).toBeVisible()
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+// Lo más largo que puede decir un día (la nave, «de acompañante», el «antes») con nombres largos: en el móvil cabe.
+const previaLarga = (dia) => ({
+  hasta: dia(14),
+  personas: [
+    { driver_id: 'p1', nombre: 'MARÍA DE LOS ÁNGELES FERNÁNDEZ DE CÓRDOBA', dias: [
+      { fecha: dia(3), antes: 'de acompañante en DGA1', ahora: 'trabajas (extra) en DGA1', texto: 'x', marca: 'a', desde: `${dia(0)}T10:00:00Z` },
+      { fecha: dia(4), antes: 'trabajas (extra) en DGA1', ahora: 'de acompañante en DGA2', texto: 'x', marca: 'b', desde: `${dia(0)}T10:00:00Z` },
+      { fecha: dia(6), antes: 'sin turno', ahora: 'no disponible', texto: 'x', marca: 'c', desde: `${dia(1)}T10:00:00Z` }] },
+    { driver_id: 'p2', nombre: 'LAURA SÁNCHEZ GIL', dias: [{ fecha: dia(5), antes: 'trabajas', ahora: 'vacaciones', texto: 'x', marca: 'd', desde: `${dia(1)}T10:00:00Z` }] },
+  ],
+})
+
+test('cuadrante-8 (X6): en el móvil los días con nave y «antes» caben sin deslizar de lado', async ({ page }) => {
+  const fallos = vigilar(page)
+  const { dia } = await reloj(page)
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/cuadrante\?/, json(conAvisar(dia)))
+  await page.route(/\/api\/cuadrante\/avisos\/previa/, json(previaLarga(dia)))
+  await page.setViewportSize({ width: 375, height: 812 })
+  await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Avisar a los conductores' }).click()
+  const ventana = page.getByRole('dialog', { name: 'Avisar a los conductores' })
+  await expect(ventana.getByTestId('avisar-dia')).toHaveCount(4, { timeout: 15000 })
+  await expect(ventana.getByTestId('avisar-dia').first()).toContainText('trabajas (extra) en DGA1 (antes: de acompañante en DGA1)')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375)
+  const anchos = await ventana.evaluate((el) => [el.scrollWidth, el.clientWidth])
+  expect(anchos[0]).toBeLessThanOrEqual(anchos[1] + 1)
+  const salidos = await ventana.getByTestId('avisar-dia').evaluateAll((els) => els.filter((e) => e.scrollWidth > e.clientWidth + 1).length)
+  expect(salidos).toBe(0)
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
