@@ -339,3 +339,4 @@ Lo que la tarea NO hace y por qué:
 | 11-11 19:5x | (nube) | Metricool | Ronda 3 del miércoles. TikTok 18:00 (carrusel D): ERROR «account limit», como el resto. Sin cambios hasta que Dani decida. | Dani: plan de Metricool |
 | 12-11 07:5x | (nube) | Metricool | Ronda 1 del jueves. Sin cambios (límite de 20 posts de noviembre agotado; nada nuevo de Dani). | Dani: plan de Metricool |
 | 12-11 12:5x | (nube) | Metricool | Ronda 2 del jueves. Instagram 12:00 (carrusel F): ERROR «account limit». Sin cambios. | Dani: plan de Metricool |
+| 12-11 19:5x | (nube) | Metricool | Ronda 3 del jueves. Sin cambios (límite de noviembre agotado; el TikTok de las 18:00 y el Short de las 19:00 caen en el mismo límite). | Dani: plan de Metricool |
