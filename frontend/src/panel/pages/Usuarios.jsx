@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, UserPlus, Trash2, Save, ShieldCheck, Mail, KeyRound, ChevronDown, Users as UsersIcon, X, Check, ImagePlus, CornerDownRight, Lock, Table2, List } from 'lucide-react'
 import { getAdmins, createAdmin, updateAdmin, deleteAdmin, subirFotoAdmin } from '../api'
-import { getAdmin, isSuperAdmin, SIEMPRE_VISIBLES, esPlataforma } from '../auth'
+import { useOutletContext } from 'react-router-dom'
+import { getAdmin, isSuperAdmin, isCenterManager, SIEMPRE_VISIBLES, esPlataforma } from '../auth'
 import { useT } from '../../i18n'
 import { lista } from '../../lib/lista'
 
@@ -244,7 +245,7 @@ function QuienVe({ users, onEditar }) {
                     <span className="block truncate text-[10px] font-normal text-dark-500">
                       {sup ? 'todo' : (u.allowed_centers?.length ? u.allowed_centers.join(' · ') : 'todos los centros')}
                     </span>
-                    {!sup && (
+                    {!sup && u.puede_gestionar !== false && (
                       <button type="button" onClick={() => onEditar(u)}
                         className="mt-1 rounded-md border border-dark-700 px-2 py-0.5 text-[10.5px] font-semibold text-dark-300 hover:border-dark-500 hover:text-dark-100">
                         Editar
@@ -275,15 +276,20 @@ function QuienVe({ users, onEditar }) {
   )
 }
 
-/* Selector de centros. null = todos. */
-function CenterPicker({ centers, value, onChange, t }) {
+/* Selector de centros. null = todos. `todas` (11-11-2026, equipo-2): un jefe de centro con naves no puede dar «Todos
+   los centros» (el servidor lo rechaza), así que a él no se le ofrece. */
+function CenterPicker({ centers, value, onChange, t, todas = true }) {
   if (!centers.length) return null
+  /* Sin ninguna marcada ([]) el servidor también lo guarda como «todos» (11-11-2026, corrección P34): se resalta igual. */
+  const todosMarcado = value === null || (Array.isArray(value) && value.length === 0)
   return (
     <div className="flex flex-wrap gap-1.5">
-      <button type="button" onClick={() => onChange(null)}
-        className={`rounded-lg px-2.5 py-1 text-xs font-medium ${value === null ? 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40' : 'bg-dark-800 text-dark-300 hover:text-dark-300'}`}>
-        {t('usr.all.centers')}
-      </button>
+      {todas && (
+        <button type="button" onClick={() => onChange(null)} aria-pressed={todosMarcado}
+          className={`rounded-lg px-2.5 py-1 text-xs font-medium ${todosMarcado ? 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40' : 'bg-dark-800 text-dark-300 hover:text-dark-300'}`}>
+          {t('usr.all.centers')}
+        </button>
+      )}
       {centers.map((c) => {
         const active = Array.isArray(value) && value.includes(c)
         return (
@@ -329,16 +335,29 @@ export default function Usuarios() {
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
-  const allOrgCenters = sa ? (me?.centers || []) : (me?.allowed_centers || [])
-  const emptyForm = { name: '', username: '', password: '', perms: ALL_KEYS, centers: null, admin_role: null }
+  /* Jefes de centro (11-11-2026, equipo-2). Uno con naves solo reparte las suyas y nunca «todas»; uno sin restricción
+     ve todas, así que se le ofrecen las de la empresa (antes no le salía ningún selector). */
+  const jefe = !sa && isCenterManager()
+  const jefeLimitado = jefe && Array.isArray(me?.allowed_centers) && me.allowed_centers.length > 0
+  const allOrgCenters = sa || (jefe && !jefeLimitado) ? (me?.centers || []) : (me?.allowed_centers || [])
+  const roleOptions = sa ? [null, 'center_manager', 'dispatcher'] : ['dispatcher']
+  /* Al crear, la nave elegida arriba sale ya marcada (11-11-2026, equipo-2: si se olvidaba marcarla, la persona veía
+     todas). Un jefe con naves parte de las suyas; y el rol, del primero que se le ofrece (al jefe, «Dispatcher»). */
+  const { center: centroArriba } = useOutletContext() || {}
+  const centrosDePartida = allOrgCenters.includes(centroArriba) ? [centroArriba]
+    : jefeLimitado ? [...allOrgCenters] : null
+  const emptyForm = { name: '', username: '', password: '', perms: ALL_KEYS, centers: centrosDePartida, admin_role: roleOptions[0] }
   const [form, setForm] = useState(emptyForm)
   const [editing, setEditing] = useState(null) // {id, perms, centers, admin_role, email, newPassword}
   // «Por usuario» (la lista de siempre) o «Quién ve cada pantalla» (la tabla).
   const [vista, setVista] = useState('usuarios')
+  /* El de rol vacío que el jefe dio de alta con el formulario de antes (11-11-2026, tercera ronda V4): el servidor se
+     lo deja gestionar y, con cualquier cambio, lo pasa a Dispatcher. Se abre ya como Dispatcher y se dice. */
+  const pasaADispatcher = (u) => jefe && !u.admin_role
   const abrirEditor = (u) => setEditing({
     id: u.id, perms: Array.isArray(u.permissions) ? u.permissions : ALL_KEYS,
     centers: Array.isArray(u.allowed_centers) ? u.allowed_centers : null,
-    admin_role: u.admin_role ?? null, email: u.email || '', newPassword: '',
+    admin_role: pasaADispatcher(u) ? 'dispatcher' : (u.admin_role ?? null), email: u.email || '', newPassword: '',
   })
   // Desde la tabla: a la lista, con ese usuario abierto y a la vista.
   const editarDesdeTabla = (u) => {
@@ -365,12 +384,16 @@ export default function Usuarios() {
     } finally { setSubiendoFotoId(null) }
   }
 
-  const roleOptions = sa ? [null, 'center_manager', 'dispatcher'] : ['dispatcher']
+  /* Sin ninguna nave marcada el servidor guarda «todos» (11-11-2026, corrección P34). Un jefe con naves no puede dar
+     «todos»: tiene que marcar al menos una. */
+  const sinNaves = !form.centers?.length
+  const faltaNave = jefeLimitado && sinNaves
 
   async function create() {
     if (!form.name || !form.username || form.password.length < 6) {
       return setMsg({ ok: false, t: t('usr.form.req') })
     }
+    if (faltaNave) return setMsg({ ok: false, t: t('usr.centers.pick.one') })
     setBusy(true); setMsg(null)
     try {
       await createAdmin({ name: form.name.trim(), username: form.username.trim(), password: form.password, permissions: form.perms, allowed_centers: form.centers, admin_role: form.admin_role })
@@ -467,11 +490,14 @@ export default function Usuarios() {
 
           {allOrgCenters.length > 0 && (
             <Section title={t('usr.centers')}>
-              <CenterPicker centers={allOrgCenters} value={form.centers} onChange={(centers) => setForm({ ...form, centers })} t={t} />
+              <CenterPicker centers={allOrgCenters} value={form.centers} onChange={(centers) => setForm({ ...form, centers })} t={t} todas={!jefeLimitado} />
+              {sinNaves && (
+                <p className="mt-1.5 text-[11px] text-amber-300">{t(faltaNave ? 'usr.centers.pick.one' : 'usr.all.centers.warn')}</p>
+              )}
             </Section>
           )}
 
-          <button onClick={create} disabled={busy} className="btn-primary flex items-center gap-2 disabled:opacity-50">
+          <button onClick={create} disabled={busy || faltaNave} className="btn-primary flex items-center gap-2 disabled:opacity-50">
             {busy ? <Loader2 size={15} className="animate-spin" /> : <UserPlus size={15} />} {t('usr.create')}
           </button>
         </div>
@@ -497,6 +523,9 @@ export default function Usuarios() {
         <div className="overflow-hidden rounded-2xl border border-dark-800">
           {users.map((u, i) => {
             const isSuper = u.super_admin || u.account_type === 'owner'
+            /* A un jefe de centro el servidor le dice a quién NO puede gestionar (11-11-2026, corrección P16/P17):
+               esa fila se ve, pero sin «Editar» ni la papelera. Sin el campo (super-admin, servidor viejo), como antes. */
+            const gestionable = !isSuper && u.puede_gestionar !== false
             const perms = Array.isArray(u.permissions) ? u.permissions : null
             const isEd = editing?.id === u.id
             return (
@@ -504,7 +533,7 @@ export default function Usuarios() {
                 {/* Fila */}
                 <div className="flex items-center gap-3 px-4 py-3">
                   <Avatar name={u.name || u.username} photo={u.photo_url}
-                    onUpload={isSuper ? undefined : (file) => subirFoto(u.id, file)}
+                    onUpload={isSuper || (!gestionable && u.id !== me?.id) ? undefined : (file) => subirFoto(u.id, file)}
                     subiendo={subiendoFotoId === u.id} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -518,7 +547,7 @@ export default function Usuarios() {
                       {!isSuper && <span className="text-dark-400">{permsSummary(perms)}</span>}
                     </div>
                   </div>
-                  {!isSuper && (
+                  {gestionable && (
                     <div className="flex shrink-0 items-center gap-1">
                       <button
                         onClick={() => (isEd ? setEditing(null) : abrirEditor(u))}
@@ -546,6 +575,7 @@ export default function Usuarios() {
                         ))}
                       </div>
                       <p className="mt-1.5 text-[11px] text-dark-500">{ROLE_DESCS[editing.admin_role] ?? ROLE_DESCS[null]}</p>
+                      {pasaADispatcher(u) && <p className="mt-1.5 text-[11px] text-amber-300">{t('usr.own.to.dispatcher')}</p>}
                     </Section>
 
                     <Section title={t('usr.perms')}>
@@ -554,7 +584,7 @@ export default function Usuarios() {
 
                     {allOrgCenters.length > 0 && (
                       <Section title={t('usr.centers.visible')}>
-                        <CenterPicker centers={allOrgCenters} value={editing.centers} onChange={(centers) => setEditing((s) => ({ ...s, centers }))} t={t} />
+                        <CenterPicker centers={allOrgCenters} value={editing.centers} onChange={(centers) => setEditing((s) => ({ ...s, centers }))} t={t} todas={!jefeLimitado} />
                       </Section>
                     )}
 

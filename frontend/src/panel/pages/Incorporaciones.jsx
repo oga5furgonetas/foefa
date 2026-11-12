@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import {
   Loader2, Search, UserPlus, ClipboardPaste, Send, Check, MessageSquare, AlertTriangle, X,
   Archive, Pencil, Inbox, Hourglass, Eye, CheckCircle2, AtSign, Copy, EyeOff, GraduationCap,
-  FileQuestion, Table2, List, Download, SkipForward, MoreHorizontal,
+  FileQuestion, Table2, List, Download, SkipForward, MoreHorizontal, IdCard,
 } from 'lucide-react'
 import {
   getIncorporaciones, getIncorporacionesSinCentro, altaIncorporacion, importarIncorporaciones, editarIncorporacion,
   mensajeIncorporacion, marcarAvisoIncorporacion, guardarPlantillaIncorporaciones,
-  exportarIncorporaciones,
+  exportarIncorporaciones, fichaConductorIncorporacion, reactivarConductor,
 } from '../api'
 
 /* ── INCORPORACIONES — a quién le falta algo, y decírselo en un clic ─────────
@@ -606,6 +606,7 @@ export default function Incorporaciones() {
         <div className="space-y-2">
           {deAbajo.map((p) => (
             <Ficha key={p.id} p={p} motivosCat={d.plantilla.motivos} nombres={d.estado_nombre}
+              centers={centers} center={center} onCambio={cargar}
               abierta={abierta === p.id}
               onAbrir={() => setAbierta(abierta === p.id ? null : p.id)}
               onGuardar={(c) => editarIncorporacion(p.id, c).then(cargar)
@@ -635,6 +636,7 @@ export default function Incorporaciones() {
               <div className="mt-2 space-y-2">
                 {gente.map((p) => (
                   <Ficha key={p.id} p={p} motivosCat={d.plantilla.motivos} nombres={d.estado_nombre}
+                    centers={centers} center={center} onCambio={cargar}
                     abierta={abierta === p.id}
                     onAbrir={() => setAbierta(abierta === p.id ? null : p.id)}
                     onGuardar={(c) => editarIncorporacion(p.id, c).then(cargar)
@@ -660,7 +662,7 @@ export default function Incorporaciones() {
 }
 
 /* ── UNA PERSONA ─────────────────────────────────────────────────────────── */
-function Ficha({ p, motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje }) {
+function Ficha({ p, motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje, centers, center, onCambio }) {
   const sinCentro = !String(p.centro || '').trim()
   /* Los estados vienen ya resueltos del servidor, con lo que dice el listado de
      la ETT traducido: si pone «falta el alta en la Seguridad Social», ese papel
@@ -720,6 +722,16 @@ function Ficha({ p, motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje 
             {p.nunca_avisado && !completo && (
               <span title="nadie le ha escrito todavía"
                 className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+            )}
+            {/* Ya tiene ficha de conductor (11-11-2026, equipo-11). Por teléfono solo es una pista: no se marca. */}
+            {p.ficha && p.ficha.por !== 'telefono' && !p.ficha.baja && (
+              <span data-testid="con-ficha" title={`Ficha de conductor${p.ficha.nombre ? `: ${p.ficha.nombre}` : ''}${p.ficha.centro ? ` (${p.ficha.centro})` : ''}`}
+                className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold text-sky-300">con ficha</span>
+            )}
+            {/* Una ficha DE BAJA se dice como tal, no como «con ficha» (11-11-2026, segunda revisión, F2). */}
+            {p.ficha && p.ficha.por !== 'telefono' && p.ficha.baja && (
+              <span data-testid="ficha-de-baja" title={`Tiene una ficha de conductor dada de baja${p.ficha.centro ? ` (${p.ficha.centro})` : ''}`}
+                className="rounded-full bg-dark-700/60 px-2 py-0.5 text-[10px] font-semibold text-dark-300">ficha de baja</span>
             )}
           </span>
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11.5px] text-dark-500">
@@ -816,6 +828,9 @@ function Ficha({ p, motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje 
 
           <Cuenta p={p} />
 
+          {/* Solo con un servidor que ya dice quién tiene ficha (manda `ficha`, aunque sea null): con uno viejo, como hoy. */}
+          {'ficha' in p && <FichaConductor p={p} centers={centers} center={center} onCambio={onCambio} />}
+
           <div>
             <p className="label">Cada papel, en qué punto está <span className="text-dark-500">· pulsa para avanzarlo</span></p>
             <div className="mt-1 flex flex-wrap gap-1.5">
@@ -879,6 +894,165 @@ function Ficha({ p, motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje 
               className="ml-auto inline-flex items-center gap-1.5 text-[12px] text-dark-500 hover:text-dark-300">
               <Archive size={13} /> Ya está dentro
             </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── SU FICHA DE CONDUCTOR (11-11-2026, tanda 3, equipo-11) ─────────────────
+   Pasar a alguien de Incorporaciones a Conductores era volver a teclear nombre, teléfono, DNI y correo. Si ya tiene
+   ficha (enlazada, por DNI o por correo) se dice y se abre; si no, «Dar de alta como conductor» enseña antes lo que se
+   va a guardar y usa el alta de Conductores (que para correos e IDs repetidos y ofrece reactivar una baja). El correo
+   que trae el listado de la ETT es el de su cuenta de onboarding: solo se pone si se marca la casilla. */
+function FichaConductor({ p, centers, center, onCambio }) {
+  const navigate = useNavigate()
+  const naves = (Array.isArray(centers) ? centers : []).filter((c) => c && c !== 'Todos')
+  const propia = String(p.centro || '').trim()
+  const [abierto, setAbierto] = useState(false)
+  const [nave, setNave] = useState(propia || (center && center !== 'Todos' ? center : '') || (naves.length === 1 ? naves[0] : ''))
+  const [conCorreo, setConCorreo] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [hecho, setHecho] = useState(null)
+  const f = p.ficha
+  const abrir = (id) => navigate(`/panel/conductores?open=${encodeURIComponent(id)}`)
+
+  const deBaja = !!(f && f.por !== 'telefono' && f.baja)
+  if (f && f.por !== 'telefono' && !deBaja) {
+    return (
+      <p data-testid="ya-tiene-ficha" className="flex flex-wrap items-center gap-2 text-[12.5px] text-sky-200">
+        <IdCard size={14} className="shrink-0" />
+        Ya tiene ficha de conductor{f.centro ? ` (${f.centro})` : ''}
+        {/* Sin `id` (de una nave que no ve quien mira, segunda revisión F10), sin «Abrir». */}
+        {f.id && <Link to={`/panel/conductores?open=${encodeURIComponent(f.id)}`} className="font-semibold text-brand-400 hover:text-brand-300">Abrir</Link>}
+      </p>
+    )
+  }
+
+  async function crear(extra = {}) {
+    const body = { usar_correo: conCorreo, ...(nave ? { centro: nave } : {}), ...extra }
+    const r = await fichaConductorIncorporacion(p.id, body)
+    setHecho(r.data?.ficha || { id: '', center: nave })
+    onCambio?.()
+  }
+  /* REACTIVAR SU FICHA DE BAJA, como en Conductores (11-11-2026, segunda revisión, F9): si su ID de reparto lo tiene
+     otra ficha, se ofrece reactivarla sin él; si su correo lo tiene otra activa, no se reactiva y se ofrece abrir esa.
+     Queda en la nave de esta persona (la que se ve arriba): es la que tiene que ver quien la reactiva (F4/F14).
+     Devuelve true si quedó reactivada. */
+  async function reactivarLa(id) {
+    const cuerpo = nave ? { center: nave } : {}
+    try {
+      await reactivarConductor(id, cuerpo)
+      return true
+    } catch (e) {
+      const det = e?.response?.data?.detalle
+      if (e?.response?.status !== 409 || !det || typeof det !== 'object') throw e
+      if (det.conflicto === 'id_reparto') {
+        if (!window.confirm(`${det.mensaje}\n\nAceptar: reactivarla SIN ese ID de reparto (pónselo bueno en su ficha).\nCancelar: no hacer nada.`)) return false
+        await reactivarConductor(id, { ...cuerpo, quitar_id: true })
+        return true
+      }
+      if (det.conflicto !== 'correo') throw e
+      const no = 'No se reactiva: serían dos fichas activas con el mismo correo.'
+      if (det.abrir_id) {
+        if (window.confirm(`${det.mensaje}\n\n${no}\nAceptar: abrir esa ficha.`)) abrir(det.abrir_id)
+      } else {
+        window.alert(`${det.mensaje}\n\n${no}`)
+      }
+      return false
+    }
+  }
+  async function enviar() {
+    setBusy(true); setErr('')
+    try {
+      try {
+        await crear()
+      } catch (e) {
+        const d = e?.response?.data?.detalle
+        if (e?.response?.status === 409 && d?.abrir_id) {
+          if (window.confirm(`${d.mensaje}\n\nAceptar: abrir su ficha.`)) abrir(d.abrir_id)
+          return
+        }
+        if (e?.response?.status !== 409 || !d?.reactivar_id) throw e
+        // Como el alta de Conductores: primero, reactivar la suya; si es OTRA persona, en un segundo paso.
+        if (window.confirm(`${d.mensaje}\n\nAceptar: reactivar su ficha (conserva inspecciones, turnos e historial).\nCancelar: ver otras opciones.`)) {
+          if (!(await reactivarLa(d.reactivar_id))) return
+          await crear()                      // ahora casa con la reactivada (por su correo o su DNI): se enlaza
+        } else if (window.confirm(conCorreo
+          ? '¿Es OTRA persona con el mismo correo?\n\nLa ficha dada de baja dejará de entrar con este correo.\nAceptar: crear una ficha nueva.\nCancelar: no hacer nada.'
+          /* Sin el correo (casó por su DNI o por el correo de la lista, F2), no se le quita nada a la de baja. */
+          : '¿Es OTRA persona?\n\nAceptar: crear una ficha nueva.\nCancelar: no hacer nada.')) {
+          await crear({ nueva: true })
+        }
+      }
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se ha podido dar de alta.')
+    } finally { setBusy(false) }
+  }
+
+  if (hecho) {
+    return (
+      <p data-testid="ficha-creada" className="flex flex-wrap items-center gap-2 text-[12.5px] text-emerald-300">
+        <Check size={14} /> Ficha de conductor lista{hecho.center ? ` (${hecho.center})` : ''}
+        {hecho.id && <button onClick={() => abrir(hecho.id)} className="font-semibold text-brand-400 hover:text-brand-300">Abrir</button>}
+      </p>
+    )
+  }
+
+  const elegirNave = !propia && naves.length > 1
+  return (
+    <div className="space-y-2">
+      {f?.por === 'telefono' && (
+        <p data-testid="quiza-ficha" className="text-[12px] text-amber-300">
+          Puede ser la ficha de {f.nombre}{f.centro ? ` (${f.centro})` : ''}: tiene el mismo teléfono.{' '}
+          <Link to={`/panel/conductores?open=${encodeURIComponent(f.id)}`} className="font-semibold text-brand-400 hover:text-brand-300">Abrir</Link>
+        </p>
+      )}
+      {deBaja && (
+        <p data-testid="tiene-ficha-de-baja" className="flex items-start gap-2 text-[12.5px] text-dark-300">
+          <IdCard size={14} className="mt-0.5 shrink-0" />
+          <span className="min-w-0">Tiene una ficha de conductor dada de baja{f.centro ? ` (${f.centro})` : ''}: al darle de alta se ofrece reactivarla.</span>
+        </p>
+      )}
+      {!abierto ? (
+        <button onClick={() => setAbierto(true)}
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-sky-500/40 px-3 py-2 text-[12.5px] text-sky-300 hover:bg-sky-500/10 sm:min-h-0">
+          <IdCard size={14} /> Dar de alta como conductor
+        </button>
+      ) : (
+        <div data-testid="alta-conductor" className="space-y-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 text-[12.5px]">
+          <p className="font-semibold text-dark-100">Se crea su ficha en Conductores con:</p>
+          <ul className="space-y-0.5 text-dark-300">
+            <li>Nombre: <b className="text-dark-100">{p.nombre}</b></li>
+            <li>Teléfono: {p.telefono || '—'}</li>
+            <li>DNI: {p.dni || '—'}</li>
+            {!elegirNave && <li>Centro: {nave || 'sin centro'}</li>}
+          </ul>
+          {elegirNave && (
+            <label className="flex flex-wrap items-center gap-2 text-dark-300">Centro
+              <select value={nave} onChange={(e) => setNave(e.target.value)} aria-label="Centro de la ficha"
+                className="input w-auto py-1 text-[12.5px]">
+                <option value="">— Elige —</option>
+                {naves.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+          )}
+          {p.email && (
+            <label className="flex items-start gap-2 text-dark-300">
+              <input type="checkbox" checked={conCorreo} onChange={(e) => setConCorreo(e.target.checked)} className="mt-0.5" />
+              <span>Poner también el correo {p.email}. Es el de su cuenta del listado de la ETT: márcalo solo si es el que
+                usará para entrar en la app (con él se le crea el acceso).</span>
+            </label>
+          )}
+          {err && <p className="text-red-300">{err}</p>}
+          <div className="flex flex-wrap gap-2">
+            <button onClick={enviar} disabled={busy || (elegirNave && !nave)}
+              className="btn-primary inline-flex items-center gap-2 disabled:opacity-40">
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Crear la ficha
+            </button>
+            <button onClick={() => { setAbierto(false); setErr('') }} className="px-2 text-dark-400 hover:text-dark-200">Cancelar</button>
           </div>
         </div>
       )}

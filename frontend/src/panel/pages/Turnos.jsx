@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import {
   getShifts, getShiftCoverage, getDrivers, saveShiftsBulk, setShiftSettings,
-  generateShiftsAuto, getRouteDemand, setRouteDemand, getShiftRequests,
+  generateShiftsAuto, getRouteDemand, setRouteDemand, getShiftRequests, getCoberturaPeticiones,
   resolveShiftRequest, resolverGrupoPeticiones, importShifts, getCodigosCuadrante, setCodigosCuadrante,
   importShiftsPegado, getShiftBlocks, createShiftBlock, deleteShiftBlock,
   setAliasNombres, updateDriver, exportarCuadrante,
@@ -21,6 +21,7 @@ import Suspensiones from '../components/Suspensiones'
 import ElegirNave from '../components/ElegirNave'
 import { getRefuerzos } from '../api'
 import { isoLocal, hoyLocal, horaLocal, diaMesLocal } from '../../lib/fecha'
+import { claseDif, signo } from '../cuadranteComun'
 
 /* Cuantos dias se pueden pintar de una vez. 92 es un trimestre: por encima
    son miles de celdas y la pantalla se arrastra sin que nadie lo necesite. */
@@ -799,6 +800,34 @@ export default function Turnos() {
      no piden nada: pisaban la bandeja y los conductores de la nueva. */
   const naveRef = useRef(center)
   naveRef.current = center
+  /* LA COBERTURA DE CADA DÍA PEDIDO (11-11-2026, cuadrante-2). Al aprobar solo se veían las fechas: nada decía si
+     ese día la nave se quedaba corta. Se pide aparte, una vez por nave (con «Todos», una por cada nave de la
+     bandeja), solo de los días que no han pasado y con el tope de 62 días del servidor. Si falla o el servidor aún no
+     la tiene (404), la bandeja sale como siempre, sin chips y sin error: solo informa, nunca bloquea. */
+  const [coberturaPet, setCoberturaPet] = useState({})   // nave -> { dias, trabaja: Set('did|fecha') }
+  const cargarCobertura = useCallback(async (reqs, n) => {
+    const hoyIso = hoyLocal()
+    const porNave = {}
+    for (const s of reqs) {
+      const nave = center === 'Todos' ? s.center : center
+      if (!nave || !s.date || s.date < hoyIso) continue
+      if (!porNave[nave]) porNave[nave] = []
+      porNave[nave].push(s.date)
+    }
+    const out = {}
+    await Promise.all(Object.entries(porNave).map(async ([nave, fechas]) => {
+      fechas.sort()
+      const desde = fechas[0]
+      const tope = sumaDias(desde, 61)
+      const hasta = fechas[fechas.length - 1] < tope ? fechas[fechas.length - 1] : tope
+      try {
+        const { data } = await getCoberturaPeticiones(nave, desde, hasta)
+        // Con el rango pedido: un día de fuera (más allá del tope) no se pidió, y no es «sin máxima» (P21).
+        if (data?.dias && typeof data.dias === 'object') out[nave] = { dias: data.dias, trabaja: new Set(lista(data.trabaja)), desde, hasta }
+      } catch { /* sin chips */ }
+    }))
+    if (n === pedidaPet.current) setCoberturaPet(out)
+  }, [center])
   /* Con «Todos» también (11-11-2026, cuadrante-3): el menú contaba las pendientes de todos los centros y la pantalla
      no dejaba verlas. El servidor ya da solo las de los centros de quien mira. */
   const cargarPeticiones = useCallback(async () => {
@@ -807,15 +836,20 @@ export default function Turnos() {
     setCargandoPeticiones(true); setErrPeticiones('')
     try {
       const r = await getShiftRequests(center, 'pendiente')
-      if (n === pedidaPet.current) setSolicitudes(lista(r.data?.requests))
+      if (n === pedidaPet.current) {
+        const reqs = lista(r.data?.requests)
+        setSolicitudes(reqs)
+        // La cobertura, detrás y sin esperarla: la bandeja no tarda más en salir por ella.
+        cargarCobertura(reqs, n)
+      }
     } catch {
       if (n === pedidaPet.current) setErrPeticiones(t('turns.req.load.err'))
     } finally {
       if (n === pedidaPet.current) setCargandoPeticiones(false)
     }
-  }, [center, t])
+  }, [center, t, cargarCobertura])
   // Al cambiar de nave, la lista de la otra no se queda a la vista mientras llega la nueva.
-  useEffect(() => { setSolicitudes([]); cargarPeticiones() }, [cargarPeticiones])
+  useEffect(() => { setSolicitudes([]); setCoberturaPet({}); cargarPeticiones() }, [cargarPeticiones])
 
   // Como `pedidaPet`: solo pinta la última carga pedida (10-11-2026).
   const pedidaCarga = useRef(0)
@@ -1533,7 +1567,7 @@ export default function Turnos() {
     const m = new Map()
     for (const s of solicitudes) {
       const k = s.grupo || s.id
-      if (!m.has(k)) m.set(k, { key: k, driver_name: s.driver_name, type: s.type, center: s.center,
+      if (!m.has(k)) m.set(k, { key: k, driver_id: s.driver_id, driver_name: s.driver_name, type: s.type, center: s.center,
         motivo_label: s.motivo_label, note: s.note, created_at: s.created_at,
         fechas: [], ids: [], cambiada: false })
       const g = m.get(k)
@@ -1564,6 +1598,35 @@ export default function Turnos() {
   const fmtDia = (f) => new Date(f + 'T12:00:00').toLocaleDateString(lang, { weekday: 'short' })
   const fmtNum = (f) => new Date(f + 'T12:00:00').toLocaleDateString(lang, { day: '2-digit', month: '2-digit' })
   const finde = (f) => [0, 6].includes(new Date(f + 'T12:00:00').getDay())
+  /* El chip de un día pedido (11-11-2026, cuadrante-2): cómo queda la nave si se lo das, con el color de la fila
+     «Diferencia» del Cuadrante (rojo por debajo de la máxima, ámbar sin colchón, verde si sobra). Sin máxima, gris:
+     no se inventa nada. Un libre de quien ese día ya no sale a ruta, o un extra de quien ya sale, no cambia nada. */
+  const chipCobertura = (g, f, cob) => {
+    const d = cob.dias?.[f]
+    const dia = `${fmtDia(f)} ${fmtNum(f)}`
+    if (!d || d.maximo == null) {
+      return { texto: `${dia} · sin máxima`, clase: 'bg-dark-800 text-dark-400',
+        title: 'Ese día no tiene máxima puesta en el Cuadrante: no se puede decir si se queda corto.' }
+    }
+    const extra = g.type === 'extra'
+    const trabaja = cob.trabaja.has(`${g.driver_id}|${f}`)
+    const cambia = extra ? (trabaja ? 0 : 1) : (trabaja ? -1 : 0)
+    const enRuta = (d.en_ruta || 0) + (d.bajan || 0)
+    const dif = enRuta + cambia - d.maximo
+    const efecto = cambia ? `si se lo das ${signo(dif)}` : (extra ? 'ya trabaja: no cambia' : 'ya libra: no cambia')
+    const otras = Math.max(0, (extra ? d.pendientes_extra : d.pendientes_libre) - 1)
+    const mas = [d.concedidos ? `ya concedidos: ${d.concedidos}` : '', otras ? `otras pendientes: ${otras}` : '']
+      .filter(Boolean)
+    return {
+      texto: [`${dia} · en ruta ${enRuta}/${d.maximo} → ${efecto}`, ...mas].join(' · '),
+      clase: claseDif({ dif, colchon: d.colchon ?? 2 }),
+      title: `En ruta ${d.en_ruta || 0}${d.bajan ? ` + ${d.bajan} que bajan de otros centros` : ''}, máxima ${d.maximo}, `
+        + `colchón ${d.colchon ?? 2}. Es la cuenta de Refuerzos: todos los turnos de ruta de la nave. Si hay prestados `
+        + 'con turno, puede salir uno o dos por encima de la fila «Diferencia» del Cuadrante.'
+        + (d.concedidos ? ` Ya concedidos: días libres ya aprobados ese día en la nave (${d.concedidos}).` : '')
+        + (otras ? ` Otras pendientes: ${otras} más ${extra ? 'piden trabajar' : 'piden librar'} ese día y esperan respuesta.` : ''),
+    }
+  }
   // Un día cerrado, con las fechas como se leen («sáb 20/12 → mar 06/01»), no 2026-12-20 → 2027-01-06.
   const filaBloqueo = (b) => (
     <div key={b.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
@@ -2597,6 +2660,25 @@ export default function Turnos() {
                     )}
                   </div>
                   <p className="mt-1 text-[12.5px] text-dark-400">{g.fechas.map(fmtNum).join(' · ')}</p>
+                  {(() => {
+                    const cob = coberturaPet[noCenter ? g.center : center]
+                    const hoyIso = hoyLocal()
+                    const futuras = cob ? g.fechas.filter((f) => f >= hoyIso && f >= cob.desde && f <= cob.hasta) : []
+                    if (!futuras.length) return null
+                    return (
+                      <div className="mt-1.5 flex min-w-0 flex-wrap gap-1" data-testid="cobertura-peticion">
+                        {futuras.map((f) => {
+                          const c = chipCobertura(g, f, cob)
+                          return (
+                            <span key={f} title={c.title} data-testid="chip-cobertura"
+                              className={`max-w-full break-words rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${c.clase}`}>
+                              {c.texto}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                   {g.note && <p className="mt-1 text-[12.5px] italic text-dark-500">“{g.note}”</p>}
                   {g.created_at && (
                     <p className="mt-1 font-mono text-[10.5px] text-dark-500">

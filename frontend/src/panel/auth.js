@@ -179,8 +179,23 @@ export function getPermissions() {
    centros están sucios ('OGA5', 'oga5 ', 'AMZL OGA5 SANTIAGO XPT'), así que
    comparar con `includes` exacto dejaba la lista VACÍA y el panel se quedaba
    con un único botón "Todos" — que para chat y checklist significa
-   literalmente pedir el centro llamado "Todos" y no ver nada. */
-const _norm = (s) => String(s || '').trim().toUpperCase()
+   literalmente pedir el centro llamado "Todos" y no ver nada.
+
+   El cruce es la MISMA regla que el servidor (`_centro_casa_con_permitido` de server.py, 11-11-2026, revisión V11):
+   con trozos en las dos direcciones, a quien solo tiene NORTE2 el selector le ofrecía NORTE, que el servidor rechaza
+   con un 403. El permitido dentro del centro, como siempre («OGA5» en «AMZL OGA5 SANTIAGO XPT»); el centro dentro del
+   permitido, solo si es igual (recortado) o es el CÓDIGO de nave que lleva dentro (el `_CENTRO_RE` del servidor; los
+   bordes, como el `\b` de Python: ni letra, ni cifra, ni «_» pegada). */
+const _CODIGO_NAVE = /(?:^|[^\p{L}\p{N}_])([A-Z]{2,4}\p{Nd}{1,2})(?![\p{L}\p{N}_])/gu
+
+function centroCasaConPermitido(centro, permitido) {
+  const c = String(centro || '').toUpperCase()
+  const p = String(permitido || '').toUpperCase()
+  if (!p) return false
+  if (c.includes(p)) return true
+  const pedido = c.trim()
+  return !!pedido && (pedido === p.trim() || [...p.matchAll(_CODIGO_NAVE)].some((m) => m[1] === pedido))
+}
 
 export function getVisibleCenters() {
   const p = decodeToken() || {}
@@ -196,7 +211,7 @@ export function getVisibleCenters() {
     : Array.isArray(p.allowed_centers) && p.allowed_centers.length ? p.allowed_centers
     : Array.isArray(a.allowed_centers) ? a.allowed_centers : null)
   if (!mios || !mios.length) return todos            // sin restricción: los de la org
-  const cruce = todos.filter((c) => mios.some((m) => _norm(c).includes(_norm(m)) || _norm(m).includes(_norm(c))))
+  const cruce = todos.filter((c) => mios.some((m) => centroCasaConPermitido(c, m)))
   // Si la org no los lista (datos viejos), mejor los suyos que ninguno.
   return cruce.length ? cruce : mios.filter(Boolean)
 }
@@ -307,6 +322,12 @@ export function isCenterManager() {
 
 export function isDispatcher() {
   return getAdminRole() === 'dispatcher'
+}
+
+/* Añadir o quitar naves de la empresa: el super-admin y quien tenga «Admin completo»; un jefe de centro o un
+   dispatcher, no (11-11-2026, equipo-10). El servidor lo exige igual (`_puede_tocar_naves`); aquí solo se esconde. */
+export function puedeTocarNaves() {
+  return isSuperAdmin() || !['center_manager', 'dispatcher'].includes(getAdminRole())
 }
 
 /* LA DEMO NO PISA TU SESIÓN (03-10-2026). Dani entró en la demo del reparto

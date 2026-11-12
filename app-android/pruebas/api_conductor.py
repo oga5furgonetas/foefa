@@ -10,7 +10,7 @@ aquí se ve antes que en el móvil.
 """
 import json
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import httpx
 
@@ -19,6 +19,18 @@ CONDUCTOR = ("conductor@fds.test", "turno-de-prueba-1")
 AUTONOMO = ("prueba@fds.test", "ruta-de-prueba-1")
 CLAVE_NUEVA = "nueva-clave-1"
 fallos = []
+
+
+def hoy_del_servidor():
+    """El «hoy» del servidor (`_dia_negocio`: hora de Madrid), no el del reloj de quien lanza la prueba (12-11-2026).
+    Las máquinas de la CI van en UTC: de las 00:00 a la 01:00 de Madrid (a las 02:00 en verano) `date.today()` era
+    todavía ayer, el «mañana» de la prueba era el «hoy» del servidor y fallaban las cuatro comprobaciones de los
+    turnos y las vacantes de mañana, sin que nada estuviera roto."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Europe/Madrid")).date()
+    except Exception:                                                # noqa: BLE001  (sin base de zonas: como antes)
+        return date.today()
 
 
 def ok(cond, que):
@@ -40,7 +52,7 @@ def main():
     # Sin conexiones reutilizadas: si el servidor cierra una tras un error, la siguiente llamada no hereda el corte.
     c = httpx.Client(base_url=BASE, timeout=30, headers={"X-FDS-App": "android-prueba-pc", "Accept": "application/json"},
                      limits=httpx.Limits(max_keepalive_connections=0))
-    hoy = date.today()
+    hoy = hoy_del_servidor()
     manana = (hoy + timedelta(days=1)).isoformat()
 
     print("Acceso unificado (auth/app-login) con un conductor de empresa")

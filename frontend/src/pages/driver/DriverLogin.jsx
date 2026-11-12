@@ -89,8 +89,10 @@ export default function DriverLogin({ onLogin }) {
       const r = await api.post('/auth/driver-login',
         { email: email.trim(), password, slug: currentSlug() })
       if (r.data?.access_token) localStorage.setItem(DRIVER_TOKEN_KEY, r.data.access_token)
+      /* El `id` también (11-11-2026): sin él la inspección mandaba driver_id "undefined". */
       onLogin({
         ...currentDriver,
+        id: r.data?.id || currentDriver.id,
         name: r.data?.name || currentDriver.name,
         center: r.data?.center || currentDriver.center,
         configurar_cuenta: !!r.data?.configurar_cuenta,

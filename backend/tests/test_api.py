@@ -665,7 +665,8 @@ async def test_gestor_de_centro_puede_cambiar_permisos(client):
     org = f"org-{uuid.uuid4().hex[:8]}"
     jefe, _ = await _crear_admin(org, admin_role="center_manager",
                                  centros=["CENTRO1"], permisos=["chat", "vehiculos"])
-    curra, _ = await _crear_admin(org, centros=["CENTRO1"], permisos=["chat"])
+    # Un dispatcher: un jefe solo gestiona dispatchers, nunca a un «Admin completo» (11-11-2026, corrección P16/P17).
+    curra, _ = await _crear_admin(org, admin_role="dispatcher", centros=["CENTRO1"], permisos=["chat"])
     token = server.create_token(jefe, "admin", "Gestor", org_id=org)
 
     r = await client.patch(f"/api/auth/admins/{curra}",
@@ -711,7 +712,7 @@ async def test_quitar_un_permiso_se_nota_sin_volver_a_entrar(client):
     org = f"org-{uuid.uuid4().hex[:8]}"
     jefe, _ = await _crear_admin(org, admin_role="center_manager",
                                  centros=["CENTRO1"], permisos=["chat", "vehiculos"])
-    curra, _ = await _crear_admin(org, centros=["CENTRO1"], permisos=["chat"])
+    curra, _ = await _crear_admin(org, admin_role="dispatcher", centros=["CENTRO1"], permisos=["chat"])
     token = server.create_token(jefe, "admin", "Gestor", org_id=org,
                                 permissions=["chat", "vehiculos"])
 

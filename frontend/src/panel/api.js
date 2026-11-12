@@ -107,6 +107,13 @@ export const removeDriverRecoveryEmail = (id) => api.delete(`/drivers/${id}/reco
 // aplica el servidor ese día; si ya ha llegado, en el acto).
 export const programarTraslado = (id, centro, desde) => api.post(`/drivers/${id}/traslado`, { centro, desde })
 export const cancelarTraslado = (id) => api.delete(`/drivers/${id}/traslado`)
+// Las fichas de baja y reactivar una (11-11-2026, equipo-6). Reactivar: 409 {mensaje, abrir_id, conflicto} si el
+// correo o el ID de reparto ya los tiene otra ficha; con { quitar_id: true } se reactiva sin el ID.
+export const getDriversBajas = (center) => api.get('/drivers/bajas', { params: centerParam(center) })
+export const reactivarConductor = (id, body = {}) => api.post(`/drivers/${id}/reactivar`, body)
+// Quién tiene la app de Android, con qué versión y cuándo la abrió (11-11-2026, equipo-5):
+// {conductores: {id: {app, plataforma, visto}}, ultima}. Un servidor viejo contesta 404/405: la columna no sale.
+export const getDriversApp = (center) => api.get('/drivers/app', { params: centerParam(center) })
 // Apoyo en ruta: quien le quita paradas a quien, con mapa por WhatsApp
 /* Empleo: ofertas, cuestionario y candidatos. La oferta va SIEMPRE atada a un
    centro y el candidato hereda el suyo, para que no se mezclen las naves. */
@@ -159,6 +166,9 @@ export const importarIncorporaciones = (body) => api.post('/incorporaciones/pers
 export const editarIncorporacion = (id, body) => api.patch(`/incorporaciones/personas/${id}`, body)
 export const mensajeIncorporacion = (id, body) => api.post(`/incorporaciones/personas/${id}/mensaje`, body)
 export const marcarAvisoIncorporacion = (id, body) => api.post(`/incorporaciones/personas/${id}/enviado`, body)
+/* De Incorporaciones a ficha de conductor (11-11-2026, equipo-11): { usar_correo, nueva, centro } (todo opcional) ->
+   { ya_tenia, ficha: {id, name, center} } o el mismo 409 que POST /drivers ({mensaje, abrir_id} o {mensaje, reactivar_id}). */
+export const fichaConductorIncorporacion = (id, body = {}) => api.post(`/incorporaciones/personas/${id}/ficha-conductor`, body)
 export const guardarPlantillaIncorporaciones = (body) => api.put('/incorporaciones/plantillas', body)
 /* La descarga va como `blob`: sin esto axios intenta leerlo como texto y
    el fichero llega con los acentos rotos. */
@@ -177,6 +187,8 @@ export const uploadDriverPhoto = (id, file) => { const fd = new FormData(); fd.a
 /* Salud de las fichas: duplicadas por correo y Transporter IDs que faltan. */
 export const getDriversDuplicados = () => api.get('/drivers/duplicados')
 export const fusionarConductores = (body) => api.post('/drivers/fusionar', body)
+/* «No es la misma persona»: { queda: id de la activa, ceden: [ids de baja] } (11-11-2026). */
+export const separarConductores = (body) => api.post('/drivers/separar', body)
 export const repasarFusiones = () => api.post('/drivers/fusiones/repasar')
 /* Los IDs que salen a ruta y no tienen ficha, con sus rutas para reconocerlos. */
 /* Alta de un tiron del que conduce un id, con el nombre que da Cortex: sin
@@ -289,6 +301,8 @@ export const getOrgCenters = () => api.get('/org/centers')
 export const getCentrosGeo = () => api.get('/org/centros-geo') // {centros: {OGA5: {lat, lng, origen}}}
 export const enlaceTaller = (workshopId) => api.post(`/workshops/${workshopId}/enlace`) // enlace fijo por taller
 export const addOrgCenter = (name) => api.post('/org/centers', { name })
+// Quitar una nave vacía (11-11-2026, equipo-10): 409 {mensaje, conductores, furgonetas, usuarios} si tiene algo.
+export const deleteOrgCenter = (name) => api.delete(`/org/centers/${encodeURIComponent(name)}`)
 /* WhatsApp Business. Las credenciales NO pasan por aqui: viven en los secretos
    de Fly. Estos endpoints solo dicen que falta, encienden cada aviso y prueban. */
 export const getWhatsappEstado = () => api.get('/whatsapp/estado')
@@ -385,6 +399,12 @@ export const cuadranteDescartar = (id) => api.post(`/cuadrante/propuestas/${id}/
 // persona, el servidor dice que no (Ctrl+Z en la hoja no pisa lo de nadie).
 export const cuadranteDeshacer = (center, soloSi) =>
   api.post('/cuadrante/deshacer', { center, ...(soloSi ? { solo_si: soloSi } : {}) }, { timeout: 120000 })
+// «Avisar a los conductores» (11-11-2026): quién tiene cambios sin avisar y, al pulsar, se les avisa (solo a los marcados).
+export const cuadranteAvisosPrevia = (center) => api.post('/cuadrante/avisos/previa', { center })
+// Los desmarcados (los que la oficina vio y quitó) van aparte: no se les avisa y no vuelven mientras su día siga igual.
+// `vistas` (opcional): las marcas de los días que se enseñaron; solo se descarta lo visto.
+export const cuadranteAvisosEnviar = (center, driverIds, descartarIds = [], vistas) =>
+  api.post('/cuadrante/avisos/enviar', { center, driver_ids: driverIds, descartar_ids: descartarIds, ...(vistas ? { vistas } : {}) }, { timeout: 60000 })
 // La hoja del cuadrante: los apuntes del DIARIO y el registro de DEBER HORAS.
 export const getDiario = (center, fecha) => api.get('/cuadrante/diario', { params: { center, fecha } })
 export const guardarDiario = (center, fecha, cambios, notas) =>
@@ -440,6 +460,9 @@ export const getRouteDemand = (center, desde, hasta) => api.get('/route-demand',
 export const setRouteDemand = (center, items) => api.post('/route-demand', { center, items })
 export const getShiftRequests = (center, status, extra = {}) =>
   api.get('/shift-requests', { params: { ...centerParam(center), ...(status ? { status } : {}), ...extra } })
+// Cómo queda la nave cada día si se concede lo pendiente (11-11-2026): los chips de la bandeja. Solo una nave.
+export const getCoberturaPeticiones = (center, desde, hasta) =>
+  api.get('/shift-requests/cobertura', { params: { center, desde, hasta } })
 // Solo el numero, para el aviso del menu: la lista de arriba devuelve hasta
 // mil documentos enteros y esto lo pide el panel cada dos minutos.
 export const contarPeticionesPendientes = (center) =>
@@ -455,7 +478,8 @@ export const getRefuerzos = (center) => api.get('/refuerzos', { params: centerPa
 export const crearRefuerzo = (body) => api.post('/refuerzos', body)
 export const cambiarRefuerzo = (id, body) => api.patch(`/refuerzos/${id}`, body)
 export const anularRefuerzo = (id) => api.post(`/refuerzos/${id}/anular`)
-export const getFaltasRefuerzo = (center) => api.get('/refuerzos/faltas', { params: { center } })
+// `dias` es opcional (11-11-2026, «Mi día» pide solo 3): sin él, la misma llamada de siempre (el servidor da 14).
+export const getFaltasRefuerzo = (center, dias) => api.get('/refuerzos/faltas', { params: dias ? { center, dias } : { center } })
 // Suspensiones (18-10-2026): días en SUSP en el cuadrante, con candado, de un día a otro.
 export const getSuspensiones = (center) => api.get('/suspensiones', { params: centerParam(center) })
 export const crearSuspension = (body) => api.post('/suspensiones', body)

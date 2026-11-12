@@ -8,24 +8,26 @@ import ImportarMoviles from '../components/ImportarMoviles'
 import { useEscape } from '../../lib/useEscape'
 import { usePlan } from '../../lib/usePlan'
 import {
-  Loader2, Search, Plus, X, Pencil, Trash2, UserCheck, FileSpreadsheet, Phone, Mail, IdCard, Car,
+  Loader2, Search, Plus, X, Pencil, UserCheck, FileSpreadsheet, Phone, Mail, IdCard, Car,
   MapPin, FileText, Building2, Save, Camera, Trophy, TrendingUp, TrendingDown, Minus, Flame,
   BarChart2, ChevronDown, ChevronUp, AlertCircle, Lock, LockOpen, Eye, EyeOff, ShieldCheck,
-  Share2, Smartphone, ArrowRightLeft, KeyRound, MoreHorizontal,
+  Share2, Smartphone, ArrowRightLeft, KeyRound, MoreHorizontal, UserMinus, RotateCcw,
 } from 'lucide-react'
 import {
   getDrivers, createDriver, updateDriver, deleteDriver, uploadDriverPhoto, programarTraslado, cancelarTraslado,
+  getDriversBajas, reactivarConductor, getDriversApp,
   getDriversScoring, getScoringLeaderboard, getDriverAccounts, setDriverPassword,
   getDriverRecoveryEmail, setDriverRecoveryEmail, removeDriverRecoveryEmail,
   generarAccesosConductores, previaAccesosConductores, getContrasenaInicial, setContrasenaInicial,
   deleteDriverAccount,
-  getDriversDuplicados, fusionarConductores, repasarFusiones,
+  getDriversDuplicados, fusionarConductores, separarConductores, repasarFusiones,
 } from '../api'
 import { MARCA } from '../../marca'
+import { DIAS_AVISO_CARNET, diasHastaCarnet, fechaCarnet, textoDiasCarnet } from '../../lib/carnet'
 
 const EMPTY = {
   name: '', dni: '', phone: '', movil_personal: '', email: '', driver_id: '', transporter_id: '',
-  license_number: '', contrato: '', nivel: '', center: '', alojamiento: '', notas: '',
+  license_number: '', license_expiry: '', contrato: '', nivel: '', center: '', alojamiento: '', notas: '',
 }
 
 // Sin centro, la ficha sale en la lista de TODOS los centros (así nadie la
@@ -41,9 +43,38 @@ const FALTAS = [
   { id: 'correo', clave: 'drv.f.sinCorreo', falta: (d) => !String(d?.email || '').trim() },
   { id: 'reparto', clave: 'drv.f.sinId', falta: (d) => !String(d?.transporter_id || '').trim(), soloReparto: true },
   { id: 'acceso', clave: 'drv.f.sinAcceso', falta: (d, cuentas) => !cuentas.includes(d.id), soloCuentas: true },
+  // Quién no tiene la app de Android (11-11-2026, tanda 3, equipo-5): solo si el servidor ha dicho quién la tiene.
+  // No es «sin acceso» (eso es la cuenta con contraseña): se puede tener cuenta y usar solo la web.
+  { id: 'app', clave: 'drv.f.sinApp', falta: (d, _cuentas, app) => !app?.conductores?.[d.id], soloApp: true },
 ]
-const faltasQueCuentan = ({ conIdReparto, cuentasOk }) =>
-  FALTAS.filter((f) => (!f.soloReparto || conIdReparto) && (!f.soloCuentas || cuentasOk))
+const faltasQueCuentan = ({ conIdReparto, cuentasOk, appOk = false }) =>
+  FALTAS.filter((f) => (!f.soloReparto || conIdReparto) && (!f.soloCuentas || cuentasOk) && (!f.soloApp || appOk))
+
+/* LA APP DE CADA UNO (11-11-2026, equipo-5): «2.4.6 · hoy», «2.4.3 · hace 9 días». Versión y día, sin la hora. */
+const versionTupla = (v) => (String(v || '').match(/\d+/g) || []).slice(0, 4).map(Number)
+function versionMenor(a, b) {
+  const x = versionTupla(a)
+  const y = versionTupla(b)
+  if (!x.length || !y.length) return false
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0)
+  }
+  return false
+}
+function cuandoApp(iso) {
+  const f = iso ? new Date(iso) : null
+  if (!f || Number.isNaN(f.getTime())) return ''
+  const hoy = new Date()
+  const n = Math.round((new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()) - new Date(f.getFullYear(), f.getMonth(), f.getDate())) / 864e5)
+  if (n <= 0) return 'hoy'
+  if (n === 1) return 'ayer'
+  return `hace ${n} días`
+}
+const diaApp = (iso) => {
+  const f = iso ? new Date(iso) : null
+  return !f || Number.isNaN(f.getTime()) ? ''
+    : `${String(f.getDate()).padStart(2, '0')}/${String(f.getMonth() + 1).padStart(2, '0')}/${f.getFullYear()}`
+}
 
 function initials(n) {
   return (n || '?').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -334,6 +365,29 @@ function SaludFichas({ onCambio }) {
     } finally { setOcupado('') }
   }
 
+  /* «NO ES LA MISMA PERSONA» (11-11-2026). Una ficha de baja y una activa con el mismo correo pueden ser la misma
+     persona dada de alta dos veces… o alguien que se fue y otra persona a la que se dio de alta con su buzón. Para el
+     servidor son siempre la misma, y quien se fue seguía entrando como la nueva. Solo la oficina lo sabe: con esto, la
+     de baja deja de entrar con ese correo. Solo junto a las de baja de un grupo con UNA activa (un servidor sin
+     `activa` no enseña el botón). */
+  const separar = async (grupo, f) => {
+    const activas = grupo.fichas.filter((x) => x.activa === true)
+    if (activas.length !== 1) return
+    const queda = activas[0]
+    if (!window.confirm(`¿${f.nombre} es OTRA persona que ${queda.nombre}?
+
+Su ficha (dada de baja) dejará de entrar con el correo ${grupo.email}: el correo se queda solo en la de ${queda.nombre}.
+Aceptar: separarlas. Cancelar: no hacer nada.`)) return
+    setOcupado(`sep:${f.id}`); setErr(''); setHecho('')
+    try {
+      await separarConductores({ queda: queda.id, ceden: [f.id] })
+      setHecho(`${f.nombre} ya no entra con ${grupo.email}.`)
+      cargar(); onCambio?.()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudieron separar.')
+    } finally { setOcupado('') }
+  }
+
   if (!dups) return <div className="flex items-center gap-2 text-dark-400"><Loader2 className="animate-spin" size={18} /> …</div>
 
   return (
@@ -379,6 +433,14 @@ function SaludFichas({ onCambio }) {
                           {f.inspecciones} insp · {f.asignaciones} asign · {f.turnos} turnos · {f.peticiones} pet.
                         </span>
                         {f.id === conservar && <span className="ml-auto text-[12px] font-semibold text-emerald-400">se conserva</span>}
+                        {f.activa === false && g.fichas.filter((x) => x.activa === true).length === 1 && (
+                          <button type="button" data-testid="separar-ficha"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); separar(g, f) }}
+                            disabled={!!ocupado}
+                            className={`${f.id === conservar ? '' : 'ml-auto '}rounded-lg border border-dark-700 px-2.5 py-1 text-[12px] text-dark-300 hover:border-dark-500 disabled:opacity-50`}>
+                            {ocupado === `sep:${f.id}` ? 'Separando…' : 'No es la misma persona'}
+                          </button>
+                        )}
                       </label>
                     ))}
                   </div>
@@ -946,12 +1008,26 @@ function ContrasenaInicial() {
    móvil había que deslizar de lado para ver el teléfono. Debajo de `sm` va esto: el nombre y su centro; el teléfono, a
    un toque para llamar (aparte de la tarjeta, que abre la ficha: un enlace dentro de un botón no vale); y lo que le
    falta. El ordenador sigue con la tabla. */
-function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, onAbrir }) {
+/* Desde cuándo está de baja (11-11-2026, equipo-6): la fecha si se sabe, o que la sacó la hoja de Google. */
+function bajaTexto(d) {
+  /* Quién la sacó lo resuelve el servidor (`origen`, segunda revisión F5/F6): la hoja de Google deja `desactivada_por`
+     puesto aunque después la reactive y la dé de baja la oficina. Sin `origen` (un servidor anterior), como antes. */
+  const hoja = d && 'origen' in d ? d.origen === 'hoja' : d?.desactivada_por === 'hoja'
+  if (hoja) return 'la sacó la hoja de Google'
+  // `baja_en` va en UTC: el día, el de aquí (una baja a las 00:30 es de ese día, no del anterior).
+  const f = d?.baja_en ? new Date(d.baja_en) : null
+  if (!f || Number.isNaN(f.getTime())) return 'de baja'
+  return `de baja desde ${String(f.getDate()).padStart(2, '0')}/${String(f.getMonth() + 1).padStart(2, '0')}/${f.getFullYear()}`
+}
+
+function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deBaja = false, appInfo = null, onAbrir }) {
   const { t } = useT()
-  const faltan = faltasQueCuentan({ conIdReparto, cuentasOk }).filter((f) => f.id !== 'centro' && f.falta(d, accounts))
+  // De una baja no se dice lo que le falta: no se va a completar (11-11-2026, equipo-6).
+  const faltan = deBaja ? [] : faltasQueCuentan({ conIdReparto, cuentasOk, appOk: !!appInfo })
+    .filter((f) => f.id !== 'centro' && f.falta(d, accounts, appInfo))
   const tel = String(d.phone || '').replace(/[^\d+]/g, '')
   return (
-    <li className="flex items-stretch border-b border-dark-800/50 last:border-0">
+    <li className={`flex items-stretch border-b border-dark-800/50 last:border-0 ${deBaja ? 'opacity-70' : ''}`}>
       <button type="button" onClick={() => onAbrir(d)} className="flex min-h-[56px] min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-left active:bg-dark-800/60">
         <Avatar driver={d} size={8} />
         <span className="min-w-0 flex-1">
@@ -972,6 +1048,16 @@ function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, onA
             {faltan.map((f) => (
               <span key={f.id} className="whitespace-nowrap rounded-full bg-dark-800 px-2 py-0.5 text-[10.5px] font-semibold text-amber-300">{t(f.clave)}</span>
             ))}
+            {/* La app sin actualizar, también en el móvil (11-11-2026, equipo-5): «sin app» va entre las faltas. */}
+            {appInfo && versionMenor(appInfo.conductores?.[d.id]?.app, appInfo.ultima) && (
+              <span data-testid="tarjeta-app-vieja" title={`Hay una versión más nueva: ${appInfo.ultima}`}
+                className="whitespace-nowrap rounded-full bg-amber-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-amber-300">
+                app {appInfo.conductores[d.id].app}
+              </span>
+            )}
+            {deBaja && (
+              <span data-testid="baja-desde" className="whitespace-nowrap rounded-full bg-dark-800 px-2 py-0.5 text-[10.5px] font-semibold text-dark-300">{bajaTexto(d)}</span>
+            )}
           </span>
         </span>
       </button>
@@ -1040,7 +1126,7 @@ function useEstrecho() {
   return si
 }
 
-function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = false, onAbrir }) {
+function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = false, deBaja = false, appInfo = null, onAbrir }) {
   const { t } = useT()
   const estrecho = useEstrecho()
   const [orden, setOrden] = useState({ col: 'name', asc: true })
@@ -1092,7 +1178,7 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
       <ul aria-label="Conductores">
         {filas.map((d) => (
           <TarjetaConductor key={d.id} d={d} accounts={accounts} cuentasOk={cuentasOk} conIdReparto={conIdReparto}
-            datoOrden={datoOrden} onAbrir={onAbrir} />
+            datoOrden={datoOrden} deBaja={deBaja} appInfo={appInfo} onAbrir={onAbrir} />
         ))}
       </ul>
       </>
@@ -1111,6 +1197,7 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
               <Cab col="nivel">Nivel</Cab>
               {/* «Acceso» y no «PIN» (10-11-2026): no hay ningún PIN; dice si tiene cuenta con contraseña. */}
               <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-dark-500">Acceso</th>
+              {appInfo && <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-dark-500">App</th>}
             </tr>
           </thead>
           <tbody>
@@ -1120,9 +1207,12 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
               const hasAcc = accounts.includes(d.id)
               return (
                 <tr key={d.id} onClick={() => onAbrir(d)}
-                  className="float-row cursor-pointer border-b border-dark-800/50 last:border-0">
+                  className={`float-row cursor-pointer border-b border-dark-800/50 last:border-0 ${deBaja ? 'opacity-70' : ''}`}>
                   <td className="px-2 py-1"><Avatar driver={d} size={7} /></td>
-                  <td className="max-w-[220px] truncate px-2 py-1 font-medium text-dark-100">{String(d.name || '').replace(/\s+/g, ' ').trim()}</td>
+                  <td className="max-w-[220px] truncate px-2 py-1 font-medium text-dark-100">
+                    {deBaja ? <span>{String(d.name || '').replace(/\s+/g, ' ').trim()}</span> : String(d.name || '').replace(/\s+/g, ' ').trim()}
+                    {deBaja && <span data-testid="baja-desde" className="block truncate text-[11px] font-normal text-dark-500">{bajaTexto(d)}</span>}
+                  </td>
                   <td className="px-2 py-1 text-dark-400">
                     {sinCentro(d)
                       ? <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">sin centro</span>
@@ -1151,6 +1241,7 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
                     {hasAcc ? <Lock size={11} className="inline text-lime-400" title="Tiene acceso al portal" />
                             : <span className="text-dark-700">—</span>}
                   </td>
+                  {appInfo && <td className="whitespace-nowrap px-2 py-1"><CeldaApp info={appInfo.conductores?.[d.id]} ultima={appInfo.ultima} /></td>}
                 </tr>
               )
             })}
@@ -1159,7 +1250,7 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
       </div>
       )}
       <p className="border-t border-dark-800 px-3 py-1.5 text-[11px] text-dark-500">
-        {filas.length} {filas.length === 1 ? 'conductor' : 'conductores'} · pulsa {estrecho ? 'uno' : 'una fila'} para abrir la ficha
+        {filas.length} {deBaja ? 'de baja' : filas.length === 1 ? 'conductor' : 'conductores'} · pulsa {estrecho ? 'uno' : 'una fila'} para abrir la ficha
       </p>
     </div>
   )
@@ -1193,11 +1284,34 @@ export default function Conductores() {
     if (openId && drivers) {
       const d = drivers.find((x) => x.id === openId)
       if (d) setModal({ driver: d })
+      /* Una ficha de OTRA nave (11-11-2026, equipo-11: «Abrir» desde Incorporaciones o los Carnets): se busca entre
+         todas las que ve quien la pide, como «ya tiene ficha» en el alta. Si no la ve, no se abre nada (como antes). */
+      else {
+        getDrivers('Todos').then((r) => {
+          const f = lista(r.data).find((x) => x.id === openId)
+          if (f) setModal({ driver: f })
+        }).catch(() => {})
+      }
       setSearchParams({}, { replace: true })
     }
   }, [drivers]) // eslint-disable-line
 
+  // LAS FICHAS DE BAJA (11-11-2026, tanda 3, equipo-6): null = el servidor no las da (uno viejo): ni chip ni lista.
+  const [bajas, setBajas] = useState(null)
+  const [verBajas, setVerBajas] = useState(false)
+  const [aviso, setAviso] = useState('')
+  // QUIÉN TIENE LA APP (11-11-2026, equipo-5): null = no se sabe (servidor viejo o error): ni columna ni filtro.
+  const [appInfo, setAppInfo] = useState(null)
   async function load() {
+    getDriversBajas(center)
+      .then((r) => setBajas(Array.isArray(r.data) ? r.data.filter((x) => x && x.id) : null))
+      .catch(() => setBajas(null))
+    getDriversApp(center)
+      .then((r) => {
+        const c = r.data?.conductores
+        setAppInfo(c && typeof c === 'object' && !Array.isArray(c) ? { conductores: c, ultima: r.data.ultima || null } : null)
+      })
+      .catch(() => setAppInfo(null))
     try {
       const [rd, ra] = await Promise.all([getDrivers(center), getDriverAccounts()])
       setDrivers(lista(rd.data))
@@ -1211,21 +1325,38 @@ export default function Conductores() {
   useEffect(() => { setDrivers(null); setModal(null); load() }, [center]) // eslint-disable-line
 
   // Se busca también por nº de empleado y teléfono, y sin tildes: «nunez»
-  // encuentra a «NÚÑEZ».
-  const list = useMemo(() => {
+  // encuentra a «NÚÑEZ». Lo mismo en la lista de bajas.
+  const buscar = useMemo(() => {
     const plano = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     const b = plano(q).trim()
-    return (drivers || [])
+    return (arr) => (arr || [])
       .filter(d => !b || [d.name, d.email, d.center, d.driver_id, d.transporter_id, d.phone, d.movil_personal]
         .some(v => plano(v).includes(b)))
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }))
-  }, [drivers, q])
+  }, [q])
+  const vivos = useMemo(() => buscar(drivers), [buscar, drivers])
+  const bajasVistas = useMemo(() => buscar(bajas), [buscar, bajas])
+  const enBajas = verBajas && Array.isArray(bajas)
+  const list = enBajas ? bajasVistas : vivos
 
   // Los filtros de un toque, contados sobre lo que deja el buscador: el número es lo que se ve al pulsarlo.
-  const faltas = useMemo(() => faltasQueCuentan({ conIdReparto, cuentasOk })
-    .map((f) => ({ ...f, n: list.filter((d) => f.falta(d, accounts)).length })), [list, accounts, conIdReparto, cuentasOk])
+  const faltas = useMemo(() => (enBajas ? [] : faltasQueCuentan({ conIdReparto, cuentasOk, appOk: !!appInfo }))
+    .map((f) => ({ ...f, n: list.filter((d) => f.falta(d, accounts, appInfo)).length })),
+  [list, accounts, conIdReparto, cuentasOk, enBajas, appInfo])
   const filtroVivo = faltas.find((f) => f.id === filtro) || null
-  const vistos = filtroVivo ? list.filter((d) => filtroVivo.falta(d, accounts)) : list
+  const vistos = filtroVivo ? list.filter((d) => filtroVivo.falta(d, accounts, appInfo)) : list
+  const conChipBajas = enBajas || (Array.isArray(bajas) && bajas.length > 0)
+  /* El chip «Bajas (N)»: con los filtros y también cuando no hay ningún activo o la búsqueda no casa con nadie (segunda
+     revisión, F12): una nave que se ha quedado sin activos tiene que poder llegar a sus bajas para reactivarlas. */
+  const chipBajas = conChipBajas && (
+    <button aria-pressed={enBajas} onClick={() => { setFiltro(null); setVerBajas((v) => !v) }}
+      title="Las fichas dadas de baja: se pueden abrir y reactivar"
+      className={`min-h-[44px] rounded-full border px-3 text-[12.5px] font-semibold sm:min-h-0 sm:py-1 ${enBajas
+        ? 'border-dark-400/60 bg-dark-700/60 text-dark-100'
+        : 'border-dark-700 text-dark-400 hover:border-dark-600 hover:text-dark-200'}`}>
+      Bajas ({bajasVistas.length})
+    </button>
+  )
 
   /* «Ya tiene ficha»: se abre esa ficha. Puede no estar en la lista que se ve
      (otro centro): se busca entre todas las que puede ver quien da de alta. */
@@ -1243,7 +1374,12 @@ export default function Conductores() {
 
   async function handleSave(id, data) {
     if (id) {
-      await updateDriver(id, data)
+      const r = await updateDriver(id, data)
+      /* Cambiada la nave desde «Editar» con un cambio programado a OTRA (11-11-2026, equipo-8): ese sigue en pie. */
+      const tp = r?.data?.traslado_pendiente
+      if (tp?.centro) {
+        window.alert(`Ojo: tenía programado pasar a ${tp.centro}${tp.desde ? ` el ${fechaCorta(tp.desde)}` : ''}. Ese cambio sigue programado; si ya no vale, cancélalo en «Cambio de centro».`)
+      }
     } else {
       try {
         await createDriver(data)
@@ -1263,22 +1399,59 @@ export default function Conductores() {
         /* Alguien que vuelve tras una baja: el servidor ofrece su ficha de
            siempre en vez de crear otra y partir su historial en dos. */
         if (e?.response?.status !== 409 || !d?.reactivar_id) throw e
+        /* «Otra persona» en un SEGUNDO paso (11-11-2026): antes el «Cancelar» del primero ya creaba la ficha nueva, y
+           mucha gente pulsa Cancelar para no hacer nada. Ahora el servidor, además, le quita el correo a la ficha de
+           baja (deja de entrar con él): pulsarlo sin querer le cerraría la cuenta a la misma persona. */
         if (window.confirm(`${d.mensaje}
 
 Aceptar: reactivar su ficha (conserva inspecciones, turnos e historial).
-Cancelar: es otra persona, crear una ficha nueva.`)) {
+Cancelar: ver otras opciones.`)) {
           const { password: _pw, ...resto } = data
           await updateDriver(d.reactivar_id, { ...resto, active: true })
+        } else if (window.confirm(`¿Es OTRA persona con el mismo correo?
+
+La ficha dada de baja dejará de entrar con este correo.
+Aceptar: crear una ficha nueva.
+Cancelar: no hacer nada.`)) {
+          /* Las DOS señales (revisión P13): con `nueva` a secas, que es lo que manda el panel viejo en caché al
+             pulsar Cancelar, el servidor crea la ficha sin quitarle el correo a nadie. */
+          await createDriver(data, { nueva: true, otra_persona: true })
         } else {
-          await createDriver(data, { nueva: true })
+          setModal(null)
+          return
         }
       }
     }
     setModal(null); setDrivers(null); load()
   }
+  /* «Dar de baja» y no «Eliminar» (11-11-2026, equipo-6): el servidor nunca borraba, daba de baja. */
   async function handleDelete(d) {
-    if (!confirm(`¿Eliminar a ${d.name}?`)) return
+    if (!confirm(`¿Dar de baja a ${d.name}? Deja de salir en las listas y no podrá volver a entrar en la app. Se conservan sus inspecciones, turnos e historial y se puede reactivar desde «Bajas».`)) return
     await deleteDriver(d.id); setModal(null); setDrivers(null); load()
+  }
+
+  /* REACTIVAR UNA BAJA (11-11-2026, equipo-6). Si su ID de reparto ya lo tiene otra ficha viva, se pregunta si se
+     reactiva sin él; si su correo ya lo tiene otra activa, no se puede (serían dos para la misma persona): se abre esa. */
+  async function reactivar(d) {
+    try {
+      await reactivarConductor(d.id)
+    } catch (e) {
+      const det = e?.response?.data?.detalle
+      /* El del ID de una ficha de otra nave llega sin `abrir_id` (11-11-2026, tercera revisión, W2): se ofrece igual. */
+      if (e?.response?.status !== 409 || !det || (!det.abrir_id && det.conflicto !== 'id_reparto')) throw e
+      if (det.conflicto === 'id_reparto') {
+        if (!window.confirm(`${det.mensaje}\n\nAceptar: reactivar a ${d.name} SIN ese ID de reparto (pónselo bueno en su ficha).\nCancelar: no hacer nada.`)) return
+        await reactivarConductor(d.id, { quitar_id: true })
+      } else {
+        if (window.confirm(`${det.mensaje}\n\nNo se reactiva: serían dos fichas activas con el mismo correo.\nAceptar: abrir esa ficha.`)) {
+          await abrirExistente(det)
+        }
+        return
+      }
+    }
+    setModal(null)
+    setAviso(`${d.name} vuelve a estar activo. Entra con la contraseña que tuviera; el correo personal de recuperación se quitó al darle de baja y, si lo usaba, hay que volver a ponérselo.`)
+    setDrivers(null); load()
   }
 
   const TABS = [
@@ -1392,13 +1565,16 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
       {tab === 'directorio' && (
         !drivers
           ? <div className="flex items-center gap-2 py-16 text-dark-400"><Loader2 size={18} className="animate-spin" /> {t('ui.loading')}</div>
-          : list.length === 0 && q && drivers.length > 0
+          : list.length === 0 && q && drivers.length > 0 && !enBajas
             ? <div className="rounded-2xl border border-dashed border-dark-700 py-12 text-center">
                 <p className="font-medium text-dark-300">Nadie coincide con «{q}»</p>
                 <p className="mt-1 text-sm text-dark-500">Se busca por nombre, correo, sede, nº de empleado y teléfono.</p>
-                <button onClick={() => setQ('')} className="btn-ghost mt-4 px-3 py-1.5 text-sm">Borrar búsqueda</button>
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                  <button onClick={() => setQ('')} className="btn-ghost px-3 py-1.5 text-sm">Borrar búsqueda</button>
+                  {chipBajas}
+                </div>
               </div>
-          : list.length === 0
+          : list.length === 0 && !enBajas
             ? <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-dark-700 px-6 py-20 text-center">
                 <UserCheck size={44} className="mb-4 text-dark-500" />
                 <p className="text-base font-semibold text-dark-100">{t('drv.empty')}{center !== 'Todos' ? ` en ${center}` : ''}</p>
@@ -1413,6 +1589,7 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
                   <button onClick={() => setModal({ driver: null })} className="btn-ghost flex items-center gap-1.5 px-4 py-2 text-sm">
                     <Plus size={14} /> {t('drv.add')}
                   </button>
+                  {chipBajas}
                 </div>
               </div>
             : <div className="flex flex-col">
@@ -1435,11 +1612,18 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
                     </span>
                   </div>
                 )}
-                {/* Solo los que tienen a alguien (o el que está puesto, para poder quitarlo). */}
-                {faltas.some((f) => f.n > 0 || f.id === filtro) && (
+                {aviso && (
+                  <div role="status" className="mb-3 flex items-start gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] px-3 py-2 text-[12.5px] text-emerald-200">
+                    <span className="min-w-0 flex-1">{aviso}</span>
+                    <button onClick={() => setAviso('')} aria-label="Cerrar" className="shrink-0 text-emerald-300/70 hover:text-emerald-200"><X size={14} /></button>
+                  </div>
+                )}
+                {/* Solo los que tienen a alguien (o el que está puesto, para poder quitarlo). «Bajas», al final. */}
+                {(faltas.some((f) => f.n > 0 || f.id === filtro) || conChipBajas) && (
                   <div role="group" aria-label={t('drv.filtros')} className="mb-3 flex flex-wrap items-center gap-2">
                     {faltas.filter((f) => f.n > 0 || f.id === filtro).map((f) => (
                       <button key={f.id} aria-pressed={filtro === f.id}
+                        title={f.id === 'app' ? t('drv.f.sinAppAyuda') : undefined}
                         onClick={() => setFiltro((x) => (x === f.id ? null : f.id))}
                         className={`min-h-[44px] rounded-full border px-3 text-[12.5px] font-semibold sm:min-h-0 sm:py-1 ${filtro === f.id
                           ? 'border-amber-400/60 bg-amber-500/15 text-amber-200'
@@ -1453,10 +1637,21 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
                         {t('drv.f.quitar')}
                       </button>
                     )}
+                    {chipBajas}
                   </div>
                 )}
-                <TablaConductores list={vistos} accounts={accounts} cuentasOk={cuentasOk} conIdReparto={conIdReparto}
-                  onAbrir={(d) => setModal({ driver: d })} />
+                {filtro === 'app' && filtroVivo && (
+                  <p data-testid="ayuda-sin-app" className="mb-3 text-[12.5px] text-dark-400">{t('drv.f.sinAppAyuda')}</p>
+                )}
+                {enBajas && (
+                  <p data-testid="aviso-bajas" className="mb-3 text-[12.5px] text-dark-400">
+                    Fichas dadas de baja: no salen en las listas ni entran en la app. Abre una para reactivarla.
+                    Pulsa otra vez «Bajas» para volver a las activas.
+                  </p>
+                )}
+                <TablaConductores list={vistos} accounts={enBajas ? [] : accounts} cuentasOk={cuentasOk && !enBajas}
+                  conIdReparto={conIdReparto && !enBajas} deBaja={enBajas} appInfo={enBajas ? null : appInfo}
+                  onAbrir={(d) => setModal({ driver: d, deBaja: enBajas })} />
               </div>
       )}
 
@@ -1472,6 +1667,9 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
           centers={centers}
           centroInicial={center && center !== 'Todos' ? center : (centers.length === 1 ? centers[0] : '')}
           hasAccount={accounts.includes(modal.driver?.id)}
+          deBaja={!!modal.deBaja}
+          appInfo={modal.deBaja ? null : appInfo}
+          onReactivar={reactivar}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setModal(null)}
@@ -1483,7 +1681,7 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
-function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, onDelete, onClose, onAccountChange }) {
+function DriverModal({ driver, centers, centroInicial = '', hasAccount, deBaja = false, appInfo = null, onReactivar, onSave, onDelete, onClose, onAccountChange }) {
   const { t } = useT()
   useEscape(onClose)
   const { modulos } = usePlan()
@@ -1515,12 +1713,22 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
   const [recoveryMessage, setRecoveryMessage] = useState('')
   const [recoveryError, setRecoveryError] = useState('')
 
+  // Una ficha de baja se ve en solo lectura (11-11-2026, equipo-6): ni editar ni accesos, solo «Reactivar».
+  const [reBusy, setReBusy] = useState(false)
+  const [reErr, setReErr] = useState('')
+  async function handleReactivar() {
+    setReBusy(true); setReErr('')
+    try { await onReactivar?.(driver) }
+    catch (ex) { setReErr(ex?.response?.data?.detail || 'No se ha podido reactivar.') }
+    finally { setReBusy(false) }
+  }
+
   useEffect(() => {
-    if (!driver?.id) return
+    if (!driver?.id || deBaja) return
     getDriverRecoveryEmail(driver.id)
       .then(({ data }) => setRecoveryStatus(data))
       .catch(() => setRecoveryStatus(null))
-  }, [driver?.id])
+  }, [driver?.id, deBaja])
 
   async function handleSetRecoveryEmail(e) {
     e.preventDefault()
@@ -1654,7 +1862,7 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {!isNew && !editing && (
+            {!isNew && !editing && !deBaja && (
               <button
                 onClick={() => setEditing(true)}
                 className="flex items-center gap-1.5 rounded-lg bg-dark-800 px-3 py-1.5 text-xs font-semibold text-dark-200 hover:bg-dark-700 transition-colors"
@@ -1662,13 +1870,14 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
                 <Pencil size={12} /> {t('ui.edit')}
               </button>
             )}
-            {!isNew && (
+            {/* «Dar de baja» y no «Eliminar» (11-11-2026, equipo-6): no se borra nada y se puede reactivar. */}
+            {!isNew && !deBaja && (
               <button
                 onClick={() => onDelete(driver)}
-                className="rounded-lg bg-red-500/10 p-1.5 text-red-400 hover:bg-red-500/20 transition-colors"
-                title="Eliminar conductor"
+                className="flex items-center gap-1.5 rounded-lg bg-red-500/10 p-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-colors sm:px-2.5"
+                title="Dar de baja" aria-label="Dar de baja"
               >
-                <Trash2 size={14} />
+                <UserMinus size={14} /> <span className="hidden sm:inline">Dar de baja</span>
               </button>
             )}
             <button onClick={onClose} className="rounded-lg p-1.5 text-dark-400 hover:bg-dark-800 hover:text-dark-200 transition-colors">
@@ -1682,6 +1891,19 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
           {/* ── Vista detalle ── */}
           {!editing && driver && (
             <div className="p-6">
+              {deBaja && (
+                <div data-testid="ficha-de-baja" className="mb-5 rounded-xl border border-dark-700 bg-dark-800/50 px-4 py-3">
+                  <p className="text-sm font-semibold text-dark-100">Ficha dada de baja · {bajaTexto(driver)}{driver.baja_por ? ` (por ${driver.baja_por})` : ''}</p>
+                  <p className="mt-1 text-xs text-dark-400">
+                    No sale en las listas ni puede entrar en la app. Al reactivarla vuelve con sus inspecciones, turnos e historial.
+                  </p>
+                  <button type="button" onClick={handleReactivar} disabled={reBusy}
+                    className="mt-3 flex min-h-[44px] items-center gap-1.5 rounded-lg bg-brand-600 px-4 text-xs font-bold text-brand-tinta disabled:opacity-50 sm:min-h-0 sm:py-2">
+                    {reBusy ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />} Reactivar
+                  </button>
+                  {reErr && <p className="mt-2 text-xs text-red-400">{reErr}</p>}
+                </div>
+              )}
               {/* Tags */}
               {(cc || nc) && (
                 <div className="flex flex-wrap gap-2 mb-6">
@@ -1696,6 +1918,8 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
                 <Detail icon={Phone}     label="Móvil personal"   value={driver.movil_personal} />
                 <Detail icon={Mail}      label="Email"            value={driver.email} span={2} />
                 <Detail icon={Car}       label="Nº carnet"        value={driver.license_number} />
+                <CaducaCarnet fecha={driver.license_expiry} />
+                {appInfo && <LineaApp info={appInfo.conductores?.[driver.id]} ultima={appInfo.ultima} />}
                 <Detail icon={FileText}  label="Nº de empleado"   value={driver.driver_id} mono />
                 <Detail icon={IdCard}    label="ID de reparto"    value={driver.transporter_id} mono />
                 <Detail icon={MapPin}    label="Centro"           value={driver.center} />
@@ -1708,9 +1932,10 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
                 )}
               </div>
 
-              <CambioCentro driver={driver} centers={centers} onCambio={onAccountChange} />
+              {!deBaja && <CambioCentro driver={driver} centers={centers} onCambio={onAccountChange} />}
+              <HistorialCentros historial={driver.historial_centros} />
 
-              <div className="mt-6 rounded-xl border border-dark-800 p-4">
+              {!deBaja && <div className="mt-6 rounded-xl border border-dark-800 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <h3 className="text-sm font-semibold text-dark-100">Correo personal de acceso</h3>
@@ -1735,10 +1960,10 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
                   className="mt-2 text-xs text-red-400 hover:text-red-300 disabled:opacity-50">Desvincular correo personal</button>}
                 {recoveryMessage && <p className="mt-2 text-xs text-emerald-400">{recoveryMessage}</p>}
                 {recoveryError && <p className="mt-2 text-xs text-red-400">{recoveryError}</p>}
-              </div>
+              </div>}
 
               {/* ── Acceso con contraseña ── */}
-              {driver.email && (
+              {driver.email && !deBaja && (
                 <div className="mt-6 rounded-xl border border-dark-800 overflow-hidden">
                   <button
                     onClick={() => { setPwSection(v => !v); setPwErr(''); setPwOk('') }}
@@ -1844,6 +2069,13 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
                       Sin centro sale en la lista de todos los centros, marcada. Mejor elige el suyo.
                     </p>
                   )}
+                  {/* El cambio desde aquí queda apuntado (11-11-2026, equipo-8): solo se dice si ya tenía nave. */}
+                  {!isNew && String(driver?.center || '').trim()
+                    && String(form.center || '').trim().toUpperCase() !== String(driver.center).trim().toUpperCase() && (
+                    <p data-testid="aviso-cambio-centro" className="mt-1 text-[11px] leading-snug text-dark-500">
+                      Se apunta en su historial de centros. Para que cambie un día concreto, usa «Cambio de centro».
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1902,6 +2134,13 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
                   <input className="input w-full" value={form.license_number || ''} onChange={e => set('license_number', e.target.value)} />
                 </div>
 
+                {/* La caducidad del carnet (11-11-2026, historia-10): avisa en la ficha y en Vencimientos → Carnets. */}
+                <div>
+                  <Label>Carnet caduca el</Label>
+                  <input className="input w-full" type="date" aria-label="Carnet caduca el" value={form.license_expiry || ''}
+                    onChange={e => set('license_expiry', e.target.value)} />
+                </div>
+
                 <div>
                   <Label>Nº de empleado</Label>
                   <input className="input w-full font-mono" value={form.driver_id || ''} onChange={e => set('driver_id', e.target.value)} placeholder="Opcional" />
@@ -1914,7 +2153,7 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
                       onChange={e => set('transporter_id', e.target.value.replace(/\s+/g, '').toUpperCase())}
                       placeholder="A2S2HK9FC8JOUX" />
                     <p className="mt-1 text-[11px] leading-snug text-dark-500">
-                      El de los informes diarios y las horas. Se escribe a mano.
+                      El de los informes diarios. Con él, cada conductor ve en su portal los informes que le tocan: comprueba que es el suyo.
                     </p>
                   </div>
                 )}
@@ -1985,6 +2224,8 @@ function CambioCentro({ driver, centers, onCambio }) {
       } else {
         setTraslado(r.data?.traslado || { centro: elegido, desde })
         setAviso('')
+        /* Con fecha de hoy y sin poder aplicarlo ahora, el servidor lo dice (11-11-2026, tercera revisión, W3). */
+        if (typeof r.data?.error === 'string') setErr(r.data.error)
       }
       setAbierto(false)
       onCambio?.()
@@ -2049,6 +2290,86 @@ function CambioCentro({ driver, centers, onCambio }) {
       {aviso && <p className="mt-2 text-xs text-emerald-300">{aviso}</p>}
       {err && <p className="mt-2 text-xs text-red-300">{err}</p>}
     </div>
+  )
+}
+
+/* HISTORIAL DE CENTRO (11-11-2026, tanda 3, equipo-8): de qué nave a qué nave ha pasado y cuándo, lo más nuevo
+   primero. Lo apuntan el cambio programado y, desde ahora, «Editar». Sin entradas (o con un servidor viejo, que no lo
+   manda) no sale nada. */
+function HistorialCentros({ historial }) {
+  const [todas, setTodas] = useState(false)
+  const filas = lista(historial).filter((h) => h && typeof h === 'object')
+    .sort((a, b) => String(b.aplicado_en || b.desde || '').localeCompare(String(a.aplicado_en || a.desde || '')))
+  if (!filas.length) return null
+  const vistas = todas ? filas : filas.slice(0, 5)
+  return (
+    <div data-testid="historial-centros" className="mt-3 rounded-xl border border-dark-800 px-4 py-3">
+      <div className="flex items-center gap-2">
+        <ArrowRightLeft size={15} className="text-dark-500" />
+        <span className="text-sm font-semibold text-dark-200">Historial de centro</span>
+      </div>
+      <ul className="mt-2 space-y-1 text-xs text-dark-400">
+        {vistas.map((h, i) => (
+          <li key={`${h.aplicado_en || h.desde || ''}-${i}`}>
+            <span className="font-semibold text-dark-200">{h.de || 'sin centro'} → {h.a || 'sin centro'}</span>
+            {h.desde && <> el {fechaCorta(String(h.desde).slice(0, 10))}</>}
+            {h.programado_por && (h.como === 'ficha'
+              ? ` · cambiado en la ficha por ${h.programado_por}`
+              : ` · programado por ${h.programado_por}`)}
+          </li>
+        ))}
+      </ul>
+      {filas.length > 5 && (
+        <button type="button" onClick={() => setTodas((v) => !v)}
+          className="mt-1 text-xs font-semibold text-brand-400 hover:text-brand-300">
+          {todas ? 'Ver menos' : `Ver más (${filas.length - 5})`}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/* «Carnet caduca» en la ficha (11-11-2026, historia-10): rojo si ya caducó, ámbar si caduca en 30 días o menos. */
+function CaducaCarnet({ fecha }) {
+  const n = diasHastaCarnet(fecha)
+  if (n === null) return null
+  const color = n < 0 ? 'text-red-300' : n <= DIAS_AVISO_CARNET ? 'text-amber-300' : 'text-dark-100'
+  return (
+    <div data-testid="carnet-caduca">
+      <div className="text-[10px] uppercase tracking-widest text-dark-500 mb-1">Carnet caduca</div>
+      <div className={`flex flex-wrap items-center gap-x-2 text-sm font-medium ${color}`}>
+        <Car size={13} className="shrink-0 text-dark-500" />
+        <span className="cifra">{fechaCarnet(fecha)}</span>
+        {n <= DIAS_AVISO_CARNET && <span className="text-xs font-semibold">· {textoDiasCarnet(n)}</span>}
+      </div>
+    </div>
+  )
+}
+
+/* La versión de la app y cuándo se abrió, en ámbar si hay una más nueva publicada (11-11-2026, equipo-5). */
+function LineaApp({ info, ultima }) {
+  const vieja = info && versionMenor(info.app, ultima)
+  return (
+    <div data-testid="linea-app" className="col-span-2">
+      <div className="text-[10px] uppercase tracking-widest text-dark-500 mb-1">App de Android</div>
+      <div className={`flex items-center gap-2 text-sm font-medium ${!info ? 'text-dark-400' : vieja ? 'text-amber-300' : 'text-dark-100'}`}>
+        <Smartphone size={13} className="shrink-0 text-dark-500" />
+        {info
+          ? `App ${MARCA.nombre} ${info.app || ''}${diaApp(info.visto) ? ` · abierta el ${diaApp(info.visto)}` : ''}${vieja ? ` · hay una más nueva (${ultima})` : ''}`
+          : 'No tiene la app abierta en ningún Android'}
+      </div>
+    </div>
+  )
+}
+
+function CeldaApp({ info, ultima }) {
+  if (!info) return <span className="text-dark-700">—</span>
+  const vieja = versionMenor(info.app, ultima)
+  return (
+    <span data-testid="celda-app" title={vieja ? `Hay una versión más nueva: ${ultima}` : undefined}
+      className={`cifra text-[12px] ${vieja ? 'text-amber-300' : 'text-dark-400'}`}>
+      {info.app || '¿?'}{cuandoApp(info.visto) ? ` · ${cuandoApp(info.visto)}` : ''}
+    </span>
   )
 }
 

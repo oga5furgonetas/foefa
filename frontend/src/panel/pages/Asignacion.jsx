@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { useT } from '../../i18n'
+import { useT, LANG_LOCALE } from '../../i18n'
 import { lista } from '../../lib/lista'
 import { useEscape } from '../../lib/useEscape'
 import {
@@ -439,7 +439,7 @@ function SlotRow({ slot, vehicles, drivers, usedV, usedD, onChange, onDelete, in
 /* ── Main page ── */
 export default function Asignacion() {
   const { center, setCenter } = useOutletContext()
-  const { t } = useT()
+  const { t, lang } = useT()
   const [date, setDate] = useState(isoToday())
   const [slots, setSlots] = useState([])
   /* CAMBIOS SIN GUARDAR (10-11-2026): tras pegar el roster, copiar ayer o tocar
@@ -452,6 +452,16 @@ export default function Asignacion() {
   // Si lo guardado en el servidor para ese día venía sin filas (11-11-2026): quitar
   // todas las filas de un día que SÍ las tenía es un cambio que hay que guardar.
   const cargadoVacio = useRef(true)
+  /* «OTRO GUARDÓ MIENTRAS EDITABAS» (11-11-2026, dia-6). Con dos personas en la misma nave y día, la última que
+     guardaba borraba sin aviso lo de la otra. `version` es el updated_at con el que se cargó la hoja ('' si el día
+     venía vacío; null si no se sabe, p. ej. un servidor de antes que no la devuelve al guardar: entonces no se manda
+     y todo va como antes). Si otra persona guardó entre medias, el servidor contesta 409 y aquí no se pierde nada. */
+  const version = useRef(null)
+  const [conflicto, setConflicto] = useState(null)      // { por, updated_at }
+  const guardando = useRef(false)
+  const guardados = useRef(0)                            // sube en cada guardado: el sondeo que lo cruza no cuenta
+  // La nueva tras guardar (null si el servidor no la devuelve). Por función: lo que había antes no cuenta.
+  const ponerVersion = (v) => { version.current = v }
   const [vehicles, setVehicles] = useState([])
   const [drivers, setDrivers] = useState([])
   const [inspMap, setInspMap] = useState({})
@@ -498,6 +508,8 @@ export default function Asignacion() {
       const loadedSlots = Array.isArray(doc?.slots) ? doc.slots : []
       setSlots(loadedSlots)
       cargadoVacio.current = loadedSlots.length === 0
+      version.current = doc ? (typeof doc.updated_at === 'string' ? doc.updated_at : '') : ''
+      setConflicto(null)
       setCambios(false)
       const insps = Array.isArray(insp.data) ? insp.data : []
       const map = buildInspMap(loadedSlots, insps)
@@ -568,12 +580,27 @@ export default function Asignacion() {
     if (noCenter) return
     const poll = async () => {
       try {
+        const vuelta = guardados.current
         const [da, insp] = await Promise.all([
           getDailyAssignment(center, date),
           getInspections({ center, date_from: date, date_to: date, limit: 500 }).catch(() => ({ data: [] })),
         ])
         const doc = Array.isArray(da.data) ? da.data[0] : da.data
         const freshSlots = Array.isArray(doc?.slots) ? doc.slots : []
+        /* Otra persona ha guardado este día (11-11-2026, dia-6). Sin cambios aquí, se ve lo suyo en silencio; con
+           cambios, no se toca nada y se avisa. No cuenta un sondeo que se cruza con un guardado propio (traería la
+           hoja de antes o la de después y la confundiría con la de otra persona), ni el de otra nave o día. */
+        const suya = typeof doc?.updated_at === 'string' ? doc.updated_at : null
+        if (suya !== null && version.current !== null && suya !== version.current && !guardando.current
+            && vuelta === guardados.current && cargado.current.center === center && cargado.current.date === date) {
+          if (!cambiosRef.current) {
+            setSlots(freshSlots)
+            version.current = suya
+            cargadoVacio.current = freshSlots.length === 0
+          } else {
+            setConflicto({ por: doc.updated_by || '', updated_at: suya })
+          }
+        }
         const insps = Array.isArray(insp.data) ? insp.data : []
         const newMap = buildInspMap(freshSlots, insps)
         for (const vid of Object.keys(newMap)) {
@@ -687,7 +714,7 @@ export default function Asignacion() {
   }
   function addSlot() { setSlots(s => [...s, { vehicle_id: '', vehicle_plate: '', driver_id: '', driver_name: '' }]); setCambios(true) }
 
-  async function save() {
+  async function save(forzar = false) {
     const clean = slots
       .filter(s => s.vehicle_id || s.driver_id)
       // `route` viaja: es lo que enlaza a la persona con la ruta, y sin eso
@@ -695,14 +722,40 @@ export default function Asignacion() {
       // y se tiraba justo aquí.
       .map(({ vehicle_id, vehicle_plate, driver_id, driver_name, route }) => ({ vehicle_id, vehicle_plate, driver_id, driver_name, route: route || '' }))
     setBusy(true); setMsg(null)
+    // La versión con la que se cargó (dia-6); sin ella, como antes. `forzar`: «Guardar lo mío encima».
+    const cuerpo = { center, date, slots: clean }
+    if (version.current !== null) cuerpo.version = version.current
+    if (forzar === true) cuerpo.forzar = true
+    guardando.current = true
+    guardados.current += 1
     try {
-      await putDailyAssignment({ center, date, slots: clean })
+      const r = await putDailyAssignment(cuerpo)
+      ponerVersion(typeof r?.data?.updated_at === 'string' ? r.data.updated_at : null)
+      setConflicto(null)
       setSlots(clean)
       cargadoVacio.current = clean.length === 0
       setCambios(false)
       setMsg({ ok: true, t: t('asgn.save.ok').replace('{n}', clean.length) })
-    } catch { setMsg({ ok: false, t: t('asgn.save.error') }) }
-    finally { setBusy(false) }
+    } catch (e) {
+      // El `detail` con forma de objeto llega en `detalle` (services/api.js deja en `detail` un texto).
+      const d = e?.response?.status === 409 ? (e.response.data?.detalle ?? e.response.data?.detail) : null
+      // Otra persona guardó entre medias: lo de pantalla se queda y se pregunta qué hacer.
+      if (d && d.codigo === 'otro_guardo') setConflicto({ por: d.por || '', updated_at: d.updated_at || '' })
+      else setMsg({ ok: false, t: t('asgn.save.error') })
+    } finally {
+      guardando.current = false
+      guardados.current += 1
+      setBusy(false)
+    }
+  }
+
+  // «Ver lo suyo»: lo de pantalla se pierde (se pregunta) y se carga lo guardado.
+  function verLoSuyo() {
+    if (window.confirm(t('asgn.unsaved.lose'))) { cambiosRef.current = false; load() }
+  }
+  const horaDe = (iso) => {
+    const d = new Date(iso)
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString(LANG_LOCALE[lang] || 'es-ES', { hour: '2-digit', minute: '2-digit' })
   }
 
   /* ── Stats ── */
@@ -815,6 +868,23 @@ export default function Asignacion() {
       {msg && (
         <div className={`mb-3 rounded-lg px-3 py-2 text-sm ${msg.ok ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'}`}>
           {msg.t}
+        </div>
+      )}
+
+      {/* Otra persona guardó este día mientras se editaba aquí (11-11-2026, dia-6): lo de pantalla sigue aquí. */}
+      {conflicto && (
+        <div role="alert" data-testid="asgn-conflicto" className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+            <span>{t('asgn.conflicto.texto').replace('{por}', conflicto.por || t('asgn.conflicto.otra'))
+              .replace('{hora}', horaDe(conflicto.updated_at))}</span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" onClick={verLoSuyo} disabled={busy}
+              className="btn-secondary text-xs disabled:opacity-40 max-sm:min-h-[44px]">{t('asgn.conflicto.ver')}</button>
+            <button type="button" onClick={() => save(true)} disabled={busy}
+              className="btn-primary text-xs disabled:opacity-40 max-sm:min-h-[44px]">{t('asgn.conflicto.encima')}</button>
+          </div>
         </div>
       )}
 

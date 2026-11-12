@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { useOutletContext, Link } from 'react-router-dom'
 import { useT } from '../../i18n'
 import { verMatricula } from '../../lib/matricula'
-import { Camera, AlertTriangle, ClipboardCheck, BellRing, CheckCircle2, ChevronRight } from 'lucide-react'
-import { getDailyAssignment, getInspections, getIncidents, getItvAlerts } from '../api'
+import { Camera, AlertTriangle, ClipboardCheck, BellRing, CheckCircle2, ChevronRight, Users } from 'lucide-react'
+import { getDailyAssignment, getInspections, getIncidents, getItvAlerts, getFaltasRefuerzo } from '../api'
+import { canSee } from '../auth'
 import { PageSkeleton } from '../components/Skeleton'
 import ElegirNave from '../components/ElegirNave'
-import { hoyLocal, horaLocal } from '../../lib/fecha'
+import { hoyLocal, horaLocal, isoLocal, fechaEs } from '../../lib/fecha'
 
 /* ── Torre de control "Mi día" ────────────────────────────────────────────────
    La pantalla de las 8:00 del jefe de turno: todo lo urgente de HOY en un solo
@@ -24,6 +25,13 @@ export default function MiDia() {
   const defaulted = center === 'Todos'
   const centro = defaulted ? (centers?.[0] || '') : center
   const noCenter = !centro
+  /* LOS PRÓXIMOS DÍAS POR DEBAJO DE LA MÁXIMA (11-11-2026, revisión de la flota propia, historia-5). Es lo que más
+     preocupa al jefe de nave a primera hora y ya lo calcula el servidor para Turnos → Refuerzos; aquí solo se avisa
+     (hoy, mañana y pasado) y se lleva allí: pedir refuerzo avisa a conductores y se hace allí, con su explicación.
+     Solo para quien puede ver Turnos Y aprobar días (11-11-2026, P18 de la revisión): en Turnos → Refuerzos la lista de
+     días que no llegan solo la ve quien puede aprobar; a los demás la tarjeta los mandaba a una pantalla sin nada que
+     hacer. Un 400/403 o un servidor que no lo conozca: la pantalla sigue como antes. */
+  const verFaltas = canSee('turnos') && canSee('aprobar-dias')
 
   useEffect(() => {
     if (noCenter) return
@@ -35,13 +43,20 @@ export default function MiDia() {
       // los centros y las contaba como "abiertas" (56 con 40 abiertas).
       getIncidents({ status: 'open', center: centro }).catch(() => ({ data: [] })),
       getItvAlerts(centro).catch(() => ({ data: [] })),
-    ]).then(([da, insp, inc, itv]) => {
+      verFaltas ? getFaltasRefuerzo(centro, 3).catch(() => ({ data: null })) : Promise.resolve({ data: null }),
+    ]).then(([da, insp, inc, itv, fal]) => {
       const doc = Array.isArray(da.data) ? da.data[0] : da.data
+      // Hasta pasado mañana, mirado también aquí: si un servidor diera más días, la tarjeta no crece.
+      const pasado = new Date(); pasado.setDate(pasado.getDate() + 2)
+      const hasta = isoLocal(pasado)
       setData({
         slots: Array.isArray(doc?.slots) ? doc.slots : [],
         insps: Array.isArray(insp.data) ? insp.data : [],
         incidents: Array.isArray(inc.data) ? inc.data : [],
         itv: Array.isArray(itv.data) ? itv.data : [],
+        faltas: fal.data?.con_maximas && Array.isArray(fal.data?.faltas)
+          ? fal.data.faltas.filter((f) => f && Number(f.falta) > 0 && String(f.date || '') <= hasta)
+          : [],
       })
     }).catch(() => setErr(t('dash.error')))
   }, [centro]) // eslint-disable-line
@@ -70,7 +85,9 @@ export default function MiDia() {
   // Vencidas y a ≤ 15 días van juntas porque las dos piden cita YA; el chip
   // dice cuál es cuál en vez de enseñar "-621d".
   const itvSoon = data.itv.filter((a) => a.days_left != null && a.days_left <= 15)
+  // Con gente faltando en los próximos días no está «todo en orden» (historia-5).
   const allClear = !sinCuadrante && pending.length === 0 && withDamage.length === 0 && itvSoon.length === 0
+    && data.faltas.length === 0
 
   const Section = ({ icon: Icon, tone, title, count, to, children }) => (
     <div className={`rounded-2xl border p-4 ${tone}`}>
@@ -115,6 +132,45 @@ export default function MiDia() {
           title={t('midia.no.roster')}>
           <p className="text-xs opacity-80">{t('midia.no.roster.why')}</p>
         </Section>
+      )}
+
+      {/* Toda la tarjeta lleva a Turnos → Refuerzos de esta nave (el `?centro=` lo elige arriba). Sin botón «Pedir»:
+          pedir avisa a los conductores, y un toque equivocado aquí no puede mandar nada (historia-5). */}
+      {data.faltas.length > 0 && (
+        <Link to={`/panel/turnos?vista=refuerzos&centro=${encodeURIComponent(centro)}`} data-testid="midia-faltan"
+          className="block rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-amber-200">
+          <span className="mb-2 flex items-center justify-between">
+            <span className="flex items-center gap-2 text-sm font-bold"><Users size={15} /> {t('midia.short.title')}
+              <span className="rounded-full bg-black/30 px-2 py-0.5 text-xs">{data.faltas.length}</span>
+            </span>
+            <ChevronRight size={14} className="opacity-60" />
+          </span>
+          <span className="block space-y-1">
+            {data.faltas.map((f) => (
+              <span key={f.date} data-testid="midia-falta" className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-black/20 px-3 py-1.5 text-sm">
+                <span className="font-semibold first-letter:uppercase">{f.dia || fechaEs(f.date)}</span>
+                <span className="text-xs opacity-80">
+                  {t('midia.short.row').replace('{m}', f.maximo).replace('{r}', f.en_ruta)}
+                  {f.bajan > 0 && <> {t('midia.short.others').replace('{n}', f.bajan)}</>}
+                </span>
+                <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-xs font-semibold text-red-300">
+                  {t('midia.short.missing').replace('{n}', f.falta)}
+                </span>
+                <span className="text-xs opacity-80">
+                  {f.refuerzo
+                    // Abierto por los conductores al solicitar una vacante: no lo «pidió» la oficina (P35).
+                    ? t(f.refuerzo.auto ? 'midia.short.asked.auto' : 'midia.short.asked')
+                      .replace('{a}', f.refuerzo.aprobados ?? 0).replace('{p}', f.refuerzo.plazas ?? 0)
+                    : !f.pueden ? t('midia.short.nobody')
+                      : f.pueden === 1 ? t('midia.short.can.one') : t('midia.short.can').replace('{n}', f.pueden)}
+                </span>
+              </span>
+            ))}
+          </span>
+          {data.faltas.some((f) => !f.refuerzo && f.pueden > 0) && (
+            <span className="mt-2 block text-xs opacity-80">{t('midia.short.go')}</span>
+          )}
+        </Link>
       )}
 
       {pending.length > 0 && (

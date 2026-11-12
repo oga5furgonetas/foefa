@@ -450,6 +450,25 @@ class VehicleCreate(BaseModel):
     campana_hasta: Optional[str] = None
 
 
+def _fecha_carnet(v):
+    """La caducidad del carnet como 'AAAA-MM-DD', o None si no lo es (11-11-2026, tanda 3, historia-10). Admite una
+    fecha o fecha y hora de Python y un texto que EMPIECE por una fecha válida ('2027-03-01T00:00:00'). Todo lo demás
+    ('31/12/2026', un número, 'mañana', una fecha imposible) es None: nunca lanza."""
+    if isinstance(v, datetime):
+        return v.date().isoformat()
+    if isinstance(v, date_cls):
+        return v.isoformat()
+    if not isinstance(v, str):
+        return None
+    t = v.strip()
+    if not re.match(r"^\d{4}-\d{2}-\d{2}(?:$|[T ])", t):
+        return None
+    try:
+        return datetime.strptime(t[:10], "%Y-%m-%d").date().isoformat()
+    except ValueError:
+        return None
+
+
 class Driver(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -464,6 +483,9 @@ class Driver(BaseModel):
     movil_personal: Optional[str] = None
     email: Optional[str] = None
     license_number: Optional[str] = None
+    # Caducidad del carnet de conducir, 'AAAA-MM-DD' (11-11-2026, historia-10). El PATCH ya la guardaba, pero sin estar
+    # aquí no volvía al panel. Un valor que no sea una fecha llega como None (ver `_campos_tolerantes`).
+    license_expiry: Optional[str] = None
     login: Optional[str] = None        # login del conductor
     driver_id: Optional[str] = None    # identificador externo (nº de empleado)
     # El ID con el que la persona sale en los informes de reparto (DNR diaria,
@@ -485,7 +507,21 @@ class Driver(BaseModel):
     # `_bucle_traslados` ese día. Sin estar aquí, `response_model` lo quitaría de
     # la respuesta y la ficha no diría que se va (lo mismo que `transporter_id`).
     traslado: Optional[dict] = None
+    # De qué nave a qué nave ha pasado y cuándo ({de, a, desde, aplicado_en, programado_por, como?}): lo escriben el
+    # cambio programado y, desde el 11-11-2026 (equipo-8), «Editar». Sin estar aquí no llegaba al panel.
+    historial_centros: Optional[list] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @model_validator(mode="before")
+    @classmethod
+    def _campos_tolerantes(cls, v):
+        """GET /drivers devuelve TODAS las fichas con este modelo: un valor raro guardado en una sola (copiada de
+        otra base, escrita a mano) no puede tumbar la lista entera con un 500. Lo que no tiene la forma, None."""
+        if isinstance(v, dict) and "historial_centros" in v and not isinstance(v.get("historial_centros"), list):
+            v = {**v, "historial_centros": None}
+        if isinstance(v, dict) and v.get("license_expiry") is not None:
+            v = {**v, "license_expiry": _fecha_carnet(v.get("license_expiry"))}
+        return v
 
 
 class DriverCreate(BaseModel):
@@ -495,6 +531,8 @@ class DriverCreate(BaseModel):
     movil_personal: Optional[str] = None
     email: Optional[str] = None
     license_number: Optional[str] = None
+    # Opcional (11-11-2026, historia-10): vacío = sin fecha; algo que no sea una fecha, 400 (lo mira create_driver).
+    license_expiry: Optional[str] = None
     center: Optional[str] = None
     password: Optional[str] = None
     driver_id: Optional[str] = None    # identificador externo (nº de empleado)
@@ -6662,9 +6700,19 @@ async def org_centros_geo(_=Depends(require_admin)):
     return {"centros": {c: v for c, v in out.items() if not naves or c in naves}}
 
 
+def _puede_tocar_naves(user: dict) -> bool:
+    """Añadir o quitar naves de la empresa: el super-admin y quien tenga «Admin completo» (admin_role vacío, que es como
+    se crean los dueños de las empresas cliente). Un jefe de centro o un dispatcher, no (11-11-2026, equipo-10, decidido
+    con Dani): desde la importación cualquiera pulsaba «Añadir X a mi empresa» con una nave ajena, y se quedaba para
+    siempre en el selector de todos."""
+    return bool(user.get("sa")) or user.get("admin_role") not in ("center_manager", "dispatcher")
+
+
 @api_router.post("/org/centers")
 async def add_org_center(data: dict = Body(...), user: dict = Depends(require_admin)):
     """Añade un centro a tu organización. Pasado el límite del plan → 402 (de pago)."""
+    if not _puede_tocar_naves(user):
+        raise HTTPException(status_code=403, detail="Solo un administrador completo puede añadir centros")
     name = _texto_cuerpo(data.get("name")).upper()
     if not name:
         raise HTTPException(status_code=400, detail="Indica el nombre del centro")
@@ -6681,6 +6729,65 @@ async def add_org_center(data: dict = Body(...), user: dict = Depends(require_ad
     await global_db.organizations.update_one(
         {"id": org["id"]}, {"$set": {"centers": centers}})
     return {"ok": True, "centers": centers}
+
+
+@api_router.delete("/org/centers/{nombre}")
+async def quitar_org_center(nombre: str, user: dict = Depends(require_admin)):
+    """Quita una nave de la empresa (11-11-2026, equipo-10). No había forma: una nave añadida por error se quedaba
+    para siempre en el selector de todos (y, pasadas 12, sacaba a otra de las listas: `_centros_de_la_empresa`).
+
+    Solo si está VACÍA: sin conductores vivos, sin furgonetas sin borrar y sin usuarios que la tengan entre sus naves
+    (si no, esas fichas se quedarían fuera de todos los selectores). Los centros se guardan sucios
+    («AMZL OGA5 SANTIAGO XPT»), así que se cuentan por el código dentro del texto, no por igualdad. No toca ningún dato
+    histórico (asignaciones, inspecciones…): guardan la nave como texto y siguen ahí si se vuelve a añadir."""
+    if not _puede_tocar_naves(user):
+        raise HTTPException(status_code=403, detail="Solo un administrador completo puede quitar centros")
+    buscado = str(nombre or "").strip().upper()
+    org = await get_org(user.get("org_id"))
+    if not org:
+        raise HTTPException(status_code=404, detail="Organización no encontrada")
+    centers = org.get("centers") or []
+    guardado = next((c for c in centers if buscado and str(c or "").strip().upper() == buscado), None)
+    if guardado is None:
+        raise HTTPException(status_code=404, detail="Ese centro no está en tu empresa")
+    # Para quitarla hay que verla (11-11-2026, corrección P32): un «Admin completo» limitado a DGA1 de una empresa
+    # cliente quitaba OGA5. En la cuenta dueña, para el super-admin y sin naves asignadas, pasa como antes.
+    if not _user_can_see_center(user, guardado):
+        raise HTTPException(status_code=403, detail="No tienes acceso a ese centro")
+    if len([c for c in centers if str(c or "").strip()]) <= 1:
+        # Sin ninguna, las listas caerían a las naves que salgan en los datos (`_centros_de_la_empresa`).
+        raise HTTPException(status_code=409, detail={
+            "mensaje": "Tu empresa tiene que tener al menos un centro: añade el bueno antes de quitar este.",
+            "conductores": 0, "furgonetas": 0, "usuarios": 0, "traslados": 0})
+    rx = {"$regex": r"(?<![A-Z0-9])%s(?![A-Z0-9])" % re.escape(buscado), "$options": "i"}
+    conductores = await db.drivers.count_documents(
+        {"center": rx, "status": {"$ne": "deleted"}, "active": {"$ne": False}})
+    # Y los que tienen un cambio de centro PROGRAMADO a ella (11-11-2026, corrección P15): el bucle de traslados
+    # (`aplicar_traslados`) los mete el día que toca aunque la nave ya no sea de la empresa, y se quedan fuera de
+    # todos los selectores.
+    traslados = await db.drivers.count_documents(
+        {"traslado.centro": rx, "status": {"$ne": "deleted"}, "active": {"$ne": False}})
+    furgonetas = await db.vehicles.count_documents({"center": rx, "status": {"$ne": "deleted"}})
+    usuarios = 0
+    async for a in global_db.admin_users.find({"org_id": org["id"]}, {"_id": 0, "allowed_centers": 1}):
+        if any(str(c or "").strip().upper() == buscado for c in (a.get("allowed_centers") or [])):
+            usuarios += 1
+    if conductores or furgonetas or usuarios or traslados:
+        trozos = [("%d %s" % (n, uno if n == 1 else varios)) for n, uno, varios in (
+            (conductores, "conductor", "conductores"), (furgonetas, "furgoneta", "furgonetas"),
+            (usuarios, "usuario", "usuarios"),
+            (traslados, "conductor con un cambio de centro programado a él",
+             "conductores con un cambio de centro programado a él")) if n]
+        texto = trozos[0] if len(trozos) == 1 else ", ".join(trozos[:-1]) + " y " + trozos[-1]
+        que_hacer = ("muévelos a otro centro, o cambia o cancela esos cambios de centro, antes de quitarlo" if traslados
+                     else "muévelos a otro centro antes de quitarlo")
+        raise HTTPException(status_code=409, detail={
+            "mensaje": "%s tiene %s: %s." % (guardado, texto, que_hacer),
+            "conductores": conductores, "furgonetas": furgonetas, "usuarios": usuarios, "traslados": traslados})
+    await global_db.organizations.update_one({"id": org["id"]}, {"$pull": {"centers": guardado}})
+    await _audit(user, "centro_quitado", {"centro": guardado})
+    org = await get_org(org["id"])
+    return {"ok": True, "centers": (org or {}).get("centers") or []}
 
 
 @auth_router.post("/lead")
@@ -8681,8 +8788,48 @@ def _can_manage_user(actor: dict, target_centers: Optional[list]) -> bool:
         return False  # dispatchers no pueden gestionar usuarios
     actor_centers = set(actor.get("allowed_centers") or [])
     target_set   = set(target_centers or [])
+    # «Todas las naves» se guarda como null o []. Antes un conjunto vacío «estaba dentro» de cualquiera, así que un
+    # jefe solo de DGA1 podía crear un usuario que viera todas las naves, o editar, cambiar la contraseña o borrar a
+    # cualquiera con acceso total (11-11-2026, equipo-2). Ahora:
+    #   · un jefe SIN restricción (ve todas) puede con cualquier no-jefe: ya podía con los de «todas», que es lo más;
+    #   · un jefe CON naves solo con usuarios que tengan naves, y todas dentro de las suyas.
+    if not actor_centers:
+        return True
+    if not target_set:
+        return False
     # center_manager solo puede gestionar usuarios cuyos centros son subconjunto de los suyos
     return target_set.issubset(actor_centers)
+
+def _jefe_gestiona_rol(target: dict, actor: Optional[dict] = None) -> bool:
+    """Un jefe de centro solo gestiona DISPATCHERS (11-11-2026, corrección P16/P17 de equipo-2): nunca a un «Admin
+    completo» (admin_role vacío, que puede más que él: p. ej. añadir naves) ni a otro jefe. Antes, con la regla de
+    naves sola, un jefe le cambiaba la contraseña a un «Admin completo» de su nave y entraba con su cuenta.
+    Salvo (11-11-2026, tercera ronda V4) el de rol vacío que creó ÉL (`created_by`): en main el formulario salía con el
+    rol vacío y lo que un jefe daba de alta sin tocarlo era «Admin completo» sin querer. Con esos puede, pero en la misma
+    escritura pasan a dispatcher (`_jefe_lo_pasa_a_dispatcher`), así que nunca entra con la cuenta de un Admin completo.
+    La regla de naves (`_can_manage_user`) se sigue pidiendo aparte."""
+    if target.get("admin_role") == "dispatcher":
+        return True
+    return bool(actor and _is_center_manager(actor) and not target.get("admin_role") and actor.get("sub")
+                and target.get("created_by") == actor.get("sub"))
+
+
+def _jefe_lo_pasa_a_dispatcher(actor: dict, target: dict) -> bool:
+    """True si quien escribe es un jefe y el usuario tiene el rol vacío: si ha llegado hasta aquí es uno que creó él
+    (`_jefe_gestiona_rol`), y en esa misma escritura pasa a 'dispatcher' (11-11-2026, tercera ronda V4)."""
+    return _is_center_manager(actor) and not target.get("admin_role")
+
+def _puede_gestionar_a(actor: dict, target: dict) -> bool:
+    """¿Puede `actor` editar, cambiar la contraseña, borrar o poner la foto de `target`? Lo mismo que piden esas rutas:
+    nunca a un super-admin; el super-admin a cualquiera; un jefe, solo a dispatchers de sus naves (`_can_manage_user`);
+    nadie más. Lo usan la lista de Usuarios (qué filas llevan botones) y POST /auth/reset-admin-password."""
+    if target.get("super_admin"):
+        return False
+    if actor.get("sa"):
+        return True
+    if not _is_center_manager(actor):
+        return False
+    return _jefe_gestiona_rol(target, actor) and _can_manage_user(actor, target.get("allowed_centers"))
 
 def _clamp_permissions(actor: dict, permissions: Optional[list]) -> Optional[list]:
     """center_manager no puede dar más permisos de los que él mismo tiene."""
@@ -8715,6 +8862,11 @@ async def create_admin(
         raise HTTPException(403, "Sin permisos para crear usuarios")
 
     admin_role = data.admin_role if data.admin_role in ("center_manager", "dispatcher") else None
+    # Un jefe de centro solo da de alta dispatchers (11-11-2026, equipo-2). La pantalla solo le ofrece «Dispatcher»,
+    # pero el formulario salía con el rol vacío y, sin pulsarlo, se creaba un «Admin completo», que puede más que un
+    # dispatcher (p. ej. añadir naves). Se fuerza en vez de dar 403: la web vieja en caché lo sigue mandando vacío.
+    if _is_center_manager(_admin):
+        admin_role = "dispatcher"
     perms = _clamp_permissions(_admin, data.permissions)
 
     doc = {
@@ -8751,6 +8903,8 @@ async def update_admin_permissions(admin_id: str, data: dict = Body(...), _admin
             raise HTTPException(403, "No tienes acceso para modificar este usuario")
         if target.get("admin_role") == "center_manager":
             raise HTTPException(403, "No puedes modificar a otro gestor de centro")
+        if not _jefe_gestiona_rol(target, _admin):  # un «Admin completo» (11-11-2026, corrección P16/P17; V4)
+            raise HTTPException(403, "Solo el super-admin puede modificar a un Admin completo")
     elif not _admin.get("sa") and not _is_center_manager(_admin):
         raise HTTPException(403, "Sin permisos para modificar usuarios")
 
@@ -8760,6 +8914,10 @@ async def update_admin_permissions(admin_id: str, data: dict = Body(...), _admin
     if "allowed_centers" in data:
         ac = data.get("allowed_centers")
         patch["allowed_centers"] = ac if (isinstance(ac, list) or ac is None) else None
+        # Las naves NUEVAS también tienen que ser del jefe (11-11-2026, equipo-2): antes solo se miraban las que el
+        # usuario ya tenía, y un jefe de DGA1 podía ampliar a un dispatcher suyo a «todas» o a OGA5.
+        if _is_center_manager(_admin) and not _can_manage_user(_admin, patch["allowed_centers"]):
+            raise HTTPException(403, "Solo puedes dar acceso a tus centros asignados")
     if data.get("name"):
         patch["name"] = str(data["name"]).strip()
     if "admin_role" in data:
@@ -8768,6 +8926,11 @@ async def update_admin_permissions(admin_id: str, data: dict = Body(...), _admin
             # center_manager no puede crear otros center_managers
             if ar == "center_manager" and not _admin.get("sa"):
                 raise HTTPException(403, "Solo super-admin puede asignar rol de gestor de centro")
+            # Ni subir a «Admin completo» a un dispatcher (11-11-2026, equipo-2). A un «Admin completo» un jefe ya no
+            # llega aquí (corrección P16/P17, más arriba), así que esta condición solo ve dispatchers; el de rol vacío
+            # que creó él sí llega, y más abajo pasa a dispatcher (tercera ronda V4).
+            if ar is None and _is_center_manager(_admin) and target.get("admin_role") is not None:
+                raise HTTPException(403, "Solo super-admin puede dar el rol de Admin completo")
             patch["admin_role"] = ar
     if "email" in data:
         em = _texto_cuerpo(data.get("email")).lower()
@@ -8782,6 +8945,10 @@ async def update_admin_permissions(admin_id: str, data: dict = Body(...), _admin
         patch["hashed_password"] = hash_password(new_pw)
     if not patch:
         raise HTTPException(status_code=400, detail="Nada que actualizar")
+    # El de rol vacío que creó el jefe pasa a dispatcher con cualquier cambio (11-11-2026, tercera ronda V4): la web
+    # vieja en caché manda admin_role null al guardar sus permisos, y aquí no puede quedarse así.
+    if _jefe_lo_pasa_a_dispatcher(_admin, target):
+        patch["admin_role"] = "dispatcher"
     await global_db.admin_users.update_one({"id": admin_id}, {"$set": patch})
     # Se tire lo que se tire (permisos, centros, rol o contraseña), la caché de
     # `_admin_cacheado` queda vieja. Antes solo se limpiaba al resetear la clave,
@@ -8812,6 +8979,8 @@ async def delete_admin(admin_id: str, _admin: dict = Depends(require_admin)):
             raise HTTPException(403, "No tienes acceso para eliminar este usuario")
         if target.get("admin_role") == "center_manager":
             raise HTTPException(403, "No puedes eliminar a otro gestor de centro")
+        if not _jefe_gestiona_rol(target, _admin):  # un «Admin completo» (11-11-2026, corrección P16/P17; V4)
+            raise HTTPException(403, "Solo el super-admin puede eliminar a un Admin completo")
     elif not _admin.get("sa") and not _is_center_manager(_admin):
         raise HTTPException(403, "Sin permisos para eliminar usuarios")
 
@@ -8843,6 +9012,10 @@ async def subir_foto_admin(admin_id: str, file: UploadFile = File(...), _admin: 
         if not _admin.get("sa") and _is_center_manager(_admin):
             if not _can_manage_user(_admin, target.get("allowed_centers")):
                 raise HTTPException(403, "No tienes acceso para modificar este usuario")
+            # Solo dispatchers: ni otro jefe ni un «Admin completo» (11-11-2026, corrección P16/P17), salvo el de rol
+            # vacío que creó él (tercera ronda V4), que pasa a dispatcher al guardar la foto.
+            if not _jefe_gestiona_rol(target, _admin):
+                raise HTTPException(403, "No tienes acceso para modificar este usuario")
         elif not _admin.get("sa") and not _is_center_manager(_admin):
             raise HTTPException(403, "Sin permisos para modificar usuarios")
 
@@ -8855,7 +9028,10 @@ async def subir_foto_admin(admin_id: str, file: UploadFile = File(...), _admin: 
         photo_url, _bytes = await process_and_save_image(content, f"admin-{admin_id}")
     except Exception as e:
         raise HTTPException(500, f"Error procesando imagen: {e}")
-    await global_db.admin_users.update_one({"id": admin_id}, {"$set": {"photo_url": photo_url}})
+    cambio = {"photo_url": photo_url}
+    if not es_uno_mismo and _jefe_lo_pasa_a_dispatcher(_admin, target):    # 11-11-2026, tercera ronda V4
+        cambio["admin_role"] = "dispatcher"
+    await global_db.admin_users.update_one({"id": admin_id}, {"$set": cambio})
     _ADMIN_EXISTS_CACHE.pop(admin_id, None)
     return {"success": True, "photo_url": photo_url}
 
@@ -9082,12 +9258,28 @@ async def reset_admin_password(data: dict, _admin: dict = Depends(require_admin)
     if not username or len(new_password) < 6:
         raise HTTPException(status_code=400, detail="Usuario y contraseña (mín. 6 caracteres) requeridos")
     # Filtra por org_id para evitar que un admin de un DSP resetee cuentas de otro DSP.
+    target = await global_db.admin_users.find_one({"username": username, "org_id": _admin.get("org_id")}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Admin no encontrado")
+    # Lo mismo que cambiar la contraseña de otro por PATCH /auth/admins/{id} (11-11-2026, corrección P4): aquí no se
+    # miraba nada, así que cualquier usuario de la oficina, un dispatcher incluido, le cambiaba la contraseña a
+    # cualquiera de su empresa, también al dueño y al super-admin, y entraba con su cuenta. Ningún cliente la usa.
+    if target.get("super_admin"):
+        raise HTTPException(status_code=403, detail="No puedes modificar a un super-admin")
+    if not _admin.get("sa") and not _is_center_manager(_admin):
+        raise HTTPException(403, "Sin permisos para modificar usuarios")
+    if not _puede_gestionar_a(_admin, target):
+        raise HTTPException(403, "No tienes acceso para modificar este usuario")
+    cambio = {"hashed_password": hash_password(new_password)}
+    if _jefe_lo_pasa_a_dispatcher(_admin, target):     # el de rol vacío que creó el jefe (11-11-2026, tercera ronda V4)
+        cambio["admin_role"] = "dispatcher"
     result = await global_db.admin_users.update_one(
-        {"username": username, "org_id": _admin.get("org_id")},
-        {"$set": {"hashed_password": hash_password(new_password)}}
+        {"id": target.get("id"), "username": username, "org_id": _admin.get("org_id")},
+        {"$set": cambio}
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Admin no encontrado")
+    _ADMIN_EXISTS_CACHE.pop(target.get("id"), None)
     logger.info(f"Contraseña de admin '{username}' cambiada por {_admin['name']}")
     return {"success": True}
 
@@ -9155,12 +9347,19 @@ async def list_admins(_admin: dict = Depends(require_admin)):
     admins = await global_db.admin_users.find(q, {"_id": 0, "hashed_password": 0}).to_list(200)
     # center_manager solo ve usuarios en sus centros (+ a sí mismo)
     if not _admin.get("sa") and _is_center_manager(_admin):
+        # Ve lo de siempre (sus naves y los de «todas», que «caben» en cualquiera) MÁS los dispatchers que puede
+        # gestionar (un jefe sin naves, los de cualquier nave). Y cada fila lleva `puede_gestionar` (campo nuevo,
+        # 11-11-2026, corrección P16/P17): la pantalla no pone «Editar» ni la papelera a quien no gestiona. No se
+        # esconde a nadie que se viera antes.
         my_centers = set(_admin.get("allowed_centers") or [])
         admins = [
             a for a in admins
             if a["id"] == _admin.get("sub")
             or set(a.get("allowed_centers") or []).issubset(my_centers)
+            or _puede_gestionar_a(_admin, a)
         ]
+        for a in admins:
+            a["puede_gestionar"] = a["id"] != _admin.get("sub") and _puede_gestionar_a(_admin, a)
     return admins
 
 
@@ -11214,8 +11413,26 @@ async def get_vehicles_portal(user: dict = Depends(require_any_auth)):
     hay_cuadrante = any(a.get("slots") for a in asigs)
     mis_slots = [s for a in asigs for s in (a.get("slots") or [])
                  if s.get("driver_id") in mis_ids and s.get("vehicle_id")]
+    # PRESTADO A OTRA NAVE (11-11-2026, dia-1-prestados): si no está en la Asignación de la suya, se mira si está en
+    # la de otra nave hoy. Antes la casilla le decía «Hoy: 1234ABC» (/me/assigned-vehicle mira todas las naves) y
+    # aquí le salía «Hoy no sales a ruta», o la lista de su nave sin esa furgoneta. Solo ABRE, nunca quita
+    # (11-11-2026, P12): con Asignación en su nave, la furgoneta del préstamo en vez del «no_en_ruta»; sin ella, lo
+    # que ya veía (su fija, o la lista de su nave) MÁS esa furgoneta. Si la del hueco no está (de baja o borrada),
+    # lo de antes. A quien ya sale en la suya no le cambia nada.
+    prestadas = []
+    if not mis_slots and mis_ids:
+        ids_p = []
+        async for a in db.daily_assignments.find({"date": hoy, "slots.driver_id": {"$in": list(mis_ids)}},
+                                                 {"_id": 0, "slots": 1}):
+            ids_p += [s["vehicle_id"] for s in (a.get("slots") or [])
+                      if isinstance(s, dict) and s.get("driver_id") in mis_ids and s.get("vehicle_id")]
+        if ids_p:
+            prestadas = await db.vehicles.find(
+                {"id": {"$in": ids_p}, "status": {"$nin": ["deleted", "baja"]}}, _SIN_HIST).to_list(10)
 
     if hay_cuadrante and not mis_slots:
+        if prestadas:
+            return _portal_payload(prestadas, permitido=True, motivo=None)
         # Consta el cuadrante y no está: hoy no le toca.
         return _portal_payload([], permitido=False, motivo="no_en_ruta")
 
@@ -11226,19 +11443,24 @@ async def get_vehicles_portal(user: dict = Depends(require_any_auth)):
             {"id": {"$in": ids}, "status": {"$nin": ["deleted", "baja"]}}, _SIN_HIST).to_list(10)
         return _portal_payload(vehicles, permitido=True, motivo=None)
 
+    def _con_prestadas(lista: list) -> list:
+        # La del préstamo, delante (es la que lleva hoy); lo de siempre, detrás y sin repetir.
+        ya = {v.get("id") for v in prestadas}
+        return prestadas + [v for v in lista if v.get("id") not in ya]
+
     # Sin cuadrante cargado: no se sabe. Se abre, acotado a su centro.
     asignadas = await db.vehicles.find(
         {"status": {"$nin": ["deleted", "baja"]},
          "current_driver_id": {"$in": list(mis_ids)}}, _SIN_HIST).to_list(10)
     if asignadas:
-        return _portal_payload(asignadas, permitido=True, motivo=None)
+        return _portal_payload(_con_prestadas(asignadas), permitido=True, motivo=None)
     if center:
         vehicles = await db.vehicles.find(
             {"status": {"$nin": ["deleted", "baja"]},
              "center": {"$regex": re.escape(center[:4]), "$options": "i"}}, _SIN_HIST).to_list(100)
     else:
         vehicles = []
-    return _portal_payload(vehicles, permitido=True, motivo="sin_cuadrante")
+    return _portal_payload(_con_prestadas(vehicles), permitido=True, motivo="sin_cuadrante")
 
 
 @api_router.post("/vehicles", response_model=Vehicle)
@@ -11987,6 +12209,32 @@ async def _tid_en_otra_ficha(tid: str, excepto: str = None):
     return await db.drivers.find_one(filtro, {"_id": 0, "id": 1, "name": 1, "center": 1})
 
 
+def _tid_de_la_ficha(f: dict):
+    """(ID de reparto de una ficha guardada, campo donde está): `transporter_id` o, si está vacío, el campo viejo
+    `driver_id` cuando tiene la forma de un ID de reparto (gotcha 79). ('', None) si no tiene (11-11-2026, segunda
+    revisión, F3: al reactivar solo se miraba `transporter_id` y quedaban dos fichas vivas con el mismo ID)."""
+    t = re.sub(r"\s+", "", str((f or {}).get("transporter_id") or "")).upper()
+    if t:
+        return t, "transporter_id"
+    d = re.sub(r"\s+", "", str((f or {}).get("driver_id") or "")).upper()
+    if d and _DIA_TID.match(d):
+        return d, "driver_id"
+    return "", None
+
+
+async def _apuntar_cambio_tid(tid: str, antes, despues, quien: str, origen: str):
+    """Deja apuntado un cambio del ID de reparto en `transporter_id_cambios`, con la MISMA forma que la DNR diaria
+    ({en, por, transporter_id, antes, despues}) más `origen` ('ficha_alta' | 'ficha') (11-11-2026, tanda 3,
+    horas_dnr-10). Desde la ficha se cambiaba sin dejar rastro, y el ID decide qué DNR ve cada conductor en su
+    portal: un ID mal puesto le enseña a uno las de otro. Un fallo al apuntar nunca impide guardar la ficha."""
+    try:
+        await db.transporter_id_cambios.insert_one({
+            "en": datetime.now(timezone.utc).isoformat(), "por": quien or "oficina",
+            "transporter_id": tid, "antes": antes, "despues": despues, "origen": origen})
+    except Exception as e:                                       # noqa: BLE001
+        logger.warning("No se pudo apuntar el cambio del ID %s desde la ficha: %s", tid, e)
+
+
 async def _centro_sin_eleccion(user: dict) -> str:
     """El centro de una ficha nueva cuando no hay nada que elegir: el unico que
     puede ver quien la da de alta, o el unico de la empresa. Con varios, vacio:
@@ -12019,13 +12267,104 @@ def _ya_tiene_ficha(otra: dict, que: str) -> dict:
     }
 
 
+async def _ceder_correo(email: str, a_id: str, ids: list, user: dict) -> list:
+    """La oficina dice que la ficha `a_id` y las de `ids` son personas DISTINTAS con el mismo correo (11-11-2026,
+    tanda 3, S1): el correo pasa a ser solo de `a_id`.
+
+    Todo el servidor da por hecho que «mismo correo = misma persona» (_ficha_activa_de lleva el token de una ficha
+    de baja a la activa del mismo correo, driver_login entra por la activa, _fichas_misma_persona las junta en la
+    furgoneta y los bloqueos). Para la misma persona dada de alta dos veces es lo que tiene que pasar; para otra
+    persona era un agujero: Juan, de baja, seguía entrando como Pedro, al que la oficina dio de alta con su mismo
+    buzón eligiendo «es otra persona». En vez de tocar esas reglas (que necesita la persona duplicada), aquí se
+    deja de cumplir su premisa: las fichas de `ids` se quedan SIN correo (guardado en `correo_cedido`, para la
+    historia) y sus cuentas, desactivadas y sin correo.
+
+    NUNCA toca una ficha activa, ni la cuenta de ninguna ficha que no esté en `ids` (activa o de baja): solo las
+    fichas de `ids` con `active: False`, sus cuentas y las huérfanas con ese correo. Devuelve los ids de las fichas
+    que ha cedido."""
+    email = (email or "").strip()
+    ids = [i for i in (ids or []) if i and i != a_id]
+    if not email or not ids:
+        return []
+    ahora = datetime.now(timezone.utc).isoformat()
+    # El correo se casa como en drivers_duplicados: recortado y sin mayúsculas (11-11-2026, revisión P27). Con el
+    # `^correo$` exacto, una ficha guardada con espacios no se cedía y la oficina recibía un «ya no entra» falso.
+    re_correo = {"$regex": r"^\s*%s\s*$" % re.escape(email), "$options": "i"}
+    cedidas = []
+    for f in await db.drivers.find({"id": {"$in": ids}, "active": False},
+                                   {"_id": 0, "id": 1, "email": 1}).to_list(50):
+        if str(f.get("email") or "").strip().lower() != email.lower():
+            continue
+        await db.drivers.update_one(
+            {"id": f["id"], "active": False},
+            {"$set": {"correo_cedido": {"email": f.get("email"), "a": a_id, "en": ahora,
+                                        "por": (user or {}).get("name") or (user or {}).get("sub")}},
+             "$unset": {"email": ""}})
+        cedidas.append(f["id"])
+    if not cedidas:
+        return []
+    # Las cuentas: las de esas fichas y las HUÉRFANAS con ese correo (sin ficha, o con una que ya no existe).
+    # Sin correo nadie llega a ellas por el login; desactivadas, tampoco por un correo de recuperación.
+    # NUNCA la de otra ficha que exista, activa o de baja (11-11-2026, revisión P3/P14): la ficha vieja de baja de
+    # Pedro, que no se separa, guarda la contraseña con la que Pedro entra; cerrarla le dejaba fuera a él.
+    cuentas = await db.driver_accounts.find(
+        {"$or": [{"driver_id": {"$in": cedidas}}, {"email": re_correo}]},
+        {"_id": 0, "id": 1, "driver_id": 1}).to_list(50)
+    otras = [c.get("driver_id") for c in cuentas if c.get("driver_id") and c.get("driver_id") not in cedidas]
+    existen = {f["id"] for f in await db.drivers.find(
+        {"id": {"$in": otras}}, {"_id": 0, "id": 1}).to_list(50)} if otras else set()
+    for c in cuentas:
+        did = c.get("driver_id")
+        if did == a_id or (did and did not in cedidas and did in existen):
+            continue
+        filtro = {"id": c["id"]} if c.get("id") else ({"driver_id": did} if did else None)
+        if not filtro:
+            continue
+        await db.driver_accounts.update_one(
+            filtro, {"$set": {"active": False, "correo_cedido": email}, "$unset": {"email": ""}})
+    _FICHA_ACTIVA_CACHE.clear()
+    await _audit(user, "driver_correo_cedido", {"email": email, "a": a_id, "cedidas": cedidas})
+    logger.info("Correo cedido a la ficha %s: %d ficha(s) de baja dejan de entrar con él", (a_id or "")[:8], len(cedidas))
+    return cedidas
+
+
+# Campos del modelo Driver que una ficha NUEVA no guarda si van vacíos (11-11-2026, segunda revisión, F1). En main el
+# alta no los escribía; al entrar en el modelo se guardaban como null, y el `$push` de `historial_centros` de después
+# (cambiar la nave en «Editar», el traslado programado) falla en Mongo: «must be an array but is of type null».
+_FICHA_NUEVA_SIN_NULL = ("historial_centros", "license_expiry")
+
+
+def _doc_ficha_nueva(driver) -> dict:
+    """El documento de una ficha nueva sacada del modelo Driver, sin los campos de `_FICHA_NUEVA_SIN_NULL` vacíos."""
+    doc = serialize_doc(driver.model_dump())
+    for campo in _FICHA_NUEVA_SIN_NULL:
+        if doc.get(campo) is None:
+            doc.pop(campo, None)
+    return doc
+
+
+async def _historial_centros_en_lista(driver_id: str, guardado) -> None:
+    """Antes de un `$push` de `historial_centros`: si lo guardado no es una lista (el null de las fichas dadas de alta
+    antes del arreglo F1, o algo escrito a mano), se convierte en [] (11-11-2026, segunda revisión). Condicionado a que
+    siga valiendo lo que se leyó: si otro ya lo ha arreglado o ha empujado algo, no se pisa."""
+    if isinstance(guardado, list):
+        return
+    await db.drivers.update_one({"id": driver_id, "historial_centros": guardado},
+                                {"$set": {"historial_centros": []}})
+
+
 @api_router.post("/drivers", response_model=Driver)
 async def create_driver(data: DriverCreate, nueva: bool = False,
-                        admin: dict = Depends(require_admin)):
+                        admin: dict = Depends(require_admin), otra_persona: bool = False):
     driver_data = data.model_dump()
     password = driver_data.pop("password", None)
     if not str(driver_data.get("center") or "").strip():
         driver_data["center"] = await _centro_sin_eleccion(admin) or None
+    # La caducidad del carnet (11-11-2026, historia-10): vacía, sin fecha; si no es una fecha, se dice.
+    carnet = str(driver_data.get("license_expiry") or "").strip()
+    driver_data["license_expiry"] = _fecha_carnet(carnet) if carnet else None
+    if carnet and not driver_data["license_expiry"]:
+        raise HTTPException(400, "La fecha de caducidad del carnet no es válida.")
     driver_data["transporter_id"] = _tid_de_ficha(driver_data.get("transporter_id"))
     otra = await _tid_en_otra_ficha(driver_data["transporter_id"])
     if otra:
@@ -12075,13 +12414,47 @@ async def create_driver(data: DriverCreate, nueva: bool = False,
                                "Reactivala para conservar su historial." % (baja.get("name") or email),
                     "reactivar_id": baja["id"], "nombre": baja.get("name") or "",
                 })
-    doc = serialize_doc(driver.model_dump())
+    # «ES OTRA PERSONA» (11-11-2026, tanda 3, S1; revisión P13/P28/P31): las fichas de baja con este correo dejan de
+    # ser «la misma persona» (_ceder_correo, más abajo). SOLO con `otra_persona=true`, que manda el segundo paso del
+    # panel nuevo: el «Cancelar» del único aviso del panel viejo en caché manda `nueva=true` a secas, y con él se
+    # hace lo de siempre (crear la ficha sin tocar nada). Y solo si quien da el alta ve la nave de cada ficha que
+    # cedería: si no, 403 ANTES de escribir nada.
+    de_baja = []
+    if nueva and otra_persona and email:
+        try:
+            de_baja = await db.drivers.find(
+                {"email": {"$regex": r"^\s*%s\s*$" % re.escape(email), "$options": "i"}, "active": False,
+                 "id": {"$ne": driver.id}}, {"_id": 0, "id": 1, "center": 1}).to_list(50)
+        except Exception:                                        # noqa: BLE001
+            logger.exception("No se pudieron buscar las fichas de baja con el correo del alta")
+            de_baja = []
+        ajenas = sorted({str(f.get("center") or "").strip() for f in de_baja
+                         if not _user_can_see_center(admin, str(f.get("center") or ""))})
+        if ajenas:
+            raise HTTPException(403, "La ficha dada de baja con este correo es de %s, que no tienes asignada: "
+                                     "pide a quien lleve esa nave que dé el alta." % ", ".join(ajenas))
+    doc = _doc_ficha_nueva(driver)
     try:
         await db.drivers.insert_one(doc)
     except DuplicateKeyError:
         # Dos altas A LA VEZ: la comprobacion de arriba las deja pasar a las
         # dos y solo el indice `email_unico_activo` para a la segunda.
         raise HTTPException(409, "Ya hay un conductor activo con el correo %s." % email)
+    # El ID de reparto con el que nace la ficha, apuntado como los de la DNR diaria (11-11-2026, horas_dnr-10).
+    if driver.transporter_id:
+        await _apuntar_cambio_tid(driver.transporter_id, [], {"ficha_id": driver.id, "ficha": driver.name},
+                                  admin.get("name") or admin.get("sub"), "ficha_alta")
+
+    # «ES OTRA PERSONA» (11-11-2026, tanda 3, S1): la oficina lo ha dicho con `?nueva=true&otra_persona=true` tras
+    # el 409 de reactivar. Las fichas de baja con este correo (buscadas arriba) dejan de ser «la misma persona»
+    # (_ceder_correo): si no, el token, la contraseña y la renovación de la app de quien se fue le llevaban a esta
+    # ficha nueva. Sin las dos señales, o sin fichas de baja con este correo, no cambia nada. Si falla, se apunta y
+    # el alta sigue.
+    if de_baja:
+        try:
+            await _ceder_correo(email, driver.id, [f["id"] for f in de_baja], admin)
+        except Exception:                                        # noqa: BLE001
+            logger.exception("No se pudo ceder el correo de las fichas de baja al dar de alta a otra persona")
 
     if password and driver.email:
         await db.driver_accounts.insert_one({
@@ -12242,6 +12615,8 @@ async def drivers_duplicados(_=Depends(require_admin)):
                 "telefono": d.get("phone") or d.get("telefono"),
                 "inspecciones": insp.get(i, 0), "turnos": turnos.get(i, 0),
                 "peticiones": pets.get(i, 0), "asignaciones": asig.get(i, 0),
+                # Para el botón «No es la misma persona» (11-11-2026, tanda 3, S1): solo junto a las de baja.
+                "activa": d.get("active") is not False,
             })
             filas[-1]["total"] = sum(filas[-1][k] for k in
                                      ("inspecciones", "turnos", "peticiones", "asignaciones"))
@@ -12250,6 +12625,59 @@ async def drivers_duplicados(_=Depends(require_admin)):
         fuera.append({"email": e, "fichas": filas, "sugerida": filas[0]["id"]})
     return {"grupos": fuera, "total": len(fuera),
             "fichas_de_mas": sum(len(g["fichas"]) - 1 for g in fuera)}
+
+
+@api_router.post("/drivers/separar")
+async def drivers_separar(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """«No es la misma persona» (11-11-2026, tanda 3, S1): para las parejas que YA existen de una ficha activa y una
+    de baja con el mismo correo, que el servidor no puede distinguir de una persona dada de alta dos veces. La
+    oficina, que las ve en «Fichas duplicadas», dice cuáles son otra persona: el correo se queda solo en `queda` (la
+    activa) y las de `ceden` (de baja) dejan de entrar con él (_ceder_correo). Solo fichas de baja, nunca una activa.
+    Declarada ANTES de /drivers/{driver_id}/..., como /drivers/duplicados."""
+    queda = str((data or {}).get("queda") or "").strip()
+    ceden = (data or {}).get("ceden")
+    if not queda or not isinstance(ceden, list) or not ceden or len(ceden) > 20:
+        raise HTTPException(400, "Indica la ficha que se queda el correo y las de baja que no son la misma persona.")
+    ceden = [str(c or "").strip() for c in ceden]
+    if any(not c or c == queda for c in ceden):
+        raise HTTPException(400, "Indica la ficha que se queda el correo y las de baja que no son la misma persona.")
+    activa = await db.drivers.find_one({"id": queda}, {"_id": 0, "id": 1, "active": 1, "email": 1, "center": 1})
+    correo = str((activa or {}).get("email") or "").strip()
+    if not activa or activa.get("active") is False or not correo:
+        raise HTTPException(400, "La ficha que se queda el correo tiene que estar activa y tener correo.")
+    fichas = {f["id"]: f for f in await db.drivers.find(
+        {"id": {"$in": ceden}}, {"_id": 0, "id": 1, "active": 1, "email": 1, "merged_into": 1, "center": 1}).to_list(50)}
+    # La nave de quien lo hace (11-11-2026, revisión P29/P31): un usuario limitado a una nave no separa (ni deja sin
+    # acceso) fichas de otra. Para el dueño, el super-admin y quien no tiene naves asignadas, nada cambia.
+    for f in [activa] + [fichas[c] for c in ceden if c in fichas]:
+        if not _user_can_see_center(user, str(f.get("center") or "")):
+            raise HTTPException(403, "Esa ficha es de %s, que no tienes asignada." % str(f.get("center") or "").strip())
+    for c in ceden:
+        f = fichas.get(c)
+        if not f or f.get("active") is not False:
+            raise HTTPException(400, "Solo se puede separar una ficha dada de baja.")
+        if f.get("merged_into"):
+            # Fusionada en otra: es esa otra persona (y «Fichas duplicadas» no la enseña).
+            raise HTTPException(400, "Esa ficha está fusionada en otra: separa la otra.")
+        if str(f.get("email") or "").strip().lower() != correo.lower():
+            raise HTTPException(400, "Esa ficha no tiene el mismo correo.")
+    # Las fusionadas en las que se separan son la misma persona que ellas: se van con ellas (si no, su token
+    # seguiría llevando a `queda` por el correo).
+    todas, frontera = list(ceden), list(ceden)
+    for _ in range(5):
+        if not frontera:
+            break
+        hijas = [f["id"] for f in await db.drivers.find(
+            {"merged_into": {"$in": frontera}, "active": False}, {"_id": 0, "id": 1}).to_list(50)
+            if f.get("id") and f["id"] not in todas and f["id"] != queda]
+        todas += hijas
+        frontera = hijas
+    cedidas = await _ceder_correo(correo, queda, todas, user)
+    if not cedidas:
+        # Nada cedido (la ficha cambió entre la lista y el clic): un «ok» haría decir al panel «ya no entra» sin ser
+        # verdad (11-11-2026, revisión P30).
+        raise HTTPException(409, "No se ha separado ninguna ficha: vuelve a cargar «Fichas duplicadas» y míralo otra vez.")
+    return {"ok": True, "cedidas": cedidas}
 
 
 # ── IMPORTAR CONDUCTORES DE GOLPE ───────────────────────────────────────────
@@ -12406,9 +12834,43 @@ def _imp_lee(filas: list) -> dict:
             "personas": personas, "saltadas": saltadas}
 
 
+class _ImpVivasYBajas:
+    """Al importar, qué correos y nombres son de fichas VIVAS y cuáles solo de fichas DE BAJA (11-11-2026, tanda 3,
+    equipo-6). Antes todas contaban como «ya estaba dado de alta» y quien estaba de baja no aparecía en ningún sitio.
+    Una persona cuenta «de baja» solo si casa con una baja de verdad y con NINGUNA viva (por correo; por nombre, solo
+    si viene sin correo). Las fusionadas y las borradas no cuentan como bajas: son la misma persona que otra ficha."""
+
+    def __init__(self):
+        self.correos_vivos, self.correos_baja, self.nombres_vivos, self.nombres_baja = set(), set(), set(), set()
+
+    def anota(self, d: dict, correo: bool):
+        clave = str(d.get("email") or "").lower() if correo else _imp_norm(d.get("name") or "")
+        if not clave:
+            return
+        quitada = bool(d.get("merged_into")) or d.get("status") in ("deleted", "fusionada")
+        if d.get("active") is not False and not quitada:
+            (self.correos_vivos if correo else self.nombres_vivos).add(clave)
+        elif d.get("active") is False and not quitada:
+            (self.correos_baja if correo else self.nombres_baja).add(clave)
+
+    def de_baja(self, p: dict) -> bool:
+        if p.get("email"):
+            e = str(p["email"]).lower()
+            return e in self.correos_baja and e not in self.correos_vivos
+        n = _imp_norm(p.get("name") or "")
+        return n in self.nombres_baja and n not in self.nombres_vivos
+
+    def ya_viva(self, p: dict):
+        """Lo que se acaba de dar de alta en esta misma importación ya es una ficha viva."""
+        if p.get("email"):
+            self.correos_vivos.add(str(p["email"]).lower())
+        else:
+            self.nombres_vivos.add(_imp_norm(p.get("name") or ""))
+
+
 @api_router.post("/drivers/importar/previsualizar")
 async def drivers_importar_prev(file: UploadFile = File(...), center: str = Form(""),
-                                _=Depends(require_admin)):
+                                user: dict = Depends(require_admin)):
     """Qué se importaría, SIN guardar nada."""
     contenido = await file.read()
     try:
@@ -12426,21 +12888,33 @@ async def drivers_importar_prev(file: UploadFile = File(...), center: str = Form
     # (gotcha 15), y fusionarlos haría que uno viera la furgoneta del otro.
     correos = [p["email"] for p in r["personas"] if p["email"]]
     ya = {}
+    vivas = _ImpVivasYBajas()
     async for d in db.drivers.find({"email": {"$in": correos}},
-                                   {"_id": 0, "email": 1, "name": 1}):
+                                   {"_id": 0, "email": 1, "name": 1, "active": 1, "status": 1, "merged_into": 1}):
         ya[str(d.get("email") or "").lower()] = d.get("name")
-    nombres_bd = {_imp_norm(d["name"]) async for d in db.drivers.find(
-        {}, {"_id": 0, "name": 1}) if d.get("name")}
+        vivas.anota(d, correo=True)
+    nombres_bd = set()
+    async for d in db.drivers.find({}, {"_id": 0, "name": 1, "active": 1, "status": 1, "merged_into": 1}):
+        if d.get("name"):
+            nombres_bd.add(_imp_norm(d["name"]))
+            vivas.anota(d, correo=False)
 
     nuevos = repetidos = 0
+    de_baja = []
     for p in r["personas"]:
         p["ya_existe"] = bool(p["email"] and p["email"] in ya) or \
             (not p["email"] and _imp_norm(p["name"]) in nombres_bd)
+        # Campo NUEVO (11-11-2026, equipo-6): lo que casa es una ficha de baja. Sigue contando en `ya_estaban`.
+        p["de_baja"] = bool(p["ya_existe"] and vivas.de_baja(p))
+        if p["de_baja"]:
+            de_baja.append(p["name"])
         if p["ya_existe"]:
             repetidos += 1
         else:
             nuevos += 1
-    conocidos = set(c.upper() for c in (await _centros_de_la_empresa()) if c)
+    # Solo las naves que ve quien importa (11-11-2026, equipo-10): un jefe de DGA1 de una empresa cliente podía mandar
+    # gente a OGA5. En la cuenta dueña y para el super-admin son todas, como antes (`_naves_que_ve`).
+    conocidos = _naves_que_ve(user, set(c.upper() for c in (await _centros_de_la_empresa()) if c))
     # Un fichero de varias naves: se reparte por centro para que se elija cual
     # entra. Es la misma pieza que usan las furgonetas.
     centros = _grupos_por_centro(
@@ -12452,6 +12926,9 @@ async def drivers_importar_prev(file: UploadFile = File(...), center: str = Form
         "cabecera": r["cabecera"], "fila_cabecera": r["fila_cabecera"],
         "total_leidas": len(r["personas"]),
         "nuevas": nuevos, "ya_estaban": repetidos,
+        # De esas `ya_estaban`, las que estaban de baja: no se dan de alta (nunca una segunda ficha); se reactivan a
+        # mano desde «Bajas» (por nombre puede ser un tocayo). `ya_estaban` cuenta lo mismo que antes.
+        "de_baja": len(de_baja), "nombres_de_baja": de_baja[:20],
         "saltadas": r["saltadas"][:40], "n_saltadas": len(r["saltadas"]),
         # Las primeras, para que se vea que se ha entendido bien antes de tocar
         # nada. Es la diferencia entre importar y importar a ciegas.
@@ -12480,10 +12957,28 @@ async def drivers_importar(file: UploadFile = File(...), center: str = Form(""),
 
     correos = [p["email"] for p in r["personas"] if p["email"]]
     ya = set()
-    async for d in db.drivers.find({"email": {"$in": correos}}, {"_id": 0, "email": 1}):
+    vivas = _ImpVivasYBajas()
+    naves_ya = {}       # (correo o nombre) -> naves de las fichas con las que casa (11-11-2026, tercera ronda V5)
+    async for d in db.drivers.find({"email": {"$in": correos}},
+                                   {"_id": 0, "email": 1, "active": 1, "status": 1, "merged_into": 1, "center": 1}):
         ya.add(str(d.get("email") or "").lower())
-    nombres_bd = {_imp_norm(d["name"]) async for d in db.drivers.find(
-        {}, {"_id": 0, "name": 1}) if d.get("name")}
+        vivas.anota(d, correo=True)
+        naves_ya.setdefault(("e", str(d.get("email") or "").lower()), set()).add(str(d.get("center") or ""))
+    nombres_bd = set()
+    async for d in db.drivers.find({}, {"_id": 0, "name": 1, "active": 1, "status": 1, "merged_into": 1,
+                                        "center": 1}):
+        if d.get("name"):
+            nombres_bd.add(_imp_norm(d["name"]))
+            vivas.anota(d, correo=False)
+            naves_ya.setdefault(("n", _imp_norm(d["name"])), set()).add(str(d.get("center") or ""))
+
+    def _de_naves_que_no_ve(p) -> bool:
+        """La fila casa SOLO con fichas de naves que quien importa no ve (11-11-2026, tercera ronda V5): no se toca y
+        cuenta como «de otros centros sin tocar», no como «ya estaba» (ni sale su nombre en las bajas). Sigue sin
+        darse de alta: nunca una segunda ficha de la misma persona. Para quien ve todas, siempre False."""
+        naves = naves_ya.get(("e", p["email"]) if p["email"] else ("n", _imp_norm(p["name"])))
+        return bool(naves) and not any(_user_can_see_center(user, c) for c in naves)
+    de_baja = []
 
     ahora = datetime.now(timezone.utc).isoformat()
     quien = user.get("name") or user.get("username") or "importación"
@@ -12502,6 +12997,7 @@ async def drivers_importar(file: UploadFile = File(...), center: str = Form(""),
         pass
     conocidos = set(c.upper() for c in (await _centros_de_la_empresa()) if c)
     elegidos, destino = _eleccion_centros(centros, mapa, conocidos)
+    _destinos_que_ve(user, destino)
     nuevos, saltados, fuera_seleccion = [], [], 0
     for p in r["personas"]:
         clave = p.pop("centro_texto", "").upper()
@@ -12517,10 +13013,17 @@ async def drivers_importar(file: UploadFile = File(...), center: str = Form(""),
         existe = (p["email"] and p["email"] in ya) or \
             (not p["email"] and _imp_norm(p["name"]) in nombres_bd)
         if existe:
+            if _de_naves_que_no_ve(p):
+                fuera_seleccion += 1
+                continue
             # NO se actualiza la ficha que ya está. Importar es dar de alta lo
             # que falta; pisar datos buenos con los de un Excel viejo es la
             # forma más rápida de que se deje de confiar en la aplicación.
             saltados.append({"nombre": p["name"], "motivo": "ya estaba dado de alta"})
+            # Tampoco se reactiva una ficha de baja (por nombre puede ser un tocayo): se dice, y se hace a mano desde
+            # «Bajas» (11-11-2026, equipo-6).
+            if vivas.de_baja(p):
+                de_baja.append(p["name"])
             continue
         d = {k: v for k, v in p.items() if k != "fila" and v is not None}
         d.update({"id": str(uuid.uuid4()), "active": True,
@@ -12534,11 +13037,15 @@ async def drivers_importar(file: UploadFile = File(...), center: str = Form(""),
             d["center"] = (center if center and center not in ("Todos", "todos")
                            else (unico_centro or None))
         nuevos.append(d)
+        vivas.ya_viva(p)
         if p["email"]:
             ya.add(p["email"])
         else:
             nombres_bd.add(_imp_norm(p["name"]))
 
+    # El centro FINAL de cada alta (el del mapa, el de su columna, el del formulario o el único de la empresa), antes
+    # de escribir nada (11-11-2026, corrección P33).
+    _centros_finales_que_ve(user, [d.get("center") for d in nuevos])
     metidos = len(nuevos)
     if nuevos:
         try:
@@ -12570,7 +13077,9 @@ async def drivers_importar(file: UploadFile = File(...), center: str = Form(""),
                 metidos, len(saltados), con_acceso)
     return {"importados": metidos, "ya_estaban": len(saltados), "con_acceso": con_acceso,
             "no_leidas": len(r["saltadas"]), "fuera_seleccion": fuera_seleccion,
-            "nombres": [d["name"] for d in nuevos][:50]}
+            "nombres": [d["name"] for d in nuevos][:50],
+            # NUEVOS y opcionales (11-11-2026, equipo-6): de las `ya_estaban`, las que estaban de baja.
+            "de_baja": len(de_baja), "nombres_de_baja": de_baja[:20]}
 
 
 # DONDE SE APUNTA A UN CONDUCTOR. Una sola lista, porque el fallo de fusionar
@@ -12738,6 +13247,213 @@ async def get_drivers(center: Optional[str] = None, user: dict = Depends(require
                         {"center": {"$regex": r"^\s*$"}}]
     drivers = await db.drivers.find(query, {"_id": 0}).to_list(1000)
     return drivers
+
+
+# LAS FICHAS DADAS DE BAJA, A LA VISTA (11-11-2026, tanda 3, equipo-6). «Eliminar» las daba de baja y no se veían en
+# ningún sitio ni se podían reactivar, salvo volviendo a dar de alta con el mismo correo. Solo las de baja de verdad:
+# ni las fusionadas en otra (también llevan `active: False`) ni las borradas. GET /drivers no cambia.
+_FICHA_DE_BAJA = {"active": False, "status": {"$nin": ["deleted", "fusionada"]}, "merged_into": {"$exists": False}}
+
+
+def _momento_iso(v):
+    """Un momento guardado (ISO con o sin zona, o datetime) como datetime con zona; None si no se entiende."""
+    try:
+        d = v if isinstance(v, datetime) else datetime.fromisoformat(str(v).strip().replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def _baja_origen(f: dict):
+    """(origen, fecha) de una baja, ya resuelto para la pantalla (11-11-2026, segunda revisión, F5/F6). Hay dos marcas:
+    la de la oficina (`baja_en`/`baja_por`) y la de la hoja de Google (`desactivada_por` 'hoja' y `desactivada_en`), y
+    las dos pueden quedar puestas (la hoja la sacó, se reactivó y luego la dio de baja la oficina): manda la más
+    reciente; si solo hay una, esa. `desactivada_por` no se toca: lo usa la sincronización."""
+    oficina = f.get("baja_en") or None
+    es_hoja = f.get("desactivada_por") == "hoja"
+    hoja = f.get("desactivada_en") or None
+    if oficina and es_hoja:
+        a, b = _momento_iso(oficina), _momento_iso(hoja)
+        if a and b:
+            gana_hoja = b > a
+        else:
+            gana_hoja = bool(hoja) and str(hoja) > str(oficina)
+        return ("hoja", hoja) if gana_hoja else ("oficina", oficina)
+    if oficina:
+        return "oficina", oficina
+    if es_hoja:
+        return "hoja", hoja
+    # Ni una ni otra (bajas de antes): la fecha de la hoja si la hubiera, como hasta ahora.
+    return None, hoja
+
+
+@api_router.get("/drivers/bajas")
+async def get_drivers_bajas(center: Optional[str] = None, user: dict = Depends(require_admin)):
+    """Las fichas de baja de las naves que ve el usuario (y las sin centro, como GET /drivers), lo más reciente
+    primero. Recortadas: lo justo para encontrarlas y reactivarlas."""
+    query = dict(_FICHA_DE_BAJA)
+    filtro = _filtro_centro(user, center)
+    if filtro:
+        query["$or"] = [filtro, {"center": {"$in": [None, ""]}}, {"center": {"$regex": r"^\s*$"}}]
+    fichas = await db.drivers.find(query, {"_id": 0, "id": 1, "name": 1, "center": 1, "email": 1, "phone": 1,
+                                           "transporter_id": 1, "baja_en": 1, "baja_por": 1,
+                                           "desactivada_por": 1, "desactivada_en": 1}).to_list(500)
+    salida = []
+    for f in fichas:
+        if not f.get("id"):
+            continue
+        origen, fecha = _baja_origen(f)
+        salida.append({"id": f.get("id"), "name": f.get("name") or "", "center": f.get("center"),
+                       "email": f.get("email"), "phone": f.get("phone"), "transporter_id": f.get("transporter_id"),
+                       "baja_en": fecha, "baja_por": f.get("baja_por") if origen == "oficina" else None,
+                       "desactivada_por": f.get("desactivada_por"), "origen": origen})
+    salida.sort(key=lambda f: (str(f.get("baja_en") or ""), f["name"]), reverse=True)
+    sin_fecha = [f for f in salida if not f.get("baja_en")]
+    con_fecha = [f for f in salida if f.get("baja_en")]
+    return con_fecha + sorted(sin_fecha, key=lambda f: f["name"])
+
+
+@api_router.get("/drivers/app")
+async def get_drivers_app(center: Optional[str] = None, user: dict = Depends(require_admin)):
+    """Quién tiene la app de Android, con qué versión y cuándo la abrió por última vez (11-11-2026, tanda 3, equipo-5).
+
+    Lo apunta la propia app al abrirse (POST /push/fcm-token: `app` = su versión, `updated_at`); la web y la app de
+    iPhone no se apuntan, así que quien solo usa esas sale «sin app». `push_tokens` es GLOBAL (todas las empresas): se
+    busca SOLO por los ids de las fichas de esta base y de las naves que ve el usuario (el mismo filtro que GET
+    /drivers), y un registro de otra base no cuenta. Por conductor, el más reciente. Solo lectura."""
+    query = {"active": {"$ne": False}}
+    filtro = _filtro_centro(user, center)
+    if filtro:
+        query["$or"] = [filtro, {"center": {"$in": [None, ""]}}, {"center": {"$regex": r"^\s*$"}}]
+    ids = [f["id"] for f in await db.drivers.find(query, {"_id": 0, "id": 1}).to_list(1000) if f.get("id")]
+    base = _current_db_name.get()
+    conductores = {}
+    if ids:
+        regs = await global_db.push_tokens.find(
+            {"user_id": {"$in": ids}, "role": "driver"},
+            {"_id": 0, "user_id": 1, "org_id": 1, "db_name": 1, "plataforma": 1, "app": 1,
+             "updated_at": 1}).to_list(5000)
+        rango = {}   # por conductor: (es de ESTA base, visto) del que se ha quedado
+        for r in regs:
+            if r.get("db_name") and r["db_name"] != base:
+                continue
+            if not r.get("db_name") and r.get("org_id") and user.get("org_id") and r["org_id"] != user.get("org_id"):
+                continue
+            visto = str(r.get("updated_at") or "")
+            # Uno de ESTA base gana siempre a uno sin base, aunque el sin base sea más reciente: ese puede ser de otra
+            # empresa con el mismo id (11-11-2026, segunda revisión, F11). Entre iguales, el más reciente.
+            clave = (bool(r.get("db_name")), visto)
+            antes = rango.get(r["user_id"])
+            if antes and antes >= clave:
+                continue
+            rango[r["user_id"]] = clave
+            conductores[r["user_id"]] = {"app": r.get("app") or None, "plataforma": r.get("plataforma") or "android",
+                                         "visto": visto or None}
+    # La última publicada: la mayor de Play y de la web, número a número (2.4.10 es más nueva que 2.4.6).
+    publicadas = [v["nombre"] for v in (_app_android_play(), _app_android_web()) if v]
+    ultima = max(publicadas, key=_version_tupla) if publicadas else None
+    return {"conductores": conductores, "ultima": ultima}
+
+
+def _409_reactivar(user: dict, otra: dict, conflicto: str, valor: str) -> dict:
+    """El 409 de reactivar (POST /reactivar y el PATCH que reactiva) cuando el correo o el ID de reparto ya lo tiene otra
+    ficha. Si quien pide ve la nave de esa otra, el de siempre: a cuál ir (`abrir_id`) y de quién es. Si no, ni a cuál ir
+    ni de quién es (11-11-2026, segunda revisión, F10, y tercera, W2/W4): `mensaje`, `centro` y `conflicto` (y con el
+    ID, `transporter_id`), que es con lo que el panel ofrece «sin el ID» o dice que no se puede."""
+    centro = (otra.get("center") or "").strip()
+    if conflicto == "correo":
+        if _user_can_see_center(user, otra.get("center") or ""):
+            return {**_ya_tiene_ficha(otra, "correo %s" % valor), "conflicto": "correo"}
+        return {"mensaje": "Ese correo (%s) ya lo tiene una ficha activa de %s, que no tienes asignada."
+                           % (valor, centro or "otra nave"), "centro": centro, "conflicto": "correo"}
+    if _user_can_see_center(user, otra.get("center") or ""):
+        return {**_ya_tiene_ficha(otra, "ID de reparto %s" % valor), "conflicto": "id_reparto", "transporter_id": valor}
+    return {"mensaje": "Ese ID de reparto (%s) ya lo tiene una ficha de %s, que no tienes asignada."
+                       % (valor, centro or "otra nave"), "centro": centro, "conflicto": "id_reparto",
+            "transporter_id": valor}
+
+
+@api_router.post("/drivers/{driver_id}/reactivar")
+async def reactivar_driver(driver_id: str, data: dict = Body(default={}), user: dict = Depends(require_admin)):
+    """Vuelve a poner activa una ficha de baja, con sus inspecciones, turnos e historial (11-11-2026, equipo-6).
+
+    Se para (409) si su correo ya lo tiene otra ficha ACTIVA (serían dos para la misma persona: se abre esa) o si su
+    ID de reparto lo tiene otra viva (la DNR y las horas se colgarían de la persona equivocada): con
+    `{"quitar_id": true}` se reactiva sin el ID. No toca `desactivada_por`: la sincronización con la hoja de Google
+    lo usa para saber que la oficina la reactivó a mano y no volver a darla de baja. La cuenta de acceso tampoco: vuelve
+    a entrar con la contraseña que tuviera (el correo personal de recuperación se quitó al darla de baja).
+
+    LA NAVE (11-11-2026, segunda revisión, F4/F7/F14): como en main, quien vuelve se reactiva en la nave de quien le da
+    de alta. Hay que ver la nave en la que QUEDA la ficha (`center` del cuerpo, opcional; sin él, la guardada), no la
+    de su baja. Si cambia de nave, se apunta en `historial_centros` como cualquier cambio."""
+    quitar_id = (data or {}).get("quitar_id") is True
+    f = await db.drivers.find_one({"id": driver_id}, {"_id": 0})
+    if not f:
+        raise HTTPException(404, "Conductor no encontrado")
+    if f.get("merged_into") or f.get("status") in ("deleted", "fusionada"):
+        raise HTTPException(400, "Esa ficha está fusionada en otra o borrada: no se puede reactivar.")
+    if f.get("active") is not False:
+        raise HTTPException(400, "%s no está de baja." % (f.get("name") or "Esa ficha"))
+    vieja = str(f.get("center") or "").strip()
+    pedida = _texto_cuerpo((data or {}).get("center"), 30).strip() if isinstance(data, dict) else ""
+    queda = pedida or vieja
+    if queda and not _user_can_see_center(user, queda):
+        raise HTTPException(403, "No tienes acceso a ese centro")
+    cambia_nave = bool(pedida) and pedida.upper() != vieja.upper()
+    email = str(f.get("email") or "").strip()
+    if email:
+        otra = await db.drivers.find_one(
+            {"email": {"$regex": "^%s$" % re.escape(email), "$options": "i"}, "active": {"$ne": False},
+             "id": {"$ne": driver_id}}, {"_id": 0, "id": 1, "name": 1, "center": 1})
+        if otra:
+            # Sin ver su nave, ni a cuál ir ni de quién es (11-11-2026, segunda revisión, F10).
+            raise HTTPException(409, _409_reactivar(user, otra, "correo", email))
+    # El ID de la ficha: `transporter_id` o, si está vacío, el campo viejo `driver_id` con forma de ID de reparto
+    # (11-11-2026, segunda revisión, F3; gotcha 79).
+    tid, campo_tid = _tid_de_la_ficha(f)
+    otra_tid = await _tid_en_otra_ficha(tid, excepto=driver_id) if tid else None
+    if otra_tid and not quitar_id:
+        # Como el del correo: sin ver la nave de la otra, sin `abrir_id` ni `nombre` (11-11-2026, tercera revisión, W2).
+        raise HTTPException(409, _409_reactivar(user, otra_tid, "id_reparto", tid))
+    quitar = {"baja_en": "", "baja_por": ""}
+    if otra_tid:
+        quitar[campo_tid] = ""
+    poner = {"active": True}
+    cambio = {"$set": poner, "$unset": quitar}
+    centro_cambiado = None
+    if cambia_nave:
+        centro_cambiado = {"de": vieja, "a": pedida}
+        poner["center"] = pedida
+        cambio["$push"] = {"historial_centros": {
+            "de": vieja, "a": pedida, "desde": _dia_negocio(), "aplicado_en": datetime.now(timezone.utc).isoformat(),
+            "programado_por": user.get("name") or user.get("sub") or "", "como": "ficha"}}
+        t = f.get("traslado")
+        if isinstance(t, dict) and str(t.get("centro") or "").strip().upper() == pedida.upper():
+            quitar["traslado"] = ""
+        if "historial_centros" in f:
+            await _historial_centros_en_lista(driver_id, f.get("historial_centros"))
+    try:
+        r = await db.drivers.update_one({"id": driver_id, "active": False}, cambio)
+    except DuplicateKeyError:
+        raise HTTPException(409, {"mensaje": "Ese correo ya lo tiene otro conductor activo.", "conflicto": "correo"})
+    if not r.matched_count:
+        raise HTTPException(409, "Alguien la ha cambiado mientras tanto: vuelve a cargar la lista.")
+    if otra_tid:
+        await _apuntar_cambio_tid(tid, [{"ficha_id": driver_id, "ficha": f.get("name"), "campos": [campo_tid]}],
+                                  None, user.get("name") or user.get("sub"), "ficha")
+    # Con quién y cuándo se dio la baja que se borra (11-11-2026, segunda revisión, F13).
+    await _audit(user, "driver_reactivar", {"driver_id": driver_id, "sin_id": bool(otra_tid),
+                                            "baja_en": f.get("baja_en"), "baja_por": f.get("baja_por"),
+                                            **({"centro": centro_cambiado} if centro_cambiado else {})})
+    if centro_cambiado:
+        await _audit(user, "driver_centro", {"driver_id": driver_id, **centro_cambiado})
+    ficha = await db.drivers.find_one({"id": driver_id}, {"_id": 0}) or {}
+    try:
+        salida = Driver(**ficha).model_dump(mode="json")
+    except Exception:                                            # noqa: BLE001
+        # Ya está reactivada: una ficha vieja con un dato raro no puede convertir eso en un error.
+        salida = {"id": driver_id, "name": ficha.get("name") or "", "center": ficha.get("center"), "active": True}
+    return {"ok": True, "driver": salida}
 
 
 def _correo_mascara(email: str) -> str:
@@ -12964,14 +13680,33 @@ async def update_driver(driver_id: str, data: dict, user=Depends(require_admin))
                                          "(o con el prefijo del pais).")
             data["movil_personal"] = "+" + e164
 
+    # LA CADUCIDAD DEL CARNET (11-11-2026, tanda 3, historia-10). Ya se aceptaba y se guardaba tal cual llegara. Ahora:
+    # una fecha AAAA-MM-DD se guarda; vacía, se quita; otra cosa, 400. El formulario manda la ficha entera, y un valor
+    # viejo que no es una fecha la pantalla lo ve vacío: si llega vacío y lo guardado no era una fecha, no se toca.
+    if "license_expiry" in data:
+        crudo = data.get("license_expiry")
+        if crudo is None or (isinstance(crudo, str) and not crudo.strip()):
+            data.pop("license_expiry")
+            guardada = await db.drivers.find_one({"id": driver_id}, {"_id": 0, "license_expiry": 1}) or {}
+            if _fecha_carnet(guardada.get("license_expiry")):
+                quitar["license_expiry"] = ""
+        else:
+            fecha = _fecha_carnet(crudo)
+            if not fecha:
+                raise HTTPException(400, "La fecha de caducidad del carnet no es válida.")
+            data["license_expiry"] = fecha
+
+    tid_cambia = None   # (ficha, ID de antes) si el ID de reparto cambia de verdad: se apunta al guardar
     if "transporter_id" in data:
         # El formulario manda la ficha entera: si el ID no ha cambiado no se
         # revalida, o una ficha vieja con un ID raro no se podria guardar por
         # tocarle el telefono.
-        actual = await db.drivers.find_one({"id": driver_id}, {"_id": 0, "transporter_id": 1}) or {}
+        actual = await db.drivers.find_one({"id": driver_id}, {"_id": 0, "transporter_id": 1, "name": 1}) or {}
         _plano = lambda v: re.sub(r"\s+", "", str(v or "")).upper()  # noqa: E731
         if _plano(data.get("transporter_id")) == _plano(actual.get("transporter_id")):
             data.pop("transporter_id")
+        else:
+            tid_cambia = (actual, _plano(actual.get("transporter_id")))
     if "transporter_id" in data:
         tid = _tid_de_ficha(data.get("transporter_id"))
         if not tid:
@@ -12983,11 +13718,107 @@ async def update_driver(driver_id: str, data: dict, user=Depends(require_admin))
                 raise HTTPException(409, _ya_tiene_ficha(otra, "ID de reparto %s" % tid))
             data["transporter_id"] = tid
 
+    # EL CAMBIO DE CENTRO DESDE «EDITAR» DEJA RASTRO (11-11-2026, tanda 3, equipo-8). El cambio programado lo apuntaba
+    # en `historial_centros` y este no: «¿desde cuándo está en OGA5?» no tenía respuesta. El formulario manda la ficha
+    # entera, así que se compara con la nave de ahora sin distinguir mayúsculas ni espacios: si es la misma, no se
+    # toca (ni se apunta un cambio falso por «oga5» frente a «OGA5»).
+    # ¿REACTIVA UNA BAJA? (11-11-2026, segunda revisión, F4/F7/F14). Es lo que manda el «reactivar su ficha» del alta
+    # (el formulario entero con `active: true`) y el asistente. Como en main, quien vuelve se trae a la nave de quien le
+    # da de alta: al reactivar hay que ver la nave en la que QUEDA, no la de su baja (abajo).
+    estado = {}
+    reactiva = False
+    if "active" in data:
+        estado = await db.drivers.find_one({"id": driver_id}, {
+            "_id": 0, "active": 1, "transporter_id": 1, "driver_id": 1, "center": 1, "merged_into": 1, "status": 1,
+            "baja_en": 1, "baja_por": 1, "email": 1}) or {}
+        reactiva = data.get("active") is True and estado.get("active") is False
+
+    centro_cambiado = traslado_pendiente = None
+    empuje = {}
+    previa = {}
+    if "center" in data:
+        nueva = str(data.get("center") or "").strip()
+        previa = await db.drivers.find_one({"id": driver_id}, {"_id": 0, "center": 1, "traslado": 1,
+                                                               "historial_centros": 1}) or {}
+        vieja = str(previa.get("center") or "").strip()
+        if nueva.upper() == vieja.upper():
+            data.pop("center")
+        else:
+            # Como el cambio programado: hay que ver la nave de origen y la de destino (en la cuenta dueña y para
+            # quien no tiene naves limitadas, siempre). Al REACTIVAR, solo la de destino (F4/F7/F14).
+            for c in ((nueva,) if reactiva else (vieja, nueva)):
+                if c and not _user_can_see_center(user, c):
+                    raise HTTPException(403, "No tienes acceso a ese centro")
+            centro_cambiado = {"de": vieja, "a": nueva}
+            empuje["historial_centros"] = {
+                "de": vieja, "a": nueva, "desde": _dia_negocio(),
+                "aplicado_en": datetime.now(timezone.utc).isoformat(),
+                "programado_por": user.get("name") or user.get("sub") or "", "como": "ficha"}
+            t = previa.get("traslado")
+            if isinstance(t, dict) and str(t.get("centro") or "").strip():
+                if str(t.get("centro")).strip().upper() == nueva.upper():
+                    # Ya está donde iba a ir: el bucle no tiene que volver a apuntarlo.
+                    quitar["traslado"] = ""
+                else:
+                    traslado_pendiente = {"centro": t.get("centro"), "desde": t.get("desde")}
+
+    # DAR DE BAJA Y REACTIVAR CON EL PATCH (11-11-2026, tanda 3, equipo-6). Lo usan el cuadrante (dar de baja), el 409
+    # de «ya tiene una ficha de baja» del alta (reactivar) y el asistente. Al dar de baja se apunta cuándo y quién (la
+    # lista «Bajas» lo enseña; si ya estaba de baja no se pisa); al reactivar se quita, y el ID de reparto que la ficha
+    # ya tenía se comprueba como en el alta: sin esto, dos fichas vivas con el mismo ID cuelgan la DNR de una persona
+    # en la otra. Solo cuando `active` cambia de verdad.
+    poner_baja = None
+    if "active" in data:
+        de_baja_ya = estado.get("active") is False
+        if data.get("active") is False and not de_baja_ya:
+            # Como «Dar de baja» (DELETE): hay que ver la nave guardada de la ficha (11-11-2026, tercera revisión, W1).
+            centro = str(estado.get("center") or "").strip()
+            if centro and not _user_can_see_center(user, centro):
+                raise HTTPException(403, "No tienes acceso a ese centro")
+            poner_baja = {"baja_en": datetime.now(timezone.utc).isoformat(),
+                          "baja_por": user.get("name") or user.get("sub") or ""}
+        elif reactiva:
+            # Las mismas comprobaciones que POST /drivers/{id}/reactivar (11-11-2026, segunda revisión, F4).
+            if estado.get("merged_into") or estado.get("status") in ("deleted", "fusionada"):
+                raise HTTPException(400, "Esa ficha está fusionada en otra o borrada: no se puede reactivar.")
+            queda = str(data.get("center") or "").strip() if "center" in data \
+                else str(estado.get("center") or "").strip()
+            if queda and not _user_can_see_center(user, queda):
+                raise HTTPException(403, "No tienes acceso a ese centro")
+            # El correo, como POST /reactivar (11-11-2026, tercera revisión, W4): el que QUEDA (el del cuerpo si viene,
+            # si no el guardado), sin distinguir mayúsculas, entre las ACTIVAS que no son esta. El alta que reactiva
+            # manda el de la propia ficha: ese no choca. Sin esto quedaban dos activas con el mismo correo.
+            correo = str((data.get("email") if "email" in data else estado.get("email")) or "").strip()
+            if correo:
+                otra = await db.drivers.find_one(
+                    {"email": {"$regex": "^%s$" % re.escape(correo), "$options": "i"}, "active": {"$ne": False},
+                     "id": {"$ne": driver_id}}, {"_id": 0, "id": 1, "name": 1, "center": 1})
+                if otra:
+                    raise HTTPException(409, _409_reactivar(user, otra, "correo", correo))
+            quitar.update({"baja_en": "", "baja_por": ""})
+            # El ID con el que QUEDA (el que llega ya se ha comprobado arriba): `transporter_id` o, si no tiene, el
+            # `driver_id` con forma de ID de reparto (F3).
+            if "transporter_id" not in data:
+                guardado, _campo = _tid_de_la_ficha({
+                    "transporter_id": "" if "transporter_id" in quitar else estado.get("transporter_id"),
+                    "driver_id": data.get("driver_id") if "driver_id" in data else estado.get("driver_id")})
+                if guardado:
+                    otra = await _tid_en_otra_ficha(guardado, excepto=driver_id)
+                    if otra:
+                        raise HTTPException(409, _ya_tiene_ficha(otra, "ID de reparto %s" % guardado))
+    if poner_baja:
+        data.update(poner_baja)
+
     cambio = {}
     if data:
         cambio["$set"] = data
     if quitar:
         cambio["$unset"] = quitar
+    if empuje:
+        cambio["$push"] = empuje
+        # Un `historial_centros` guardado que no es una lista (el null de antes del arreglo F1) haría fallar el `$push`.
+        if "historial_centros" in previa:
+            await _historial_centros_en_lista(driver_id, previa.get("historial_centros"))
     if not cambio:
         return {"success": True, "sin_cambios": True}
     try:
@@ -12996,8 +13827,28 @@ async def update_driver(driver_id: str, data: dict, user=Depends(require_admin))
         raise HTTPException(409, "Ese correo ya lo tiene otro conductor activo.")
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Conductor no encontrado")
+    # EL CAMBIO DEL ID DE REPARTO, APUNTADO (11-11-2026, horas_dnr-10): como hace la DNR diaria, el de antes (que se
+    # va) y el nuevo (que llega), cada uno en su apunte. Solo si cambió de verdad; nunca impide guardar.
+    if tid_cambia:
+        ficha, viejo = tid_cambia
+        quien = user.get("name") or user.get("sub")
+        nombre = data.get("name") or ficha.get("name")
+        if viejo:
+            await _apuntar_cambio_tid(viejo, [{"ficha_id": driver_id, "ficha": nombre, "campos": ["transporter_id"]}],
+                                      None, quien, "ficha")
+        if data.get("transporter_id"):
+            await _apuntar_cambio_tid(data["transporter_id"], [], {"ficha_id": driver_id, "ficha": nombre},
+                                      quien, "ficha")
     if data.get("active") is False:
         await _limpiar_correo_personal_conductor(driver_id, user.get("org_id"))
+    if reactiva:
+        # Como POST /reactivar, con quién y cuándo se dio la baja que se borra (F4/F13).
+        await _audit(user, "driver_reactivar", {"driver_id": driver_id, "baja_en": estado.get("baja_en"),
+                                                "baja_por": estado.get("baja_por"), "ruta": "patch"})
+    if centro_cambiado:
+        await _audit(user, "driver_centro", {"driver_id": driver_id, **centro_cambiado})
+        # Campos NUEVOS y solo cuando cambia la nave: el panel viejo solo mira `success`.
+        return {"success": True, "centro_cambiado": centro_cambiado, "traslado_pendiente": traslado_pendiente}
     return {"success": True}
 
 
@@ -13048,9 +13899,14 @@ async def upload_inspection_photos(
     # Los admins pueden repetir (peritajes manuales desde el panel).
     if user.get("role") == "driver":
         today = _dia_negocio()
+        # Se busca con la ficha del TOKEN, no con el `driver_id` del formulario (11-11-2026):
+        # el portal web que entraba con contraseña guardaba al conductor sin `id` y mandaba
+        # el texto "undefined"; no encontraba la de hoy, no daba el 409 y un reintento
+        # creaba una SEGUNDA inspección. Para un conductor la inspección se guarda siempre
+        # con `user["sub"]` (más abajo), así que es la única con la que tiene sentido buscar.
         dup = await db.inspections.find_one({
             "deleted": {"$ne": True}, "vehicle_id": vehicle_id,
-            "driver_id": driver_id or user.get("sub"),
+            "driver_id": user.get("sub"),
             "created_at": _rango_dia_negocio(today)
         }, {"_id": 0, "id": 1})
         if dup:
@@ -15639,7 +16495,25 @@ def _user_can_see_center(user: dict, center: str) -> bool:
     # Los centros en BD vienen sucios ('AMZL OGA5 SANTIAGO XPT'), así que se
     # compara por código contenido, no por igualdad exacta.
     c = (center or "").upper()
-    return any(p.upper() in c or c in p.upper() for p in ac if p)
+    if not c:
+        return any(p for p in ac)          # centro vacío: como siempre ("" está dentro de cualquier permitido)
+    return any(_centro_casa_con_permitido(c, p) for p in ac if p)
+
+
+def _centro_casa_con_permitido(centro_upper: str, permitido: str) -> bool:
+    """La regla de un centro frente a UNO de los permitidos de un usuario. La usan _user_can_see_center y
+    _centros_que_ve, y la copia `centroCasaConPermitido` de frontend/src/panel/auth.js (el selector de arriba).
+
+    - El permitido dentro del centro, como siempre: «OGA5» lee el nombre sucio «AMZL OGA5 SANTIAGO XPT» de la base.
+    - El centro dentro del permitido, SOLO si es IGUAL (recortado) o es el CÓDIGO de nave que el permitido lleva
+      dentro (_CENTRO_RE: «OGA5» en «AMZL OGA5 SANTIAGO XPT»). 11-11-2026, revisión V3: la palabra entera no bastaba
+      con naves de palabras («MADRID» y «MADRID SUR»: quien solo tenía «MADRID SUR» pedía «MADRID» y la consulta le
+      traía las dos); antes de P11/P20 pasaba cualquier trozo («GA» con «OGA5»)."""
+    p = str(permitido).upper()
+    if p in centro_upper:
+        return True
+    pedido = centro_upper.strip()
+    return bool(pedido) and (pedido == p.strip() or pedido in _CENTRO_RE.findall(p))
 
 
 async def _filtro_por_vehiculos(user: dict, center: Optional[str] = None) -> dict:
@@ -16031,9 +16905,11 @@ async def _danos_nuevos_hoy(center: str, dia: str) -> list:
                "status": {"$nin": ["deleted", "baja"]}})
     if not ids:
         return []
+    # El día en hora de Madrid, no la fecha UTC de la marca (11-11-2026, portal_inicio-5): con `^{dia}` lo hecho
+    # entre las 00:00 y la 01:00 (02:00 en verano) contaba para el día anterior. Ver _rango_dia_negocio.
     insps = await db.inspections.find(
         {"deleted": {"$ne": True}, "vehicle_id": {"$in": ids},
-         "created_at": {"$regex": f"^{dia}"}},
+         "created_at": _rango_dia_negocio(dia)},
         {"_id": 0, "vehicle_id": 1, "analysis": 1, "driver_name": 1}).to_list(2000)
 
     asig = await db.daily_assignments.find_one(
@@ -16090,7 +16966,7 @@ async def _inspecciones_del_dia(center: str, dia: str) -> dict:
         return {"hechas": 0, "flota": 0}
     revisados = await db.inspections.distinct(
         "vehicle_id", {"deleted": {"$ne": True}, "vehicle_id": {"$in": ids},
-                       "created_at": {"$regex": f"^{dia}"}})
+                       "created_at": _rango_dia_negocio(dia)})      # día de Madrid (11-11-2026)
     return {"hechas": len(revisados), "flota": len(ids)}
 
 
@@ -16105,10 +16981,60 @@ async def _incidencias_flota_dia(center: str, dia: str) -> dict:
     ids = await _vehiculos_de_sede(center)
     if not ids:
         return {"nuevas": 0, "graves": 0}
-    q = {"vehicle_id": {"$in": ids}, "created_at": {"$regex": f"^{dia}"}}
+    q = {"vehicle_id": {"$in": ids}, "created_at": _rango_dia_negocio(dia)}      # día de Madrid (11-11-2026)
     return {"nuevas": await db.incidents.count_documents(q),
             "graves": await db.incidents.count_documents(
                 {**q, "severity": {"$in": list(_INCIDENCIA_GRAVE)}})}
+
+
+async def _salidas_sin_auditoria(center: str, dia: str) -> dict:
+    """Las furgonetas de la Asignación diaria de la sede y cuáles salieron sin auditoría ese día, con quién las
+    llevaba (11-11-2026, revisión de la flota propia, portal_inicio-5).
+
+    El resumen de la noche decía «Revisados: X de Y» con la flota entera, pero no QUÉ furgoneta salió sin revisar ni
+    quién la llevaba, que es lo que hace falta al día siguiente para atribuir un golpe. Sale de datos propios: la
+    Asignación diaria (`daily_assignments`) y las inspecciones del día (en hora de Madrid, _rango_dia_negocio).
+
+    Cada furgoneta cuenta una vez aunque esté en dos huecos (se queda el primer conductor). Solo cuentan los huecos con
+    conductor (P37). El conductor es el de la asignación (su nombre, o el de la ficha si solo trae el id); si no se
+    encuentra, None: un nombre puesto a dedo en un parte es justo lo que no se puede hacer.
+    Sin asignación ese día: total 0 (y el resumen no pinta nada, como antes).
+    """
+    asigs = await db.daily_assignments.find(
+        {"date": dia, "center": {"$regex": re.escape(center), "$options": "i"}},
+        {"_id": 0, "slots": 1}).to_list(50)
+    salidas = {}
+    for a in asigs:
+        for s in (a.get("slots") or []):
+            # Solo huecos con furgoneta Y conductor (11-11-2026, P37 de la revisión de la tanda 3): una furgoneta sin
+            # conductor en la asignación se quedó en la nave, y contarla era una falsa alarma en el correo de la noche.
+            if (isinstance(s, dict) and s.get("vehicle_id") and (s.get("driver_id") or s.get("driver_name"))
+                    and s["vehicle_id"] not in salidas):
+                salidas[s["vehicle_id"]] = s
+    if not salidas:
+        return {"total": 0, "revisadas": 0, "sin_auditoria": []}
+    revisadas = set(await db.inspections.distinct(
+        "vehicle_id", {"deleted": {"$ne": True}, "vehicle_id": {"$in": list(salidas)},
+                       "created_at": _rango_dia_negocio(dia)}))
+    faltan = [vid for vid in salidas if vid not in revisadas]
+    # La matrícula, de la asignación; si el hueco no la trae, de la ficha de la furgoneta.
+    sin_placa = [vid for vid in faltan if not salidas[vid].get("vehicle_plate")]
+    placas = {}
+    if sin_placa:
+        placas = {v["id"]: v.get("license_plate") for v in await db.vehicles.find(
+            {"id": {"$in": sin_placa}}, {"_id": 0, "id": 1, "license_plate": 1}).to_list(200)}
+    # El nombre, del hueco; si solo trae el driver_id (P37), de la ficha. Si tampoco está, None (nunca se inventa).
+    sin_nombre = [salidas[vid]["driver_id"] for vid in faltan
+                  if not salidas[vid].get("driver_name") and salidas[vid].get("driver_id")]
+    nombres = {}
+    if sin_nombre:
+        nombres = {d["id"]: d.get("name") for d in await db.drivers.find(
+            {"id": {"$in": sin_nombre}}, {"_id": 0, "id": 1, "name": 1}).to_list(200)}
+    lista = [{"matricula": salidas[vid].get("vehicle_plate") or placas.get(vid) or "—",
+              "conductor": salidas[vid].get("driver_name") or nombres.get(salidas[vid].get("driver_id")) or None}
+             for vid in faltan]
+    lista.sort(key=lambda x: (x["conductor"] is None, (x["conductor"] or "").lower(), x["matricula"]))
+    return {"total": len(salidas), "revisadas": len(salidas) - len(faltan), "sin_auditoria": lista}
 
 
 async def resumen_dia_centro(center: str, dia: str) -> dict:
@@ -16144,12 +17070,19 @@ async def resumen_dia_centro(center: str, dia: str) -> dict:
     placas = sorted({d["matricula"] for d in danos})
     golpes = f"{len(danos)} · {', '.join(placas[:6])}" if danos else "ninguno"
     inc = await _incidencias_flota_dia(center, dia)
+    # Las salidas sin auditoría (11-11-2026, portal_inicio-5). Protegido: este resumen lo manda el bucle de las 21:00
+    # sede por sede, y un fallo aquí no puede dejar sin resumen a esta ni a las demás (ya pasó con un KeyError).
+    try:
+        salidas = await _salidas_sin_auditoria(center, dia)
+    except Exception as e:                                       # noqa: BLE001
+        logger.warning("Resumen diario: salidas sin auditoría de %s: %s", center, e)
+        salidas = None
 
     d, m, y = dia[8:10], dia[5:7], dia[0:4]
     return {"center": center, "fecha": f"{d}/{m}/{y}",
             "inspecciones": inspecciones, "checklist": checklist, "golpes": golpes,
             "placas": placas, "danos": danos, "turnos": turnos,
-            "incidencias": inc}
+            "incidencias": inc, "salidas": salidas}
 
 
 def _texto_resumen_largo(r: dict) -> str:
@@ -16197,7 +17130,54 @@ def _texto_resumen_largo(r: dict) -> str:
     if not r.get("turnos"):
         L.append("")
         L.append("📝 <b>Checklist:</b> no hay ninguno creado hoy")
+
+    # Las salidas de la asignación y quién salió sin auditoría (11-11-2026, portal_inicio-5). Sin asignación ese día
+    # (total 0) o si no se pudo calcular (None), no se dice nada, como antes. Los nombres se escapan: un «<» o un «&»
+    # en un nombre haría que Telegram rechazara el mensaje entero (va con parse_mode HTML). AL FINAL del mensaje
+    # (P36 de la revisión de la tanda 3): si un día cargado no cabe en los 4.000 caracteres de Telegram, lo que se
+    # recorta es esto, nunca lo que ya llegaba antes (ver _cortar_por_lineas en enviar_resumen_diario).
+    sal = r.get("salidas") or {}
+    if sal.get("total"):
+        esc = lambda s: str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        L.append("")
+        L.append(f"🚚 <b>Salidas de la asignación:</b> {sal['revisadas']} de {sal['total']} revisadas")
+        sin = sal.get("sin_auditoria") or []
+        if sin:
+            quienes = [f"{esc(x['conductor'])} ({esc(x['matricula'])})" if x.get("conductor")
+                       else f"sin conductor ({esc(x['matricula'])})" for x in sin[:15]]
+            mas = f", …y {len(sin) - 15} más" if len(sin) > 15 else ""
+            L.append(f"   Sin auditoría: {', '.join(quienes)}{mas}")
     return "\n".join(L)
+
+
+def _cortar_por_lineas(texto: str, tope: int) -> str:
+    """El texto, recortado a `tope` caracteres por LÍNEAS ENTERAS desde el final, con «…» si se quitó algo
+    (11-11-2026, P36 de la revisión de la tanda 3).
+
+    El resumen va a Telegram con parse_mode HTML y _telegram_enviar lo corta a 4.000 caracteres a ciegas: un corte a
+    mitad de un «<b>» hace que Telegram rechace el mensaje ENTERO. Cada línea del resumen abre y cierra sus etiquetas,
+    así que cortar por líneas nunca deja una a medias. Si ya cabe, el texto no se toca.
+
+    La marca no le quita sitio a las líneas (11-11-2026, V13 de la tercera ronda): con el sitio de la marca reservado
+    desde el principio, un texto de siempre que llenaba el tope justo (3.999 o 4.000 con el «Para:») perdía su última
+    línea por culpa del bloque de salidas que va detrás, y en main llegaba entero. Ahora entran las líneas enteras que
+    caben; la marca va si queda sitio para ella y, si no, se manda sin ella."""
+    if len(texto) <= tope:
+        return texto
+    marca = "\n…"
+    out, n = [], 0
+    for linea in texto.split("\n"):
+        extra = len(linea) + (1 if out else 0)
+        if n + extra > tope:
+            break
+        out.append(linea)
+        n += extra
+    # Sin líneas en blanco colgando antes de la marca (la que separa el bloque de salidas).
+    while out and not out[-1].strip():
+        n -= len(out.pop()) + (1 if out else 0)
+    if not out:
+        return texto[:max(tope, 0)]
+    return "\n".join(out) + (marca if n + len(marca) <= tope else "")
 
 
 # La última configuración de Telegram vista con la base viva: el vigilante de la base la usa
@@ -16272,6 +17252,25 @@ def _html_resumen(r: dict) -> str:
         P.append(f'<div style="margin-top:8px;color:#fbbf24;font-size:14px">'
                  f'⚠️ {esc(str(inc["nuevas"]) + " incidencias nuevas" + graves)}</div>')
     P.append('</div>')
+
+    # Salidas sin auditoría (11-11-2026, portal_inicio-5): quién salió con qué furgoneta sin revisarla. Solo si ese
+    # día hay asignación cargada (total > 0); si no, el correo sigue como antes.
+    sal = r.get("salidas") or {}
+    if sal.get("total"):
+        sin = sal.get("sin_auditoria") or []
+        P.append(f'<div style="background:{L};border-radius:10px;padding:16px;margin-bottom:14px">')
+        P.append(f'<div style="font-size:12px;color:{S};margin-bottom:8px">'
+                 f'SALIDAS SIN AUDITORÍA ({len(sin)}) · {sal["revisadas"]} de {sal["total"]} revisadas</div>')
+        if sin:
+            for x in sin[:30]:
+                P.append(f'<div style="padding:8px 0;border-top:1px solid #2a2f38">'
+                         f'{esc(x.get("conductor") or "sin conductor en la asignación")} · '
+                         f'<b style="font-family:monospace">{esc(x["matricula"])}</b></div>')
+            if len(sin) > 30:
+                P.append(f'<div style="padding-top:8px;font-size:13px;color:{S}">…y {len(sin) - 30} más</div>')
+        else:
+            P.append('<div style="font-size:15px;color:#34d399">Todas revisadas ✓</div>')
+        P.append('</div>')
 
     # Golpes
     danos = r.get("danos") or []
@@ -16355,8 +17354,10 @@ async def enviar_resumen_diario(dia: Optional[str] = None, solo_id: Optional[str
         # Una prueba dirigida a una persona NO va al grupo: probar que algo
         # llega no puede costarle un mensaje a todo el mundo.
         if not solo_id:
-            await _telegram_aviso(_texto_resumen_largo(r)
-                                  + "\n\n<i>Para: " + ", ".join(d["nombre"] for d in quienes) + "</i>")
+            # Por líneas enteras y dejando sitio al «Para:» (11-11-2026, P36): un día cargado que antes llegaba entero
+            # sigue llegando entero; si algo no cabe, se quita del final (las salidas sin auditoría).
+            para = "\n\n<i>Para: " + ", ".join(d["nombre"] for d in quienes) + "</i>"
+            await _telegram_aviso(_cortar_por_lineas(_texto_resumen_largo(r), 4000 - len(para)) + para)
 
         # Correo: la vía que no depende de nadie. Sin plantillas que aprobar,
         # sin restricciones de cuenta de Meta y sin coste por mensaje.
@@ -16407,6 +17408,8 @@ async def enviar_resumen_diario(dia: Optional[str] = None, solo_id: Optional[str
         # aviso resumen_diario: 'entrega'» en el registro del 03-11) y los demás centros se quedaban sin resumen.
         salida.append({**{k: r[k] for k in ("center", "fecha", "inspecciones", "checklist", "golpes")},
                        "incidencias": r["incidencias"], "danos": r["danos"],
+                       # Clave NUEVA (11-11-2026, portal_inicio-5); .get: None si no se pudo calcular.
+                       "salidas": r.get("salidas"),
                        "turnos": [{k: t[k] for k in ("turno", "hechas", "total")} for t in r["turnos"]],
                        "destinatarios": [d["nombre"] for d in quienes],
                        "correos": correos, "whatsapp": wasap})
@@ -16414,13 +17417,24 @@ async def enviar_resumen_diario(dia: Optional[str] = None, solo_id: Optional[str
 
 
 @api_router.post("/avisos/enviar-resumen-diario")
-async def trigger_resumen_diario(data: dict = Body(default={}), _=Depends(require_admin)):
+async def trigger_resumen_diario(data: dict = Body(default={}), user: dict = Depends(require_admin)):
     """Dispara el resumen del día ahora, para verlo sin esperar a la hora.
 
     Con `id` va SOLO a esa persona y sin copia al grupo: es la prueba de "¿le
     llega a Judyt?" sin molestar a nadie más.
     """
-    return {"enviados": await enviar_resumen_diario(data.get("date"), data.get("id"))}
+    enviados = await enviar_resumen_diario(data.get("date"), data.get("id"))
+    # Lo que se DEVUELVE a quien pulsa, solo de las naves que ve (11-11-2026, P19 de la revisión de la tanda 3): con
+    # las salidas sin auditoría, la respuesta decía quién llevó qué furgoneta en naves ajenas. El envío de arriba, a
+    # los destinatarios configurados, no cambia. Dueño, super-admin y quien no tiene naves asignadas: todas, como antes.
+    suyos = [e for e in enviados if _user_can_see_center(user, e.get("center") or "")]
+    # Cuántas naves se mandaron y no se le enseñan (11-11-2026, V12 de la tercera ronda): sin esto la pantalla decía
+    # «no se ha mandado nada» cuando sí se mandó a otras. Solo un número, sin nombres; y solo si hay alguna, así que
+    # para quien las ve todas la respuesta es la de siempre.
+    out = {"enviados": suyos}
+    if len(enviados) > len(suyos):
+        out["enviados_otras_naves"] = len(enviados) - len(suyos)
+    return out
 
 
 _HORARIOS_DEF = {"resumen_diario": 21, "turno_manana": 15, "turno_tarde": 22}
@@ -25014,7 +26028,7 @@ async def empleo_contratar(cand_id: str, user: dict = Depends(require_admin)):
                email=email or None, center=c.get("centro") or None,
                telefono_por="empleo", telefono_en=datetime.now(timezone.utc).isoformat(),
                notas=("Alta desde la oferta «%s»." % (c.get("oferta_titulo") or "")).strip())
-    doc = serialize_doc(d.model_dump())
+    doc = _doc_ficha_nueva(d)   # sin `historial_centros: null` (11-11-2026, F1)
     try:
         await db.drivers.insert_one(dict(doc))
     except DuplicateKeyError:
@@ -27595,9 +28609,22 @@ async def delete_vehicle(vehicle_id: str, user=Depends(require_admin)):
 
 @api_router.delete("/drivers/{driver_id}")
 async def delete_driver(driver_id: str, user=Depends(require_admin)):
+    # Es «dar de baja», no borrar: desde el 11-11-2026 (tanda 3, equipo-6) se apunta cuándo y quién, que la lista
+    # «Bajas» enseña. Si ya estaba de baja, no se pisa la fecha de entonces.
+    estado = await db.drivers.find_one({"id": driver_id}, {"_id": 0, "active": 1, "center": 1}) or {}
+    poner = {"active": False}
+    if estado.get("active") is not False:
+        # Dar de baja a una ACTIVA pide ver su nave (11-11-2026, tercera revisión, W1): reactivar solo pide ver la nave
+        # en la que queda (F4), y sin esto un usuario limitado se llevaba a su nave a quien trabaja en otra en dos pasos
+        # (baja y reactivar). Las sin nave salen en la lista de todos: esas, como siempre.
+        centro = str(estado.get("center") or "").strip()
+        if centro and not _user_can_see_center(user, centro):
+            raise HTTPException(403, "No tienes acceso a ese centro")
+        poner.update({"baja_en": datetime.now(timezone.utc).isoformat(),
+                      "baja_por": user.get("name") or user.get("sub") or ""})
     result = await db.drivers.update_one(
         {"id": driver_id},
-        {"$set": {"active": False}}
+        {"$set": poner}
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Conductor no encontrado")
@@ -27655,14 +28682,10 @@ async def put_vehicle(vehicle_id: str, data: dict, _=Depends(require_admin)):
 
 @api_router.put("/drivers/{driver_id}")
 async def put_driver(driver_id: str, data: dict, user=Depends(require_admin)):
-    data.pop("_id", None)
-    data.pop("id", None)
-    result = await db.drivers.update_one({"id": driver_id}, {"$set": data})
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Conductor no encontrado")
-    if data.get("active") is False:
-        await _limpiar_correo_personal_conductor(driver_id, user.get("org_id"))
-    return {"success": True}
+    # El alias hace LO MISMO que el PATCH (11-11-2026, segunda revisión, F8): los mismos campos permitidos, las mismas
+    # comprobaciones (nave, ID de reparto, carnet, reactivar) y la misma respuesta. Escribía en la ficha cualquier
+    # campo que le llegara, sin mirar nada. Ningún cliente lo usa (ni el panel, ni el portal, ni la app de Android).
+    return await update_driver(driver_id, data, user)
 
 
 # =========================
@@ -27685,22 +28708,37 @@ def _traslado_toca(traslado, hoy: str) -> bool:
     return bool(str(traslado.get("centro") or "").strip()) and len(desde) == 10 and desde <= hoy
 
 
-async def aplicar_traslados(hoy: Optional[str] = None) -> list:
-    """Aplica en la empresa actual los traslados cuyo día ya ha llegado."""
+async def aplicar_traslados(hoy: Optional[str] = None, fallos: Optional[list] = None) -> list:
+    """Aplica en la empresa actual los traslados cuyo día ya ha llegado.
+
+    `fallos` (opcional, 11-11-2026, tercera revisión, W3): si se pasa una lista, en ella se apunta cada ficha que no
+    se pudo aplicar ({id, nombre, error}), para que el bucle lo diga en su latido y «Cambio de centro» en su
+    respuesta. Lo que devuelve no cambia: los aplicados."""
     hoy = hoy or _dia_negocio()
     hechos = []
     async for d in db.drivers.find({"traslado": {"$exists": True}},
-                                   {"_id": 0, "id": 1, "name": 1, "center": 1, "traslado": 1}):
+                                   {"_id": 0, "id": 1, "name": 1, "center": 1, "traslado": 1,
+                                    "historial_centros": 1}):
         t = d.get("traslado")
         if not _traslado_toca(t, hoy):
             continue
         nota = {"de": d.get("center") or "", "a": t["centro"], "desde": t["desde"],
                 "aplicado_en": datetime.now(timezone.utc).isoformat(), "programado_por": t.get("por") or ""}
-        # Con el traslado en el filtro: si alguien lo ha cambiado o cancelado
-        # mientras tanto, no se aplica uno que ya no vale.
-        r = await db.drivers.update_one(
-            {"id": d["id"], "traslado.centro": t["centro"], "traslado.desde": t["desde"]},
-            {"$set": {"center": t["centro"]}, "$unset": {"traslado": ""}, "$push": {"historial_centros": nota}})
+        # UNA FICHA QUE FALLA NO PARA A LAS DEMÁS (11-11-2026, segunda revisión, F1): se apunta y se sigue; se vuelve a
+        # intentar en la próxima vuelta. Antes una sola dejaba sin aplicar las de detrás y las de todas las empresas.
+        try:
+            if "historial_centros" in d:
+                await _historial_centros_en_lista(d["id"], d.get("historial_centros"))
+            # Con el traslado en el filtro: si alguien lo ha cambiado o cancelado
+            # mientras tanto, no se aplica uno que ya no vale.
+            r = await db.drivers.update_one(
+                {"id": d["id"], "traslado.centro": t["centro"], "traslado.desde": t["desde"]},
+                {"$set": {"center": t["centro"]}, "$unset": {"traslado": ""}, "$push": {"historial_centros": nota}})
+        except Exception as e:                                   # noqa: BLE001
+            logger.warning("Traslado de %s (%s) sin aplicar: %s", d.get("name"), d.get("id"), e)
+            if fallos is not None:
+                fallos.append({"id": d.get("id"), "nombre": d.get("name") or "", "error": str(e)[:200]})
+            continue
         if r.modified_count:
             hechos.append({"id": d["id"], "nombre": d.get("name") or "", **nota})
             logger.info("Traslado aplicado: %s de %s a %s (%s)", d.get("name"), nota["de"], nota["a"], t["desde"])
@@ -27719,13 +28757,24 @@ async def _bucle_traslados():
                 {"_id": 0, "id": 1, "db_name": 1, "account_type": 1}).to_list(500)
             bases = list(dict.fromkeys([_DEFAULT_DB_NAME] + [_tenant_db_name(o) for o in orgs]))
             anterior = _current_db_name.get()
+            fallo = None
             try:
                 for base in bases:
                     set_current_org_db(base)
-                    total += len(await aplicar_traslados())
+                    # Una empresa que falla no deja sin traslados a las de detrás (11-11-2026, segunda revisión, F1).
+                    # Ni una ficha que falla queda callada: la primera va al latido (tercera revisión, W3).
+                    de_esta = []
+                    try:
+                        total += len(await aplicar_traslados(fallos=de_esta))
+                    except Exception as e:                       # noqa: BLE001
+                        logger.error("Bucle de traslados, base %s: %s", base, e)
+                        fallo = fallo or "%s: %s" % (base, e)
+                    if de_esta and not fallo:
+                        fallo = "%s: ficha %s: %s" % (base, de_esta[0]["id"], de_esta[0]["error"])
             finally:
                 set_current_org_db(anterior)
-            await _latido("traslados", aplicados=total, cada_min=TRASLADOS_CADA_MIN, error=None)
+            await _latido("traslados", aplicados=total, cada_min=TRASLADOS_CADA_MIN,
+                          error=str(fallo)[:200] if fallo else None)
         except Exception as e:                                   # noqa: BLE001
             logger.error("Bucle de traslados: %s", e)
             await _latido("traslados", error=str(e)[:200], cada_min=TRASLADOS_CADA_MIN)
@@ -27781,9 +28830,17 @@ async def programar_traslado(driver_id: str, data: dict = Body(...), user: dict 
     await db.drivers.update_one({"id": driver_id}, {"$set": {"traslado": traslado}})
     await _audit(user, "traslado_programado", {"driver_id": driver_id, "de": d.get("center"),
                                                "centro": centro, "desde": desde})
-    hechos = await aplicar_traslados() if desde <= _dia_negocio() else []
+    fallos = []
+    hechos = await aplicar_traslados(fallos=fallos) if desde <= _dia_negocio() else []
     aplicado = any(h["id"] == driver_id for h in hechos)
-    return {"traslado": None if aplicado else traslado, "aplicado": aplicado}
+    salida = {"traslado": None if aplicado else traslado, "aplicado": aplicado}
+    # Con fecha de hoy y sin poder aplicarlo ahora, se dice (11-11-2026, tercera revisión, W3). Queda programado (como
+    # antes: `aplicado` false y el traslado) y el bucle lo reintenta. `error` es un campo NUEVO: el panel viejo no lo lee
+    # y enseña «Pasa a … el …», que es lo cierto; nunca «Cambiado».
+    if any(f.get("id") == driver_id for f in fallos):
+        salida["error"] = ("Queda programado, pero no se ha podido aplicar ahora. Se vuelve a intentar solo cada "
+                           "cuarto de hora; si mañana sigue sin cambiar, avisa.")
+    return salida
 
 
 @api_router.delete("/drivers/{driver_id}/traslado")
@@ -28071,6 +29128,32 @@ def _grupos_por_centro(items: list, conocidos) -> list:
     return sorted(grupos.values(), key=lambda g: (g["clave"] == "", -g["filas"], g["clave"]))
 
 
+def _naves_que_ve(user: dict, naves) -> set:
+    """De las naves de la empresa, las que ve este usuario (11-11-2026, equipo-10): las importaciones solo ofrecen y
+    solo aceptan esas. En la cuenta dueña, para el super-admin y para quien no tiene naves asignadas son todas
+    (`_user_can_see_center`), o sea, lo de antes."""
+    return {c for c in (naves or ()) if _user_can_see_center(user, c)}
+
+
+def _destinos_que_ve(user: dict, destino: dict) -> None:
+    """403 si lo elegido en la vista previa manda filas a una nave que quien importa no ve (11-11-2026, equipo-10).
+    En la cuenta dueña, para el super-admin y para quien no tiene naves asignadas no rechaza nada, como antes."""
+    ajenos = sorted({c for c in (destino or {}).values() if c and not _user_can_see_center(user, c)})
+    if ajenos:
+        raise HTTPException(403, "No tienes acceso a estos centros: %s." % ", ".join(ajenos))
+
+
+def _centros_finales_que_ve(user: dict, centros) -> None:
+    """403 si alguna fila que se va a ESCRIBIR acaba en una nave que quien importa no ve (11-11-2026, corrección P33).
+    Mirar solo el `mapa` no bastaba: sin vista previa el centro sale de la columna de cada fila, o del `center` /
+    `center_filter` del formulario. Se llama con el centro final de cada fila ANTES de escribir nada. Una fila sin
+    centro no es «otra nave». En la cuenta dueña, para el super-admin y para quien no tiene naves no rechaza nada."""
+    ajenos = sorted({str(c).strip() for c in (centros or ()) if c and str(c).strip()
+                     and not _user_can_see_center(user, str(c).strip())})
+    if ajenos:
+        raise HTTPException(403, "No tienes acceso a estos centros: %s." % ", ".join(ajenos))
+
+
 def _eleccion_centros(centros, mapa, conocidos):
     """(elegidos, destino) de lo que la persona marco en la vista previa.
 
@@ -28183,10 +29266,12 @@ async def _veh_contexto():
 @api_router.post("/import/vehicles/previsualizar")
 async def import_vehicles_previsualizar(file: UploadFile = File(...),
                                         columnas: Optional[str] = Form(None),
-                                        _=Depends(require_admin)):
+                                        user: dict = Depends(require_admin)):
     """Que trae el fichero, SIN importar nada."""
     headers, cols, filas_crudas = await _veh_leer_fichero(file, columnas, exigir_matricula=False)
     conocidos, flota = await _veh_contexto()
+    # Solo las naves de quien importa (11-11-2026, equipo-10); en la cuenta dueña, todas como antes.
+    conocidos = _naves_que_ve(user, conocidos)
     cabeceras = [{"indice": i, "nombre": h,
                   "campo": next((c for c, j in cols.items() if j == i), ""),
                   "ejemplo": next((str(r[i]) for r in filas_crudas
@@ -28241,11 +29326,12 @@ async def import_vehicles(
     headers, cols, filas_crudas = await _veh_leer_fichero(file, columnas)
     conocidos, flota = await _veh_contexto()
     elegidos, destino = _eleccion_centros(centros, mapa, conocidos)
+    _destinos_que_ve(user, destino)
     filtro = _centro_norm(center_filter, conocidos) if center_filter and center_filter != "Todos" else ""
     unico = next(iter(conocidos)) if len(conocidos) == 1 else ""
 
     imported = updated = sin_cambios = skipped = no_estaban = fuera_seleccion = 0
-    errors, vistas = [], set()
+    errors, vistas, pendientes = [], set(), []
     ahora = datetime.now(timezone.utc).isoformat()
     for r in filas_crudas:
         f = _veh_fila(cols, r)
@@ -28265,11 +29351,23 @@ async def import_vehicles(
         if elegidos is None and filtro and centro != filtro:
             fuera_seleccion += 1
             continue
+        # La que YA está en una nave que quien importa no ve no se toca (11-11-2026, tercera ronda V5): se salta y
+        # cuenta como «de otros centros sin tocar». Sin esto, un usuario de DGA1 cambiaba km, ITV o renting de las de
+        # OGA5, o se las llevaba a la suya con el mapa. En la cuenta dueña, para el super-admin y para quien no tiene
+        # naves asignadas `_user_can_see_center` da siempre True: lo de antes.
+        if flota.get(k) and not _user_can_see_center(user, flota[k].get("center") or ""):
+            fuera_seleccion += 1
+            continue
         campos = dict(f["campos"])
         if centro:
             campos["center"] = centro
         elif f["centro_texto"]:
             campos["center"] = f["centro_texto"]
+        pendientes.append((f, k, campos))
+    # Primero se decide qué se escribe y después se escribe (11-11-2026, corrección P33): así se mira el centro FINAL
+    # de cada fila que va a tocar la base (dar de alta, o una que ya está y cambia de nave) ANTES de escribir nada.
+    _centros_finales_que_ve(user, [c.get("center") for _f, k, c in pendientes if flota.get(k) or crear])
+    for f, k, campos in pendientes:
         try:
             existing = flota.get(k)
             if existing:
@@ -28870,9 +29968,11 @@ async def stats_hoy(center: Optional[str] = None, user: dict = Depends(require_a
     vids = list({s["vehicle_id"] for _, s in slots})
     revision = {}
     if vids:
+        # El día de Madrid y no la fecha UTC de la marca (11-11-2026, portal_inicio-5): con `^{dia}`, lo revisado
+        # entre las 00:00 y la 01:00 (02:00 en verano) no contaba como de hoy. Ver _rango_dia_negocio.
         async for i in db.inspections.find(
                 {"deleted": {"$ne": True}, "vehicle_id": {"$in": vids},
-                 "created_at": {"$regex": f"^{dia}"}},
+                 "created_at": _rango_dia_negocio(dia)},
                 {"_id": 0, "vehicle_id": 1, "analysis.severity": 1}):
             sev = str((i.get("analysis") or {}).get("severity") or "").lower() or None
             prev = revision.get(i["vehicle_id"], "sin_revisar")
@@ -28902,7 +30002,7 @@ async def stats_hoy(center: Optional[str] = None, user: dict = Depends(require_a
     if ids_flota:
         hechas = len(await db.inspections.distinct(
             "vehicle_id", {"deleted": {"$ne": True}, "vehicle_id": {"$in": ids_flota},
-                           "created_at": {"$regex": f"^{dia}"}}))
+                           "created_at": _rango_dia_negocio(dia)}))      # día de Madrid (11-11-2026)
 
     # ── Checklist de turno, sumado por turno en las sedes que se ven ──
     if center and center != "Todos":
@@ -28943,7 +30043,7 @@ async def stats_hoy(center: Optional[str] = None, user: dict = Depends(require_a
         # Los golpes no llevan la nave en la lista: se cuentan aquí, dentro del bucle por sede.
         por_sede[sede]["golpes"] = len(de_la_sede)
         golpes.extend(de_la_sede)
-    qi = {**fv, "created_at": {"$regex": f"^{dia}"}}
+    qi = {**fv, "created_at": _rango_dia_negocio(dia)}      # día de Madrid (11-11-2026)
     incidencias = {
         "nuevas": await db.incidents.count_documents(qi),
         "graves": await db.incidents.count_documents(
@@ -28990,7 +30090,9 @@ def _centros_que_ve(user: dict, centros: list) -> list:
     ac = [str(p).upper() for p in (user.get("allowed_centers") or []) if p]
     if not ac:
         return [c for c in centros if _user_can_see_center(user, c)]
-    return [c for c in centros if any(p in c.upper() or c.upper() in p for p in ac)]
+    # La MISMA regla que _user_can_see_center (11-11-2026, revisión V11): con los trozos en las dos direcciones, a quien
+    # solo tiene NORTE2 le salía aquí la fila de NORTE, que el resto del panel ya le niega.
+    return [c for c in centros if any(_centro_casa_con_permitido(str(c).upper(), p) for p in ac)]
 
 
 @api_router.get("/stats/centros-hoy")
@@ -29205,7 +30307,14 @@ async def get_daily_assignments(
         raise HTTPException(400, "Formato de fecha inválido (YYYY-MM-DD)")
     query = {"date": date}
     if center and center != "Todos":
+        # La nave de quien pide (11-11-2026, P2): alguien limitado a OGA5 leía la Asignación de DGA1. Con
+        # `_user_can_see_center` y no con `_filtro_centro`, para no cambiar la consulta exacta de siempre (ni dar 400
+        # a un nombre de nave con otros caracteres). Dueño, super-admin y quien no tiene naves asignadas: igual.
+        if not _user_can_see_center(user, center):
+            raise HTTPException(403, "No tienes acceso a ese centro")
         query["center"] = center
+    else:
+        query.update(_filtro_centro(user))      # «Todos» o sin centro: solo las naves que ve ({} si las ve todas)
     docs = await db.daily_assignments.find(query, {"_id": 0}).to_list(100)
     # Enrich: check if each assigned vehicle has an inspection today
     for doc in docs:
@@ -29236,6 +30345,21 @@ async def upsert_daily_assignment(request: Request, user: dict = Depends(require
     center = _texto_cuerpo(data.get("center"), 30)
     if not center:
         raise HTTPException(status_code=400, detail="Centro requerido")
+    # Alguien limitado a una nave pisaba la Asignación de otra (11-11-2026, P2). Dueño, super-admin, quien no tiene
+    # naves asignadas y el asistente (`_cia_asignar`, que no pasa por aquí): igual que siempre.
+    if not _user_can_see_center(user, center):
+        raise HTTPException(status_code=403, detail="No tienes acceso a ese centro")
+    # El nombre de nave inventado (11-11-2026, revisión V2): «OGA5 DGA1» u «OGA5/DGA1» pasaban el permiso de quien solo
+    # ve OGA5 (lo lleva dentro), y el portal y el resumen de DGA1, que buscan la nave por trozo, la leían como suya.
+    # Para un usuario LIMITADO, el centro tiene que ser TAL CUAL (recortado y sin mirar mayúsculas) una nave de la
+    # empresa (las de su ficha y los códigos limpios de las fichas) o una de las suyas, que es lo que el selector le
+    # ofrece cuando la empresa no las lista; que la vea ya lo dice la línea de arriba. Dueño, super-admin, quien no
+    # tiene naves asignadas y la empresa sin ninguna lista de naves: igual que siempre.
+    suyas = {str(p).strip().upper() for p in (user.get("allowed_centers") or []) if str(p or "").strip()}
+    if suyas and not user.get("sa") and user.get("account_type") != "owner":
+        empresa = set(await _centros_de_la_empresa()) | await _centros_conocidos()
+        if empresa and center.strip().upper() not in (empresa | suyas):
+            raise HTTPException(status_code=403, detail="No tienes acceso a ese centro")
 
     # Limpia los slots: guarda solo los campos núcleo (descarta has_inspection,
     # inspection_severity y cualquier campo calculado que venga del GET).
@@ -29255,24 +30379,38 @@ async def upsert_daily_assignment(request: Request, user: dict = Depends(require
         })
 
     now = datetime.now(timezone.utc).isoformat()
+    # «OTRO GUARDÓ MIENTRAS EDITABAS» (11-11-2026, dia-6). Con dos personas en la misma nave y día, la última que
+    # guardaba borraba sin aviso lo de la otra. La pantalla manda ahora `version` (el updated_at con el que cargó la
+    # hoja; '' si el día venía vacío) y, si no coincide con lo guardado, 409 con quién y cuándo; con `forzar`, se
+    # guarda encima. SIN `version` (la web de antes, en caché), como siempre: gana el último.
+    version = data.get("version")
+    version = str(version) if isinstance(version, str) else None
+    forzar = data.get("forzar") is True
+    por = _texto_cuerpo((user or {}).get("name"), 120)
     try:
         existing = await db.daily_assignments.find_one(
             {"date": date, "center": center}, {"_id": 0}
         )
+        if existing and version is not None and not forzar and (existing.get("updated_at") or "") != version:
+            raise HTTPException(status_code=409, detail={
+                "codigo": "otro_guardo", "por": existing.get("updated_by") or "",
+                "updated_at": existing.get("updated_at") or ""})
         if existing:
             await db.daily_assignments.update_one(
                 {"date": date, "center": center},
-                {"$set": {"slots": slots, "updated_at": now}}
+                {"$set": {"slots": slots, "updated_at": now, "updated_by": por}}
             )
-            return {"success": True, "action": "updated", "id": existing.get("id")}
+            return {"success": True, "action": "updated", "id": existing.get("id"), "updated_at": now}
         else:
             doc_id = str(uuid.uuid4())
             doc = {
                 "id": doc_id, "date": date, "center": center,
-                "slots": slots, "created_at": now, "updated_at": now
+                "slots": slots, "created_at": now, "updated_at": now, "updated_by": por
             }
             await db.daily_assignments.insert_one(doc)
-            return {"success": True, "action": "created", "id": doc_id}
+            return {"success": True, "action": "created", "id": doc_id, "updated_at": now}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Cuadrante: error guardando en BD: {e}")
         raise HTTPException(status_code=500, detail=f"Error BD: {str(e)}")
@@ -33751,6 +34889,82 @@ async def list_shift_requests(center: Optional[str] = None, status: Optional[str
     return {"requests": reqs}
 
 
+@api_router.get("/shift-requests/cobertura")
+async def cobertura_peticiones(center: str = "", desde: Optional[str] = None, hasta: Optional[str] = None,
+                               admin: dict = Depends(require_admin)):
+    """Cómo queda la nave cada día si se concede lo que está pendiente (11-11-2026, cuadrante-2). Solo lectura.
+
+    Al aprobar desde la bandeja solo se veían las fechas: nada decía si ese día la nave se quedaba corta. La cuenta es
+    la de Refuerzos (_maximas_y_ruta: máxima, en ruta y los que bajan de otros centros), que es la fila «Diferencia»
+    del Cuadrante; el colchón, el del Cuadrante, solo para el color. `trabaja` son las celdas con turno de ruta de
+    quien tiene algo pendiente: con eso la pantalla sabe si darle el libre resta uno (o si ya libraba) y si el extra
+    suma uno. Ruta nueva: la web vieja no la llama y nada de lo que ya existe cambia."""
+    center = _texto_cuerpo(center, 60).strip()
+    if not center or center.lower() in ("todos", "all"):
+        raise HTTPException(400, "Elige un centro: las máximas son por nave")
+    if not _user_can_see_center(admin, center):
+        raise HTTPException(403, "Ese centro no es tuyo")
+    hoy = _dia_negocio()
+    ini = _cua_fecha(desde, "La fecha de inicio") if desde else hoy
+    fin = hasta or (date_cls.fromisoformat(ini) + timedelta(days=30)).isoformat()
+    desde, hasta = _cua_rango(ini, fin, tope=62)
+    pat = {"$regex": re.escape(center[:4]), "$options": "i"}
+    maximas = await _maximas_y_ruta(center, desde, hasta)
+    cfg = await db[_CUA_CONFIG].find_one({"center": center}, {"_id": 0}) \
+        or await db[_CUA_CONFIG].find_one({"center": pat}, {"_id": 0}) or {}
+    try:
+        colchon = int(cfg.get("colchon", 2))
+    except (TypeError, ValueError):
+        colchon = 2
+    exacto = center.lower()
+    colchon_dia: dict = {}
+    async for a in db[_CUA_AJUSTES].find({"tipo": "colchon_dia", "center": pat,
+                                          "fecha": {"$gte": desde, "$lte": hasta}}, {"_id": 0}):
+        f = str(a.get("fecha") or "")
+        es_exacto = str(a.get("center") or "").strip().lower() == exacto
+        if f not in colchon_dia or (es_exacto and not colchon_dia[f][0]):
+            try:
+                colchon_dia[f] = (es_exacto, int(a.get("colchon")))
+            except (TypeError, ValueError):
+                continue
+    concedidos: dict = {}
+    pend_libre: dict = {}
+    pend_extra: dict = {}
+    con_pendientes: set = set()
+    async for r in db.shift_requests.find(
+            {"center": pat, "date": {"$gte": desde, "$lte": hasta}, "status": {"$in": ["pendiente", "aprobado"]}},
+            {"_id": 0, "driver_id": 1, "date": 1, "type": 1, "status": 1}):
+        f = r.get("date")
+        if r.get("status") == "aprobado":
+            # Los días LIBRES ya concedidos ese día en esta nave (un extra concedido ya está en «en ruta»).
+            if r.get("type") == "libre":
+                concedidos[f] = concedidos.get(f, 0) + 1
+            continue
+        cuenta = pend_extra if r.get("type") == "extra" else pend_libre
+        cuenta[f] = cuenta.get(f, 0) + 1
+        if r.get("driver_id"):
+            con_pendientes.add(f"{r['driver_id']}|{f}")
+    # Solo las celdas pedidas: de cada una, si hoy tiene turno de ruta en esta nave.
+    trabaja = set()
+    if con_pendientes:
+        ids = sorted({k.split("|")[0] for k in con_pendientes})
+        async for s in db.shifts.find({"driver_id": {"$in": ids}, "center": pat,
+                                       "date": {"$gte": desde, "$lte": hasta}, **_FILTRO_RUTA},
+                                      {"_id": 0, "driver_id": 1, "date": 1}):
+            k = f"{s['driver_id']}|{s['date']}"
+            if k in con_pendientes:
+                trabaja.add(k)
+    dias = {}
+    for f in sorted(set(maximas) | set(pend_libre) | set(pend_extra)):
+        m = maximas.get(f)
+        dias[f] = {"maximo": m["maximo"] if m else None, "en_ruta": m["en_ruta"] if m else None,
+                   "bajan": m["bajan"] if m else 0,
+                   "colchon": colchon_dia[f][1] if f in colchon_dia else colchon,
+                   "concedidos": concedidos.get(f, 0),
+                   "pendientes_libre": pend_libre.get(f, 0), "pendientes_extra": pend_extra.get(f, 0)}
+    return {"center": center, "desde": desde, "hasta": hasta, "dias": dias, "trabaja": sorted(trabaja)}
+
+
 @api_router.post("/shift-requests/{req_id}/resolve")
 async def resolve_shift_request(req_id: str, data: dict = Body(...),
                                 admin: dict = Depends(require_admin)):
@@ -37426,8 +38640,134 @@ _ONB_SIN_CENTRO = {"$or": [{"centro": {"$in": ["", None]}}, {"centro": {"$exists
                            {"centro": {"$regex": r"^\s*$"}}]}
 
 
+def _onb_dni(v) -> str:
+    return re.sub(r"[^A-Z0-9]", "", str(v or "").upper())
+
+
+def _onb_tel9(v) -> str:
+    d = "".join(c for c in str(v or "") if c.isdigit())
+    return d[-9:] if len(d) >= 9 else ""
+
+
+async def _onb_casar_fichas():
+    """Con UNA consulta a las fichas vivas, una función que dice qué ficha de conductor es la de una persona de
+    Incorporaciones (11-11-2026, tanda 3, equipo-11): la que ya se enlazó (`driver_id`), o por DNI (solo letras y
+    cifras), correo (sin mayúsculas) o teléfono (los últimos 9 dígitos de `phone` o `movil_personal`). Por teléfono es
+    solo una pista (un móvil de empresa cambia de mano): nunca se enlaza sola. Devuelve {id, nombre, centro, por} o
+    None. Las fusionadas y las borradas no cuentan.
+
+    LAS DE BAJA TAMBIÉN (11-11-2026, segunda revisión, F2): quien vuelve tras una baja casa con su ficha de siempre
+    por enlazada, DNI o correo (nunca por teléfono), con `baja: True`; sin esto se le daba de alta otra ficha y su
+    historial quedaba partido en dos. Una viva gana a una de baja; una de baja, a la pista por teléfono."""
+    campos = {"_id": 0, "id": 1, "name": 1, "center": 1, "dni": 1, "email": 1, "phone": 1, "movil_personal": 1}
+
+    def _indices(fichas):
+        por_id, por_dni, por_correo, por_tel = {}, {}, {}, {}
+        for d in fichas:
+            if not d.get("id"):
+                continue
+            por_id[d["id"]] = d
+            if _onb_dni(d.get("dni")):
+                por_dni.setdefault(_onb_dni(d["dni"]), d)
+            if str(d.get("email") or "").strip():
+                por_correo.setdefault(str(d["email"]).strip().lower(), d)
+            for t in (d.get("phone"), d.get("movil_personal")):
+                if _onb_tel9(t):
+                    por_tel.setdefault(_onb_tel9(t), d)
+        return por_id, por_dni, por_correo, por_tel
+
+    vivas = _indices(await db.drivers.find(_FICHA_VIVA, campos).to_list(5000))
+    bajas = _indices(await db.drivers.find(_FICHA_DE_BAJA, campos).to_list(5000))
+
+    def _fuerte(indices, p):
+        por_id, por_dni, por_correo, _ = indices
+        for por, d in (("enlazada", por_id.get(str(p.get("driver_id") or ""))),
+                       ("dni", por_dni.get(_onb_dni(p.get("dni"))) if _onb_dni(p.get("dni")) else None),
+                       ("correo", por_correo.get(str(p.get("email") or "").strip().lower())
+                        if str(p.get("email") or "").strip() else None)):
+            if d:
+                return por, d
+        return None, None
+
+    def casar(p: dict):
+        por, d = _fuerte(vivas, p)
+        baja = False
+        if not d:
+            por, d = _fuerte(bajas, p)
+            baja = bool(d)
+        if not d and _onb_tel9(p.get("telefono")):
+            por, d = "telefono", vivas[3].get(_onb_tel9(p.get("telefono")))
+        if not d:
+            return None
+        r = {"id": d["id"], "nombre": d.get("name") or "", "centro": d.get("center") or "", "por": por}
+        if baja:
+            r["baja"] = True
+        return r
+    return casar
+
+
+def _onb_ficha_vista(user: dict, casada):
+    """Lo que puede saber quien mira de la ficha casada (11-11-2026, segunda revisión, F10): si no ve su nave, ni el
+    id ni el nombre (GET /drivers se la esconde): solo por qué casa y su nave; de la pista por teléfono, nada."""
+    if not casada or _user_can_see_center(user or {}, casada.get("centro") or ""):
+        return casada
+    if casada.get("por") == "telefono":
+        return None
+    return {k: casada[k] for k in ("por", "centro", "baja") if k in casada}
+
+
+@api_router.post("/incorporaciones/personas/{pid}/ficha-conductor")
+async def onb_ficha_conductor(pid: str, body: dict = Body(default={}), user: dict = Depends(require_admin)):
+    """De Incorporaciones a ficha de conductor sin volver a teclear nada (11-11-2026, tanda 3, equipo-11).
+
+    Si la persona ya casa con una ficha viva (enlazada, por DNI o por correo), se enlaza y se dice. Si no, se da de alta
+    con el MISMO create_driver de Conductores (controla correo e ID repetidos y ofrece reactivar bajas: sus 409 salen
+    tal cual). El correo de Incorporaciones es el de la cuenta que trae el listado de la ETT, que puede no ser el suyo:
+    solo se pone con `usar_correo: true` (y con él se crea su cuenta con la contraseña inicial, si la hay)."""
+    p = await db[_ONB_COL].find_one({"id": pid}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "No existe esa persona")
+    casada = (await _onb_casar_fichas())(p)
+    # `nueva: true` solo lo manda el panel nuevo tras su segundo paso («es OTRA persona»): es la señal de ceder el
+    # correo (11-11-2026, revisión P13). Esta ruta es nueva: ningún panel viejo la llama.
+    otra = body.get("nueva") is True
+    ve = bool(casada) and _user_can_see_center(user, casada.get("centro") or "")
+    # QUIEN VUELVE TRAS UNA BAJA (11-11-2026, segunda revisión, F2): el mismo 409 de reactivar que da create_driver (el
+    # panel ya sabe tratarlo); con `nueva: true` («es otra persona»), se crea la ficha como antes.
+    if casada and casada["por"] != "telefono" and casada.get("baja") and not otra:
+        nombre_baja = casada["nombre"] if ve else (_texto_cuerpo(p.get("nombre"), 80) or "")
+        raise HTTPException(409, {
+            "mensaje": "%s ya tiene una ficha dada de baja (%s). Reactívala para conservar su historial." % (
+                nombre_baja or "Esta persona",
+                {"enlazada": "la suya", "dni": "mismo DNI", "correo": "mismo correo"}.get(casada["por"], casada["por"])),
+            "reactivar_id": casada["id"], "nombre": nombre_baja})
+    if casada and casada["por"] != "telefono" and not casada.get("baja"):
+        await db[_ONB_COL].update_one({"id": pid}, {"$set": {"driver_id": casada["id"]}})
+        # También deja rastro cuando solo enlaza (11-11-2026, segunda revisión, F13).
+        await _audit(user, "onb_ficha_conductor", {"persona": pid, "driver_id": casada["id"], "por": casada["por"]})
+        # Sin ver su nave, ni el id ni el nombre (F10).
+        ficha = ({"id": casada["id"], "name": casada["nombre"], "center": casada["centro"]} if ve
+                 else {"center": casada["centro"]})
+        return {"ya_tenia": True, "ficha": ficha, "por": casada["por"]}
+    centro = _centro_norm(_texto_cuerpo(body.get("centro"), 20)) or str(p.get("centro") or "").strip()
+    if centro and not _user_can_see_center(user, centro):
+        raise HTTPException(403, "No tienes acceso a ese centro")
+    nombre = _texto_cuerpo(p.get("nombre"), 80)
+    if not nombre:
+        raise HTTPException(400, "Esa persona no tiene nombre guardado")
+    correo = _texto_cuerpo(p.get("email"), 80) if body.get("usar_correo") is True else ""
+    alta = DriverCreate(name=nombre, phone=_texto_cuerpo(p.get("telefono"), 30) or None,
+                        dni=_texto_cuerpo(p.get("dni"), 20) or None, center=centro or None, email=correo or None)
+    creada = await create_driver(alta, nueva=otra, admin=user, otra_persona=otra)
+    await db[_ONB_COL].update_one({"id": pid}, {"$set": {
+        "driver_id": creada.id, "ficha_en": datetime.now(timezone.utc).isoformat(),
+        "ficha_por": user.get("name") or user.get("sub") or ""}})
+    await _audit(user, "onb_ficha_conductor", {"persona": pid, "driver_id": creada.id})
+    return {"ya_tenia": False, "ficha": {"id": creada.id, "name": creada.name, "center": creada.center or ""}}
+
+
 @api_router.get("/incorporaciones/personas")
-async def onb_listar(center: Optional[str] = None, _=Depends(require_admin), sin_centro: bool = False):
+async def onb_listar(center: Optional[str] = None, user=Depends(require_admin), sin_centro: bool = False):
     # `sin_centro` (11-11-2026, G3/G6, opcional): SOLO quien no tiene centro, para el bloque «Sin centro» de la pantalla
     # nueva, que se lo pone. Sin el, lo de siempre: con un centro, solo la gente de ese centro.
     q = {"archivada": {"$ne": True}, **(_ONB_SIN_CENTRO if sin_centro else _onb_filtro_centro(center))}
@@ -37468,6 +38808,17 @@ async def onb_listar(center: Optional[str] = None, _=Depends(require_admin), sin
                 cuenta[m] = cuenta.get(m, 0) + 1
     filas.sort(key=lambda f: (-(f.get("dias_esperando") or 0),
                               f.get("nombre") or ""))
+    # SU FICHA DE CONDUCTOR, SI YA LA TIENE (11-11-2026, tanda 3, equipo-11): campo NUEVO y aparte. No se toca el
+    # camino ni `siguiente`: la web vieja agrupa por ellos y mandaría a esta gente a «papeles». Si falla, sin ficha.
+    try:
+        casar = await _onb_casar_fichas()
+        for f in filas:
+            # Sin ver la nave de la ficha casada, solo por qué casa y su nave (11-11-2026, segunda revisión, F10).
+            f["ficha"] = _onb_ficha_vista(user, casar(f))
+    except Exception as e:                                       # noqa: BLE001
+        logger.warning("Incorporaciones: no se pudo mirar quién tiene ficha de conductor: %s", e)
+        for f in filas:
+            f["ficha"] = None
     # Lo que hay que hacer HOY, contado aparte para que no haya que buscarlo.
     urgentes = [f for f in filas
                 if f.get("columna") != "completo"
@@ -38720,7 +40071,8 @@ async def plantilla_desde_asignacion(center: str, date: Optional[str] = None,
 _HORA_RE = re.compile(r"^([01]?\d|2[0-3]):[0-5]\d$")
 
 
-def _plantilla_validar_filas(rows: list, conductores: list, matriculas: dict, asignados: dict) -> list:
+def _plantilla_validar_filas(rows: list, conductores: list, matriculas: dict, asignados: dict,
+                             itv: dict = None, dia: str = "") -> list:
     """Que cada fila de la plantilla cuadre con lo que la empresa YA sabe.
 
     La plantilla sale de leer capturas o texto con la IA, y de vez en cuando se
@@ -38728,7 +40080,12 @@ def _plantilla_validar_filas(rows: list, conductores: list, matriculas: dict, as
     existe. Eso se CAZA antes de que salga la hoja, comparando con:
       · los conductores de la empresa (nombre normalizado y por palabras),
       · los vehículos de la flota (matrícula normalizada),
-      · la Asignación del día, si está hecha: {conductor: matrícula}.
+      · la Asignación del día, si está hecha: {conductor: matrícula},
+      · la ITV de cada furgoneta (11-11-2026, dia-5): `itv` es {matrícula
+        normalizada: 'AAAA-MM-DD'} y `dia` el día DE LA HOJA (no hoy: una hoja
+        hecha por la tarde para mañana avisa de la ITV que caduca esta noche).
+        Sin los dos, como antes. Sin fecha de ITV no se avisa: en la flota hay
+        muchas sin apuntar y llenaría de ruido todas las filas.
     Devuelve avisos con sugerencia; no cambia nada solo. Pura, sin base de
     datos: `test_plantilla_validar.py`.
     """
@@ -38794,6 +40151,13 @@ def _plantilla_validar_filas(rows: list, conductores: list, matriculas: dict, as
                                "texto": "Ya va en la fila %d" % (vistos_f[furgo] + 1), "sugerencia": None})
             else:
                 vistos_f[furgo] = i
+            # La ITV caducada ANTES del día de la hoja (11-11-2026, dia-5). Es un
+            # aviso, no un bloqueo: si ya la pasó, se cambia la fecha en su ficha.
+            caduca = str((itv or {}).get(furgo) or "")
+            if dia and re.match(r"^\d{4}-\d{2}-\d{2}$", caduca) and caduca < dia:
+                avisos.append({"fila": i, "campo": "furgo", "tipo": "itv_caducada",
+                               "texto": "ITV caducada desde el %s/%s/%s" % (caduca[8:10], caduca[5:7], caduca[:4]),
+                               "sugerencia": None})
         # 4. Horas: con forma de hora, y llegada y carga antes de la salida.
         if h_salida:
             if not _HORA_RE.match(h_salida):
@@ -38828,6 +40192,21 @@ def _plantilla_validar_filas(rows: list, conductores: list, matriculas: dict, as
     return avisos
 
 
+def _plantilla_dia_iso(valor) -> Optional[str]:
+    """Una fecha de la hoja («11/11/2026») o ISO («2026-11-11», también con hora) en AAAA-MM-DD; None si no se
+    entiende. Para la ITV y el cuadrante en la Plantilla (11-11-2026, dia-5 y dia-4)."""
+    hoja = _fecha_hoja_iso(valor)
+    if hoja:
+        return hoja
+    s = str(valor or "").strip()[:10]
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", s):
+        return None
+    try:
+        return date_cls.fromisoformat(s).isoformat()
+    except ValueError:
+        return None
+
+
 @api_router.post("/tools/plantilla-validar")
 async def plantilla_validar(data: dict = Body(...), user: dict = Depends(require_admin)):
     """Avisos de la plantilla contra la empresa y la Asignación del día, con sugerencia."""
@@ -38844,22 +40223,195 @@ async def plantilla_validar(data: dict = Body(...), user: dict = Depends(require
     # hacía sugerir a otra persona con un apellido en común.
     conductores = await db.drivers.find(
         {"active": {"$ne": False}, "status": {"$nin": ["deleted", "fusionada"]},
-         "merged_into": {"$exists": False}}, {"_id": 0, "name": 1}).to_list(5000)
+         "merged_into": {"$exists": False}}, {"_id": 0, "id": 1, "name": 1, "center": 1}).to_list(5000)
     matriculas = {}
+    itv: dict = {}
     async for v in db.vehicles.find({"status": {"$nin": ["deleted", "baja"]}, **fc},
-                                    {"_id": 0, "license_plate": 1}):
+                                    {"_id": 0, "license_plate": 1, "itv_date": 1}):
         n = _matricula_norm(v.get("license_plate"))
         if n:
             matriculas[n] = v.get("license_plate")
+            caduca = _plantilla_dia_iso(v.get("itv_date"))
+            if caduca:
+                itv[n] = caduca
+    # El día de la hoja para la ITV (11-11-2026, dia-5); sin fecha que se entienda, hoy.
+    dia_hoja = _plantilla_dia_iso(fecha)
     asignados: dict = {}
     if center and center != "Todos" and re.match(r"^\d{4}-\d{2}-\d{2}$", dia or ""):
         doc = await db.daily_assignments.find_one({"date": dia, **fc}, {"_id": 0, "slots": 1})
         for s in (doc or {}).get("slots") or []:
             if isinstance(s, dict) and (s.get("driver_name") or "").strip() and s.get("vehicle_plate"):
                 asignados[str(s["driver_name"]).strip()] = str(s["vehicle_plate"])
-    avisos = _plantilla_validar_filas(rows, conductores, matriculas, asignados)
+    avisos = _plantilla_validar_filas(rows, conductores, matriculas, asignados,
+                                      itv=itv, dia=dia_hoja or _hoy_madrid())
+    # El cuadrante y las suspensiones de ese día (11-11-2026, dia-4): solo con un centro y una fecha de hoja que se
+    # entienda. Solo avisos: no se escribe nada.
+    faltan, con_cuadrante = [], False
+    if center and center != "Todos" and dia_hoja:
+        nuevos, faltan, con_cuadrante = await _plantilla_cuadrante(rows, conductores, center, dia_hoja, user)
+        if nuevos:
+            # Junto a los de su fila (el orden es estable: los de siempre no se mueven entre sí).
+            avisos = sorted(avisos + nuevos, key=lambda a: a["fila"])
     return {"avisos": avisos, "con_asignacion": bool(asignados), "dia": dia,
-            "resumen": {"filas": len(rows), "con_aviso": len({a["fila"] for a in avisos})}}
+            "resumen": {"filas": len(rows), "con_aviso": len({a["fila"] for a in avisos})},
+            "faltan": faltan, "con_cuadrante": con_cuadrante}
+
+
+def _plantilla_turno_libre(turno: dict) -> Tuple[bool, str]:
+    """¿Ese turno es un día LIBRE (vacaciones, libre, baja, no disponible…)? Y su etiqueta. BKP, Site y Ride along
+    trabajan: un backup que sale en la hoja es que lo han llamado. Un turno viejo sin código manda por su tipo."""
+    cod = str((turno or {}).get("cod") or "").strip().upper()
+    info = CODIGOS_CUADRANTE_INFO.get(cod)
+    if info:
+        return info[0] == "libre", info[1]
+    if (turno or {}).get("type") == "libre":
+        return True, cod or "Libre"
+    return False, ""
+
+
+def _plantilla_avisos_cuadrante(casados: dict, turno_de: dict, susp_de: dict, dia: str) -> list:
+    """Avisos por fila de la Plantilla contra el cuadrante (11-11-2026, dia-4). Pura.
+
+    casados: {fila: driver_id} (solo los que casan sin duda); turno_de: {driver_id: turno de ese día, de cualquier
+    nave}; susp_de: {"driver_id|dia": suspensión}. Suspendido manda (sin el motivo: la hoja la ven más personas); si
+    no, solo un turno LIBRE explícito avisa. Sin turno ese día no se dice nada: el cuadrante puede no estar cargado.
+    """
+    avisos = []
+    for i in sorted(casados):
+        did = casados[i]
+        s = susp_de.get(f"{did}|{dia}")
+        if s:
+            d, h = str(s.get("desde") or dia), str(s.get("hasta") or dia)
+            avisos.append({"fila": i, "campo": "conductor", "tipo": "suspendido",
+                           "texto": "Suspendido del %s/%s al %s/%s" % (d[8:10], d[5:7], h[8:10], h[5:7]),
+                           "sugerencia": None})
+            continue
+        libre, etiqueta = _plantilla_turno_libre(turno_de.get(did))
+        if libre:
+            avisos.append({"fila": i, "campo": "conductor", "tipo": "no_tiene_turno",
+                           "texto": "En el cuadrante ese día: %s" % etiqueta, "sugerencia": None})
+    return avisos
+
+
+def _plantilla_puntos(tokens_a: list, tokens_b: list) -> float:
+    """`_match_score` con las palabras ya sacadas con `_name_tokens` (11-11-2026, P24): la Plantilla compara cada fila
+    con todas las fichas cada 600 ms mientras se escribe, y normalizar los mismos 300 nombres en cada fila costaba
+    varias veces más. Es el mismo cálculo, copiado y no compartido porque `test_plantilla_validar.py` saca
+    `_match_score` del fuente tal cual; `test_tanda3_dia.py` comprueba que dan lo mismo."""
+    score = 0.0
+    used_b = set()
+    for ta in tokens_a:
+        for i, tb in enumerate(tokens_b):
+            if i in used_b:
+                continue
+            if ta == tb:
+                score += 1.0
+                used_b.add(i)
+                break
+            short, long_ = (ta, tb) if len(ta) <= len(tb) else (tb, ta)
+            if len(short) >= 4 and long_.startswith(short):
+                score += 0.8
+                used_b.add(i)
+                break
+    return score
+
+
+def _plantilla_casador(pares: list):
+    """Una función que casa un nombre con `pares` [(id, nombre)] igual que `_afin_casar`, con los nombres de las
+    fichas normalizados UNA vez por llamada y no una por fila (11-11-2026, P24)."""
+    por_norm: dict = {}
+    fichas = []
+    for cid, nom in pares:
+        por_norm.setdefault(_normalize_name(nom or "").strip(), []).append(cid)
+        fichas.append((cid, _name_tokens(nom or "")))
+
+    def casar(nombre: str) -> Optional[str]:
+        n = _normalize_name(nombre or "").strip()
+        if not n:
+            return None
+        exactos = por_norm.get(n) or []
+        if len(exactos) == 1:
+            return exactos[0]
+        if len(exactos) > 1:
+            return None                               # tocayos: que lo elija una persona
+        tok = _name_tokens(nombre or "")
+        punt = sorted(((_plantilla_puntos(tok, t), cid) for cid, t in fichas), reverse=True)
+        if punt and punt[0][0] >= 1.6 and (len(punt) == 1 or punt[1][0] < punt[0][0]):
+            return punt[0][1]
+        return None
+    return casar
+
+
+async def _plantilla_cuadrante(rows: list, conductores: list, center: str, dia: str,
+                               user: dict) -> Tuple[list, list, bool]:
+    """(avisos por fila, faltan, con_cuadrante) de la Plantilla contra el cuadrante de ese día (11-11-2026, dia-4).
+
+    `faltan`: quien tiene turno DE RUTA ese día en la nave y no está en la hoja, ni por su ficha ni por un nombre
+    parecido (para no acusar a una ficha duplicada); fuera los suspendidos y las fichas de baja. Sin ningún turno de
+    la nave ese día (`con_cuadrante` falso) va vacía: nunca «falta alguien» sin cuadrante.
+
+    El aviso por fila (suspensión o ausencia) solo sale si `user` ve la nave de esa persona: la de su ficha, o la del
+    turno o la suspensión (11-11-2026, P1). Quien está limitado a OGA5 no se entera así de que alguien de DGA1 está de
+    baja o suspendido; el prestado de DGA1 con su día en OGA5 sí avisa, porque ese turno ya lo ve en su cuadrante.
+    """
+    pares = [(c["id"], c.get("name") or "") for c in conductores if c.get("id")]
+    nombre_de = dict(pares)
+    casar = _plantilla_casador(pares)                 # los nombres de las fichas, normalizados una vez (P24)
+    casados = {}
+    for i, r in enumerate(rows or []):
+        if isinstance(r, dict) and str(r.get("conductor") or "").strip():
+            cid = casar(str(r.get("conductor")))
+            if cid:
+                casados[i] = cid
+    rx = _cua_rx(center)
+    con_cuadrante = bool(await db.shifts.find_one({"center": rx, "date": dia}, {"_id": 0, "date": 1}))
+    de_ruta = []
+    if con_cuadrante:
+        de_ruta = await db.shifts.find({"center": rx, "date": dia, **_FILTRO_RUTA},
+                                       {"_id": 0, "driver_id": 1, "driver_name": 1}).to_list(500)
+    ids = set(casados.values()) | {s.get("driver_id") for s in de_ruta if s.get("driver_id")}
+    susp_de = await _suspendidos(list(ids), dia, dia)
+    turno_de = {}
+    if casados:
+        async for s in db.shifts.find({"driver_id": {"$in": sorted(set(casados.values()))}, "date": dia},
+                                      {"_id": 0, "driver_id": 1, "cod": 1, "type": 1, "center": 1}):
+            turno_de[s.get("driver_id")] = s
+    # Solo lo de las naves que ve quien mira (P1). `susp_de` entero sigue sirviendo para `faltan`.
+    centro_de = {c["id"]: c.get("center") or "" for c in conductores if c.get("id")}
+
+    def _ve(did: str, doc: dict) -> bool:
+        centros = [str(c).strip() for c in (centro_de.get(did), (doc or {}).get("center")) if str(c or "").strip()]
+        if not centros:
+            return _user_can_see_center(user, "")       # sin nave en ningún sitio: lo que diga la regla de siempre
+        return any(_user_can_see_center(user, c) for c in centros)
+    turno_ve = {did: s for did, s in turno_de.items() if _ve(did, s)}
+    susp_ve = {k: s for k, s in susp_de.items() if _ve(k.split("|")[0], s)}
+    avisos = _plantilla_avisos_cuadrante(casados, turno_ve, susp_ve, dia)
+    en_hoja = [str(r.get("conductor") or "").strip() for r in rows or []
+               if isinstance(r, dict) and str(r.get("conductor") or "").strip()]
+    en_hoja_norm = {_normalize_name(n).strip() for n in en_hoja}
+    en_hoja_tok = [_name_tokens(h) for h in en_hoja]  # una vez, no una por cada turno (P24)
+
+    def _esta(nombre: str) -> bool:
+        n = _normalize_name(nombre or "").strip()
+        if not n:
+            return False
+        if n in en_hoja_norm:
+            return True
+        tok = _name_tokens(nombre or "")
+        return any(_plantilla_puntos(tok, t) >= 1.6 for t in en_hoja_tok)
+
+    faltan, vistos = [], set(casados.values())
+    for s in de_ruta:
+        did = s.get("driver_id")
+        if not did or did in vistos or did not in nombre_de or susp_de.get(f"{did}|{dia}"):
+            continue
+        vistos.add(did)
+        if _esta(nombre_de[did]) or _esta(str(s.get("driver_name") or "")):
+            continue
+        faltan.append({"driver_id": did, "nombre": nombre_de[did] or str(s.get("driver_name") or "")})
+    faltan.sort(key=lambda x: _normalize_name(x["nombre"]))
+    return avisos, faltan, con_cuadrante
 
 
 @api_router.post("/tools/plantilla-excel")
@@ -39787,21 +41339,27 @@ async def diarios_por_conductor(center: str, desde: str, hasta: str,
         {"_id": 0}).to_list(5000)
 
     nombres = {}
-    # Las de baja primero para que una activa con el mismo id la pise: si dos
-    # fichas comparten id, manda la que sigue trabajando.
+    # Si dos fichas comparten id, manda la que sigue trabajando (_reparto_ids, 11-11-2026).
+    # Antes se fiaba del orden (`sort("active", 1)`): en `driver_id` se quedaba la
+    # PRIMERA leida, que era la de baja, y en `transporter_id` una de baja pisaba a
+    # una ficha sin el campo `active` (que cuenta como activa). «Mis DNR» reparte
+    # con el mismo ayudante, asi que oficina y portal no pueden decir cosas distintas.
+    con_t = []
     async for d in db.drivers.find(
             {"transporter_id": {"$nin": [None, ""]}},
-            {"_id": 0, "name": 1, "transporter_id": 1, "id": 1, "active": 1}).sort("active", 1):
-        nombres[(d.get("transporter_id") or "").upper()] = {
-            "name": d["name"], "id": d["id"], "de_baja": d.get("active") is False}
+            {"_id": 0, "name": 1, "transporter_id": 1, "id": 1, "active": 1, "merged_into": 1, "status": 1}
+    ).sort("active", 1):
+        con_t.append(d)
     # El mismo ID vive tambien en `driver_id` («ID Amazon»): 32 fichas lo tienen
     # SOLO ahi (ver _cx_nombres). Sin esto salian como un codigo sin nombre.
+    con_d = []
     async for d in db.drivers.find(
             {"driver_id": {"$nin": [None, ""]}},
-            {"_id": 0, "name": 1, "driver_id": 1, "id": 1, "active": 1}).sort("active", 1):
-        clave = str(d.get("driver_id") or "").strip().upper()
-        if clave and clave not in nombres:
-            nombres[clave] = {"name": d["name"], "id": d["id"], "de_baja": d.get("active") is False}
+            {"_id": 0, "name": 1, "driver_id": 1, "id": 1, "active": 1, "merged_into": 1, "status": 1}
+    ).sort("active", 1):
+        con_d.append(d)
+    for clave, d in _reparto_ids(con_t, con_d).items():
+        nombres[clave] = {"name": d["name"], "id": d["id"], "de_baja": d.get("active") is False}
     # Etiquetas sueltas: gente sin ficha de conductor (oficina, o que se fue).
     doc_alias = await db.app_meta.find_one({"_id": "transporter_alias"}) or {}
     for tid, nm in (doc_alias.get("mapa") or {}).items():
@@ -40074,6 +41632,35 @@ def _dnr_viva(d: dict) -> bool:
                 or d.get("status") in ("deleted", "fusionada"))
 
 
+def _reparto_ids(con_t: list, con_d: list) -> dict:
+    """{ID: ficha} con el que la oficina (diarios_por_conductor) y «Mis DNR» (_dnr_mis_ids) casan cada ID con
+    una ficha (11-11-2026, tanda 3). Una sola regla, en un solo sitio, para que no puedan separarse: una ficha
+    de baja (no _dnr_viva) nunca le quita el ID a una viva.
+      · `transporter_id` (con_t, en el orden leido): gana la ULTIMA leida, como siempre, salvo que una de baja
+        no pisa a una viva. Antes se fiaba del orden por `active`, y una ficha SIN el campo (que todo el servidor
+        trata como activa) sale antes que las de baja: la de baja se quedaba con el ID.
+      · `driver_id` (con_d): solo los IDs que ninguna ficha tiene en `transporter_id` (R8: manda ese campo,
+        aunque sea de una de baja; no cambia). Entre las que lo tienen, la viva gana a la de baja y, entre
+        iguales, la PRIMERA leida, como siempre. Antes ganaba siempre la primera, que era la de baja.
+    Las claves, como hasta ahora: `transporter_id` en mayusculas; `driver_id` sin espacios y en mayusculas."""
+    reparto: dict = {}
+    for d in con_t:
+        clave = (d.get("transporter_id") or "").upper()
+        antes = reparto.get(clave)
+        if antes is not None and _dnr_viva(antes) and not _dnr_viva(d):
+            continue
+        reparto[clave] = d
+    claves_t = set(reparto)
+    for d in con_d:
+        clave = str(d.get("driver_id") or "").strip().upper()
+        if not clave or clave in claves_t:
+            continue
+        antes = reparto.get(clave)
+        if antes is None or (not _dnr_viva(antes) and _dnr_viva(d)):
+            reparto[clave] = d
+    return reparto
+
+
 async def _dnr_mis_ids(mis_fichas: set) -> Optional[tuple]:
     """({transporter_id: (id de la ficha, nombre)}, {IDs en disputa}), o None si
     cualquiera de las dos lecturas de fichas llega a _DNR_TOPE_FICHAS (R8/G1,
@@ -40083,9 +41670,9 @@ async def _dnr_mis_ids(mis_fichas: set) -> Optional[tuple]:
     lectura cortada no se puede repetir el reparto de la oficina: no se casa nada.
 
     Lo primero son los IDs que la oficina casa con estas fichas: mismas
-    consultas, mismo orden y mismas claves que diarios_por_conductor (las de
-    baja primero para que la activa las pise en `transporter_id`; en `driver_id`
-    solo entra lo que no reclamo nadie antes).
+    consultas, mismo orden y el MISMO reparto que diarios_por_conductor
+    (_reparto_ids, 11-11-2026: una de baja nunca le quita el ID a una viva; en
+    `driver_id` solo entra lo que nadie tiene en `transporter_id`).
 
     Lo segundo (R7/F11, afinado el 11-11-2026, S1): los IDs en disputa en los
     que esta persona queda «en revision». SOLO hay disputa cuando la regla de la
@@ -40157,21 +41744,19 @@ async def _dnr_mis_ids(mis_fichas: set) -> Optional[tuple]:
                 return destino          # la cadena sale de lo leido: la ultima a la que se llega
             d = leidas[destino]
 
-    mapa: dict = {}
+    # El reparto de la oficina, con su mismo ayudante (11-11-2026).
+    mapa: dict = {clave: (d.get("id"), d.get("name") or "") for clave, d in _reparto_ids(con_t, con_d).items()}
     en_t: dict = {}     # ID -> personas vivas con el en `transporter_id`
     en_d: dict = {}     # ID -> personas vivas con el en `driver_id`
     claves_t = set()    # los IDs que alguna ficha (viva o no) tiene en `transporter_id`
     for d in con_t:
         clave = (d.get("transporter_id") or "").upper()
-        mapa[clave] = (d.get("id"), d.get("name") or "")
         if clave:
             claves_t.add(clave)
         if clave and persona(d):
             en_t.setdefault(clave, set()).add(persona(d))
     for d in con_d:
         clave = str(d.get("driver_id") or "").strip().upper()
-        if clave and clave not in mapa:
-            mapa[clave] = (d.get("id"), d.get("name") or "")
         if clave and persona(d):
             en_d.setdefault(clave, set()).add(persona(d))
     mios = {tid: (fid, nombre) for tid, (fid, nombre) in mapa.items() if tid and fid and fid in mis_fichas}
@@ -49484,7 +51069,9 @@ async def _afin_datos(admin: dict, center: str) -> dict:
     furgos = await db.vehicles.find(
         {**fc, "status": {"$nin": ["deleted", "baja"]}},
         {"_id": 0, "id": 1, "license_plate": 1, "status": 1, "bloqueada": 1, "center": 1,
-         "trato": 1, "trato_desde": 1, "vuelta_taller_en": 1}).to_list(3000)
+         "trato": 1, "trato_desde": 1, "vuelta_taller_en": 1,
+         # Solo la lee «Poner furgonetas» (11-11-2026, dia-5); las demás llamadas no la miran.
+         "itv_date": 1}).to_list(3000)
     vids = [v["id"] for v in furgos]
     # Conductores: todos los activos (para casar nombres que vienen de otro
     # centro) y, aparte, los de ESTE centro o que han llevado sus furgonetas.
@@ -49883,8 +51470,20 @@ async def plantilla_furgos(data: dict = Body(...), admin: dict = Depends(require
         if furgo_txt and furgo_txt not in por_placa:
             # Una matrícula que no es del centro: la fila está servida a mano igualmente.
             filas[-1].furgo = "txt:" + furgo_txt
-    operativas = [v["id"] for v in D["furgos"] if _afin_operativa(v)]
-    no_oper = [v["id"] for v in D["furgos"] if not _afin_operativa(v)]
+    # La ITV caducada ANTES del día de la hoja (11-11-2026, dia-5): esa furgoneta no se propone sola ni sale en
+    # «para este» y, en la fila de aparcamiento, cuenta como una que se queda (igual que la del taller). Solo aquí:
+    # `_afin_operativa` no cambia, que es la que usa Furgonetas fijas. SOLO si lo pide el panel nuevo, que siempre
+    # manda la clave `date` (vacía o que no se entiende: hoy). La web de antes en caché no la manda y para ella todo
+    # sigue como en main (11-11-2026, P25): la de la ITV caducada se propone como cualquier otra y sin nota.
+    pide_itv = "date" in data
+    dia_hoja = (_plantilla_dia_iso(data.get("date")) or _hoy_madrid()) if pide_itv else ""
+    itv_mal = {}
+    for v in D["furgos"] if pide_itv else []:
+        caduca = _plantilla_dia_iso(v.get("itv_date"))
+        if caduca and caduca < dia_hoja:
+            itv_mal[v["id"]] = caduca
+    operativas = [v["id"] for v in D["furgos"] if _afin_operativa(v) and v["id"] not in itv_mal]
+    no_oper = [v["id"] for v in D["furgos"] if not _afin_operativa(v) or v["id"] in itv_mal]
     doc = await db[_AFIN_FILA_COL].find_one({"center": center}, {"_id": 0, "filas": 1, "actualizado_en": 1}) or {}
     carriles, _ = _afin_placas_a_ids(doc.get("filas") or [], D["furgos"])
     carriles = [c for c in carriles if c]
@@ -49920,10 +51519,28 @@ async def plantilla_furgos(data: dict = Body(...), admin: dict = Depends(require
     # Cuántos de la hoja tienen ya furgoneta fija: con 0, «no había ninguna
     # que poner» no dice qué hacer; la pantalla manda a aplicar el reparto.
     con_fija = sum(1 for f in filas if f.conductor and (D["fijas"].get(f.conductor) or _af.Fija()).principal)
+    # Para la nota de la pantalla: a quién no se le ha puesto su principal o su secundaria por la ITV (la web de
+    # antes no lee esta clave).
+    # Se nombra la saltada por la ITV solo si iba POR DELANTE de la que al final se puso, o si no se puso ninguna
+    # (11-11-2026, segunda ronda de P26): principal caducada y secundaria puesta, sale la principal; principal puesta
+    # y secundaria caducada, nada (era el ruido de P26).
+    puestas = {p.fila: p.furgo for p in res["propuestas"] if p.aplicar and p.furgo}
+    itv_caducada = []
+    for f in filas:
+        if not f.conductor or f.furgo:
+            continue
+        fija = D["fijas"].get(f.conductor) or _af.Fija()
+        for vid in (fija.principal, fija.secundaria):
+            if vid and vid == puestas.get(f.i):
+                break
+            if vid and vid in itv_mal:
+                itv_caducada.append({"furgo": placa.get(vid, vid), "itv_date": itv_mal[vid],
+                                     "conductor": nombre_ficha.get(f.conductor, "")})
     return {"propuestas": propuestas, "mover": mover, "sin_furgo": res["sin_furgo"], "con_fija": con_fija,
             "sin_nombre": sin_nombre, "opciones": opciones, "conflictos": conflictos,
             "fila_actualizada": doc.get("actualizado_en") if carriles else None,
-            "metodo": res["metodo"], "cuidado_activo": D["cuidado_activo"]}
+            "metodo": res["metodo"], "cuidado_activo": D["cuidado_activo"],
+            **({"itv_caducada": itv_caducada} if pide_itv else {})}
 
 
 def _movil_para_hoja(crudo) -> str:
@@ -50465,6 +52082,9 @@ class _CuaCambio:
             "id": cid, "center": self.center, "en": datetime.now(timezone.utc).isoformat(),
             "por": (self.user or {}).get("name") or "", "que": self.que,
             "n": len(self.snaps), "snaps": self.snaps, "deshecho": False})
+        # Cada celda de turnos tocada, apuntada para «Avisar a los conductores» (11-11-2026): aparte de este historial,
+        # que se queda con 30, para que no se pierda ningún aviso. Nunca rompe el cambio (_cua_avisos_apuntar no lanza).
+        await _cua_avisos_apuntar(self.center, _cua_aviso_celdas({"snaps": self.snaps}))
         # Se guardan los 30 últimos por centro: deshacer es para el error de
         # hace un rato, no un historial eterno.
         viejos = await db[_CUA_CAMBIOS].find({"center": self.center}, {"_id": 0, "id": 1}) \
@@ -50499,6 +52119,21 @@ async def _cua_aprobados(ids, desde: str, hasta: str) -> dict:
             {"status": "aprobado", "driver_id": {"$in": list(ids)}, "date": {"$gte": desde, "$lte": hasta}},
             {"_id": 0, "driver_id": 1, "date": 1, "type": 1}):
         out[f"{r['driver_id']}|{r['date']}"] = r.get("type")
+    return out
+
+
+async def _cua_pendientes(ids, desde: str, hasta: str) -> dict:
+    """Días pedidos por el conductor que aún esperan respuesta (11-11-2026, cuadrante-1): {"did|fecha": {id, tipo,
+    grupo}}. Solo para VERLOS en el Cuadrante: el motor no los mira (se le pregunta a Dani si debe)."""
+    out = {}
+    if not ids:
+        return out
+    for r in await db.shift_requests.find(
+            {"status": "pendiente", "driver_id": {"$in": list(ids)}, "date": {"$gte": desde, "$lte": hasta}},
+            {"_id": 0, "id": 1, "driver_id": 1, "date": 1, "type": 1, "grupo": 1}).to_list(2000):
+        if r.get("driver_id") and r.get("date"):
+            out[f"{r['driver_id']}|{r['date']}"] = {"id": r.get("id"), "tipo": r.get("type") or "libre",
+                                                     "grupo": r.get("grupo")}
     return out
 
 
@@ -50737,11 +52372,15 @@ async def cuadrante_ver(center: str, desde: str, hasta: str, user: dict = Depend
                                           {"_id": 0, "id": 1, "que": 1, "en": 1, "por": 1, "n": 1},
                                           sort=[("en", -1)])
     aprobados = await _cua_aprobados(ids, desde, hasta)
+    # Las peticiones sin contestar (11-11-2026, cuadrante-1): una clave más que la web vieja ignora.
+    pendientes = await _cua_pendientes(ids, desde, hasta)
+    # `avisar_activo` (11-11-2026): el interruptor de «Avisar a los conductores». El panel solo enseña el botón con
+    # True; la web vieja ignora la clave.
     return {"center": center, "desde": desde, "hasta": hasta, "hoy": _dia_negocio(),
             "personas": personas, "celdas": celdas, "maximas": maximas, "objetivos": objetivos,
             "config": {"colchon": int(cfg.get("colchon", 2)), "permitir_extra": bool(cfg.get("permitir_extra", True))},
             "ajustes": ajustes, "aprobados": sorted(aprobados), "propuesta": prop, "ultimo_cambio": ult,
-            "tipos": list(_cm.TIPOS)}
+            "tipos": list(_cm.TIPOS), "pendientes": pendientes, "avisar_activo": _CUA_AVISOS_ACTIVO}
 
 
 @api_router.post("/cuadrante/celdas")
@@ -50969,7 +52608,7 @@ async def _cua_crear_conductor(center: str, nombre: str) -> dict:
     if len(igual) == 1:
         return {**igual[0], "nueva": False}
     driver = Driver(name=re.sub(r"\s+", " ", nombre).strip(), center=center)
-    await db.drivers.insert_one(serialize_doc(driver.model_dump()))
+    await db.drivers.insert_one(_doc_ficha_nueva(driver))   # sin `historial_centros: null` (11-11-2026, F1)
     return {"id": driver.id, "name": driver.name, "active": True, "nueva": True}
 
 
@@ -51192,6 +52831,17 @@ async def cuadrante_deshacer(data: dict = Body(...), user: dict = Depends(requir
     if solo_si and c.get("id") != solo_si:
         raise HTTPException(409, "Lo último del cuadrante lo ha cambiado otra persona (%s): no se deshace para no "
                                  "pisarlo. Usa «Deshacer último cambio» si de verdad quieres." % (c.get("por") or "?"))
+    # Deshacer también cambia lo que el conductor tiene ese día: lo que había JUSTO ANTES se apunta para «Avisar a los
+    # conductores» (11-11-2026). Si esta lectura falla, se deshace igual, sin apuntar. Con el aviso apagado
+    # (_CUA_AVISOS_ACTIVO), ni se lee: deshacer hace las mismas lecturas y escrituras que antes de existir el aviso.
+    celdas_aviso, previo = set(), None
+    if _CUA_AVISOS_ACTIVO:
+        try:
+            hoy_aviso = _dia_negocio()
+            celdas_aviso = {(did, f) for did, f, _a in _cua_aviso_celdas(c) if f >= hoy_aviso}
+            previo = await _cua_turnos_de(celdas_aviso)
+        except Exception as e:                                       # noqa: BLE001
+            logger.warning("Avisos del cuadrante: no se ha podido leer lo de antes de deshacer en %s: %s", center, e)
     # Por lotes y por colección: deshacer una hoja importada son ~2.500 turnos,
     # y de uno en uno contra Atlas eran minutos. Cada filtro sale una sola vez
     # en `snaps` (lo garantiza _CuaCambio), así que el orden no cambia nada.
@@ -51207,8 +52857,294 @@ async def cuadrante_deshacer(data: dict = Body(...), user: dict = Depends(requir
     await db[_CUA_CAMBIOS].update_one({"id": c["id"]}, {"$set": {
         "deshecho": True, "deshecho_en": datetime.now(timezone.utc).isoformat(),
         "deshecho_por": user.get("name") or ""}})
+    if previo is not None:
+        await _cua_avisos_apuntar(center, [(did, f, previo.get((did, f))) for did, f in celdas_aviso])
     await _audit(user, "cuadrante_deshacer", {"center": center, "que": c.get("que")})
     return {"ok": True, "que": c.get("que"), "n": c.get("n")}
+
+
+# ── AVISAR A LOS CONDUCTORES DE SUS CAMBIOS (11-11-2026, cuadrante-8) ────────
+# Cuando la oficina cambia el cuadrante (propuesta, celdas, chat, Excel, Sheets) al conductor no le llegaba nada. Esto
+# es un BOTÓN, nunca automático: la oficina ve antes a quién y qué, desmarca a quien quiera y pulsa.
+# Rehecho el 11-11-2026 (revisión, P8-P10 y P22): ya NO sale del historial de «Deshacer», que guarda solo los 30
+# últimos registros por nave y se saltaba cambios sin decirlo. Ahora todo cambio del cuadrante (_CuaCambio.guardar y
+# el deshacer) apunta cada celda que cambia de hoy en adelante en su propia colección, un documento por celda:
+#   cuadrante_avisos_pendientes {_id: "nave|conductor|fecha", center, driver_id, fecha, dicho, visto?, en, tocado,
+#                                avisado_en?, avisado_por?, avisado_lote?}
+# `dicho` es lo que el conductor SABE de ese día (lo que había antes del primer cambio sin avisar, o lo último que se le
+# avisó) y no se pisa al apuntar; `tocado` cambia con cada cambio de la celda; `visto` es lo que había cuando la oficina
+# la vio y la desmarcó. Se avisa si lo que hay AHORA se lee distinto («trabajas», «libras»…) de `dicho` y de `visto`, de
+# hoy a 14 días: un cambio deshecho o devuelto a como estaba no avisa, uno avisado y deshecho después sí, y uno lejano
+# sale cuando su día entra en los 14, tenga la edad que tenga. Lo que no pasa por el cuadrante (un día concedido, una
+# suspensión, la rejilla escondida de Turnos) tiene su propio camino o no se avisa por aquí.
+_CUA_AVISOS_PEND = "cuadrante_avisos_pendientes"
+_CUA_AVISO_DIAS = 14
+# EL INTERRUPTOR (11-11-2026): APAGADO. El repaso final sacó casos raros sin cerrar (un día concedido que se anula, se
+# avisa y se deshace se queda sin aviso; lo que cambia con la ventana abierta le llega a un marcado sin que la oficina
+# lo viera; fichas fusionadas que pierden lo pendiente; conductores que pasan de una nave a otra), y esto manda avisos a
+# móviles de verdad: ver docs/ESTADO.md, punto -37. Apagado, el servidor hace EXACTAMENTE lo de antes: no apunta nada
+# (_cua_avisos_apuntar vuelve sin leer ni escribir), deshacer no lee nada de más, las dos rutas de avisos dan 404 y
+# GET /cuadrante dice `avisar_activo: False`, así que el panel no enseña el botón. Para encenderlo basta ponerlo a True
+# cuando esos casos estén cerrados (lo decide Dani; test_tanda3_cuadrante.py tiene una prueba que lo vigila).
+_CUA_AVISOS_ACTIVO = False
+_CUA_AVISO_ETIQUETA = {"1": "trabajas", "T": "trabajas", "X": "trabajas", "EXTRA": "trabajas (extra)",
+                       "N/T": "libras", "L": "libras", "N/T APROB": "libras", "APROBADO": "libras",
+                       "V": "vacaciones", "COMP": "compensas", "BKP": "de reserva", "S": "en oficina",
+                       "RA": "de acompañante", "RIDE": "de acompañante", "N/D": "no disponible", "BAJA": "de baja",
+                       "SUSP": "suspendido", "N/P": "no presentado"}
+
+
+def _cua_aviso_etiqueta(doc: Optional[dict]) -> str:
+    """Lo que se le dice al conductor de una celda. 1, T y X son lo mismo para él: «trabajas»."""
+    cod = _cua_cod_turno(doc) if doc else ""
+    if not cod:
+        return "sin turno"
+    if cod in ("1", "T", "X") and (doc or {}).get("extra"):
+        return "trabajas (extra)"
+    if cod in _CUA_AVISO_ETIQUETA:
+        return _CUA_AVISO_ETIQUETA[cod]
+    info = CODIGOS_CUADRANTE_INFO.get(cod)
+    return info[1].lower() if info else cod
+
+
+def _cua_aviso_celdas(cambio: dict):
+    """Las celdas de turnos que tocó un cambio: (driver_id, fecha, lo que había antes)."""
+    for s in cambio.get("snaps") or []:
+        f = s.get("filtro") if isinstance(s, dict) else None
+        if isinstance(s, dict) and s.get("col") == "shifts" and isinstance(f, dict) \
+                and isinstance(f.get("driver_id"), str) and isinstance(f.get("date"), str):
+            yield f["driver_id"], f["date"][:10], s.get("doc")
+
+
+def _cua_aviso_ventana() -> Tuple[str, str]:
+    hoy = _dia_negocio()
+    return hoy, (date_cls.fromisoformat(hoy) + timedelta(days=_CUA_AVISO_DIAS)).isoformat()
+
+
+async def _cua_avisos_apuntar(center: str, celdas) -> None:
+    """Apunta las celdas de turnos que acaba de tocar un cambio del cuadrante, de hoy en adelante. `celdas`: (driver_id,
+    fecha, lo que había ANTES del cambio). Una celda que no estaba entra con `dicho` = la etiqueta de lo de antes; una que
+    ya estaba solo cambia `tocado` (lo que el conductor sabe no se pisa). NUNCA rompe el cambio: si algo falla, se dice
+    en el log y el cuadrante se guarda (o se deshace) igual.
+    Se llama DESPUÉS de aplicar el cambio (11-11-2026, tercera ronda, V8): solo se apuntan las celdas que se leen
+    distinto para el conductor que antes. La sincronización con la hoja pasa por aquí ~2.500 celdas cada vez; las que
+    no cambian ni se crean ni se tocan (miles de escrituras inútiles, y un `tocado` movido anulaba lo descartado)."""
+    if not _CUA_AVISOS_ACTIVO:                       # apagado (11-11-2026): ni una lectura ni una escritura
+        return
+    try:
+        celdas = list(celdas)
+        if not celdas:
+            return
+        hoy = _dia_negocio()
+        # Lo de días ya pasados de esta nave ya no se avisa nunca: fuera, también en las naves que no abren la previa.
+        await db[_CUA_AVISOS_PEND].delete_many({"center": center, "fecha": {"$lt": hoy}})
+        antes: dict = {}
+        for did, f, doc in celdas:
+            if f >= hoy and (did, f) not in antes:
+                antes[(did, f)] = doc
+        if not antes:
+            return
+        ahora_turnos = await _cua_turnos_de(set(antes))                  # lo de ahora, en UNA consulta
+        cambiadas = {k: doc for k, doc in antes.items()
+                     if _cua_aviso_etiqueta(doc) != _cua_aviso_etiqueta(ahora_turnos.get(k))}
+        if not cambiadas:
+            return
+        marca, ahora = str(uuid.uuid4()), datetime.now(timezone.utc).isoformat()
+        # Un documento por celda con `_id` fijo: dos cambios a la vez sobre la misma celda no la duplican.
+        ops = []
+        for (did, f), doc in cambiadas.items():
+            nuevo = {"center": center, "driver_id": did, "fecha": f, "en": ahora}
+            if doc and (doc.get("aprobado_req") or doc.get("suspension_id")):
+                # Lo de antes era un día concedido o de una suspensión (tercera ronda, V1): eso se lo dijo su propio
+                # camino (el aviso de la aprobación, la suspensión), así que es lo que sabe aunque ya hubiera algo
+                # apuntado; y lo que la oficina hubiera descartado antes ya no vale.
+                ops.append(UpdateOne({"_id": f"{center}|{did}|{f}"},
+                                     {"$set": {"tocado": marca, "dicho": _cua_aviso_etiqueta(doc)},
+                                      "$setOnInsert": nuevo, "$unset": {"visto": ""}}, upsert=True))
+                continue
+            ops.append(UpdateOne({"_id": f"{center}|{did}|{f}"},
+                                 {"$set": {"tocado": marca},
+                                  "$setOnInsert": {**nuevo, "dicho": _cua_aviso_etiqueta(doc)}}, upsert=True))
+            # Si el día vuelve a lo que el conductor sabe, lo que la oficina descartó deja de valer (tercera ronda,
+            # V6): si más tarde se le vuelve a poner eso mismo, es un cambio nuevo que nadie ha visto. Sin leer nada:
+            # solo casa si `dicho` es lo de ahora. Las dos operaciones no se pisan, vayan en el orden que vayan.
+            ops.append(UpdateOne({"_id": f"{center}|{did}|{f}", "visto": {"$exists": True},
+                                  "dicho": _cua_aviso_etiqueta(ahora_turnos.get((did, f)))},
+                                 {"$unset": {"visto": ""}}))
+        for i in range(0, len(ops), 500):
+            await db[_CUA_AVISOS_PEND].bulk_write(ops[i:i + 500], ordered=False)
+    except Exception as e:                                           # noqa: BLE001
+        logger.warning("Avisos del cuadrante: no se ha podido apuntar un cambio de %s: %s", center, e)
+
+
+def _cua_aviso_marca(pendiente: dict, ahora: str) -> str:
+    """La marca de un día tal como se enseña (11-11-2026, segunda ronda): su último cambio (`tocado`) y lo que dice
+    ahora. El panel devuelve las de lo que enseñó (`vistas`) y solo se descarta lo que la oficina vio: un cambio
+    posterior por el cuadrante cambia `tocado`, y uno por fuera (la rejilla escondida de Turnos) cambia lo que dice."""
+    return f"{pendiente.get('tocado') or ''}|{ahora}"
+
+
+async def _cua_avisos_calcular(center: str) -> Tuple[list, str, dict]:
+    """(personas, hasta, leido): lo pendiente de la nave de hoy a 14 días comparado con lo que hay AHORA en los turnos.
+    `leido` es {(driver_id, fecha): el documento pendiente tal como se leyó}, para «coger» cada celda al mandar."""
+    hoy, hasta = _cua_aviso_ventana()
+    leido: dict = {}
+    for p in await db[_CUA_AVISOS_PEND].find({"center": center, "fecha": {"$gte": hoy, "$lte": hasta}}).to_list(5000):
+        if isinstance(p.get("driver_id"), str) and isinstance(p.get("fecha"), str) and p.get("_id") is not None:
+            leido[(p["driver_id"], p["fecha"])] = p
+    if not leido:
+        return [], hasta, {}
+    ahora = await _cua_turnos_de(set(leido))
+    ids = sorted({k[0] for k in leido})
+    fichas = {d["id"]: d for d in await db.drivers.find(
+        {"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1, "active": 1, "merged_into": 1}).to_list(5000)}
+    por: dict = {}
+    for did, f in sorted(leido):
+        ficha = fichas.get(did)
+        # Fichas de baja, fusionadas o que no existen: no se avisa a nadie que ya no está.
+        if not ficha or ficha.get("active") is False or ficha.get("merged_into"):
+            continue
+        doc = ahora.get((did, f))
+        # Un día concedido o de una suspensión tiene su propio camino (y su aviso, o su conversación): aquí no.
+        if doc and (doc.get("aprobado_req") or doc.get("suspension_id")):
+            continue
+        # Ese día ya es de otra nave (tercera ronda, V9): lo enseña y lo avisa la suya, no esta (si no, dos avisos, y
+        # un jefe de esta nave viendo un día de otra). Un turno sin nave apuntada (datos viejos) sigue saliendo aquí.
+        if doc and doc.get("center") and not _cua_es_centro(doc.get("center"), center):
+            continue
+        p = leido[(did, f)]
+        dicho = str(p.get("dicho") or "sin turno")
+        nuevo = _cua_aviso_etiqueta(doc)
+        if nuevo == dicho and p.get("visto") is not None:
+            # Volvió a lo que él sabe por fuera del cuadrante (tercera ronda, V6; por el cuadrante lo hace el apunte):
+            # lo descartado deja de valer. Solo si la celda sigue como se leyó.
+            try:
+                await db[_CUA_AVISOS_PEND].update_one(
+                    {"_id": p["_id"], "tocado": p.get("tocado"), "dicho": p.get("dicho"), "visto": p.get("visto")},
+                    {"$unset": {"visto": ""}})
+            except Exception as e:                                       # noqa: BLE001
+                logger.warning("Avisos del cuadrante: no se ha podido olvidar un descarte de %s: %s", center, e)
+        # Volvió a lo que él sabe, o la oficina ya vio esto mismo y decidió no avisar: nada.
+        if nuevo == dicho or nuevo == p.get("visto"):
+            continue
+        por.setdefault(did, {"driver_id": did, "nombre": ficha.get("name") or did, "dias": []})["dias"].append(
+            {"fecha": f, "antes": dicho, "ahora": nuevo, "texto": f"{_refuerzo_dia(f)}: {nuevo}",
+             "marca": _cua_aviso_marca(p, nuevo)})
+    personas = sorted(por.values(), key=lambda p: _clave_nombre(p["nombre"]))
+    return personas, hasta, leido
+
+
+def _cua_aviso_texto(dias: list) -> str:
+    """«sábado 15/11: libras · lunes 17/11: trabajas · y 2 más»."""
+    textos = [d["texto"] for d in dias]
+    return " · ".join(textos[:6]) + (f" · y {len(textos) - 6} más" if len(textos) > 6 else "")
+
+
+@api_router.post("/cuadrante/avisos/previa")
+async def cuadrante_avisos_previa(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """A quién se avisaría y de qué (no manda nada). body: {center}. De paso borra lo apuntado de días ya pasados."""
+    if not _CUA_AVISOS_ACTIVO:                       # apagado (11-11-2026): como un servidor que no la tiene
+        raise HTTPException(404, "No disponible")
+    center = _cua_centro(data.get("center"))
+    _cua_acceso(user, center)
+    hoy, _hasta = _cua_aviso_ventana()
+    try:
+        await db[_CUA_AVISOS_PEND].delete_many({"center": center, "fecha": {"$lt": hoy}})
+    except Exception as e:                                           # noqa: BLE001
+        logger.warning("Avisos del cuadrante: no se han podido borrar los días pasados de %s: %s", center, e)
+    personas, hasta, _leido = await _cua_avisos_calcular(center)
+    return {"personas": personas, "hasta": hasta}
+
+
+@api_router.post("/cuadrante/avisos/enviar")
+async def cuadrante_avisos_enviar(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Manda UN aviso por persona con sus días cambiados. body: {center, driver_ids?, descartar_ids?}. Lo vuelve a
+    calcular aquí (no se fía de lo que enseñó la pantalla). Se avisa a `driver_ids` (sin esa clave, a todos menos a
+    `descartar_ids`); a los de `descartar_ids` (los que la oficina vio y desmarcó) no se les avisa y se guarda lo que
+    vieron (`visto`), para que no vuelvan a salir mientras su día siga igual; a quien no está en ninguna de las dos
+    (apareció después de la previa) no se le toca nada y sale la próxima vez."""
+    if not _CUA_AVISOS_ACTIVO:                       # apagado (11-11-2026): como un servidor que no la tiene
+        raise HTTPException(404, "No disponible")
+    center = _cua_centro(data.get("center"))
+    _cua_acceso(user, center)
+    solo = None
+    if data.get("driver_ids") is not None:
+        solo = {str(x) for x in _lista_cuerpo(data.get("driver_ids"), 500) if x}
+    descartar = {str(x) for x in _lista_cuerpo(data.get("descartar_ids"), 500) if x}
+    # `vistas` (11-11-2026, segunda ronda; opcional): las marcas de los días que la oficina vio en la previa. Con ellas,
+    # de un desmarcado solo se descarta el día cuya marca está ahí; lo que cambió después de la previa sigue pendiente.
+    # Sin la clave, como antes: se descarta lo que hay al enviar.
+    marcas_vistas = None
+    if data.get("vistas") is not None:
+        marcas_vistas = {str(x) for x in _lista_cuerpo(data.get("vistas"), 5000) if x}
+    personas, _hasta, leido = await _cua_avisos_calcular(center)
+    col = db[_CUA_AVISOS_PEND]
+    ahora_iso, lote, por_quien = datetime.now(timezone.utc).isoformat(), str(uuid.uuid4()), user.get("name") or ""
+    enviados, avisados, descartados = [], 0, 0
+    for p in personas:
+        did = p["driver_id"]
+        avisar = (did in solo) if solo is not None else (did not in descartar)
+        if not avisar:
+            if did not in descartar:
+                continue
+            # Desmarcado: no se le avisa y se guarda lo que la oficina vio. Solo si la celda no ha cambiado desde que
+            # se leyó: lo que haya cambiado después no lo ha visto nadie.
+            vistas = 0
+            for d in p["dias"]:
+                if marcas_vistas is not None and d["marca"] not in marcas_vistas:
+                    continue
+                q = leido[(did, d["fecha"])]
+                r = await col.update_one({"_id": q["_id"], "tocado": q.get("tocado")}, {"$set": {"visto": d["ahora"]}})
+                vistas += 1 if getattr(r, "matched_count", 0) else 0
+            descartados += 1 if vistas else 0
+            continue
+        # Se «coge» cada celda con la condición de que siga como se leyó (lo que sabe y su último cambio): si otra
+        # persona pulsa a la vez, o la celda cambia en ese instante, no entra en este aviso y se queda pendiente.
+        cogidas = []
+        for d in p["dias"]:
+            q = leido[(did, d["fecha"])]
+            r = await col.update_one(
+                {"_id": q["_id"], "dicho": q.get("dicho"), "tocado": q.get("tocado")},
+                {"$set": {"dicho": d["ahora"], "avisado_en": ahora_iso, "avisado_por": por_quien, "avisado_lote": lote},
+                 "$unset": {"visto": ""}})
+            if getattr(r, "matched_count", 0):
+                cogidas.append((q, d))
+        if not cogidas:
+            continue
+        dias = [d for _q, d in cogidas]
+        titulo = "Cambios en tu cuadrante"
+        try:
+            desde_iso = datetime.now(timezone.utc).isoformat()
+            n = await _avisar_usuarios([did], titulo, _cua_aviso_texto(dias), "/conductor")
+            # _avisar_usuarios se traga sus errores y no lanza (tercera ronda, V7): se comprueba que su aviso está de
+            # verdad en la bandeja. Si no, no cuenta como avisado y sus celdas vuelven atrás (mejor repetido que
+            # perdido).
+            if not n or not await db.avisos_movil.find_one(
+                    {"user_id": did, "titulo": titulo, "creado_en": {"$gte": desde_iso}}, {"_id": 0, "id": 1}):
+                raise RuntimeError("el aviso no está en su bandeja")
+            avisados += n
+        except Exception as e:                                       # noqa: BLE001
+            logger.warning("Aviso de cambios del cuadrante a %s: %s", did, e)
+            # No le ha llegado: sus celdas vuelven a como estaban y salen la próxima vez.
+            for q, _d in cogidas:
+                vuelta: dict = {"$set": {"dicho": q.get("dicho")}}
+                quitar = {}
+                for campo in ("avisado_en", "avisado_por", "avisado_lote", "visto"):
+                    if campo in q:
+                        vuelta["$set"][campo] = q[campo]
+                    else:
+                        quitar[campo] = ""
+                if quitar:
+                    vuelta["$unset"] = quitar
+                try:
+                    await col.update_one({"_id": q["_id"], "avisado_lote": lote}, vuelta)
+                except Exception as e2:                              # noqa: BLE001
+                    logger.warning("Avisos del cuadrante: no se ha podido devolver una celda de %s: %s", did, e2)
+            continue
+        enviados.append({**p, "dias": dias})
+    await _audit(user, "cuadrante_avisar", {"center": center, "avisados": avisados, "descartados": descartados,
+                                            "sin_tocar": len(personas) - len(enviados) - descartados})
+    return {"avisados": avisados, "personas": enviados, "descartados": descartados}
 
 
 # ── EL CHAT DEL CUADRANTE ────────────────────────────────────────────────────
@@ -53807,12 +55743,15 @@ async def _cia_asignar(datos: dict, user: dict) -> dict:
                 "driver_id": s.get("driver_id", "") or "", "driver_name": s.get("driver_name", "") or "",
                 "route": str(s.get("route") or "").strip().upper()[:24]} for s in slots]
     ahora = datetime.now(timezone.utc).isoformat()
+    # Quién, para el aviso «otro guardó» de la Asignación (11-11-2026, dia-6).
+    por = "Asistente"
     if doc:
         await db.daily_assignments.update_one({"date": fecha, "center": center},
-                                              {"$set": {"slots": limpios, "updated_at": ahora}})
+                                              {"$set": {"slots": limpios, "updated_at": ahora, "updated_by": por}})
     else:
         await db.daily_assignments.insert_one({"id": str(uuid.uuid4()), "date": fecha, "center": center,
-                                               "slots": limpios, "created_at": ahora, "updated_at": ahora})
+                                               "slots": limpios, "created_at": ahora, "updated_at": ahora,
+                                               "updated_by": por})
     return {"ok": True, "furgonetas": len(datos["cambios"])}
 
 

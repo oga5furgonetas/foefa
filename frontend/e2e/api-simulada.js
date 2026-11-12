@@ -98,6 +98,11 @@ function respuesta(ruta, escenario) {
     // en el `{}` de defecto y los paneles de Conductores reventaban con
     // `Cannot read properties of undefined (reading 'map')`.
     '/drivers/duplicados': { grupos: [], total: 0, fichas_de_mas: 0 },
+    // Tanda 3 (11-11-2026, equipo-6): las bajas, también ANTES que '/drivers' (si no, con «lleno» saldría
+    // «Bajas (1)» con la ficha activa). '/drivers/app' (equipo-5) NO se simula a propósito: cae en '/drivers', que es
+    // una lista, y el panel no enseña la columna ni el filtro «sin app» (como con un servidor viejo); así las pruebas de
+    // antes no ven «sin app» en cada ficha. Las suyas lo simulan en tanda3-fichas.spec.js.
+    '/drivers/bajas': [],
     '/drivers': lleno ? [CONDUCTOR] : [],
     '/inspections': lleno ? [INSPECCION] : [],
     '/incidents': [],
