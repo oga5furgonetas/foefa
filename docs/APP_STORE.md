@@ -411,3 +411,14 @@ The demo account in the App Review Information is unchanged. Thank you for your 
    revisión. Las cuentas de prueba (autónomo y conductor) siguen vivas; no borrarlas.
 5. Contestar en el Centro de resolución con el texto de arriba y volver a enviar. Si el envío rechazado no deja reenviar,
    como el 03-11: quitar su elemento rechazado y crear uno nuevo por la API (`enviar`).
+
+## Revisión urgente pedida (13-11-2026, 15:00)
+
+La 2.4.1 (envío `22b9c401`, reenviada el 09-11 a las 20:37 sin nada de pagos) llevaba casi cuatro días en «Waiting for
+Review» sin que la abriera ningún revisor (la primera vez, en octubre, Apple contestó en un día). Dani: «Pídelo a Apple».
+Con su sesión en su Chrome (entró él), se pidió en https://developer.apple.com/contact/app-store/?topic=expedite: el
+formulario de hoy solo pide la app (se elige de la lista que sale al escribir «FDS»: «FDS: ruta de reparto») y la
+plataforma (iOS); no hay campo para explicar el motivo. Apple contestó al momento: «We'll expedite review for FDS: ruta
+de reparto. If your submission is rejected during this review, you don't need to request another expedited review when
+you resubmit. Your resubmission will be automatically returned to the expedited queue.» Apple avisa de que pedirlo
+muchas veces puede hacer que deje de concederlo: no volver a pedirlo para esta versión.
