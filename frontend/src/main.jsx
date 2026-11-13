@@ -273,6 +273,8 @@ const PaseMovil = lazy(() => import('./pages/PaseMovil'))
 const SeguimientoPedido = lazy(() => import('./pages/SeguimientoPedido'))
 const RegaloPagina = lazy(() => import('./pages/RegaloPagina'))
 const Planes = lazy(() => import('./pages/Planes'))
+// La página de venta para empresas (14-11-2026): habla de precios, así que solo en la web, como /planes.
+const Empresas = lazy(() => import('./pages/Empresas'))
 const DriverPortal = lazy(() => import('./pages/driver/DriverPortal'))
 const VerificarCorreoConductor = lazy(() => import('./pages/driver/VerificarCorreoConductor'))
 const PanelLogin = lazy(() => import('./panel/PanelLogin'))
@@ -433,6 +435,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/s/:token" element={<SeguimientoPedido />} />
               <Route path="/regalo/:codigo" element={<SoloWeb><RegaloPagina /></SoloWeb>} />
               <Route path="/planes" element={<SoloWeb><Planes /></SoloWeb>} />
+              <Route path="/empresas" element={<SoloWeb><Empresas /></SoloWeb>} />
               <Route path="/privacidad" element={<Privacidad />} />
               <Route path="/terminos" element={<Terminos />} />
               <Route path="/encargo" element={<Encargo />} />

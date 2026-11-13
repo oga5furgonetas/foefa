@@ -65,6 +65,10 @@ export const PLAN_REPARTO = {
   no_incluye: ['Quién causa los golpes, cuadrante y asignación (eso es Pro, por vehículo)'],
 }
 
+/* Los días de prueba de una cuenta de empresa, sin tarjeta (server.py: `PLAN_TARIFAS[…]["dias_prueba"] or 14` en el
+   alta; los Términos, §5). Lo enseña /empresas. */
+export const DIAS_PRUEBA_EMPRESA = 14
+
 export const DESCUENTOS_VOLUMEN = [{ desde: 50, pct: 10 }, { desde: 150, pct: 15 }, { desde: 300, pct: 20 }]
 
 /** Porcentaje de descuento por tamaño de flota. */

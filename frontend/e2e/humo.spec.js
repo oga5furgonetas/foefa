@@ -34,7 +34,7 @@ const PANEL = [
 ]
 
 const PUBLICAS = [
-  ['/', 'Landing'], ['/login', 'Login'], ['/planes', 'Planes'], ['/invita?ref=ABCDE1', 'Landing de invitación'],
+  ['/', 'Landing'], ['/login', 'Login'], ['/planes', 'Planes'], ['/empresas', 'Empresas'], ['/invita?ref=ABCDE1', 'Landing de invitación'],
   ['/registro', 'Registro'], ['/contacto', 'Contacto'], ['/iphone', 'Guía de iPhone'],
   ['/security', 'Seguridad'], ['/peritaje-tecnico', 'Peritaje'],
   ['/verify', 'Verificador'], ['/privacidad', 'Privacidad'],

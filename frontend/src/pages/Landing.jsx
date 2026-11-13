@@ -2,21 +2,19 @@ import { useEffect, useState } from 'react'
 import {
   Camera, ScanLine, FileText, Mic, Route, Navigation, MapPinned, ParkingSquare, Hand, PenLine, History,
   MessageCircle, WifiOff, Search, Wallet, BarChart3, FileSpreadsheet, BellRing, ScanSearch, Bot,
-  ClipboardCheck, Wrench, CalendarClock, CalendarDays, Users, ShoppingBasket, ArrowRight, Check, Loader2, Sun, Moon,
+  ArrowRight, Check, Loader2,
   Smartphone, Languages, Gift, ShieldCheck,
 } from 'lucide-react'
-import { MARCA } from '../marca'
-import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, locale } from '../lib/idioma'
-import { API_BASE } from '../lib/apiBase'
-import { saveSession } from '../panel/auth'
+import { tx, useIdioma, idioma, locale } from '../lib/idioma'
 import { medirAccion } from '../lib/analitica'
-import { evento, hayPixel, abrirAvisoCookies } from '../lib/metaPixel'
+import { evento } from '../lib/metaPixel'
 import { abrirDemoReparto } from '../lib/demoReparto'
 import { paisDelMovil, precioRepartidor, importeEn } from '../lib/region'
 import { PARADAS_GRATIS, promoGratis, fechaPromo, eurosRef, refCentActual, refPromoActiva, fechaRefPromo, BONO_CENT } from '../lib/precios'
 import Landing3DShowcase from './Landing3DShowcase'
 import GooglePlayBadge from '../components/GooglePlayBadge'
 import { esAndroid } from '../lib/instalar'
+import { BTN_PRIMARIO, BTN_SECUNDARIO, MODULOS_EMPRESA, Seccion, VistaPanel, Pie, useDemoPanel } from './portadaComun'
 
 /* ── LA PORTADA (21-10-2026) ──────────────────────────────────────────────
    Dani: «cuando entra una persona nueva a la web, véndelo sobre todo como la
@@ -101,37 +99,9 @@ const IA_PORTADA = [
   [ShieldCheck, 'Siempre decides tú', 'El asistente propone y tú confirmas: no cambia nada por su cuenta.'],
 ]
 
-/* LO DE LA EMPRESA: el panel de la oficina. Cada módulo, una pantalla del panel. */
-const MODULOS_EMPRESA = [
-  [ClipboardCheck, 'Revisiones con foto e IA', 'El conductor revisa la furgoneta desde el móvil y la IA señala cada golpe nuevo.'],
-  [Wrench, 'Taller y estado de la flota', 'Incidencias, órdenes de reparación y qué furgoneta está peor, de la peor a la mejor.'],
-  [CalendarClock, 'Vencimientos', 'ITV, seguro, renting y mantenimientos en un calendario, ordenados por lo que caduca antes.'],
-  [CalendarDays, 'Cuadrante y días libres', 'El cuadrante se rehace solo con sus reglas, se sincroniza con tu Google Sheets y la gente pide días o se apunta a refuerzos desde el móvil.'],
-  [Users, 'Asignación del día y equipo', 'Quién lleva cada furgoneta hoy, las fichas de tu gente y el portal de cada conductor en su móvil.'],
-  [ShoppingBasket, 'Reparto a domicilio', 'Para súper y distribución: pedidos, rutas de tus repartidores y un enlace para que el cliente siga su pedido.'],
-]
-
-/* El botón principal: cian de la marca con tinta oscura, igual de día y de noche. */
-const BTN_PRIMARIO = 'inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 px-5 py-3 text-[15px] font-semibold text-[#04121a] shadow-[0_10px_30px_-10px_rgba(20,231,216,.55)] transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400 disabled:opacity-60'
-const BTN_SECUNDARIO = 'inline-flex items-center justify-center gap-2 rounded-xl border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-fill)] px-5 py-3 text-[15px] font-semibold text-[color:var(--ld-text)] transition hover:border-[color:var(--ld-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400 disabled:opacity-60'
+/* El botón principal y el secundario, la rejilla de la empresa, Seccion y la vista del panel: en portadaComun.jsx
+   (14-11-2026), compartidos con /empresas. */
 const ALTA_REPARTIDOR = '/registro?sector=autonomo&plan=autonomo'
-
-function Seccion({ id, eyebrow, titulo, sub, children, className = '' }) {
-  return (
-    <section id={id} className={`mx-auto max-w-[1120px] px-5 py-14 sm:py-20 ${className}`}>
-      {(eyebrow || titulo) && (
-        <header className="mb-10 max-w-2xl">
-          {eyebrow && <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ld-accent)]">{eyebrow}</p>}
-          {titulo && (
-            <h2 className="mt-3 font-display text-[clamp(26px,3.4vw,40px)] font-bold leading-[1.1] tracking-[-0.03em] text-[color:var(--ld-text)] [text-wrap:balance]">{titulo}</h2>
-          )}
-          {sub && <p className="mt-4 text-[16.5px] leading-relaxed text-[color:var(--ld-muted)]">{sub}</p>}
-        </header>
-      )}
-      {children}
-    </section>
-  )
-}
 
 /* El móvil del héroe: el vídeo de la app de verdad (el de los anuncios, mudo y en bucle) y dos capturas reales. */
 function Moviles() {
@@ -146,58 +116,6 @@ function Moviles() {
         className="w-[40%] rounded-[26px] border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-surface)] object-cover shadow-[0_40px_90px_-30px_rgba(0,0,0,.7)]" />
       <img src={`/capturas-ruta/${capturas}/3-navegando.webp`} alt="" width="390" height="844" loading="lazy"
         className="w-[30%] translate-y-6 rounded-[22px] border border-[color:var(--ld-border-strong)] shadow-2xl shadow-black/30" />
-    </div>
-  )
-}
-
-/* La vista del panel de la oficina, con datos de ejemplo (y lo dice en su pie). */
-const SALIDAS = [
-  { m: '5678 KLM', c: 'Luis P.', r: 'Zona 3', ok: false },
-  { m: '1234 BCD', c: 'Ana L.', r: 'Zona 1', ok: true, sev: true },
-  { m: '9012 FGH', c: 'Marta G.', r: 'Zona 2', ok: true },
-  { m: '3456 JKL', c: 'Iván R.', r: 'Zona 4', ok: true },
-]
-function VistaPanel() {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-surface)] shadow-[0_40px_90px_-40px_rgba(0,0,0,.6)]">
-      <div className="flex items-center gap-1.5 border-b border-[color:var(--ld-border)] px-4 py-2.5">
-        {[0, 1, 2].map((i) => <span key={i} className="h-2.5 w-2.5 rounded-full bg-[color:var(--ld-border-strong)]" />)}
-        <span className="ml-3 truncate font-mono text-[11px] text-[color:var(--ld-dim)]">{MARCA.nombre.toLowerCase()} · panel</span>
-      </div>
-      <div className="p-5 sm:p-6">
-        <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[color:var(--ld-dim)]">{tx('El día de hoy')}</p>
-        <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-4">
-          <div>
-            <span className="font-display text-[44px] font-bold leading-none tracking-[-0.04em] text-[color:var(--ld-text)] tabular-nums">86<span className="text-lg font-medium text-[color:var(--ld-dim)]">%</span></span>
-            <p className="mt-1 text-[12.5px] text-[color:var(--ld-muted)]">{tx('de la flota revisada hoy')}</p>
-          </div>
-          <dl className="flex flex-wrap gap-x-6 gap-y-3">
-            {[['2', tx('salen sin revisar'), true], ['3', tx('golpes nuevos'), true], ['1', tx('ITV esta semana'), false]].map(([n, k, alerta]) => (
-              <div key={k}>
-                <dt className="sr-only">{k}</dt>
-                <dd className={`font-display text-[22px] font-semibold leading-none tabular-nums ${alerta ? 'text-[color:var(--ld-warn)]' : 'text-[color:var(--ld-text)]'}`}>{n}</dd>
-                <dd className="mt-1 text-[11.5px] text-[color:var(--ld-dim)]">{k}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-        <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--ld-fill)]"><div className="h-full w-[86%] rounded-full bg-emerald-400/85" /></div>
-        <ul className="mt-5 grid grid-cols-2 gap-2">
-          {SALIDAS.map((s) => (
-            <li key={s.m} className={`rounded-xl border p-2.5 ${s.ok ? 'border-[color:var(--ld-border)]' : 'border-[color:var(--ld-warn)]'} bg-[color:var(--ld-surface2)]`}>
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="font-mono text-[11.5px] font-bold text-[color:var(--ld-text)]">{s.m}</span>
-                <span className="font-mono text-[10px] text-[color:var(--ld-dim)]">{s.r}</span>
-              </div>
-              <div className="mt-0.5 truncate text-[11px] text-[color:var(--ld-muted)]">{s.c}</div>
-              <div className={`mt-1.5 text-[10.5px] font-semibold ${!s.ok ? 'text-[color:var(--ld-warn)]' : s.sev ? 'text-[color:var(--ld-mid)]' : 'text-[color:var(--ld-ok)]'}`}>
-                {tx(!s.ok ? 'sin revisar' : s.sev ? 'golpe moderado' : 'revisada')}
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <p className="border-t border-[color:var(--ld-border)] px-5 py-2 text-[11px] text-[color:var(--ld-dim)]">{tx('Vista del panel · datos de ejemplo')}</p>
     </div>
   )
 }
@@ -265,7 +183,7 @@ export default function Landing() {
   useEffect(() => { try { localStorage.setItem('ld_theme', tema) } catch { /* modo privado */ } }, [tema])
   const [probando, setProbando] = useState(false)
   const [errProbar, setErrProbar] = useState('')
-  const [demo, setDemo] = useState('')          // '' | 'cargando' | 'error'
+  const [demo, abrirDemoPanel] = useDemoPanel('portada_demo_panel')   // '' | 'cargando' | 'error'
   const promo = promoGratis()
 
   async function probar() {
@@ -275,19 +193,6 @@ export default function Landing() {
     try {
       await abrirDemoReparto()
     } catch (e) { setErrProbar(e.message || tx('Sin conexión')); setProbando(false) }
-  }
-
-  /* La demo del panel entra con un usuario de solo lectura. Si el servidor no contesta, se dice. */
-  async function abrirDemoPanel() {
-    if (demo === 'cargando') return
-    medirAccion('portada_demo_panel')
-    setDemo('cargando')
-    try {
-      const r = await fetch(`${API_BASE}/auth/demo-login`, { method: 'POST' })
-      const j = await r.json()
-      if (j?.access_token) { saveSession(j); window.location.href = '/panel'; return }
-    } catch { /* se dice abajo */ }
-    setDemo('error')
   }
 
   const alta = (sitio) => () => { medirAccion(`portada_alta_${sitio}`); evento('Lead', { content_name: 'crear_cuenta' }) }
@@ -303,7 +208,7 @@ export default function Landing() {
           </a>
           <div className="flex items-center gap-1 sm:gap-5">
             <a href="#funciones" className="hidden text-[14px] font-medium text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)] md:inline">{tx('Funciones')}</a>
-            <a href="#empresas" className="hidden text-[14px] font-medium text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)] md:inline">{tx('Para empresas')}</a>
+            <a href="/empresas" className="hidden text-[14px] font-medium text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)] md:inline">{tx('Para empresas')}</a>
             <a href="#precio" className="hidden text-[14px] font-medium text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)] sm:inline">{tx('Precio')}</a>
             {/* El tablón de ofertas (Dani, 21-10-2026: «en la pantalla principal, al lado de Funciones»). Se ve también en el móvil. */}
             <a href="/empleo" onClick={() => medirAccion('portada_empleo')} className="whitespace-nowrap px-1 text-[14px] font-medium text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)]">{tx('Empleo')}</a>
@@ -467,6 +372,8 @@ export default function Landing() {
             </div>
             <p className="mt-3 text-[13px] text-[color:var(--ld-dim)]">{tx('Desde 5 € por vehículo y mes · 14 días gratis, sin tarjeta')} · <a href="/planes" className="font-semibold text-[color:var(--ld-accent)] hover:underline">{tx('Ver precios')}</a></p>
             {demo === 'error' && <p role="status" className="mt-2 text-[13px] text-[color:var(--ld-warn)]">{tx('La demo no responde ahora mismo. Prueba a crear una cuenta: son dos minutos.')}</p>}
+            {/* La página de venta para empresas (14-11-2026). */}
+            <p className="mt-4 text-[14px]"><a href="/empresas" onClick={() => medirAccion('portada_ver_empresas')} className="inline-flex items-center gap-1.5 font-semibold text-[color:var(--ld-accent)] hover:underline">{tx('Ver todo lo que hace para tu empresa')} <ArrowRight size={14} /></a></p>
           </div>
           <VistaPanel />
         </div>
@@ -508,52 +415,8 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Pie ── */}
-      <footer className="border-t border-[color:var(--ld-border)]">
-        <div className="mx-auto grid max-w-[1120px] gap-8 px-5 py-10 sm:grid-cols-[1.2fr_1fr_1fr]">
-          <div>
-            <a href="/" className="flex items-center gap-2.5 text-[color:var(--ld-text)]">
-              <img src="/favicon.svg" alt="" width="26" height="26" className="rounded-md" />
-              <span className="font-display text-[16px] font-bold">FDS</span>
-            </a>
-            <p className="mt-3 max-w-xs text-[13px] leading-relaxed text-[color:var(--ld-dim)]">{tx('La app de reparto gratis y el panel para tu flota.')}</p>
-            <div className="mt-5 flex items-center gap-2">
-              <label htmlFor="ld-idioma" className="sr-only">Idioma / Language</label>
-              <select id="ld-idioma" value={lang} onChange={(e) => cambiarIdioma(e.target.value)}
-                className="rounded-lg border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-surface)] px-2.5 py-1.5 text-[13px] text-[color:var(--ld-text)]">
-                {Object.entries(IDIOMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-              <button type="button" onClick={() => setTema((v) => (v === 'dark' ? 'light' : 'dark'))}
-                aria-label={tx('Cambiar entre claro y oscuro')} title={tx('Cambiar entre claro y oscuro')}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--ld-border-strong)] text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)]">
-                {tema === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-              </button>
-            </div>
-          </div>
-          <nav aria-label={tx('Producto')}>
-            <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ld-dim)]">{tx('Producto')}</p>
-            <ul className="mt-3 space-y-2 text-[14px]">
-              {[['/repartidores', tx('App de reparto')], ['/planes', tx('Precios para empresas')], ['/guia-ruta-de-reparto', tx('Guía: cómo ordenar la ruta')],
-                ['/peritaje-tecnico', tx('Cómo funciona la IA de daños')], ['/empleo', tx('Ofertas de empleo')], ['/contacto', tx('Contacto')], ['/panel/login', tx('Entrar')]].map(([h, k]) => (
-                <li key={h}><a href={h} className="text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)]">{k}</a></li>
-              ))}
-            </ul>
-          </nav>
-          <nav aria-label={tx('Legal')}>
-            <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ld-dim)]">{tx('Legal')}</p>
-            <ul className="mt-3 space-y-2 text-[14px]">
-              {[['/privacidad', tx('Privacidad')], ['/terminos', tx('Términos')], ['/cookies', tx('Cookies')], ['/aviso-legal', tx('Aviso legal')], ['/security', tx('Seguridad')]].map(([h, k]) => (
-                <li key={h}><a href={h} className="text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)]">{k}</a></li>
-              ))}
-              {/* Cambiar de opinión sobre los píxeles, a un toque (02-11-2026): vuelve a abrir el aviso de cookies. */}
-              {hayPixel() && (
-                <li><button type="button" onClick={abrirAvisoCookies} className="text-left text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)]">{tx('Cambiar mis cookies')}</button></li>
-              )}
-            </ul>
-          </nav>
-        </div>
-        <p className="border-t border-[color:var(--ld-border)] px-5 py-5 text-center text-[12.5px] text-[color:var(--ld-dim)]">© {new Date().getFullYear()} {MARCA.nombre}</p>
-      </footer>
+      {/* ── Pie (portadaComun.jsx, compartido con /empresas) ── */}
+      <Pie lang={lang} tema={tema} setTema={setTema} />
     </div>
   )
 }

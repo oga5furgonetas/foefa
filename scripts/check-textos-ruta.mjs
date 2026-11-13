@@ -38,6 +38,9 @@ const FICHEROS = [
   'pages/driver/MisDnr.jsx', 'pages/driver/dnrVistas.js',
   // Su ejemplo de la pantalla de entrega, «¿Cómo sé si tiene preferencia?» (11-11-2026, R11).
   'pages/driver/EjemploPreferencia.jsx',
+  // La página de venta para empresas (14-11-2026) y las piezas que comparte con la portada (la rejilla de la empresa,
+  // la vista del panel y el pie).
+  'pages/Empresas.jsx', 'pages/portadaComun.jsx',
 ]
 // Las piezas de la app de reparto (06-11-2026, diseño compacto): todo pages/driver/piezas/, sin nombrarlas una a una; si
 // no, sus textos no se comprueban y las claves que se mudan a ellas se dan por muertas.
@@ -54,7 +57,9 @@ const LISTAS = ['MOTIVOS', 'DONDE', 'DONDE_CORTO', 'NAVEGADORES', 'HUECOS', 'PES
   // La guía de iPhone (/iphone).
   'PASOS', 'QUE_FUNCIONA',
   // «Mis DNR» (11-11-2026, V5): cómo la marcó y por qué no pasó la foto, [lo que se ve, la frase larga, …] (MisDnr.jsx).
-  'COMO', 'FOTO']
+  'COMO', 'FOTO',
+  // /empresas (14-11-2026): los tres problemas con lo que se ve en el panel, los pasos para empezar y las preguntas.
+  'PROBLEMAS', 'PASOS_EMPRESA', 'PREGUNTAS_EMPRESA']
 
 const usadas = new Set(DE_DATOS)
 const cadenas = (trozo) => [...trozo.matchAll(/'((?:\\'|[^'])*)'/g)].map((m) => m[1].replace(/\\'/g, "'"))

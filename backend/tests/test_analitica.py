@@ -287,6 +287,80 @@ def test_el_evento_dice_si_viene_de_iphone_o_android():
     pc = an.evento_desde(cuerpo, "Mozilla/5.0 (Windows NT 10.0) Chrome/129", None, ahora)
     assert (ios["so"], android["so"], pc["so"]) == ("ios", "android", "otro")
 
+# ── la pagina de venta para empresas (/empresas, 14-11-2026) ─────────────────
+def test_empresas_es_una_pantalla_de_la_web_y_no_otra():
+    assert an.limpiar_ruta("/empresas") == "/empresas"
+    assert an.limpiar_ruta("/empresas?utm_source=correo#demo") == "/empresas"
+    assert an.area_de("/empresas") == "web"
+    cuerpo = {"sid": "abcdef1234567890", "tipo": "accion", "nombre": "emp_form_ok", "ruta": "/empresas"}
+    doc = an.evento_desde(cuerpo, "Mozilla/5.0 Chrome/120", None, AHORA)
+    assert doc["ruta"] == "/empresas" and doc["nombre"] == "emp_form_ok"
+    # Entra en el embudo general de la web como cualquier pagina publica.
+    r = an.informe([_ev("emp00000001", 100, "/empresas")], AHORA)
+    alta = next(e for e in r["embudos"] if e["clave"] == "alta")
+    assert alta["pasos"][0]["n"] == 1
+    assert r["areas"] == {"web": 1}
+
+
+def test_el_embudo_de_empresas_va_de_ver_la_pagina_a_pedir_demo_o_crear_cuenta():
+    evs = _ordenar([
+        # ve la pagina y se va
+        _ev("emp0000mira", 300, "/empresas"),
+        # pulsa «Probar gratis» arriba y crea la cuenta
+        _ev("emp000alta1", 300, "/empresas"),
+        _ev("emp000alta1", 299, "/empresas", tipo="accion", nombre="emp_probar_arriba"),
+        _ev("emp000alta1", 298, "/registro"),
+        _ev("emp000alta1", 290, "/registro", tipo="accion", nombre="registro_ok"),
+        # baja al formulario, lo rellena y le llega el recibido
+        _ev("emp000demo1", 300, "/empresas"),
+        _ev("emp000demo1", 299, "/empresas", tipo="accion", nombre="emp_demo_boton"),
+        _ev("emp000demo1", 298, "/empresas", tipo="accion", nombre="emp_form_abrir"),
+        _ev("emp000demo1", 297, "/empresas", tipo="accion", nombre="emp_form_enviar"),
+        _ev("emp000demo1", 296, "/empresas", tipo="accion", nombre="emp_form_ok"),
+        # el formulario falla: pidio la demo pero no se envio
+        _ev("emp0000fall", 300, "/empresas"),
+        _ev("emp0000fall", 299, "/empresas", tipo="accion", nombre="emp_form_abrir"),
+        _ev("emp0000fall", 298, "/empresas", tipo="accion", nombre="emp_form_error"),
+    ])
+    f = next(e for e in an.informe(evs, AHORA)["embudos"] if e["clave"] == "empresas")
+    n = [p["n"] for p in f["pasos"]]
+    assert f["sesiones"] == 4
+    assert n == [4, 3, 2]
+    assert [p["pct"] for p in f["pasos"]] == [100.0, 75.0, 50.0]
+
+
+def test_el_embudo_de_empresas_no_se_llena_con_altas_de_otras_paginas():
+    """Un alta desde la portada o desde /repartidores NO es de /empresas: si el
+    embudo contara a quien toca cualquier paso, `registro_ok` lo inflaria."""
+    evs = _ordenar([
+        _ev("portada0001", 200, "/"),
+        _ev("portada0001", 199, "/registro"),
+        _ev("portada0001", 190, "/registro", tipo="accion", nombre="registro_ok"),
+        _ev("reparto0001", 200, "/repartidores"),
+        _ev("reparto0001", 190, "/repartidores", tipo="accion", nombre="registro_ok"),
+    ])
+    r = an.informe(evs, AHORA)
+    f = next(e for e in r["embudos"] if e["clave"] == "empresas")
+    assert f["sesiones"] == 0
+    assert [p["n"] for p in f["pasos"]] == [0, 0, 0]
+    # El embudo general sigue contando esas altas: el filtro es solo del de empresas.
+    alta = next(e for e in r["embudos"] if e["clave"] == "alta")
+    assert alta["pasos"][3]["n"] == 2
+
+
+def test_un_paso_con_varios_nombres_cuenta_la_sesion_una_vez():
+    evs = _ordenar([
+        _ev("emp0000dos1", 100, "/empresas"),
+        _ev("emp0000dos1", 99, "/empresas", tipo="accion", nombre="emp_probar_arriba"),
+        _ev("emp0000dos1", 98, "/empresas", tipo="accion", nombre="emp_demo_boton"),
+        _ev("emp0000dos1", 97, "/empresas", tipo="accion", nombre="emp_probar_cierre"),
+    ])
+    f = next(e for e in an.informe(evs, AHORA)["embudos"] if e["clave"] == "empresas")
+    assert [p["n"] for p in f["pasos"]] == [1, 1, 0]
+    # Y los nombres sueltos siguen saliendo en la tabla de acciones.
+    acc = {a["nombre"]: a["veces"] for a in an.informe(evs, AHORA)["acciones"]}
+    assert acc == {"emp_probar_arriba": 1, "emp_demo_boton": 1, "emp_probar_cierre": 1}
+
 
 if __name__ == "__main__":
     fallos = 0

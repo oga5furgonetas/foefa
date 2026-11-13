@@ -1,0 +1,483 @@
+import { useEffect, useRef, useState } from 'react'
+import { ArrowRight, Camera, ClipboardList, FileText, Loader2, Smartphone, Upload, CalendarClock, CheckCircle2, Send, Warehouse } from 'lucide-react'
+import { MARCA } from '../marca'
+import { tx, useIdioma, idioma, locale } from '../lib/idioma'
+import { API_BASE } from '../lib/apiBase'
+import { medirAccion } from '../lib/analitica'
+import { PLANES_EMPRESA, DESCUENTOS_VOLUMEN, MESES_ANUAL, DIAS_PRUEBA_EMPRESA, precioMes, descuentoVolumen } from '../lib/precios'
+import { COMPANY } from '../legal/config'
+import { BTN_PRIMARIO, BTN_SECUNDARIO, MODULOS_EMPRESA, Seccion, VistaPanel, Pie, useDemoPanel } from './portadaComun'
+
+/* ── LA PÁGINA DE VENTA PARA EMPRESAS (/empresas, 14-11-2026) ─────────────────────────────────────────────────────
+   El destino de los correos y llamadas a dueños de empresas con furgonetas (docs/AUDITORIA-2026-11-01.md §7 y §8:
+   «primero clientes con jefe»). Tiene que convencer en un minuto con verdades comprobables.
+
+   REGLA: cada frase que dice que el producto hace algo tiene detrás código que existe hoy (la tabla frase → fichero
+   está en el informe del encargo). Los precios salen de lib/precios.js y, si contesta, de /billing/planes, como en
+   /planes: ninguno escrito aquí. Lo que es solo del plan Pro lleva su etiqueta. Sin testimonios, sin logotipos, sin
+   cifras de terceros. Se mide con medirAccion('emp_*') y el embudo «empresas» de backend/analitica.py. */
+
+/* Cifras reales de la empresa donde nació FDS, leídas en su panel el 13-11-2026. Las confirma Dani antes de publicar.
+   No inflarlas: si cambian, se cambian aquí. */
+const CIFRAS_CASA = { naves: 3, furgonetas: 63, revisionesSemana: 200 }
+
+const ALTA_EMPRESA = '/registro'
+const TRAMOS_FLOTA = ['1-9', '10-29', '30-99', '100+']
+
+/* Los tres problemas, con lo que se ve en el panel. `pro`: solo con el plan Pro (server.py, _MODULOS_SOLO_PRO y
+   «forensics» en PLAN_LIMITS). */
+const PROBLEMAS = [
+  { icono: Camera, titulo: 'El golpe que nadie hizo',
+    texto: 'Aparece una abolladura y nadie sabe cuándo fue. Sin fotos de cada día, la acaba pagando la empresa.',
+    ve: [
+      ['Cada mañana, el conductor hace las fotos de su furgoneta desde el móvil antes de salir.', false],
+      ['Cada revisión queda guardada con su fecha, su hora y quién la hizo.', false],
+      ['La detección de daños mira cada foto sola: marca los golpes que ve y si ya estaban en la revisión anterior. No acierta siempre.', false],
+      ['En el panel ves qué furgonetas no se han revisado hoy y cuáles llevan más de una semana sin mirarse.', false],
+      ['Revisión rápida: confirmas o descartas, uno detrás de otro, los golpes que ha marcado.', true],
+      ['Origen de daños: para cada golpe, la última foto en la que la furgoneta estaba bien y quién la llevaba desde entonces. Dice quién la llevaba, no quién dio el golpe.', true],
+    ] },
+  { icono: FileText, titulo: 'El cargo al devolver la furgoneta',
+    texto: 'Al devolver una furgoneta de renting o de alquiler llega una lista de daños. Si no puedes demostrar cuándo apareció cada uno, lo pagas tú.',
+    ve: [
+      ['Cada furgoneta guarda en su ficha todas sus revisiones con foto, desde la primera.', false],
+      ['Su historial (revisiones, incidencias y reparaciones, por fecha) sale en un parte para imprimir o guardar en PDF, con la foto de antes y la de después de los últimos daños nuevos.', false],
+      ['Informe pericial: una revisión se firma y sale en PDF con sus fotos marcadas y un código que cualquiera puede comprobar en nuestra web, que enseña la matrícula (en parte oculta), la fecha de la revisión y quién la firmó. No es una firma electrónica avanzada.', true],
+    ] },
+  { icono: CalendarClock, titulo: 'La ITV que se pasó',
+    texto: 'Con muchas furgonetas, alguna fecha se escapa, y te enteras cuando la furgoneta ya no puede salir.',
+    ve: [
+      ['La lista de ITV de toda la flota, ordenada por lo que caduca antes, con las furgonetas que no tienen la fecha puesta.', false],
+      ['Un calendario del mes con la ITV, el fin de cada renting y los cambios de aceite, ruedas y pastillas, calculados con los kilómetros que hace cada furgoneta.', false],
+      ['Las citas de taller, apuntadas en el mismo calendario.', false],
+    ] },
+]
+
+const PASOS_EMPRESA = [
+  [Upload, 'Creas la cuenta y metes tus furgonetas y tu gente', 'Subes tu Excel o CSV de furgonetas y el de conductores, o los pegas desde Excel: antes de guardar ves cómo queda. También se pueden dar de alta a mano.'],
+  [Smartphone, 'Cada conductor entra desde su móvil', 'Desde el navegador, con el enlace de tu empresa y su correo: no tiene que instalar nada.'],
+  [ClipboardList, 'Desde la primera mañana ves quién ha revisado su furgoneta y qué ha salido', 'En Inspecciones, cada revisión con sus fotos, quién la hizo y los golpes que ha marcado la detección de daños; y aparte, las furgonetas que aún no se han revisado.'],
+]
+
+const PREGUNTAS_EMPRESA = [
+  ['¿Mis datos se mezclan con los de otras empresas?', 'datos'],
+  ['¿Los conductores tienen que instalar algo?', 'instalar'],
+  ['¿Sirve si las furgonetas son mías y no de renting?', 'propias'],
+  ['¿Cuánto cuesta y hay permanencia?', 'precio'],
+  ['¿Cuánto se tarda en ponerlo en marcha?', 'tiempo'],
+]
+
+/* Euros en el idioma de la pantalla: «5 €» en español, «€5» en inglés. */
+function euros(n) {
+  const dec = Number.isInteger(n) ? 0 : 2
+  try {
+    return new Intl.NumberFormat(locale(), { style: 'currency', currency: 'EUR', minimumFractionDigits: dec, maximumFractionDigits: dec })
+      .format(n).replace(/[\u00a0\u202f]/g, ' ')
+  } catch { return `${n} €` }
+}
+
+/* Los planes como los ve /planes: los de lib/precios.js y, encima, los que mande el servidor (Planes.jsx, el mismo
+   cruce). Si no contesta, se quedan los de respaldo. */
+function usePlanes() {
+  const [planes, setPlanes] = useState(PLANES_EMPRESA)
+  const [tramos, setTramos] = useState(DESCUENTOS_VOLUMEN)
+  useEffect(() => {
+    let vivo = true
+    fetch(`${API_BASE}/billing/planes`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!vivo) return
+        const lista = Array.isArray(d?.planes) ? d.planes : []
+        setPlanes(PLANES_EMPRESA.map((f) => {
+          const s = lista.find((p) => p.clave === f.clave)
+          return s ? { ...f, ...s, desde: f.desde ?? d?.desde_empresa, color: f.color } : f
+        }))
+        if (Array.isArray(d?.descuentos_volumen) && d.descuentos_volumen.length) setTramos(d.descuentos_volumen)
+      })
+      .catch(() => { /* respaldo local */ })
+    return () => { vivo = false }
+  }, [])
+  return { planes, tramos }
+}
+
+/* «Haz la cuenta»: el precio sale de precioMes(), la misma función que /planes, con su mínimo y su descuento. */
+function Calculadora({ planes, tramos }) {
+  const porVehiculo = planes.filter((p) => Number(p.por_vehiculo) > 0)
+  const [furgonetas, setFurgonetas] = useState('20')
+  const [cargo, setCargo] = useState('')
+  const [clave, setClave] = useState(() => (porVehiculo.find((p) => p.recomendado) || porVehiculo[0])?.clave)
+  const medida = useRef(false)
+  const usar = () => { if (!medida.current) { medida.current = true; medirAccion('emp_calculadora') } }
+
+  const plan = porVehiculo.find((p) => p.clave === clave) || porVehiculo[0]
+  if (!plan) return null
+  const n = Math.max(1, Math.min(5000, Math.floor(Number(furgonetas)) || 0))
+  const hayN = Number(furgonetas) >= 1
+  const mes = precioMes(plan, n, tramos)
+  const pct = descuentoVolumen(Math.max(n, plan.minimo_vehiculos || 0), tramos)
+  const euroCargo = Number(String(cargo).replace(',', '.'))
+  const meses = euroCargo > 0 && mes > 0 ? Math.floor(euroCargo / mes) : null
+
+  const campo = 'w-full rounded-xl border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-bg)] px-3.5 py-3 text-[16px] font-semibold text-[color:var(--ld-text)] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-400'
+  return (
+    <div className="grid gap-6 rounded-2xl border border-[color:var(--ld-border)] bg-[color:var(--ld-surface)] p-6 sm:p-8 lg:grid-cols-[1fr_1.1fr]">
+      <div className="space-y-5">
+        <div>
+          <label htmlFor="emp-furgonetas" className="block text-[14.5px] font-semibold text-[color:var(--ld-text)]">{tx('¿Cuántas furgonetas tienes?')}</label>
+          <input id="emp-furgonetas" type="number" inputMode="numeric" min="1" max="5000" value={furgonetas}
+            onChange={(e) => { usar(); setFurgonetas(e.target.value) }} className={`${campo} mt-2`} />
+        </div>
+        <div>
+          <label htmlFor="emp-cargo" className="block text-[14.5px] font-semibold text-[color:var(--ld-text)]">{tx('¿De cuánto fue el último cargo por daños que te pasaron?')}</label>
+          <div className="relative mt-2">
+            <input id="emp-cargo" type="number" inputMode="decimal" min="0" step="1" value={cargo} placeholder={tx('En euros')}
+              onChange={(e) => { usar(); setCargo(e.target.value) }} className={`${campo} pr-10 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`} />
+            <span aria-hidden className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[15px] text-[color:var(--ld-dim)]">€</span>
+          </div>
+        </div>
+        <div role="radiogroup" aria-label={tx('Plan')} className="flex flex-wrap gap-2">
+          {porVehiculo.map((p) => (
+            <button key={p.clave} type="button" role="radio" aria-checked={p.clave === plan.clave}
+              onClick={() => { usar(); setClave(p.clave) }}
+              className={`rounded-xl border px-4 py-2 text-[14px] font-semibold transition ${p.clave === plan.clave
+                ? 'border-brand-400 bg-brand-400/15 text-[color:var(--ld-text)]'
+                : 'border-[color:var(--ld-border-strong)] text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)]'}`}>
+              {tx('Plan {plan}', { plan: tx(p.nombre) })} · {tx('{precio}/vehículo', { precio: euros(Number(p.por_vehiculo)) })}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-col justify-center rounded-xl bg-[color:var(--ld-fill)] p-5 sm:p-6" aria-live="polite" data-testid="emp-resultado">
+        {hayN ? (<>
+          {/* La frase entera se traduce de una vez (cada idioma pone el precio donde le toca); el precio va en grande. */}
+          <p className="text-[17px] leading-snug text-[color:var(--ld-text)]">
+            {tx('{marca} te cuesta {precio} al mes con el plan {plan}.', { marca: MARCA.nombre, plan: tx(plan.nombre) }).split('{precio}').map((trozo, i) => (
+              <span key={i}>{i > 0 && <b data-testid="emp-precio" data-precio={mes} className="font-display text-[32px] font-extrabold tracking-[-0.03em] tabular-nums">{euros(mes)}</b>}{trozo}</span>
+            ))}
+          </p>
+          {n < (plan.minimo_vehiculos || 0) && (
+            <p className="mt-2 text-[13.5px] text-[color:var(--ld-muted)]">{tx('El plan {plan} factura como mínimo {n} vehículos.', { plan: tx(plan.nombre), n: plan.minimo_vehiculos })}</p>
+          )}
+          {pct > 0 && <p className="mt-2 text-[13.5px] text-[color:var(--ld-muted)]">{tx('Ya con el {pct} % de descuento por volumen.', { pct })}</p>}
+          {meses != null && (
+            <p className="mt-4 text-[17px] font-semibold leading-snug text-[color:var(--ld-ok)]" data-testid="emp-meses">
+              {meses >= 2 ? tx('Con evitar un cargo así, tienes pagados {n} meses.', { n: meses })
+                : meses === 1 ? tx('Con evitar un cargo así, tienes pagado un mes.')
+                  : tx('Un cargo así no llega a pagar un mes.')}
+            </p>
+          )}
+          <p className="mt-4 text-[12.5px] text-[color:var(--ld-dim)]">{tx('Precios sin IVA. Pago mensual, sin permanencia.')}</p>
+        </>) : (
+          <p className="text-[15px] text-[color:var(--ld-muted)]">{tx('Pon cuántas furgonetas tienes.')}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* «Que me la enseñen»: va a POST /auth/lead (capture_lead en server.py), que lo guarda en el CRM y en la Bandeja y
+   avisa al dueño. `plan` empieza por «DEMO EMPRESAS» para distinguirlo en la Bandeja. */
+function FormularioDemo() {
+  const [f, setF] = useState({ nombre: '', empresa: '', correo: '', telefono: '', flota: '', mensaje: '' })
+  const [estado, setEstado] = useState('')        // '' | 'enviando' | 'ok' | 'error'
+  const [aviso, setAviso] = useState('')           // el texto del recibido o del error
+  const [falta, setFalta] = useState('')
+  const enviando = useRef(false)                    // dos toques seguidos no mandan dos veces
+  const abierto = useRef(false)
+  const soltar = () => { enviando.current = false }   // tras un error, se puede volver a enviar
+  const cambia = (k) => (e) => setF((v) => ({ ...v, [k]: e.target.value }))
+  const alAbrir = () => { if (!abierto.current) { abierto.current = true; medirAccion('emp_form_abrir') } }
+
+  async function enviar(e) {
+    e.preventDefault()
+    if (enviando.current) return
+    const correo = f.correo.trim()
+    const motivo = !f.nombre.trim() ? tx('Pon tu nombre.')
+      : !f.empresa.trim() ? tx('Pon el nombre de tu empresa.')
+        : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo) ? tx('Pon un correo válido.')
+          : !f.flota ? tx('Elige cuántas furgonetas tienes.') : ''
+    setFalta(motivo)
+    if (motivo) return
+    enviando.current = true
+    setEstado('enviando'); setAviso('')
+    medirAccion('emp_form_enviar')
+    const plan = [
+      'DEMO EMPRESAS', `furgonetas: ${f.flota}`, `tel: ${f.telefono.trim() || '-'}`, `idioma: ${idioma()}`,
+      f.mensaje.trim() && `mensaje: ${f.mensaje.trim()}`,
+    ].filter(Boolean).join(' · ').slice(0, 1000)
+    try {
+      const r = await fetch(`${API_BASE}/auth/lead`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: f.nombre.trim().slice(0, 120), company: f.empresa.trim().slice(0, 120), email: correo, plan }),
+      })
+      let j = null
+      try { j = await r.json() } catch { /* sin cuerpo */ }
+      if (!r.ok) {
+        const d = j?.detail
+        throw new Error(typeof d === 'string' && d.trim() ? tx(d) : tx('No se ha podido enviar. Inténtalo otra vez en un momento.'))
+      }
+      medirAccion('emp_form_ok')
+      setAviso(typeof j?.mensaje === 'string' && j.mensaje ? tx(j.mensaje) : tx('¡Recibido! Te respondemos en menos de 24 horas hábiles.'))
+      setEstado('ok')
+    } catch (err) {
+      medirAccion('emp_form_error')
+      const red = err instanceof TypeError   // fetch sin red
+      setAviso(red || !err?.message ? tx('No se ha podido enviar: parece que no hay conexión. Inténtalo otra vez.') : err.message)
+      setEstado('error')
+      soltar()
+    }
+  }
+
+  if (estado === 'ok') {
+    return (
+      <div role="status" data-testid="emp-recibido" className="rounded-2xl border border-emerald-400/40 bg-emerald-400/10 p-7 text-center">
+        <CheckCircle2 size={34} className="mx-auto text-[color:var(--ld-ok)]" />
+        <p className="mt-3 text-[18px] font-semibold text-[color:var(--ld-text)]">{aviso}</p>
+      </div>
+    )
+  }
+  const campo = 'mt-1.5 w-full rounded-xl border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-bg)] px-3.5 py-3 text-[16px] text-[color:var(--ld-text)] placeholder:text-[color:var(--ld-dim)] focus:outline-none focus:ring-2 focus:ring-brand-400'
+  const etiqueta = 'block text-[14px] font-semibold text-[color:var(--ld-text)]'
+  return (
+    <form noValidate onSubmit={enviar} onFocus={alAbrir} className="rounded-2xl border border-[color:var(--ld-border)] bg-[color:var(--ld-surface)] p-6 sm:p-8">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div><label htmlFor="emp-nombre" className={etiqueta}>{tx('Tu nombre')}</label>
+          <input id="emp-nombre" autoComplete="name" value={f.nombre} onChange={cambia('nombre')} className={campo} /></div>
+        <div><label htmlFor="emp-empresa" className={etiqueta}>{tx('Empresa')}</label>
+          <input id="emp-empresa" autoComplete="organization" value={f.empresa} onChange={cambia('empresa')} className={campo} /></div>
+        <div><label htmlFor="emp-correo" className={etiqueta}>{tx('Correo')}</label>
+          <input id="emp-correo" type="email" autoComplete="email" inputMode="email" value={f.correo} onChange={cambia('correo')} className={campo} /></div>
+        <div><label htmlFor="emp-telefono" className={etiqueta}>{tx('Teléfono (opcional)')}</label>
+          <input id="emp-telefono" type="tel" autoComplete="tel" value={f.telefono} onChange={cambia('telefono')} className={campo} /></div>
+        <div><label htmlFor="emp-flota" className={etiqueta}>{tx('¿Cuántas furgonetas?')}</label>
+          <select id="emp-flota" value={f.flota} onChange={cambia('flota')} className={campo}>
+            <option value="">{tx('Elige')}</option>
+            {TRAMOS_FLOTA.map((t) => <option key={t} value={t}>{t === '100+' ? tx('100 o más') : t}</option>)}
+          </select></div>
+        <div className="sm:col-span-2"><label htmlFor="emp-mensaje" className={etiqueta}>{tx('Mensaje (opcional)')}</label>
+          <textarea id="emp-mensaje" rows={3} value={f.mensaje} onChange={cambia('mensaje')} className={campo} /></div>
+      </div>
+      {falta && <p role="alert" className="mt-4 text-[14px] font-semibold text-[color:var(--ld-warn)]">{falta}</p>}
+      {estado === 'error' && <p role="alert" data-testid="emp-error" className="mt-4 text-[14px] font-semibold text-[color:var(--ld-warn)]">{aviso}</p>}
+      <button type="submit" disabled={estado === 'enviando'} className={`${BTN_PRIMARIO} mt-6 w-full sm:w-auto`}>
+        {estado === 'enviando' ? <><Loader2 size={16} className="animate-spin" /> {tx('Enviando…')}</> : <><Send size={16} /> {tx('Pedir la demostración')}</>}
+      </button>
+      <p className="mt-4 text-[12.5px] leading-relaxed text-[color:var(--ld-dim)]">
+        {tx('Trata estos datos {titular}, responsable de {marca}, solo para contestarte y enseñarte el producto.', { titular: COMPANY.legalName, marca: MARCA.nombre })}{' '}
+        <a href="/privacidad" className="font-semibold text-[color:var(--ld-accent)] hover:underline">{tx('Política de privacidad')}</a>
+      </p>
+    </form>
+  )
+}
+
+export default function Empresas() {
+  const lang = useIdioma()
+  const titulo = tx('{marca} para empresas con furgonetas: revisiones con foto, golpes y vencimientos', { marca: MARCA.nombre })
+  useEffect(() => {
+    const antes = document.title
+    document.title = titulo
+    try { document.documentElement.lang = lang } catch { /* nada */ }
+    return () => { document.title = antes }
+  }, [titulo, lang])
+  const [tema, setTema] = useState(() => { try { return localStorage.getItem('ld_theme') || 'dark' } catch { return 'dark' } })
+  useEffect(() => { try { localStorage.setItem('ld_theme', tema) } catch { /* modo privado */ } }, [tema])
+  const [demo, abrirDemoPanel] = useDemoPanel('emp_demo_panel')
+  const { planes, tramos } = usePlanes()
+  // Sigue en la página a los 10 s: una vez por visita (como rep_10s en /repartidores).
+  useEffect(() => { const t = setTimeout(() => medirAccion('emp_10s'), 10000); return () => clearTimeout(t) }, [])
+
+  const esencial = planes.find((p) => p.clave === 'operacion') || PLANES_EMPRESA[0]
+  const pro = planes.find((p) => p.clave === 'completo') || PLANES_EMPRESA[1]
+  const aMedida = planes.find((p) => !Number(p.por_vehiculo)) || PLANES_EMPRESA[2]
+  const desde = Math.min(...planes.map((p) => Number(p.por_vehiculo)).filter((x) => x > 0))
+  const lineaPrecio = tx('Desde {precio} por vehículo y mes · sin tarjeta', { precio: euros(desde) })
+
+  function respuesta(k) {
+    if (k === 'datos') return tx('No. Cada empresa tiene su propia base de datos, separada de las de las demás. Y los datos son tuyos: si te vas, te los devolvemos o los borramos, lo que elijas.')
+    if (k === 'instalar') return tx('No. Entran desde el navegador del móvil, con el enlace de tu empresa y su correo.')
+    if (k === 'propias') return tx('Sí. La revisión con fotos, el taller, la ITV y los mantenimientos funcionan igual. El proveedor y el fin del renting solo se rellenan si los tienes.')
+    if (k === 'tiempo') return tx('Depende de lo que tardes en tres pasos: crear la cuenta, subir el Excel de furgonetas y el de conductores (antes de guardar ves cómo queda) y mandar a cada conductor el enlace de tu empresa. La primera revisión llega cuando el primer conductor la haga.')
+    return [
+      tx('{plan1}: {p1} por vehículo y mes, con un mínimo de {m1} vehículos facturados. {plan2}: {p2} por vehículo y mes, con un mínimo de {m2}. Para flotas grandes, el plan {plan3}, a medida.', {
+        plan1: tx(esencial.nombre), p1: euros(Number(esencial.por_vehiculo)), m1: esencial.minimo_vehiculos,
+        plan2: tx(pro.nombre), p2: euros(Number(pro.por_vehiculo)), m2: pro.minimo_vehiculos, plan3: tx(aMedida.nombre) }),
+      tx('Usuarios y conductores, sin límite. Descuento por volumen: {lista}.', {
+        lista: tramos.map((t) => tx('un {pct} % desde {n} vehículos', { pct: t.pct, n: t.desde })).join(', ') }),
+      tx('Con pago mensual no hay permanencia: cancelas cuando quieras y sigues hasta el final del mes pagado. Con pago anual pagas {meses} meses y tienes el año entero.', { meses: MESES_ANUAL }),
+      tx('Los {n} primeros días son gratis y sin tarjeta. Precios sin IVA.', { n: DIAS_PRUEBA_EMPRESA }),
+    ].join(' ')
+  }
+
+  const enlaceMenu = 'whitespace-nowrap px-1.5 text-[14px] font-medium text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)]'
+  return (
+    <div className="ld-root min-h-screen overflow-x-hidden font-sans antialiased" data-theme={tema}>
+      {/* ── Cabecera ── */}
+      <nav className="sticky top-0 z-50 border-b border-[color:var(--ld-border)] bg-[color:var(--ld-nav)] backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-[1120px] items-center justify-between gap-2 px-4 sm:px-5">
+          <a href="/" className="flex shrink-0 items-center gap-2 text-[color:var(--ld-text)]">
+            <img src="/favicon.svg" alt="" width="30" height="30" className="rounded-lg" />
+            <span className="font-display text-[18px] font-bold tracking-[-0.02em]">{MARCA.nombre}</span>
+          </a>
+          <div className="flex items-center gap-1 sm:gap-4">
+            <a href="/planes" onClick={() => medirAccion('emp_precios_menu')} className={enlaceMenu}>{tx('Precios')}</a>
+            <a href="/panel/login" className={enlaceMenu}>{tx('Entrar')}</a>
+            <a href={ALTA_EMPRESA} onClick={() => medirAccion('emp_probar_menu')}
+              className="whitespace-nowrap rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 px-3 py-2 text-[13.5px] font-semibold text-[#04121a] hover:brightness-110">{tx('Probar gratis')}</a>
+          </div>
+        </div>
+      </nav>
+
+      {/* ── Arriba: lo que se ve sin deslizar ── */}
+      <header className="relative">
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-40 right-[-10%] h-[520px] w-[720px] rounded-full bg-brand-400/[0.10] blur-[120px]" />
+        </div>
+        <div className="relative mx-auto grid max-w-[1120px] items-center gap-10 px-5 pb-16 pt-7 sm:pt-14 lg:grid-cols-[1.1fr_1fr] lg:gap-10">
+          <div>
+            <p className="inline-flex items-center gap-2 rounded-full border border-brand-400/40 bg-brand-400/10 px-3 py-1 text-[13px] font-semibold text-[color:var(--ld-text)]">
+              <Warehouse size={14} className="text-[color:var(--ld-accent)]" /> {tx('Para empresas con furgonetas')}
+            </p>
+            <h1 className="mt-4 font-display text-[clamp(34px,5.4vw,60px)] font-extrabold leading-[1.03] tracking-[-0.045em] text-[color:var(--ld-text)] [text-wrap:balance]">
+              {tx('Deja de pagar golpes que no son tuyos')}
+            </h1>
+            <p className="mt-4 max-w-[34rem] text-[16.5px] leading-relaxed text-[color:var(--ld-muted)] sm:mt-6 sm:text-[17.5px]">
+              {tx('Cada conductor revisa su furgoneta con fotos antes de salir. Si aparece un golpe, ves en qué revisión apareció y quién la llevaba. Y cuando te pasan un cargo al devolverla, tienes las fotos con fecha.')}
+            </p>
+            <div className="mt-6 flex flex-wrap items-center gap-3 sm:mt-8">
+              <a href={ALTA_EMPRESA} onClick={() => medirAccion('emp_probar_arriba')} className={BTN_PRIMARIO} data-testid="emp-probar">
+                {tx('Probar gratis {n} días', { n: DIAS_PRUEBA_EMPRESA })} <ArrowRight size={16} />
+              </a>
+              <a href="#demo" onClick={() => medirAccion('emp_demo_boton')} className={BTN_SECUNDARIO} data-testid="emp-ensenar">
+                {tx('Que me la enseñen en 15 minutos')}
+              </a>
+            </div>
+            <p className="mt-4 text-[13px] text-[color:var(--ld-dim)]">
+              {lineaPrecio} · <a href="/planes" onClick={() => medirAccion('emp_precios_arriba')} className="font-semibold text-[color:var(--ld-accent)] hover:underline">{tx('Ver precios')}</a>
+            </p>
+          </div>
+          <VistaPanel />
+        </div>
+      </header>
+
+      {/* ── De dónde sale ── */}
+      <Seccion eyebrow={tx('De dónde sale')} titulo={tx('No salió de una oficina. Salió de una nave.')}
+        sub={tx('{marca} se hizo dentro de una empresa de reparto, para su propio día a día. Allí la revisión con fotos es obligatoria antes de salir, y la oficina ve cada mañana quién la ha hecho y quién no.', { marca: MARCA.nombre })}
+        className="border-t border-[color:var(--ld-border)]">
+        <dl className="grid grid-cols-3 gap-3 sm:gap-6">
+          {[[CIFRAS_CASA.naves, tx('naves')], [CIFRAS_CASA.furgonetas, tx('furgonetas')],
+            [tx('unas {n}', { n: CIFRAS_CASA.revisionesSemana }), tx('revisiones con foto cada semana')]].map(([n, t]) => (
+            <div key={t} className="flex flex-col-reverse justify-end rounded-2xl border border-[color:var(--ld-border)] bg-[color:var(--ld-surface)] px-3 py-5 sm:p-6">
+              <dt className="mt-2 text-[13px] leading-snug text-[color:var(--ld-muted)] sm:text-[14.5px]">{t}</dt>
+              <dd className="font-display text-[clamp(26px,4.4vw,44px)] font-extrabold leading-none tracking-[-0.04em] text-[color:var(--ld-text)] tabular-nums">{n}</dd>
+            </div>
+          ))}
+        </dl>
+      </Seccion>
+
+      {/* ── Tres problemas, con su respuesta ── */}
+      <Seccion eyebrow={tx('Lo que te cuesta dinero')} titulo={tx('Tres problemas que acaba pagando la empresa')}
+        className="border-t border-[color:var(--ld-border)]">
+        <div className="grid gap-6 lg:grid-cols-3">
+          {PROBLEMAS.map(({ icono: Icono, titulo: t, texto, ve }) => (
+            <article key={t} className="flex flex-col rounded-2xl border border-[color:var(--ld-border)] bg-[color:var(--ld-surface)] p-6">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-400/[0.12] ring-1 ring-brand-400/25"><Icono size={18} className="text-[color:var(--ld-accent)]" /></span>
+              <h3 className="mt-4 text-[19px] font-semibold tracking-[-0.01em] text-[color:var(--ld-text)]">{tx(t)}</h3>
+              <p className="mt-2 text-[15px] leading-relaxed text-[color:var(--ld-muted)]">{tx(texto)}</p>
+              <p className="mt-5 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ld-accent)]">{tx('Cómo se ve en {marca}', { marca: MARCA.nombre })}</p>
+              <ul className="mt-3 space-y-2.5">
+                {ve.map(([linea, soloPro]) => (
+                  <li key={linea} className="flex gap-2.5 text-[14.5px] leading-snug text-[color:var(--ld-text)]">
+                    <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[color:var(--ld-ok)]" />
+                    <span>{soloPro && <span className="mr-1.5 rounded-md bg-orange-400/15 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-orange-300">{tx('Plan {plan}', { plan: tx(pro.nombre) })}</span>}{tx(linea)}</span>
+                  </li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
+      </Seccion>
+
+      {/* ── Todo lo que lleva: la misma rejilla que la portada ── */}
+      <Seccion eyebrow={tx('Todo lo que lleva')} titulo={tx('El panel de la oficina y el móvil de cada conductor')}
+        sub={tx('Lo que entra en cada plan está en la página de precios.')}
+        className="border-t border-[color:var(--ld-border)]">
+        <ul className="grid gap-px overflow-hidden rounded-2xl border border-[color:var(--ld-border)] bg-[color:var(--ld-border)] sm:grid-cols-2 lg:grid-cols-3">
+          {MODULOS_EMPRESA.map(([Icono, t, d]) => (
+            <li key={t} className="bg-[color:var(--ld-bg)] p-5">
+              <Icono size={19} className="text-[color:var(--ld-accent)]" />
+              <h3 className="mt-3 text-[15.5px] font-semibold text-[color:var(--ld-text)]">{tx(t)}</h3>
+              <p className="mt-1.5 text-[14px] leading-relaxed text-[color:var(--ld-muted)]">{tx(d)}</p>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 text-[14px]"><a href="/planes" onClick={() => medirAccion('emp_precios_modulos')} className="inline-flex items-center gap-1.5 font-semibold text-[color:var(--ld-accent)] hover:underline">{tx('Ver qué lleva cada plan')} <ArrowRight size={14} /></a></p>
+      </Seccion>
+
+      {/* ── Haz la cuenta ── */}
+      <Seccion id="cuenta" eyebrow={tx('Haz la cuenta')} titulo={tx('Lo que te cuesta, frente a lo que te ahorras')}
+        className="border-t border-[color:var(--ld-border)]">
+        <Calculadora planes={planes} tramos={tramos} />
+      </Seccion>
+
+      {/* ── Cómo se empieza ── */}
+      <Seccion eyebrow={tx('Cómo se empieza')} titulo={tx('Tres pasos, y la primera mañana ya lo ves')}
+        className="border-t border-[color:var(--ld-border)]">
+        <ol className="grid gap-10 md:grid-cols-3 md:gap-8">
+          {PASOS_EMPRESA.map(([Icono, t, d], i) => (
+            <li key={t}>
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-400/[0.12] ring-1 ring-brand-400/25"><Icono size={18} className="text-[color:var(--ld-accent)]" /></span>
+                <span className="font-mono text-[12px] font-semibold text-[color:var(--ld-dim)]">0{i + 1}</span>
+              </div>
+              <h3 className="mt-4 text-[18px] font-semibold tracking-[-0.01em] text-[color:var(--ld-text)]">{tx(t)}</h3>
+              <p className="mt-2 text-[15px] leading-relaxed text-[color:var(--ld-muted)]">{tx(d)}</p>
+            </li>
+          ))}
+        </ol>
+        <div className="mt-10 flex flex-wrap items-center gap-3">
+          <button type="button" onClick={abrirDemoPanel} disabled={demo === 'cargando'} className={BTN_SECUNDARIO}>
+            {demo === 'cargando' ? <Loader2 size={16} className="animate-spin" /> : null} {tx('Ver la demo del panel')}
+          </button>
+          <span className="text-[13px] text-[color:var(--ld-dim)]">{tx('Un panel de ejemplo, de solo lectura, sin registrarte.')}</span>
+        </div>
+        {demo === 'error' && <p role="status" className="mt-2 text-[13px] text-[color:var(--ld-warn)]">{tx('La demo no responde ahora mismo. Prueba a crear una cuenta: son dos minutos.')}</p>}
+      </Seccion>
+
+      {/* ── Preguntas ── */}
+      <Seccion eyebrow={tx('Preguntas frecuentes')} titulo={tx('Lo que pregunta el dueño de una flota')} className="border-t border-[color:var(--ld-border)]">
+        <div className="divide-y divide-[color:var(--ld-border)] overflow-hidden rounded-2xl border border-[color:var(--ld-border)] bg-[color:var(--ld-surface)]">
+          {PREGUNTAS_EMPRESA.map(([q, k]) => (
+            <details key={k} className="group px-5 py-4">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[16px] font-semibold text-[color:var(--ld-text)]">
+                {tx(q)} <span className="text-[color:var(--ld-accent)] transition group-open:rotate-45">+</span>
+              </summary>
+              <p className="mt-2.5 text-[15px] leading-relaxed text-[color:var(--ld-muted)]">{respuesta(k)}</p>
+            </details>
+          ))}
+        </div>
+      </Seccion>
+
+      {/* ── Que me la enseñen ── */}
+      <Seccion id="demo" eyebrow={tx('Demostración')} titulo={tx('Que te la enseñemos en 15 minutos')}
+        sub={tx('Déjanos tus datos y te contestamos para quedar. Si lo prefieres, empieza la prueba ya: son {n} días gratis.', { n: DIAS_PRUEBA_EMPRESA })}
+        className="scroll-mt-16 border-t border-[color:var(--ld-border)]">
+        <FormularioDemo />
+      </Seccion>
+
+      {/* ── Cierre ── */}
+      <section className="mx-auto max-w-[1120px] px-5 pb-20">
+        <div className="relative overflow-hidden rounded-3xl border border-brand-400/25 bg-[color:var(--ld-surface)] px-6 py-14 text-center sm:px-12">
+          <div aria-hidden className="pointer-events-none absolute -top-24 left-1/2 h-[300px] w-[640px] -translate-x-1/2 rounded-full bg-brand-400/[0.14] blur-[90px]" />
+          <h2 className="relative font-display text-[clamp(28px,4vw,44px)] font-extrabold leading-[1.08] tracking-[-0.035em] text-[color:var(--ld-text)] [text-wrap:balance]">{tx('El próximo golpe, con sus fotos y su fecha')}</h2>
+          <p className="relative mx-auto mt-4 max-w-xl text-[16.5px] leading-relaxed text-[color:var(--ld-muted)]">{lineaPrecio}</p>
+          <div className="relative mt-8 flex flex-wrap justify-center gap-3">
+            <a href={ALTA_EMPRESA} onClick={() => medirAccion('emp_probar_cierre')} className={BTN_PRIMARIO}>{tx('Probar gratis {n} días', { n: DIAS_PRUEBA_EMPRESA })} <ArrowRight size={16} /></a>
+            <a href="#demo" onClick={() => medirAccion('emp_demo_cierre')} className={BTN_SECUNDARIO}>{tx('Que me la enseñen en 15 minutos')}</a>
+          </div>
+        </div>
+      </section>
+
+      <Pie lang={lang} tema={tema} setTema={setTema} />
+    </div>
+  )
+}
