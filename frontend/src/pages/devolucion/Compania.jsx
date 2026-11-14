@@ -2,7 +2,7 @@
    página), la fuente con enlace, edición y fecha de lectura, los precios que publique, lo que dice del proceso, el botón
    para repasar el vehículo con esa guía y las demás compañías. Lo mismo, en HTML, lo sirve la función de Pages
    (functions/devolucion-renting/[compania].js) para los buscadores. */
-import { COMPANIAS, DOCUMENTOS, PRECIOS_APARTE, documentosDe, regla, subtituloCompania, tituloCompania, vehiculoPara, vozDe } from '../../lib/guiasRenting'
+import { COMPANIAS, DOCUMENTOS, PRECIOS_APARTE, documentosDe, paginasDe, regla, subtituloCompania, tituloCompania, vehiculoPara, vozDe } from '../../lib/guiasRenting'
 import { BTN_PRIMARIO, BTN_SECUNDARIO } from '../portadaComun'
 import { ENLACE_TEXTO, Fuente, H1, Mandanosla, ORDEN_ZONAS, Pag, PuertaFds, RUTA, Vigencia, avisoDe, zonaNombre } from './comun'
 import { escribirEstado } from './estado'
@@ -40,7 +40,7 @@ function Tabla({ id }) {
               <td className={`${celda} text-[color:var(--ld-text2)]`}><span className="block text-[12.5px] font-semibold text-[color:var(--ld-ok)] sm:hidden">{acepta}</span>{r.no_se_cobra}</td>
               <td className={`${celda} mt-1 text-[color:var(--ld-warn)] sm:mt-0`}><span className="block text-[12.5px] font-semibold sm:hidden">{noAcepta}</span>{r.se_cobra ?? vozDe(id).soloAcepta}
                 {r.condicion && <span className="mt-1 block text-[13px] text-[color:var(--ld-muted)]">{r.condicion}</span>}</td>
-              <td className={`${celda} mt-1 sm:mt-0 sm:pr-0 sm:text-right`}><Pag n={r.pagina} /></td>
+              <td className={`${celda} mt-1 sm:mt-0 sm:pr-0 sm:text-right`}><Pag n={paginasDe(r)} /></td>
             </tr>
           ))}
         </tbody>

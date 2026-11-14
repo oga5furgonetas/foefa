@@ -4,9 +4,9 @@
    junto al vehículo, con una mano). Se puede volver atrás sin perder lo contestado después. */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import { aceptaDe, ayudaParaMedir, cobraDe, minuscula, vozDe } from '../../lib/guiasRenting'
+import { aceptaDe, ayudaParaMedir, cobraDe, cobroDe, minuscula, paginaCobroDe, vozDe } from '../../lib/guiasRenting'
 import Vehiculo, { ZONAS_DIBUJO } from './Vehiculo'
-import { H2, Pag, TextoRegla, Vigencia, etiquetaPaso, zonaNombre } from './comun'
+import { BaseCobro, CondicionCobro, H2, Pag, TextoRegla, Vigencia, etiquetaPaso, zonaNombre } from './comun'
 import { NOTA_MAX } from './estado'
 
 function Medida({ objeto }) {
@@ -52,6 +52,9 @@ export default function Paso({ vehiculo, doc, pasos, i, respuesta, nota, onRespo
   useEffect(() => { caja.current?.focus({ preventScroll: true }) }, [i])
   useAltoBarra(barra)
   const ayuda = ayudaParaMedir(p)
+  // Si el paso dice «se factura», dónde lo dice el documento y la condición que le pone, a la vista en el mismo paso.
+  const bases = p.si === 'factura' ? cobroDe(doc, p.tema, vehiculo) : []
+  const condiciones = [...new Set(bases.map((b) => b.condicionCorta || b.condicion).filter(Boolean))]
   const etiqueta = etiquetaPaso(p)
   const marca = (p.piezas || ZONAS_DIBUJO[p.zona] || []).length > 0
   const tipo = vehiculo === 'turismo' ? 'Turismo' : 'Furgoneta'
@@ -87,8 +90,10 @@ export default function Paso({ vehiculo, doc, pasos, i, respuesta, nota, onRespo
                   <TextoRegla r={r} doc={doc} si={p.si} compacta />
                 </div>
               ))}
+              {bases.map((b) => <BaseCobro key={`${b.pagina || b.fuente}|${b.cita}`} b={b} doc={doc} className="mt-2.5" />)}
             </div>
           </div>
+          {condiciones.map((t) => <CondicionCobro key={t} texto={t} className="mt-4" />)}
           <Vigencia doc={doc} className="mt-3" />
 
           {ayuda && (
@@ -114,7 +119,7 @@ export default function Paso({ vehiculo, doc, pasos, i, respuesta, nota, onRespo
                   <li key={r.indice} className="border-t border-[color:var(--ld-border)] py-3.5">
                     <p className="text-[14.5px] font-bold leading-snug text-[color:var(--ld-text)]">{r.dano} {r.zona !== p.zona && <span className="font-normal text-[color:var(--ld-muted)]">· {zonaNombre(r.zona)}</span>}</p>
                     <LineaCorta {...aceptaDe(r, v)} color="text-[color:var(--ld-ok)]" />
-                    <LineaCorta {...cobraDe(r, v)} color="text-[color:var(--ld-warn)]"><Pag n={r.pagina} /></LineaCorta>
+                    <LineaCorta {...cobraDe(r, v)} color="text-[color:var(--ld-warn)]"><Pag n={paginaCobroDe(r)} /></LineaCorta>
                   </li>
                 ))}
               </ul>

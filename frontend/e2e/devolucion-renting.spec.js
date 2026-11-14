@@ -20,6 +20,10 @@ function enlace(slug, vehiculo, r, p = 'fin', extra = '') {
   return `${RUTA}#v=${vehiculo === 'turismo' ? 't' : 'f'}&c=${slug}&h=${huellaRecorrido(doc, vehiculo)}${r ? `&r=${r}` : ''}${extra}&p=${p}`
 }
 const nPasos = (slug, vehiculo) => pasosDe(COMPANIAS.find((c) => c.slug === slug).documentos[vehiculo], vehiculo).length
+/* El texto de los bloques del resultado con etiqueta (no el del proceso, que es el del documento tal cual). */
+const bloques = (page) => page.locator('[data-testid="dev-factura"], [data-testid="dev-fuera"], [data-testid="dev-no-lista"], [data-testid="dev-aparte"]').allInnerTexts()
+/* Las respuestas de un recorrido, paso a paso, según cada paso («s», «n» o «x»). */
+const respuestas = (slug, vehiculo, f) => pasosDe(COMPANIAS.find((c) => c.slug === slug).documentos[vehiculo], vehiculo).map(f).join('')
 
 /* Las peticiones a /api: se contestan (para no ensuciar la consola) y se apuntan. */
 async function preparar(page) {
@@ -181,15 +185,19 @@ test.describe('/devolucion-renting', () => {
     await expect(page.getByTestId('dev-base-cobro')).toContainText('cobrando por reparación')
     await expect(page.getByTestId('dev-fuera').locator('h3')).toContainText('Lo que su guía no acepta')
     await expect(page.getByTestId('dev-item-fuera')).toContainText('Falta un juego de llaves')
-    await expect(page.getByTestId('dev-item-fuera')).toContainText('No dice cómo lo cobra.')
+    // La regla ya dice que no da precio: no se repite «No dice cómo lo cobra».
+    await expect(page.getByTestId('dev-item-fuera')).toContainText('La guía no da precio')
+    await expect(page.getByTestId('dev-item-fuera').getByTestId('dev-sin-cobro')).toHaveCount(0)
     await expect(page.getByTestId('dev-nose-lista')).toContainText('Revisarlo con luz natural, sin sombras, y en seco.')
     // Un «No» no certifica la zona: se dice lo que se contestó y lo que tampoco acepta sin preguntarlo.
     await expect(res).not.toContainText('Dentro de lo que su guía acepta')
     await expect(page.getByTestId('dev-no-lista').locator('h3')).toContainText('Lo que has contestado que no')
     const noParagolpes = page.getByTestId('dev-item-no').first()
     await expect(noParagolpes).toContainText('Contestaste que no a: ¿Algún arañazo o rozadura en los paragolpes')
-    await expect(noParagolpes.getByTestId('dev-sin-preguntar')).toContainText('Sin preguntar, su guía tampoco acepta en esta zona:')
-    await expect(noParagolpes.getByTestId('dev-sin-preguntar')).toContainText('parachoques o rejilla rotos, agrietados o deformados')
+    await expect(noParagolpes.getByTestId('dev-sin-preguntar').first()).toContainText('Sin preguntar, en esta zona su guía no acepta, sea del tamaño que sea:')
+    await expect(noParagolpes.getByTestId('dev-sin-preguntar').first()).toContainText('parachoques o rejilla rotos, agrietados o deformados')
+    // Lo que acepta hasta un límite no sale como «no acepta».
+    await expect(noParagolpes.getByTestId('dev-sin-preguntar').nth(1)).toContainText('Y pone límites a:')
     await expect(page.getByTestId('dev-aparte')).toContainText('Bacas, barras de techo y enganche de remolque')
     await expect(res.getByTestId('dev-vigencia').first()).toContainText('Documento de LeasePlan (hoy Ayvens), sin fecha')
     await expect(page.getByTestId('dev-aviso')).toHaveText('Orientativo: decide el perito de tu compañía con la guía que esté en vigor.')
@@ -288,7 +296,8 @@ test.describe('/devolucion-renting', () => {
     const n = nPasos('bmw-financial-services', 'turismo')
     await page.goto(enlace('bmw-financial-services', 'turismo', `nnsn${'n'.repeat(n - 5)}s`))
     await expect(page.getByTestId('dev-item-factura')).toContainText('Testigo de avería encendido')
-    await expect(page.getByTestId('dev-item-factura')).toContainText('Su pág. 15: se anota cualquier aviso de fallo, avería o falta de mantenimiento del cuadro. Si, además, está encendido alguno de los que el manual de usuario del coche da como avería, el coche no se puede devolver y se factura el Valor Final del contrato.')
+    await expect(page.getByTestId('dev-item-factura')).toContainText('Si además hay encendido un testigo de avería según el manual de usuario, el vehículo no se puede devolver y se factura el Valor Final del contrato. pág. 15')
+    await expect(page.getByTestId('dev-item-factura')).toContainText('Su pág. 15 anota, además, cualquier otro aviso del cuadro: de fallo, de avería o de falta de mantenimiento.')
     await expect(page.getByTestId('dev-item-fuera')).toContainText('Su pág. 16 lo resume de otra forma')
 
     // Volkswagen: la póliza de los 3 últimos meses va en el resultado.
@@ -302,6 +311,106 @@ test.describe('/devolucion-renting', () => {
     await expect(page.getByTestId('dev-item-no').first()).toContainText('Su tabla pone precio desde 2 cm y no dice qué pasa por debajo.')
     await expect(page.getByTestId('dev-aviso')).toHaveText('Orientativo: decide quien revise el vehículo en Europcar, con la tabla que esté en vigor.')
     await expect(page.getByTestId('dev-resultado')).not.toContainText(/perito|precio fijo/i)
+  })
+
+  test('Alphabet: cada «se factura» con su página exacta, y lo de fuera con la condición de su pág. 6', async ({ page }) => {
+    const { api, fallos } = await preparar(page)
+    const condicion = 'En caso contrario, los daños exteriores serán facturados al cliente'
+    // Todo «Sí»: cada frase dice a qué alcanza; la pág. 9 (el habitáculo) solo para el interior.
+    await page.goto(enlace('alphabet', 'furgoneta', 's'.repeat(nPasos('alphabet', 'furgoneta'))))
+    const bases = page.getByTestId('dev-base-cobro')
+    await expect(bases.filter({ hasText: 'pág. 9' })).toHaveCount(1)
+    await expect(bases.filter({ hasText: 'pág. 9' })).toContainText(/^Interior: lo dice en su pág\. 9/)
+    await expect(bases.filter({ hasText: 'pág. 32' })).toHaveText('Paragolpes, carrocería y retrovisores: lo pone bajo «Facturables» (8.4 Carrocería), en su pág. 32.')
+    await expect(bases.filter({ hasText: '8.1 Parabrisas' })).toContainText('Lunas: lo pone bajo «Facturables»')
+    await expect(bases.filter({ hasText: '8.2 Llantas' })).toContainText('en su pág. 30')
+    await expect(page.getByTestId('dev-condicion-cobro')).toHaveCount(1)
+    await expect(page.getByTestId('dev-condicion-cobro')).toContainText(`Lo de fuera depende de tu contrato. Su pág. 6: «Sólo en el caso de que el contrato de renting no incluya el seguro obligatorio ni el servicio de reparaciones`)
+    await expect(page.getByTestId('dev-condicion-cobro')).toContainText(condicion)
+    // Cada cosa con su página, sin dos páginas en la misma línea: la limpieza es de la 20 y la llanta de la 30.
+    const limpieza = page.getByTestId('dev-item-factura').filter({ hasText: 'Suciedad que pide limpieza especializada' })
+    await expect(limpieza).toContainText('Si son varias piezas, cuenta como limpieza alta pág. 20')
+    await expect(page.getByTestId('dev-resultado')).not.toContainText(/\(página \d+\)/)
+    await expect(page.getByTestId('dev-item-factura').filter({ hasText: 'Arañazo de más de 4 cm en una llanta' })).toContainText('pág. 30')
+    // Lo que pide aparte, con la palabra que cabe: lo que factura, «Su guía dice»; nunca «no acepta: desrotulación».
+    await expect(page.getByTestId('dev-aparte')).toContainText('Su guía dice: si se devuelve rotulado sin haber contratado la desrotulación en la cuota, Alphabet factura su coste')
+    await expect(page.getByTestId('dev-aparte')).not.toContainText('Su guía no acepta: desrotulación')
+
+    // Solo el interior: la pág. 9 y ninguna condición de lo de fuera.
+    await page.goto(enlace('alphabet', 'turismo', respuestas('alphabet', 'turismo', (p) => (p.tema === 'interior' ? 's' : 'n'))))
+    await expect(page.getByTestId('dev-base-cobro')).toHaveText('Lo dice en su pág. 9: «Se considerarán daños facturables y, por tanto, serán facturados al cliente, aquellos que no presentaba el vehículo en el momento de la entrega».')
+    await expect(page.getByTestId('dev-condicion-cobro')).toHaveCount(0)
+
+    // Solo una luna: la pág. 28, nunca la 9, y la condición a la vista.
+    await page.goto(enlace('alphabet', 'turismo', respuestas('alphabet', 'turismo', (p) => (p.tema === 'lunas' ? 's' : 'n'))))
+    await expect(page.getByTestId('dev-base-cobro')).toHaveText('Lo pone bajo «Facturables» (8.1 Parabrisas, ópticas, etc), en su pág. 28.')
+    await expect(page.getByTestId('dev-condicion-cobro')).toContainText(condicion)
+
+    // La zona de carga: la pág. 13 en el turismo y la 16 en la furgoneta.
+    await page.goto(enlace('alphabet', 'turismo', respuestas('alphabet', 'turismo', (p) => (p.tema === 'carga' ? 's' : 'n'))))
+    await expect(page.getByTestId('dev-base-cobro')).toContainText('Lo dice en su pág. 13:')
+    await page.goto(enlace('alphabet', 'furgoneta', respuestas('alphabet', 'furgoneta', (p) => (p.tema === 'carga' ? 's' : 'n'))))
+    await expect(page.getByTestId('dev-base-cobro')).toContainText('Lo dice en su pág. 16:')
+
+    // En el paso de fuera, dónde lo dice y la condición, corta; en el del interior, sin condición.
+    await page.goto(enlace('alphabet', 'furgoneta', '', 0))
+    await expect(page.getByTestId('dev-paso').getByTestId('dev-base-cobro')).toHaveText('Lo pone bajo «Facturables» (8.4 Carrocería), en su pág. 32.')
+    await expect(page.getByTestId('dev-paso').getByTestId('dev-condicion-cobro')).toContainText('Lo de fuera depende de tu contrato: su pág. 6')
+    const interior = respuestas('alphabet', 'furgoneta', (p) => (p.tema === 'interior' ? '|' : 'n')).indexOf('|')
+    await page.goto(enlace('alphabet', 'furgoneta', 'n'.repeat(interior), interior))
+    await expect(page.getByTestId('dev-pregunta')).toContainText('por dentro')
+    await expect(page.getByTestId('dev-paso').getByTestId('dev-base-cobro')).toContainText('pág. 9')
+    await expect(page.getByTestId('dev-paso').getByTestId('dev-condicion-cobro')).toHaveCount(0)
+    soloContador(api)
+    expect(fallos).toEqual([])
+  })
+
+  test('las frases del resultado no se contradicen con su etiqueta: BMW, Volkswagen, Athlon y Ayvens', async ({ page }) => {
+    await preparar(page)
+    const todo = (slug, vehiculo, letra) => enlace(slug, vehiculo, letra.repeat(nPasos(slug, vehiculo)))
+    const NUNCA = /no lo dice expresamente|Su guía solo dice lo que acepta\.|no acepta: (si |todos los costes|no da importe|hay que )|tampoco acepta/i
+
+    // BMW: «Sin limpiar» ya dice qué se puede reclamar (sin un «No dice cómo lo cobra» debajo); falta una llave: lo que
+    // pide, y una sola vez que no dice cómo lo cobra.
+    await page.goto(todo('bmw-financial-services', 'turismo', 's'))
+    const limpieza = page.getByTestId('dev-item-fuera').filter({ hasText: 'Sin limpiar' })
+    await expect(limpieza).toContainText('se podría reclamar el coste de la limpieza')
+    await expect(limpieza.getByTestId('dev-sin-cobro')).toHaveCount(0)
+    const llaves = page.getByTestId('dev-item-fuera').filter({ hasText: 'Falta una llave' })
+    await expect(llaves).toContainText('Su guía pide: entregar la ficha técnica y el permiso de circulación originales')
+    await expect(llaves.getByTestId('dev-sin-cobro')).toHaveText('No dice cómo lo cobra.')
+    await expect(llaves).not.toContainText('no dice qué se cobra')
+    expect((await bloques(page)).join(' ')).not.toMatch(NUNCA)
+
+    // BMW, todo «No»: lo que acepta en parte no sale como «no acepta» («daños que se quitan puliendo»).
+    await page.goto(todo('bmw-financial-services', 'turismo', 'n'))
+    const pintura = page.getByTestId('dev-item-no').filter({ hasText: 'Pintura · arañazos' })
+    await expect(pintura.getByTestId('dev-sin-preguntar').filter({ hasText: 'no acepta, sea del tamaño' })).not.toContainText('puliendo')
+    await expect(pintura.getByTestId('dev-sin-preguntar').filter({ hasText: 'puliendo' })).toContainText(/^Y pone límites a: /)
+    await expect(page.getByTestId('dev-titular')).toHaveText('cosas fuera de lo que su guía da por bueno')
+
+    // Volkswagen: bajo «no acepta», lo que sí acepta (de eso se ha pasado), no «la guía no lo dice expresamente».
+    await page.goto(todo('volkswagen-financial-services', 'furgoneta', 's'))
+    await expect(page.getByTestId('dev-item-fuera').filter({ hasText: 'en una llanta' })).toContainText('Su guía acepta: pequeños roces de hasta 0,5 cm de largo, como mucho 3 roces por llanta. pág. 6')
+    await expect(page.getByTestId('dev-item-fuera').filter({ hasText: 'menos de 2 mm de dibujo' })).toContainText('Su guía acepta: profundidad igual o superior a 2 mm')
+    expect((await bloques(page)).join(' ')).not.toMatch(NUNCA)
+    // Con todo «No», un manual que no dice cobrar nada no lleva «0 cosas que su guía dice que se facturan».
+    await page.goto(todo('volkswagen-financial-services', 'furgoneta', 'n'))
+    await expect(page.getByTestId('dev-titular')).toHaveText('cosas que su guía no acepta')
+    await page.goto(todo('volkswagen-financial-services', 'turismo', 'x'))
+    await expect(page.getByTestId('dev-titular')).toHaveText('cosas que su guía no acepta')
+
+    // Athlon: «Su guía no da importe; …», con su sujeto; una sola página por línea.
+    await page.goto(todo('athlon', 'furgoneta', 's'))
+    await expect(page.getByTestId('dev-item-fuera').filter({ hasText: 'Falta algo' })).toContainText('Su guía no da importe; deben devolverse')
+    await expect(page.getByTestId('dev-item-fuera').filter({ hasText: 'limpieza estándar' })).toContainText('Manchas o suciedad no derivada de un uso normal pág. 11')
+    await expect(page.getByTestId('dev-resultado')).not.toContainText(/\(p\. \d+\)/)
+    expect((await bloques(page)).join(' ')).not.toMatch(NUNCA)
+
+    // Ayvens (turismo): lo que hay que pagar por quitar los adhesivos, «Su guía dice», no «Su guía no acepta».
+    await page.goto(todo('ayvens', 'turismo', 's'))
+    await expect(page.getByTestId('dev-aparte')).toContainText('Su guía dice: hay que pagar todos los costes de quitarlos')
+    expect((await bloques(page)).join(' ')).not.toMatch(NUNCA)
   })
 
   test('«Otra compañía»: lo que piden las demás, tema a tema, sin rangos que mezclen ni «No cobra: Nada»', async ({ page }) => {

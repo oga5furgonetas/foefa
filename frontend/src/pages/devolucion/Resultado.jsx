@@ -6,10 +6,10 @@
    Se guarda o se imprime (hoja de impresión, con la fecha y las direcciones escritas) y se manda: el resultado viaja
    en el propio enlace. */
 import { useState } from 'react'
-import { DOCUMENTOS, aparteDe, cobraDe, cobroDe, companiaDe, resumen, vozDe } from '../../lib/guiasRenting'
+import { DOCUMENTOS, aceptaDe, aparteDe, cobraDe, cobroDe, companiaDe, noAceptaDe, paginaCobroDe, paginasDe, resumen, sinTolerancia, titularDe, vozDe } from '../../lib/guiasRenting'
 import { BTN_PRIMARIO, BTN_SECUNDARIO } from '../portadaComun'
 import { MARCA } from '../../marca'
-import { ENLACE_TEXTO, Fuente, Mandanosla, Pag, PuertaFds, Vigencia, avisoDe, etiquetaPaso, textoAcepta, textoNoAcepta, zonaNombre } from './comun'
+import { BaseCobro, CondicionCobro, ENLACE_TEXTO, Fuente, Mandanosla, Pag, PuertaFds, Vigencia, avisoDe, etiquetaPaso, textoAcepta, textoNoAcepta, zonaNombre } from './comun'
 
 const CONSEJO_REVISAR = /luz natural|seco|al revisarlo|revisar el coche limpio/i
 const hoy = () => new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -47,19 +47,47 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
   const v = vozDe(c)
   const n = v.plural ? 'n' : ''
   const [copiado, setCopiado] = useState('')
-  const { factura, fuera, sinCriterio, no, noSe, cifra } = resumen(pasos, respuestas)
+  const cuentas = resumen(pasos, respuestas)
+  const { factura, fuera, sinCriterio, no, noSe, cifra } = cuentas
   const consejos = (d.proceso.recomendaciones_antes_de_devolver || []).filter((t) => CONSEJO_REVISAR.test(t))
   const aparte = aparteDe(doc, vehiculo)
   const pr = d.proceso
-  // Dónde dice el documento que cobra lo de cada cosa que «se factura» (si no lo dice la propia regla).
-  const bases = [...new Map(factura.flatMap(({ p }) => cobroDe(doc, p.tema)).map((b) => [b.cita, b])).values()]
-  const titular = fuera.length === 0 ? (cifra === 1 ? `cosa que ${v.su} dice${n} que se factura` : `cosas que ${v.su} dice${n} que se facturan`)
-    : factura.length === 0 ? (cifra === 1 ? `cosa que ${v.su} no acepta${n}` : `cosas que ${v.su} no acepta${n}`)
-      : (cifra === 1 ? `cosa fuera de lo que ${v.su} da${n} por bueno` : `cosas fuera de lo que ${v.su} da${n} por bueno`)
+  // Dónde dice el documento que cobra lo de cada cosa que «se factura» (si no lo dice la propia regla), una vez cada
+  // frase, y las condiciones que pone a ese cobro (Alphabet, lo de fuera: su pág. 6), una vez cada una.
+  // Si hay más de una frase, cada una dice a qué cosas alcanza («Paragolpes y retrovisores: lo pone bajo…»).
+  const porBase = new Map()
+  for (const { p } of factura) {
+    for (const b of cobroDe(doc, p.tema, vehiculo)) {
+      const k = `${b.pagina || b.fuente}|${b.cita}`
+      if (!porBase.has(k)) porBase.set(k, { b, que: [] })
+      const que = porBase.get(k).que
+      const nombre = p.tema === 'accesorios' ? 'Accesorios' : zonaNombre(p.zona)
+      if (!que.includes(nombre)) que.push(nombre)
+    }
+  }
+  const bases = [...porBase.values()]
+  const condiciones = [...new Set(bases.map(({ b }) => b.condicion).filter(Boolean))]
+  const juntar = (l) => l.map((t, k) => (k ? t.charAt(0).toLowerCase() + t.slice(1) : t)).join(', ').replace(/, ([^,]*)$/, ' y $1')
+  const titular = titularDe(pasos, cuentas, v)
   const partes = [[factura, `que ${v.su} dice${n} que se factura${factura.length === 1 ? '' : 'n'}`], [fuera, `que no acepta${n}`], [sinCriterio, 'que no dice si se cobra'],
     [noSe, 'sin saber todavía'], [no, 'que has contestado que no']].filter(([l]) => l.length).map(([l, t]) => `${l.length} ${t}`)
   const cambiar = (i) => () => onCambiar(i)
-  const tambienNoAcepta = (p) => p.mas.filter((r) => cobraDe(r, v).etiqueta)
+  // Lo que no se ha preguntado de una zona contestada con «No», en tres grupos que no se mezclan: lo que no acepta sea
+  // del tamaño que sea, lo que acepta solo hasta un límite (nunca «tampoco acepta» de algo que acepta en parte) y lo
+  // demás de lo que habla sin decir qué acepta. Una tabla de precios no «acepta» nada: a todo le pone precio.
+  const sinPreguntar = (p) => {
+    const otras = p.mas.filter((r) => cobraDe(r, v).etiqueta)
+    if (v.voz === 'tabla') return otras.length ? [{ que: otras, dice: `Sin preguntar, en esta zona ${v.su} también pone precio a` }] : []
+    const ninguna = otras.filter(sinTolerancia)
+    const limites = otras.filter((r) => !ninguna.includes(r) && aceptaDe(r, v).etiqueta === v.acepta)
+    const resto = otras.filter((r) => !ninguna.includes(r) && !limites.includes(r))
+    const grupos = [
+      [ninguna, v.voz === 'condiciones' ? `${v.su} cobran, sea del tamaño que sea` : `${v.su} no acepta${n}, sea del tamaño que sea`, null],
+      [limites, `${v.su} pone${n} límites a`, `pone${n} límites a`],
+      [resto, `${v.su} también habla${n} de`, `habla${n} también de`],
+    ].filter(([l]) => l.length)
+    return grupos.map(([que, primero, despues], k) => ({ que, dice: k === 0 ? `Sin preguntar, en esta zona ${primero}` : `Y ${despues}` }))
+  }
 
   async function mandar() {
     const url = window.location.href
@@ -90,15 +118,14 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
 
       {factura.length > 0 && (
         <Bloque titulo={`Lo que ${v.su} dice${n} que se factura`} cuenta={factura.length} testid="dev-factura"
-          pie={bases.map((b) => (
-            <p key={b.cita} className="mt-2.5 text-[13.5px] leading-snug text-[color:var(--ld-muted)]" data-testid="dev-base-cobro">
-              {b.fuente ? <>Lo dice <a href={b.url} target="_blank" rel="noopener noreferrer" className={ENLACE_TEXTO}>{b.fuente.charAt(0).toLowerCase() + b.fuente.slice(1)}</a></> : <>Lo dice{n ? 'n' : ''} en su <Pag n={b.pagina} /></>}: «{b.cita}».
-            </p>
-          ))}>
+          pie={<>
+            {bases.map(({ b, que }) => <BaseCobro key={`${b.pagina || b.fuente}|${b.cita}`} b={b} doc={doc} que={bases.length > 1 ? juntar(que) : null} className="mt-2.5" />)}
+            {condiciones.map((t) => <CondicionCobro key={t} texto={t} className="mt-3" />)}
+          </>}>
           {factura.map(({ p, i }) => (
             <Item key={i} titulo={p.hallazgo} nota={notas[i]} etiqueta={p.hallazgo} onCambiar={cambiar(i)} testid="dev-item-factura">
-              <p>{p.r.se_cobra} <Pag n={p.r.pagina} /></p>
-              {p.con.map((r) => <p key={r.indice}>{textoNoAcepta(r, doc, 'factura')} <Pag n={r.pagina} /></p>)}
+              <p>{p.r.se_cobra} <Pag n={paginaCobroDe(p.r)} /></p>
+              {p.con.map((r) => <p key={r.indice}>{textoNoAcepta(r, doc, 'factura')} <Pag n={paginaCobroDe(r)} /></p>)}
               <NotaPaso p={p} />
             </Item>
           ))}
@@ -106,21 +133,23 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
       )}
       {fuera.length > 0 && (
         <Bloque titulo={`Lo que ${v.su} no acepta${n}`} cuenta={fuera.length} testid="dev-fuera">
-          {fuera.map(({ p, i }) => (
-            <Item key={i} titulo={p.hallazgo} nota={notas[i]} etiqueta={p.hallazgo} onCambiar={cambiar(i)} testid="dev-item-fuera">
-              <p>{p.r.se_cobra ?? v.soloAcepta} <Pag n={p.r.pagina} /></p>
-              {p.con.map((r) => <p key={r.indice}>{r.se_cobra ?? v.soloAcepta} <Pag n={r.pagina} /></p>)}
-              <p className="text-[color:var(--ld-muted)]">No dice cómo lo cobra.</p>
-              <NotaPaso p={p} />
-            </Item>
-          ))}
+          {fuera.map(({ p, i }) => {
+            const lineas = [p.r, ...p.con].map((r) => ({ r, ...noAceptaDe(r, v) }))
+            return (
+              <Item key={i} titulo={p.hallazgo} nota={notas[i]} etiqueta={p.hallazgo} onCambiar={cambiar(i)} testid="dev-item-fuera">
+                {lineas.map(({ r, texto, pagina }) => <p key={r.indice}>{texto} <Pag n={pagina} /></p>)}
+                {lineas.some((l) => l.sinCobro) && <p className="text-[color:var(--ld-muted)]" data-testid="dev-sin-cobro">No dice{n} cómo lo cobra{n}.</p>}
+                <NotaPaso p={p} />
+              </Item>
+            )
+          })}
         </Bloque>
       )}
       {sinCriterio.length > 0 && (
         <Bloque titulo={`Lo que ${v.su} no dice${n} si se cobra`} cuenta={sinCriterio.length} testid="dev-sin-criterio">
           {sinCriterio.map(({ p, i }) => (
             <Item key={i} titulo={p.hallazgo} nota={notas[i]} etiqueta={p.hallazgo} onCambiar={cambiar(i)} testid="dev-item-sin-criterio">
-              <p>{p.r.se_cobra ?? v.soloAcepta} <Pag n={p.r.pagina} /></p>
+              <p>{p.r.se_cobra ?? v.soloAcepta} <Pag n={paginaCobroDe(p.r)} /></p>
               <NotaPaso p={p} />
             </Item>
           ))}
@@ -130,7 +159,7 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
         <Bloque titulo="Lo que no sabes todavía" cuenta={noSe.length} testid="dev-nose-lista">
           {noSe.map(({ p, i }) => (
             <Item key={i} titulo={p.pregunta} etiqueta={etiquetaPaso(p)} onCambiar={cambiar(i)}>
-              <p>{zonaNombre(p.zona)}. {textoAcepta(p.r, doc)} <Pag n={p.r.pagina} /></p>
+              <p>{etiquetaPaso(p)}. {textoAcepta(p.r, doc)} <Pag n={p.r.pagina} /></p>
               <NotaPaso p={p} />
             </Item>
           ))}
@@ -144,16 +173,15 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
       {no.length > 0 && (
         <Bloque titulo="Lo que has contestado que no" cuenta={no.length} testid="dev-no-lista">
           {no.map(({ p, i }) => {
-            const otras = tambienNoAcepta(p)
+            const lista = (rs) => rs.map((r, k) => <span key={r.indice}>{r.dano.charAt(0).toLowerCase() + r.dano.slice(1)} (<Pag n={paginasDe(r)} className="text-[11.5px]" />){k < rs.length - 1 ? '; ' : '.'}</span>)
             return (
               <Item key={i} titulo={etiquetaPaso(p)} etiqueta={etiquetaPaso(p)} onCambiar={cambiar(i)} testid="dev-item-no">
                 <p>Contestaste que no a: {p.pregunta} <Pag n={p.r.pagina} /></p>
-                {otras.length > 0 && (
-                  <p className="text-[13.5px] text-[color:var(--ld-muted)]" data-testid="dev-sin-preguntar">
-                    <b className="font-semibold text-[color:var(--ld-text2)]">Sin preguntar, {v.su} tampoco acepta{n} en esta zona:</b>{' '}
-                    {otras.map((r, k) => <span key={r.indice}>{r.dano.charAt(0).toLowerCase() + r.dano.slice(1)} (<Pag n={r.pagina} className="text-[11.5px]" />){k < otras.length - 1 ? '; ' : '.'}</span>)}
+                {sinPreguntar(p).map(({ que, dice }) => (
+                  <p key={dice} className="text-[13.5px] text-[color:var(--ld-muted)]" data-testid="dev-sin-preguntar">
+                    <b className="font-semibold text-[color:var(--ld-text2)]">{dice}:</b> {lista(que)}
                   </p>
-                )}
+                ))}
                 <NotaPaso p={p} />
               </Item>
             )
@@ -165,7 +193,7 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
           {aparte.map((r) => (
             <Item key={r.indice} titulo={r.dano}>
               <p>{textoAcepta(r, doc)}</p>
-              <p>{textoNoAcepta(r, doc)} <Pag n={r.pagina} /></p>
+              <p>{textoNoAcepta(r, doc)} <Pag n={paginaCobroDe(r)} /></p>
             </Item>
           ))}
         </Bloque>
