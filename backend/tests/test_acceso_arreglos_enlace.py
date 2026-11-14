@@ -77,6 +77,10 @@ RUTAS_PROHIBIDAS = [
     ("/api/auth/change-my-password", {"new_password": "me-la-quedo-1", "codigo": "123456"}, "enlace_sin_contrasena"),
     ("/api/auth/codigo-clave", {}, "enlace_sin_contrasena"),
     ("/api/portal/mi-correo-personal", {"email": "intruso@ejemplo.es"}, "enlace_sin_contrasena"),
+    # La cuenta de la tienda (14-11-2026, enlace3 hallazgo 2): correo y contraseña atados al conductor que seguían
+    # abriendo la tienda después de anular el enlace.
+    ("/api/tienda/cuenta/vincular", {"email": "intruso@ejemplo.es", "password": "intruso-1234"},
+     "enlace_sin_contrasena"),
     ("/api/portal/mi-telefono", {"telefono": "699 111 222"}, "enlace_sin_cambiar_telefono"),
 ]
 
@@ -113,6 +117,7 @@ def test_con_la_sesion_del_enlace_toda_ruta_de_contrasena_o_correo_de_acceso_da_
     assert [dict(c) for c in mundo.a["driver_accounts"].docs] == cuentas_antes
     assert mundo.a["driver_clave_codes"].docs == []
     assert mundo.g["driver_recovery_pending"].docs == []
+    assert mundo.a["tienda_clientes"].docs == []
     assert next(d for d in mundo.a["drivers"].docs if d["id"] == "d-luis")["phone"] == "+34600000001"
 
 

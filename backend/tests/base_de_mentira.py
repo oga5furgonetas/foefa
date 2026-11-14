@@ -3,7 +3,7 @@
 servidor sin MongoDB: find/find_one/update (con upsert)/insert/delete/distinct
 y los operadores que usan (=, $in, $nin, $ne, $exists, rangos, $and, $or,
 $regex; $set, $unset, $setOnInsert, $addToSet, $push (con $each/$slice), $pull, $inc;
-replace_one). No es mongomock: si
+replace_one, find_one_and_update, find_one_and_delete). No es mongomock: si
 una prueba necesita más, se añade aquí y se dice."""
 import re
 from types import SimpleNamespace
@@ -262,6 +262,25 @@ class Col:
                 del self.docs[i]
                 return SimpleNamespace(deleted_count=1)
         return SimpleNamespace(deleted_count=0)
+
+    async def find_one_and_update(self, q, u, projection=None, sort=None, upsert=False, return_document=False, **_):
+        """Como Mongo (14-11-2026, «reparar pieza» entrada a entrada): actualiza el PRIMER documento que casa, de una
+        vez, y devuelve cómo estaba ANTES (o después con `return_document` verdadero, `ReturnDocument.AFTER`), con la
+        proyección de exclusión aplicada; None si no casa ninguno (y sin `upsert`)."""
+        import copy as _copy
+        idx = [i for i, d in enumerate(self.docs) if _casa(d, q)]
+        for campo, sentido in reversed(sort or []):
+            idx.sort(key=lambda i: (self.docs[i].get(campo) is None, self.docs[i].get(campo) or ""),
+                     reverse=sentido < 0)
+        if not idx:
+            if not upsert:
+                return None
+            await self.update_one(q, u, upsert=True)
+            return _proyecta(_copy.deepcopy(self.docs[-1]), projection) if return_document else None
+        d = self.docs[idx[0]]
+        antes = _copy.deepcopy(d)
+        self._aplica(d, u)
+        return _proyecta(_copy.deepcopy(d) if return_document else antes, projection)
 
     async def find_one_and_delete(self, q=None, projection=None, sort=None, **_):
         """Como Mongo: borra el PRIMER documento que casa (en el orden de `sort` si lo hay) y lo devuelve tal como
