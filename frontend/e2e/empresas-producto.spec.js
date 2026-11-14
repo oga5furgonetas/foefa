@@ -34,14 +34,21 @@ const flota = (total, cambia = {}) => Array.from({ length: total }, (_, k) => to
 
 /* La ruta del servidor, con su cursor: sin nada, las 50 últimas; con `antes_de`, las anteriores a esa; con
    `primera`, la más antigua. Apunta cada petición para poder mirarlas. */
-async function simularRevisiones(page, todas) {
+/* Ronda 3 (14-11-2026): `solo_total` da `{total}`; con `viejo` se porta como un servidor de antes del 14-11, que no
+   entiende ni `solo_total` ni el cursor (da las 50 últimas), y con `fallaCursor` las tandas con cursor dan un 500. */
+async function simularRevisiones(page, todas, { viejo = false, fallaCursor = false } = {}) {
   const peticiones = []
   await page.route('**/api/inspections/vehicle/**', async (route) => {
     const u = new URL(route.request().url())
     peticiones.push(Object.fromEntries(u.searchParams))
+    if (fallaCursor && u.searchParams.get('antes_de') !== null) {
+      await route.fulfill({ status: 500, contentType: 'application/json', body: '{"detail":"x"}' })
+      return
+    }
     let out
-    if (u.searchParams.get('primera')) out = todas.slice(-1)
-    else if (u.searchParams.get('antes_de')) {
+    if (u.searchParams.get('solo_total') && !viejo) out = { total: todas.length }
+    else if (u.searchParams.get('primera')) out = todas.slice(-1)
+    else if (u.searchParams.get('antes_de') && !viejo) {
       const c = u.searchParams.get('antes_de')
       const id = u.searchParams.get('antes_de_id') || ''
       out = todas.filter((i) => i.created_at < c || (id && i.created_at === c && i.id < id)).slice(0, 50)
@@ -70,16 +77,16 @@ async function fotoDe(page, nombre) {
   await page.screenshot({ path: path.join(dir, `${nombre}-${test.info().project.name}.png`), fullPage: false })
 }
 
-async function abrirFicha(page, todas) {
+async function abrirFicha(page, todas, opciones) {
   await entrarComoAdmin(page)
   await simularApi(page, 'lleno')
-  const peticiones = await simularRevisiones(page, todas)
+  const peticiones = await simularRevisiones(page, todas, opciones)
   await page.goto('/panel/vehiculos', { waitUntil: 'domcontentloaded' })
   await page.getByText('1234 ABC').first().click()
   return peticiones
 }
 
-const pestanaInspecciones = (page) => page.getByRole('button', { name: /^Inspecciones\s*\d*$/ })
+const pestanaInspecciones = (page) => page.getByRole('button', { name: /^Inspecciones\s*\d*\+?$/ })
 
 test.describe('La ficha de la furgoneta: el historial entero', () => {
   test('con 50 revisiones sale «Ver revisiones más antiguas» y añade las siguientes sin perder ninguna', async ({ page }) => {
@@ -87,7 +94,8 @@ test.describe('La ficha de la furgoneta: el historial entero', () => {
     const todas = flota(80)
     const peticiones = await abrirFicha(page, todas)
     await pestanaInspecciones(page).click()
-    await expect(pestanaInspecciones(page)).toHaveText(/50/)
+    // M2 (ronda 3): el total de verdad desde el principio, no las 50 cargadas.
+    await expect(pestanaInspecciones(page)).toHaveText(/80/)
     const mas = page.getByRole('button', { name: 'Ver revisiones más antiguas' })
     await expect(mas).toBeVisible()
     // La primera revisión no está entre las 50: hay un acceso a ella, con sus fotos.
@@ -116,24 +124,114 @@ test.describe('La ficha de la furgoneta: el historial entero', () => {
     await expect(pestanaInspecciones(page)).toHaveText(/3/)
     await expect(page.getByRole('button', { name: 'Ver revisiones más antiguas' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /La primera revisión/ })).toHaveCount(0)
-    expect(peticiones.filter((p) => p.primera || p.antes_de)).toEqual([])
+    expect(peticiones.filter((p) => p.primera || p.antes_de || p.solo_total)).toEqual([])
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })
 
+/* RONDA 3 (14-11-2026), lo que encontró la revisión final en la ficha. */
+test.describe('La ficha de la furgoneta: el total y las fotos de cada revisión', () => {
+  test('M2 · con 80 revisiones la tarjeta, la pestaña y la tira dicen 80, no 50', async ({ page }) => {
+    // Falla con el código de antes: decían 50 hasta pulsar «Ver revisiones más antiguas».
+    const fallos = vigilar(page)
+    const peticiones = await abrirFicha(page, flota(80))
+    await expect(page.getByText(/^80$/).first()).toBeVisible()
+    await pestanaInspecciones(page).click()
+    await expect(pestanaInspecciones(page)).toHaveText(/^Inspecciones\s*80$/)
+    await expect(page.getByText('hoy · 80 inspecciones')).toBeVisible()
+    expect(peticiones.filter((p) => p.solo_total)).toHaveLength(1)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('M2 · con un servidor que no sabe el total, «50+» y no «50»', async ({ page }) => {
+    await abrirFicha(page, flota(80), { viejo: true })
+    await pestanaInspecciones(page).click()
+    await expect(pestanaInspecciones(page)).toHaveText(/^Inspecciones\s*50\+$/)
+    await expect(page.getByText('hoy · 50+ inspecciones')).toBeVisible()
+  })
+
+  test('V3 · cada revisión se despliega con sus fotos, que se cargan solo al abrirla', async ({ page }) => {
+    // Falla con el código de antes: la fila no era un botón ni tenía fotos.
+    const fallos = vigilar(page)
+    await abrirFicha(page, flota(5))
+    await pestanaInspecciones(page).click()
+    // La revisión 2 (la tercera más nueva). Su foto 3 no está en la tira de arriba (que lleva la primera de cada una).
+    const fila = page.getByRole('button', { name: /Ana López/ }).nth(2)
+    await expect(fila).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.locator(`img[src="${foto(2, 3)}"]`)).toHaveCount(0)
+    await fila.click()
+    await expect(fila).toHaveAttribute('aria-expanded', 'true')
+    for (const k of [1, 2, 3, 4]) {
+      const enlace = page.locator(`a[href="${foto(2, k)}"]`)
+      await expect(enlace).toHaveAttribute('target', '_blank')
+      await expect(enlace.locator('img')).toBeVisible()
+    }
+    // Solo esa: las demás siguen cerradas y sin pedir sus fotos.
+    await expect(page.locator(`img[src="${foto(1, 3)}"]`)).toHaveCount(0)
+    await fila.scrollIntoViewIfNeeded()
+    await fotoDe(page, 'ficha-fila-abierta')
+    await fila.click()
+    await expect(fila).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.locator(`img[src="${foto(2, 3)}"]`)).toHaveCount(0)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('V3 · una revisión sin fotos (o con fotos raras) dice «Sin fotos» y no rompe', async ({ page }) => {
+    const fallos = vigilar(page)
+    await abrirFicha(page, flota(2, { 1: { photos: null }, 0: { photos: 'no-es-lista' } }))
+    await pestanaInspecciones(page).click()
+    for (const n of [0, 1]) await page.getByRole('button', { name: /Ana López/ }).nth(n).click()
+    await expect(page.getByText('Sin fotos')).toHaveCount(2)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('M6 · la gravedad con su nombre: «Sin daños», no «sin_danos»', async ({ page }) => {
+    // Falla con el código de antes: la etiqueta era el valor en crudo.
+    await abrirFicha(page, flota(2, { 1: { analysis: { severity: 'leve', new_damages: [] } } }))
+    await pestanaInspecciones(page).click()
+    await expect(page.getByRole('button', { name: /Sin daños/ })).toHaveCount(1)
+    await expect(page.getByRole('button', { name: /Leve/ })).toHaveCount(1)
+    await expect(page.getByText('sin_danos')).toHaveCount(0)
+  })
+})
+
 /* El parte se abre en otra ventana con document.write: se recoge lo que escribe. */
-async function abrirParte(page, todas) {
+/* Ronda 3: con revisiones por cargar, la ventana se abre en el clic con «Preparando el parte…» y el parte se escribe
+   después con document.open() (que la vacía, como en el navegador). Se apunta lo que se llegó a escribir antes. */
+async function abrirParte(page, todas, opciones) {
+  return (await abrirParteCon(page, todas, opciones)).html
+}
+async function abrirParteCon(page, todas, opciones) {
   await page.addInitScript(() => {
     window.__parte = ''
-    window.open = () => ({ document: { write: (h) => { window.__parte += h }, close: () => {} } })
+    window.__escritos = []
+    window.open = () => ({
+      closed: false, close: () => {},
+      document: {
+        open: () => { window.__parte = '' },
+        write: (h) => { window.__parte += h; window.__escritos.push(h) },
+        close: () => {},
+      },
+    })
   })
-  await abrirFicha(page, todas)
+  const peticiones = await abrirFicha(page, todas, opciones)
   await page.waitForLoadState('networkidle')
   await page.getByRole('button', { name: 'Historial' }).click()
   await page.getByRole('button', { name: 'Parte de disputa' }).click()
-  await expect.poll(() => page.evaluate(() => window.__parte.length)).toBeGreaterThan(100)
-  return page.evaluate(() => window.__parte)
+  await expect.poll(() => page.evaluate(() => window.__parte.includes('Cronología registrada')), { timeout: 20000 }).toBe(true)
+  const html = await page.evaluate(() => window.__parte)
+  return { html, peticiones, escritos: await page.evaluate(() => window.__escritos) }
 }
+// La hoja del parte tal cual se imprimiría (con FOTOS_PRODUCTO).
+async function fotoParte(browser, page, html, nombre, entera = true) {
+  if (!process.env.FOTOS_PRODUCTO) return
+  const hoja = await browser.newPage({ viewport: page.viewportSize() })
+  await hoja.setContent(html.replace(/<script>[\s\S]*?<\/script>/, ''))
+  await hoja.screenshot({ path: path.join(process.env.FOTOS_PRODUCTO, `${nombre}-${test.info().project.name}.png`), fullPage: entera })
+  await hoja.close()
+}
+const filasInspeccion = (html) => [...html.matchAll(/<tr><td class="dt">[^<]*<\/td><td>Inspección[^<]*<\/td><\/tr>/g)].map((m) => m[0])
+const avisoDe = (html) => (html.match(/<div class="aviso">([^<]*)<\/div>/) || [])[1] || null
 const evidencia = (html) => html.slice(html.indexOf('Evidencia fotográfica'))
 const imgs = (html) => [...html.matchAll(/<img src="([^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"'))
 
@@ -185,6 +283,111 @@ test.describe('El parte para imprimir', () => {
   test('si la primera ya sale como «antes» de un golpe, no se repite', async ({ page }) => {
     const html = await abrirParte(page, flota(2, { 1: { analysis: { new_damages: [{ photo_index: 1 }] } } }))
     expect(html).not.toContain('Estado de entrada')
+  })
+})
+
+/* RONDA 3 (14-11-2026): el parte entero, la gravedad con su nombre y la misma pareja que «Origen de daños». */
+test.describe('El parte para imprimir: entero y con la pareja del servidor', () => {
+  test('M1 · con 80 revisiones y sin pulsar «Ver más», el parte las lleva TODAS y sin aviso', async ({ page }) => {
+    // Falla con el código de antes: salían 50 filas y nada decía que faltaban 30.
+    const fallos = vigilar(page)
+    const { html, peticiones, escritos } = await abrirParteCon(page, flota(80))
+    expect(filasInspeccion(html)).toHaveLength(80)
+    expect(avisoDe(html)).toBeNull()
+    expect(escritos[0]).toContain('Preparando el parte…')
+    expect(peticiones.filter((p) => p.antes_de)).toHaveLength(1)
+    // Con todo cargado, la ficha también: la pestaña dice 80 y ya no hay «Ver más».
+    await pestanaInspecciones(page).click()
+    await expect(pestanaInspecciones(page)).toHaveText(/^Inspecciones\s*80$/)
+    await expect(page.getByRole('button', { name: 'Ver revisiones más antiguas' })).toHaveCount(0)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('M1 · si falla una tanda, el parte lo DICE arriba', async ({ page, browser }) => {
+    const { html } = await abrirParteCon(page, flota(80), { fallaCursor: true })
+    expect(filasInspeccion(html)).toHaveLength(50)
+    expect(avisoDe(html)).toBe('Este parte incluye las 50 revisiones más recientes de las 80 que tiene la furgoneta'
+      + ' y la primera (Estado de entrada). Las demás están en el panel.')
+    expect(html.indexOf('class="aviso"')).toBeLessThan(html.indexOf('Cronología registrada'))
+    // La de entrada va igual: se pidió aparte.
+    expect(imgs(html.slice(html.indexOf('Estado de entrada')))).toEqual([1, 2, 3, 4].map((k) => foto(0, k)))
+    await fotoParte(browser, page, html, 'parte-aviso', false)
+  })
+
+  test('M1 · con un servidor viejo (sin cursor ni total), también lo dice, sin inventar el total', async ({ page }) => {
+    const { html } = await abrirParteCon(page, flota(80), { viejo: true })
+    expect(filasInspeccion(html)).toHaveLength(50)
+    expect(avisoDe(html)).toBe('Este parte incluye las 50 revisiones más recientes y la primera (Estado de entrada).'
+      + ' Las demás están en el panel.')
+  })
+
+  test('M1 · con más de 1.000 revisiones se para en el tope y lo dice', async ({ page }) => {
+    test.setTimeout(90000)
+    const { html, peticiones } = await abrirParteCon(page, flota(1080))
+    expect(filasInspeccion(html)).toHaveLength(1000)
+    expect(peticiones.filter((p) => p.antes_de)).toHaveLength(19)
+    expect(avisoDe(html)).toBe('Este parte incluye las 1000 revisiones más recientes de las 1080 que tiene la furgoneta'
+      + ' y la primera (Estado de entrada). Las demás están en el panel.')
+  })
+
+  test('R2 · con 50 revisiones justas lleva «Estado de entrada»', async ({ page }) => {
+    // Falla con el código de antes: la primera estaba en la lista, la tanda vino llena y no salía.
+    const { html } = await abrirParteCon(page, flota(50))
+    expect(filasInspeccion(html)).toHaveLength(50)
+    expect(avisoDe(html)).toBeNull()
+    const entrada = html.slice(html.indexOf('Estado de entrada'))
+    expect(html).toContain('Estado de entrada')
+    expect(imgs(entrada)).toEqual([1, 2, 3, 4].map((k) => foto(0, k)))
+  })
+
+  test('M6 · en el parte, «Inspección · Sin daños», no «sin_danos»', async ({ page }) => {
+    // Falla con el código de antes.
+    const html = await abrirParte(page, flota(2, { 1: { analysis: { severity: 'leve', new_damages: [] } } }))
+    expect(filasInspeccion(html).map((f) => f.replace(/<[^>]+>/g, '|'))).toEqual([
+      expect.stringContaining('Inspección · Leve · Ana López'),
+      expect.stringContaining('Inspección · Sin daños · Ana López'),
+    ])
+    expect(html).not.toContain('sin_danos')
+  })
+
+  test('V8 · si la anterior no tiene esa vista, la foto de antes dice «Revisión anterior, otra vista»', async ({ page, browser }) => {
+    // Falla con el código de antes: ponía la primera foto como «Estado anterior».
+    const html = await abrirParte(page, flota(2, {
+      1: { photo_vistas: ['frontal', 'trasera', 'lateral_izq', 'lateral_der'], analysis: { severity: 'leve', new_damages: [{ photo_index: 2 }] } },
+      0: { photos: [1, 2, 3].map((k) => foto(0, k)), photo_vistas: ['frontal', 'lateral_izq', 'lateral_der'] },
+    }))
+    expect(imgs(evidencia(html))).toEqual([foto(0, 1), foto(1, 2)])
+    expect(evidencia(html)).toContain('Revisión anterior, otra vista')
+    expect(evidencia(html)).not.toContain('Estado anterior')
+    await fotoParte(browser, page, html, 'parte-otra-vista')
+  })
+
+  test('V8 · con la misma vista, «Estado anterior» como siempre', async ({ page }) => {
+    const html = await abrirParte(page, flota(2, {
+      1: { photo_vistas: ['frontal', 'trasera', 'lateral_izq', 'lateral_der'], analysis: { new_damages: [{ photo_index: 2 }] } },
+      0: { photo_vistas: ['trasera', 'frontal', 'lateral_izq', 'lateral_der'] },
+    }))
+    expect(evidencia(html)).toContain('Estado anterior')
+    expect(evidencia(html)).not.toContain('otra vista')
+  })
+
+  test('R3 · la anterior sabe sus vistas pero no la de esa posición: la misma foto que daría el servidor', async ({ page }) => {
+    // Falla con el código de antes: daba la del mismo número (foto 2), y `_atr_fotos_prueba` la primera.
+    const html = await abrirParte(page, flota(2, {
+      1: { photo_vistas: ['frontal', 'trasera', 'lateral_izq', 'lateral_der'], analysis: { new_damages: [{ photo_index: 2 }] } },
+      0: { photo_vistas: ['frontal', null, 'lateral_izq', 'lateral_der'] },
+    }))
+    expect(imgs(evidencia(html))).toEqual([foto(0, 1), foto(1, 2)])
+    expect(evidencia(html)).toContain('Revisión anterior, otra vista')
+  })
+
+  test('R3 · como el servidor, de la anterior se prefiere la anotada de esa posición', async ({ page }) => {
+    const anotada = foto(900, 3)
+    const html = await abrirParte(page, flota(2, {
+      1: { analysis: { new_damages: [{ photo_index: 3 }] } },
+      0: { annotated_photos: [null, null, anotada, null] },
+    }))
+    expect(imgs(evidencia(html))).toEqual([anotada, foto(1, 3)])
   })
 })
 

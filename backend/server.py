@@ -14479,7 +14479,7 @@ async def inspecciones_cobertura(center: Optional[str] = None,
 
 @api_router.get("/inspections/vehicle/{vehicle_id}")
 async def get_vehicle_inspections(vehicle_id: str, antes_de: str = "", antes_de_id: str = "",
-                                  limite: int = 50, primera: bool = False,
+                                  limite: int = 50, primera: bool = False, solo_total: bool = False,
                                   user: dict = Depends(require_any_auth)):
     """Las revisiones de una furgoneta, de la más nueva a la más vieja (50 por defecto).
 
@@ -14495,13 +14495,19 @@ async def get_vehicle_inspections(vehicle_id: str, antes_de: str = "", antes_de_
       también el `id`, que solo cambia el orden entre empatadas (antes, sin fijar).
     · `limite`: cuántas, de 1 a 200.
     · `primera=true`: la revisión MÁS ANTIGUA (la «foto de entrada»), en una
-      lista de una (o vacía)."""
+      lista de una (o vacía).
+    · `solo_total=true` (14-11-2026, M2): solo `{"total": N}`, cuántas tiene
+      (sin las borradas). La ficha decía «50 inspecciones» teniendo 80. Es una
+      petición aparte para no cambiar la forma de la respuesta de siempre; un
+      servidor viejo la ignora y da la lista, y la ficha pone entonces «50+»."""
     if user["role"] == "driver":
         assigned = await db.vehicles.find_one({"id": vehicle_id, "current_driver_id": user["sub"]})
         if not assigned:
             raise HTTPException(status_code=403, detail="Acceso denegado")
 
     q: dict = {"deleted": {"$ne": True}, "vehicle_id": vehicle_id}
+    if solo_total:
+        return {"total": await db.inspections.count_documents(q)}
     if primera:
         # Sin fecha no se sabe si es la primera: fuera (en Mongo, ascendente, irían delante).
         q["created_at"] = {"$gt": ""}
