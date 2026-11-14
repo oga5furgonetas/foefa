@@ -188,7 +188,7 @@ def _forma_del_contrato(dia, exp):
                                         "ya_estaba", "libro"], "golpe")
         for a in r["ya_apuntado"]:
             _claves(a, ["ledger_id", "golpe_id", "pieza", "panel", "gravedad", "desde", "inspection_id", "vista",
-                        "origen", "en_taller", "de_esta_revision"], "ya_apuntado")
+                        "origen", "en_taller", "de_esta_revision", "foto_url", "box_2d"], "ya_apuntado")
     for s in dia["sin_revision"]:
         _claves(s, ["id", "matricula", "modelo", "centro", "asignada_a"], "sin_revision")
 
@@ -222,6 +222,12 @@ async def test_los_ejemplos_de_las_pantallas_salen_de_las_rutas_de_verdad(monkey
     assert [l["veredicto"] for l in r5678["lados"]] == ["igual", "no_se_ve", "golpe", None]
     assert r3456["lados"][3]["anterior"] is None                     # un lado sin foto anterior
     assert {a["origen"] for a in r5678["ya_apuntado"]} == {"repaso", "revision_rapida"}
+    # La miniatura de lo ya apuntado (14-11-2026): la del repaso trae su foto y su caja; la de Revisión rápida, null.
+    for a in r5678["ya_apuntado"]:
+        if a["origen"] == "repaso":
+            assert a["foto_url"] in (LIMPIA, GOLPE) and isinstance(a["box_2d"], list) and len(a["box_2d"]) == 4
+        else:
+            assert a["foto_url"] is None and a["box_2d"] is None
     assert dia["sin_revision"][0]["asignada_a"] == {"id": "drv-rosa", "nombre": "Rosa M."}
     golpes = {g["pieza"]: g for g in exp["golpes"]}
     assert golpes["Puerta lateral derecha"]["ya_estaba"] is True

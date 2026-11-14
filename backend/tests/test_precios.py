@@ -176,9 +176,9 @@ async def test_el_informe_pericial_va_en_pro_y_no_se_vende_aparte(monkeypatch):
     monkeypatch.setattr(server, "_catalogo_planes", cat)
     r = await server.billing_planes()
     por_clave = {p["clave"]: p for p in r["planes"]}
-    assert any("pericial" in x for x in por_clave["completo"]["incluye"])
+    assert any("Informe firmado de la revisión" in x for x in por_clave["completo"]["incluye"])
     assert server.PLAN_LIMITS["completo"]["forensics"] is True
-    assert any("pericial" in x for x in por_clave["operacion"]["no_incluye"])
+    assert any("Informe firmado de la revisión" in x for x in por_clave["operacion"]["no_incluye"])
     assert server.PLAN_LIMITS["operacion"]["forensics"] is False
     assert "peritaje" not in {c["clave"] for c in r["complementos"]}
     # Los complementos que se cobran solos tienen su precio en el código, el mismo que la web.

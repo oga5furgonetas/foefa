@@ -241,6 +241,9 @@ export const signInspection = (inspectionId, signatureText) =>
    en el resto del panel ('Todos' = todos los visibles). Deshacer quita el veredicto de un lado y lo que arrastró. */
 export const getRepasoDia = (fecha, center) =>
   api.get('/repaso/dia', { params: { ...(fecha ? { fecha } : {}), ...(center && center !== 'Todos' ? { center } : {}) } })
+/* Solo el número del menú (14-11-2026): {fecha, pendientes} de hoy, sin pedir el día entero cada 2 minutos. */
+export const getRepasoPendientes = (center) =>
+  api.get('/repaso/pendientes', { params: center && center !== 'Todos' ? { center } : {} })
 export const marcarRepaso = (inspectionId, cuerpo) => api.post(`/inspections/${inspectionId}/repaso`, cuerpo)
 export const deshacerRepaso = (inspectionId, photoIndex) => api.delete(`/inspections/${inspectionId}/repaso/${photoIndex}`)
 

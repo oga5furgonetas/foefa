@@ -721,7 +721,7 @@ PRECIO
 Gratis y sin límite hasta el 31 de diciembre de 2026, sin tarjeta. Después, gratis hasta 15 paradas al día, o sin tope por 9,99 € al mes o 99 € al año.
 
 PARA EMPRESAS
-Supermercados con reparto a domicilio, distribuidores y empresas de paquetería: panel de la oficina con los pedidos en el mapa, enlace de seguimiento para el cliente, vehículos, revisiones con foto e IA, taller y vencimientos.
+Supermercados con reparto a domicilio, distribuidores y empresas de paquetería: panel de la oficina con los pedidos en el mapa, enlace de seguimiento para el cliente, vehículos, revisiones con foto, taller y vencimientos.
 
 PRIVACIDAD
 Cada repartidor ve solo sus paradas. Si repartes para una empresa, tu ubicación solo se comparte durante la jornada que tú empiezas y terminas. Los datos de los clientes se borran solos a los días que tú fijes.

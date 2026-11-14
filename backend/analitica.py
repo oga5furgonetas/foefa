@@ -188,7 +188,8 @@ def area_de(ruta):
 
 
 # Cada paso: (etiqueta, "v"/"a", valor). En vista, `*web` = cualquier pantalla
-# de la web publica. En accion, `valor` puede ser una TUPLA de nombres: el paso
+# de la web publica, y `valor` puede ser una TUPLA de rutas (cualquiera de
+# ellas). En accion, `valor` puede ser una TUPLA de nombres: el paso
 # lo toca quien hizo cualquiera de ellos. Los pasos NO son un camino obligado
 # (ver cabecera).
 #
@@ -220,12 +221,16 @@ EMBUDOS = [
         ("Ven una oferta", "v", "/empleo/:slug/:oferta"),
         ("Pulsan el cartel de la ropa", "a", "tienda_cartel_clic")]},
     # La pagina de venta para empresas (14-11-2026): los nombres `emp_*` los
-    # manda frontend/src/pages/Empresas.jsx.
-    {"clave": "empresas", "titulo": "Empresas (/empresas)", "solo_desde_el_primero": True, "pasos": [
-        ("Ven la pagina de empresas", "v", "/empresas"),
+    # manda frontend/src/pages/Empresas.jsx. Desde el 14-11-2026 esa pagina es
+    # tambien la portada («/»; «/empresas» ensena lo mismo): el primer paso
+    # cuenta las dos. `emp_demo_boton` ya no existe; la demo se pide desde el
+    # cierre (`emp_demo_cierre`) o desde la calculadora (`emp_demo_calculadora`),
+    # y el expediente de ejemplo se abre con `emp_expediente_arriba`.
+    {"clave": "empresas", "titulo": "Empresas (portada y /empresas)", "solo_desde_el_primero": True, "pasos": [
+        ("Ven la pagina de empresas", "v", ("/", "/empresas")),
         ("Pulsan probar o piden la demo", "a",
          ("emp_probar_menu", "emp_probar_arriba", "emp_probar_cierre",
-          "emp_demo_boton", "emp_demo_cierre", "emp_form_abrir")),
+          "emp_demo_cierre", "emp_demo_calculadora", "emp_form_abrir")),
         ("Envian la demo o crean la cuenta", "a", ("emp_form_ok", "registro_ok"))]},
 ]
 
@@ -240,6 +245,8 @@ def _toca(e, paso):
         return False
     if valor == "*web":
         return area_de(e["ruta"]) == "web"
+    if isinstance(valor, tuple):
+        return e["ruta"] in valor
     return e["ruta"] == valor
 
 
