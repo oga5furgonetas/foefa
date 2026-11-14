@@ -40,7 +40,7 @@ export default function PeritajeTecnico() {
         </p>
         <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
           <Link to="/registro?plan=completo" className="rounded-lg bg-gradient-to-r from-sky-500 to-sky-700 px-6 py-3 text-base font-bold text-white shadow-lg shadow-sky-900/40 hover:from-sky-400 hover:to-sky-600">
-            Empezar 14 días gratis · 499€/mes
+            Empezar 14 días gratis
           </Link>
           <Link to="/contacto?asunto=Peritaje" className="rounded-lg border border-dark-700 px-5 py-3 text-base font-semibold text-dark-200 hover:bg-dark-800">
             Hablar con ventas →

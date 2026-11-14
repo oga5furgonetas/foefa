@@ -9,7 +9,7 @@ import { sinPagos } from '../../lib/plataforma'
    avisos del navegador, con las frases de LEGAL_NOTES.en). */
 export default function PrivacyEn() {
   return (
-    <LegalLayout title="Privacy Policy" lastUpdate="2026-11-03">
+    <LegalLayout title="Privacy Policy" lastUpdate="2026-11-14">
       <p>At {COMPANY.brand} we process personal data in accordance with Regulation (EU) 2016/679 (GDPR) and the applicable national legislation. This policy explains what data we collect, what we use it for, who we share it with and how you can exercise your rights.</p>
 
       <h2>1. Data controller</h2>
@@ -28,6 +28,8 @@ export default function PrivacyEn() {
         <li><strong>Deliveries (if the company uses them):</strong> the data of the company’s own customers being delivered to (name, phone, address and what the order contains) and the <strong>driver’s location only during the working day</strong>, which the driver starts and ends on their own phone after reading a notice.</li>
         <li><strong>Job applications:</strong> the form data and, if you tick the optional box, the record of your consent to receive news from FDS and its date.</li>
         <li><strong>Use of the service:</strong> technical logs essential for security and operation.</li>
+        {/* 14-11-2026: the same point as in Privacidad.jsx (contact and demo forms, POST /auth/lead). */}
+        <li><strong>Contact and demo forms:</strong> what you write in them (name, company, email, phone if you give it, how many vans you have and your message) and the IP address and browser they are sent from. We use them to reply to you and show you the product, as pre-contractual steps taken at your request (art. 6.1.b GDPR). They are kept until you ask us to erase them at <a href={`mailto:${COMPANY.privacyEmail}`}>{COMPANY.privacyEmail}</a> or they are no longer needed to handle your request.</li>
         <li><strong>Couriers’ marketplace:</strong> what you post (text, price, area and photos, from which we strip the location and the other data the phone stores when you upload them), your name with the initial of your surname, which is all others see of you, the messages with whoever buys or sells, and the notices or reports. Your phone, your email and your company are never shown to anyone: the email is used only to tell you that you have a message or that your listing has been reviewed.{!sinPagos() && ' If you turn on notifications, we store that choice and your browser’s subscription to send them; the notice says who writes to you and about which listing, never the message.'}</li>
         {/* In the iPhone app (09-11-2026) the mentions of “Invite and earn”, wallet, payments and subscriptions are not shown (docs/APP_STORE.md). */}
         {!sinPagos() && <li><strong>“Invite and earn” programme:</strong> who invited whom, the wallet balance and, if you request a payout, the holder’s name and the Bizum phone number, the IBAN or the PayPal email. In the individual wallet of the driver portal we also store the driver identifier, their company email and the company linked to their link. To prevent cheating we store an encrypted fingerprint of the network from which each account is created (not the IP address), used only to compare two sign-ups.</li>}

@@ -373,6 +373,60 @@ function computeHealth({ vehicle, insps, incidents, maintenance, ledger, t }) {
   return { score, factors }
 }
 
+/* ── LA FOTO DEL GOLPE EN EL PARTE (14-11-2026) ──
+   El parte ponía siempre la PRIMERA foto de cada revisión con daño nuevo y la primera de la anterior: si el golpe
+   estaba en la trasera, el «antes y después» no lo enseñaba. Ahora va la foto del golpe (`photo_index`, que cuenta
+   desde 1, como lo leen Revisión rápida e Inspecciones) y, de la anterior, la de la MISMA vista (`photo_vistas`, o
+   `photo_roles` en las viejas, como `_vistas_inspeccion` del servidor); sin vistas, la del mismo número; si no hay,
+   la primera. Sin `photo_index` válido, lo de antes. */
+const VISTAS_CARROCERIA = ['frontal', 'trasera', 'lateral_izq', 'lateral_der']
+function vistasDe(insp) {
+  const fotos = insp?.photos || []
+  const vis = insp?.photo_vistas
+  if (Array.isArray(vis) && vis.length === fotos.length) return vis
+  const roles = insp?.photo_roles
+  if (!(Array.isArray(roles) && roles.length === fotos.length)) return fotos.map(() => null)
+  let k = 0
+  const out = roles.map((r) => {
+    if (r === 'angle') { const v = VISTAS_CARROCERIA[k] || null; k += 1; return v }
+    if (r === 'odometer') return 'odometro'
+    if (r === 'fuel') return 'combustible'
+    return null
+  })
+  // Más de cuatro de carrocería = orden desconocido: no se afirma nada (como el servidor).
+  return k === VISTAS_CARROCERIA.length ? out : fotos.map(() => null)
+}
+function parejasDelGolpe(i, prev) {
+  const fotos = i?.photos || []
+  const pf = prev?.photos || []
+  const deAntes = { cur: i?.annotated_photos?.[0] || fotos[0], before: pf[0] }
+  const idx = []
+  let sinIndice = false
+  for (const d of i?.analysis?.new_damages || []) {
+    const pi = d?.photo_index
+    if (Number.isInteger(pi) && pi >= 1 && pi <= fotos.length && fotos[pi - 1]) {
+      if (!idx.includes(pi)) idx.push(pi)
+    } else sinIndice = true
+  }
+  if (!idx.length) return [deAntes]
+  const vc = vistasDe(i)
+  const vp = vistasDe(prev)
+  const pares = idx.sort((a, b) => a - b).map((pi) => {
+    const k = pi - 1
+    const v = vc[k]
+    const j = v ? vp.findIndex((x, n) => x === v && pf[n]) : -1
+    let before = j >= 0 ? pf[j] : null
+    // El mismo número solo si no se sabe que es OTRA vista.
+    if (!before && pf[k] && !(v && vp[k] && vp[k] !== v)) before = pf[k]
+    return { cur: i.annotated_photos?.[k] || fotos[k], before: before || pf[0] }
+  })
+  if (sinIndice) pares.push(deAntes)
+  const vistas = new Set()
+  return pares.filter((p) => p.cur && !vistas.has(p.cur) && vistas.add(p.cur))
+}
+
+const TANDA_INSP = 50   // lo que da /inspections/vehicle/{id} por petición
+
 /* ── Vehicle detail panel ── */
 function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
   const { t, lang } = useT()
@@ -397,6 +451,14 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
   const [activeTab, setActiveTab] = useState('info') // 'info' | 'gemelo' | 'inspecciones' | 'docs'
   const [ledger, setLedger] = useState(null)
   const [ledgerLoading, setLedgerLoading] = useState(false)
+  /* EL HISTORIAL ENTERO (14-11-2026): solo llegaban las 50 últimas revisiones. Si la tanda vino llena, «Ver
+     revisiones más antiguas» pide las anteriores a la última que hay (cursor del servidor), y aparte se pide la
+     PRIMERA de la furgoneta: la foto de cómo llegó, que es la que hace falta al devolverla. */
+  const [hayMasInsps, setHayMasInsps] = useState(false)
+  const [cargandoMasInsps, setCargandoMasInsps] = useState(false)
+  const [primeraInsp, setPrimeraInsp] = useState(null)
+  const [verPrimera, setVerPrimera] = useState(false)
+  const vidActual = useRef(initVehicle?.id)
 
   const vinOrPlate = vehicle.vin || vehicle.license_plate || ''
   const st = STATUS_MAP[vehicle.status] || STATUS_MAP.baja
@@ -410,7 +472,17 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
     let cancelled = false
     setDriver(undefined); setInsps(null); setVehicleIncidents(null)
     getVehicleDriver(vehicle.id).then(r => { if (!cancelled) setDriver(r.data?.driver || null) }).catch(() => { if (!cancelled) setDriver(null) })
-    getVehicleInspections(vehicle.id).then(r => { if (!cancelled) setInsps(lista(r.data)) }).catch(() => { if (!cancelled) setInsps([]) })
+    vidActual.current = vehicle.id
+    setHayMasInsps(false); setPrimeraInsp(null); setVerPrimera(false)
+    getVehicleInspections(vehicle.id).then(r => {
+      if (cancelled) return
+      const l = lista(r.data)
+      setInsps(l)
+      if (l.length < TANDA_INSP) return
+      setHayMasInsps(true)
+      getVehicleInspections(vehicle.id, { primera: true })
+        .then(p => { if (!cancelled) setPrimeraInsp(lista(p.data)[0] || null) }).catch(() => {})
+    }).catch(() => { if (!cancelled) setInsps([]) })
     getIncidents({ vehicle_id: vehicle.id }).then(r => { if (!cancelled) setVehicleIncidents(Array.isArray(r.data) ? r.data : []) }).catch(() => { if (!cancelled) setVehicleIncidents([]) })
     getVehicleMaintenance(vehicle.id).then(r => { if (!cancelled) setMaintenance(r.data || null) }).catch(() => { if (!cancelled) setMaintenance(null) })
     // Lo que se le ha HECHO, no lo que le toca: la ficha guardaba solo el km
@@ -470,6 +542,32 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
     clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToast(null), 3000)
   }
+
+  // Las siguientes 50, sin perder las que hay. Un servidor viejo ignora el cursor y devuelve las mismas: no se
+  // repite ninguna (se quitan por id) y el botón se va, porque no ha llegado nada nuevo.
+  function cargarMasInsps() {
+    const ult = insps?.[insps.length - 1]
+    if (!ult || cargandoMasInsps) return
+    const vid = vehicle.id
+    setCargandoMasInsps(true)
+    getVehicleInspections(vid, { antes_de: ult.created_at || '', antes_de_id: ult.id || '' })
+      .then((r) => {
+        if (vidActual.current !== vid) return
+        const llegan = lista(r.data)
+        const ya = new Set((insps || []).map((i) => i.id))
+        const nuevas = llegan.filter((i) => !ya.has(i.id))
+        setInsps((prev) => {
+          const dentro = new Set((prev || []).map((i) => i.id))
+          return [...(prev || []), ...nuevas.filter((i) => !dentro.has(i.id))]
+        })
+        setHayMasInsps(llegan.length >= TANDA_INSP && nuevas.length > 0)
+      })
+      .catch(() => { if (vidActual.current === vid) showToast(t('vh.insp.mas.err'), false) })
+      .finally(() => { if (vidActual.current === vid) setCargandoMasInsps(false) })
+  }
+  // La primera revisión de la furgoneta, si no está ya en la lista. Con todo cargado, es la última de la lista.
+  const primeraFuera = primeraInsp && !(insps || []).some((i) => i.id === primeraInsp.id) ? primeraInsp : null
+  const insEntrada = primeraFuera || (!hayMasInsps && insps?.length ? insps[insps.length - 1] : null)
 
   async function patch(fields) {
     setBusy(true)
@@ -545,20 +643,32 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
 
     // Evidencia: hasta 3 inspecciones con daño nuevo, cada una con su "antes"
     const withNew = (insps || []).filter((i) => (i.analysis?.new_damages || []).length > 0).slice(0, 3)
+    const yaEnParte = new Set()
     const evidence = withNew.map((i) => {
       const idx = insps.indexOf(i)
       const prev = insps[idx + 1] // la siguiente en la lista es la anterior en el tiempo
-      const cur = i.annotated_photos?.[0] || i.photos?.[0]
-      const before = prev?.photos?.[0]
-      if (!cur) return ''
+      // Una pareja por cada foto con golpe nuevo (14-11-2026); sin `photo_index`, la primera de cada una, como antes.
+      const pares = parejasDelGolpe(i, prev)
+      if (!pares.length) return ''
+      yaEnParte.add(i.id)
+      if (prev && pares.some((p) => p.before)) yaEnParte.add(prev.id)
       return `<div class="ev">
         <div class="ev-h">Daño nuevo detectado el ${fmtAt(i.created_at)}${i.driver_name ? ` · Conductor: ${esc(i.driver_name)}` : ''}</div>
-        <div class="ev-imgs">
+        ${pares.map(({ cur, before }) => `<div class="ev-imgs">
           ${before ? `<figure><img src="${esc(before)}"><figcaption>Estado anterior — ${fmtAt(prev.created_at)}${prev.driver_name ? ` (${esc(prev.driver_name)})` : ''}</figcaption></figure>` : ''}
           <figure><img src="${esc(cur)}"><figcaption>Daño documentado — ${fmtAt(i.created_at)}</figcaption></figure>
-        </div>
+        </div>`).join('')}
       </div>`
     }).join('')
+
+    /* ESTADO DE ENTRADA (14-11-2026): la PRIMERA revisión de la furgoneta, con su fecha y todas sus fotos, que es
+       lo que se discute al devolverla. Solo si existe y no sale ya arriba como «antes» o «después» de un golpe. */
+    const ent = insEntrada && !yaEnParte.has(insEntrada.id) ? insEntrada : null
+    const fotosEnt = (ent?.photos || []).filter(Boolean)
+    const entrada = ent ? `<div class="ev">
+        <div class="ev-h">Primera revisión registrada: ${fmtAt(ent.created_at)}${ent.driver_name ? ` · Conductor: ${esc(ent.driver_name)}` : ''}</div>
+        ${fotosEnt.length ? `<div class="ent-imgs">${fotosEnt.map((f, n) => `<figure><img src="${esc(f)}"><figcaption>Foto ${n + 1} — ${fmtAt(ent.created_at)}</figcaption></figure>`).join('')}</div>` : '<div class="sub">Sin fotos</div>'}
+      </div>` : ''
 
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Parte de disputa — ${esc(vehicle.license_plate)}</title>
 <style>
@@ -575,6 +685,8 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
   .ev { margin: 14px 0; page-break-inside: avoid; }
   .ev-h { font-weight: 600; font-size: 12px; margin-bottom: 6px; }
   .ev-imgs { display: flex; gap: 10px; }
+  .ev-imgs + .ev-imgs { margin-top: 10px; }
+  .ent-imgs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   figure { margin: 0; flex: 1; }
   img { width: 100%; border: 1px solid #ddd; border-radius: 4px; }
   figcaption { font-size: 10px; color: #666; margin-top: 3px; }
@@ -595,6 +707,7 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
   </div>
   <h2>Cronología registrada</h2>
   <table>${rows}</table>
+  ${entrada ? `<h2>Estado de entrada</h2>${entrada}` : ''}
   ${evidence ? `<h2>Evidencia fotográfica</h2>${evidence}` : ''}
   <div class="foot">Documento generado automáticamente a partir de registros con marca de tiempo de ${esc(MARCA.nombre)}
   (inspecciones fotográficas, incidencias y reparaciones). Las inspecciones individuales disponen además de
@@ -1321,6 +1434,40 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
                         </div>
                       )
                     })}
+                    {hayMasInsps && (
+                      <button type="button" onClick={cargarMasInsps} disabled={cargandoMasInsps}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-dark-700/60 py-2.5 text-[12px] font-semibold text-dark-300 transition hover:bg-dark-800/40 disabled:opacity-60">
+                        {cargandoMasInsps ? <Loader2 size={13} className="animate-spin" /> : <Clock size={13} />}
+                        {t('vh.insp.mas')}
+                      </button>
+                    )}
+                    {/* La foto de entrada, si no está ya en la lista (14-11-2026). */}
+                    {primeraFuera && (
+                      <div className="rounded-xl border border-brand-500/30 bg-brand-500/5">
+                        <button type="button" onClick={() => setVerPrimera((v) => !v)} aria-expanded={verPrimera}
+                          className="flex w-full items-center gap-3 px-3 py-2.5 text-left">
+                          <Camera size={13} className="shrink-0 text-brand-300" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-semibold text-brand-200">{t('vh.insp.primera')}</span>
+                            <span className="mt-0.5 block truncate text-[11px] text-dark-400">
+                              {fechaHoraLocal(primeraFuera.created_at)}{primeraFuera.driver_name ? ` · ${primeraFuera.driver_name}` : ''}
+                            </span>
+                          </span>
+                          <ChevronRight size={12} className={`shrink-0 text-dark-500 transition-transform ${verPrimera ? 'rotate-90' : ''}`} />
+                        </button>
+                        {verPrimera && (
+                          (primeraFuera.photos || []).filter(Boolean).length ? (
+                            <div className="grid grid-cols-3 gap-1.5 px-3 pb-3 sm:grid-cols-4">
+                              {(primeraFuera.photos || []).filter(Boolean).map((f, n) => (
+                                <a key={f + n} href={f} target="_blank" rel="noreferrer" className="block">
+                                  <img src={f} alt="" loading="lazy" className="aspect-square w-full rounded-lg border border-dark-700 object-cover" />
+                                </a>
+                              ))}
+                            </div>
+                          ) : <p className="px-3 pb-3 text-[11px] text-dark-500">{t('vh.insp.sinFotos')}</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

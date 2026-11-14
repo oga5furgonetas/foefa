@@ -75,7 +75,10 @@ export const createVehicle = (body) => api.post('/vehicles', body)
 export const getLastInspections = (center) => api.get('/vehicles/last-inspections', { params: centerParam(center) })
 export const getSpareWheels = () => api.get('/vehicles/spare-wheel')
 export const getVehicleDriver = (id) => api.get(`/vehicles/${id}/driver`)
-export const getVehicleInspections = (id) => api.get(`/inspections/vehicle/${id}`)
+// `params` (14-11-2026), opcional: { antes_de, antes_de_id } para las siguientes 50, o { primera: true } para la
+// revisión más antigua (la foto de entrada). Sin él, las 50 últimas, como siempre.
+export const getVehicleInspections = (id, params) =>
+  (params ? api.get(`/inspections/vehicle/${id}`, { params }) : api.get(`/inspections/vehicle/${id}`))
 export const getVehicleDamageLedger = (id) => api.get(`/vehicles/${id}/damage-ledger`)
 export const repairVehicleLedger = (id, body) => api.post(`/vehicles/${id}/ledger/repair`, body)
 export const resolveVehicleModel = (brand, model, year, version) =>
