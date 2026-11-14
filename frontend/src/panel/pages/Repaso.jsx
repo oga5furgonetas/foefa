@@ -8,9 +8,10 @@ import Pareja from '../components/repaso/Pareja'
 import Ampliar from '../components/repaso/Ampliar'
 import FormGolpe from '../components/repaso/FormGolpe'
 import Terminado from '../components/repaso/Terminado'
+import ElegirDia from '../components/repaso/ElegirDia'
 import { YaApuntado, ResumenDia } from '../components/repaso/Lateral'
 import {
-  nombreLado, nombrePieza, porRepasar, cuentasDelDia, golpesNuevosDelDia, siguienteFoco, primerFoco, ladoVecino,
+  nombreLado, nombreLadoCorto, nombrePieza, porRepasar, cuentasDelDia, golpesNuevosDelDia, siguienteFoco, primerFoco, ladoVecino,
   fechaDeSello, sumarDias, fechaLarga, horaDe, hoyLocal, conLado, cuerpoGolpe, textoDeError,
 } from '../components/repaso/logica'
 
@@ -118,6 +119,22 @@ export default function Repaso() {
     if (dia?.es_hoy && setAvisoRepaso) setAvisoRepaso(cuentas.porRepasar)
   }, [dia, cuentas.porRepasar, setAvisoRepaso])
 
+  /* Terminado y sin golpes nuevos: el siguiente paso es el día anterior, si quedó algo por repasar. Se mira SOLO ese
+     día (las revisiones viejas sin repasar no son deuda) y sin tocar la pantalla: si no hay nada, no se dice nada. */
+  const [anterior, setAnterior] = useState(null)   // { de: 'fecha|centro' del día terminado, fecha: la del anterior }
+  const acabado = !!dia?.fecha && !foco && (dia.revisiones || []).some((r) => r.lados?.length)
+    && !(dia.revisiones || []).some((r) => r.lados?.length && porRepasar(r)) && !golpesNuevosDelDia(dia).length
+  const deAcabado = acabado ? `${dia.fecha}|${center}` : ''
+  useEffect(() => {
+    if (!deAcabado) return undefined
+    let vale = true
+    const previo = sumarDias(deAcabado.split('|')[0], -1)
+    getRepasoDia(previo, center)
+      .then((r) => { if (vale && cuentasDelDia(r.data).porRepasar > 0) setAnterior({ de: deAcabado, fecha: previo }) })
+      .catch(() => { /* sin el día anterior, no se ofrece: no es un error de este día */ })
+    return () => { vale = false }
+  }, [deAcabado]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const revs = dia?.revisiones || []
   const ri = foco ? revs.findIndex((r) => r.id === foco.r) : -1
   const rev = ri >= 0 ? revs[ri] : null
@@ -145,6 +162,18 @@ export default function Repaso() {
       if (u) { const img = new Image(); img.src = u }
     }
   }, [dia, foco]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* La pestaña elegida, siempre a la vista: si la fila de lados se desliza (un idioma largo en el móvil), se mueve
+     SOLO la fila, nunca la página (scrollIntoView movería también la página hacia arriba). */
+  useEffect(() => {
+    const fila = lista.current
+    const el = fila?.querySelector('[aria-selected="true"]')
+    if (!fila || !el || fila.scrollWidth <= fila.clientWidth) return
+    const izq = el.offsetLeft - 4
+    const der = el.offsetLeft + el.offsetWidth + 4
+    if (izq < fila.scrollLeft) fila.scrollLeft = izq
+    else if (der > fila.scrollLeft + fila.clientWidth) fila.scrollLeft = der - fila.clientWidth
+  }, [foco, dia])
 
   // Tras decidir, el foco del teclado vuelve a la mesa (si estaba en ella o en ninguna parte), para seguir con teclas.
   const enfocarMesa = () => {
@@ -356,30 +385,18 @@ export default function Repaso() {
         </h1>
         {fechaDia && (esHoy || carga.estado === 'cargando') && <p className="mt-0.5 text-sm text-dark-400 first-letter:uppercase">{fechaLarga(fechaDia, locale)}</p>}
       </div>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+      <div className="flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-3 sm:w-auto sm:justify-end sm:gap-x-5">
         {conLados.length > 0 && (
           <div className="flex items-center gap-3" data-testid="avance"
             aria-label={t('repaso.avance').replace('{a}', cuentas.repasadas).replace('{b}', cuentas.revisiones)}>
-            <span className="block h-1.5 w-28 overflow-hidden rounded-full bg-dark-800 sm:w-40">
+            <span className="block h-1.5 w-14 overflow-hidden rounded-full bg-dark-800 min-[400px]:w-24 sm:w-40">
               <span className="block h-full bg-dark-50" style={{ width: `${cuentas.revisiones ? (cuentas.repasadas / cuentas.revisiones) * 100 : 0}%` }} />
             </span>
             <b className="font-mono text-sm font-semibold tabular-nums text-dark-50">{cuentas.repasadas} / {cuentas.revisiones}</b>
           </div>
         )}
         {fechaDia && <div className="flex items-center gap-1.5">
-          <button type="button" aria-label={t('repaso.dia.anterior')} title={t('repaso.dia.anterior')}
-            disabled={!fechaDia} onClick={() => irDia(sumarDias(fechaDia, -1))}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-dark-700 text-dark-200 hover:bg-dark-800 disabled:opacity-40">
-            <ChevronLeft size={17} />
-          </button>
-          <input type="date" aria-label={t('repaso.dia.elegir')} value={fechaDia || ''} max={hoyTope}
-            onChange={(e) => { const v = e.target.value; if (v && v <= hoyTope) irDia(v) }}
-            className="h-9 rounded-lg border border-dark-700 bg-dark-900 px-2 font-mono text-[13px] text-dark-100" />
-          <button type="button" aria-label={t('repaso.dia.siguiente')} title={t('repaso.dia.siguiente')}
-            disabled={!fechaDia || esHoy || fechaDia >= hoyTope} onClick={() => irDia(sumarDias(fechaDia, 1))}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-dark-700 text-dark-200 hover:bg-dark-800 disabled:opacity-40">
-            <ChevronRight size={17} />
-          </button>
+          <ElegirDia t={t} locale={locale} fecha={fechaDia} tope={hoyTope} esHoy={esHoy} onIr={irDia} />
           {fecha && (
             <button type="button" onClick={() => setFecha(null)}
               className="h-9 rounded-lg px-2.5 text-sm font-semibold text-dark-200 underline-offset-4 hover:underline">
@@ -437,8 +454,9 @@ export default function Repaso() {
     )
   } else if (!cuerpo && terminado) {
     mesa = (
-      <Terminado t={t} esHoy={esHoy} cuentas={cuentas} golpes={golpesDia}
-        onAbrir={(r, k) => irA(r, k)}
+      <Terminado t={t} locale={locale} esHoy={esHoy} cuentas={cuentas} golpes={golpesDia}
+        anterior={anterior && anterior.de === `${dia.fecha}|${center}` ? anterior.fecha : null}
+        onAbrir={(r, k) => irA(r, k)} onIrDia={irDia}
         onRevisar={() => { const r = conLados[0]; if (r) irA(r.id, r.lados[0].photo_index) }} />
     )
   } else if (!cuerpo && rev && lado) {
@@ -466,7 +484,7 @@ export default function Repaso() {
                 ? <span>{t('repaso.llevo.a')} <b className="font-semibold text-dark-50">{rev.conductor.nombre}</b></span>
                 : <span>{t('repaso.conductor.borrado')}</span>)
               : <span>{t('repaso.sin.conductor')}</span>}
-            {rev.hora ? <span> · {t('repaso.recibida').replace('{hora}', rev.hora)}</span> : null}
+            {rev.hora ? <span className="whitespace-nowrap"> · {t('repaso.recibida').replace('{hora}', rev.hora)}</span> : null}
           </p>
           {conLados.length > 1 && (
             <div className="ml-auto flex shrink-0 items-center gap-1" data-testid="paso">
@@ -487,24 +505,27 @@ export default function Repaso() {
           )}
         </div>
 
-        {/* Los lados, con lo que ya se ha decidido de cada uno; a la derecha, cómo ver las dos fotos. Si no caben en
-            una línea, bajan a la siguiente: no se corta ninguno. */}
+        {/* Los lados, con lo que ya se ha decidido de cada uno; a la derecha, cómo ver las dos fotos. Siempre en UNA
+            línea: en el móvil los laterales van con su nombre corto («Izquierdo», «Derecho»), y si aun así no caben
+            (un idioma largo) la fila se desliza y la pestaña elegida se trae a la vista. */}
         <div className="mt-4 flex items-start gap-3">
-          <div ref={lista} className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5" role="tablist" aria-label={t('repaso.lados')}
-            onKeyDown={teclaPestanas}>
+          <div ref={lista} className="relative -mx-1 flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-x-auto px-1 py-0.5 [scrollbar-width:none] sm:gap-1.5 [&::-webkit-scrollbar]:hidden"
+            role="tablist" aria-label={t('repaso.lados')} onKeyDown={teclaPestanas} data-testid="lados">
             {rev.lados.map((l) => {
               const activo = l.photo_index === lado.photo_index
               const estado = textoEstado(t, l.veredicto, !l.anterior)
+              const corto = nombreLadoCorto(t, l)
               return (
                 <button key={l.photo_index} type="button" role="tab" aria-selected={activo} tabIndex={activo ? 0 : -1}
                   title={estado} aria-label={`${nombreLado(t, l)}: ${estado}`}
                   data-testid={`lado-${l.photo_index}`} data-veredicto={l.veredicto || ''}
                   onClick={() => irA(rev.id, l.photo_index)}
-                  className={`flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-semibold transition-colors ${activo
+                  className={`flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-sm font-semibold transition-colors sm:gap-2 sm:px-3 ${activo
                     ? 'border-dark-50 bg-dark-50 text-dark-950'
                     : l.veredicto ? 'border-dark-700 text-dark-400 hover:bg-dark-800' : 'border-ruta-borde/60 bg-dark-900 text-dark-100 hover:bg-dark-800'}`}>
                   <MarcaLado veredicto={l.veredicto} activo={activo} />
-                  {nombreLado(t, l)}
+                  <span className="sm:hidden">{corto}</span>
+                  <span className="hidden sm:inline">{nombreLado(t, l)}</span>
                 </button>
               )
             })}
@@ -583,7 +604,9 @@ export default function Repaso() {
                 </button>
                 <button type="button" onClick={abrirGolpe} disabled={ocupado || hoyRota}
                   title={hoyRota ? t('repaso.foto.fallo.golpe') : undefined}
-                  className="h-[52px] whitespace-nowrap rounded-xl border-[1.5px] border-ruta-peligro-texto px-3 text-[15px] sm:px-5 font-bold text-ruta-peligro-texto hover:bg-dark-800 disabled:cursor-not-allowed disabled:opacity-50 sm:order-2">
+                  className={`h-[52px] whitespace-nowrap rounded-xl border-[1.5px] px-3 text-[15px] font-bold disabled:cursor-not-allowed sm:order-2 sm:px-5 ${hoyRota
+                    ? 'border-dark-800 bg-dark-800 text-dark-400'
+                    : 'border-ruta-peligro-texto text-ruta-peligro-texto hover:bg-dark-800 disabled:opacity-50'}`}>
                   {sinAnterior ? t('repaso.btn.tienegolpe') : t('repaso.btn.golpe')}
                 </button>
                 <button type="button" onClick={() => responder('igual')} disabled={ocupado} data-testid="btn-igual"
@@ -646,7 +669,7 @@ export default function Repaso() {
               </div>
             )}
           </div>
-          <aside className="flex min-w-0 flex-col gap-5 xl:border-l xl:border-dark-700 xl:pl-6 2xl:pl-7">
+          <aside className="flex min-w-0 flex-col gap-5 border-t border-dark-700 pt-5 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0 2xl:pl-7">
             {rev && !terminado && <YaApuntado t={t} locale={locale} lista={rev.ya_apuntado || []} miniatura={miniatura} />}
             <ResumenDia t={t} cuentas={cuentas} esHoy={esHoy} sinRevision={dia?.sin_revision || []} />
             {cuentas.sinLados > 0 && !sinNada && (

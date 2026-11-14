@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import Matricula from '../../../components/Matricula'
-import { fechaLarga, nombrePieza } from './logica'
+import { VISTAS, fechaLarga, nombreLado, nombrePieza } from './logica'
 
 /* LA COLUMNA DE LA DERECHA DEL REPASO (debajo en el móvil), 14-11-2026.
    Arriba, lo que ya está apuntado en la furgoneta que se mira (golpes confirmados por una persona y sin reparar), para
@@ -8,10 +8,18 @@ import { fechaLarga, nombrePieza } from './logica'
 
 /* La foto del golpe, pequeña y entera (la caja tiene que caer sobre el golpe: recortarla la movería). El hueco es fijo
    para que la lista no baile; la foto va contenida en él, sobre fondo oscuro. */
-function Miniatura({ url, caja }) {
+function Miniatura({ url, caja, rotulo }) {
   const [fallo, setFallo] = useState(false)
   const [nat, setNat] = useState(null)
-  if (!url || fallo) return <span className="block h-[60px] w-20 shrink-0 rounded-md bg-dark-800" aria-hidden="true" />
+  /* Sin foto no se pinta un hueco gris vacío (parece una foto que no ha cargado): una regla de 1 px a la altura de
+     la foto y, debajo, de qué lado es. La columna conserva su ancho para que la lista no baile. */
+  if (!url || fallo) {
+    return (
+      <span className="block w-20 shrink-0 border-t border-dark-700 pt-1.5 text-[12px] leading-snug text-dark-400" data-testid="miniatura-sinfoto">
+        {rotulo}
+      </span>
+    )
+  }
   // Dónde cae la imagen dentro del hueco de 80 × 60.
   let r = { left: 0, top: 0, width: 80, height: 60 }
   if (nat?.w && nat?.h) {
@@ -49,7 +57,8 @@ export function YaApuntado({ t, locale, lista, miniatura }) {
             const m = a.foto_url ? { url: a.foto_url, caja: a.box_2d || null } : miniatura(a)
             return (
               <li key={a.golpe_id || a.ledger_id || `${a.panel}-${i}`} className="flex gap-3 border-t border-dark-700 py-3 first:border-t-0">
-                <Miniatura key={m?.url || 'sin'} url={m?.url} caja={m?.caja} />
+                <Miniatura key={m?.url || 'sin'} url={m?.url} caja={m?.caja}
+                  rotulo={VISTAS.includes(a.vista) ? nombreLado(t, { vista: a.vista }) : t('repaso.lat.sinfoto')} />
                 <div className="min-w-0">
                   <b className="block text-[14.5px] font-semibold leading-snug text-dark-50">{nombrePieza(t, a.pieza_clave, a.pieza) || a.panel}</b>
                   <span className="mt-0.5 block text-[12.5px] text-dark-400">

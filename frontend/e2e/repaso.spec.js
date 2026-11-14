@@ -825,47 +825,264 @@ for (const accion of ['pasa_a_otro', 'queda_revision_rapida']) {
   })
 }
 
-/* Las fotos para mirar: la mesa en los tres temas del panel, y lo demás en el de por defecto. */
+/* ── Lo que encontró la revisión de diseño del 14-11-2026 (tanda 4, zona Repaso) ── */
+
+// Contraste WCAG entre el color del texto y el del fondo de un elemento (los dos opacos).
+const contrasteDe = (loc) => loc.evaluate((el) => {
+  const rgb = (c) => c.match(/[\d.]+/g).slice(0, 3).map(Number)
+  const lum = ([r, g, b]) => {
+    const f = (v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4 }
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+  }
+  const s = getComputedStyle(el)
+  const a = lum(rgb(s.color))
+  const b = lum(rgb(s.backgroundColor))
+  return { ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05), color: s.color, fondo: s.backgroundColor }
+})
+
+for (const ancho of [360, 390]) {
+  for (const idioma of ['es', 'it']) {
+    test(`Repaso · a ${ancho} px las pestañas de los lados van en una línea y la elegida se ve entera (${idioma})`, async ({ page, baseURL }) => {
+      await page.setViewportSize({ width: ancho, height: 800 })
+      await abrir(page, dia(baseURL), { idioma })
+      const fila = page.getByTestId('lados')
+      await expect(fila.getByRole('tab')).toHaveCount(4)
+      // Se marcan tres lados para que lleven su marca (más anchas) y se va al cuarto, el último.
+      for (let i = 0; i < 3; i++) await botonIgual(page).click()
+      await expect(tab(page, 4)).toHaveAttribute('aria-selected', 'true')
+      const centros = []
+      for (const t of await fila.getByRole('tab').all()) {
+        const b = await t.boundingBox()
+        centros.push(b.y + b.height / 2)
+      }
+      // Una sola línea: todas a la misma altura.
+      expect(Math.max(...centros) - Math.min(...centros)).toBeLessThan(1)
+      // La elegida, entera dentro de lo que se ve de la fila.
+      const caja = await fila.boundingBox()
+      const activa = await tab(page, 4).boundingBox()
+      expect(activa.x).toBeGreaterThanOrEqual(caja.x - 0.5)
+      expect(activa.x + activa.width).toBeLessThanOrEqual(caja.x + caja.width + 0.5)
+      // Y la página no se sale de lado.
+      expect(await page.evaluate(() => document.scrollingElement.scrollWidth - document.scrollingElement.clientWidth)).toBeLessThanOrEqual(0)
+    })
+  }
+}
+
+test('Repaso · el día es un botón en mono («jue 12 nov») que abre el selector del sistema', async ({ page, baseURL }) => {
+  await page.addInitScript(() => {
+    window.__selector = 0
+    HTMLInputElement.prototype.showPicker = function showPicker() { window.__selector += 1 }
+  })
+  await abrir(page, dia(baseURL))
+  const boton = page.getByRole('button', { name: 'Elegir el día' })
+  await expect(boton).toHaveText('jue 12 nov')
+  await expect(boton).toHaveAccessibleName('Elegir el día, jue 12 nov')
+  expect(await boton.evaluate((el) => getComputedStyle(el).fontFamily)).toMatch(/Plex Mono/i)
+  // El campo de fecha del navegador no se ve (está, debajo del botón, para el selector).
+  const campo = page.getByTestId('dia-campo')
+  await expect(campo).toHaveCSS('opacity', '0')
+  await boton.click()
+  await expect.poll(() => page.evaluate(() => window.__selector)).toBe(1)
+  // Con el teclado, igual.
+  await boton.focus()
+  await page.keyboard.press('Enter')
+  await expect.poll(() => page.evaluate(() => window.__selector)).toBe(2)
+})
+
+test('Repaso · sin showPicker, el campo del día recibe el foco y se puede escribir', async ({ page, baseURL }) => {
+  await page.addInitScript(() => { Object.defineProperty(HTMLInputElement.prototype, 'showPicker', { value: undefined, configurable: true }) })
+  const srv = await abrir(page, dia(baseURL))
+  await page.getByRole('button', { name: 'Elegir el día' }).click()
+  const campo = page.getByTestId('dia-campo')
+  await expect(campo).toBeFocused()
+  await expect(campo).toHaveCSS('opacity', '1')
+  await campo.fill('2026-11-10')
+  await expect.poll(() => srv.pedidas.some((q) => q.includes('fecha=2026-11-10'))).toBe(true)
+  // Al soltarlo vuelve el botón.
+  await page.getByRole('heading', { level: 1 }).click()
+  await expect(page.getByRole('button', { name: 'Elegir el día' })).toBeVisible()
+})
+
+test('Repaso · el día en el idioma del panel', async ({ page, baseURL }) => {
+  await abrir(page, dia(baseURL), { idioma: 'en' })
+  await expect(page.getByRole('button', { name: 'Choose the day' })).toHaveText('Thu 12 Nov')
+})
+
+test('Repaso · «Guardar el golpe» sin completar se lee como «todavía no», y las piezas van en rejilla regular', async ({ page, baseURL, isMobile }) => {
+  await abrir(page, dia(baseURL))
+  await tab(page, 3).click()
+  await page.getByRole('button', { name: 'Hay un golpe nuevo' }).click()
+  const guardar = page.getByTestId('golpe-guardar')
+  await expect(guardar).toBeDisabled()
+  const c = await contrasteDe(guardar)
+  // Nunca letra blanca, nunca el cian de la marca lavado: tinta apagada sobre el hueco, y que se lea.
+  expect(c.color).not.toBe('rgb(255, 255, 255)')
+  expect(c.fondo).not.toMatch(/^rgba?\((95, 227, 216|20, 231, 216)/)
+  expect(await guardar.evaluate((el) => getComputedStyle(el).opacity)).toBe('1')
+  expect(c.ratio).toBeGreaterThanOrEqual(4.5)
+  // Las piezas: 2 columnas en el móvil, 3 en el ordenador; todas del mismo alto y con el nombre entero.
+  const piezas = page.getByTestId('piezas').getByRole('button')
+  const cajas = []
+  for (const p of await piezas.all()) {
+    cajas.push(await p.boundingBox())
+    expect(await p.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0)
+  }
+  const columnas = new Set(cajas.map((b) => Math.round(b.x))).size
+  expect(columnas).toBe(isMobile ? 2 : 3)
+  const altos = cajas.map((b) => Math.round(b.height))
+  expect(Math.max(...altos) - Math.min(...altos)).toBeLessThanOrEqual(1)
+  // Completo, vuelve el cian con la tinta encima.
+  await dibujarCaja(page)
+  await page.getByTestId('piezas').getByRole('button', { name: 'Puerta lateral corredera izquierda' }).click()
+  await page.getByRole('button', { name: 'Moderado' }).click()
+  await expect(guardar).toBeEnabled()
+  expect((await contrasteDe(guardar)).ratio).toBeGreaterThanOrEqual(4.5)
+})
+
+test('Repaso · «Ya apuntado» sin foto: una regla con el nombre del lado, no un recuadro vacío', async ({ page, baseURL }) => {
+  const elDia = dia(baseURL)
+  elDia.revisiones[0].ya_apuntado = [
+    { ledger_id: null, golpe_id: 'g1', pieza: 'Paragolpes trasero', pieza_clave: 'paragolpes_tras', panel: 'paragolpes', gravedad: 'leve',
+      desde: '2026-11-03', inspection_id: 'otra', vista: 'trasera', origen: 'repaso', en_taller: false, de_esta_revision: false, foto_url: null, box_2d: null },
+    { ledger_id: null, golpe_id: null, pieza: 'Retrovisor derecho', pieza_clave: null, panel: 'retrovisor', gravedad: 'leve',
+      desde: '2026-10-28', inspection_id: 'otra', vista: null, origen: 'revision_rapida', en_taller: true, de_esta_revision: false, foto_url: null, box_2d: null },
+  ]
+  await abrir(page, elDia)
+  const sin = page.getByTestId('ya-apuntado').getByTestId('miniatura-sinfoto')
+  await expect(sin).toHaveCount(2)
+  await expect(sin.nth(0)).toHaveText('Trasera')
+  await expect(sin.nth(1)).toHaveText('Sin foto')
+  expect(await sin.nth(0).evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('1px')
+  expect(await sin.nth(0).evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)')
+})
+
+// Marca un golpe en el lateral izquierdo de la primera furgoneta y da por iguales los demás lados del día.
+async function terminarConGolpe(page, srv) {
+  await tab(page, 3).click()
+  await page.getByRole('button', { name: 'Hay un golpe nuevo' }).click()
+  await dibujarCaja(page)
+  const form = page.getByTestId('form-golpe')
+  await form.getByRole('button', { name: 'Puerta lateral corredera izquierda' }).click()
+  await form.getByRole('button', { name: 'Moderado' }).click()
+  await form.getByRole('button', { name: 'Guardar el golpe' }).click()
+  await expect.poll(() => srv.posts.length).toBe(1)
+  for (let i = 0; i < 5; i++) {
+    await botonIgual(page).click()
+    await expect.poll(() => srv.posts.length).toBe(i + 2)
+  }
+  await expect(page.getByTestId('terminado')).toBeVisible()
+}
+
+test('Repaso · terminado con golpes: sin tarjeta ni cuentas repetidas, «Ver los golpes» y el expediente de cada uno', async ({ page, baseURL }) => {
+  const srv = await abrir(page, dia(baseURL, { esHoy: true }))
+  await terminarConGolpe(page, srv)
+  const fin = page.getByTestId('terminado')
+  // Sin tarjeta: ni fondo ni borde alrededor; solo la regla de arriba.
+  const estilo = await fin.evaluate((el) => { const s = getComputedStyle(el); return { fondo: s.backgroundColor, izq: s.borderLeftWidth, arriba: s.borderTopWidth } })
+  expect(estilo).toMatchObject({ fondo: 'rgba(0, 0, 0, 0)', izq: '0px' })
+  expect(parseFloat(estilo.arriba)).toBeGreaterThan(0)
+  // Las cuentas ya están en la columna «Hoy»: aquí no se repiten.
+  await expect(fin).not.toContainText('Sin golpes nuevos')
+  await expect(fin).not.toContainText('Con un golpe nuevo')
+  await expect(fin.getByTestId('terminado-sin-golpes')).toHaveCount(0)
+  // Cada golpe, con el enlace al expediente de su furgoneta.
+  const exp = fin.getByTestId('golpe-expediente')
+  await expect(exp).toHaveCount(1)
+  await expect(exp).toHaveAttribute('href', '/panel/vehiculos/veh-rev-a/expediente')
+  await expect(exp).toHaveAccessibleName('Abrir el expediente de 5678 KLM')
+  // El siguiente paso: ver los golpes (abre el primero en la mesa).
+  await fin.getByRole('button', { name: 'Ver los golpes de hoy' }).click()
+  await expect(tab(page, 3)).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByTestId('decidido')).toContainText('Puerta lateral corredera izquierda')
+})
+
+test('Repaso · terminado sin golpes: una frase tranquila y, si el día anterior quedó sin repasar, el enlace', async ({ page, baseURL }) => {
+  const srv = await abrir(page, dia(baseURL, { esHoy: true }))
+  const ayer = dia(baseURL, { revisiones: [revision(baseURL, { id: 'rev-y', matricula: '1111 BBB', conductor: 'Rosa M.', hora: '09:10' })] })
+  ayer.fecha = '2026-11-11'
+  srv.diaDe = (f) => (f === '2026-11-11' ? ayer : null)
+  for (let i = 0; i < 6; i++) {
+    await botonIgual(page).click()
+    await expect.poll(() => srv.posts.length).toBe(i + 1)
+  }
+  const fin = page.getByTestId('terminado')
+  await expect(fin.getByTestId('terminado-sin-golpes')).toContainText('Hoy no hay nada nuevo.')
+  await expect(fin.getByTestId('ver-golpes')).toHaveCount(0)
+  const enlace = fin.getByRole('button', { name: 'Repasar el 11 de noviembre' })
+  await expect(enlace).toBeVisible()
+  await enlace.click()
+  await expect(page.getByTestId('mesa').getByTestId('matricula').first()).toContainText('1111 BBB')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Repaso del 11 de noviembre')
+})
+
+test('Repaso · terminado sin golpes y con el día anterior al día: no ofrece nada más', async ({ page, baseURL }) => {
+  const srv = await abrir(page, dia(baseURL, { esHoy: true }))
+  for (let i = 0; i < 6; i++) {
+    await botonIgual(page).click()
+    await expect.poll(() => srv.posts.length).toBe(i + 1)
+  }
+  await expect(page.getByTestId('terminado-sin-golpes')).toContainText('Hoy no hay nada nuevo.')
+  // Se ha mirado el día anterior (el servidor de mentira lo da repasado) y no se ofrece.
+  await expect.poll(() => srv.pedidas.some((q) => q.includes('fecha=2026-11-11'))).toBe(true)
+  await expect(page.getByTestId('dia-sin-repasar')).toHaveCount(0)
+})
+
+/* Las fotos para mirar: a 1280 px en los tres temas del panel (la mesa, el golpe a medias y completo, y «terminado» con
+   y sin golpes); a 390 px, lo mismo en el tema de por defecto. */
+const YA_APUNTADO_FOTO = (baseURL) => [{
+  ledger_id: null, golpe_id: 'g-viejo', pieza: 'Paragolpes trasero', pieza_clave: 'paragolpes_tras', panel: 'paragolpes',
+  gravedad: 'leve', desde: '2026-10-02', inspection_id: 'otra', vista: 'trasera', origen: 'repaso', en_taller: false,
+  de_esta_revision: false, foto_url: `${baseURL}/demo/van-lateral-golpe-paragolpes.jpg`, box_2d: [560, 70, 760, 330],
+}, {
+  ledger_id: null, golpe_id: null, pieza: 'Retrovisor derecho', pieza_clave: null, panel: 'retrovisor', gravedad: 'leve',
+  desde: '2026-10-28', inspection_id: 'otra', vista: null, origen: 'revision_rapida', en_taller: true, de_esta_revision: false,
+  foto_url: null, box_2d: null,
+}]
 for (const tema of ['hibrido', 'light', 'dark']) {
   test(`Repaso · fotos de la pantalla (tema ${tema})`, async ({ page, baseURL, isMobile }) => {
     test.skip(!fotos, 'solo con FOTOS_REPASO')
     test.skip(isMobile && tema !== 'hibrido', 'en el móvil, solo el tema de por defecto')
     await page.setViewportSize(isMobile ? { width: 390, height: 844 } : { width: 1280, height: 800 })
+    const n = (x) => `${x}-${tema}`
     const elDia = dia(baseURL, { esHoy: true })
-    elDia.revisiones[0].ya_apuntado = [{
-      ledger_id: null, golpe_id: 'g-viejo', pieza: 'Paragolpes trasero', pieza_clave: 'paragolpes_tras', panel: 'paragolpes',
-      gravedad: 'leve', desde: '2026-10-02', inspection_id: 'otra', vista: 'trasera', origen: 'repaso', en_taller: false,
-      de_esta_revision: false, foto_url: `${baseURL}/demo/van-lateral-golpe-paragolpes.jpg`, box_2d: [560, 70, 760, 330],
-    }, {
-      ledger_id: null, golpe_id: null, pieza: 'Retrovisor derecho', pieza_clave: null, panel: 'retrovisor', gravedad: 'leve',
-      desde: '2026-10-28', inspection_id: 'otra', vista: null, origen: 'revision_rapida', en_taller: true, de_esta_revision: false,
-      foto_url: null, box_2d: null,
-    }]
-    await abrir(page, elDia, { tema })
+    elDia.revisiones[0].ya_apuntado = YA_APUNTADO_FOTO(baseURL)
+    const srv = await abrir(page, elDia, { tema })
     await expect(page.getByTestId('foto-hoy').locator('img')).toBeVisible()
     await page.waitForFunction(() => [...document.querySelectorAll('[data-testid^="foto-"] img')].every((i) => i.complete && i.naturalWidth > 0))
-    await foto(page, `repaso-mesa-${tema}`)
-    if (tema !== 'hibrido') return
-    // El golpe a medio apuntar y, en el ordenador, el deslizador.
+    await foto(page, n('repaso-mesa'))
+    // El golpe a medias (la caja y la pieza, sin la gravedad) y completo.
     await tab(page, 3).click()
     await page.getByRole('button', { name: 'Hay un golpe nuevo' }).click()
     await dibujarCaja(page)
-    await page.getByTestId('form-golpe').getByRole('button', { name: 'Puerta lateral corredera izquierda' }).click()
-    await foto(page, 'repaso-golpe')
-    await page.getByRole('button', { name: 'Cancelar' }).click()
-    if (!isMobile) {
+    const form = page.getByTestId('form-golpe')
+    await form.getByRole('button', { name: 'Puerta lateral corredera izquierda' }).click()
+    await foto(page, n('repaso-golpe-medias'))
+    await form.getByRole('button', { name: 'Moderado' }).click()
+    await foto(page, n('repaso-golpe-completo'))
+    if (tema === 'hibrido' && !isMobile) {
+      await page.getByRole('button', { name: 'Cancelar' }).click()
       await page.getByRole('button', { name: 'Con deslizador' }).click()
-      await foto(page, 'repaso-deslizador')
+      await foto(page, n('repaso-deslizador'))
       await page.getByRole('button', { name: 'Una junto a otra' }).click()
+    } else {
+      await page.getByRole('button', { name: 'Cancelar' }).click()
     }
-    await tab(page, 1).click()
-    await page.keyboard.press('z').catch(() => {})
-    if (await page.getByTestId('ampliada').count()) {
-      await foto(page, 'repaso-ampliada')
-      await page.keyboard.press('Escape')
+    await terminarConGolpe(page, srv)
+    await foto(page, n('repaso-terminado-golpes'))
+  })
+
+  test(`Repaso · fotos de «terminado» sin golpes (tema ${tema})`, async ({ page, baseURL, isMobile }) => {
+    test.skip(!fotos, 'solo con FOTOS_REPASO')
+    test.skip(isMobile && tema !== 'hibrido', 'en el móvil, solo el tema de por defecto')
+    await page.setViewportSize(isMobile ? { width: 390, height: 844 } : { width: 1280, height: 800 })
+    const srv = await abrir(page, dia(baseURL, { esHoy: true }), { tema })
+    const ayer = dia(baseURL, { revisiones: [revision(baseURL, { id: 'rev-y', matricula: '1111 BBB', conductor: 'Rosa M.', hora: '09:10' })] })
+    srv.diaDe = (f) => (f === '2026-11-11' ? ayer : null)
+    for (let i = 0; i < 6; i++) {
+      await botonIgual(page).click()
+      await expect.poll(() => srv.posts.length).toBe(i + 1)
     }
-    for (let i = 0; i < 6; i++) await botonIgual(page).click()
-    await expect(page.getByTestId('terminado')).toBeVisible()
-    await foto(page, 'repaso-terminado')
+    await expect(page.getByTestId('dia-sin-repasar')).toBeVisible()
+    await foto(page, `repaso-terminado-${tema}`)
   })
 }
