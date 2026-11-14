@@ -1511,6 +1511,16 @@ async def _ia_danos_de(user) -> bool:
     return _ia_danos_activa(await get_org(user.get("org_id")))
 
 
+async def _ia_con_datos_o_403(user) -> None:
+    """LA PUERTA DE TODA LLAMADA A GEMINI CON DATOS DE UNA EMPRESA (14-11-2026, tercera tanda). La IA de daños
+    apagada (`_ia_danos_activa`) no bastaba: el asistente, importar el cuadrante pegado o en foto, el chat del
+    cuadrante y la plantilla mandaban a la clave general (que puede ser del nivel gratuito) nombres de conductores,
+    matrículas y lo que escribe la oficina. Se llama ANTES de crear el cliente de Gemini; sin la IA, 403 y no sale
+    nada. `test_tanda3_servidor_ia.py` lee server.py y obliga a decidir cada llamada nueva."""
+    if not await _ia_danos_de(user):
+        raise HTTPException(status_code=403, detail="Esta cuenta no tiene esa función.")
+
+
 def _modulos_modo(org) -> str:
     m = (org or {}).get("modulos")
     return "todos" if org_modulos(org) is None else "medida" if isinstance(m, list) else "estandar"
@@ -3304,6 +3314,30 @@ async def _known_damages_prompt(vehicle_id: str, exclude_inspection_id: str = No
         return ""
 
 
+_LIBRO_CON_INDICE: set = set()
+
+
+async def _libro_con_indice() -> None:
+    """EL ÚNICO DEL LIBRO DESDE EL PRIMER GOLPE (14-11-2026, tercera tanda). Los índices de cada empresa se ponen al
+    arrancar y solo donde ya hay colección (`_BdSoloExistentes`): una empresa nueva no tenía `uniq_veh_panel_open`
+    hasta el siguiente arranque después de su primer golpe, y dos golpes a la vez en dos puertas de la misma
+    furgoneta creaban dos entradas «puerta» abiertas (y entonces el único ya no se podía crear). Se pone aquí, antes
+    de la primera escritura del libro de esa base, una vez por proceso. Si ya existe (85/86) vale igual."""
+    nombre = _current_db_name.get()
+    if nombre in _LIBRO_CON_INDICE:
+        return
+    try:
+        await db.vehicle_damage_ledger.create_index(
+            [("vehicle_id", 1), ("panel", 1)], unique=True,
+            partialFilterExpression={"status": "open"}, name="uniq_veh_panel_open")
+        _LIBRO_CON_INDICE.add(nombre)
+    except Exception as e:                                       # noqa: BLE001
+        if getattr(e, "code", None) in (85, 86):
+            _LIBRO_CON_INDICE.add(nombre)
+        else:
+            logger.warning("indice unico del libro en %s: %s", nombre, e)
+
+
 async def _ledger_upsert(filtro: dict, update: dict) -> bool:
     """Upsert en el libro de daños, a prueba del indice unico.
 
@@ -3318,6 +3352,7 @@ async def _ledger_upsert(filtro: dict, update: dict) -> bool:
     queria conseguir: se traga y se devuelve False (gotcha 32 — un cerrojo que
     revienta es peor que no tenerlo).
     """
+    await _libro_con_indice()
     try:
         await db.vehicle_damage_ledger.update_one(filtro, update, upsert=True)
         return True
@@ -3387,6 +3422,22 @@ async def _apply_vehicle_memory(vehicle_id: str, analysis, inspection_id: str = 
         de_personas = {e.get("panel") for e in await db.vehicle_damage_ledger.find(
             {"vehicle_id": vehicle_id, "status": "open", "source": "human"}, {"_id": 0, "panel": 1}).to_list(200)}
 
+        # LA MISMA ESCALADA, UNA SOLA VEZ (14-11-2026, tercera tanda). Sobre una pieza que confirmó una persona la IA
+        # no toca la gravedad, pero si la ve más grave lo que ve se apunta aparte en esa entrada (`rank_ia`): así
+        # avisa UNA vez, como antes, y al día siguiente ya es «ya registrado». Sin esto, la misma puerta salía
+        # nueva (y con su aviso de daño grave) en cada revisión de esa furgoneta.
+        def _rango(e) -> int:
+            r = e.get("rank") or 1
+            return max(r, e.get("rank_ia") or 0) if e.get("source") == "human" else r
+
+        async def _visto_por_la_ia(p, rango, en_memoria: bool = True) -> None:
+            await db.vehicle_damage_ledger.update_one(
+                {"vehicle_id": vehicle_id, "panel": p, "status": "open", "source": "human"},
+                {"$max": {"rank_ia": rango}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+            # Una escalada de hoy no cuenta como conocida en ESTE análisis (sale nueva una vez, como antes).
+            if en_memoria and p in known and known[p].get("source") == "human":
+                known[p]["rank_ia"] = max(known[p].get("rank_ia") or 0, rango)
+
         bad_panels: set = set()
         # La fiabilidad de cada pieza EN TODA LA FLOTA, no solo en esta
         # furgoneta: es donde esta la señal (429 de los 666 inventos se
@@ -3408,12 +3459,14 @@ async def _apply_vehicle_memory(vehicle_id: str, analysis, inspection_id: str = 
             p = _canon_panel(d.part or "")
             d_rank = _SEV_RANK.get(_norm_sev(d.severity), 1)
 
-            if p and p in known and d_rank <= known[p]["rank"] + 1:
+            if p and p in known and d_rank <= _rango(known[p]) + 1:
                 # YA REGISTRADO → conocido, fuera de nuevos (sigue en damages[]).
                 # Tolerancia de ±1 grado: otra foto con OTRO ÁNGULO del mismo daño
                 # suele variar un punto la severidad percibida — eso NO es un daño
                 # nuevo. Solo un salto claro (+2, p.ej. leve→grave) es escalada.
-                if d_rank == known[p]["rank"] + 1 and p not in de_personas:
+                if d_rank == _rango(known[p]) + 1 and p in de_personas:
+                    await _visto_por_la_ia(p, d_rank)
+                elif d_rank == known[p]["rank"] + 1 and p not in de_personas:
                     # Consolidar la severidad mayor en el ledger, sin re-alertar
                     await db.vehicle_damage_ledger.update_one(
                         {"vehicle_id": vehicle_id, "panel": p, "status": "open", "source": {"$ne": "human"}},
@@ -3467,6 +3520,10 @@ async def _apply_vehicle_memory(vehicle_id: str, analysis, inspection_id: str = 
                                       "first_seen": await _fecha_dano(inspection_id),
                                       "first_seen_inspection": inspection_id or ""}})
                 registered += 1
+            elif p and getattr(d, "confirmed", True) and p in de_personas:
+                # Escalada sobre lo que confirmó una persona: sale nueva hoy (como antes) y queda apuntada aparte.
+                await _visto_por_la_ia(p, d_rank, en_memoria=False)
+                registered += 1
             kept.append(d)
 
         if moved or downgraded:
@@ -3481,7 +3538,7 @@ async def _apply_vehicle_memory(vehicle_id: str, analysis, inspection_id: str = 
         for d in (getattr(analysis, "damages", None) or []):
             p = _canon_panel(d.part or "")
             d_rank = _SEV_RANK.get(_norm_sev(d.severity), 1)
-            if p and p in known and d_rank <= known[p]["rank"] and getattr(d, "is_new", True):
+            if p and p in known and d_rank <= _rango(known[p]) and getattr(d, "is_new", True):
                 d.is_new = False
                 if "[ya registrado" not in (d.description or ""):
                     d.description = ((d.description or "") +
@@ -5673,6 +5730,9 @@ async def org_billing(user: dict = Depends(get_current_user)):
     b["account_type"] = (org or {}).get("account_type")
     b["org_name"] = (org or {}).get("name")
     b["modulos"] = org_modulos(org)
+    # ¿Tiene la IA esta cuenta? (R10, 14-11-2026): sin ella el panel no enseña el asistente ni los botones «con IA»
+    # de importar y del cuadrante, que contestarían 403 (`_ia_con_datos_o_403`).
+    b["ia"] = _ia_danos_activa(org)
     b["sector"] = (org or {}).get("sector")
     b["pago_proveedor"] = (org or {}).get("pago_proveedor")
     b["cancela_al_final"] = bool((org or {}).get("cancela_al_final"))
@@ -6097,8 +6157,8 @@ async def billing_planes(pais: str = ""):
                 "Todo lo de Esencial, con delegaciones ilimitadas y un jefe por delegación",
                 "Origen de daños: todos los golpes de la flota en una lista, con quién llevaba cada furgoneta cuando "
                 "es seguro",
-                ("Revisión rápida, solo en las cuentas con la IA activa: compara cada foto con la anterior del mismo "
-                 "lado y marca lo que parece nuevo. Se equivoca a menudo, así que cada marca la confirma una persona"),
+                # Fuera «Revisión rápida, solo en las cuentas con la IA activa…» (14-11-2026, tercera tanda): quien
+                # compra hoy no la recibe (`_ia_danos_activa`). Igual en frontend/src/lib/precios.js.
                 "Qué furgoneta lleva cada uno: asignación y furgonetas fijas",
                 "Cuadrante con motor, turnos y días libres desde el móvil",
                 "Plantilla de salida, checklist de apertura y cierre, aparcamiento",
@@ -8143,6 +8203,10 @@ async def _demo_regenerar():
     try:
         for _v in await ddb.vehicles.find({}, {"_id": 0, "id": 1}).to_list(500):
             await _get_vehicle_ledger(_v["id"])
+        # En la historia de la demo, la oficina ya ha confirmado esos golpes (tercera tanda, S7): «Origen de daños»
+        # no da nunca más certeza a lo que solo marcó la IA que a una persona, y la demo enseña lo que se vende,
+        # golpes confirmados. Sin esto, la demo no tenía ni un «Un solo conductor».
+        await ddb.vehicle_damage_ledger.update_many({"source": {"$ne": "human"}}, {"$set": {"source": "human"}})
     except Exception as _le:                                 # noqa: BLE001
         logger.warning("Demo: no se pudo rehacer el libro de daños: %s", _le)
     finally:
@@ -8274,6 +8338,7 @@ async def assistant_ask(data: dict, user: dict = Depends(require_admin)):
     """Responde preguntas en lenguaje natural sobre LA FLOTA DE ESTA ORG.
     Enfoque fiable: se recopila un resumen compacto de datos reales (solo
     lectura, acotado) y Gemini responde SOLO con esos datos."""
+    await _ia_con_datos_o_403(user)      # nombres, matrículas y daños de la empresa: sin la IA no salen (R11)
     question = _texto_cuerpo(data.get("question"))[:300]
     if len(question) < 4:
         raise HTTPException(status_code=400, detail="Escribe una pregunta")
@@ -8831,6 +8896,9 @@ async def get_my_assigned_vehicle(user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Solo conductores")
     driver_id = user["sub"]
     today = _dia_negocio()
+    # R9 (14-11-2026): la web del conductor de una cuenta sin la IA de daños no nombra la IA ni espera a que lea
+    # nada (pide los km a mano desde el principio). Con la IA, `false`: todo exactamente igual.
+    sin_ia = not await _ia_danos_de(user)
     # Sus fichas, no su ficha: si está duplicado, el cuadrante apunta a una y
     # el login puede haber caído en la otra (ver _fichas_misma_persona). Si
     # aquí no se mira igual que en el portal, se le abre la auditoría y luego
@@ -8857,8 +8925,9 @@ async def get_my_assigned_vehicle(user: dict = Depends(get_current_user)):
                         "vehicle": vehicle,
                         "center": doc.get("center"),
                         "already_inspected": insp is not None,
+                        "sin_ia": sin_ia,
                     }
-    return {"assigned": False, "vehicle": None}
+    return {"assigned": False, "vehicle": None, "sin_ia": sin_ia}
 
 
 @auth_router.get("/me")
@@ -10277,7 +10346,7 @@ async def vehiculo_expediente(vehicle_id: str, _=Depends(require_admin)):
 
     for i in insp:
         a = i.get("analysis") or {}
-        n = a.get("total_damages_count")
+        n = _total_con_repaso(a)            # con los golpes que marcó una persona (S14, 14-11-2026)
         nuevos = descubre.get(i.get("id")) or []
         _add(i.get("created_at"), "revision",
              "Revisión de %s" % (nombres.get(i.get("driver_id")) or "alguien"),
@@ -10288,7 +10357,7 @@ async def vehiculo_expediente(vehicle_id: str, _=Depends(require_admin)):
              detalle=("aparece %s" % ", ".join(nuevos[:3])) if nuevos
                      else (("%s golpe%s ya conocidos" % (n, "s" if n != 1 else "")) if n else None),
              novedad=bool(nuevos),
-             gravedad=a.get("severity"),
+             gravedad=_sev_con_repaso(a),
              foto=next((f for f in (i.get("annotated_photos") or []) if f), None)
                   or next((f for f in (i.get("photos") or []) if f), None))
 
@@ -15363,11 +15432,15 @@ async def vehicle_ledger_repair(vehicle_id: str, body: dict = Body(default={}), 
         q["panel"] = p
     else:
         raise HTTPException(400, "Indica 'panel' o 'all': true")
+    con_golpes = await db.vehicle_damage_ledger.find(
+        q, {"_id": 0, "golpe_id": 1, "golpe_ids": 1}).to_list(None)
     res = await db.vehicle_damage_ledger.update_many(q, {"$set": {
         "status": "repaired", "repaired_at": now_iso,
         "repaired_note": str(body.get("note") or "")[:200],
         "repaired_by": user.get("name") or "",
     }})
+    # Los golpes del repaso de esas entradas quedan reparados en su ficha (S3, 14-11-2026), con su fecha.
+    await _repaso_golpes_reparados(vehicle_id, con_golpes, now_iso)
     if body.get("all"):
         # Marca de "salió de chapa": la IA sabrá que los daños de fotos de
         # referencia anteriores a esta fecha YA NO EXISTEN.
@@ -16325,6 +16398,20 @@ def _repaso_ledger_id(e) -> Optional[str]:
 _REPASO_TOTALES = ("total_con_repaso", "severidad_con_repaso")
 
 
+def _sev_con_repaso(an) -> Optional[str]:
+    """La gravedad de una revisión CONTANDO lo que marcó una persona (S14, 14-11-2026): un golpe grave apuntado en el
+    repaso sobre un «sin daños» de la IA no puede leerse «Sin daños». Para lo que es de la IA (la cola de «Revisión
+    rápida», la autorrevisión) se sigue leyendo `severity`."""
+    an = an if isinstance(an, dict) else {}
+    return an.get("severidad_con_repaso") or an.get("severity")
+
+
+def _total_con_repaso(an):
+    """El número de daños de una revisión con los golpes a mano (S14); sin ellos, el de siempre."""
+    an = an if isinstance(an, dict) else {}
+    return an["total_con_repaso"] if an.get("total_con_repaso") is not None else an.get("total_damages_count")
+
+
 def _repaso_danos(an) -> list:
     return an.get("damages") if isinstance(an, dict) and isinstance(an.get("damages"), list) else []
 
@@ -16408,6 +16495,32 @@ async def _escribir_analisis_ia(inspection_id: str, nuevo, extra: dict) -> None:
     logger.warning("analisis de %s: la lista de daños cambia sin parar; se escribe con la última leída", inspection_id)
     await db.inspections.update_one({"id": inspection_id},
                                     {"$set": {"analysis": _analisis_con_repaso(nuevo, actual), **extra}})
+    # Un golpe que se colara justo en ese hueco no se pierde: los lados del repaso son la verdad y se reponen.
+    await _repaso_reponer_golpes(inspection_id)
+
+
+def _repaso_dano_de_lado(pi, golpe: dict) -> dict:
+    """El daño que un golpe del repaso pone en `analysis.damages` (lo mismo al marcar que al reponerlo)."""
+    return {"part": golpe.get("part"), "pieza_clave": golpe.get("pieza_clave"), "severity": golpe.get("severity"),
+            "description": golpe.get("description") or "", "photo_index": pi, "box_2d": golpe.get("box_2d"),
+            # «ya estaba» no es nuevo: la ficha no tiene que pintarlo como tal.
+            "is_new": not golpe.get("ya_estaba"), "confirmed": True,
+            "origen": "repaso", "golpe_id": golpe.get("golpe_id")}
+
+
+async def _repaso_reponer_golpes(inspection_id: str) -> None:
+    """Vuelve a poner en la ficha los golpes de los lados que no estén (S13, 14-11-2026). Solo hace falta tras una
+    escritura sin condición; no toca nada si ya están."""
+    try:
+        insp = await db.inspections.find_one({"id": inspection_id}, {"_id": 0, "repaso": 1, "analysis": 1}) or {}
+        estan = {d.get("golpe_id") for d in _repaso_danos(insp.get("analysis")) if isinstance(d, dict)}
+        for lado in _repaso_guardados(insp).values():
+            g = lado.get("golpe")
+            if lado.get("veredicto") == "golpe" and isinstance(g, dict) and g.get("golpe_id") \
+                    and g["golpe_id"] not in estan:
+                await _repaso_poner_dano(inspection_id, _repaso_dano_de_lado(lado.get("photo_index"), g))
+    except Exception as e:                                       # noqa: BLE001
+        logger.error("repaso: reponiendo los golpes de %s: %s", inspection_id, e)
 
 
 _REPASO_SIN_CAMBIO = object()
@@ -16514,6 +16627,7 @@ async def _repaso_libro(insp: dict, pi: int, vista, golpe: dict, por: str, ahora
     golpes del repaso enlazados, el dueño incluido. Así un golpe marcado por una persona nunca depende de la entrada
     de otro: deshacer o reparar uno no se lleva a los demás (`_repaso_libro_soltar`).
     Nunca `insert_one`: si otro proceso crea la de esa pieza entre medias, el único lo para y se vuelve a mirar."""
+    await _libro_con_indice()            # una empresa nueva: el único antes de su primer golpe (S12)
     vid, panel, gid = insp.get("vehicle_id"), golpe["panel"], golpe["golpe_id"]
     campos = {**_repaso_campos_libro(insp, pi, vista, golpe, por, ahora), "updated_at": ahora}
     abierta = {"vehicle_id": vid, "panel": panel, "status": "open"}
@@ -16547,42 +16661,116 @@ async def _repaso_libro_soltar(vid, golpe_id: str, ahora: str, reparado: bool = 
       reparado y era el único                -> la entrada queda reparada                 ("reparado")
       la confirmó también «Revisión rápida»  -> se queda con lo que confirmó esa persona  ("queda_revision_rapida")
       era de la IA antes del golpe           -> vuelve EXACTAMENTE como estaba            ("devuelto_a_ia")
-      la creó el golpe y nadie más la tocó   -> se borra                                  ("borrado")"""
-    de_el = {"vehicle_id": vid, "$or": [{"golpe_id": golpe_id}, {"golpe_ids": golpe_id}]}
-    e = await db.vehicle_damage_ledger.find_one(de_el)
-    if not e:
-        return None
-    if e.get("golpe_id") != golpe_id:
-        await db.vehicle_damage_ledger.update_one(de_el, {"$pull": {"golpe_ids": golpe_id}})
-        return "sin_cambios"
-    otros = [g for g in (e.get("golpe_ids") or []) if g != golpe_id]
-    if otros and e.get("status") == "open":
-        for g in otros:
-            datos = await _repaso_datos_golpe(vid, g)
-            if datos:
-                await db.vehicle_damage_ledger.update_one(
-                    de_el, {"$set": {**datos, "golpe_ids": otros, "updated_at": ahora}})
-                return "pasa_a_otro"
-    if reparado:
-        await db.vehicle_damage_ledger.update_one(
-            de_el, {"$set": {"status": "repaired", "repaired_at": ahora, "updated_at": ahora}})
-        return "reparado"
-    rr = e.get("revision_rapida")
-    if isinstance(rr, dict):
-        poner = {k: rr.get(k) for k in ("part", "severity", "rank", "first_seen", "first_seen_inspection")}
-        await db.vehicle_damage_ledger.update_one(de_el, {
-            "$set": {**poner, "source": "human", "updated_at": ahora},
-            "$unset": {k: "" for k in _REPASO_CAMPOS_GOLPE}})
-        return "queda_revision_rapida"
-    previa = e.get("ia_previa")
-    if isinstance(previa, dict):
-        poner = {k: previa[k] for k in _REPASO_CAMPOS_LIBRO if k in previa}
-        quitar = {k: "" for k in _REPASO_CAMPOS_LIBRO if k not in previa}
-        quitar["ia_previa"] = ""
-        await db.vehicle_damage_ledger.update_one(de_el, {"$set": poner, "$unset": quitar} if poner else {"$unset": quitar})
-        return "devuelto_a_ia"
-    await db.vehicle_damage_ledger.delete_one({**de_el, "status": "open"})
-    return "borrado"
+                                                (archivada si «Reconstruir flota» la archivó entre medias)
+      la creó el golpe y nadie más la tocó   -> se borra                                  ("borrado")
+
+    Cada escritura va condicionada a lo que se ha leído (quién es el dueño): dos «deshacer» a la vez de golpes de la
+    misma entrada ya no dejan en `golpe_ids` un golpe deshecho ni a un golpe deshecho de dueño (S3, 14-11-2026)."""
+    for _intento in range(8):
+        de_el = {"vehicle_id": vid, "$or": [{"golpe_id": golpe_id}, {"golpe_ids": golpe_id}]}
+        e = await db.vehicle_damage_ledger.find_one(de_el)
+        if not e:
+            return None
+        if e.get("golpe_id") != golpe_id:
+            # Solo si sigue sin ser el dueño: si otro «deshacer» se lo acaba de pasar, se vuelve a mirar.
+            r = await db.vehicle_damage_ledger.update_one(
+                {"vehicle_id": vid, "golpe_ids": golpe_id, "golpe_id": e.get("golpe_id")},
+                {"$pull": {"golpe_ids": golpe_id}})
+            if not r.matched_count:
+                continue
+            await _libro_cerrar_si_no_queda_nada(vid, e, ahora)
+            return "sin_cambios"
+        suyo = {"vehicle_id": vid, "golpe_id": golpe_id}
+        otros = [g for g in (e.get("golpe_ids") or []) if g != golpe_id]
+        if otros and e.get("status") == "open":
+            otra_vez = False
+            for g in otros:
+                datos = await _repaso_datos_golpe(vid, g)
+                if datos:
+                    # `$pull` y no la lista reescrita: un enlazado que se deshace a la vez no se queda dentro.
+                    r = await db.vehicle_damage_ledger.update_one(
+                        {**suyo, "golpe_ids": g},
+                        {"$set": {**datos, "updated_at": ahora}, "$pull": {"golpe_ids": golpe_id}})
+                    if r.matched_count:
+                        return "pasa_a_otro"
+                    otra_vez = True
+                    break
+            if otra_vez:
+                continue
+        if reparado:
+            r = await db.vehicle_damage_ledger.update_one(
+                suyo, {"$set": {"status": "repaired", "repaired_at": ahora, "updated_at": ahora}})
+            if r.matched_count:
+                return "reparado"
+            continue
+        rr = e.get("revision_rapida")
+        if isinstance(rr, dict):
+            poner = {k: rr.get(k) for k in ("part", "severity", "rank", "first_seen", "first_seen_inspection")}
+            r = await db.vehicle_damage_ledger.update_one(suyo, {
+                "$set": {**poner, "source": "human", "updated_at": ahora},
+                "$unset": {k: "" for k in _REPASO_CAMPOS_GOLPE}})
+            if r.matched_count:
+                return "queda_revision_rapida"
+            continue
+        previa = e.get("ia_previa")
+        if isinstance(previa, dict):
+            poner = {k: previa[k] for k in _REPASO_CAMPOS_LIBRO if k in previa}
+            quitar = {k: "" for k in _REPASO_CAMPOS_LIBRO if k not in previa}
+            quitar["ia_previa"] = ""
+            if previa.get("archivar"):
+                # «Reconstruir flota» la archivó mientras el golpe la tenía (S4): vuelve archivada, no abierta.
+                poner.update({"status": "archived", "archived_at": previa.get("archivada_at") or ahora,
+                              "archived_reason": "rebuild_fleet"})
+            r = await db.vehicle_damage_ledger.update_one(
+                suyo, {"$set": poner, "$unset": quitar} if poner else {"$unset": quitar})
+            if r.matched_count:
+                return "devuelto_a_ia"
+            continue
+        await db.vehicle_damage_ledger.delete_one({**suyo, "status": "open"})
+        return "borrado"
+    raise RuntimeError("el libro de daños de esa pieza cambia sin parar")
+
+
+async def _libro_cerrar_si_no_queda_nada(vid, e: dict, ahora: str) -> None:
+    """Una entrada SIN dueño del repaso (la confirmó una persona en «Revisión rápida») con golpes enlazados: se cierra
+    cuando se va el último enlazado si su propio daño ya estaba reparado (`dano_propio_reparado_at`, lo apunta
+    `update_damage`). Antes se quedaba abierta para siempre con `golpe_ids: []` (S3, 14-11-2026)."""
+    if e.get("golpe_id") or e.get("status") != "open" or not e.get("dano_propio_reparado_at"):
+        return
+    await db.vehicle_damage_ledger.update_one(
+        {"vehicle_id": vid, "panel": e.get("panel"), "status": "open", "golpe_id": None,
+         "golpe_ids.0": {"$exists": False}, "dano_propio_reparado_at": {"$exists": True}},
+        {"$set": {"status": "repaired", "repaired_at": e.get("dano_propio_reparado_at"), "updated_at": ahora}})
+
+
+async def _repaso_golpes_reparados(vid, entradas: list, ahora: str) -> None:
+    """Cerrar una entrada del libro desde fuera de la ficha («reparar pieza», la entrega de una orden de taller) cubre
+    los golpes del repaso que llevaba: quedan reparados en su ficha, con su fecha (S3, 14-11-2026). Si no, salían de
+    «Ya apuntado» (que solo lee lo abierto) pero seguían «abiertos» en el expediente, y al día siguiente se volvían a
+    marcar. Un fallo aquí no tumba la reparación: se anota."""
+    vistos = []
+    for e in entradas or []:
+        for g in [e.get("golpe_id")] + list(e.get("golpe_ids") or []):
+            if g and (e.get("vehicle_id") or vid, g) not in vistos:
+                vistos.append((e.get("vehicle_id") or vid, g))
+    for v, gid in vistos:
+        try:
+            insp = await db.inspections.find_one({"vehicle_id": v, "analysis.damages.golpe_id": gid},
+                                                 {"_id": 0, "id": 1})
+            if not insp:
+                continue
+
+            def _reparado(an, gid=gid):
+                cambia, danos = False, []
+                for d in _repaso_danos(an):
+                    if isinstance(d, dict) and d.get("golpe_id") == gid and d.get("repair_status") != "done":
+                        d = {**d, "repair_status": "done", "completed_at": ahora}
+                        cambia = True
+                    danos.append(d)
+                return {**an, "damages": danos} if cambia else _REPASO_SIN_CAMBIO
+            await _repaso_cambiar_danos(insp["id"], _reparado)
+        except Exception as ex:                                  # noqa: BLE001
+            logger.warning("libro: el golpe %s no ha quedado reparado en su ficha: %s", gid, ex)
 
 
 async def _repaso_libro_deshacer(vid, golpe_id: str) -> Optional[str]:
@@ -16702,7 +16890,48 @@ async def repaso_pendientes(center: Optional[str] = None, user: dict = Depends(r
     async for r in db.inspections.find(q, _REPASO_CAMPOS):
         if _repaso_estado(r)[0] in ("sin_repasar", "a_medias"):
             pendientes += 1
-    return {"fecha": hoy, "pendientes": pendientes}
+    return {"fecha": hoy, "pendientes": pendientes, "avisar": await _repaso_avisar(user)}
+
+
+# Empresas en las que alguien ya ha dado un veredicto en el Repaso (por base): una vez que sí, siempre sí.
+_REPASO_USADO: set = set()
+
+
+async def _repaso_avisar(user: dict) -> bool:
+    """¿Pinta el menú el número de «Repaso»? (R7, 14-11-2026). No a una empresa con la IA de daños activa que nunca
+    ha dado un veredicto en el Repaso: esa oficina trabaja en «Revisión rápida» y un número rojo de unas 30
+    revisiones cada día que no baja con su trabajo es ruido. En cuanto alguien da uno, sí para siempre. Sin la IA,
+    el Repaso es su única cola: siempre sí. Barato (se pide cada 2 minutos): la marca que deja el primer veredicto
+    (`app_meta`, por `_id`) y luego memoria; las revisiones se recorren UNA vez por proceso (por lo marcado antes de
+    que existiera la marca), no cada 2 minutos."""
+    base = _current_db_name.get()
+    if base in _REPASO_USADO:
+        return True
+    if not await _ia_danos_de(user):
+        return True
+    usado = bool(await db.app_meta.find_one({"_id": _REPASO_MARCA_USADO}, {"_id": 1}))
+    if not usado and base not in _REPASO_MIRADO:
+        _REPASO_MIRADO.add(base)
+        usado = bool(await db.inspections.find_one({"repaso.lados": {"$exists": True}}, {"_id": 0, "id": 1}))
+    if usado:
+        _REPASO_USADO.add(base)
+    return usado
+
+
+_REPASO_MIRADO: set = set()
+_REPASO_MARCA_USADO = "repaso_usado"
+
+
+async def _repaso_marcar_usado(ahora: str) -> None:
+    """Deja escrito que en esta empresa ya se ha dado un veredicto en el Repaso (R7). Una escritura por proceso."""
+    base = _current_db_name.get()
+    if base in _REPASO_USADO:
+        return
+    try:
+        await db.app_meta.update_one({"_id": _REPASO_MARCA_USADO}, {"$setOnInsert": {"en": ahora}}, upsert=True)
+        _REPASO_USADO.add(base)
+    except Exception as e:                                       # noqa: BLE001
+        logger.warning("repaso: no se ha podido apuntar que ya se usa: %s", e)
 
 
 @api_router.get("/repaso/dia")
@@ -16934,6 +17163,7 @@ async def repaso_marcar_lado(inspection_id: str, data: dict = Body(default={}), 
         {"$set": {f"repaso.lados.{pi}": lado}})
     if not r.matched_count:
         raise HTTPException(status_code=409, detail="Ese lado ya tiene veredicto. Deshazlo antes de cambiarlo.")
+    await _repaso_marcar_usado(ahora)    # desde ahora el menú pinta el número de «Repaso» (R7)
 
     libro = None
     if golpe:
@@ -16952,12 +17182,7 @@ async def repaso_marcar_lado(inspection_id: str, data: dict = Body(default={}), 
                     logger.error("repaso: deshaciendo el golpe a medias: %s", e2)
 
         try:
-            await _repaso_poner_dano(inspection_id, {
-                "part": golpe["part"], "pieza_clave": golpe["pieza_clave"], "severity": golpe["severity"],
-                "description": golpe["description"] or "", "photo_index": pi, "box_2d": golpe["box_2d"],
-                # «ya estaba» no es nuevo: la ficha no tiene que pintarlo como tal.
-                "is_new": not golpe["ya_estaba"], "confirmed": True,
-                "origen": "repaso", "golpe_id": gid})
+            await _repaso_poner_dano(inspection_id, _repaso_dano_de_lado(pi, golpe))
             accion, entrada = await _repaso_libro(insp, pi, vista, golpe, por, ahora)
             golpe["libro"] = {"accion": accion, "ledger_id": _repaso_ledger_id(entrada)}
             # Solo si el lado sigue siendo ESTE golpe: si otra persona lo ha deshecho mientras se apuntaba, lo
@@ -17025,9 +17250,29 @@ async def repaso_deshacer_lado(inspection_id: str, photo_index: str, user: dict 
         raise HTTPException(status_code=404, detail="Ese lado no tiene veredicto")
     libro = None
     if gid:
-        # (3) La ficha y (4) el libro
-        await _repaso_quitar_dano(inspection_id, gid)
-        libro = {"accion": await _repaso_libro_deshacer(vid, gid) or "sin_cambios"}
+        # (3) La ficha y (4) el libro. Si cualquiera de los dos no se puede escribir (la ficha o el libro no paran de
+        # cambiar), se vuelve a dejar TODO como estaba y se contesta 409 para reintentar: antes quedaba un golpe en
+        # la ficha y en el libro sin su lado, que ya nadie podía deshacer (S3, 14-11-2026).
+        async def _revertir(con_dano: bool) -> None:
+            try:
+                if con_dano:
+                    await _repaso_poner_dano(inspection_id, dano or _repaso_dano_de_lado(pi, golpe))
+                await db.inspections.update_one({"id": inspection_id, f"repaso.lados.{pi}": {"$exists": False}},
+                                                {"$set": {f"repaso.lados.{pi}": lado}})
+            except Exception as e3:                              # noqa: BLE001
+                logger.error("repaso: devolviendo el lado %s/%s tras un deshacer fallido: %s", inspection_id, pi, e3)
+        try:
+            await _repaso_quitar_dano(inspection_id, gid)
+        except RuntimeError:
+            await _revertir(con_dano=False)
+            raise HTTPException(status_code=409, detail="La revisión ha cambiado mientras se deshacía el golpe. "
+                                                        "Vuelve a intentarlo.")
+        try:
+            libro = {"accion": await _repaso_libro_deshacer(vid, gid) or "sin_cambios"}
+        except RuntimeError:
+            await _revertir(con_dano=True)
+            raise HTTPException(status_code=409, detail="La revisión ha cambiado mientras se deshacía el golpe. "
+                                                        "Vuelve a intentarlo.")
     # (5) ¿Estaba repasada?
     await _repaso_reabrir(inspection_id)
     actual = await db.inspections.find_one({"id": inspection_id}, {"_id": 0}) or {}
@@ -17157,7 +17402,11 @@ async def expediente_antes_del_perito(vehicle_id: str, user: dict = Depends(requ
         {"vehicle_id": vehicle_id, "deleted": {"$ne": True}},
         {**_REPASO_CAMPOS, "analysis.damages.golpe_id": 1, "analysis.damages.part": 1,
          "analysis.damages.photo_index": 1, "analysis.damages.actual_cost": 1, "analysis.damages.repair_status": 1,
-         "analysis.damages.completed_at": 1, "analysis.damages.workshop_id": 1}).to_list(None)
+         "analysis.damages.completed_at": 1, "analysis.damages.workshop_id": 1,
+         # Lo que marcó la IA y nadie ha decidido (R8, `posibles_ia`): solo pieza, foto y caja.
+         "analysis.new_damages.part": 1, "analysis.new_damages.photo_index": 1, "analysis.new_damages.box_2d": 1,
+         "analysis.new_damages.is_new": 1, "analysis.new_damages.origen": 1,
+         "analysis.new_damages.golpe_id": 1, "analysis.new_damages.veredicto_ia": 1}).to_list(None)
     revs.sort(key=lambda r: (str(r.get("created_at") or ""), str(r.get("id") or "")))
     por_id = {r.get("id"): r for r in revs}
     fichas = await _repaso_fichas([r.get("driver_id") for r in revs])
@@ -17207,8 +17456,8 @@ async def expediente_antes_del_perito(vehicle_id: str, user: dict = Depends(requ
             vistos.add((rev.get("id"), g.get("panel"), pi))
             vistos_pieza.add((rev.get("id"), g.get("panel")))
     # 2) Los de la IA que una persona confirmó en «Revisión rápida». Lo que nadie confirmó no sale.
-    fbs = await db.ai_feedback.find({"vehicle_id": vehicle_id, "verdict": {"$in": ["correct", "corrected"]}},
-                                    {"_id": 0}).to_list(None)
+    todos_fbs = await db.ai_feedback.find({"vehicle_id": vehicle_id}, {"_id": 0}).to_list(None)
+    fbs = [f for f in todos_fbs if f.get("verdict") in ("correct", "corrected")]
     fbs.sort(key=lambda f: (str(f.get("created_at") or ""), str(f.get("id") or "")))
     for fb in fbs:
         rev = por_id.get(fb.get("inspection_id"))
@@ -17235,6 +17484,50 @@ async def expediente_antes_del_perito(vehicle_id: str, user: dict = Depends(requ
                              caja=caja or _repaso_caja(d.get("box_2d")), por=fb.get("reviewed_by"),
                              at=fb.get("created_at"), ya_estaba=vista is not None and ant is None, anterior_ref=ant))
     golpes.sort(key=lambda g: (str(g["recibida_at"] or ""), str(g["id"])))
+
+    # 3) Lo que marcó la IA y NADIE ha decidido (R8/S9, 14-11-2026). No se esconde, pero no se confunde: va aparte
+    #    (`posibles_ia`), sin conductor ni gravedad, y no entra en ninguna cuenta ni en el calendario. Sin la IA de
+    #    daños, vacía.
+    posibles, posibles_mas = [], 0
+    if await _ia_danos_de(user):
+        decididos: dict = {}
+        for f in todos_fbs:
+            if f.get("verdict") and f.get("scope") in ("new", "all", None):
+                decididos.setdefault(f.get("inspection_id"), set()).add(
+                    ("new" if f.get("scope") == "new" else "all", f.get("damage_index")))
+        for rev in reversed(revs):
+            an = rev.get("analysis") if isinstance(rev.get("analysis"), dict) else {}
+            nuevos = an.get("new_damages") if isinstance(an.get("new_damages"), list) else []
+            if not nuevos:
+                continue
+            dec = decididos.get(rev.get("id")) or set()
+            # Un veredicto dado sobre la copia del daño en `damages` (scope «all») también lo decide.
+            dec_all = {(d.get("part"), d.get("photo_index")) for k, d in enumerate(_repaso_danos(an))
+                       if isinstance(d, dict) and ("all", k) in dec}
+            fotos = _repaso_fotos(rev)
+            vistas = _vistas_inspeccion({**rev, "photos": fotos})
+            for k, d in enumerate(nuevos):
+                if not isinstance(d, dict) or d.get("is_new") is False or d.get("origen") == "repaso" \
+                        or d.get("golpe_id") or d.get("veredicto_ia") == "descartado":
+                    continue
+                if ("new", k) in dec or (d.get("part"), d.get("photo_index")) in dec_all:
+                    continue
+                part = _texto_cuerpo(d.get("part"), 120) if isinstance(d.get("part"), str) else ""
+                if part and (rev.get("id"), _canon_panel(part)) in vistos_pieza:
+                    continue                 # esa pieza ya tiene un golpe confirmado en esta revisión
+                if len(posibles) >= 60:
+                    posibles_mas += 1
+                    continue
+                pi = d.get("photo_index")
+                pi = pi if isinstance(pi, int) and not isinstance(pi, bool) and 1 <= pi <= len(fotos) else None
+                vista = vistas[pi - 1] if pi and vistas[pi - 1] in _VISTAS_CARROCERIA else None
+                ant = _perito_anterior_de(revs, rev, vista)
+                posibles.append({
+                    "inspeccion_id": rev.get("id"), "fecha": _repaso_iso(rev.get("created_at")),
+                    "pieza": part or None, "vista": vista, "foto_url": _repaso_foto(rev, pi) if pi else None,
+                    "box_2d": _repaso_caja(d.get("box_2d")),
+                    "anterior": {"foto_url": _repaso_foto(ant[0], ant[1]), "fecha": _repaso_iso(ant[0].get("created_at"))}
+                    if ant else None})
 
     # Cómo entró y cómo está: la foto más antigua y la más reciente de cada lado (pueden ser de revisiones distintas).
     entro, esta = {}, {}
@@ -17303,6 +17596,8 @@ async def expediente_antes_del_perito(vehicle_id: str, user: dict = Depends(requ
         "como_esta": {"fotos": _fotos(esta)} if revs else None,
         "golpes": golpes,
         "calendario": calendario,
+        "posibles_ia": posibles,
+        "posibles_ia_mas": posibles_mas,
     }
 
 
@@ -18195,7 +18490,8 @@ def _legend_pill(color_hex, label):
 
 def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
                         photo_bytes_list: list, verify_url: str,
-                        damages_incluidos: list = None, damages_sugeridos: list = None) -> bytes:
+                        damages_incluidos: list = None, damages_sugeridos: list = None,
+                        anadidos: list = None) -> bytes:
     """Construye el PDF de peritaje técnico. Síncrono, llamado vía run_in_executor.
     photo_bytes_list contiene fotos YA anotadas con cajas (donde aplique)."""
     from reportlab.lib.pagesizes import A4
@@ -18238,11 +18534,20 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
 
     # Bloque datos
     analysis = (insp.get("analysis") or {})
+    # La gravedad de la cabecera cuenta los golpes que marcó una persona (S14, 14-11-2026): «sin_danos» encima de una
+    # tabla con un golpe grave «Una persona» se contradecía. Solo los que entran en lo firmado (S5): los de después
+    # van aparte. En el análisis de la persona (sin IA), su `severity` ya es la de todos sus golpes: se rehace.
+    _orden_sev = {"sin_danos": 0, "leve": 1, "moderado": 2, "grave": 3, "critico": 4}
+    sev_cabecera = "sin_danos" if analysis.get("origen") == "repaso" else analysis.get("severity")
+    for _d in damages_incluidos:
+        if _d.get("origen") == "repaso" and _orden_sev.get(_d.get("severity"), -1) > _orden_sev.get(sev_cabecera, -1):
+            sev_cabecera = _d.get("severity")
     rows = [
         ["Matrícula", vehicle.get("license_plate", "—"), "Centro", vehicle.get("center", "—")],
         ["Marca/Modelo", f"{vehicle.get('brand','—')} {vehicle.get('model','')}".strip(), "VIN", vehicle.get("vin", "—")],
         ["Conductor", driver_name or "—", "Inspección ID", (insp.get("id","")[:8] + "…")],
-        ["Fecha inspección", (insp.get("created_at") or "")[:19].replace("T", " "), "Severidad", str(analysis.get("severity", "—"))],
+        ["Fecha inspección", (insp.get("created_at") or "")[:19].replace("T", " "), "Severidad",
+         str(sev_cabecera or "—")],
         ["Daños incluidos", str(len(damages_incluidos)), "Coste estimado", f"{analysis.get('total_estimated_cost', 0)} €"],
     ]
     t = Table(rows, colWidths=[28*mm, 60*mm, 28*mm, 64*mm])
@@ -18440,6 +18745,32 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
         "jurídica. La validez probatoria del documento dependerá de la valoración que haga el "
         "destinatario o, en su caso, la autoridad competente.", small))
 
+    # Lo que una persona confirmó DESPUÉS de firmar (S5, 14-11-2026): al final, fuera de lo firmado, con su fecha y
+    # quién. El código de la firma no lo cubre.
+    if anadidos:
+        story.append(PageBreak())
+        story.append(Paragraph("Añadido después de la firma", h2))
+        story.append(Paragraph(
+            "Esto lo confirmó una persona después de firmar la revisión. No forma parte de lo firmado: el código de "
+            "la firma no lo cubre.", small))
+        story.append(Spacer(1, 2*mm))
+        filas = [["Pieza", "Gravedad", "Qué", "Cuándo", "Quién"]]
+        for a in sorted(anadidos, key=lambda x: str(x.get("at") or ""))[:30]:
+            # `cuando` lo pone forensic_pdf en la zona de la empresa (este hilo no tiene la de la petición).
+            cuando = a.get("cuando") or " ".join(x for x in _repaso_local(a.get("at")) if x)
+            filas.append([Paragraph(str(a.get("part") or "—")[:60], small), str(a.get("severity") or "—"),
+                          Paragraph(str(a.get("que") or ""), small),
+                          cuando or "—", Paragraph(str(a.get("por") or "—")[:40], small)])
+        tad = Table(filas, colWidths=[52*mm, 22*mm, 42*mm, 30*mm, 34*mm])
+        tad.setStyle(TableStyle([
+            ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("LINEBELOW", (0, 0), (-1, -1), 0.3, colors.HexColor("#e5e7eb")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        story.append(tad)
+
     doc.build(story)
     return buf.getvalue()
 
@@ -18600,17 +18931,51 @@ async def forensic_pdf(inspection_id: str, _=Depends(require_admin)):
     # Filtrar daños incluidos vs sugeridos (umbral de veracidad inicial sobre Gemini).
     # Los que confirmó una persona en «Revisión rápida» se marcan (14-11-2026): entran siempre, como los del repaso.
     _an = insp.get("analysis") or {}
-    confirmados = {(f.get("scope"), f.get("damage_index")): f.get("reviewed_by") or "?"
+    # LO FIRMADO NO CAMBIA (S5, 14-11-2026). El PDF se rehace en cada descarga y metía, bajo la misma firma y el mismo
+    # código, los golpes que una persona confirmó DESPUÉS de firmar: si firmaba el conductor, parecía que había
+    # firmado también lo que la oficina marcó una semana más tarde. Ahora lo de después va en un bloque aparte,
+    # «Añadido después de la firma», con su fecha y quién, fuera de lo firmado; lo de antes, como siempre.
+    firmado_at = str(sig.get("signed_at") or insp.get("forensic_signed_at") or "")
+
+    def _despues(cuando) -> bool:
+        return bool(firmado_at) and bool(cuando) and str(cuando) > firmado_at
+
+    confirmados = {(f.get("scope"), f.get("damage_index")): (f.get("reviewed_by") or "?", f.get("created_at"))
                    async for f in db.ai_feedback.find(
                        {"inspection_id": inspection_id, "verdict": {"$in": ["correct", "corrected"]}},
-                       {"_id": 0, "scope": 1, "damage_index": 1, "reviewed_by": 1})}
-    all_damages = []
+                       {"_id": 0, "scope": 1, "damage_index": 1, "reviewed_by": 1, "created_at": 1})}
+    lado_de_golpe = {lado["golpe"]["golpe_id"]: lado for lado in _repaso_guardados(insp).values()
+                     if lado.get("veredicto") == "golpe" and isinstance(lado.get("golpe"), dict)
+                     and lado["golpe"].get("golpe_id")}
+    all_damages, anadidos, vistos_despues = [], [], set()
     for scope, campo in (("all", "damages"), ("new", "new_damages")):
         for k, d in enumerate(_an.get(campo) or []):
             if not isinstance(d, dict):
                 continue
+            if d.get("origen") == "repaso":
+                lado = lado_de_golpe.get(d.get("golpe_id")) or {}
+                if _despues(lado.get("at")):
+                    clave = ("golpe", d.get("golpe_id"))
+                    if clave not in vistos_despues:
+                        vistos_despues.add(clave)
+                        anadidos.append({"part": d.get("part"), "severity": d.get("severity"),
+                                         "que": "Golpe marcado en el repaso", "at": lado.get("at"),
+                                         "por": lado.get("por") or "?"})
+                    continue
+                all_damages.append(d)
+                continue
             por = confirmados.get((scope, k))
-            all_damages.append({**d, "_confirmado_por": por} if por else d)
+            if por and _despues(por[1]):
+                # El daño de la IA SÍ estaba al firmar: se queda tal cual (con su confianza); la confirmación, aparte.
+                clave = ("rr", d.get("part"), d.get("photo_index"))
+                if clave not in vistos_despues:
+                    vistos_despues.add(clave)
+                    anadidos.append({"part": d.get("part"), "severity": d.get("severity"),
+                                     "que": "Confirmado en Revisión rápida", "at": por[1], "por": por[0]})
+                por = None
+            all_damages.append({**d, "_confirmado_por": por[0]} if por else d)
+    for a in anadidos:
+        a["cuando"] = " ".join(x for x in _repaso_local(a.get("at")) if x)
     # Dedupe por (part, photo_index, hash de box) para no duplicar entre damages y new_damages; si una de las dos
     # copias la confirmó una persona, se queda esa.
     seen, dedup = {}, []
@@ -18658,9 +19023,10 @@ async def forensic_pdf(inspection_id: str, _=Depends(require_admin)):
     verify_url = f"{_PORTAL_BASE_FRONT}/verify/{sig['content_hash']}"
     # Generación PDF en hilo (reportlab es síncrono y CPU-bound).
     loop = asyncio.get_event_loop()
+    import functools as _ft
     pdf_bytes = await loop.run_in_executor(
-        None, _build_forensic_pdf, insp, sig, vehicle, driver_name, annotated_bytes_list, verify_url,
-        damages_incluidos, damages_sugeridos
+        None, _ft.partial(_build_forensic_pdf, insp, sig, vehicle, driver_name, annotated_bytes_list, verify_url,
+                          damages_incluidos, damages_sugeridos, anadidos=anadidos)
     )
     fn_plate = re.sub(r"[^A-Za-z0-9]", "", (vehicle.get("license_plate") or "INSP"))
     fn_date = (sig.get("signed_at") or "")[:10]
@@ -22696,7 +23062,7 @@ async def send_daily_inspection_summary():
                 insp = insp_by_vehicle.get(vid)
                 if insp:
                     done.append(slot)
-                    sev = ((insp.get("analysis") or {}).get("severity") or "").lower()
+                    sev = (_sev_con_repaso(insp.get("analysis")) or "").lower()
                     if sev in ("grave", "critico", "crítico"):
                         sev_counts["grave"] += 1
                     elif sev in ("leve", "moderado"):
@@ -24463,9 +24829,18 @@ _ATR_SEGUN_EXPEDIENTE = {
 }
 
 
-def _atr_motivo_expediente(d: dict, actual: Optional[dict], revs: list, fichas: dict) -> tuple:
+# Los motivos del expediente que son HECHOS sobre quién la llevaba (S7): bajan también lo confirmado en «Revisión
+# rápida». `anterior_sin_repasar` no: allí se confirma con la foto anterior al lado. `sin_foto_anterior` (no se sabe
+# de qué lado es la foto) tampoco: para eso está la regla de siempre, que ya baja a «baja» sin foto anterior.
+_ATR_MOTIVOS_DE_HECHO = ("varios_conductores", "varios_dias", "sin_conductor", "ya_estaba")
+
+
+def _atr_motivo_expediente(d: dict, actual: Optional[dict], revs: list, fichas: dict,
+                           anterior_vista_al_lado: bool = False) -> tuple:
     """(motivo, personas) de la regla del expediente para una entrada del libro confirmada por una persona; motivo
-    None = el expediente sí dice quién la llevaba. `revs`: las revisiones vivas de la furgoneta, en orden."""
+    None = el expediente sí dice quién la llevaba. `revs`: las revisiones vivas de la furgoneta, en orden.
+    `anterior_vista_al_lado`: lo confirmó una persona en «Revisión rápida», con la foto anterior delante; la
+    anterior cuenta como mirada y se siguen comprobando los demás motivos."""
     if not actual or actual.get("deleted") is True:
         return "sin_foto_anterior", 0
     por_id = {r.get("id"): r for r in revs}
@@ -24484,7 +24859,10 @@ def _atr_motivo_expediente(d: dict, actual: Optional[dict], revs: list, fichas: 
         ya = vista is not None and ref is None
     golpe = {"fecha": _repaso_local(actual.get("created_at"))[0], "recibida_at": _repaso_iso(actual.get("created_at")),
              "ya_estaba": ya}
-    at = _perito_atribucion(golpe, _repaso_anterior_json(ref[0], ref[1], fichas) if ref else None, revs, fichas)
+    anterior = _repaso_anterior_json(ref[0], ref[1], fichas) if ref else None
+    if anterior and anterior_vista_al_lado:
+        anterior = {**anterior, "veredicto": "igual"}
+    at = _perito_atribucion(golpe, anterior, revs, fichas)
     return at["motivo"], len(at["conductores"])
 
 
@@ -24604,15 +24982,28 @@ async def danos_atribucion(center: str = "", dias: int = 120, solo_alta: bool = 
         # Un golpe confirmado por una persona (el repaso o «Revisión rápida») sale también en el expediente de su
         # furgoneta, que solo dice quién la llevaba cuando es seguro (`_perito_atribucion`). Esta pantalla no puede
         # nombrar a nadie con certeza alta cuando el expediente dice «sin conductor atribuible» (14-11-2026).
-        if certeza == "alta" and d.get("source") == "human":
+        #
+        # NUNCA MÁS CERTEZA A LA IA SOLA QUE A UNA PERSONA (S7, 14-11-2026, tercera tanda). Con la regla de arriba
+        # aplicada solo a lo confirmado, lo confirmado en «Revisión rápida» bajaba a «media» y lo que solo marcó la IA
+        # seguía en «alta» con nombre. Ahora:
+        #   · solo la IA (nadie lo confirmó): como mucho «media»;
+        #   · «Revisión rápida» (persona, sin golpe del repaso): la regla de siempre, y de la del expediente solo los
+        #     motivos de hecho. Quien confirma allí tiene la foto anterior al lado (el comparador), así que
+        #     «nadie marcó igual la anterior» no la baja;
+        #   · un golpe del repaso (`golpe_id`): la regla del expediente, entera.
+        if certeza == "alta" and d.get("source") != "human":
+            certeza, motivo = "media", "solo lo marcó la IA: nadie lo ha confirmado"
+        elif certeza == "alta":
+            del_repaso, fallo = bool(d.get("golpe_id")), False
             try:
                 motivo_exp, n_exp = _atr_motivo_expediente(
-                    d, actual, [i for i in lista if i.get("deleted") is not True], fichas)
+                    d, actual, [i for i in lista if i.get("deleted") is not True], fichas,
+                    anterior_vista_al_lado=not del_repaso)
             except Exception as _xe:                         # noqa: BLE001
                 # Si no se puede aplicar la regla, no se nombra a nadie (nunca al revés).
                 logger.debug("atribucion: regla del expediente %s: %s", d.get("_id"), _xe)
-                motivo_exp, n_exp = "sin_foto_anterior", 0
-            if motivo_exp:
+                motivo_exp, n_exp, fallo = "sin_foto_anterior", 0, True
+            if motivo_exp and (del_repaso or fallo or motivo_exp in _ATR_MOTIVOS_DE_HECHO):
                 certeza, motivo = _ATR_SEGUN_EXPEDIENTE.get(motivo_exp, ("baja", "no se puede saber quién la llevaba"))
                 if "%d" in motivo:
                     motivo = motivo % n_exp
@@ -30207,7 +30598,12 @@ async def _ot_cerrar_danos(ledger_ids: list, estado: str, numero=None) -> int:
         cambio = {"$set": {"status": "open", "updated_at": _ot_ahora()},
                   "$unset": {"orden_id": "", "orden_numero": ""}}
     try:
+        con_golpes = (await db.vehicle_damage_ledger.find(
+            clave, {"_id": 0, "vehicle_id": 1, "golpe_id": 1, "golpe_ids": 1}).to_list(None)
+            if estado == "entregado" else [])
         r = await db.vehicle_damage_ledger.update_many(clave, cambio)
+        # La furgoneta ha vuelto del taller con esa pieza arreglada: sus golpes del repaso, reparados en su ficha (S3).
+        await _repaso_golpes_reparados(None, con_golpes, _ot_ahora())
         return int(r.modified_count or 0)
     except Exception as e:                                   # noqa: BLE001
         # Que falle cerrar el libro NO puede tumbar el cierre de la orden: la
@@ -30901,7 +31297,8 @@ async def update_damage(
     allowed = {"actual_cost", "workshop_id", "repair_status", "repair_notes"}
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    current = damages[damage_index] if isinstance(damages[damage_index], dict) else {}
+    # Lo que se cambia, validado antes de tocar nada.
+    cambios = {}
     for k, v in (data or {}).items():
         if k not in allowed:
             continue
@@ -30909,15 +31306,59 @@ async def update_damage(
             # Guardarlo tal cual permitia meter TEXTO ("150"): pasaba el float()
             # de la suma y luego reventaba _vehicle_panel_cost para siempre.
             v = _decimal(v, "actual_cost", minimo=0, maximo=1_000_000)
-        current[k] = v
+        cambios[k] = v
 
-    # Marcas de tiempo automáticas
-    if "workshop_id" in data and data.get("workshop_id"):
-        current.setdefault("assigned_at", now_iso)
-        if current.get("repair_status") in (None, "", "pending"):
-            current["repair_status"] = "assigned"
+    # ESCRITURA CONDICIONADA (S2, 14-11-2026), como el repaso y la IA: se leía la lista de daños y se escribía entera
+    # después; un golpe marcado en el repaso entre medias desaparecía de la ficha (seguía en su lado y en el libro). El
+    # daño se busca por su `golpe_id` si es del repaso, o en su sitio con la misma pieza y foto si es de la IA (los
+    # golpes van al final, así que los de la IA no se mueven); si ya no está, 409.
+    leido = damages[damage_index] if isinstance(damages[damage_index], dict) else {}
+    gid_leido = leido.get("golpe_id")
+    firma = (leido.get("part"), leido.get("photo_index"))
+    hecho = {}
+
+    def _con_el_cambio(an):
+        danos = list(_repaso_danos(an))
+        if gid_leido:
+            k = next((i for i, d in enumerate(danos) if isinstance(d, dict) and d.get("golpe_id") == gid_leido), None)
+        else:
+            k = None
+            if damage_index < len(danos):
+                d = danos[damage_index]
+                if isinstance(d, dict):
+                    if not d.get("golpe_id") and (d.get("part"), d.get("photo_index")) == firma:
+                        k = damage_index
+                elif not leido:
+                    k = damage_index
+        if k is None:
+            raise HTTPException(status_code=409, detail="Ese daño ha cambiado mientras se guardaba. Vuelve a abrir "
+                                                        "la revisión.")
+        current = dict(danos[k]) if isinstance(danos[k], dict) else {}
+        current.update(cambios)
+        # Marcas de tiempo automáticas
+        if "workshop_id" in data and data.get("workshop_id"):
+            current.setdefault("assigned_at", now_iso)
+            if current.get("repair_status") in (None, "", "pending"):
+                current["repair_status"] = "assigned"
+        if data.get("repair_status") == "done":
+            current["completed_at"] = now_iso
+        danos[k] = current
+        # Recalcular total de coste real (suma de actual_cost de los daños que lo tengan)
+        total = sum(float(d.get("actual_cost") or 0) for d in danos
+                    if isinstance(d, dict) and d.get("actual_cost") is not None)
+        nuevo = {**an, "damages": danos}
+        if total > 0:
+            nuevo["total_actual_cost"] = round(total, 2)
+        hecho.update(current=current, total=total)
+        return nuevo
+
+    try:
+        await _repaso_cambiar_danos(inspection_id, _con_el_cambio)
+    except RuntimeError:
+        raise HTTPException(status_code=409, detail="La revisión ha cambiado mientras se guardaba. Vuelve a intentarlo.")
+    current = hecho.get("current") or {}
+
     if data.get("repair_status") == "done":
-        current["completed_at"] = now_iso
         # Reparado → el panel queda LIMPIO en el ledger: un golpe futuro ahí
         # vuelve a contar como daño nuevo (lo justo para scoring y €).
         try:
@@ -30934,25 +31375,17 @@ async def update_damage(
                     {"vehicle_id": insp.get("vehicle_id"), "panel": _p, "status": "open",
                      "golpe_ids.0": {"$exists": False}},
                     {"$set": {"status": "repaired", "repaired_at": now_iso}})
+                # Y la de «Revisión rápida» que aún tiene golpes enlazados: queda apuntado que SU daño está
+                # reparado, y se cierra cuando se vaya el último enlazado (`_libro_cerrar_si_no_queda_nada`, S3).
+                await db.vehicle_damage_ledger.update_many(
+                    {"vehicle_id": insp.get("vehicle_id"), "panel": _p, "status": "open", "golpe_id": None,
+                     "golpe_ids.0": {"$exists": True}},
+                    {"$set": {"dano_propio_reparado_at": now_iso}})
                 logger.info(f"[Ledger] panel '{_p}' de {insp.get('vehicle_id')} limpiado por reparación")
         except Exception as _le:
             logger.debug(f"ledger repair: {_le}")
 
-    damages[damage_index] = current
-
-    # Recalcular total de coste real (suma de actual_cost de los daños que lo tengan)
-    actual_total = sum(
-        float(d.get("actual_cost") or 0)
-        for d in damages
-        if isinstance(d, dict) and d.get("actual_cost") is not None
-    )
-
-    update = {"analysis.damages": damages}
-    if actual_total > 0:
-        update["analysis.total_actual_cost"] = round(actual_total, 2)
-
-    await db.inspections.update_one({"id": inspection_id}, {"$set": update})
-
+    actual_total = hecho.get("total") or 0
     return {
         "success": True,
         "damage": current,
@@ -31356,8 +31789,9 @@ async def _migrar_repaso_a_permisos() -> dict:
     marca = "migracion_permiso_repaso"
     if await global_db.app_meta.find_one({"_id": marca}):
         return {"hecha_antes": True, "usuarios": 0}
+    # También a quien solo tenía «Revisión rápida» (S11, 14-11-2026): es la persona que hoy hace ese trabajo.
     r = await global_db.admin_users.update_many(
-        {"$and": [{"permissions": "inspecciones"}, {"permissions": {"$ne": "repaso"}}]},
+        {"$and": [{"permissions": {"$in": ["inspecciones", "revision"]}}, {"permissions": {"$ne": "repaso"}}]},
         {"$addToSet": {"permissions": "repaso"}})
     _ADMIN_EXISTS_CACHE.clear()          # los permisos se leen con 60 s de caché: que valga ya
     await global_db.app_meta.update_one(
@@ -32025,6 +32459,10 @@ async def rebuild_fleet_damages(_=Depends(require_admin)):
        con el modelo actual (el ciclo automático la procesa; 5 cada 10 min).
     4) Las deja sin revisar → caen en Revisión Rápida para que el humano valide.
     """
+    if not await _ia_danos_de(_):
+        # Sin la IA de daños no hay nada que reanalizar: dejaba la última revisión de cada furgoneta en «pendiente»
+        # para siempre (el bucle de recuperación no pasa por su base). Como en reanalyze (S4, 14-11-2026).
+        raise HTTPException(status_code=403, detail="Esta cuenta no tiene el análisis automático de fotos.")
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
 
@@ -32034,6 +32472,11 @@ async def rebuild_fleet_damages(_=Depends(require_admin)):
     arch = await db.vehicle_damage_ledger.update_many(
         {"status": "open", "source": {"$ne": "human"}},
         {"$set": {"status": "archived", "archived_at": now_iso, "archived_reason": "rebuild_fleet"}})
+    #    Lo de la IA que un golpe del repaso tiene guardado para devolverlo si se deshace (`ia_previa`) también queda
+    #    archivado: deshacer después el golpe ya no lo resucita abierto (S4, 14-11-2026).
+    await db.vehicle_damage_ledger.update_many(
+        {"status": "open", "source": "human", "ia_previa": {"$exists": True}},
+        {"$set": {"ia_previa.archivar": True, "ia_previa.archivada_at": now_iso}})
 
     # 3) Última inspección con fotos por vehículo (analizada o no)
     pipeline = [
@@ -32458,6 +32901,12 @@ async def get_damage_costs(center: Optional[str] = None, _=Depends(require_admin
     }
 
 
+# La gravedad de una revisión con lo que marcó una persona, dentro de una agregación (S14): la de la persona si la
+# hay, si no la de la IA, si no «sin_danos» (lo de siempre).
+_AGG_SEV_CON_REPASO = {"$ifNull": ["$analysis.severidad_con_repaso",
+                                   {"$ifNull": ["$analysis.severity", "sin_danos"]}]}
+
+
 @api_router.get("/stats/dashboard")
 async def stats_dashboard(center: Optional[str] = None, user: dict = Depends(require_admin)):
     """Contadores del dashboard, acotados al centro pedido y a lo que el
@@ -32482,10 +32931,11 @@ async def stats_dashboard(center: Optional[str] = None, user: dict = Depends(req
 
     # Desglose de severidad de inspecciones. Solo los cinco cajones de siempre:
     # `sin_analisis` (16 en produccion) no entra, igual que antes.
+    # Con los golpes que marcó una persona (S14, 14-11-2026): `severidad_con_repaso` solo existe si los hay.
     severity_counts = {"sin_danos": 0, "leve": 0, "moderado": 0, "grave": 0, "critico": 0}
     async for r in db.inspections.aggregate([
             {"$match": {**fv, "deleted": {"$ne": True}}},
-            {"$group": {"_id": {"$ifNull": ["$analysis.severity", "sin_danos"]}, "n": {"$sum": 1}}}]):
+            {"$group": {"_id": _AGG_SEV_CON_REPASO, "n": {"$sum": 1}}}]):
         if r["_id"] in severity_counts:
             severity_counts[r["_id"]] += r["n"]
 
@@ -32497,7 +32947,7 @@ async def stats_dashboard(center: Optional[str] = None, user: dict = Depends(req
     async for r in db.inspections.aggregate([
             {"$match": {**fv, "deleted": {"$ne": True}, "created_at": {"$gte": cutoff}}},
             {"$group": {"_id": {"d": {"$substr": [{"$toString": "$created_at"}, 0, 10]},
-                                "sev": {"$ifNull": ["$analysis.severity", "sin_danos"]}},
+                                "sev": _AGG_SEV_CON_REPASO},
                         "n": {"$sum": 1}}}]):
         key = r["_id"].get("d") or ""
         if not key:
@@ -32556,8 +33006,8 @@ async def stats_hoy(center: Optional[str] = None, user: dict = Depends(require_a
         async for i in db.inspections.find(
                 {"deleted": {"$ne": True}, "vehicle_id": {"$in": vids},
                  "created_at": _rango_dia_negocio(dia)},
-                {"_id": 0, "vehicle_id": 1, "analysis.severity": 1}):
-            sev = str((i.get("analysis") or {}).get("severity") or "").lower() or None
+                {"_id": 0, "vehicle_id": 1, "analysis.severity": 1, "analysis.severidad_con_repaso": 1}):
+            sev = str(_sev_con_repaso(i.get("analysis")) or "").lower() or None     # con el repaso (S14)
             prev = revision.get(i["vehicle_id"], "sin_revisar")
             # Si la furgoneta tiene dos inspecciones hoy, manda la PEOR.
             if prev == "sin_revisar" or _GRAVEDAD_ORDEN.get(sev, 9) < _GRAVEDAD_ORDEN.get(prev, 9):
@@ -32793,8 +33243,9 @@ async def damage_responsibility(inspection_id: str, _=Depends(require_admin)):
         "vehicle_id": vehicle_id,
         "inspection_date": insp_date,
         "driver": driver,
-        "severity": analysis.get("severity", "sin_danos"),
-        "damages_count": analysis.get("total_damages_count", 0),
+        # Con lo que marcó una persona en el repaso (S14, 14-11-2026).
+        "severity": _sev_con_repaso(analysis) or "sin_danos",
+        "damages_count": _total_con_repaso(analysis) or 0,
         "note": "Conductor asignado en el momento de la inspeccion. Para danos NUEVOS, compara con la inspeccion anterior."
     }
 
@@ -32910,7 +33361,7 @@ async def get_daily_assignments(
                 )
                 slot["has_inspection"] = insp is not None
                 if insp:
-                    slot["inspection_severity"] = (insp.get("analysis") or {}).get("severity")
+                    slot["inspection_severity"] = _sev_con_repaso(insp.get("analysis"))   # con el repaso (S14)
     return docs
 
 
@@ -33019,6 +33470,7 @@ async def import_roster_text(
     user: dict = Depends(require_admin),
 ):
     await _require_plan_feature(user, "assignments")
+    await _ia_con_datos_o_403(user)      # el texto pegado (nombres y matrículas) va a Gemini (R11)
     """Importa la asignación del día pegada de donde sea, EN CUALQUIER FORMATO.
 
     Estrategia en cascada:
@@ -33228,6 +33680,7 @@ async def import_roster_image(
     """Lee una captura de la asignación del día con Gemini Vision, extrae los pares
     matrícula↔conductor y los cruza con la BD para rellenar el cuadrante."""
     await _require_plan_feature(user, "assignments")
+    await _ia_con_datos_o_403(user)      # la foto del cuadrante va a Gemini (R11)
     if not date:
         date = _dia_negocio()   # dia de Espana: en UTC, de 0 a 2 h era ayer
 
@@ -42475,6 +42928,7 @@ async def plantilla_extraer(request: Request, admin: dict = Depends(require_admi
     `redondeo`: minutos del tramo de salida (0 = la hora tal cual).
     """
     await _require_plan_feature(admin, "assignments")
+    await _ia_con_datos_o_403(admin)     # capturas y texto con nombres y matrículas van a Gemini (R11)
     # Lectura en crudo del multipart: imágenes y/o texto en cualquier mezcla.
     form = await request.form()
 
@@ -51328,7 +51782,7 @@ async def _ai_ejecutar_consulta(user: dict, center: str, consulta: dict) -> dict
             limit=40, campos="lista", user=user)
         lineas = [f"{len(inspecciones)} inspecciones encajan el filtro (las más recientes primero)."]
         for insp in inspecciones[:40]:
-            sev = (insp.get("analysis") or {}).get("severity")
+            sev = _sev_con_repaso(insp.get("analysis"))
             lineas.append(f"- {str(insp.get('created_at') or '')[:16].replace('T', ' ')}"
                           + (f", gravedad {sev}" if sev else ", sin analizar"))
         return {"resumen_texto": "\n".join(lineas), "documentos": None, "n": len(inspecciones)}
@@ -51807,6 +52261,7 @@ async def _ai_llamar_gemini(contents: list) -> dict:
 
 @api_router.post("/ai/asistente")
 async def ai_asistente_hablar(data: _IAAsistenteEntrada, user: dict = Depends(require_admin)):
+    await _ia_con_datos_o_403(user)      # el hilo, el contexto de la sede y lo que se escribe van a Gemini (R11)
     mensaje = _texto_cuerpo(data.mensaje, 2000)
     center = _texto_cuerpo(data.center, 20)
     if not mensaje:
@@ -52114,6 +52569,7 @@ async def ai_fichas_tecnicas_proponer(
     para todo el lote, no una por fichero) y propone a qué furgoneta va cada
     una. No escribe nada todavía: los ficheros se guardan en un cajón
     temporal de R2 hasta que se confirme."""
+    await _ia_con_datos_o_403(user)      # las fichas técnicas van a Gemini (R11)
     center = _texto_cuerpo(center, 20)
     if not center or not _user_can_see_center(user, center):
         raise HTTPException(403, "No tienes acceso a ese centro")
@@ -55840,6 +56296,8 @@ async def cuadrante_chat(data: dict = Body(...), user: dict = Depends(require_ad
     fuente = "reglas"
     aviso_ia = ""
     if not r["seguro"]:
+        # Lo que entienden las reglas funciona sin IA; lo que no, iría a Gemini con los nombres y los turnos (R11).
+        await _ia_con_datos_o_403(user)
         historial = await db[_CUA_CHAT].find({"center": center}, {"_id": 0, "rol": 1, "texto": 1}) \
             .sort("en", -1).to_list(10)
         try:
@@ -57886,7 +58344,8 @@ async def _cia_ver_conductor(e: dict, user: dict):
             if s.get("driver_id") == did:
                 furgos[a["date"]] = s.get("vehicle_plate") or s.get("vehicle_id")
     insp = await db.inspections.find({"driver_id": did, "deleted": {"$ne": True}},
-                                     {"_id": 0, "created_at": 1, "vehicle_id": 1, "analysis.severity": 1}) \
+                                     {"_id": 0, "created_at": 1, "vehicle_id": 1, "analysis.severity": 1,
+                                      "analysis.severidad_con_repaso": 1}) \
         .sort("created_at", -1).to_list(3)
     personas = await db[_CUA_PERSONAS].find({"driver_id": did}, {"_id": 0, "center": 1, "en_cuadrante": 1,
                                                                  "inactivo_desde": 1, "tipo": 1, "nota": 1}).to_list(10)
@@ -57903,7 +58362,7 @@ async def _cia_ver_conductor(e: dict, user: dict):
                            sorted(turnos, key=lambda x: x["date"])},
         "furgoneta": {"hoy": furgos.get(hoy), "mañana": furgos.get(manana)},
         "ultimas_inspecciones": [{"fecha": str(i.get("created_at"))[:16], "vehicle_id": i.get("vehicle_id"),
-                                  "gravedad": (i.get("analysis") or {}).get("severity")} for i in insp],
+                                  "gravedad": _sev_con_repaso(i.get("analysis"))} for i in insp],
         "peticiones_pendientes": pend, "suspension": susp,
         "posibles_fichas_dobles": await _cia_dobles_de(f, user),
     }
@@ -58083,13 +58542,14 @@ async def _cia_ver_inspecciones(e: dict, user: dict):
     if e.get("driver_id"):
         q["driver_id"] = _texto_cuerpo(e.get("driver_id"), 80)
     filas = await db.inspections.find(q, {"_id": 0, "id": 1, "created_at": 1, "vehicle_id": 1, "driver_id": 1,
-                                          "analysis.severity": 1, "analysis.damages": 1}).sort("created_at", -1).to_list(60)
+                                          "analysis.severity": 1, "analysis.severidad_con_repaso": 1,
+                                          "analysis.damages": 1}).sort("created_at", -1).to_list(60)
     nombres = {d["id"]: d.get("name") for d in await db.drivers.find(
         {"id": {"$in": list({i.get("driver_id") for i in filas if i.get("driver_id")})}},
         {"_id": 0, "id": 1, "name": 1}).to_list(500)}
     return {"dias": dias, "total": len(filas), "inspecciones": [
         {"fecha": str(i.get("created_at"))[:16], "matricula": placa.get(i.get("vehicle_id")),
-         "conductor": nombres.get(i.get("driver_id")), "gravedad": (i.get("analysis") or {}).get("severity"),
+         "conductor": nombres.get(i.get("driver_id")), "gravedad": _sev_con_repaso(i.get("analysis")),
          "danos": len((i.get("analysis") or {}).get("damages") or [])} for i in filas[:40]]}
 
 

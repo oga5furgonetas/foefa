@@ -71,7 +71,9 @@ async def test_origen_de_danos_con_lo_confirmado_en_revision_rapida_tambien(t, s
                                   "new_damages": [dict(dano)]})]
     await server.damage_feedback("r12", {"verdict": "correct", "damage_index": 0, "scope": "new"}, user=MARTA)
     (fila,) = (await server.danos_atribucion(center="", dias=120, solo_alta=False, _=MARTA))["danos"]
-    assert fila["confirmado"] is True and fila["certeza"] != "alta"        # la foto de ayer, sin marcar igual
+    # Tercera tanda (S7): lo confirmado en «Revisión rápida» se confirma con la foto anterior al lado (el comparador),
+    # así que «la foto de ayer, sin marcar igual» ya no lo baja: la regla de siempre (la misma persona) → «alta».
+    assert fila["confirmado"] is True and fila["certeza"] == "alta"
     for pi in (1, 2, 3, 4):
         await marcar("r11", pi, "igual")
     (fila,) = (await server.danos_atribucion(center="", dias=120, solo_alta=False, _=MARTA))["danos"]
@@ -144,8 +146,10 @@ async def test_el_pdf_firmado_lleva_el_golpe_del_repaso_y_el_confirmado_en_revis
                               revision("r12", V, "drv-ana", marca(12), forensic_signed=True, analysis={
                                   "severity": "leve", "total_damages_count": 1, "damages": [dict(ia)],
                                   "new_damages": [dict(ia)]})]
+    # Firmada DESPUÉS de marcar y confirmar (tercera tanda, S5: lo confirmado después de la firma va aparte; eso lo
+    # prueba test_tanda3_servidor_libro.py).
     t["forensic_signatures"].docs.append({"inspection_id": "r12", "content_hash": "ab" * 32,
-                                          "signed_at": "2026-11-12T10:00:00+00:00"})
+                                          "signed_at": "2999-01-01T00:00:00+00:00"})
     await marcar("r12", 3, "golpe", **G)
     await server.damage_feedback("r12", {"verdict": "correct", "damage_index": 0, "scope": "new"}, user=MARTA)
     visto = {}
@@ -156,7 +160,7 @@ async def test_el_pdf_firmado_lleva_el_golpe_del_repaso_y_el_confirmado_en_revis
     async def nada_de_yolo(_iid, _i, dets):
         return []                                    # la IA de cajas no confirma nada: lo de personas va igual
 
-    def pdf(*args):
+    def pdf(*args, **kw):
         visto["incluidos"], visto["sugeridos"] = args[-2], args[-1]
         return b"%PDF-1.4"
     monkeypatch.setattr(server, "_fetch_photo_bytes", sin_foto)

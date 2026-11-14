@@ -38,6 +38,8 @@ async def _las_dos(center=None, user=MARTA):
 async def _coinciden(center=None, user=MARTA):
     dia, pen = await _las_dos(center, user)
     c = dia["cuentas"]
+    # `avisar` (R7, tercera tanda) va aparte: lo prueba test_tanda3_servidor_flota.py.
+    assert isinstance(pen.pop("avisar"), bool)
     assert pen == {"fecha": DIA, "pendientes": c["sin_repasar"] + c["a_medias"]}, (pen, c)
     return pen["pendientes"]
 

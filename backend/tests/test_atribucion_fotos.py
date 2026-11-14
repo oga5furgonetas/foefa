@@ -43,7 +43,9 @@ def _base(limpia: dict, golpe: dict, dano: dict = None):
     t["vehicle_damage_ledger"] = Col([{
         "_id": "l1", "vehicle_id": "v1", "panel": server._canon_panel(PIEZA), "part": PIEZA,
         "severity": "grave", "status": "open", "first_seen": go["created_at"][:10],
-        "first_seen_inspection": "i2", **(dano or {})}])
+        # Confirmado por una persona (tercera tanda, S7): lo que solo marcó la IA no pasa nunca de «media», y aquí se
+        # prueba qué foto viaja con un «alta».
+        "first_seen_inspection": "i2", "source": "human", **(dano or {})}])
     return t
 
 

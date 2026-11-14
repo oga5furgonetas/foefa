@@ -269,10 +269,10 @@ async def test_los_planes_no_prometen_la_ia(monkeypatch):
     junto = " · ".join(textos).lower()
     for prohibido in ("detectad", "detecta ", "causa los golpes", "fotos e ia", "por ia", "con ia"):
         assert prohibido not in junto, prohibido
-    # La IA solo se nombra diciendo lo que hace, dónde está y que se equivoca.
-    con_ia = [x for x in textos if "IA" in x.split()]
-    assert con_ia and all("solo en las cuentas con la IA activa" in x and "se equivoca a menudo" in x.lower()
-                          for x in con_ia)
+    # Ningún plan nombra la IA (tercera tanda, S10): «Revisión rápida, solo en las cuentas con la IA activa…» se fue
+    # de Pro porque quien compra hoy no la recibe.
+    con_ia = [x for x in textos if "IA" in x.replace(",", " ").split()]
+    assert not con_ia, con_ia
     por = {p["clave"]: p for p in r["planes"]}
     assert any("Repaso del día" in x for x in por["operacion"]["incluye"])
     assert any("Informe firmado de la revisión" in x for x in por["completo"]["incluye"])          # lo que ya comprobaba test_precios

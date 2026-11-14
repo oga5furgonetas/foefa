@@ -191,6 +191,14 @@ export default function OrigenDanos() {
                       Apareció el <span className="cifra">{fechaEs(d.aparecio)}</span>
                       {d.ventana_dias != null && <> · ventana de <span className="cifra">{d.ventana_dias}</span> {d.ventana_dias === 1 ? 'día' : 'días'}</>}
                     </span>
+                    {/* Quién lo dice (S7, 14-11-2026): lo que solo marcó la IA no se lee como lo confirmado. En su
+                        propia línea, para que en el móvil no parta la fecha. Un servidor viejo no manda `confirmado`:
+                        entonces no se dice nada. */}
+                    {typeof d.confirmado === 'boolean' && (
+                      <span className={`mt-0.5 block text-[11.5px] ${d.confirmado ? 'text-dark-400' : 'text-dark-500'}`}>
+                        {d.confirmado ? t('origen.confirmado') : t('origen.soloIa')}
+                      </span>
+                    )}
                   </span>
                   {/* El nombre en la cabecera solo con la prueba delante: las dos fotos. */}
                   {d.certeza === 'alta' && tieneFotos && d.conductores[0] && (

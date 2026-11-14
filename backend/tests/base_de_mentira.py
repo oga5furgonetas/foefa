@@ -186,6 +186,11 @@ class Col:
                 d.setdefault(k, []).append(v)
         for k, v in u.get("$inc", {}).items():
             _poner(d, k, (_leer(d, k) if _leer(d, k) is not _FALTA else 0) + v)
+        for k, v in u.get("$max", {}).items():
+            # Como Mongo: si no existe (o es None), se pone; si no, el mayor (14-11-2026, `rank_ia` del libro).
+            antes = _leer(d, k)
+            if antes is _FALTA or antes is None or v > antes:
+                _poner(d, k, v)
         for k, v in u.get("$pull", {}).items():
             # Con una condición ({"golpe_id": …}) quita los elementos que la cumplen, como Mongo (14-11-2026).
             lista = _leer(d, k)
@@ -289,6 +294,11 @@ class Col:
 
     async def count_documents(self, q=None, **_):
         return sum(1 for d in self.docs if _casa(d, q))
+
+    async def create_index(self, claves, **opciones):
+        """Apunta el índice pedido (no lo hace cumplir): las pruebas miran que se pida (14-11-2026)."""
+        self.__dict__.setdefault("indices", []).append((claves, opciones))
+        return opciones.get("name") or str(claves)
 
 
 class Db(dict):

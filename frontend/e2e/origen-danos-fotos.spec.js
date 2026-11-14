@@ -126,3 +126,30 @@ test('Origen de daños · solo «Sin acotar», abre ahí', async ({ page }) => {
   await expect(page.getByRole('button', { name: /1111/ })).toBeVisible()
   expect(await fondo(grupo(page, 'Sin acotar'))).toBe(true)
 })
+
+/* QUIÉN LO DICE (14-11-2026, tercera tanda, S7). Cada golpe lleva `confirmado`: lo confirmado por una persona y lo
+   que solo marcó la IA no se leen igual. Un servidor viejo no lo manda: entonces la fila no dice nada de eso. */
+test('Origen de daños · cada golpe dice si lo confirmó una persona o solo lo marcó la IA', async ({ page, baseURL }) => {
+  const foto = `${baseURL}/demo/van-lateral.jpg`
+  const golpe = `${baseURL}/demo/van-lateral-golpe-puerta.jpg`
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  const danos = [
+    { ...dano('c1', foto, golpe), matricula: '1111AAA', confirmado: true },
+    { ...dano('c2', foto, golpe), matricula: '2222BBB', confirmado: false, certeza: 'media',
+      motivo: 'solo lo marcó la IA: nadie lo ha confirmado' },
+    { ...dano('c3', foto, golpe), matricula: '3333CCC' },
+  ]
+  await page.route(/\/api\/damages\/atribucion/, (r) => r.fulfill({
+    json: { danos, resumen: { alta: 2, media: 1, baja: 0 }, total: 3, truncado: false },
+  }))
+  await page.goto('/panel/origen-danos', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /^Todos/ }).click()
+  await expect(page.getByRole('button', { name: /1111/ })).toContainText('Confirmado por una persona')
+  await expect(page.getByRole('button', { name: /2222/ })).toContainText('Solo lo marcó la IA')
+  const sinCampo = page.getByRole('button', { name: /3333/ })
+  await expect(sinCampo).toBeVisible()
+  await expect(sinCampo).not.toContainText('Confirmado por una persona')
+  await expect(sinCampo).not.toContainText('Solo lo marcó la IA')
+  await fotoDe(page, 'origen-confirmado')
+})

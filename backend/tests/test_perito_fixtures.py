@@ -83,6 +83,17 @@ def cuatro(lateral_izq=LIMPIA, lateral_der=LIMPIA, sin=()):
 RETROVISOR = {"part": "Retrovisor derecho", "severity": "leve", "description": "Carcasa rayada",
               "photo_index": 4, "box_2d": [300, 640, 420, 780], "confidence": 0.71, "is_new": True,
               "confirmed": True}
+# Lo que marcó la IA y nadie ha decidido (R8, tercera tanda): sale en el expediente aparte (`posibles_ia`). Uno en la
+# primera revisión (sin foto anterior de ese lado) y otro con la anterior del mismo lado.
+CAPO_IA = {"part": "Capó", "severity": "leve", "description": "Posible arañazo", "photo_index": 1,
+           "box_2d": [180, 300, 330, 620], "confidence": 0.58, "is_new": True, "confirmed": True}
+PARAGOLPES_IA = {"part": "Paragolpes trasero", "severity": "leve", "description": "Posible roce", "photo_index": 2,
+                 "box_2d": [640, 200, 820, 760], "confidence": 0.52, "is_new": True, "confirmed": True}
+
+
+def ia(*danos):
+    return {"severity": "leve", "total_damages_count": len(danos), "damages": [dict(d) for d in danos],
+            "new_damages": [dict(d) for d in danos]}
 
 
 def sembrar():
@@ -111,10 +122,11 @@ def sembrar():
     t["inspections"] = Col([
         # La 5678, desde que entró (20-10) hasta el 12-11: un periodo largo, con días sin fotos.
         revision("rev-5678-1020", "veh-5678", "drv-luis", "2026-10-20T07:00:00.000000+00:00",
-                 cuatro(lateral_der=GOLPE)),
+                 cuatro(lateral_der=GOLPE), ia(CAPO_IA)),
         revision("rev-5678-1021", "veh-5678", "drv-rosa", "2026-10-21T07:05:00.000000+00:00", cuatro()),
         # Hechas desde el panel, sin conductor.
-        revision("rev-5678-1027", "veh-5678", None, "2026-10-27T07:10:00.000000+00:00", cuatro()),
+        revision("rev-5678-1027", "veh-5678", None, "2026-10-27T07:10:00.000000+00:00", cuatro(),
+                 ia(PARAGOLPES_IA)),
         revision("rev-5678-1028", "veh-5678", None, "2026-10-28T07:10:00.000000+00:00", cuatro()),
         revision("rev-5678-1103", "veh-5678", "drv-ana", "2026-11-03T07:00:00.000000+00:00", cuatro()),
         # El 04-11 la llevaron dos personas: por la mañana Ana, por la tarde Luis.
@@ -177,9 +189,10 @@ async def recorrer(monkeypatch):
     await lados_igual("rev-5678-1020", (1, 2, 3), "2026-10-20T09:15:00+00:00")
     await marcar("rev-5678-1020", 4, "golpe", "2026-10-20T09:16:30+00:00", part="Puerta lateral derecha",
                  severity="leve", box_2d=[410, 220, 640, 470], description="Bollo pequeño, sin pintura saltada")
-    # 22-10: la arreglan en el taller propio, desde la ficha de la inspección (la ruta de siempre), con su coste.
+    # 22-10: la arreglan en el taller propio, desde la ficha de la inspección (la ruta de siempre), con su coste. El
+    # golpe va detrás del capó que marcó la IA (índice 1).
     a_las("2026-10-22T16:30:00+00:00")
-    await server.update_damage("rev-5678-1020", 0, {"repair_status": "done", "actual_cost": 180}, _=MARTA)
+    await server.update_damage("rev-5678-1020", 1, {"repair_status": "done", "actual_cost": 180}, _=MARTA)
     # 27 y 28-10, sin conductor: el paragolpes aparece el 28 y la foto del 27 se marcó igual. Va al taller.
     await marcar("rev-5678-1027", 1, "igual", "2026-10-27T09:00:00+00:00")
     await lados_igual("rev-5678-1028", (2, 3, 4), "2026-10-28T09:00:00+00:00")
@@ -275,7 +288,11 @@ def _forma_del_contrato(dia, exp):
         _claves(s, ["id", "matricula", "modelo", "centro", "asignada_a"], "sin_revision")
 
     _claves(exp, ["generado_at", "vehiculo", "periodo", "cuentas", "como_entro", "como_esta", "golpes",
-                  "calendario"], "expediente")
+                  "calendario", "posibles_ia", "posibles_ia_mas"], "expediente")
+    for p in exp["posibles_ia"]:
+        _claves(p, ["inspeccion_id", "fecha", "pieza", "vista", "foto_url", "box_2d", "anterior"], "posibles_ia")
+        if p["anterior"]:
+            _claves(p["anterior"], ["foto_url", "fecha"], "posibles_ia.anterior")
     _claves(exp["vehiculo"], ["id", "matricula", "modelo", "centro", "fin_renting", "km", "km_fecha"], "vehiculo")
     _claves(exp["cuentas"], ["revisiones", "conductores", "golpes", "reparados", "abiertos", "en_taller",
                              "atribuibles", "ya_estaban", "dias_con_revision", "dias_sin_revision"], "cuentas")
@@ -337,6 +354,11 @@ async def test_los_ejemplos_de_las_pantallas_salen_de_las_rutas_de_verdad(monkey
     assert exp["cuentas"]["reparados"] == 1 and exp["cuentas"]["golpes"] == 7
     assert exp["periodo"] == {"desde": "2026-10-20", "hasta": "2026-11-12", "dias": 24}
     assert {c["estado"] for c in exp["calendario"]} == {"revisada", "sin_revisar", "golpe"}
+    # Lo que marcó la IA y nadie decidió (R8): uno con su foto anterior del mismo lado y otro sin ella. El retrovisor
+    # que se confirmó en «Revisión rápida» no está aquí: es un golpe.
+    assert [(p["inspeccion_id"], p["pieza"], p["anterior"] is not None) for p in exp["posibles_ia"]] == [
+        ("rev-5678-1027", "Paragolpes trasero", True), ("rev-5678-1020", "Capó", False)]
+    assert exp["posibles_ia_mas"] == 0
     # Las respuestas de marcar y deshacer.
     assert resp["marcar_ya_apuntado"]["libro"]["accion"] == "ya_apuntado"
     assert resp["marcar_ya_apuntado"]["libro"]["pieza_clave"] == "puerta_tras_der"

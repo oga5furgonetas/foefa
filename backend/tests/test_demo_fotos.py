@@ -202,7 +202,9 @@ async def test_el_libro_rehecho_es_identico_al_que_crea_abrir_las_fichas(demo):
             await server._get_vehicle_ledger(v["id"])
     finally:
         server._current_db_name.reset(tok)
-    quita = lambda xs: sorted(({k: v for k, v in x.items() if k not in ("_id", "updated_at")}  # noqa: E731
+    # Lo único distinto: en la demo, la oficina ya los ha confirmado (`source: human`, tercera tanda, S7).
+    assert {e["source"] for e in rehecho} == {"human"}
+    quita = lambda xs: sorted(({k: v for k, v in x.items() if k not in ("_id", "updated_at", "source")}  # noqa: E731
                                for x in xs), key=lambda x: (x["vehicle_id"], x["panel"]))
     assert quita(rehecho) == quita(ddb.vehicle_damage_ledger.docs)
 
