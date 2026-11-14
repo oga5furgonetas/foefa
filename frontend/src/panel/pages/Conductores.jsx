@@ -97,8 +97,10 @@ function initials(n) {
 // era color sin significado, y competía con los estados (abierto, sin abrir) que sí lo tienen.
 const AVATAR_LISO = 'bg-dark-800 text-dark-100'
 
-const NIVEL = { pleno: ['Pleno','bg-emerald-500/15 text-emerald-300'], L1: ['L1','bg-sky-500/15 text-sky-300'], L2: ['L2','bg-amber-500/15 text-amber-300'], L3: ['L3','bg-red-500/15 text-red-300'] }
-const CONTRATO = { empresa: ['Empresa','bg-brand-500/15 text-brand-300'], ett: ['ETT','bg-purple-500/15 text-purple-300'] }
+/* Contrato y nivel, en texto gris sin pastilla (14-11-2026, tanda 6): eran pastillas violeta, azul, roja y verde que no
+   avisaban de nada (un L3 no es un fallo, una ETT no es un aviso). El segundo valor es la clase del texto. */
+const NIVEL = { pleno: ['Pleno', 'text-dark-300'], L1: ['L1', 'text-dark-300'], L2: ['L2', 'text-dark-300'], L3: ['L3', 'text-dark-300'] }
+const CONTRATO = { empresa: ['Empresa', 'text-dark-300'], ett: ['ETT', 'text-dark-300'] }
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
 function Avatar({ driver, size = 10 }) {
@@ -128,7 +130,8 @@ function ScoreRing({ score, size = 80, stroke = 7 }) {
     : '#ef4444'
   return (
     <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1f2937" strokeWidth={stroke} />
+      {/* El fondo del anillo, en el gris de las reglas del tema (de día era casi negro sobre la tarjeta blanca). */}
+      <circle cx={size/2} cy={size/2} r={r} fill="none" style={{ stroke: 'rgb(var(--dk-800))' }} strokeWidth={stroke} />
       <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
         strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
         style={{ transition: 'stroke-dasharray .6s cubic-bezier(.4,0,.2,1)' }} />
@@ -168,32 +171,16 @@ function TrendIcon({ trend, size = 12 }) {
   return <Minus size={size} className="text-dark-500" />
 }
 
-function PillarBars({ s }) {
-  const bars = [
-    // Cada pilar con su nombre corto, no con un emoji (14-11-2026, ARREGLOS-5 N1: la casa no usa emojis).
-    { label: 'Cump.', v: s.compliance,  max: 30, color: '#38bdf8' },
-    { label: 'Punt.', v: s.punctuality, max: 15, color: '#a78bfa' },
-    { label: 'Evid.', v: s.evidence,    max: 15, color: '#22d3ee' },
-    { label: 'Hon.',  v: s.honesty,     max: 15, color: '#2dd4bf' },
-    { label: 'Cons.', v: s.conservation,max: 25, color: '#34d399' },
-  ]
-  return (
-    <div className="flex gap-1 items-end h-10">
-      {bars.map(b => {
-        const pct = Math.round((b.v / b.max) * 100)
-        return (
-          <div key={b.label} className="flex flex-col items-center gap-0.5 flex-1">
-            <div className="w-full rounded-sm overflow-hidden bg-dark-800" style={{ height: 28 }}>
-              <div className="w-full rounded-sm transition-all duration-500"
-                style={{ height: `${pct}%`, background: b.color, marginTop: `${100-pct}%` }} />
-            </div>
-            <span className="text-[8px] leading-none">{b.label}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
+/* LOS CINCO PILARES (14-11-2026, tanda 6): cada uno con su nombre entero por t() y su barra en tinta sobre gris. Eran
+   cinco colores que no significaban nada y unas etiquetas de 8 px en español escrito a mano («Cump.», «Punt.»…). Ya no
+   van en el podio, donde no cabían legibles: salen en la fila desplegable de la clasificación. */
+const PILARES = [
+  { clave: 'drv.pilar.cumplimiento', campo: 'compliance', max: 30 },
+  { clave: 'drv.pilar.puntualidad', campo: 'punctuality', max: 15 },
+  { clave: 'drv.pilar.evidencias', campo: 'evidence', max: 15 },
+  { clave: 'drv.pilar.honestidad', campo: 'honesty', max: 15 },
+  { clave: 'drv.pilar.conservacion', campo: 'conservation', max: 25 },
+]
 
 function InspCount({ count }) {
   const { t } = useT()
@@ -203,13 +190,11 @@ function InspCount({ count }) {
 // ── Podio top-3 ───────────────────────────────────────────────────────────────
 function PodiumCard({ d, position, size = 90 }) {
   const HEIGHT = { 1: 'pt-0', 2: 'pt-8', 3: 'pt-16' }
-  const GLOW   = { 1: 'shadow-amber-500/20', 2: 'shadow-slate-400/10', 3: 'shadow-orange-700/10' }
-  const BORDER = { 1: 'border-amber-400/40', 2: 'border-slate-400/30', 3: 'border-orange-700/30' }
-  const STREAK_COLOR = !d.clean_streak || d.clean_streak < 3 ? 'text-dark-500'
-    : d.clean_streak >= 10 ? 'text-amber-400' : 'text-orange-400'
+  /* Sin sombra ni borde dorado, plateado o de bronce (14-11-2026, tanda 6): una tarjeta con la regla de 1 px de la casa;
+     el puesto ya lo dice la cifra. La racha, en gris: es un dato, no un aviso. */
   return (
     <div className={`flex flex-col items-center ${HEIGHT[position]}`}>
-      <div className={`w-full rounded-2xl border ${BORDER[position]} bg-dark-900 p-4 shadow-xl ${GLOW[position]} flex flex-col items-center gap-2`}>
+      <div data-testid="podio" className="flex w-full flex-col items-center gap-2 rounded-xl border border-dark-800 bg-dark-900 p-3 sm:p-4">
         {/* El puesto en cifra, no una medalla dibujada (14-11-2026, ARREGLOS-5 N1). */}
         <span className="cifra text-2xl font-semibold text-dark-100">{position}</span>
         {/* Avatar initials */}
@@ -217,19 +202,19 @@ function PodiumCard({ d, position, size = 90 }) {
           {(d.name || '?').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0,2).toUpperCase()}
         </div>
         <ScoreDisplay score={d.total} size={size} />
-        <div className="text-center">
-          <div className="font-bold text-sm text-white leading-tight truncate max-w-[120px]">{d.name}</div>
+        <div className="w-full min-w-0 text-center">
+          {/* En tinta: con `text-white` el nombre no se veía de día (blanco sobre la tarjeta blanca). */}
+          <div className="max-w-full truncate text-sm font-bold leading-tight text-dark-50" title={d.name}>{d.name}</div>
           <InspCount count={d.inspections_count} />
         </div>
         <div className="flex items-center gap-2 text-[10px]">
           <TrendIcon trend={d.trend} size={11} />
           {d.clean_streak >= 3 && (
-            <span className={`flex items-center gap-0.5 font-bold ${STREAK_COLOR}`}>
+            <span className="cifra flex items-center gap-0.5 font-semibold text-dark-400">
               <Flame size={10} />{d.clean_streak}
             </span>
           )}
         </div>
-        {d.compliance != null && <PillarBars s={d} />}
       </div>
     </div>
   )
@@ -238,7 +223,8 @@ function PodiumCard({ d, position, size = 90 }) {
 // ── Lista completa ────────────────────────────────────────────────────────────
 function DriverRow({ s, rank, showCenter, expanded, onToggle }) {
   const { t } = useT()
-  const rankColor = rank === 1 ? 'text-amber-400' : rank === 2 ? 'text-slate-400' : rank === 3 ? 'text-orange-600' : 'text-dark-500'
+  // El puesto, en tinta los tres primeros y en gris los demás: sin oro, plata ni bronce (14-11-2026, tanda 6).
+  const rankColor = rank <= 3 ? 'text-dark-100' : 'text-dark-500'
   const barColor  = (s.total ?? 0) >= 85 ? 'bg-emerald-500' : (s.total ?? 0) >= 65 ? 'bg-brand-500' : (s.total ?? 0) >= 40 ? 'bg-amber-500' : 'bg-red-500'
   return (
     <>
@@ -269,7 +255,7 @@ function DriverRow({ s, rank, showCenter, expanded, onToggle }) {
         </td>
         <td className="py-3 px-2 text-center">
           {s.clean_streak >= 3 && (
-            <span className={`flex items-center justify-center gap-0.5 text-xs font-bold ${s.clean_streak >= 10 ? 'text-amber-400' : s.clean_streak >= 5 ? 'text-orange-400' : 'text-dark-500'}`}>
+            <span className="cifra flex items-center justify-center gap-0.5 text-xs font-semibold text-dark-400">
               <Flame size={11} />{s.clean_streak}
             </span>
           )}
@@ -282,29 +268,27 @@ function DriverRow({ s, rank, showCenter, expanded, onToggle }) {
         <tr className="border-b border-dark-800/50">
           <td colSpan={6} className="px-4 pb-4 pt-2 bg-dark-900/40">
             {/* Barras de pilares */}
-            <div className="grid grid-cols-5 gap-2 mb-3">
-              {[
-                { l: 'Cumpl.', v: s.compliance,  max: 30, c: 'bg-sky-500' },
-                { l: 'Puntual.', v: s.punctuality,max: 15, c: 'bg-violet-500' },
-                { l: 'Evidencia', v: s.evidence, max: 15, c: 'bg-cyan-500' },
-                { l: 'Honest.', v: s.honesty,    max: 15, c: 'bg-teal-500' },
-                { l: 'Conserv.', v: s.conservation,max: 25, c: 'bg-emerald-500' },
-              ].map(b => (
-                <div key={b.l}>
-                  <div className="flex justify-between text-[9px] text-dark-500 mb-0.5">
-                    <span>{b.l}</span><span className="tabular-nums">{b.v}/{b.max}</span>
+            {/* Los cinco pilares con su nombre entero y su barra en tinta sobre gris (14-11-2026, tanda 6). */}
+            <div data-testid="pilares" className="mb-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-5">
+              {PILARES.map((b) => {
+                const v = s[b.campo]
+                return (
+                  <div key={b.campo}>
+                    <div className="mb-0.5 flex justify-between gap-2 text-[11px] text-dark-400">
+                      <span className="truncate">{t(b.clave)}</span><span className="cifra text-dark-300">{v ?? '—'}/{b.max}</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-dark-800">
+                      <div className="h-full rounded-full bg-dark-100" style={{ width: `${Math.max(0, Math.min(100, ((v || 0) / b.max) * 100))}%` }} />
+                    </div>
                   </div>
-                  <div className="h-1.5 rounded-full bg-dark-800 overflow-hidden">
-                    <div className={`h-full rounded-full ${b.c}`} style={{ width: `${(b.v/b.max)*100}%` }} />
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
             <div className="flex flex-wrap gap-4 text-[11px] text-dark-500">
               <span>{s.inspections_count} {t('drv.insp.month')}</span>
               {s.days_assigned > 0 && <span>{s.days_assigned} {t('drv.days.assigned')}</span>}
               {s.damage_rate != null && <span>{t('drv.damage.rate')} <b className="text-dark-300">{s.damage_rate.toFixed(2)}</b>{t('drv.per.insp')}</span>}
-              {s.clean_streak > 0 && <span className="text-orange-400 font-semibold flex items-center gap-0.5"><Flame size={10} />{s.clean_streak} {t('drv.clean.streak')}</span>}
+              {s.clean_streak > 0 && <span className="flex items-center gap-0.5 font-semibold text-dark-300"><Flame size={10} />{s.clean_streak} {t('drv.clean.streak')}</span>}
             </div>
             {s.delta_events?.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
@@ -516,6 +500,8 @@ function ScoringView({ center }) {
   // El PODIO solo admite elegibles para el premio (≥35% de días asignados):
   // nadie gana el mes con 3 días buenos. La lista completa muestra a todos.
   const top3     = ranked.filter(s => s.prize_eligible !== false).slice(0, 3)
+  // En el móvil, el anillo más pequeño: con 100 px, las tres tarjetas no cabían en 390 y la tercera se cortaba.
+  const estrecho = useEstrecho()
 
   const stats = lb?.center_stats?.[activeCtr] || {}
 
@@ -588,13 +574,13 @@ function ScoringView({ center }) {
       {/* Header con mes y tabs de centro */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div className="flex items-center gap-2">
-          <Trophy size={18} className="text-amber-400" />
+          <Trophy size={18} className="text-dark-400" />
           <span className="font-bold text-base">{t('drv.ranking.title')}</span>
           {stats.avg_score != null && (
             <span className="text-xs text-dark-500 ml-2">{t('drv.ranking.avg')} <span className="text-dark-300 font-semibold">{stats.avg_score}</span></span>
           )}
           {data?.prize_min_days != null && (
-            <span className="ml-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-amber-400"
+            <span className="ml-2 text-[12px] text-dark-400"
               title="Para optar al premio: al menos el 35% de los días del mes con asignación en el cuadrante. Los daños marcados como falso positivo en Revisión Rápida no penalizan.">
               Premio: mín. {data.prize_min_days} días asignados
             </span>
@@ -634,14 +620,14 @@ function ScoringView({ center }) {
           {top3.length > 0 && (
             <div className="mb-8">
               <div className="grid gap-3"
-                style={{ gridTemplateColumns: top3.length === 3 ? '1fr 1fr 1fr' : top3.length === 2 ? '1fr 1fr' : '1fr' }}>
+                style={{ gridTemplateColumns: `repeat(${top3.length}, minmax(0, 1fr))` }}>
                 {/* Reordenar: plata-oro-bronce para efecto podio real */}
                 {(() => {
                   const ordered = top3.length === 3
                     ? [top3[1], top3[0], top3[2]]   // plata izquierda, oro centro, bronce derecha
                     : top3
                   return ordered.map(d => d && (
-                    <PodiumCard key={d.driver_id} d={d} position={d.position} size={top3.length >= 2 ? 100 : 120} />
+                    <PodiumCard key={d.driver_id} d={d} position={d.position} size={estrecho ? (top3.length >= 2 ? 72 : 100) : (top3.length >= 2 ? 100 : 120)} />
                   ))
                 })()}
               </div>
@@ -652,12 +638,14 @@ function ScoringView({ center }) {
           <div className="rounded-xl border border-dark-800 overflow-hidden">
             <div className="bg-dark-900/60 px-4 py-2.5 border-b border-dark-800 flex items-center gap-2">
               <BarChart2 size={13} className="text-dark-500" />
-              <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">{t('drv.ranking.full')}</span>
+              <span className="text-[13px] font-semibold text-dark-200">{t('drv.ranking.full')}</span>
               <span className="ml-auto text-xs text-dark-500">{ranked.length} clasificados</span>
             </div>
-            <table className="w-full">
+            {/* En el móvil la clasificación se desplaza dentro de su caja: se cortaba la columna «Racha». */}
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[340px]">
               <thead>
-                <tr className="border-b border-dark-800 text-[10px] text-dark-500 uppercase tracking-wider">
+                <tr className="border-b border-dark-800 text-[11.5px] font-medium text-dark-500">
                   <th className="py-2 pl-4 text-left w-8">#</th>
                   <th className="py-2 pl-2 text-left">{t('drv.col.driver')}</th>
                   <th className="py-2 px-3 text-left">{t('drv.col.score')}</th>
@@ -674,6 +662,7 @@ function ScoringView({ center }) {
                 ))}
               </tbody>
             </table>
+            </div>
             {unranked.length > 0 && (
               <div className="border-t border-dark-800 px-4 py-2 text-[11px] text-dark-500 flex items-center gap-1.5">
                 <AlertCircle size={11} /> {unranked.length} {t('drv.col.no.data')}
@@ -975,7 +964,7 @@ function ContrasenaInicial() {
         <span className="min-w-[min(15rem,calc(100%_-_2rem))] flex-1 text-dark-300">
           Contraseña inicial de los conductores nuevos:{' '}
           {estado.definida
-            ? <span className="text-lime-300">definida{desde ? ` desde el ${desde}` : ''}{estado.por ? ` por ${estado.por}` : ''}</span>
+            ? <span data-testid="inicial-definida" className="text-dark-100">definida{desde ? ` desde el ${desde}` : ''}{estado.por ? ` por ${estado.por}` : ''}</span>
             : <span className="text-amber-300">sin definir</span>}
           <span className="ml-1.5 cursor-help text-dark-500"
             title="Cada conductor que des de alta con correo (uno a uno o importando) entra la primera vez con esta contraseña y la app le obliga a elegir la suya. Aquí nunca se enseña: el servidor solo guarda el hash.">(?)</span>
@@ -1007,7 +996,7 @@ function ContrasenaInicial() {
         </div>
       )}
       {error && <p className="mt-1.5 text-[12px] text-red-300">{error}</p>}
-      {aviso && <p className="mt-1.5 text-[12px] text-lime-300">{aviso}</p>}
+      {aviso && <p className="mt-1.5 text-[12px] text-emerald-300">{aviso}</p>}
     </div>
   )
 }
@@ -1044,17 +1033,20 @@ function BotonAcceso({ fila, onAcceso, conClave = false, movil = false }) {
   if (!fila || !onAcceso) return null
   const e = fila.acceso?.estado || 'sin_enlace'
   const clave = e === 'sin_enlace' && conClave ? 'alta.acc.chip.conClave' : (CHIP_ACCESO[e] || CHIP_ACCESO.sin_enlace)
-  // El día con el sello de la casa («Abierto el 14 NOV»), como la ventana (14-11-2026).
-  const texto = t(clave).replace('{dia}', diaSello(fila.acceso?.abierto_dia, lang))
+  /* El día con el sello de la casa («Abierto el 14 NOV»), como la ventana (14-11-2026). El texto, en la letra de la
+     casa; solo el día, en mono (tanda 6: la mono es para fechas, matrículas y cifras). */
+  const [antes, despues] = t(clave).includes('{dia}') ? t(clave).split('{dia}') : [t(clave), null]
+  const texto = despues === null ? antes
+    : <>{antes}<span className="font-mono">{diaSello(fila.acceso?.abierto_dia, lang)}</span>{despues}</>
   /* ACCIÓN Y ESTADO NO SE PARECEN (14-11-2026, ARREGLOS-5 N1): «Mandar su acceso» es lo único que pide hacer algo y va
-     como enlace subrayado en tinta, como en la espera del arranque; lo demás es estado y va en mono con su color
+     como enlace subrayado en tinta, como en la espera del arranque; lo demás es estado y va con su color
      (abierto, hecho; caducado, aviso; sin abrir o con contraseña, gris). Sin pastillas: los dos se tocan igual y abren
      la misma ventana. */
   const accion = e === 'sin_enlace' && !conClave
-  const tono = e === 'abierto' ? 'font-mono text-[11.5px] text-emerald-300'
-    : e === 'caducado' ? 'font-mono text-[11.5px] text-amber-300'
+  const tono = e === 'abierto' ? 'text-[12.5px] text-emerald-300'
+    : e === 'caducado' ? 'text-[12.5px] text-amber-300'
       : accion ? 'text-[12.5px] font-semibold text-dark-100 underline decoration-dark-500 underline-offset-4 hover:decoration-dark-100'
-        : 'font-mono text-[11.5px] text-dark-400'
+        : 'text-[12.5px] text-dark-400'
   return (
     <button type="button" data-testid="boton-acceso" data-estado={e === 'sin_enlace' && conClave ? 'con_clave' : e}
       title={textoEstado(t, fila.acceso, lang, { sello: true })}
@@ -1090,7 +1082,9 @@ function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deB
               : <span>{d.center}</span>}
             {/* Sin «·» delante (14-11-2026, ARREGLOS-5 N1): al partirse la línea a 390 px se quedaba suelto al principio
                 de la segunda. Los datos se separan con el hueco. */}
-            {tel && <span className="cifra text-dark-400">{verTelefono(d.phone)}</span>}
+            {/* El teléfono, siempre en su línea (tanda 6): saltaba de la 2.ª a la 3.ª según lo largo del estado de al
+                lado, y las filas tenían alturas distintas sin motivo. */}
+            {tel && <span data-testid="tarjeta-telefono" className="cifra basis-full text-dark-400">{verTelefono(d.phone)}</span>}
             {datoOrden && <DatoDeOrden d={d} col={datoOrden} nombre={t(COLUMNA_ORDEN[datoOrden])} />}
             {d.traslado?.centro && (
               <span className="whitespace-nowrap rounded-full bg-sky-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-sky-300">
@@ -1156,7 +1150,7 @@ function DatoDeOrden({ d, col, nombre }) {
   if (col === 'contrato' || col === 'nivel') {
     const [l, c] = (col === 'nivel' ? NIVEL : CONTRATO)[d[col]] || []
     return c
-      ? <span data-testid="dato-orden" title={nombre} className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${c}`}>{l}</span>
+      ? <span data-testid="dato-orden" title={nombre} className={`whitespace-nowrap ${c}`}>{l}</span>
       : <span data-testid="dato-orden" title={nombre} className="text-dark-500">—</span>
   }
   const v = d[col] || ''
@@ -1191,7 +1185,7 @@ function useEstrecho() {
   return si
 }
 
-function TablaConductores({ list, columnas = null, accounts, cuentasOk = false, conIdReparto = false, deBaja = false, appInfo = null, onAbrir, accesos = null, onAcceso = null }) {
+function TablaConductores({ list, columnas = null, accounts, cuentasOk = false, conIdReparto = false, deBaja = false, appInfo = null, onAbrir, accesos = null, onAcceso = null, junto = null }) {
   const { t } = useT()
   const estrecho = useEstrecho()
   const hay = useMemo(() => columnas || columnasConDato(list), [columnas, list])
@@ -1246,6 +1240,8 @@ function TablaConductores({ list, columnas = null, accounts, cuentasOk = false, 
           className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-lg border border-dark-700 text-dark-300">
           {orden.asc ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
+        {/* «Más opciones», aquí en el móvil (tanda 6): solo, bajo los filtros, se comía una línea entera de aire. */}
+        {junto}
       </div>
       <ul aria-label="Conductores">
         {filas.map((d) => (
@@ -1257,7 +1253,10 @@ function TablaConductores({ list, columnas = null, accounts, cuentasOk = false, 
       </>
       ) : (
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-[13px]">
+        {/* Con solo nombre, centro, teléfono y acceso (y la app, si la hay), la tabla no se estira a todo el ancho: se
+            quedaban unos 400 px vacíos entre el nombre y el centro y el estado se iba lejos (tanda 6). Con más
+            columnas, como siempre. */}
+        <table data-testid="tabla-conductores" className={`${hay.size === 0 ? 'w-auto min-w-[640px]' : 'w-full min-w-[760px]'} text-[13px]`}>
           <thead className="sticky top-0 z-10 bg-dark-900">
             <tr className="border-b border-dark-800">
               <th className="w-8 px-2 py-2"></th>
@@ -1304,18 +1303,18 @@ function TablaConductores({ list, columnas = null, accounts, cuentasOk = false, 
                   {hay.has('email') && <td className="max-w-[210px] truncate px-2 py-1 text-dark-500">{d.email || VACIO}</td>}
                   {hay.has('contrato') && (
                     <td className="whitespace-nowrap px-2 py-1">
-                      {cc ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cc}`}>{cl}</span> : VACIO}
+                      {cc ? <span className={cc}>{cl}</span> : VACIO}
                     </td>
                   )}
                   {hay.has('nivel') && (
                     <td className="whitespace-nowrap px-2 py-1">
-                      {nc ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${nc}`}>{nl}</span> : VACIO}
+                      {nc ? <span className={nc}>{nl}</span> : VACIO}
                     </td>
                   )}
                   <td className="whitespace-nowrap px-2 py-1">
                     {/* El candado: tiene contraseña. El botón: su enlace personal (14-11-2026). */}
                     {/* Sin datos del enlace (servidor viejo), el candado de siempre; con ellos, lo dice la etiqueta. */}
-                    {!accesos?.[d.id] && (hasAcc ? <Lock size={11} className="mr-1.5 inline text-lime-400" title="Tiene acceso al portal" />
+                    {!accesos?.[d.id] && (hasAcc ? <Lock size={11} className="mr-1.5 inline text-dark-400" title="Tiene acceso al portal" />
                       : VACIO)}
                     {!deBaja && <BotonAcceso fila={accesos?.[d.id]} onAcceso={onAcceso} conClave={hasAcc} />}
                   </td>
@@ -1447,6 +1446,17 @@ export default function Conductores() {
     return !v
   })
   const vacia = Array.isArray(drivers) && drivers.length === 0
+  /* «Más opciones»: en el ordenador, a la derecha de los filtros; en el móvil, en la fila de «Ordenar por» (tanda 6),
+     donde no se come una línea propia. Uno solo en la página: la misma prueba lo encuentra en los dos anchos. */
+  const estrecho = useEstrecho()
+  const botonOpciones = (
+    <button type="button" data-testid="mas-opciones" onClick={cambiarOpciones}
+      aria-expanded={verOpciones} aria-controls="opciones-conductores" title={t('drv.masOpcionesAyuda')}
+      className={`flex min-h-[44px] shrink-0 items-center gap-1 px-1 text-[12.5px] font-medium text-dark-400 hover:text-dark-100 sm:min-h-0 sm:py-1 ${estrecho ? '' : 'ml-auto'}`}>
+      {t('drv.masOpciones')}
+      <ChevronDown size={14} aria-hidden="true" className={`transition-transform ${verOpciones ? 'rotate-180' : ''}`} />
+    </button>
+  )
   const conChipBajas = enBajas || (Array.isArray(bajas) && bajas.length > 0)
   /* El chip «Bajas (N)»: con los filtros y también cuando no hay ningún activo o la búsqueda no casa con nadie (segunda
      revisión, F12): una nave que se ha quedado sin activos tiene que poder llegar a sus bajas para reactivarlas. */
@@ -1591,10 +1601,13 @@ Cancelar: no hacer nada.`)) {
               </div>
               {/* Importar va ANTES de «añadir»: quien llega el primer día no
                   quiere teclear cincuenta fichas, quiere subir su Excel. */}
-              <button onClick={() => setVerImportar((v) => !v)}
-                className="hidden items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 py-2.5 text-[13.5px] font-semibold text-dark-300 hover:border-dark-600 hover:text-dark-100 sm:flex">
-                <FileSpreadsheet size={15} /> {t('drv.importar')}
-              </button>
+              {/* Con la lista vacía, una sola forma de importar: «Importar la lista», abajo (tanda 6). */}
+              {!vacia && (
+                <button onClick={() => setVerImportar((v) => !v)}
+                  className="hidden items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 py-2.5 text-[13.5px] font-semibold text-dark-300 hover:border-dark-600 hover:text-dark-100 sm:flex">
+                  <FileSpreadsheet size={15} /> {t('drv.importar')}
+                </button>
+              )}
               <button onClick={() => setVerMoviles((v) => !v)}
                 title="Pon los móviles personales desde la agenda de tu teléfono: los WhatsApp personales van a ese número."
                 className="hidden items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 py-2.5 text-[13.5px] font-semibold text-dark-300 hover:border-dark-600 hover:text-dark-100 sm:flex">
@@ -1610,10 +1623,12 @@ Cancelar: no hacer nada.`)) {
                   <>
                     <button aria-label="Cerrar" tabIndex={-1} onClick={() => setVerMas(false)} className="fixed inset-0 z-30 cursor-default" />
                     <div role="menu" className="absolute left-0 top-full z-40 mt-1.5 w-60 overflow-hidden rounded-xl border border-dark-700 bg-dark-900 py-1 shadow-xl">
-                      <button role="menuitem" onClick={() => { setVerMas(false); setVerImportar((v) => !v) }}
-                        className="flex min-h-[44px] w-full items-center gap-2 px-3.5 text-left text-[13.5px] font-semibold text-dark-200 active:bg-dark-800">
-                        <FileSpreadsheet size={15} /> {t('drv.importar')}
-                      </button>
+                      {!vacia && (
+                        <button role="menuitem" onClick={() => { setVerMas(false); setVerImportar((v) => !v) }}
+                          className="flex min-h-[44px] w-full items-center gap-2 px-3.5 text-left text-[13.5px] font-semibold text-dark-200 active:bg-dark-800">
+                          <FileSpreadsheet size={15} /> {t('drv.importar')}
+                        </button>
+                      )}
                       <button role="menuitem" onClick={() => { setVerMas(false); setVerMoviles((v) => !v) }}
                         className="flex min-h-[44px] w-full items-center gap-2 px-3.5 text-left text-[13.5px] font-semibold text-dark-200 active:bg-dark-800">
                         <Smartphone size={15} /> {t('drv.moviles')}
@@ -1674,7 +1689,11 @@ Cancelar: no hacer nada.`)) {
                 <p className="font-medium text-dark-200">Nadie coincide con «{q}»</p>
                 <p className="mt-1 text-sm text-dark-500">Se busca por nombre, correo, sede, nº de empleado y teléfono.</p>
                 <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <button onClick={() => setQ('')} className="btn-ghost px-3 py-1.5 text-sm">Borrar búsqueda</button>
+                  {/* Un enlace subrayado, como «Añadir uno a uno» (tanda 6): el `btn-ghost` quedaba sangrado 12 px. */}
+                  <button onClick={() => setQ('')}
+                    className="inline-flex min-h-[44px] items-center text-[14px] font-semibold text-dark-100 underline decoration-dark-500 underline-offset-4 hover:decoration-dark-100">
+                    Borrar búsqueda
+                  </button>
                   {chipBajas}
                 </div>
               </div>
@@ -1714,6 +1733,7 @@ Cancelar: no hacer nada.`)) {
                 )}
                 {/* Solo los que tienen a alguien (o el que está puesto, para poder quitarlo). «Bajas», al final; y, a la
                     derecha, «Más opciones» (las contraseñas), siempre. */}
+                {(!estrecho || faltas.some((f) => f.n > 0 || f.id === filtro) || conChipBajas) && (
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   {(faltas.some((f) => f.n > 0 || f.id === filtro) || conChipBajas) && (
                   <div role="group" aria-label={t('drv.filtros')} className="flex flex-wrap items-center gap-2">
@@ -1736,13 +1756,9 @@ Cancelar: no hacer nada.`)) {
                     {chipBajas}
                   </div>
                   )}
-                  <button type="button" data-testid="mas-opciones" onClick={cambiarOpciones}
-                    aria-expanded={verOpciones} aria-controls="opciones-conductores" title={t('drv.masOpcionesAyuda')}
-                    className="ml-auto flex min-h-[44px] items-center gap-1 px-1 text-[12.5px] font-medium text-dark-400 hover:text-dark-100 sm:min-h-0 sm:py-1">
-                    {t('drv.masOpciones')}
-                    <ChevronDown size={14} aria-hidden="true" className={`transition-transform ${verOpciones ? 'rotate-180' : ''}`} />
-                  </button>
+                  {!estrecho && botonOpciones}
                 </div>
+                )}
                 {/* Las dos contraseñas, montadas siempre (ver `verOpciones`): plegadas, no se ven ni ocupan sitio. */}
                 <div id="opciones-conductores" data-testid="opciones-conductores" hidden={!verOpciones}>
                   <ContrasenaInicial />
@@ -1760,7 +1776,7 @@ Cancelar: no hacer nada.`)) {
                 <TablaConductores list={vistos} columnas={columnas} accounts={enBajas ? [] : accounts} cuentasOk={cuentasOk && !enBajas}
                   conIdReparto={conIdReparto && !enBajas} deBaja={enBajas} appInfo={enBajas ? null : appInfo}
                   onAbrir={(d) => setModal({ driver: d, deBaja: enBajas })}
-                  accesos={enBajas ? null : accesos} onAcceso={setDialogoAcceso} />
+                  accesos={enBajas ? null : accesos} onAcceso={setDialogoAcceso} junto={estrecho ? botonOpciones : null} />
               </div>
       )}
 
@@ -2025,8 +2041,8 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, deBaja =
               {/* Tags */}
               {(cc || nc) && (
                 <div className="flex flex-wrap gap-2 mb-6">
-                  {cc && <span className={`rounded-full px-3 py-1 text-xs font-semibold ${cc}`}>{cl}</span>}
-                  {nc && <span className={`rounded-full px-3 py-1 text-xs font-semibold ${nc}`}>{nl}</span>}
+                  {cc && <span className={`rounded-full border border-dark-700 px-3 py-1 text-xs font-semibold ${cc}`}>{cl}</span>}
+                  {nc && <span className={`rounded-full border border-dark-700 px-3 py-1 text-xs font-semibold ${nc}`}>{nl}</span>}
                 </div>
               )}
 

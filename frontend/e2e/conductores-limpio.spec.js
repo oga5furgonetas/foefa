@@ -7,8 +7,9 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
      «Ranking» sin emoji; las cabeceras sin mayúsculas; «Mandar su acceso» subrayado y el estado en mono; un solo guion.
    · N2 · Conductores vacío: una acción («Importar la lista», cian), «Añadir uno a uno» como enlace, sin caja de puntos, y
      el «Añadir conductor» de la cabecera con borde.
-   · N3 · el avatar de la cabecera, gris; la burbuja del asistente, en tinta y sin sombra; en las listas, a la izquierda
-     (nunca encima de la columna de acciones: llamar, «Mandar su acceso»). */
+   · N3 · el avatar de la cabecera, gris; el asistente, desde la tanda 6 un botón de la barra de arriba (sin relleno cian
+     ni sombra) que no pisa nada de la lista.
+   · T6 · (tanda 6) los menores de Conductores, el Ranking legible de día y Vehículos con la misma mano. */
 
 const ESENCIAL = ['dashboard', 'mi-dia', 'vehiculos', 'repaso', 'inspecciones', 'incidencias', 'talleres', 'ordenes',
   'vencimientos', 'importaciones', 'conductores', 'chat', 'configuracion']
@@ -78,9 +79,16 @@ test('N1 · empresa nueva: sin columnas vacías, sin «sin correo», contraseña
   expect(await mandar.evaluate((b) => getComputedStyle(b).textDecorationLine)).toContain('underline')
   const abierto = page.getByTestId('boton-acceso').and(page.locator('[data-estado="abierto"]')).first()
   await expect(abierto).toHaveText('Abierto el 13 NOV')
+  // El estado, en la letra de la casa; solo el día, en mono (tanda 6).
   const est = await abierto.evaluate((b) => ({ letra: getComputedStyle(b).fontFamily, borde: getComputedStyle(b).borderTopWidth }))
-  expect(est.letra).toMatch(/Plex Mono/)
+  expect(est.letra).not.toMatch(/Mono/)
   expect(est.borde).toBe('0px')
+  const dia = abierto.locator('span.font-mono')
+  await expect(dia).toHaveText('13 NOV')
+  expect(await dia.evaluate((s) => getComputedStyle(s).fontFamily)).toMatch(/Plex Mono/)
+  // Con cuatro columnas, la tabla no se estira a todo el ancho (dejaba unos 400 px vacíos en medio).
+  const anchos = await page.getByTestId('tabla-conductores').evaluate((t) => ({ tabla: t.offsetWidth, caja: t.parentElement.offsetWidth }))
+  expect(anchos.tabla).toBeLessThan(anchos.caja - 150)
 })
 
 test('N1 · la flota completa no pierde nada: siete columnas, «sin correo» y las contraseñas a un toque', async ({ page, isMobile }) => {
@@ -119,24 +127,25 @@ test('N2 · Conductores vacío: una sola acción cian y «Añadir uno a uno» co
 })
 
 for (const tema of ['light', 'dark', 'hibrido']) {
-  test(`N3 · ${tema}: el avatar, gris; la burbuja, en tinta y sin sombra, a la izquierda en las listas`, async ({ page, isMobile }) => {
+  test(`N3 · ${tema}: el avatar, gris; el asistente, un botón de la barra de arriba que no pisa nada de la lista`, async ({ page, isMobile }) => {
     await montar(page, { tema, fichas: NUEVA, accesos: ACC_NUEVA })
     await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('Ana L.', { exact: true }).first()).toBeVisible({ timeout: 15000 })
-    const boton = page.getByTitle(/IA$/).last()
+    const boton = page.getByRole('button', { name: 'Asistente', exact: true })
     await expect(boton).toBeVisible()
     const b = await boton.evaluate((el) => ({ fondo: getComputedStyle(el).backgroundColor, sombra: getComputedStyle(el).boxShadow }))
     expect(cian(b.fondo), b.fondo).toBe(false)
     expect(b.sombra).toBe('none')
-    await expect(page.getByTestId('burbuja-asistente')).toHaveAttribute('data-lado', 'izquierda')
+    // Ya no flota (tanda 6): ni burbuja, ni nada del asistente encima de la página.
+    await expect(page.getByTestId('burbuja-asistente')).toHaveCount(0)
     if (!isMobile) {
       const avatar = page.locator('header button[aria-haspopup="menu"] span').first()
       expect(cian(await avatar.evaluate((el) => getComputedStyle(el).backgroundColor))).toBe(false)
     }
-    // Nunca encima de la columna de acciones: ni de un botón de llamar ni de una etiqueta de acceso, en ningún punto de la lista.
+    // Nunca encima de la lista: ni de un avatar, ni de un botón de llamar, ni de una etiqueta de acceso, en ningún punto.
     for (let paso = 0; paso < 6; paso++) {
       const caja = await boton.boundingBox()
-      const pisa = await page.evaluate((c) => [...document.querySelectorAll('a[href^="tel:"], [data-testid="boton-acceso"]')].some((el) => {
+      const pisa = await page.evaluate((c) => [...document.querySelectorAll('main a[href^="tel:"], main [data-testid="boton-acceso"], main li, main tbody tr')].some((el) => {
         const r = el.getBoundingClientRect()
         return r.width && r.left < c.x + c.width && r.right > c.x && r.top < c.y + c.height && r.bottom > c.y
       }), caja)
@@ -144,8 +153,145 @@ for (const tema of ['light', 'dark', 'hibrido']) {
       await page.mouse.wheel(0, 140)
       await page.waitForTimeout(150)
     }
-    // Fuera de las listas, donde siempre: abajo a la derecha.
-    await page.goto('/panel', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByTestId('burbuja-asistente')).toHaveAttribute('data-lado', 'derecha')
   })
 }
+
+/* ── TANDA 6 (14-11-2026, zona panel): Conductores y Vehículos, los menores que quedaban ─────────────────────────── */
+test('T6 · Conductores en el móvil: «Más opciones» en la fila de «Ordenar por» y el teléfono siempre en su línea', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'las tarjetas son del móvil')
+  await montar(page, { fichas: NUEVA, accesos: ACC_NUEVA })
+  await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Ana L.', { exact: true }).first()).toBeVisible({ timeout: 15000 })
+  const mas = page.getByTestId('mas-opciones')
+  await expect(mas).toHaveCount(1)
+  // En la misma fila que el selector de orden: el mismo padre y la misma altura.
+  const fila = await mas.evaluate((b) => {
+    const sel = document.getElementById('orden-conductores')
+    const a = b.getBoundingClientRect(); const s = sel.getBoundingClientRect()
+    return { mismoPadre: b.parentElement === sel.parentElement, centro: Math.abs((a.top + a.bottom) / 2 - (s.top + s.bottom) / 2) }
+  })
+  expect(fila.mismoPadre).toBe(true)
+  expect(fila.centro).toBeLessThan(4)
+  await mas.click()
+  await expect(page.getByText(/Contraseña inicial de los conductores nuevos/)).toBeVisible()
+  // El teléfono, a la misma altura dentro de cada tarjeta (antes saltaba de línea según lo largo del estado).
+  const alturas = await page.getByTestId('tarjeta-telefono').evaluateAll((ss) => ss.map((s) => Math.round(s.getBoundingClientRect().top - s.closest('li').getBoundingClientRect().top)))
+  expect(alturas.length).toBeGreaterThan(5)
+  expect(new Set(alturas).size).toBe(1)
+  // Nada se sale de lado.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
+test('T6 · Conductores vacío: una sola forma de importar', async ({ page }) => {
+  await montar(page, { fichas: [], accesos: { conductores: [] } })
+  await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('conductores-vacio')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByRole('button', { name: 'Importar la lista' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Importar Excel' })).toHaveCount(0)
+  const mas = page.getByRole('button', { name: 'Más', exact: true })
+  if (await mas.isVisible()) {
+    await mas.click()
+    await expect(page.getByRole('menuitem', { name: 'Importar Excel' })).toHaveCount(0)
+  }
+})
+
+test('T6 · la flota completa: contrato, nivel y «definida» sin colores sin significado; «Borrar búsqueda», enlace', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'la tabla es del ordenador')
+  await montar(page, { fichas: COMPLETA, accesos: ACC_COMPLETA, cuentas: [{ driver_id: 'c1' }] })
+  await page.route(/\/api\/auth\/driver-accounts\/contrasena-inicial/, (r) => r.fulfill({ json: { definida: true, desde: '2026-10-30T09:00:00Z', por: 'Ana L.' } }))
+  await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Ana L.', { exact: true })).toBeVisible({ timeout: 15000 })
+  const fondo = (loc) => loc.evaluate((s) => getComputedStyle(s).backgroundColor)
+  for (const txt of ['ETT', 'L1', 'Pleno', 'Empresa']) {
+    const s = page.locator('table tbody td span', { hasText: new RegExp(`^${txt}$`) }).first()
+    expect(await fondo(s), txt).toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
+  }
+  await page.getByTestId('mas-opciones').click()
+  const definida = page.getByTestId('inicial-definida')
+  await expect(definida).toBeVisible()
+  // Sin el lima de antes (rgb(190, 242, 100) o su versión de día).
+  expect(await definida.evaluate((s) => getComputedStyle(s).color)).not.toMatch(/rgb\((190, 242, 100|77, 124, 15|101, 163, 13)\)/)
+  await page.getByPlaceholder('Buscar conductor…').fill('zzz')
+  const borrar = page.getByRole('button', { name: 'Borrar búsqueda' })
+  await expect(borrar).toBeVisible()
+  expect(await borrar.evaluate((b) => getComputedStyle(b).textDecorationLine)).toContain('underline')
+  // Alineado con el texto de encima (el `btn-ghost` lo sangraba 12 px).
+  const izq = await page.getByText(/^Nadie coincide con/).evaluate((p) => p.getBoundingClientRect().left)
+  expect(Math.abs((await borrar.boundingBox()).x - izq)).toBeLessThan(2)
+})
+
+const N5 = ['Ana L.', 'Luis P.', 'Rosa M.', 'Javier G.', 'Marta R.']
+const SCORES = N5.map((name, i) => ({ driver_id: `d${i + 1}`, name, center: 'NORTE', total: 92 - i * 7, compliance: 28 - i * 2, punctuality: 14 - i,
+  evidence: 13 - i, honesty: 15 - i, conservation: 22 - i * 2, inspections_count: 20 - i * 2, clean_streak: 11 - i * 3, trend: 'mejorando', prize_eligible: true }))
+
+for (const tema of ['light', 'dark']) {
+  test(`T6 · Ranking ${tema}: el nombre del podio se ve; sin sombras, bordes dorados ni mayúsculas; los pilares en tinta y por t()`, async ({ page, isMobile }) => {
+    await montar(page, { tema, fichas: NUEVA, accesos: ACC_NUEVA })
+    await page.route(/\/api\/scoring\/drivers/, (r) => r.fulfill({ json: { scores: SCORES, prize_min_days: 8 } }))
+    await page.route(/\/api\/scoring\/leaderboard/, (r) => r.fulfill({ json: { leaderboard: {}, center_stats: { NORTE: { avg_score: 78 } } } }))
+    await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: /^Ranking/ }).first().click()
+    const podio = page.getByTestId('podio')
+    await expect(podio).toHaveCount(3)
+    for (let i = 0; i < 3; i++) {
+      const p = podio.nth(i)
+      const m = await p.evaluate((el) => {
+        const nombre = el.querySelector('[title]')
+        const s = getComputedStyle(el)
+        return { sombra: s.boxShadow, borde: s.borderTopColor, fondo: s.backgroundColor, letra: getComputedStyle(nombre).color, txt: el.innerText }
+      })
+      expect(m.sombra).toBe('none')
+      expect(m.letra).not.toBe(m.fondo)
+      expect(m.letra).not.toBe('rgb(255, 255, 255)')
+      expect(m.borde).not.toMatch(/rgba\(251, 191, 36/)
+      // Ni las etiquetas de 8 px de los pilares («Cump.», «Punt.»…).
+      expect(m.txt).not.toMatch(/Cump\.|Punt\.|Evid\./)
+    }
+    // Ningún rótulo en mayúsculas en el ranking.
+    const mayus = await page.locator('main').evaluate((m) => [...m.querySelectorAll('*')].filter((e) => e.offsetParent && getComputedStyle(e).textTransform === 'uppercase').length)
+    expect(mayus).toBe(0)
+    await expect(page.getByText('Clasificación completa', { exact: true })).toBeVisible()
+    // Los pilares, en la fila desplegable: con su nombre entero y las cinco barras del mismo color.
+    await page.locator('tbody tr', { hasText: 'Ana L.' }).first().click()
+    const pilares = page.getByTestId('pilares')
+    await expect(pilares).toContainText('Cumplimiento')
+    await expect(pilares).toContainText('Conservación')
+    const colores = await pilares.evaluate((el) => [...el.querySelectorAll('.h-full')].map((b) => getComputedStyle(b).backgroundColor))
+    expect(colores).toHaveLength(5)
+    expect(new Set(colores).size).toBe(1)
+    if (isMobile) expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  })
+}
+
+test('T6 · Vehículos: sin la sede en mono, «Añadir vehículo» cian liso, la pestaña elegida en tinta, «Nunca revisada», y en el móvil no se sale de lado', async ({ page, isMobile }) => {
+  await montar(page, { fichas: NUEVA, accesos: ACC_NUEVA })
+  await page.route(/\/api\/vehicles(\?|$)/, (r) => r.fulfill({ json: [{ id: 'v1', license_plate: '5678KLM', brand: 'Renault', model: 'Master', center: 'NORTE', status: 'active', mileage: 45000, itv_date: '2027-03-15' }] }))
+  await page.goto('/panel/vehiculos', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText(/^5678\s*KLM/).first()).toBeVisible({ timeout: 15000 })
+  // Nada en mono espaciado en la cabecera de la página.
+  const espaciados = await page.locator('main header').evaluate((h) => [...h.querySelectorAll('*')].filter((e) => {
+    const s = getComputedStyle(e); return /Mono/.test(s.fontFamily) && parseFloat(s.letterSpacing) > 1
+  }).length)
+  expect(espaciados).toBe(0)
+  const anadir = page.getByTestId('anadir-vehiculo')
+  const a = await anadir.evaluate((b) => { const s = getComputedStyle(b); return { img: s.backgroundImage, sombra: s.boxShadow, fondo: s.backgroundColor } })
+  expect(a.img).toBe('none')
+  expect(a.sombra).toBe('none')
+  expect(cian(a.fondo), a.fondo).toBe(true)
+  // La pestaña elegida, en tinta y sin caja: sin fondo de color.
+  const elegida = page.getByTestId('pestanas-vehiculos').locator('button[aria-pressed="true"]')
+  await expect(elegida).toHaveCount(1)
+  const e = await elegida.evaluate((b) => { const s = getComputedStyle(b); return { fondo: s.backgroundColor, letra: s.color } })
+  expect(e.fondo).toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
+  expect(cian(e.letra)).toBe(false)
+  await expect(page.getByText('Nunca inspeccionada')).toHaveCount(0)
+  await expect(page.getByText('Nunca revisada').first()).toBeVisible()
+  if (isMobile) {
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    // La tabla cabe en su caja; modelo y km, en la línea de debajo de la matrícula.
+    const t = await page.getByTestId('tabla-vehiculos').evaluate((tb) => ({ tabla: tb.scrollWidth, caja: tb.parentElement.clientWidth }))
+    expect(t.tabla).toBeLessThanOrEqual(t.caja)
+    await expect(page.getByTestId('vehiculo-linea-movil').first()).toContainText('Renault Master')
+    await expect(page.getByTestId('vehiculo-linea-movil').first()).toContainText('45.000')
+  }
+})

@@ -106,7 +106,7 @@ function itvBadge(itv) {
 }
 
 function lastInspDot(date) {
-  if (!date) return { cls: 'bg-dark-600', txt: 'Nunca inspeccionada' }
+  if (!date) return { cls: 'bg-dark-600', txt: 'Nunca revisada' }
   // Días de CALENDARIO, no bloques de 24 h: revisada ayer a las 22:00 salía «hoy» a las 8:00.
   const f = new Date(date)
   const d = Number.isNaN(f.getTime()) ? 0 : Math.max(0, diasAtras(isoLocal(f)))
@@ -3007,10 +3007,9 @@ export default function Vehiculos() {
   return (
     <div>
       <header className="rise mb-8">
-        {center && center !== 'Todos' && (
-          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-brand-400/80">{center}</p>
-        )}
-        <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
+        {/* Sin el rótulo de la sede en mono espaciado encima (14-11-2026, tanda 6, como Conductores): la sede ya la dice
+            el selector de arriba. */}
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <h1 className="font-display text-[clamp(28px,3.4vw,42px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">
             {t('veh.title')}{vehicles && <span className="text-dark-500"> · {list.length}</span>}
           </h1>
@@ -3030,11 +3029,12 @@ export default function Vehiculos() {
                 <Download size={15} /> <span className="hidden sm:inline">Excel</span>
               </button>
             )}
+            {/* Cian liso con tinta encima, como «Añadir conductor» (tanda 6): sin degradado, sombra ni reflejo. */}
             <button
+              data-testid="anadir-vehiculo"
               onClick={() => setAddOpen(true)}
-              className="group relative flex items-center gap-1.5 overflow-hidden rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-lg shadow-brand-500/25 transition-all duration-300 [text-shadow:0_1px_1px_rgba(0,0,0,0.15)] hover:-translate-y-px hover:shadow-xl hover:shadow-brand-500/30 hover:brightness-110 active:translate-y-0 active:scale-[0.98]"
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-brand-400 px-4 py-2.5 text-[13.5px] font-semibold text-brand-tinta transition-colors hover:bg-brand-300 active:bg-brand-500"
             >
-              <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/20 to-transparent" />
               <Plus size={15} /> Añadir vehículo
             </button>
           </div>
@@ -3053,7 +3053,9 @@ export default function Vehiculos() {
           Separadas a propósito: una furgoneta devuelta no puede engordar los
           contadores ni salir en las listas de mantenimiento, pero tampoco se
           borra, porque a veces vuelve. */}
-      <div className="rise mb-5 flex gap-1 rounded-lg bg-dark-900 p-1 ring-1 ring-dark-700 w-fit">
+      {/* Las pestañas, como las de Conductores (tanda 6): la elegida en tinta con su raya debajo, no en una caja cian; en
+          el móvil se desplazan dentro de su fila en vez de sacar la página de lado. */}
+      <div data-testid="pestanas-vehiculos" className="rise mb-5 flex overflow-x-auto border-b border-dark-800">
         {[
           { id: 'activas', label: t('veh.tab.activas') },
           { id: 'baja', label: t('veh.tab.baja'), n: nBaja },
@@ -3071,8 +3073,9 @@ export default function Vehiculos() {
               onClick={() => { setVerDocs(x.id === 'docs'); setVerExpo(x.id === 'expo')
                 setVerDup(x.id === 'dup')
                 if (!['docs', 'expo', 'dup'].includes(x.id)) setVerBaja(x.id === 'baja') }}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                activa ? 'bg-brand-500/20 text-brand-300' : 'text-dark-400 hover:text-dark-200'}`}>
+              aria-pressed={activa}
+              className={`-mb-px flex min-h-[44px] shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:min-h-0 sm:px-4 ${
+                activa ? 'border-dark-50 text-dark-50' : 'border-transparent text-dark-500 hover:text-dark-300'}`}>
               {x.label}
               {x.n > 0 && <span className="rounded-full bg-dark-800 px-1.5 text-[10px] tabular-nums text-dark-400">{x.n}</span>}
             </button>
@@ -3117,7 +3120,7 @@ export default function Vehiculos() {
       )}
 
       {vehicles && !verBaja && !verDocs && (
-        <div className="rise mb-6 flex flex-wrap items-baseline gap-x-7 gap-y-2 border-y border-white/[0.05] py-3.5" style={{ animationDelay: '60ms' }}>
+        <div className="rise mb-6 flex flex-wrap items-baseline gap-x-7 gap-y-2 border-b border-white/[0.05] pb-3.5 pt-1" style={{ animationDelay: '60ms' }}>
           {[
             { val: kpis.total,   label: t('veh.all'),        color: 'text-dark-50' },
             { val: kpis.taller,  label: t('veh.workshop'),   color: 'text-amber-300' },
@@ -3172,22 +3175,25 @@ export default function Vehiculos() {
               sabes que columna estas mirando. */}
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-[13px]">
+              {/* En el móvil la tabla cabe en la pantalla (tanda 6): modelo, centro, km y estado no van en su columna
+                  sino en una segunda línea debajo de la matrícula; desde `sm`, la tabla de siempre. Las cabeceras, en
+                  letra normal, como las de Conductores. */}
+              <table data-testid="tabla-vehiculos" className="w-full text-[13px] sm:min-w-[720px]">
                 <thead className="sticky top-0 z-10 bg-dark-900">
                   <tr className="border-b border-dark-800">
                     <th className="w-6 px-2 py-2"></th>
-                    <ThOrden campo="license_plate" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-dark-500 text-left">Matrícula</ThOrden>
-                    <ThOrden campo="model" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-dark-500 text-left">Modelo</ThOrden>
-                    <ThOrden campo="center" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-dark-500 text-left">Centro</ThOrden>
-                    <ThOrden campo="mileage" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-dark-500 text-right">Km</ThOrden>
+                    <ThOrden campo="license_plate" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[11.5px] font-medium text-dark-500 text-left">Matrícula</ThOrden>
+                    <ThOrden campo="model" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[11.5px] font-medium text-dark-500 text-left max-sm:hidden">Modelo</ThOrden>
+                    <ThOrden campo="center" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[11.5px] font-medium text-dark-500 text-left max-sm:hidden">Centro</ThOrden>
+                    <ThOrden campo="mileage" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[11.5px] font-medium text-dark-500 text-right max-sm:hidden">Km</ThOrden>
                     {/* Sin orden a proposito: esta columna no sale de un campo de la
                         fila sino de la ultima inspeccion, que se busca aparte. Ordenar
                         por un campo que no existe deja la tabla igual y no da error:
                         pareceria que el boton esta roto. */}
-                    <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-dark-500">Revisión</th>
-                    <ThOrden campo="itv_date" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-dark-500 text-left">ITV</ThOrden>
-                    <ThOrden campo="status" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-dark-500 text-left">Estado</ThOrden>
-                    <th className="w-6 px-2 py-2"></th>
+                    <th className="px-2 py-2 text-left text-[11.5px] font-medium text-dark-500">Revisión</th>
+                    <ThOrden campo="itv_date" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[11.5px] font-medium text-dark-500 text-left">ITV</ThOrden>
+                    <ThOrden campo="status" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[11.5px] font-medium text-dark-500 text-left max-sm:hidden">Estado</ThOrden>
+                    <th className="w-6 px-2 py-2 max-sm:hidden"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3208,12 +3214,18 @@ export default function Vehiculos() {
                             <span className="ml-1.5 rounded bg-dark-800 px-1 py-px text-[9px] font-semibold tracking-normal text-dark-400"
                               title={ALTA_AYUDA[v.alta]}>{ALTA_CORTA[v.alta]}</span>
                           )}
+                          {/* Solo en el móvil: lo que en el ordenador va en sus columnas. */}
+                          <span data-testid="vehiculo-linea-movil" className="mt-0.5 block font-sans text-[12px] font-normal tracking-normal text-dark-400 sm:hidden">
+                            {[[v.brand, v.model].filter(Boolean).join(' '), center === 'Todos' ? v.center : '',
+                              v.mileage != null ? `${v.mileage.toLocaleString('es')}\u00a0km` : '',
+                              v.status !== 'active' ? t(st.labelKey) : ''].filter(Boolean).join(' · ')}
+                          </span>
                         </td>
-                        <td className="max-w-[190px] truncate px-2 py-1.5 text-dark-400">
+                        <td className="max-w-[190px] truncate px-2 py-1.5 text-dark-400 max-sm:hidden">
                           {[v.brand, v.model].filter(Boolean).join(' ') || '—'}
                         </td>
-                        <td className="px-2 py-1.5 text-dark-400">{v.center || '—'}</td>
-                        <td className="cifra px-2 py-1.5 text-right text-dark-300">
+                        <td className="px-2 py-1.5 text-dark-400 max-sm:hidden">{v.center || '—'}</td>
+                        <td className="cifra px-2 py-1.5 text-right text-dark-300 max-sm:hidden">
                           {v.mileage != null ? v.mileage.toLocaleString('es') : '—'}
                           <NivelDeposito c={v.combustible} compacto />
                         </td>
@@ -3222,12 +3234,12 @@ export default function Vehiculos() {
                           <span className="text-[12px] text-dark-400">{dot.txt}</span>
                         </td>
                         <td className="whitespace-nowrap px-2 py-1.5">{itvBadge(v.itv_date)}</td>
-                        <td className="whitespace-nowrap px-2 py-1.5">
+                        <td className="whitespace-nowrap px-2 py-1.5 max-sm:hidden">
                           {v.status !== 'active'
                             ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${st.badge}`}>{t(st.labelKey)}</span>
                             : <span className="text-[12px] text-dark-500">activa</span>}
                         </td>
-                        <td className="px-2 py-1.5">
+                        <td className="px-2 py-1.5 max-sm:hidden">
                           <ChevronRight size={14} className="text-dark-700 transition-transform group-hover:translate-x-0.5 group-hover:text-dark-400" />
                         </td>
                       </tr>
