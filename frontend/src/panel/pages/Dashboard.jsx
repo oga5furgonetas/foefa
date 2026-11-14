@@ -14,6 +14,7 @@ import { useT, LANG_LOCALE } from '../../i18n'
 import { lista } from '../../lib/lista'
 import { PageSkeleton } from '../components/Skeleton'
 import Activacion from '../components/Activacion'
+import EntradaArranque from '../components/EntradaArranque'
 import Casilla from '../components/Casilla'
 import { mercEstado } from '../../services/api'
 import { hoyLocal, isoLocal } from '../../lib/fecha'
@@ -633,7 +634,9 @@ function DashboardFlota() {
 
       {/* Guía de activación: se pinta sola mientras falte algún paso y
           desaparece cuando la flota ya está en marcha. Sustituye al estado
-          vacío de antes, que solo sabía decir "importa vehículos". */}
+          vacío de antes, que solo sabía decir "importa vehículos". Encima, mientras falte algún paso del arranque
+          (furgonetas, conductores, su acceso y la primera revisión), la entrada para seguir con él. */}
+      <EntradaArranque />
       <Activacion />
 
       {/* Las casillas: cada una lleva a su pantalla, con su número y un globito si hay algo que hacer. */}

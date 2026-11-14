@@ -135,7 +135,8 @@ async def test_la_empresa_que_se_da_de_alta_fuera_del_iphone_sigue_con_su_bienve
     assert "alta_ios" not in empresa and "correos_baja" not in empresa
     assert mundo.enviados == []
     assert len(mundo.resend) == 1 and mundo.resend[0]["url"] == "https://api.resend.com/emails"
-    assert mundo.resend[0]["json"]["to"] == ["paquetes@x.es"] and "Tu prueba gratuita de 14 días" in mundo.resend[0]["json"]["subject"]
+    assert mundo.resend[0]["json"]["to"] == ["paquetes@x.es"] and mundo.resend[0]["json"]["subject"] == "Tu cuenta de FDS está lista"
+    assert "con el plan Pro y 14 días de prueba" in mundo.resend[0]["json"]["text"]
 
 
 def test_el_servidor_acepta_desde_ios_y_se_traga_los_campos_que_no_conoce():

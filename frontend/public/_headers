@@ -25,6 +25,17 @@
 /index.html
   Cache-Control: no-cache
 
+# El acceso personal del conductor (/c#<token>, 14-11-2026): el token va en el fragmento y no llega aquí, pero esta
+# página no manda la dirección a nadie, no se indexa y no se guarda en ninguna caché.
+/c
+  Referrer-Policy: no-referrer
+  X-Robots-Tag: noindex
+  Cache-Control: no-store
+/c/*
+  Referrer-Policy: no-referrer
+  X-Robots-Tag: noindex
+  Cache-Control: no-store
+
 
 # La app de China se descarga, no se abre en el navegador.
 /descargas/*

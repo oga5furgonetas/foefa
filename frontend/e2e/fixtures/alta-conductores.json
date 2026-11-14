@@ -1,0 +1,40 @@
+{
+  "lineas": [
+    {
+      "n": 1,
+      "texto": "Marta S., 677 123 456",
+      "nombre": "Marta S.",
+      "movil": "+34677123456",
+      "email": null,
+      "estado": "nuevo",
+      "motivo": null,
+      "aviso": null
+    },
+    {
+      "n": 2,
+      "texto": "Luis P.\t698765432\tluis@ejemplo.es",
+      "nombre": "Luis P.",
+      "movil": "+34698765432",
+      "email": "luis@ejemplo.es",
+      "estado": "ya_estaba",
+      "motivo": "Ya está dado de alta como «Luis P.».",
+      "aviso": null
+    },
+    {
+      "n": 3,
+      "texto": "Pablo R.",
+      "nombre": "Pablo R.",
+      "movil": null,
+      "email": null,
+      "estado": "nuevo",
+      "motivo": null,
+      "aviso": "Sin móvil: tendrás que copiarle el enlace."
+    }
+  ],
+  "nuevos": 2,
+  "ya_estaban": 1,
+  "errores": 0,
+  "center": "PRINCIPAL",
+  "guardado": false,
+  "creados": []
+}

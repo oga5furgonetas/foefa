@@ -131,7 +131,7 @@ test('I3 · sin permiso de Inicio, Revisión ni Vehículos, la barra de abajo no
   // Cuando llegan los permisos de /auth/me, la barra se rehace.
   await expect(barra.getByRole('link', { name: 'Vehículos' })).toHaveCount(0, { timeout: 30000 })
   await expect(barra.getByRole('link', { name: 'Revisión rápida' })).toHaveCount(0)
-  await expect(barra.getByRole('link', { name: 'Dashboard' })).toHaveCount(0)
+  await expect(barra.getByRole('link', { name: 'Inicio' })).toHaveCount(0)
   await expect(barra.getByRole('link', { name: 'Asignación diaria' })).toBeVisible()
   await expect(barra.getByRole('link', { name: 'Plantilla del día' })).toBeVisible()
   await expect(barra.getByRole('link')).toHaveCount(4)
@@ -143,7 +143,7 @@ test('I3 · con todos los permisos, la barra de abajo es la de siempre', async (
   await entrar(page, { centro: 'OGA5', escenario: 'vacio' })
   await page.goto('/panel', { waitUntil: 'domcontentloaded' })
   const barra = barraAbajo(page)
-  await expect(barra.getByRole('link')).toHaveText(['Dashboard', 'Revisión rápida', 'Asignación diaria', 'Vehículos'], { timeout: 30000 })
+  await expect(barra.getByRole('link')).toHaveText(['Inicio', 'Revisión rápida', 'Asignación diaria', 'Vehículos'], { timeout: 30000 })
 })
 
 /* ── I4 · con «Todos», cada salida dice su centro y lleva a él ──────────────────────────────────────────────── */

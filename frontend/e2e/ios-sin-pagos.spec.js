@@ -608,7 +608,7 @@ const ENTRADA = [
   { nombre: 'el alta sin sector (/registro): el selector de empresas no sale; sale el alta de quien reparte', ruta: '/registro', ancla: 'Tu nombre', anclaWeb: '¿Qué vas a hacer con FDS?',
     web: [/¿Qué vas a hacer con FDS\?/, /DSP de Amazon/] },
   { nombre: 'el alta de una empresa con plan (/registro?sector=supermercado&plan=reparto): sale el alta de quien reparte', ruta: '/registro?sector=supermercado&plan=reparto&billing=annual', ancla: 'Tu nombre', anclaWeb: /Plan elegido/i,
-    web: [/Plan elegido/i, /días gratis/] },
+    web: [/Plan elegido/i, /días de prueba/] },
   { nombre: 'recuperar la contraseña (/reset-password)', ruta: '/reset-password', ancla: null, web: null },
 ]
 test.describe('iPhone · la entrada, el acceso y el alta', () => {
@@ -674,7 +674,7 @@ test.describe('iPhone · la entrada, el acceso y el alta', () => {
   })
 })
 /* DESDE_IOS (T4): solo dentro de la app del iPhone. En la web y en Android el cuerpo del alta es el de siempre: sin el campo nuevo. */
-const SESION_ALTA = { access_token: 'cabecera.eyJzdWIiOiJ1MSJ9.firma', token_type: 'bearer', id: 'u1', name: 'Ana', role: 'admin', account_type: 'dsp', slug: 'ana-x1y2' }
+const SESION_ALTA = { access_token: 'cabecera.eyJzdWIiOiJ1MSJ9.firma', token_type: 'bearer', id: 'u1', name: 'Ana', role: 'admin', account_type: 'dsp', slug: 'ana-x1y2', correo_bienvenida: true }
 test.describe('control · el alta de la web no manda desde_ios', () => {
   test('/registro: el cuerpo del alta es el de siempre', async ({ page }) => {
     await simularApi(page, 'vacio')
@@ -783,6 +783,8 @@ const HOLA = 'Hola, ANA'
 const PORTAL = [
   { nombre: 'el acceso (sin sesión)', ruta: '/conductor', sinSesion: true },
   { nombre: 'el acceso de la empresa (/conductor/oga5)', ruta: '/conductor/oga5', sinSesion: true },
+  // El acceso personal que el dueño manda por WhatsApp (14-11-2026): una pantalla con «Entrar», sin nada que vender.
+  { nombre: 'la entrada con el enlace personal (/c)', ruta: '/c#' + 'a'.repeat(64), ancla: 'Entrar en tu portal', sinSesion: true },
   { nombre: 'el inicio (Mi ruta, auditoría, turnos, extras, mercadillo…)', ruta: '/conductor', ancla: HOLA, web: [/Comparte y gana/, /Ropa del equipo/, /Desde 19,90 €/] },
   { nombre: 'Mi ruta (portal)', ruta: '/conductor?vista=ruta', ancla: SIGUIENTE },
   { nombre: 'Pedir días libres', ruta: '/conductor', ancla: HOLA, clic: 'Pedir días libres' },
@@ -1062,6 +1064,33 @@ test.describe('iPhone · el panel de la empresa', () => {
       expect(fallos).toEqual([])
     })
   }
+  /* EL ARRANQUE DE UNA FLOTA (14-11-2026): sus cuatro pasos, dentro de la app, sin la prueba, el plan ni precios. */
+  test('el arranque (/panel/arranque): los cuatro pasos y la primera revisión', async ({ page }) => {
+    test.setTimeout(60000)
+    const fallos = vigilar(page)
+    await panel(page, true)
+    const base = { empresa: 'Transportes Pérez', centros: ['NORTE'], furgonetas: 1, conductores: 1, accesos: { sin_enlace: 1, sin_abrir: 0, abierto: 0, caducado: 0 }, revisiones: 0,
+      pasos: ['furgonetas', 'conductores', 'acceso', 'revision'].map((id) => ({ id, hecho: id !== 'acceso' && id !== 'revision' })), paso_actual: 3, revision: null }
+    let estado = base
+    await page.route(/\/api\/alta\/estado/, (r) => r.fulfill({ json: estado }))
+    await page.route(/\/api\/conductores\/accesos/, (r) => r.fulfill({ json: { empresa: 'Transportes Pérez', cuentas: {}, conductores: [
+      { driver_id: 'd1', nombre: 'Ana L.', center: 'NORTE', movil: '+34600111222', whatsapp: '34600111222', email: null, acceso: { estado: 'sin_enlace', creado_dia: null, abierto_dia: null, caduca_dia: null } }] } }))
+    await page.goto('/panel/arranque', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: 'Dales acceso' })).toBeVisible({ timeout: 15000 })
+    for (const n of [1, 2, 3]) {
+      await page.getByRole('button', { name: new RegExp(`^${n} · `) }).click()
+      await quieta(page, 500)
+      await limpia(page, `el arranque, paso ${n}`, { perfil: 'basico' })
+    }
+    estado = { ...base, paso_actual: null, revisiones: 1, pasos: base.pasos.map((p) => ({ ...p, hecho: true })),
+      revision: { id: 'r1', dia: '2026-11-14', hora: '09:31', recibida_at: '2026-11-14T08:31:07Z', furgoneta: { id: 'v1', matricula: '1234 ABC', modelo: 'Proace' },
+        conductor: { id: 'd1', nombre: 'Ana L.' }, fotos: [{ photo_index: 1, vista: 'frontal', url: '/demo/van-frontal.jpg' }], km: 1000, combustible_pct: 50 } }
+    await page.getByRole('button', { name: /^4 · / }).click()
+    await expect(page.getByRole('heading', { name: 'Ha llegado la primera revisión' })).toBeVisible({ timeout: 12000 })
+    await quieta(page, 500)
+    await limpia(page, 'el arranque, la primera revisión', { perfil: 'basico' })
+    expect(fallos).toEqual([])
+  })
   test('el acceso del panel', async ({ page }) => {
     await simularApi(page, 'vacio')
     await arrancar(page)

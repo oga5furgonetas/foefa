@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { useOutletContext, Link as EnlaceRuta } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { useT } from '../../i18n'
 import { Shield, Copy, Check, ExternalLink, Info, Link2, QrCode, Smartphone } from 'lucide-react'
@@ -70,7 +70,12 @@ export default function PortalConductor() {
         <h1 className="rise font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">{t('portal.title')}</h1>
       </div>
 
-      <p className="mb-5 text-sm text-dark-300"><BoldText str={t('portal.intro')} /></p>
+      <p className="mb-2 text-sm text-dark-300"><BoldText str={t('portal.intro')} /></p>
+      {/* El acceso personal (un enlace para entrar sin correo ni contraseña) va por conductor: se manda desde su lista. */}
+      <p className="mb-5 text-sm text-dark-400" data-testid="portal-acceso-personal">
+        {t('alta.portal.personal')}{' '}
+        <EnlaceRuta to="/panel/conductores" className="font-semibold text-brand-300 hover:text-brand-200">{t('alta.portal.irConductores')}</EnlaceRuta>
+      </p>
 
       {/* Enlace principal de la empresa + QR */}
       <div className="card mb-4 p-5">
