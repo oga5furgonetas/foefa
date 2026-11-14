@@ -408,8 +408,11 @@ def test_el_embudo_de_empresas_usa_los_eventos_que_existen():
     que la pagina ya no manda (emp_demo_boton) es un paso que nunca se toca."""
     import pathlib
     import re
-    fuente = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "pages" / "Empresas.jsx").read_text("utf-8")
-    existen = set(re.findall(r"medirAccion\('(emp_[a-z0-9_]+)'\)", fuente))
+    paginas = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "pages"
+    # La cabecera de la portada vive desde el 14-11-2026 en portadaComun.jsx (la comparte /planes) y mide con
+    # `medir('…')`, que solo llama a medirAccion cuando se está en la portada.
+    fuente = "".join((paginas / n).read_text("utf-8") for n in ("Empresas.jsx", "portadaComun.jsx"))
+    existen = set(re.findall(r"medir(?:Accion)?\('(emp_[a-z0-9_]+)'\)", fuente))
     f = next(x for x in an.EMBUDOS if x["clave"] == "empresas")
     for paso in f["pasos"]:
         if paso[1] == "a":
