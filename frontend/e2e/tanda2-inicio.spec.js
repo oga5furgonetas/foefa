@@ -626,12 +626,17 @@ test.describe('I11 · detalles de las fotos', () => {
 const ESENCIAL = ['dashboard', 'mi-dia', 'vehiculos', 'repaso', 'inspecciones', 'incidencias', 'talleres', 'ordenes',
   'vencimientos', 'importaciones', 'conductores', 'chat', 'configuracion']
 
-async function inicioDe(page, { modulos, avisar, pendientes = 2, ia } = {}) {
+/* `cuentas`: lo que el servidor del 14-11-2026 añade a /repaso/pendientes (`revisiones`, `repasadas`, `golpes`); sin
+   ello, la respuesta de un servidor de antes. `rutas(page)`: más rutas simuladas encima. */
+async function inicioDe(page, { modulos, avisar, pendientes = 2, ia, cuentas, lang, rutas } = {}) {
   await entrarComoAdmin(page)
+  if (lang) await page.addInitScript((l) => localStorage.setItem('flota_lang', l), lang)
   await simularApi(page, 'lleno')
+  if (rutas) await rutas(page)
   await page.route(/\/api\/org\/billing(\?|$)/, json({ plan: modulos ? 'esencial' : 'pro', status: 'active',
     ...(modulos ? { modulos } : {}), ...(ia === undefined ? {} : { ia }) }))
-  await page.route(/\/api\/repaso\/pendientes(\?|$)/, json({ fecha: '2026-11-14', pendientes, ...(avisar === undefined ? {} : { avisar }) }))
+  await page.route(/\/api\/repaso\/pendientes(\?|$)/, json({ fecha: '2026-11-14', pendientes, ...(avisar === undefined ? {} : { avisar }),
+    ...(cuentas || {}) }))
   await page.goto('/panel', { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('inicio-atajos')).toBeVisible({ timeout: 30000 })
 }
@@ -721,5 +726,189 @@ test.describe('ARREGLOS-5 · el Inicio', () => {
     await expect(entrada.locator('li[aria-current="step"]')).toContainText('Tus furgonetas')
     await expect(page.getByTestId('inicio-atajos')).toHaveCount(0)
     await expect(page.getByText('Todavía no hay flota')).toHaveCount(0)
+  })
+})
+
+/* ── Tanda 6 (14-11-2026): el Inicio, detalles de las dos revisiones de diseño ─────────────────────────────────────
+   La línea del Repaso dice lo que hay («31 de 48 repasadas · 2 golpes nuevos») con las cuentas nuevas de
+   /repaso/pendientes, y con un servidor de antes sigue como estaba («2 por repasar», arriba); los atajos sin dato a la
+   altura de su vecino; «paso 1 de 4» sin partir; Leve y Grave distintos de noche; «1 inspección»; un rótulo neutro;
+   el centro sin interletra; y sin furgonetas, la frase lleva a añadirlas. */
+test.describe('Tanda 6 · el Inicio', () => {
+  const ESEN = { modulos: ESENCIAL, avisar: true, ia: false }
+
+  test('el Repaso de hoy con las cuentas del servidor: repasadas de las de hoy y los golpes nuevos en el color de aviso', async ({ page }) => {
+    await inicioDe(page, { ...ESEN, pendientes: 17, cuentas: { revisiones: 48, repasadas: 31, golpes: 2 } })
+    const linea = page.getByTestId('inicio-repaso')
+    await expect(linea.locator('p')).toHaveText('Repaso de hoy · 31 de 48 repasadas · 2 golpes nuevos')
+    await expect(linea).not.toContainText('por repasar')
+    await expect(linea.getByTestId('inicio-repaso-golpes')).toHaveClass(/text-ruta-aviso-texto/)
+    // «2 golpes nuevos» y «31 de 48 repasadas», cada uno entero en una línea (a 390 px, el «2» se quedaba solo).
+    await page.setViewportSize({ width: 390, height: 844 })
+    for (const id of ['inicio-repaso-golpes', 'inicio-repaso-cuenta']) {
+      // Un trozo en línea da un rectángulo por cada línea que ocupa.
+      expect(await linea.getByTestId(id).evaluate((e) => e.getClientRects().length), id).toBe(1)
+    }
+    expect(await linea.getByTestId('inicio-repaso-cuenta').locator('b').evaluateAll((b) => b.map((x) => getComputedStyle(x).fontFamily)))
+      .toEqual([expect.stringMatching(/mono/i), expect.stringMatching(/mono/i)])
+    await expect(linea.getByRole('link', { name: /^Repasar\. 31 de 48 repasadas · 2 golpes nuevos$/ })).toHaveClass(/btn-primary/)
+  })
+
+  // Lo cazó quien verificó la tanda: con golpes, a 360-412 px el título se partía («Repaso de / hoy») y «N golpes
+  // nuevos» se salía del recuadro (en alemán y en francés, de la pantalla).
+  for (const lang of ['es', 'de', 'fr']) {
+    for (const ancho of [360, 390, 412]) {
+      test(`en el móvil (${ancho} px, ${lang}) con golpes: el título en una línea y nada fuera del recuadro`, async ({ page }) => {
+        await page.setViewportSize({ width: ancho, height: 800 })
+        await inicioDe(page, { ...ESEN, lang, pendientes: 17, cuentas: { revisiones: 48, repasadas: 31, golpes: 2 } })
+        const linea = page.getByTestId('inicio-repaso')
+        await expect(linea.getByTestId('inicio-repaso-golpes')).toBeVisible()
+        const m = await linea.evaluate((sec) => {
+          const caja = sec.getBoundingClientRect()
+          const de = (sel) => sec.querySelector(sel)
+          const tit = de('#inicio-repaso-tit')
+          const lineas = (el) => new Set(Array.from(el.getClientRects()).map((r) => Math.round(r.top))).size
+          const dentro = (el) => { const r = el.getBoundingClientRect(); return r.left >= caja.left - 0.5 && r.right <= caja.right + 0.5 }
+          const cuenta = de('[data-testid="inicio-repaso-cuenta"]')
+          const golpes = de('[data-testid="inicio-repaso-golpes"]')
+          return {
+            titulo: lineas(tit), cuenta: lineas(cuenta), golpes: lineas(golpes),
+            dentro: [tit, cuenta, golpes].every(dentro), desborda: document.documentElement.scrollWidth > window.innerWidth,
+          }
+        })
+        expect(m).toEqual({ titulo: 1, cuenta: 1, golpes: 1, dentro: true, desborda: false })
+      })
+    }
+  }
+
+  test('singular: una revisión y un golpe', async ({ page }) => {
+    await inicioDe(page, { ...ESEN, pendientes: 1, cuentas: { revisiones: 1, repasadas: 0, golpes: 1 } })
+    await expect(page.getByTestId('inicio-repaso').locator('p')).toHaveText('Repaso de hoy · 0 de 1 repasada · 1 golpe nuevo')
+  })
+
+  test('sin golpes no dice nada de golpes; con todo repasado, «48 de 48» y el botón con borde', async ({ page }) => {
+    await inicioDe(page, { ...ESEN, pendientes: 0, cuentas: { revisiones: 48, repasadas: 48, golpes: 0 } })
+    const linea = page.getByTestId('inicio-repaso')
+    await expect(linea.locator('p')).toHaveText('Repaso de hoy · 48 de 48 repasadas')
+    await expect(linea).not.toContainText(/golpe/i)
+    await expect(linea.getByRole('link', { name: /^Abrir el repaso/ })).toHaveClass(/btn-secondary/)
+    await expect(page.locator('main .btn-primary')).toHaveCount(0)
+  })
+
+  test('sin revisiones todavía, lo de siempre', async ({ page }) => {
+    await inicioDe(page, { ...ESEN, pendientes: 0, cuentas: { revisiones: 0, repasadas: 0, golpes: 0 } })
+    const linea = page.getByTestId('inicio-repaso')
+    await expect(linea).not.toContainText(/de 0|repasadas/)
+    await expect(linea.getByRole('link', { name: /^Abrir el repaso/ })).toHaveClass(/btn-secondary/)
+  })
+
+  for (const [lang, plural, uno] of [
+    ['en', 'Check of the day · 31 of 48 checked · 2 new dents', '0 of 1 checked · 1 new dent'],
+    ['de', null, '0 von 1 kontrolliert · 1 neuer Schaden'],
+    ['fr', null, '0 sur 1 contrôlée · 1 nouveau dégât'],
+    ['it', null, '0 su 1 controllata · 1 danno nuovo'],
+    ['pt', null, '0 de 1 revista · 1 dano novo'],
+  ]) {
+    test(`en «${lang}», singular y plural`, async ({ page }) => {
+      await inicioDe(page, { ...ESEN, lang, pendientes: 1, cuentas: { revisiones: 1, repasadas: 0, golpes: 1 } })
+      await expect(page.getByTestId('inicio-repaso').locator('p')).toContainText(uno)
+      if (plural) {
+        await page.unroute(/\/api\/repaso\/pendientes(\?|$)/)
+        await page.route(/\/api\/repaso\/pendientes(\?|$)/, json({ fecha: '2026-11-14', pendientes: 17, avisar: true, revisiones: 48, repasadas: 31, golpes: 2 }))
+        await page.reload({ waitUntil: 'domcontentloaded' })
+        await expect(page.getByTestId('inicio-repaso').locator('p')).toContainText(plural.split(' · ').slice(1).join(' · '))
+      }
+    })
+  }
+
+  test('los atajos sin dato quedan a la altura de su vecino de fila, y lo dicen', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await inicioDe(page, { ...ESEN, rutas: async (p) => {
+      await p.route(/\/api\/estado-flota(\?|$)/, json(null))
+      await p.route(/\/api\/alerts\/itv(\?|$)/, json([]))
+    } })
+    await expect(page.getByRole('button', { name: /^Estado de la flota\. sin datos aún$/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Vencimientos\. Ninguna ITV en los próximos 60 días$/ })).toBeVisible()
+    const tops = await page.getByTestId('inicio-atajos').locator('li > button > span:first-child > span:first-child')
+      .evaluateAll((s) => s.map((x) => Math.round(x.getBoundingClientRect().top)))
+    for (let i = 0; i + 1 < tops.length; i += 2) expect(Math.abs(tops[i] - tops[i + 1]), `fila ${i / 2 + 1}: ${tops}`).toBeLessThanOrEqual(1)
+    await expect(page.getByTestId('inicio-atajos').locator('li > button > span:first-child > span:nth-child(2)')).toHaveCount(tops.length)
+  })
+
+  test('a 390 px, «paso 1 de 4» va entero en una línea', async ({ page }) => {
+    await page.setViewportSize(MOVIL)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/alta\/estado/, json({ empresa: 'Transportes Pérez', furgonetas: 0, conductores: 0, revisiones: 0,
+      pasos: [{ id: 'furgonetas', hecho: false }, { id: 'conductores', hecho: false }, { id: 'acceso', hecho: false }, { id: 'revision', hecho: false }],
+      paso_actual: 1, revision: null }))
+    await page.goto('/panel', { waitUntil: 'domcontentloaded' })
+    const paso = page.getByTestId('inicio-arranque-paso')
+    await expect(paso).toHaveText('paso 1 de 4', { timeout: 30000 })
+    expect(await paso.evaluate((e) => e.getClientRects().length)).toBe(1)
+    await expect(page.getByTestId('inicio-arranque').locator('h2')).toHaveText('Sigue con el arranque · paso 1 de 4')
+  })
+
+  test('«Gráficos»: de noche, Leve y Grave se distinguen; «1 inspección»; y un rótulo neutro', async ({ page }) => {
+    await page.addInitScript(() => { localStorage.setItem('panel_theme', 'dark'); localStorage.setItem('panel_theme_elegido', '1') })
+    const d = new Date()
+    const hoy = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    await inicioDe(page, { avisar: false, rutas: (p) => p.route(/\/api\/stats\/dashboard(\?|$)/, json({
+      total_vehicles: 2, vehicles_in_workshop: 0, total_drivers: 2, total_inspections: 1, unread_alerts: 0, open_incidents: 0,
+      severity_breakdown: { sin_danos: 0, leve: 1, moderado: 1, grave: 1, critico: 0 },
+      weekly_activity: { [hoy]: { inspecciones: 1 } } })) })
+    await page.getByText('Gráficos y vencimientos').click()
+    const graficos = page.locator('details[open]')
+    // «1 inspección» en los últimos 7 días y debajo de la cifra del anillo (antes, «1 inspecciones»).
+    await expect(graficos.getByText('1 inspección', { exact: true })).toBeVisible()
+    await expect(graficos.getByText('inspección', { exact: true })).toBeVisible()
+    await expect(graficos.getByText(/^1 inspecciones$/)).toHaveCount(0)
+    await expect(graficos.getByText(/1\s*inspección hoy/)).toBeVisible()
+    await expect(graficos.getByRole('heading', { name: 'La flota en una línea' })).toBeVisible()
+    await expect(page.getByText('Todo lo demás está bajo control')).toHaveCount(0)
+    // El color de cada punto de la leyenda, puesto sobre el fondo de la página (con su transparencia).
+    const colores = await graficos.evaluate((g) => {
+      const rgba = (s) => (s.match(/[\d.]+/g) || []).map(Number)
+      let fondo = [0, 0, 0]
+      for (let el = g; el; el = el.parentElement) {
+        const c = rgba(getComputedStyle(el).backgroundColor)
+        if (c.length >= 3 && (c[3] ?? 1) > 0.9) { fondo = c; break }
+      }
+      const punto = (txt) => {
+        const p = [...g.querySelectorAll('p')].find((x) => x.textContent.trim().startsWith(txt))
+        const c = rgba(getComputedStyle(p.querySelector('span')).backgroundColor)
+        const a = c[3] ?? 1
+        return [0, 1, 2].map((k) => c[k] * a + fondo[k] * (1 - a))
+      }
+      return { leve: punto('Leve'), grave: punto('Grave') }
+    })
+    // Leve, en un gris (sin tinte: antes, ámbar al 50 %, marrón); Grave, rojizo; y lejos el uno del otro.
+    const tinte = (c) => Math.max(...c) - Math.min(...c)
+    expect(tinte(colores.leve), JSON.stringify(colores)).toBeLessThanOrEqual(30)
+    expect(colores.grave[0] - Math.max(colores.grave[1], colores.grave[2]), JSON.stringify(colores)).toBeGreaterThanOrEqual(30)
+    expect(Math.hypot(...[0, 1, 2].map((k) => colores.leve[k] - colores.grave[k])), JSON.stringify(colores)).toBeGreaterThan(50)
+  })
+
+  test('«Cómo va cada centro»: el nombre del centro sin interletra', async ({ page }) => {
+    await inicioConTodos(page)
+    const nombre = page.getByTestId('centro-nombre').first()
+    await expect(nombre).toBeVisible()
+    expect(await nombre.evaluate((e) => getComputedStyle(e).letterSpacing)).toMatch(/^(normal|0px)$/)
+  })
+
+  test('sin ninguna furgoneta y con el arranque acabado, la frase lleva a añadirlas', async ({ page }) => {
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/alta\/estado/, json({ empresa: 'Transportes Pérez', furgonetas: 0, conductores: 1, revisiones: 1,
+      pasos: [{ id: 'furgonetas', hecho: true }, { id: 'conductores', hecho: true }, { id: 'acceso', hecho: true }, { id: 'revision', hecho: true }],
+      paso_actual: null, revision: null }))
+    await page.goto('/panel', { waitUntil: 'domcontentloaded' })
+    const enlace = page.getByTestId('inicio-anadir-furgonetas')
+    await expect(enlace).toHaveText('añadir tus furgonetas', { timeout: 30000 })
+    await expect(enlace).toHaveAttribute('href', '/panel/importaciones?t=furgonetas')
+    expect(await enlace.evaluate((e) => getComputedStyle(e).textDecorationLine)).toContain('underline')
+    await expect(page.getByText('Todavía no hay flota: empieza por añadir tus furgonetas.')).toBeVisible()
+    await enlace.click()
+    await expect(page).toHaveURL(/\/panel\/importaciones\?t=furgonetas/)
   })
 })

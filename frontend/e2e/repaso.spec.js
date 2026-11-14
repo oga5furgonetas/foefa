@@ -491,6 +491,38 @@ test('Repaso · en el ordenador, las acciones van en su sitio (sin fila fija)', 
   await expect(page.getByTestId('hueco-acciones')).toBeHidden()
 })
 
+/* Tanda 6: el hueco del final mide lo que la fila fija en cada ancho (de 640 a 767 px la fila va en una línea y medía
+   126 px de hueco para 73 de fila); y la fila sale en su sitio desde el primer pintado: la entrada del <main> ya no
+   lleva `transform` (con él, durante 0,3 s la fila se colocaba al fondo del contenido, fuera de la pantalla). */
+for (const [ancho, alto] of [[360, 740], [390, 844], [700, 900]]) {
+  test(`Repaso · a ${ancho} px el hueco del final mide lo que la fila fija, y la fila sale en su sitio al entrar`, async ({ page, baseURL }) => {
+    await page.setViewportSize({ width: ancho, height: alto })
+    // La primera vez que se pinta la fila: dónde está respecto a la pantalla, sin esperar a que acabe ninguna animación.
+    await page.addInitScript(() => {
+      const mirar = () => {
+        const a = document.querySelector('[data-testid="acciones"]')
+        if (a && !window.__primeraFila) {
+          const r = a.getBoundingClientRect()
+          window.__primeraFila = { top: r.top, bottom: r.bottom, alto: innerHeight,
+            transform: getComputedStyle(document.querySelector('main') || document.body).transform }
+        }
+        if (!window.__primeraFila) requestAnimationFrame(mirar)
+      }
+      requestAnimationFrame(mirar)
+    })
+    await abrir(page, dia(baseURL))
+    await expect(botonIgual(page)).toBeVisible()
+    const primera = await page.evaluate(() => window.__primeraFila)
+    expect(primera, 'la fila se ha pintado').toBeTruthy()
+    expect(primera.transform, 'el <main> entra sin moverse').toBe('none')
+    expect(primera.bottom, 'desde el primer pintado, dentro de la pantalla').toBeLessThanOrEqual(primera.alto)
+    expect(primera.top).toBeGreaterThan(primera.alto / 2)
+    const [fila, hueco] = await Promise.all([page.getByTestId('acciones').boundingBox(), page.getByTestId('hueco-acciones').boundingBox()])
+    expect(hueco.height - fila.height, `hueco ${hueco.height} y fila ${fila.height}`).toBeGreaterThanOrEqual(0)
+    expect(hueco.height - fila.height, `hueco ${hueco.height} y fila ${fila.height}`).toBeLessThanOrEqual(3)
+  })
+}
+
 test('Repaso · el número del menú baja al repasar', async ({ page, baseURL, isMobile }) => {
   await abrir(page, dia(baseURL, { esHoy: true }))
   await expect(page.getByTestId('mesa')).toBeVisible()

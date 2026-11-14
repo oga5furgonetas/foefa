@@ -155,12 +155,13 @@ function SalidaFila({ s, onIr, t, centro }) {
 }
 
 /* La gravedad en el color de la casa: sin daños en «hecho», leve y moderado en «aviso», grave y crítico en «fallo».
-   El color del anillo de «Gráficos» sale de las mismas variables (leve y grave, más claros, para distinguirlos). */
+   El color del anillo de «Gráficos» sale de las mismas variables: leve en el gris de la casa y grave, un poco más claro
+   que crítico (tanda 6: de noche, ámbar al 50 % y rojo al 60 % salían los dos marrón y no se distinguían). */
 const SEV_KEYS = {
   sin_danos: { key: 'sev.sin_danos', tono: 'ok',    color: 'rgb(var(--r-ok-texto))' },
-  leve:      { key: 'sev.leve',      tono: 'aviso', color: 'rgb(var(--r-aviso-texto) / 0.5)' },
+  leve:      { key: 'sev.leve',      tono: 'aviso', color: 'rgb(var(--dk-500))' },
   moderado:  { key: 'sev.moderado',  tono: 'aviso', color: 'rgb(var(--r-aviso-texto))' },
-  grave:     { key: 'sev.grave',     tono: 'fallo', color: 'rgb(var(--r-peligro-texto) / 0.6)' },
+  grave:     { key: 'sev.grave',     tono: 'fallo', color: 'rgb(var(--r-peligro-texto) / 0.75)' },
   critico:   { key: 'sev.critico',   tono: 'fallo', color: 'rgb(var(--r-peligro-texto))' },
 }
 const SEV_ORDER = ['sin_danos', 'leve', 'moderado', 'grave', 'critico']
@@ -255,7 +256,7 @@ function ComoVaCadaCentro({ centers, datos, porCentro, hoyIso, puede, ir, t }) {
             <div key={c} className="border-t border-dark-800" data-centro={c}>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={() => ir(c, '/panel')} aria-label={t('centros.hoy.entrar').replace('{c}', c)}
-                  className="group flex min-h-[44px] w-full min-w-0 flex-1 items-center gap-1.5 text-left font-mono text-[15px] font-semibold tracking-wide text-dark-50">
+                  className="group flex min-h-[44px] w-full min-w-0 flex-1 items-center gap-1.5 text-left font-mono text-[15px] font-semibold tracking-normal text-dark-50" data-testid="centro-nombre">
                   <span className="group-hover:underline group-hover:underline-offset-4">{c}</span> <ChevronRight size={15} className="shrink-0 text-dark-500" />
                 </button>
                 {/* Solo en el móvil: el resumen de la fila, que abre y cierra sus datos. */}
@@ -349,20 +350,69 @@ function Atajo({ titulo, detalle, aviso, avisoTono = 'rojo', onClick }) {
    número es el MISMO que el del menú (revisiones de hoy por repasar); sin inventar rutas, la línea no dice más que
    eso. El botón cian «Repasar» es el único cian de la pantalla; con todo repasado, la línea lo dice y el botón va con
    borde. */
-function LineaRepaso({ pendientes, llegadas, t }) {
+/* Una frase traducida con sus cifras en mono tabular («<b>31</b> de <b>48</b> repasadas»): cada `{x}` de `cifras`
+   se pinta en negrita, el resto tal cual. */
+function ConCifras({ texto, cifras, className = 'font-mono font-semibold tabular-nums text-dark-50' }) {
+  return texto.split(/(\{[a-z]+\})/).map((trozo, i) => {
+    const k = /^\{([a-z]+)\}$/.exec(trozo)?.[1]
+    return k && k in cifras ? <b key={i} className={className}>{cifras[k]}</b> : trozo
+  })
+}
+
+/* Una frase con un trozo «[entre corchetes]» que es un enlace subrayado (sin `to`, el trozo va como texto). */
+function FraseConEnlace({ texto, to, testId }) {
+  const m = /^(.*)\[(.+)\](.*)$/s.exec(texto)
+  if (!m) return texto
+  return (
+    <>
+      {m[1]}
+      {to
+        ? <Link to={to} data-testid={testId} className="font-semibold text-dark-50 underline underline-offset-4 hover:text-dark-200">{m[2]}</Link>
+        : m[2]}
+      {m[3]}
+    </>
+  )
+}
+
+/* «Repaso de hoy · 31 de 48 repasadas · 2 golpes nuevos» (tanda 6): con `revisiones`, `repasadas` y `golpes` de
+   /repaso/pendientes, la línea dice lo que hay y no solo lo que falta. Sin golpes, no habla de golpes; los golpes, en
+   el color de aviso. Sin revisiones aún, lo de siempre («aún no ha llegado ninguna revisión»); con un servidor de
+   antes (sin esos campos), «N por repasar» como hasta ahora. */
+function LineaRepaso({ pendientes, revisiones, repasadas, golpes, llegadas, t }) {
   const hay = pendientes > 0
-  const estado = hay
-    ? t('inicio.repaso.pend').replace('{n}', pendientes)
-    : llegadas > 0 ? t('inicio.repaso.hecho') : t('inicio.repaso.nada')
+  const conCuentas = typeof revisiones === 'number' && typeof repasadas === 'number' && revisiones > 0
+  const nGolpes = conCuentas && typeof golpes === 'number' && golpes > 0 ? golpes : 0
+  const claveDe = revisiones === 1 ? 'inicio.repaso.de.1' : 'inicio.repaso.de'
+  const claveGolpes = nGolpes === 1 ? 'inicio.repaso.golpes.1' : 'inicio.repaso.golpes'
+  const estado = conCuentas
+    ? [t(claveDe).replace('{r}', repasadas).replace('{n}', revisiones),
+      nGolpes ? t(claveGolpes).replace('{n}', nGolpes) : null].filter(Boolean).join(' · ')
+    : hay ? t('inicio.repaso.pend').replace('{n}', pendientes)
+      : llegadas > 0 ? t('inicio.repaso.hecho') : t('inicio.repaso.nada')
   return (
     <section data-testid="inicio-repaso" aria-labelledby="inicio-repaso-tit"
       className="flex flex-wrap items-center justify-between gap-x-8 gap-y-4 border-t border-dark-700 py-5">
-      <p className="min-w-0 text-[16px] text-dark-300">
-        <b id="inicio-repaso-tit" className="text-[18px] font-extrabold tracking-[-0.02em] text-dark-50">{t('repaso.titulo.hoy')}</b>
-        <span aria-hidden="true" className="mx-2.5 text-dark-600">·</span>
-        {hay
-          ? <><b className="font-mono font-semibold tabular-nums text-dark-50">{pendientes}</b>{t('inicio.repaso.pend').replace('{n}', '')}</>
-          : <span>{estado}</span>}
+      {/* En el móvil (menos de 640 px), cada trozo en su línea y sin «·»: pegados y sin espacios, el título se partía
+          («Repaso de / hoy») y «2 golpes nuevos» se salía de la pantalla. Desde 640 px, en línea, con espacios de
+          verdad a los lados de cada «·» para que la línea pueda partirse entre trozos. */}
+      <p className="min-w-0 text-[16px] leading-relaxed text-dark-300">
+        <b id="inicio-repaso-tit" className="block whitespace-nowrap text-[18px] font-extrabold tracking-[-0.02em] text-dark-50 sm:inline">{t('repaso.titulo.hoy')}</b>
+        {' '}<span aria-hidden="true" className="mx-1 hidden text-dark-600 sm:inline">·</span>{' '}
+        {conCuentas ? (
+          <>
+            <span data-testid="inicio-repaso-cuenta" className="block whitespace-nowrap sm:inline"><ConCifras texto={t(claveDe)} cifras={{ r: repasadas, n: revisiones }} /></span>
+            {nGolpes > 0 && (
+              <>
+                {' '}<span aria-hidden="true" className="mx-1 hidden text-dark-600 sm:inline">·</span>{' '}
+                <span data-testid="inicio-repaso-golpes" className="block whitespace-nowrap text-ruta-aviso-texto sm:inline">
+                  <ConCifras texto={t(claveGolpes)} cifras={{ n: nGolpes }} className="font-mono font-semibold tabular-nums" />
+                </span>
+              </>
+            )}
+          </>
+        ) : hay
+          ? <span className="block sm:inline"><b className="font-mono font-semibold tabular-nums text-dark-50">{pendientes}</b>{t('inicio.repaso.pend').replace('{n}', '')}</span>
+          : <span className="block sm:inline">{estado}</span>}
       </p>
       <Link to="/panel/repaso" aria-label={`${t(hay ? 'inicio.repaso.boton' : 'inicio.repaso.abrir')}. ${estado}`}
         className={`${hay ? 'btn-primary' : 'btn-secondary'} inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl px-7 text-[15px] font-bold sm:w-auto`}>
@@ -500,7 +550,12 @@ function DashboardFlota() {
     let stop = false
     const cargar = () => getRepasoPendientes(center).then((r) => {
       const n = r.data?.pendientes
-      if (!stop && typeof n === 'number') setRepaso({ pendientes: n, avisar: r.data?.avisar !== false })
+      // `revisiones`, `repasadas` y `golpes` solo con un servidor del 14-11-2026 en adelante (si no, undefined).
+      const num = (x) => (typeof x === 'number' && x >= 0 ? x : undefined)
+      if (!stop && typeof n === 'number') {
+        setRepaso({ pendientes: n, avisar: r.data?.avisar !== false,
+          revisiones: num(r.data?.revisiones), repasadas: num(r.data?.repasadas), golpes: num(r.data?.golpes) })
+      }
     }).catch(() => {})
     cargar()
     const iv = setInterval(cargar, 60000)
@@ -654,25 +709,29 @@ function DashboardFlota() {
   const aTaller = urgentes + (ef?.niveles?.taller || 0)
   const ordenesAbiertas = (ef?.en_taller || []).filter((x) => x.orden).length
   const mercAviso = merc ? (merc.por_revisar || merc.sin_leer || 0) : 0
+  /* Cada atajo lleva SIEMPRE su línea de dato (tanda 6): uno sin ella quedaba centrado a otra altura que su vecino de
+     fila y la lista se veía desigual. Sin dato todavía, lo dice en gris. */
+  const sinDatos = t('inicio.atajo.sinDatos')
   const casillas = [
-    { to: '/panel/vehiculos', titulo: t('nav.vehicles'), detalle: fleet ? `${active} ${t('ops.of')} ${fleet} · ${t('ops.active.veh')}` : '' },
+    { to: '/panel/vehiculos', titulo: t('nav.vehicles'), detalle: fleet ? `${active} ${t('ops.of')} ${fleet} · ${t('ops.active.veh')}` : sinDatos },
     // La que peor está, la siguiente…: el número son las que no pueden esperar.
     { to: '/panel/estado-flota', titulo: t('nav.estadoFlota'), aviso: urgentes,
-      detalle: ef?.salud_media != null ? `${t('ef.salud.media')} ${ef.salud_media}/100${aTaller ? ` · ${aTaller} ${t('ef.a.taller')}` : ''}` : '' },
+      detalle: ef?.salud_media != null ? `${t('ef.salud.media')} ${ef.salud_media}/100${aTaller ? ` · ${aTaller} ${t('ef.a.taller')}` : ''}` : sinDatos },
     { to: '/panel/revision', titulo: t('nav.revision'), aviso: cola, avisoTono: 'ambar',
       detalle: `${cola} ${t(cola === 1 ? 'ops.validate.1' : 'ops.validate')}` },
     { to: '/panel/asignacion', centro: centroAsignacion, titulo: t('nav.assign'), aviso: sinRevisar, avisoTono: 'ambar',
-      detalle: sinRevisar > 0 ? `${sinRevisar} ${t(sinRevisar === 1 ? 'ops.sinrevisar.1' : 'ops.sinrevisar')}` : salidasHoy ? `${salidasHoy} ${t('hoy.salidas')}` : '' },
+      detalle: sinRevisar > 0 ? `${sinRevisar} ${t(sinRevisar === 1 ? 'ops.sinrevisar.1' : 'ops.sinrevisar')}`
+        : hoy?.salidas ? `${salidasHoy} ${t('hoy.salidas')}` : sinDatos },
     { to: '/panel/inspecciones', titulo: t('nav.inspections'), detalle: `${semanaTotal} · ${t('ops.week').toLowerCase()}` },
     { to: '/panel/vencimientos', titulo: t('nav.grp.expiry'), aviso: itvVencidas.length,
       detalle: itvVencidas.length ? `${itvVencidas.length} ${t(itvVencidas.length === 1 ? 'ops.itv.expired.1' : 'ops.itv.expired')}`
-        : itvProximas.length ? `${itvProximas.length} ${t('ops.itv.soon')}` : '' },
+        : itvProximas.length ? `${itvProximas.length} ${t('ops.itv.soon')}` : t('ops.itv.nada') },
     // «1 abiertas» en la foto del 10-11-2026: singular y plural.
     { to: '/panel/ordenes', titulo: t('nav.ordenes'),
-      detalle: ef ? `${ordenesAbiertas} ${t(ordenesAbiertas === 1 ? 'ops.ordenes.abierta' : 'ops.ordenes.abiertas')}` : '' },
+      detalle: ef ? `${ordenesAbiertas} ${t(ordenesAbiertas === 1 ? 'ops.ordenes.abierta' : 'ops.ordenes.abiertas')}` : sinDatos },
     { to: '/panel/incidencias', titulo: t('nav.incidents'), detalle: `${abiertas} ${t(abiertas === 1 ? 'ops.incidents.1' : 'ops.incidents')}` },
     { to: '/panel/talleres', titulo: t('nav.workshops'), detalle: `${inShop} ${t(inShop === 1 ? 'ops.workshop.1' : 'ops.workshop')}` },
-    { to: '/panel/conductores', titulo: t('nav.drivers'), detalle: data.total_drivers != null ? String(data.total_drivers) : '' },
+    { to: '/panel/conductores', titulo: t('nav.drivers'), detalle: data.total_drivers != null ? String(data.total_drivers) : sinDatos },
     ...(turno ? [{ to: '/panel/checklist-operativo', centro: centroChecklist(turno.turno), titulo: t('nav.checklist'), detalle: `${turno.hechas}/${turno.total}` }] : []),
     // El mercadillo de repartidores, también para la oficina (solo si está abierto; lo decide el servidor).
     ...(merc ? [{ to: merc.por_revisar ? '/panel/admin?s=mercadillo' : '/mercadillo', siempre: true, titulo: 'Mercadillo',
@@ -682,6 +741,10 @@ function DashboardFlota() {
   const irA = (to, centro) => (to.startsWith('/panel') ? irAlCentro(centro, to) : window.location.assign(to))
 
   const availPct = fleet > 0 ? Math.round((active / fleet) * 100) : null
+  /* Sin ninguna furgoneta (el arranque acabado y la flota borrada, o una empresa de antes del arranque), la frase lleva
+     a añadirlas: a donde las añade el arranque (importar o pegar la lista); sin esa pantalla, a Vehículos. */
+  const destinoAlta = puede('/panel/importaciones') ? '/panel/importaciones?t=furgonetas'
+    : puede('/panel/vehiculos') ? '/panel/vehiculos' : null
 
   /* «2 golpes nuevos» LLEVA a algún sitio (I3): al Repaso del día si la empresa lo usa; si no, a Revisión rápida si
      la tiene; si no tiene ninguna de las dos, es una cifra sin más. */
@@ -712,7 +775,7 @@ function DashboardFlota() {
           ) : fleet === 0
             /* Sin una sola furgoneta, «la flota está en orden» es mentira: no
                hay flota. Una empresa recien registrada lo leia el primer dia. */
-            ? t('ops.brief.empty')
+            ? <FraseConEnlace texto={t('ops.brief.empty')} to={destinoAlta} testId="inicio-anadir-furgonetas" />
             : urgentTotal > 0
             ? (<><b className="font-semibold text-dark-50">{urgentTotal}</b> {t('ops.brief.items')}.</>)
             : t('ops.brief.calm')}
@@ -726,7 +789,8 @@ function DashboardFlota() {
       {/* La acción del día: el Repaso (solo la empresa que trabaja con él). */}
       {usaRepaso && (
         <div>
-          <LineaRepaso pendientes={repaso.pendientes} llegadas={hoy?.revision?.hechas || 0} t={t} />
+          <LineaRepaso pendientes={repaso.pendientes} revisiones={repaso.revisiones} repasadas={repaso.repasadas}
+            golpes={repaso.golpes} llegadas={hoy?.revision?.hechas || 0} t={t} />
         </div>
       )}
 
@@ -893,7 +957,7 @@ function DashboardFlota() {
             <div className="flex items-center gap-5">
               <Anillo size={116}
                 centro={data.total_inspections?.toLocaleString(locale) ?? '—'}
-                sub={t('ops.inspections')}
+                sub={t(data.total_inspections === 1 ? 'ops.inspections.1' : 'ops.inspections')}
                 segmentos={SEV_ORDER.map((k) => ({ k, n: breakdown?.[k] || 0, color: SEV_KEYS[k].color }))} />
               <div className="min-w-0 flex-1 space-y-1.5 text-[12.5px]">
                 {SEV_ORDER.map((k) => (
@@ -911,7 +975,7 @@ function DashboardFlota() {
           <div className="border-t border-dark-800 pt-4">
             <p className="text-[13.5px] font-semibold text-dark-200">{t('ops.week')}</p>
             <p className="mb-4 mt-0.5 text-[13px] text-dark-400">
-              <b className="font-mono font-semibold tabular-nums text-dark-50">{semanaTotal}</b> {t('ops.inspections')}
+              <b className="font-mono font-semibold tabular-nums text-dark-50">{semanaTotal}</b> {t(semanaTotal === 1 ? 'ops.inspections.1' : 'ops.inspections')}
             </p>
             <Barras dias={semana} />
           </div>
@@ -926,7 +990,7 @@ function DashboardFlota() {
           <span className="mx-2 text-dark-600">·</span>
           <b className="font-mono font-semibold tabular-nums text-dark-50">{data.total_drivers}</b> {t('nav.drivers').toLowerCase()}
           <span className="mx-2 text-dark-600">·</span>
-          <b className="font-mono font-semibold tabular-nums text-dark-50">{todayInsp}</b> {t('ops.insp.today')}
+          <b className="font-mono font-semibold tabular-nums text-dark-50">{todayInsp}</b> {t(todayInsp === 1 ? 'ops.insp.today.1' : 'ops.insp.today')}
           {costs && costs.month_eur > 0 && (
             <><span className="mx-2 text-dark-600">·</span>
             <b className={`font-mono font-semibold tabular-nums ${costs.prev_month_eur && costs.month_eur < costs.prev_month_eur ? 'text-ruta-ok-texto' : 'text-ruta-aviso-texto'}`}>{Math.round(costs.month_eur).toLocaleString('es-ES')} €</b> {t('ops.damage.month')}</>

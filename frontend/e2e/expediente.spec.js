@@ -307,7 +307,8 @@ test.describe('El expediente en el panel', () => {
       expect(await fila.locator('.exp-cal-letras > span').evaluateAll((s) => s.map((x) => x.textContent).filter(Boolean))).toEqual(['L', 'X', 'V'])
       const meses = await fila.locator('.exp-cal-mes').allTextContents()
       expect(meses.slice(0, 3).some(Boolean), meses.join('|')).toBe(true)
-      expect(meses.join(' ')).toMatch(/\d{4}/)
+      // El año entero o, si en ningún mes de la fila cabe (el móvil), corto: «ago ’25» (tanda 6: antes se quitaba un mes).
+      expect(meses.join(' ')).toMatch(/\d{4}|’\d{2}/)
       const solapes = await fila.locator('.exp-cal-mes').evaluateAll((s) => {
         const r = s.filter((x) => x.textContent).map((x) => {
           const rango = document.createRange(); rango.selectNodeContents(x)
@@ -438,6 +439,57 @@ test.describe('El expediente en el panel', () => {
     }
     expect(await sinDesbordes(page)).toBe(true)
   })
+
+  /* CADA MES SALE EN EL MÓVIL (tanda 6): en dos o tres filas, ningún mes se pierde para hacerle sitio a un año. Antes,
+     a 390 salía «nov 2025 · 2026 · feb … may · may 2026 · jul» (faltaban diciembre y junio, y enero era solo «2026»), y
+     a 360 con 7 meses faltaba mayo. El primero de una fila que no es la primera puede repetir el mes en curso (con su
+     año): eso no cuenta como mes nuevo. Cada fila lleva su año y ningún rótulo se monta sobre el siguiente. */
+  const mesesDel = (desde, hasta) => {
+    const out = []
+    let [y, m] = desde.split('-').map(Number)
+    const [y2, m2] = hasta.split('-').map(Number)
+    while (y < y2 || (y === y2 && m <= m2)) { out.push(`${y}-${String(m).padStart(2, '0')}`); m += 1; if (m > 12) { m = 1; y += 1 } }
+    return out
+  }
+  for (const [ancho, meses, lang] of [[390, 12, 'es'], [390, 12, 'de'], [390, 12, 'en'], [360, 12, 'es'], [360, 12, 'de'],
+    [360, 12, 'en'], [360, 7, 'es'], [360, 7, 'de'], [360, 7, 'en']]) {
+    test(`a ${ancho} px con ${meses} meses, en «${lang}», cada mes del periodo sale una vez y cada fila con su año`, async ({ page }) => {
+      await page.setViewportSize({ width: ancho, height: 844 })
+      const d = conMeses(meses)
+      await abrir(page, { datos: d, lang })
+      await expect(hoja(page)).toBeVisible()
+      const esperados = mesesDel(d.periodo.desde, d.periodo.hasta)
+      await expect(async () => {
+        const filas = await page.getByTestId('calendario-fila').evaluateAll((fs) => fs.map((f) => [...f.querySelectorAll('.exp-cal-mes')]
+          .filter((x) => x.textContent).map((x) => ({ mes: x.dataset.mes, texto: x.textContent }))))
+        if (meses === 12) expect(filas.length, 'en el móvil, un año va en varias filas').toBeGreaterThan(1)
+        const vistos = []
+        filas.forEach((f, n) => {
+          f.forEach((r, k) => {
+            // El mes en curso al empezar la fila (ya salió arriba): no es un mes nuevo.
+            if (n > 0 && k === 0 && r.mes === vistos[vistos.length - 1]) return
+            vistos.push(r.mes)
+          })
+          // Con su año entero o, si en ningún mes de la fila cabe, corto («Jan ’26»).
+          expect(f.map((r) => r.texto).join(' '), `la fila ${n + 1} lleva su año`).toMatch(/\d{4}|’\d{2}/)
+        })
+        expect(vistos, JSON.stringify(filas)).toEqual(esperados)
+        // «2026» no sale solo: a estos anchos cabe «ene».
+        expect(filas.flat().filter((r) => /^\d{4}$/.test(r.texto)), JSON.stringify(filas)).toEqual([])
+      }).toPass({ timeout: 5000 })
+      const solapes = await page.getByTestId('calendario-fila').evaluateAll((fs) => fs.map((f) => {
+        const r = [...f.querySelectorAll('.exp-cal-mes')].filter((x) => x.textContent).map((x) => {
+          const rango = document.createRange(); rango.selectNodeContents(x)
+          const c = rango.getBoundingClientRect()
+          return [c.left, c.right]
+        })
+        return r.slice(1).filter((x, i) => x[0] < r[i][1]).length
+      }).reduce((a, b) => a + b, 0))
+      expect(solapes).toBe(0)
+      expect(await sinDesbordes(page)).toBe(true)
+      await foto(page, `cal-${lang}-${ancho}-${meses}`, { entera: false })
+    })
+  }
 
   test('con un mes, casillas grandes (22 px) y la leyenda al lado, con los días de cada estado', async ({ page }) => {
     const d = conMeses(1)
@@ -649,8 +701,17 @@ test.describe('El expediente en el panel', () => {
     await expect(items).toHaveCount(2)
     // El primero: la pieza como la dijo la IA (sin traducir ni poner mayúscula), la fecha, las dos fotos y la caja a trazos.
     await expect(items.nth(0).locator('.exp-ia-texto')).toHaveText('puerta trasera izq · en la revisión del 10 de noviembre de 2026')
-    // La fecha de la foto anterior, en el formato de las de los golpes (E3, tanda 5): antes, «7 nov 2026».
-    await expect(items.nth(0).locator('figcaption')).toHaveText(['Antes, el 7 de noviembre de 2026', 'Lo que marca la IA'])
+    // La fecha de la foto anterior, en el formato de las de los golpes (E3, tanda 5): antes, «7 nov 2026». Sin el año,
+    // que es el de la revisión, y en UNA línea bajo la foto (tanda 6: antes, «Antes, el 7 de noviembre de / 2026»).
+    await expect(items.nth(0).locator('figcaption')).toHaveText(['Antes, el 7 de noviembre', 'Lo que marca la IA'])
+    expect(await items.nth(0).locator('figcaption').first().getAttribute('title')).toBe('Antes, el 7 de noviembre de 2026')
+    const vista0 = page.viewportSize()
+    for (const ancho of [390, vista0.width]) {
+      await page.setViewportSize({ width: ancho, height: vista0.height })
+      const pies = await items.nth(0).locator('figcaption').evaluateAll((fs) => fs.map((f) => (
+        { alto: f.getBoundingClientRect().height, linea: parseFloat(getComputedStyle(f).lineHeight) })))
+      for (const p of pies) expect(p.alto, `a ${ancho} px, el pie en una línea`).toBeLessThan(p.linea * 1.5)
+    }
     await expect(items.nth(0).locator('img')).toHaveCount(2)
     await expect(items.nth(0).getByTestId('caja-ia')).toHaveCount(1)
     expect(await items.nth(0).getByTestId('caja-ia').getAttribute('style')).toContain('top: 60%')
