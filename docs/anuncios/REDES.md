@@ -345,3 +345,4 @@ Lo que la tarea NO hace y por qué:
 | 13-11 19:5x | (nube) | Metricool | Ronda 3 del viernes. Sin cambios (límite de 20 posts de noviembre agotado; nada nuevo de Dani). | Dani: plan de Metricool |
 | 14-11 07:5x | (nube) | Metricool | Ronda 1 del sábado. Sin cambios (límite de 20 posts de noviembre agotado; nada nuevo de Dani). | Dani: plan de Metricool |
 | 14-11 12:5x | (nube) | Metricool | Ronda 2 del sábado. Sin cambios (límite de 20 posts de noviembre agotado; nada nuevo de Dani). | Dani: plan de Metricool |
+| 14-11 19:5x | (nube) | Metricool | Ronda 3 del sábado. Sin cambios (límite de 20 posts de noviembre agotado; nada nuevo de Dani). | Dani: plan de Metricool |
