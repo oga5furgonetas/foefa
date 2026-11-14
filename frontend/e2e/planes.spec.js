@@ -109,3 +109,82 @@ test.describe('fotos de /planes', () => {
     }
   }
 })
+
+/* ── TANDA 4 DE DISEÑO (14-11-2026, hallazgo 14): /planes como una hoja de tarifas, no la plantilla de tarjetas. ── */
+test('tanda 4 · la hoja: columnas con reglas y las filas alineadas, el recomendado con su regla de tinta, cifras en mono, sin cajas ni insignias', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await simularApi(page, 'vacio')
+  await page.goto('/planes', { waitUntil: 'domcontentloaded' })
+  const hoja = page.getByTestId('planes-hoja')
+  const cols = hoja.locator('[data-plan]')
+  await expect(cols).toHaveCount(3)
+  // Sin tarjetas: ni fondo propio ni esquinas redondeadas; separadas por una regla de 1 px.
+  for (const c of await cols.all()) {
+    const [fondo, radio] = await c.evaluate((e) => [getComputedStyle(e).backgroundColor, getComputedStyle(e).borderTopLeftRadius])
+    expect(fondo).toBe('rgba(0, 0, 0, 0)')
+    expect(radio).toBe('0px')
+  }
+  expect(await cols.nth(1).evaluate((e) => getComputedStyle(e).borderLeftWidth)).toBe('1px')
+  // Las filas, alineadas: el nombre, el botón y lo que lleva empiezan a la misma altura en las tres columnas.
+  for (const sel of ['h2', 'a[href]', '[data-testid="plan-incluye"], ul']) {
+    const ys = await Promise.all((await cols.all()).map((c) => c.locator(sel).first().boundingBox().then((b) => Math.round(b.y))))
+    expect(Math.max(...ys) - Math.min(...ys), sel).toBeLessThanOrEqual(1)
+  }
+  // El recomendado (Pro): una regla de tinta de 2 px encima y la palabra, sin insignia (sin caja de color).
+  await expect(page.getByTestId('plan-regla-recomendado')).toHaveCount(1)
+  const regla = page.getByTestId('plan-regla-recomendado')
+  expect(await regla.evaluate((e) => [e.closest('[data-plan]').dataset.plan, getComputedStyle(e).height])).toEqual(['completo', '2px'])
+  const recomendado = cols.nth(1).getByText('Recomendado', { exact: true })
+  expect(await recomendado.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgba(0, 0, 0, 0)')
+  // Las cifras, en Plex Mono tabular.
+  const cifra = cols.first().locator('p').filter({ hasText: '/mes' }).locator('span').first()
+  expect(await cifra.evaluate((e) => [getComputedStyle(e).fontFamily, getComputedStyle(e).fontVariantNumeric])).toEqual([expect.stringContaining('IBM Plex Mono'), 'tabular-nums'])
+  // Nada de ✓ ni ✕: lo que no lleva va aparte, en gris.
+  expect(await hoja.innerText()).not.toMatch(/[✓✔✕✗]/)
+  await expect(cols.first()).toContainText('No incluye')
+})
+
+test('tanda 4 · la oferta fundador es una línea de texto: sin caja ámbar ni insignia', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  await page.route('**/api/founder/slots', (r) => r.fulfill({ json: { total: 10, left: 7 } }))
+  await page.goto('/planes', { waitUntil: 'domcontentloaded' })
+  const oferta = page.getByTestId('planes-fundador')
+  await expect(oferta).toContainText('Oferta fundador · quedan 7 de 10 plazas.')
+  const ambar = await oferta.evaluate((e) => [e, ...e.querySelectorAll('*')].filter((n) => {
+    const c = getComputedStyle(n)
+    return /255, 194, 51/.test(c.backgroundColor) || /255, 194, 51/.test(c.borderTopColor) || /255, 194, 51/.test(c.borderLeftColor)
+  }).length)
+  expect(ambar).toBe(0)
+  expect(await oferta.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgba(0, 0, 0, 0)')
+  // Reservar sigue abriendo el formulario.
+  await page.getByRole('button', { name: /Reservar mi plaza fundador/ }).click()
+  await expect(oferta.getByRole('button', { name: 'Confirmar la reserva' })).toBeVisible()
+})
+
+test('tanda 4 · complementos y «Cómo se cuenta» son listas con reglas, no rejillas de tarjetas; la cabecera es la de la portada', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  await page.goto('/planes', { waitUntil: 'domcontentloaded' })
+  for (const id of ['planes-complementos', 'planes-reglas']) {
+    const filas = page.getByTestId(id).locator(':scope > *')
+    expect(await filas.count()).toBeGreaterThan(3)
+    for (const f of await filas.all()) {
+      expect(await f.evaluate((e) => [getComputedStyle(e).backgroundColor, getComputedStyle(e).borderTopWidth, getComputedStyle(e).borderTopLeftRadius])).toEqual(['rgba(0, 0, 0, 0)', '1px', '0px'])
+    }
+  }
+  await expect(page.getByTestId('emp-cabecera')).toBeVisible()
+  await expect(page.getByTestId('emp-probar-menu')).toHaveAttribute('href', '/registro?sector=otra&plan=operacion&flota=40')
+})
+
+for (const ancho of [360, 390]) {
+  test(`tanda 4 · /planes a ${ancho} px en alemán: nada se sale por el lado`, async ({ page }) => {
+    await page.setViewportSize({ width: ancho, height: 800 })
+    await page.addInitScript(() => { try { localStorage.setItem('fds_idioma', 'de') } catch { /* nada */ } })
+    await simularApi(page, 'vacio')
+    await page.goto('/planes', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByTestId('planes-hoja')).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(ancho)
+    const fuera = await page.evaluate((w) => [...document.querySelectorAll('[data-testid="planes"] *')]
+      .filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.right > w + 0.5 }).map((e) => `${e.tagName}.${String(e.className).slice(0, 30)}`), ancho)
+    expect(fuera, fuera.join(' | ')).toEqual([])
+  })
+}

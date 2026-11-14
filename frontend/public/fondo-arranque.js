@@ -18,7 +18,10 @@
     if (window.Capacitor || /^(capacitor|ionic|file):$/.test(location.protocol)) return
     var ruta = location.pathname.replace(/\/+$/, '') || '/'
     var CLARAS = /^\/(?:empresas|planes|peritaje-tecnico|expediente-ejemplo|devolucion-renting(?:\/[^/]+)?|contacto|privacidad|terminos|encargo|cookies|aviso-legal|security|seguridad)?$/
-    if (!CLARAS.test(ruta)) return
+    /* /registro es también el alta oscura de quien reparte solo: esa llega siempre con `sector=autonomo` (la app, el
+       login y los anuncios); sin él, o con el de una empresa, la página es de papel (Registro.jsx decide igual). */
+    var altaEmpresa = ruta === '/registro' && !/(?:^|[?&])sector=autonomo(?:&|$)/.test(location.search)
+    if (!CLARAS.test(ruta) && !altaEmpresa) return
     var noche = false
     try { noche = localStorage.getItem('fds_tema_web') === 'dark' } catch (e) { /* modo privado */ }
     document.documentElement.classList.add(noche ? 'arranque-noche' : 'arranque-papel')

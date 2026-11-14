@@ -3,6 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import { test, expect } from '@playwright/test'
 import { simularApi } from './api-simulada.js'
+import { COMPANIAS } from '../src/lib/guiasRenting.js'
 
 /* LA PORTADA PARA EMPRESAS CON FURGONETAS (/ y /empresas, 14-11-2026, «Antes del perito»).
    «/» deja de ser la portada de la app de reparto (sigue en /repartidores) y pasa a ser la de empresas, con la identidad
@@ -51,7 +52,17 @@ for (const ruta of ['/', '/empresas']) {
       await page.goto(ruta, { waitUntil: 'domcontentloaded' })
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
       await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true }))
-      const texto = await page.locator('body').innerText()
+      /* «Gratis» no es reclamo: solo puede salir en la letra pequeña de la herramienta de devolución, que lo es de verdad
+         (ARREGLOS-4, B3: «Gratis. Sin registro. No guardamos nada de tu vehículo.»), nunca en un título ni en un botón. */
+      const banda = page.getByTestId('emp-banda-devolucion')
+      expect(await banda.locator('h2, a').allInnerTexts()).not.toContainEqual(expect.stringMatching(/gratis/i))
+      const texto = await page.evaluate(() => {
+        const letra = [...document.querySelectorAll('[data-testid="emp-banda-devolucion"] p')].filter((p) => /^Gratis\./.test(p.textContent))
+        letra.forEach((p) => { p.style.display = 'none' })
+        const t = document.body.innerText
+        letra.forEach((p) => { p.style.display = '' })
+        return t
+      })
       for (const p of PROHIBIDO) expect(texto, `no puede decir ${p}`).not.toMatch(p)
       // La pregunta que lo aclara sí está, y su respuesta: decide una persona; quién la llevaba, solo si es seguro.
       expect(texto).toContain('¿Quién decide si hay un golpe?')
@@ -102,12 +113,14 @@ for (const ruta of ['/', '/empresas']) {
       await expect(page.getByRole('link', { name: 'Entrar' }).first()).toHaveAttribute('href', '/panel/login')
       await expect(page.getByRole('link', { name: 'Qué le enseñas al perito' })).toHaveAttribute('href', '/peritaje-tecnico')
       await expect(page.getByTestId('emp-linea-precio')).toHaveText('Desde 5 € por furgoneta y mes. 14 días de prueba, sin tarjeta.')
-      // Las cifras de la casa, tal cual (CIFRAS_CASA), y las revisiones como «unas 200».
+      // Las cifras de la casa, tal cual (CIFRAS_CASA), y las revisiones «más o menos» 200: en la etiqueta, no delante
+      // de la cifra (tanda 4: el «unas» pequeño delante descuadraba la cifra).
       const nave = page.getByTestId('emp-nave')
       // (en el HTML va primero el nombre, dt, y luego la cifra, dd: se pintan al revés)
       await expect(nave).toContainText('naves3')
       await expect(nave).toContainText('furgonetas63')
-      await expect(nave).toContainText('revisiones con foto cada semanaunas 200')
+      await expect(nave).toContainText('revisiones con foto a la semana, más o menos200')
+      await expect(nave.locator('dd').nth(2)).toHaveText('200')
       await expect(page.getByTestId('emp-paso')).toHaveCount(3)
     })
   })
@@ -243,16 +256,17 @@ test('los dos botones de plan de la calculadora, del mismo ancho y en la misma f
   }
 })
 
-test('las cuatro miniaturas del paso 1: la del lado derecho es la foto; las demás, dibujadas; y ningún rótulo cortado', async ({ page }) => {
+/* Tanda 4 (hallazgo 12): las cuatro vistas, las cuatro dibujadas; antes, tres dibujos y una foto mezclados. */
+test('las cuatro miniaturas del paso 1: las cuatro dibujadas (nunca fotos y dibujos mezclados) y ningún rótulo cortado', async ({ page }) => {
   await simularApi(page, 'vacio')
   for (const ancho of [1280, 360]) {
     await page.setViewportSize({ width: ancho, height: 900 })
     await page.goto('/', { waitUntil: 'domcontentloaded' })
     const recorte = page.getByTestId('emp-recorte-fotos')
     await expect(recorte.locator('p')).toHaveText(['Frontal', 'Izquierdo', 'Derecho', 'Trasera'])
-    await expect(recorte.locator('img')).toHaveCount(1)
-    await expect(recorte.locator('img')).toHaveAttribute('src', '/demo/van-lateral.jpg')
-    await expect(recorte.locator('svg[data-vista]')).toHaveCount(3)
+    await expect(recorte.locator('img')).toHaveCount(0)
+    await expect(recorte.locator('svg[data-vista]')).toHaveCount(4)
+    expect(await recorte.locator('svg[data-vista]').evaluateAll((s) => s.map((e) => e.dataset.vista))).toEqual(['frente', 'lado-espejo', 'lado', 'detras'])
     // Ni la foto de otra furgoneta (la frontal de la demo) ni el lateral girado o acercado.
     await expect(page.locator('img[src="/demo/van-frontal.jpg"]')).toHaveCount(0)
     for (const p of await recorte.locator('p').all()) {
@@ -512,5 +526,73 @@ test.describe('fotos del arranque de la portada', () => {
         await seccion.screenshot({ path: path.join(process.env.FOTOS_PUBLICO, `portada-arranque-${ancho}-${tema}.png`) })
       })
     }
+  }
+})
+
+/* ── TANDA 4 DE DISEÑO (14-11-2026, hallazgos 10-13 y la banda nueva B3): la portada del precio hacia abajo. Cada prueba
+   mide algo que se ve: un ancho, un número de líneas, un color, que algo no esté. ── */
+test('tanda 4 · la banda de la herramienta de devolución: su título, las compañías de la guía, el botón con borde y el dibujo', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const banda = page.getByTestId('emp-banda-devolucion')
+  await expect(banda.getByRole('heading', { level: 2 })).toHaveText('¿Qué te van a cobrar al devolverlo?')
+  // Las compañías, escritas: las mismas y en el mismo orden que lib/guiasRenting.js.
+  await expect(page.getByTestId('emp-companias')).toHaveText(COMPANIAS.map((c) => c.nombre).join(' · '))
+  const boton = page.getByTestId('emp-devolucion')
+  await expect(boton).toHaveText('Repasar mi furgoneta')
+  await expect(boton).toHaveAttribute('href', '/devolucion-renting')
+  expect(await boton.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgba(0, 0, 0, 0)')   // con borde, sin cian
+  await expect(banda).toContainText('Gratis. Sin registro. No guardamos nada de tu vehículo.')
+  await expect(banda.locator('svg[data-zona="paragolpes"]')).toHaveCount(1)
+  // Va entre «Así funciona» y la banda oscura; la línea suelta de antes ya no está.
+  const [como, mia, nave] = await Promise.all(['#como', '[data-testid="emp-banda-devolucion"]', '[data-testid="emp-nave"]']
+    .map((s) => page.locator(s).evaluate((e) => e.getBoundingClientRect().top + window.scrollY)))
+  expect(como).toBeLessThan(mia)
+  expect(mia).toBeLessThan(nave)
+  await expect(page.locator('#como')).not.toContainText('Míralo con la guía de tu compañía')
+  await expect(page.locator('body')).not.toContainText(/te lo cobrar|ahorr/i)
+})
+
+test('tanda 4 · la calculadora en tres líneas: la etiqueta, la cifra sola y la nota, alineadas arriba con la pregunta', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await simularApi(page, 'vacio')
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const precio = page.getByTestId('emp-precio')
+  await expect(precio).toHaveText('100 €')                       // la cifra sola, sin frase alrededor
+  expect(await precio.evaluate((e) => e.tagName)).toBe('P')
+  await expect(page.getByTestId('emp-resultado').locator('p').first()).toHaveText('Al mes, con el plan Esencial')
+  const [pregunta, etiqueta] = await Promise.all([page.locator('label[for="emp-furgonetas"]').boundingBox(), page.getByTestId('emp-resultado').locator('p').first().boundingBox()])
+  expect(Math.abs(pregunta.y - etiqueta.y)).toBeLessThan(4)
+})
+
+test('tanda 4 · un solo cian: «Pedir la demostración» va con borde', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const fondo = await page.getByRole('button', { name: 'Pedir la demostración' }).evaluate((e) => getComputedStyle(e).backgroundColor)
+  expect(fondo).toBe('rgba(0, 0, 0, 0)')
+})
+
+test('tanda 4 · a 1280 px los títulos de columna caben en dos líneas como mucho', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await simularApi(page, 'vacio')
+  for (const l of ['es', 'de']) {
+    await conIdioma(page, l)
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await page.evaluate(() => document.fonts.ready)
+    for (const h of await page.locator('section h2.ld-titular').all()) {
+      const lineas = await h.evaluate((e) => Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)))
+      expect(lineas, `${l}: «${await h.innerText()}»`).toBeLessThanOrEqual(2)
+    }
+  }
+})
+
+test('tanda 4 · en el móvil, los dos botones del héroe y del cierre van a todo el ancho', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await simularApi(page, 'vacio')
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  for (const ids of [['emp-probar', 'emp-expediente'], ['emp-probar-cierre', 'emp-ensenar-cierre']]) {
+    const [a, b] = await Promise.all(ids.map((id) => page.getByTestId(id).boundingBox()))
+    expect(Math.round(a.width)).toBe(358)
+    expect(Math.round(b.width)).toBe(358)
   }
 })

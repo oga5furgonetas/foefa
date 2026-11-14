@@ -10,7 +10,8 @@ import { COMPANY } from '../legal/config'
 import Matricula from '../components/Matricula'
 import { EJEMPLO_HEROE } from '../lib/expedienteEjemplo'
 import SelloFoto from '../components/SelloFoto'
-import { ANCHO, BTN_CORTO, BTN_PRIMARIO, BTN_SECUNDARIO, ENLACE, LogoMarca, Pie, useTemaWeb } from './portadaComun'
+import Vehiculo from './devolucion/Vehiculo'
+import { ANCHO, BTN_PRIMARIO, BTN_SECUNDARIO, CabeceraPortada, ENLACE, Pie, useTemaWeb } from './portadaComun'
 
 /* ── LA PORTADA PARA EMPRESAS CON FURGONETAS (/ y /empresas, 14-11-2026, «Antes del perito») ──────────────────────
    Desde el 14-11-2026 «/» es esta página (antes, la de la app de reparto, que sigue en /repartidores y se enlaza
@@ -63,6 +64,10 @@ const EJEMPLO = EJEMPLO_HEROE
    coordenadas de la foto entera (el golpe está hacia x 610-715 e y 400-460 de 1200 × 675). */
 const FOTO_ANTES = '/demo/van-lateral.jpg'
 const FOTO_HOY = '/demo/van-lateral-golpe-puerta.jpg'
+
+/* Las compañías que cubre /devolucion-renting, escritas: las de COMPANIAS en lib/guiasRenting.js, en su orden y con su
+   nombre (portada.spec.js lo compara; aquí no se importa ese fichero, que es grande, solo para ocho nombres). */
+const COMPANIAS_DEVOLUCION = ['Ayvens', 'Alphabet', 'Volkswagen Financial Services', 'BMW Financial Services', 'Athlon', 'Arval', 'Hertz', 'Europcar']
 
 /* Las preguntas: [pregunta, clave de la respuesta]. */
 const PREGUNTAS_EMPRESA = [
@@ -185,8 +190,8 @@ function ProductoHeroe({ lang }) {
 const RECORTE = 'rounded-[12px] border border-[color:var(--ld-border)] bg-[color:var(--ld-surface)]'
 
 /* La furgoneta del ejemplo dibujada de línea (como los planos de devolucion/Vehiculo.jsx): una de techo alto con la
-   puerta corredera, vista de frente, de detrás o de lado (el morro a la derecha; `espejo`, a la izquierda). Para los
-   lados de los que la demo no tiene foto: una foto de otra furgoneta, o del lateral girado, no sería ese lado. */
+   puerta corredera, vista de frente, de detrás o de lado (el morro a la derecha; `espejo`, a la izquierda). Las cuatro
+   vistas del paso 1 van dibujadas: la demo no tiene foto de los cuatro lados de la misma furgoneta. */
 const TRAZO = { fill: 'none', stroke: 'var(--ld-text)', strokeWidth: 1.3, strokeLinejoin: 'round', strokeLinecap: 'round', vectorEffect: 'non-scaling-stroke' }
 const FINO = { ...TRAZO, stroke: 'var(--ld-muted)', strokeWidth: 1 }
 function FurgonetaDibujo({ vista }) {
@@ -221,20 +226,17 @@ function FurgonetaDibujo({ vista }) {
 }
 
 function RecorteFotos({ lang }) {
-  /* Las cuatro vistas de la revisión de la MISMA furgoneta. Del lateral derecho hay foto (la del héroe, encuadrada a
-     la furgoneta entera); de los otros tres lados la demo no tiene, así que van dibujados. Es un dibujo del móvil, no
-     una captura. */
-  const vistas = [['frente', tx('Frontal')], ['lado-espejo', tx('Izquierdo')], ['foto', tx('Derecho')], ['detras', tx('Trasera')]]
+  /* Las cuatro vistas de la revisión de la MISMA furgoneta, las cuatro dibujadas (tanda 4): la demo solo tiene foto del
+     lateral derecho, y tres dibujos y una foto juntos se leían como dos cosas distintas. Es un dibujo del móvil, no una
+     captura. */
+  const vistas = [['frente', tx('Frontal')], ['lado-espejo', tx('Izquierdo')], ['lado', tx('Derecho')], ['detras', tx('Trasera')]]
   return (
     <div className={`${RECORTE} p-3.5`} aria-hidden="true" data-testid="emp-recorte-fotos">
       <div className="grid grid-cols-4 gap-1.5">
         {vistas.map(([vista, nombre]) => (
           <div key={vista} className="min-w-0">
             <div className="relative aspect-[10/7] overflow-hidden rounded-[6px] bg-[color:var(--ld-fill)]">
-              {vista === 'foto'
-                ? <img src={FOTO_ANTES} alt="" loading="lazy" decoding="async" data-vista="foto"
-                  className="absolute left-[-33%] top-1/2 aspect-[1200/675] w-[141%] max-w-none -translate-y-[59%]" />
-                : <FurgonetaDibujo vista={vista} />}
+              <FurgonetaDibujo vista={vista} />
             </div>
             <p className="mt-1.5 text-center text-[0.75rem] leading-tight text-[color:var(--ld-muted)] [overflow-wrap:anywhere]">{nombre}</p>
           </div>
@@ -314,7 +316,7 @@ function Calculadora({ planes, tramos, furgonetas, setFurgonetas, clave, setClav
   const campo = 'h-[52px] w-full rounded-[12px] border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-surface)] px-3.5 text-[1.0625rem] font-semibold text-[color:var(--ld-text)] tabular-nums focus:border-[color:var(--ld-text)] focus:outline-none'
   const nota = 'mt-2 text-[0.875rem] text-[color:var(--ld-muted)]'
   return (
-    <div className="grid gap-6 rounded-[20px] border border-[color:var(--ld-border)] bg-[color:var(--ld-surface)] p-5 sm:p-7 md:grid-cols-[1fr_1.1fr] md:gap-8">
+    <div className="grid gap-6 rounded-[20px] border border-[color:var(--ld-border)] bg-[color:var(--ld-surface)] p-5 sm:p-7 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] md:gap-8">
       <div className="space-y-5">
         <div>
           <label htmlFor="emp-furgonetas" className="block text-[0.9375rem] font-semibold text-[color:var(--ld-text)]">{tx('¿Cuántas furgonetas tienes?')}</label>
@@ -344,7 +346,7 @@ function Calculadora({ planes, tramos, furgonetas, setFurgonetas, clave, setClav
           </div>
         </div>
       </div>
-      <div className="flex flex-col justify-center border-t border-[color:var(--ld-border)] pt-6 md:border-l md:border-t-0 md:pl-8 md:pt-0" aria-live="polite" data-testid="emp-resultado">
+      <div className="flex flex-col justify-start border-t border-[color:var(--ld-border)] pt-6 md:border-l md:border-t-0 md:pl-8 md:pt-0" aria-live="polite" data-testid="emp-resultado">
         {demasiadas ? (
           /* Por encima del tope no se pinta un precio que no corresponde al número escrito. */
           <p className="text-[1.0625rem] leading-snug text-[color:var(--ld-text)]" data-testid="emp-a-medida">
@@ -352,12 +354,10 @@ function Calculadora({ planes, tramos, furgonetas, setFurgonetas, clave, setClav
             <a href="#demo" onClick={() => medirAccion('emp_demo_calculadora')} className={ENLACE}>{tx('Cuéntanos tu flota')}</a>
           </p>
         ) : hayN ? (<>
-          {/* La frase entera se traduce de una vez (cada idioma pone el precio donde le toca); el precio va en grande. */}
-          <p className="text-[1.0625rem] leading-snug text-[color:var(--ld-text)]">
-            {tx('{marca} te cuesta {precio} al mes con el plan {plan}.', { marca: MARCA.nombre, plan: tx(plan.nombre) }).split('{precio}').map((trozo, i) => (
-              <span key={i}>{i > 0 && <b data-testid="emp-precio" data-precio={mes} className="text-[2.25rem] font-extrabold tracking-[-0.03em] tabular-nums">{euros(mes)}</b>}{trozo}</span>
-            ))}
-          </p>
+          {/* En tres líneas (tanda 4): la etiqueta pequeña, la cifra sola y las notas. Antes, una frase con la cifra en
+              grande dentro que se partía por la mitad. */}
+          <p className="text-[0.9375rem] font-semibold text-[color:var(--ld-text)]">{tx('Al mes, con el plan {plan}', { plan: tx(plan.nombre) })}</p>
+          <p data-testid="emp-precio" data-precio={mes} className="ld-titular mt-2 text-[2.75rem] leading-none tabular-nums text-[color:var(--ld-text)]">{euros(mes)}</p>
           {n < (plan.minimo_vehiculos || 0) && (
             <p className={nota}>{tx('El plan {plan} factura como mínimo {n} vehículos.', { plan: tx(plan.nombre), n: plan.minimo_vehiculos })}</p>
           )}
@@ -482,7 +482,8 @@ function FormularioDemo({ alEnviar }) {
         {/* «Tu empresa»: «Empresa» es también el nombre del plan a medida («Enterprise» en inglés). */}
         <div><label htmlFor="emp-empresa" className={etiqueta}>{tx('Tu empresa')}</label>
           <input id="emp-empresa" autoComplete="organization" maxLength={LARGO.empresa} value={f.empresa} onChange={cambia('empresa')} className={campo} {...marca('emp-empresa')} />{avisoDe('emp-empresa')}</div>
-        <div><label htmlFor="emp-correo" className={etiqueta}>{tx('Correo')}</label>
+        {/* El correo, a lo ancho; el teléfono y las furgonetas, juntos (tanda 4): la de las furgonetas iba sola a media fila. */}
+        <div className="sm:col-span-2"><label htmlFor="emp-correo" className={etiqueta}>{tx('Correo')}</label>
           <input id="emp-correo" type="email" autoComplete="email" inputMode="email" maxLength={LARGO.correo} value={f.correo} onChange={cambia('correo')} className={campo} {...marca('emp-correo')} />{avisoDe('emp-correo')}</div>
         <div><label htmlFor="emp-telefono" className={etiqueta}>{tx('Teléfono (opcional)')}</label>
           <input id="emp-telefono" type="tel" autoComplete="tel" maxLength={LARGO.telefono} value={f.telefono} onChange={cambia('telefono')} className={campo} /></div>
@@ -498,7 +499,8 @@ function FormularioDemo({ alEnviar }) {
             {quedan === 1 ? tx('Queda 1 carácter.') : tx('Quedan {n} caracteres.', { n: quedan })}</p>}</div>
       </div>
       {estado === 'error' && <p role="alert" data-testid="emp-error" className="mt-4 text-[0.875rem] font-semibold text-[color:var(--ld-warn)]">{aviso}</p>}
-      <button type="submit" disabled={estado === 'enviando'} className={`${BTN_PRIMARIO} mt-6 w-full sm:w-auto`}>
+      {/* Con borde (tanda 4): el único cian de la portada es «Probar con mis furgonetas». */}
+      <button type="submit" disabled={estado === 'enviando'} className={`${BTN_SECUNDARIO} mt-6 w-full sm:w-auto`}>
         {estado === 'enviando' ? <><Loader2 size={16} className="animate-spin" /> {tx('Enviando…')}</> : tx('Pedir la demostración')}
       </button>
       <p className="mt-4 text-[0.8125rem] leading-relaxed text-[color:var(--ld-muted)]">
@@ -509,9 +511,12 @@ function FormularioDemo({ alEnviar }) {
   )
 }
 
+/* Las dos columnas de las secciones del precio hacia abajo: el título en 5/12 y lo demás en 7/12. */
+const COLUMNAS = 'lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16'
+
 /* Un título de sección: Archivo 800, sin rótulo encima. */
-function H2({ children, className = '' }) {
-  return <h2 className={`ld-titular text-[1.875rem] leading-[1.06] text-[color:var(--ld-text)] [text-wrap:balance] sm:text-[2.5rem] ${className}`}>{children}</h2>
+function H2({ children, className = '', id }) {
+  return <h2 id={id} className={`ld-titular text-[1.875rem] leading-[1.06] text-[color:var(--ld-text)] [text-wrap:balance] sm:text-[2.5rem] ${className}`}>{children}</h2>
 }
 
 export default function Empresas() {
@@ -556,7 +561,6 @@ export default function Empresas() {
     ].join(' ')
   }
 
-  const enlaceMenu = 'inline-flex min-h-[44px] items-center whitespace-nowrap px-1 text-[0.9375rem] font-medium text-[color:var(--ld-text)] hover:underline underline-offset-4'
   const PASOS = [
     ['01', tx('El conductor hace cuatro fotos'), tx('Frontal, trasera y los dos laterales, más los kilómetros. Desde su móvil, a la hora que decida tu empresa: cada conductor, una revisión por furgoneta y día.'), <RecorteFotos key="r1" lang={lang} />],
     ['02', tx('Tú repasas el día en unos minutos'), tx('Cada foto de hoy aparece junto a la anterior del mismo lado. Si está igual, pasas a la siguiente. Si hay algo nuevo, lo marcas sobre la foto.'), <RecorteRepaso key="r2" />],
@@ -573,32 +577,8 @@ export default function Empresas() {
   return (
     /* overflow-x-clip (no hidden): no crea un contenedor de desplazamiento, así la cabecera `sticky` se queda arriba. */
     <div className="ld-root min-h-screen overflow-x-clip font-sans text-[1.0625rem] leading-normal antialiased" data-theme={tema} data-testid="portada-empresas">
-      {/* ── Quien reparte y llega aquí escribiendo la dirección de un anuncio: su página, arriba del todo y a la vista en
-          el móvil (en el ordenador ya va en la cabecera). ── */}
-      <a href="/repartidores" onClick={() => medirAccion('emp_repartidores_menu')} data-testid="emp-repartidores-arriba"
-        className="flex min-h-[44px] items-center justify-center gap-1.5 border-b border-[color:var(--ld-border)] px-4 text-[0.875rem] text-[color:var(--ld-muted)] lg:hidden">
-        <span>{tx('¿Repartes tú?')} <b className="font-semibold text-[color:var(--ld-text)] underline underline-offset-4">{tx('La app de ruta')}</b></span>
-        <ArrowRight size={14} aria-hidden="true" className="shrink-0 text-[color:var(--ld-text)]" />
-      </a>
-      {/* ── Cabecera ── */}
-      <nav className="sticky top-0 z-50 border-b border-[color:var(--ld-border)] bg-[color:var(--ld-nav)]" data-testid="emp-cabecera">
-        <div className={`${ANCHO} flex h-[68px] items-center justify-between gap-2`}>
-          <a href="/" className="inline-flex shrink-0 items-center gap-2.5 text-[color:var(--ld-text)]">
-            <LogoMarca />
-            <span className="text-[1.1875rem] font-extrabold tracking-[-0.01em]">{MARCA.nombre}</span>
-          </a>
-          <div className="flex items-center gap-2 sm:gap-6">
-            <a href="#como" className={`${enlaceMenu} hidden lg:inline-flex`}>{tx('Cómo funciona')}</a>
-            <a href="#precio" onClick={() => medirAccion('emp_precios_menu')} className={`${enlaceMenu} hidden lg:inline-flex`}>{tx('Precio')}</a>
-            <a href="/repartidores" onClick={() => medirAccion('emp_repartidores_menu')} className={`${enlaceMenu} hidden !text-[color:var(--ld-muted)] lg:inline-flex`}>{tx('¿Repartes tú? La app de ruta')}</a>
-            <a href="/panel/login" className={enlaceMenu}>{tx('Entrar')}</a>
-            {/* En el móvil, la etiqueta corta: la larga no cabe junto a la marca en portugués, francés o alemán. */}
-            <a href={alta} onClick={() => medirAccion('emp_probar_menu')} data-testid="emp-probar-menu" className={BTN_CORTO}>
-              <span className="sm:hidden">{tx('Probar')}</span><span className="hidden sm:inline">{tx('Probar con mis furgonetas')}</span>
-            </a>
-          </div>
-        </div>
-      </nav>
+      {/* ── La cabecera (la misma que /planes: portadaComun.jsx) ── */}
+      <CabeceraPortada alta={alta} enPortada />
 
       {/* ── Héroe: el titular y, a la derecha, el producto ── */}
       <header className={`${ANCHO} grid items-center gap-10 pb-16 pt-9 sm:pb-20 sm:pt-14 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-12 xl:grid-cols-[540px_minmax(0,1fr)] xl:gap-16`}>
@@ -611,8 +591,8 @@ export default function Empresas() {
             {tx('Cada conductor fotografía su furgoneta desde el móvil. Tú ves la foto de hoy junto a la anterior del mismo lado y marcas lo que sea nuevo. Así puedes arreglarlo en tu taller antes de que lo vea el perito del renting.')}
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <a href={alta} onClick={() => medirAccion('emp_probar_arriba')} className={BTN_PRIMARIO} data-testid="emp-probar">{tx('Probar con mis furgonetas')}</a>
-            <a href={EXPEDIENTE_EJEMPLO} onClick={() => medirAccion('emp_expediente_arriba')} className={BTN_SECUNDARIO} data-testid="emp-expediente">{tx('Ver un expediente de ejemplo')}</a>
+            <a href={alta} onClick={() => medirAccion('emp_probar_arriba')} className={`${BTN_PRIMARIO} w-full sm:w-auto`} data-testid="emp-probar">{tx('Probar con mis furgonetas')}</a>
+            <a href={EXPEDIENTE_EJEMPLO} onClick={() => medirAccion('emp_expediente_arriba')} className={`${BTN_SECUNDARIO} w-full sm:w-auto`} data-testid="emp-expediente">{tx('Ver un expediente de ejemplo')}</a>
           </div>
           <p className="mt-4 text-[0.9062rem] text-[color:var(--ld-muted)]" data-testid="emp-linea-precio">
             <b className="font-semibold text-[color:var(--ld-text)]">{tx('Desde {precio} por furgoneta y mes.', { precio: euros(desde) })}</b>{' '}
@@ -632,7 +612,7 @@ export default function Empresas() {
           <div>
           <ol>
             {PASOS.map(([n, t, d, recorte]) => (
-              <li key={n} className="grid gap-5 border-t border-[color:var(--ld-border)] py-7 last:border-b md:grid-cols-[minmax(0,1fr)_300px] md:gap-10" data-testid="emp-paso">
+              <li key={n} className="grid gap-5 border-t border-[color:var(--ld-border)] py-7 md:grid-cols-[minmax(0,1fr)_300px] md:gap-10" data-testid="emp-paso">
                 <div>
                   <span className="mb-2.5 block font-mono text-[0.875rem] font-medium text-[color:var(--ld-muted)]">{n}</span>
                   <h3 className="text-[1.4375rem] font-bold leading-[1.15] tracking-[-0.015em] text-[color:var(--ld-text)] sm:text-[1.5625rem]">{t}</h3>
@@ -642,19 +622,46 @@ export default function Empresas() {
               </li>
             ))}
           </ol>
-          {/* La herramienta pública de devolución (/devolucion-renting): lo que SU guía de renting dice que se factura. */}
-          <a href="/devolucion-renting" onClick={() => medirAccion('emp_devolucion')} data-testid="emp-devolucion"
-            className="group flex min-h-[64px] items-center justify-between gap-3 border-b border-[color:var(--ld-border)] py-5 text-[1rem] leading-snug">
-            <span><b className="block font-semibold text-[color:var(--ld-text)]">{tx('¿Qué te van a cobrar al devolverlo?')}</b>
-              <span className="mt-0.5 block font-semibold text-[color:var(--ld-accent)] underline-offset-4 group-hover:underline">{tx('Míralo con la guía de tu compañía')}</span></span>
-            <ArrowRight size={17} aria-hidden="true" className="shrink-0 text-[color:var(--ld-text)] transition-transform group-hover:translate-x-0.5" />
-          </a>
           </div>
         </div>
       </section>
 
+      {/* ── La herramienta gratuita (/devolucion-renting), con banda propia (tanda 4): antes era una línea suelta al final de
+          «Así funciona». Las compañías, escritas (sin logotipos) y las mismas que lib/guiasRenting.js (lo vigila
+          portada.spec.js). El dibujo es el de la propia herramienta (devolucion/Vehiculo.jsx), con una zona marcada. Sin
+          prometer ahorro ni decir «te lo cobrarán». ── */}
+      <section className={ANCHO} data-testid="emp-banda-devolucion" aria-labelledby="emp-devolucion-titulo">
+        <div className="grid items-center gap-8 border-t border-[color:var(--ld-border)] py-14 sm:py-[72px] lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:gap-16">
+          <div className="order-2 lg:order-1">
+            <H2 id="emp-devolucion-titulo">{tx('¿Qué te van a cobrar al devolverlo?')}</H2>
+            <p className="mt-4 max-w-[540px] text-[1.0625rem] leading-relaxed text-[color:var(--ld-text2)]">
+              {tx('Elige tu compañía de renting y da una vuelta a la furgoneta con su propia guía de devolución. Sale lo que no da por bueno, con su página.')}
+            </p>
+            <p className="mt-6 max-w-[560px] font-mono text-[0.875rem] leading-[1.7] text-[color:var(--ld-muted)]" data-testid="emp-companias">
+              {COMPANIAS_DEVOLUCION.map((c, i) => (
+                <span key={c}>{i > 0 && <span aria-hidden="true"> · </span>}<span className="whitespace-nowrap">{c}</span></span>
+              ))}
+            </p>
+            <div className="mt-8">
+              <a href="/devolucion-renting" onClick={() => medirAccion('emp_devolucion')} data-testid="emp-devolucion" className={`${BTN_SECUNDARIO} w-full sm:w-auto`}>
+                {tx('Repasar mi furgoneta')}
+              </a>
+            </div>
+            <p className="mt-3 text-[0.9062rem] text-[color:var(--ld-muted)]">{tx('Gratis. Sin registro. No guardamos nada de tu vehículo.')}</p>
+          </div>
+          <figure aria-hidden="true" data-testid="emp-devolucion-dibujo"
+            className="order-1 flex items-center justify-center rounded-[20px] border border-[color:var(--ld-border)] bg-[color:var(--ld-surface)] py-8 lg:order-2 lg:py-12">
+            {/* El plano va tumbado (el morro a la derecha): de pie, la caja era el doble de alta que el texto. El hueco es
+                el del dibujo ya girado; el SVG conserva su caja de pie y se gira en su centro. */}
+            <span className="flex h-[110px] w-[220px] items-center justify-center lg:h-[150px] lg:w-[300px]">
+              <Vehiculo tipo="furgoneta" zona="paragolpes" className="h-[220px] w-[110px] rotate-90 lg:h-[300px] lg:w-[150px]" />
+            </span>
+          </figure>
+        </div>
+      </section>
+
       {/* ── De dónde sale: las cifras de la casa ── */}
-      <section className="mt-12 bg-[color:var(--ld-banda)] text-[color:var(--ld-banda-texto)] sm:mt-16" data-testid="emp-nave">
+      <section className="bg-[color:var(--ld-banda)] text-[color:var(--ld-banda-texto)]" data-testid="emp-nave">
         <div className={`${ANCHO} grid items-end gap-10 py-14 sm:py-[76px] lg:grid-cols-[440px_minmax(0,1fr)] lg:gap-16`}>
           <div>
             <h2 className="ld-titular text-[1.875rem] leading-[1.06] [text-wrap:balance] sm:text-[2.5rem]">{tx('No salió de una oficina. Salió de una nave.')}</h2>
@@ -664,12 +671,11 @@ export default function Empresas() {
           </div>
           <dl className="grid grid-cols-3 border-t border-[color:var(--ld-banda-linea)]">
             {[[String(CIFRAS_CASA.naves), tx('naves'), ''], [String(CIFRAS_CASA.furgonetas), tx('furgonetas'), ''],
-              [String(CIFRAS_CASA.revisionesSemana), tx('revisiones con foto cada semana'), tx('unas')]].map(([n, t, antes], i) => (
+              [String(CIFRAS_CASA.revisionesSemana), tx('revisiones con foto a la semana, más o menos')]].map(([n, t], i) => (
               <div key={t} className={`flex flex-col-reverse justify-end pt-5 ${i ? 'border-l border-[color:var(--ld-banda-linea)] pl-4 sm:pl-7' : 'pr-2'}`}>
                 <dt className="mt-2.5 text-[0.875rem] leading-snug text-[color:var(--ld-banda-suave)] sm:text-[0.9375rem]">{t}</dt>
-                <dd className="ld-titular text-[2.125rem] leading-none tabular-nums sm:text-[4rem]">
-                  {antes && <span className="align-baseline text-[0.9375rem] font-semibold tracking-normal sm:text-[1.375rem]">{antes} </span>}{n}
-                </dd>
+                {/* La cifra sola; el «más o menos» va en la etiqueta (tanda 4): delante, en pequeño, descuadraba la cifra. */}
+                <dd className="ld-titular text-[2.125rem] leading-none tabular-nums sm:text-[4rem]">{n}</dd>
               </div>
             ))}
           </dl>
@@ -677,7 +683,8 @@ export default function Empresas() {
       </section>
 
       {/* ── Precio ── */}
-      <section id="precio" className={`${ANCHO} grid scroll-mt-20 gap-8 py-14 sm:py-20 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-16`}>
+      {/* Del precio hacia abajo, la columna del título es 5/12 (tanda 4): en 300 px los títulos largos caían en 3 y 4 líneas. */}
+      <section id="precio" className={`${ANCHO} grid scroll-mt-20 gap-8 py-14 sm:py-20 ${COLUMNAS}`}>
         <div>
           <H2>{tx('Lo que cuesta')}</H2>
           <p className="mt-3.5 text-[0.9688rem] leading-relaxed text-[color:var(--ld-muted)]">
@@ -690,7 +697,7 @@ export default function Empresas() {
 
       {/* ── Que me la enseñen ── */}
       <section id="demo" className={`${ANCHO} scroll-mt-20`}>
-        <div className="grid gap-8 border-t border-[color:var(--ld-border)] py-14 sm:py-20 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-16">
+        <div className={`grid gap-8 border-t border-[color:var(--ld-border)] py-14 sm:py-20 ${COLUMNAS}`}>
           <div>
             <H2>{tx('Que me la enseñen en 15 minutos')}</H2>
             <p className="mt-3.5 text-[0.9688rem] leading-relaxed text-[color:var(--ld-muted)]">{tx('Déjanos tus datos y te contestamos para quedar. Si lo prefieres, empieza la prueba ya: son {n} días, sin tarjeta.', { n: DIAS_PRUEBA_EMPRESA })}</p>
@@ -701,7 +708,7 @@ export default function Empresas() {
 
       {/* ── Preguntas ── */}
       <section className={ANCHO}>
-        <div className="grid gap-8 border-t border-[color:var(--ld-border)] py-14 sm:py-20 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-16">
+        <div className={`grid gap-8 border-t border-[color:var(--ld-border)] py-14 sm:py-20 ${COLUMNAS}`}>
           <H2>{tx('Lo que pregunta el dueño de una flota')}</H2>
           <div className="border-b border-[color:var(--ld-border)]">
             {PREGUNTAS_EMPRESA.map(([q, k]) => (
@@ -720,14 +727,14 @@ export default function Empresas() {
       {/* ── Cierre: cómo se empieza, tal como es el arranque del panel (/panel/arranque, Arranque.jsx): cuatro pasos y
           se puede dejar a medias. Cada conductor entra con SU enlace personal (CONTRATO-ALTA §1), sin correo ni contraseña. ── */}
       <section className={ANCHO} data-testid="emp-arranque">
-        <div className="grid gap-10 border-t border-[color:var(--ld-border)] py-14 sm:py-[72px] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-16">
+        <div className={`grid gap-10 border-t border-[color:var(--ld-border)] py-14 sm:py-[72px] ${COLUMNAS}`}>
           <div>
             <H2>{tx('Empieza con tus furgonetas esta semana.')}</H2>
             <p className="mt-3 max-w-[460px] text-[1.0312rem] leading-relaxed text-[color:var(--ld-muted)]">{tx('Son cuatro pasos y puedes dejarlos a medias.')}</p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <a href={alta} onClick={() => medirAccion('emp_probar_cierre')} className={BTN_PRIMARIO} data-testid="emp-probar-cierre">{tx('Probar con mis furgonetas')}</a>
+              <a href={alta} onClick={() => medirAccion('emp_probar_cierre')} className={`${BTN_PRIMARIO} w-full sm:w-auto`} data-testid="emp-probar-cierre">{tx('Probar con mis furgonetas')}</a>
               {/* Con la demo ya pedida, no se vuelve a ofrecer. */}
-              {!demoPedida && <a href="#demo" onClick={() => medirAccion('emp_demo_cierre')} className={BTN_SECUNDARIO} data-testid="emp-ensenar-cierre">{tx('Que me la enseñen en 15 minutos')}</a>}
+              {!demoPedida && <a href="#demo" onClick={() => medirAccion('emp_demo_cierre')} className={`${BTN_SECUNDARIO} w-full sm:w-auto`} data-testid="emp-ensenar-cierre">{tx('Que me la enseñen en 15 minutos')}</a>}
             </div>
           </div>
           <ol className="border-b border-[color:var(--ld-border)]">

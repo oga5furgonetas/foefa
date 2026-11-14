@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Sun, Moon } from 'lucide-react'
+import { Sun, Moon, ArrowRight } from 'lucide-react'
 import { MARCA } from '../marca'
 import { tx, IDIOMAS, cambiarIdioma } from '../lib/idioma'
+import { medirAccion } from '../lib/analitica'
 import { hayPixel, abrirAvisoCookies } from '../lib/metaPixel'
 
 /* LAS PIEZAS QUE COMPARTEN LAS PÁGINAS PÚBLICAS CON LA IDENTIDAD NUEVA (14-11-2026): la portada (/ y /empresas),
@@ -62,6 +63,46 @@ export function CabeceraSimple({ children }) {
         <div className="flex items-center gap-1 sm:gap-5">{children}</div>
       </div>
     </nav>
+  )
+}
+
+/* LA CABECERA DE LA PORTADA (tanda 4, 14-11-2026): la misma en «/» y en /planes, para que pasar de una a otra no cambie
+   el marco. Arriba, solo en el móvil, la línea a la app de ruta (en el ordenador va en el menú). `alta`: adónde lleva
+   «Probar con mis furgonetas». `enPortada`: los enlaces del menú son anclas de la misma página y se miden con los
+   nombres del embudo «empresas» (backend/analitica.py); fuera de ella llevan a «/#…» y no se miden como portada.
+   `actual`: la ruta de la página, para marcar en el menú la que se está viendo. */
+export function CabeceraPortada({ alta, enPortada = false, actual = '/' }) {
+  const medir = (nombre) => () => { if (enPortada) medirAccion(nombre) }
+  const ancla = (h) => (enPortada ? h : `/${h}`)
+  const enlaceMenu = 'inline-flex min-h-[44px] items-center whitespace-nowrap px-1 text-[0.9375rem] font-medium text-[color:var(--ld-text)] hover:underline underline-offset-4'
+  const precio = actual === '/planes' ? { href: '/planes', 'aria-current': 'page' } : { href: ancla('#precio') }
+  return (
+    <>
+      {/* Quien reparte y llega escribiendo la dirección de un anuncio: su página, arriba del todo y a la vista en el móvil. */}
+      <a href="/repartidores" onClick={medir('emp_repartidores_menu')} data-testid="emp-repartidores-arriba"
+        className="flex min-h-[44px] items-center justify-center gap-1.5 border-b border-[color:var(--ld-border)] px-4 text-[0.875rem] text-[color:var(--ld-muted)] lg:hidden">
+        <span>{tx('¿Repartes tú?')} <b className="font-semibold text-[color:var(--ld-text)] underline underline-offset-4">{tx('La app de ruta')}</b></span>
+        <ArrowRight size={14} aria-hidden="true" className="shrink-0 text-[color:var(--ld-text)]" />
+      </a>
+      <nav className="sticky top-0 z-50 border-b border-[color:var(--ld-border)] bg-[color:var(--ld-nav)]" data-testid="emp-cabecera">
+        <div className={`${ANCHO} flex h-[68px] items-center justify-between gap-2`}>
+          <a href="/" className="inline-flex shrink-0 items-center gap-2.5 text-[color:var(--ld-text)]">
+            <LogoMarca />
+            <span className="text-[1.1875rem] font-extrabold tracking-[-0.01em]">{MARCA.nombre}</span>
+          </a>
+          <div className="flex items-center gap-2 sm:gap-6">
+            <a href={ancla('#como')} className={`${enlaceMenu} hidden lg:inline-flex`}>{tx('Cómo funciona')}</a>
+            <a {...precio} onClick={medir('emp_precios_menu')} className={`${enlaceMenu} hidden lg:inline-flex aria-[current=page]:underline`}>{tx('Precio')}</a>
+            <a href="/repartidores" onClick={medir('emp_repartidores_menu')} className={`${enlaceMenu} hidden !text-[color:var(--ld-muted)] lg:inline-flex`}>{tx('¿Repartes tú? La app de ruta')}</a>
+            <a href="/panel/login" className={enlaceMenu}>{tx('Entrar')}</a>
+            {/* En el móvil, la etiqueta corta: la larga no cabe junto a la marca en portugués, francés o alemán. */}
+            <a href={alta} onClick={medir('emp_probar_menu')} data-testid="emp-probar-menu" className={BTN_CORTO}>
+              <span className="sm:hidden">{tx('Probar')}</span><span className="hidden sm:inline">{tx('Probar con mis furgonetas')}</span>
+            </a>
+          </div>
+        </div>
+      </nav>
+    </>
   )
 }
 
