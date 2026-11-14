@@ -36,6 +36,8 @@ const FICHEROS = [
   'lib/dejar.js',
   // «Mis DNR» del portal del conductor (11-11-2026, tanda 2): la pantalla y lo que comparte con su casilla del inicio.
   'pages/driver/MisDnr.jsx', 'pages/driver/dnrVistas.js',
+  // El inicio del portal web del conductor (14-11-2026, tanda 6): entero por tx(), sin frases en español con el móvil en otro idioma.
+  'pages/driver/DriverPortal.jsx',
   // Su ejemplo de la pantalla de entrega, «¿Cómo sé si tiene preferencia?» (11-11-2026, R11).
   'pages/driver/EjemploPreferencia.jsx',
   // La portada para empresas (/ y /empresas, 14-11-2026) y las piezas que comparte con las demás páginas públicas

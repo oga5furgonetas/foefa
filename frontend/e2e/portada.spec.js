@@ -752,20 +752,76 @@ test('tanda 5 · de noche, las ruedas del dibujo no son bloques claros (de día,
   expect(new Set(noche)).toEqual(new Set(['rgb(44, 54, 59)']))     // el hueco de noche, no la tinta (#E9EDEF)
 })
 
-test('tanda 5 · en el ordenador, los dos botones del cierre van en una fila, debajo de los cuatro pasos', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 })
-  await simularApi(page, 'vacio')
-  for (const l of ['es', 'de']) {
-    await conIdioma(page, l)
+/* TANDA 6: el cierre en el ordenador se lee de arriba abajo, sin huecos: el título y su frase juntos; los cuatro pasos en
+   UNA fila de cuatro columnas, cada uno con su regla; y debajo, a la izquierda, los dos botones en una fila. */
+for (const ancho of [1100, 1280]) {
+  test(`tanda 6 · a ${ancho} px el cierre: título y frase juntos, los cuatro pasos en una fila y los botones debajo, a la izquierda`, async ({ page }) => {
+    await page.setViewportSize({ width: ancho, height: 900 })
+    await simularApi(page, 'vacio')
+    for (const l of ['es', 'de']) {
+      await conIdioma(page, l)
+      await page.goto('/', { waitUntil: 'domcontentloaded' })
+      await page.evaluate(() => document.fonts.ready)
+      const seccion = page.getByTestId('emp-arranque')
+      const pasos = page.getByTestId('emp-arranque-paso')
+      await expect(pasos).toHaveCount(4)
+      await seccion.scrollIntoViewIfNeeded()
+      const caja = async (l2) => l2.boundingBox()
+      const [h2, frase, a, b] = await Promise.all([caja(seccion.locator('h2')), caja(seccion.locator('h2 + p')),
+        caja(page.getByTestId('emp-probar-cierre')), caja(page.getByTestId('emp-ensenar-cierre'))])
+      const ps = await Promise.all([0, 1, 2, 3].map((i) => caja(pasos.nth(i))))
+      // El título y la frase, juntos y a la izquierda.
+      expect(frase.y - (h2.y + h2.height), `${l}: la frase justo debajo del título`).toBeLessThan(24)
+      expect(Math.abs(frase.x - h2.x), l).toBeLessThan(1)
+      // Los cuatro pasos en una fila: misma altura de arriba, de izquierda a derecha, del borde izquierdo del título al ancho.
+      for (let i = 1; i < 4; i++) {
+        expect(Math.abs(ps[i].y - ps[0].y), `${l}: paso ${i + 1} en la misma fila`).toBeLessThan(1)
+        expect(ps[i].x, l).toBeGreaterThan(ps[i - 1].x + ps[i - 1].width)
+      }
+      expect(Math.abs(ps[0].x - h2.x), `${l}: los pasos empiezan donde el título`).toBeLessThan(1)
+      expect(ps[0].y, l).toBeGreaterThan(frase.y + frase.height)
+      // Cada paso, con su regla encima.
+      for (const w of await pasos.evaluateAll((xs) => xs.map((x) => getComputedStyle(x).borderTopWidth))) expect(w).toBe('1px')
+      // Y los cuatro títulos de paso empiezan a la misma altura, justo debajo de su número (no centrados en la fila).
+      const tops = await pasos.evaluateAll((xs) => xs.map((x) => [x.querySelector('span').getBoundingClientRect(), x.querySelector('h3').getBoundingClientRect()])
+        .map(([n, h]) => [Math.round(h.top), Math.round(h.top - n.bottom)]))
+      expect(new Set(tops.map(([t]) => t)).size, `${l}: ${JSON.stringify(tops)}`).toBe(1)
+      for (const [, hueco] of tops) expect(hueco, l).toBeLessThan(20)
+      // Los dos botones en una fila, debajo de los pasos y a la izquierda (donde empiezan el título y el primer paso).
+      expect(Math.abs(a.y - b.y), l).toBeLessThan(1)
+      expect(a.x + a.width, l).toBeLessThan(b.x)
+      const bajo = Math.max(...ps.map((p) => p.y + p.height))
+      expect(a.y, `${l}: debajo de los pasos`).toBeGreaterThan(bajo)
+      expect(a.y - bajo, `${l}: sin un hueco grande antes de los botones`).toBeLessThan(80)
+      expect(Math.abs(a.x - h2.x), `${l}: a la izquierda`).toBeLessThan(1)
+      // Ningún título de paso se sale de su columna (las palabras largas del alemán).
+      const fuera = await pasos.evaluateAll((xs) => xs.filter((x) => [...x.querySelectorAll('*')].some((c) => c.getBoundingClientRect().right > x.getBoundingClientRect().right + 0.5)).length)
+      expect(fuera, l).toBe(0)
+    }
+  })
+}
+
+/* TANDA 6: el título de la banda de la nave, en alemán, en dos líneas también entre 1024 y 1279 px (la columna de 500
+   empezaba en 1280; a 1100 caía en tres). Se cuentan las líneas de verdad, con un `Range`. */
+for (const ancho of [1024, 1100, 1280]) {
+  test(`tanda 6 · a ${ancho} px el título de la nave en alemán cabe en dos líneas`, async ({ page }) => {
+    await page.setViewportSize({ width: ancho, height: 900 })
+    await conIdioma(page, 'de')
+    await simularApi(page, 'vacio')
     await page.goto('/', { waitUntil: 'domcontentloaded' })
     await page.evaluate(() => document.fonts.ready)
-    await expect(page.getByTestId('emp-arranque-paso')).toHaveCount(4)
-    await page.getByTestId('emp-arranque').scrollIntoViewIfNeeded()
-    const [a, b, ultimo] = await Promise.all([page.getByTestId('emp-probar-cierre').boundingBox(), page.getByTestId('emp-ensenar-cierre').boundingBox(),
-      page.getByTestId('emp-arranque-paso').last().boundingBox()])
-    expect(Math.abs(a.y - b.y), l).toBeLessThan(1)
-    expect(a.x + a.width, l).toBeLessThan(b.x)
-    expect(a.y, l).toBeGreaterThan(ultimo.y + ultimo.height)
-    expect(Math.abs(a.x - ultimo.x), `${l}: alineados con los pasos`).toBeLessThan(40)
-  }
-})
+    const h = page.getByTestId('emp-nave').locator('h2')
+    await expect(h).toContainText('Es entstand nicht im Büro')
+    const lineas = await h.evaluate((e) => {
+      const r = document.createRange()
+      r.selectNodeContents(e)
+      const alto = parseFloat(getComputedStyle(e).lineHeight)
+      const tops = [...r.getClientRects()].filter((x) => x.width > 0).map((x) => x.top).sort((a, b) => a - b)
+      return tops.filter((t, i) => i === 0 || t - tops[i - 1] > alto / 2).length
+    })
+    expect(lineas).toBe(2)
+    // Y las tres cifras siguen cabiendo a su lado.
+    const fuera = await page.getByTestId('emp-nave').evaluate((s) => [...s.querySelectorAll('dd, dt')].filter((x) => x.getBoundingClientRect().right > window.innerWidth).length)
+    expect(fuera).toBe(0)
+  })
+}

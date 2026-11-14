@@ -572,6 +572,8 @@ test('tanda 5 · «Correo» en la entrada y «Hacer la revisión» en el portal,
   await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
   await expect(page.getByLabel('Correo', { exact: true })).toBeVisible()
   expect(await page.locator('body').innerText()).not.toMatch(/E-?mail/i)
+  // Y su ejemplo, también «correo» (tanda 6): decía «tu.email@empresa.com».
+  await expect(page.getByLabel('Correo', { exact: true })).toHaveAttribute('placeholder', 'tu.correo@empresa.com')
   await page.locator('#dr-correo').fill('luis@ejemplo.test')
   await page.getByRole('button', { name: 'Entrar', exact: true }).click()
   await page.locator('#driver-code').fill('123456')

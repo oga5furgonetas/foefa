@@ -53,7 +53,7 @@ const EXCEPCIONES = {
   'pages/driver/MisTurnos.jsx': [41, 'los turnos del portal: no se rediseñan'],
   'pages/driver/PedirDias.jsx': [101, 'pedir días libres, turnos del portal: no se rediseña'],
   'pages/driver/TrabajarMas.jsx': [45, 'turnos extra del portal: no se rediseñan'],
-  'pages/driver/InspectionFlow.jsx': [98, 'la auditoría de la furgoneta (fotos y km antes de salir): no se rediseña'],
+  'pages/driver/InspectionFlow.jsx': [96, 'la auditoría de la furgoneta (fotos y km antes de salir): no se rediseña'],
   'pages/driver/InspectionDone.jsx': [33, 'la auditoría de la furgoneta (resumen final): no se rediseña'],
   'pages/driver/Tienda.jsx': [113, 'la tienda de ropa es del dueño del producto (solo super-admin), no de la app de reparto'],
 }

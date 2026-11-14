@@ -822,7 +822,7 @@ test.describe('iPhone · el portal del conductor de empresa', () => {
     })
   }
 
-  test('la auditoría entera y su final (firma y «inspección enviada»), sin incentivos ni ofertas patrocinadas', async ({ page }) => {
+  test('la auditoría entera y su final (firma y «revisión enviada»), sin incentivos ni ofertas patrocinadas', async ({ page }) => {
     test.setTimeout(90000)
     const fallos = vigilar(page)
     const pedidos = []
@@ -850,21 +850,22 @@ test.describe('iPhone · el portal del conductor de empresa', () => {
     await page.getByRole('button', { name: /Revisar y enviar/ }).click()
     await limpia(page, 'la auditoría, paso 4 (resumen)')
     await page.getByRole('button', { name: /Enviar revisión/ }).click()
-    await expect(page.getByText('Inspección completada')).toBeVisible()
+    // «Revisión», no «Inspección», también al acabar (tanda 6).
+    await expect(page.getByText('Revisión completada')).toBeVisible()
     await quieta(page, 700)
-    await limpia(page, 'la inspección completada (firma)')
+    await limpia(page, 'la revisión completada (firma)')
     await page.getByRole('checkbox').check({ force: true })
     await page.getByRole('button', { name: /Firmar electrónicamente/ }).click()
-    await expect(page.getByRole('button', { name: /Nueva inspección/ }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /Nueva revisión/ }).first()).toBeVisible()
     await quieta(page, 700)
-    const final = await limpia(page, 'la inspección firmada (final)')
+    const final = await limpia(page, 'la revisión firmada (final)')
     expect(final).not.toMatch(/neumáticos|FLOTA20|Ver oferta|🎁/)
     expect(pedidos, 'en el iPhone no se piden ni se cuentan las ofertas patrocinadas').toEqual([])
     expect(fallos).toEqual([])
   })
 })
 test.describe('control · el portal del conductor de la web sigue con «Comparte y gana», la ropa y las ofertas', () => {
-  test('el inicio, la cartera, la tienda, la auditoría con sus incentivos y el final con la oferta', async ({ page }) => {
+  test('el inicio, la cartera, la tienda, la auditoría y el final con la oferta', async ({ page }) => {
     test.setTimeout(90000)
     await portal(page, false)
     await page.route(/\/api\/auth\/me\/assigned-vehicle/, (r) => r.fulfill({ json: {} }))
@@ -879,7 +880,9 @@ test.describe('control · el portal del conductor de la web sigue con «Comparte
     await expect(page.getByText(/Invita · comparte · gana/)).toBeVisible()
     await page.getByRole('button', { name: 'Volver' }).click()
     await page.getByRole('button', { name: /Hacer la revisión/ }).click()
-    await expect(page.getByText(/Próximamente: incentivos para conductores/)).toBeVisible()
+    // «Próximamente: incentivos para conductores» ya no sale tampoco en la web (tanda 6): prometía algo que no existe.
+    await expect(page.getByText('Revisión diaria')).toBeVisible()
+    await expect(page.getByText(/incentivos para conductores|premiaremos/)).toHaveCount(0)
     await page.getByRole('button', { name: /1234 ABC/ }).click()
     const archivos = page.locator('input[type=file]')
     await expect(archivos).toHaveCount(6)
@@ -889,7 +892,7 @@ test.describe('control · el portal del conductor de la web sigue con «Comparte
     await page.getByRole('button', { name: 'Sí, la lleva' }).click()
     await page.getByRole('button', { name: /Revisar y enviar/ }).click()
     await page.getByRole('button', { name: /Enviar revisión/ }).click()
-    await expect(page.getByText('Inspección completada')).toBeVisible()
+    await expect(page.getByText('Revisión completada')).toBeVisible()
     await page.getByRole('checkbox').check({ force: true })
     await page.getByRole('button', { name: /Firmar electrónicamente/ }).click()
     await expect(page.getByText('Descuento del 20 % en neumáticos')).toBeVisible()
