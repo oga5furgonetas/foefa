@@ -16,17 +16,21 @@ import { medirAccion } from '../lib/analitica'
 export const BTN_PRIMARIO = 'inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 px-5 py-3 text-[15px] font-semibold text-[#04121a] shadow-[0_10px_30px_-10px_rgba(20,231,216,.55)] transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400 disabled:opacity-60'
 export const BTN_SECUNDARIO = 'inline-flex items-center justify-center gap-2 rounded-xl border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-fill)] px-5 py-3 text-[15px] font-semibold text-[color:var(--ld-text)] transition hover:border-[color:var(--ld-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400 disabled:opacity-60'
 
-/* LO DE LA EMPRESA: el panel de la oficina. Cada módulo, una pantalla del panel. */
+/* LO DE LA EMPRESA: el panel de la oficina. Cada módulo, una pantalla del panel.
+   El cuarto elemento (opcional, 14-11-2026): las etiquetas que pinta /empresas y la portada no. 'pro': solo con el plan
+   Pro (_MODULOS_SOLO_PRO en server.py: asignacion, cuadrante, turnos…). 'peticion': una cuenta nueva no la trae
+   (HIDDEN_MODULES_CLIENTE esconde cuadrante y turnos, y no están en MODULOS_ESTANDAR). 'complemento': se paga aparte
+   (COMPLEMENTOS y PLAN_REPARTO en lib/precios.js). */
 export const MODULOS_EMPRESA = [
-  [ClipboardCheck, 'Revisiones con foto e IA', 'El conductor revisa la furgoneta desde el móvil y la IA señala cada golpe nuevo.'],
+  [ClipboardCheck, 'Revisiones con foto e IA', 'El conductor revisa la furgoneta desde el móvil y la IA marca los golpes que parecen nuevos.'],
   [Wrench, 'Taller y estado de la flota', 'Incidencias, órdenes de reparación y qué furgoneta está peor, de la peor a la mejor.'],
   /* 14-11-2026: decía «ITV, seguro, renting y mantenimientos en un calendario». El calendario (GET /fleet/calendar)
      pinta la ITV, el fin del renting, los mantenimientos y las citas; la fecha del seguro no sale en ninguna pantalla
      de vencimientos (solo la consulta el asistente). Se quita «seguro» hasta que salga. */
   [CalendarClock, 'Vencimientos', 'ITV, fin del renting y mantenimientos en un calendario, y la lista de ITV ordenada por lo que caduca antes.'],
-  [CalendarDays, 'Cuadrante y días libres', 'El cuadrante se rehace solo con sus reglas, se sincroniza con tu Google Sheets y la gente pide días o se apunta a refuerzos desde el móvil.'],
-  [Users, 'Asignación del día y equipo', 'Quién lleva cada furgoneta hoy, las fichas de tu gente y el portal de cada conductor en su móvil.'],
-  [ShoppingBasket, 'Reparto a domicilio', 'Para súper y distribución: pedidos, rutas de tus repartidores y un enlace para que el cliente siga su pedido.'],
+  [CalendarDays, 'Cuadrante y días libres', 'El cuadrante se rehace solo con sus reglas, se sincroniza con tu Google Sheets y la gente pide días o se apunta a refuerzos desde el móvil.', ['pro', 'peticion']],
+  [Users, 'Asignación del día y equipo', 'Quién lleva cada furgoneta hoy, las fichas de tu gente y el portal de cada conductor en su móvil.', ['pro']],
+  [ShoppingBasket, 'Reparto a domicilio', 'Para súper y distribución: pedidos, rutas de tus repartidores y un enlace para que el cliente siga su pedido.', ['complemento']],
 ]
 
 export function Seccion({ id, eyebrow, titulo, sub, children, className = '' }) {
@@ -126,7 +130,7 @@ export function Pie({ lang, tema, setTema }) {
         <div>
           <a href="/" className="flex items-center gap-2.5 text-[color:var(--ld-text)]">
             <img src="/favicon.svg" alt="" width="26" height="26" className="rounded-md" />
-            <span className="font-display text-[16px] font-bold">FDS</span>
+            <span className="font-display text-[16px] font-bold">{MARCA.nombre}</span>
           </a>
           <p className="mt-3 max-w-xs text-[13px] leading-relaxed text-[color:var(--ld-dim)]">{tx('La app de reparto gratis y el panel para tu flota.')}</p>
           <div className="mt-5 flex items-center gap-2">

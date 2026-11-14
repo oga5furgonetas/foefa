@@ -3,28 +3,35 @@
  * Como repartidores.js: es una SPA y el index.html común lleva las etiquetas de la portada. Quien comparte
  * /empresas por correo o WhatsApp tiene que ver una tarjeta que hable de furgonetas y golpes, y Google tiene que leer
  * el texto principal antes de que arranque React (que lo sustituye al montar). Los precios salen de lib/precios.js,
- * los mismos que pinta la página: aquí no se escribe ninguno. Sin cifras de clientes ni testimonios. */
+ * los mismos que pinta la página: aquí no se escribe ninguno. Sin cifras de clientes ni testimonios.
+ * La marca, de src/marca.js (14-11-2026, ronda 2): se carga en Node y en Workers sin nada del navegador (sus usos de
+ * `window` e `import.meta.env` van guardados). Lo comprueba scripts/check-funciones-pages.mjs, que importa todas las
+ * funciones con Node. Los textos, los mismos que la página (sin «cada mañana» ni «antes de salir»). */
 import { esc } from './repartidores.js'
 import { PLANES_EMPRESA, DIAS_PRUEBA_EMPRESA } from '../src/lib/precios.js'
+import { MARCA } from '../src/marca.js'
 
 const desde = Math.min(...PLANES_EMPRESA.map((p) => Number(p.por_vehiculo)).filter((x) => x > 0))
-const TITULO = 'FDS para empresas con furgonetas · Deja de pagar golpes que no son tuyos'
-const DESCRIPCION = `Cada conductor revisa su furgoneta con fotos antes de salir: ves en qué revisión apareció cada golpe y quién la llevaba, y tienes las fotos con fecha al devolverla al renting. Desde ${desde} € por vehículo y mes, ${DIAS_PRUEBA_EMPRESA} días gratis sin tarjeta.`
+const TITULO = `${MARCA.nombre} para empresas con furgonetas · Deja de pagar golpes que no son tuyos`
+// El alta de flota (sector «Otra flota», plan Pro), la misma que los botones de la página (Empresas.jsx, ALTA_EMPRESA).
+const ALTA = '/registro?sector=otra&plan=completo'
+const DESCRIPCION = `Cada conductor revisa su furgoneta con fotos desde el móvil: ves en qué revisión apareció cada golpe y quién la llevaba, y tienes las fotos con fecha al devolverla al renting. Desde ${desde} € por vehículo y mes, ${DIAS_PRUEBA_EMPRESA} días gratis sin tarjeta.`
 
 export const PUNTOS = [
-  'Cada mañana, el conductor hace las fotos de su furgoneta desde el móvil antes de salir.',
+  'El conductor hace las fotos de su furgoneta desde el móvil; cuándo se hace la revisión lo decide cada empresa.',
   'Cada revisión queda guardada con su fecha, su hora y quién la hizo.',
-  'La detección de daños marca los golpes que ve y si ya estaban en la revisión anterior.',
-  'Cada furgoneta guarda en su ficha todas sus revisiones con foto, desde la primera, y su historial sale en un parte para imprimir o guardar en PDF.',
-  'La lista de ITV de toda la flota, ordenada por lo que caduca antes, y un calendario con el fin de cada renting y los mantenimientos.',
+  'La detección de daños revisa sola cada foto: la compara con la anterior del mismo lado y marca los golpes que parecen nuevos. No acierta siempre.',
+  'Cada furgoneta guarda en su ficha todas sus revisiones con foto, cada una con su fecha y su conductor.',
+  'Su historial sale en un parte para imprimir o guardar en PDF, con la foto del golpe y la de la misma vista en la revisión anterior, de los últimos daños nuevos.',
+  'La lista de ITV de toda la flota, ordenada por lo que caduca antes, y un calendario con el fin de cada renting y una fecha estimada para el aceite, las ruedas y las pastillas, según los kilómetros que hace cada furgoneta.',
 ]
 
 function contenido() {
   return `<main style="max-width:40rem;margin:0 auto;padding:24px 20px;color:#e6f2f3;font-family:system-ui,sans-serif">
       <p>Para empresas con furgonetas</p>
       <h1>Deja de pagar golpes que no son tuyos</h1>
-      <p>Cada conductor revisa su furgoneta con fotos antes de salir. Si aparece un golpe, ves en qué revisión apareció y quién la llevaba. Y cuando te pasan un cargo al devolverla, tienes las fotos con fecha.</p>
-      <p><a href="/registro" style="color:#14e7d8">Probar gratis ${DIAS_PRUEBA_EMPRESA} días</a> · <a href="/planes" style="color:#14e7d8">Ver precios</a></p>
+      <p>Cada conductor revisa su furgoneta con fotos desde el móvil. Si aparece un golpe, ves en qué revisión apareció y quién la llevaba. Y cuando te pasan un cargo al devolverla, tienes las fotos con fecha.</p>
+      <p><a href="${esc(ALTA)}" style="color:#14e7d8">Probar gratis ${DIAS_PRUEBA_EMPRESA} días</a> · <a href="/planes" style="color:#14e7d8">Ver precios</a></p>
       <ul>${PUNTOS.map((v) => `<li>${esc(v)}</li>`).join('')}</ul>
       <p>Desde ${desde} € por vehículo y mes · sin tarjeta</p>
     </main>`
@@ -54,7 +61,7 @@ export async function onRequestGet(context) {
     `<meta name="twitter:card" content="summary_large_image" />`,
     `<link rel="canonical" href="${base}/empresas" />`,
     `<script type="application/ld+json">${JSON.stringify({
-      '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'FDS', applicationCategory: 'BusinessApplication',
+      '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: MARCA.nombre, applicationCategory: 'BusinessApplication',
       operatingSystem: 'Web', url: `${base}/empresas`, description: DESCRIPCION,
       offers: { '@type': 'Offer', priceCurrency: 'EUR', price: String(desde),
         priceSpecification: { '@type': 'UnitPriceSpecification', price: String(desde), priceCurrency: 'EUR', unitText: 'vehículo y mes' } } })}</script>`,

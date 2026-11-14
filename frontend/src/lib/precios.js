@@ -1,7 +1,10 @@
 /* LOS PLANES PARA EMPRESAS, EN UN SOLO SITIO (06-10-2026). Antes la página de precios y el
    alta tenían cada una su copia y se descuadraban (la web decía mínimo 15 y el alta 20).
    El porqué de cada precio está en docs/PRECIOS.md; el servidor manda (/billing/planes) y
-   esto es el respaldo si no contesta. Las claves no cambian: hay cuentas con ellas. */
+   esto es el respaldo si no contesta. Las claves no cambian: hay cuentas con ellas.
+   OJO (14-11-2026): lo importa también una función de Cloudflare Pages, functions/empresas.js, que corre fuera del
+   navegador. Aquí nada de imports ni de globales del navegador (window, localStorage, import.meta.env, tx…): la
+   función de /empresas fallaría en producción. Lo vigila scripts/check-funciones-pages.mjs. */
 
 export const PLANES_EMPRESA = [
   {
