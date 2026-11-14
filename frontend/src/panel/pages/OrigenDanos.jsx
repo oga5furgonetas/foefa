@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Loader2, ShieldAlert, Camera, ChevronRight, Info } from 'lucide-react'
 import { getAtribucionDanos } from '../api'
+import { useT } from '../../i18n'
 import { verMatricula } from '../../lib/matricula'
 import { fechaEs } from '../../lib/fecha'
 
@@ -69,6 +70,7 @@ function Prueba({ d }) {
 
 export default function OrigenDanos() {
   const { center } = useOutletContext()
+  const { t } = useT()
   const [datos, setDatos] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [filtro, setFiltro] = useState('alta')
@@ -78,7 +80,8 @@ export default function OrigenDanos() {
     setCargando(true)
     getAtribucionDanos(center, 200)
       .then((r) => setDatos(r.data))
-      .catch(() => setDatos({ danos: [], resumen: {} }))
+      // Con `error` (14-11-2026): un fallo del servidor no se confunde con «no hay golpes».
+      .catch(() => setDatos({ danos: [], resumen: {}, error: true }))
       .finally(() => setCargando(false))
   }, [center])
 
@@ -128,9 +131,13 @@ export default function OrigenDanos() {
           <Loader2 size={16} className="animate-spin" /> Buscando la última foto limpia de cada golpe…
         </div>
       ) : !lista.length ? (
+        /* CUENTA VACÍA (14-11-2026): una empresa nueva con Pro ya ve esta pantalla, y sin ningún golpe solo decía
+           «No hay golpes en este grupo», sin explicar qué hace falta para que salga algo. */
         <div className="card flex flex-col items-center gap-2 p-12 text-center text-dark-400">
           <ShieldAlert size={26} />
-          <p className="text-[13px]">No hay golpes en este grupo.</p>
+          <p className="max-w-[60ch] text-[13px]">
+            {datos?.error ? t('origen.error') : !datos?.total ? t('origen.vacio') : 'No hay golpes en este grupo.'}
+          </p>
         </div>
       ) : (
         <div className="space-y-1.5">

@@ -903,6 +903,8 @@ const SOLO_WEB = [
   ['la calculadora (/calculadora-repartidor)', '/calculadora-repartidor'], ['la guía de Safari (/iphone)', '/iphone'],
   ['los avisos de empleo de pago (/empleo/prioridad)', '/empleo/prioridad'], ['el peritaje con precio (/peritaje-tecnico)', '/peritaje-tecnico'],
   ['la tienda pública (/t/abc)', '/t/abcdefghijklmnop'],
+  // 14-11-2026: la página de venta para empresas (precios, prueba de 14 días y la calculadora).
+  ['la página de empresas (/empresas)', '/empresas'],
 ]
 test.describe('iPhone · lo que solo existe en la web lleva a la app del repartidor', () => {
   test.use({ userAgent: UA_APP })
@@ -930,7 +932,8 @@ test.describe('iPhone · lo que solo existe en la web lleva a la app del reparti
 })
 test.describe('control · en la web esas páginas siguen donde estaban', () => {
   for (const [nombre, ruta, texto] of [['los planes y precios (/planes)', '/planes', /plan|precio/i], ['la invitación (/invita)', '/invita', /gana|invita/i],
-    ['la portada (/)', '/', /FDS/], ['el regalo (/regalo/ABCD-EFGH)', '/regalo/ABCD-EFGH', /regalo|FDS/i]]) {
+    ['la portada (/)', '/', /FDS/], ['el regalo (/regalo/ABCD-EFGH)', '/regalo/ABCD-EFGH', /regalo|FDS/i],
+    ['la página de empresas (/empresas)', '/empresas', /furgonetas|precio/i]]) {
     test(nombre, async ({ page }) => {
       await simularApi(page, 'vacio')
       await arrancar(page, { ios: false })

@@ -17,7 +17,7 @@ export default function Privacidad() {
   // Fuera de España (30-10-2026): la traducción de cortesía al inglés; el español es la versión que vale.
   if (legalEnIngles()) return <PrivacyEn />
   return (
-    <LegalLayout title="Política de Privacidad" lastUpdate="2026-11-03">
+    <LegalLayout title="Política de Privacidad" lastUpdate="2026-11-14">
       <p>En {COMPANY.brand} tratamos los datos personales conforme al Reglamento (UE) 2016/679 (RGPD) y la legislación nacional aplicable. Esta política explica qué datos recogemos, para qué los usamos, con quién los compartimos y cómo puedes ejercer tus derechos.</p>
 
       <h2>1. Responsable del tratamiento</h2>
@@ -36,6 +36,9 @@ export default function Privacidad() {
         <li><strong>Reparto (si la empresa lo usa):</strong> datos de los clientes de la empresa a los que se entrega (nombre, teléfono, dirección y qué lleva el pedido) y la <strong>ubicación del conductor solo durante la jornada</strong> que él mismo empieza y termina en su móvil, tras haber leído un aviso.</li>
         <li><strong>Candidaturas de empleo:</strong> datos del formulario y, si marcas la casilla opcional, el registro de tu autorización para recibir novedades de FDS y su fecha.</li>
         <li><strong>Uso del servicio:</strong> registros técnicos (logs) imprescindibles para la seguridad y el funcionamiento.</li>
+        {/* 14-11-2026: el formulario de demostración de /empresas y el de contacto van a POST /auth/lead, que guarda también
+            la IP y el navegador, sin borrado automático (ni `leads` ni `inbox_messages` tienen plazo). */}
+        <li><strong>Formularios de contacto y de demostración:</strong> lo que escribes en ellos (nombre, empresa, correo, teléfono si lo das, cuántas furgonetas tienes y el mensaje) y la dirección IP y el navegador desde los que se envían. Los usamos para contestarte y enseñarte el producto, como medidas precontractuales que nos pides tú (art. 6.1.b RGPD). Se conservan hasta que pidas su supresión en <a href={`mailto:${COMPANY.privacyEmail}`}>{COMPANY.privacyEmail}</a> o dejen de ser necesarios para atender tu petición.</li>
         <li><strong>Mercadillo de repartidores:</strong> lo que publicas (texto, precio, zona y fotos, a las que al subirlas quitamos la ubicación y los demás datos que guarda el móvil), tu nombre con la inicial del apellido, que es lo único que ven los demás de ti, los mensajes con quien compra o vende y los avisos o denuncias. Tu teléfono, tu correo y tu empresa no se enseñan a nadie: el correo lo usamos solo para avisarte de que tienes un mensaje o de que se ha revisado tu anuncio.{!sinPagos() && ' Si activas los avisos al móvil, guardamos esa elección y la suscripción de tu navegador para mandártelos; el aviso dice quién te escribe y sobre qué anuncio, nunca el mensaje.'}</li>
         {/* En la app de iPhone (09-11-2026) no salen las menciones a «Invita y gana», cartera, pagos ni suscripciones (docs/APP_STORE.md). */}
         {!sinPagos() && <li><strong>Programa «Invita y gana»:</strong> quién invitó a quién, el saldo de la cartera y, si pides cobrarlo, el nombre del titular y el teléfono de Bizum, el IBAN o el email de PayPal. En la cartera individual del portal guardamos también el identificador del conductor, su email de empresa y la empresa asociada a su enlace. Para evitar trampas guardamos una huella cifrada de la red desde la que se crea cada cuenta (no la dirección IP), que solo sirve para comparar dos altas.</li>}

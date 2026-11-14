@@ -1393,9 +1393,12 @@ MODULOS_PANEL = [
 _MODULOS_CLAVES = [m["clave"] for m in MODULOS_PANEL]
 # Lo que ve una empresa nueva: la flota y su gente, sin lo que aun se esta
 # afinando con la flota de Dani.
+# «origen-danos» (14-11-2026): /empresas y /planes lo venden dentro de Pro, y una
+# empresa nueva con Pro no lo tenia (solo nacia con el el sector de la flota de
+# Dani). Con Esencial y Reparto lo sigue quitando `_MODULOS_SOLO_PRO` en org_modulos.
 MODULOS_ESTANDAR = ["dashboard", "mi-dia", "asignacion", "vehiculos", "revision",
                     "inspecciones", "incidencias", "talleres", "ordenes", "vencimientos", "importaciones",
-                    "conductores", "chat", "configuracion"]
+                    "conductores", "chat", "origen-danos", "configuracion"]
 # Sin estas no se puede ni empezar: no se pueden quitar.
 _MODULOS_FIJOS = ("dashboard", "configuracion")
 # Con qué pantallas nace cada tipo de empresa al registrarse (None = el
@@ -1409,8 +1412,11 @@ _MODULOS_REPARTO = ["dashboard", "reparto", "vehiculos", "inspecciones", "revisi
 # en el estándar no va. Una mensajería que no trabaja para Amazon lleva el
 # reparto con escaneo más la operación por turnos, sin lo de Amazon.
 _MODULOS_DSP_AMAZON = [k for k in _MODULOS_CLAVES if k not in ("ia-peritaje",)]
+# «origen-danos» (14-11-2026): como en el estándar, es de Pro y la mensajería nace
+# con lo de Pro; con Esencial o Reparto lo quita `_MODULOS_SOLO_PRO`.
 _MODULOS_MENSAJERIA = _MODULOS_REPARTO + ["asignacion", "cuadrante", "turnos", "checklist-operativo",
-                                          "aparcamiento", "incorporaciones", "empleo", "contactos"]
+                                          "aparcamiento", "incorporaciones", "empleo", "contactos",
+                                          "origen-danos"]
 SECTORES_REGISTRO = {
     "dsp_amazon": _MODULOS_DSP_AMAZON,
     "paqueteria": _MODULOS_DSP_AMAZON,      # nombre antiguo de la misma opción
@@ -14396,15 +14402,44 @@ async def inspecciones_cobertura(center: Optional[str] = None,
 
 
 @api_router.get("/inspections/vehicle/{vehicle_id}")
-async def get_vehicle_inspections(vehicle_id: str, user: dict = Depends(require_any_auth)):
+async def get_vehicle_inspections(vehicle_id: str, antes_de: str = "", antes_de_id: str = "",
+                                  limite: int = 50, primera: bool = False,
+                                  user: dict = Depends(require_any_auth)):
+    """Las revisiones de una furgoneta, de la más nueva a la más vieja (50 por defecto).
+
+    HISTORIAL ENTERO (14-11-2026). Solo daba las 50 últimas: con una revisión al
+    día, lo de hace más de dos meses no se veía desde ninguna pantalla, y es
+    justo la foto de cómo llegó la furgoneta la que hace falta al devolverla.
+    Todo es opcional y sin nada es lo de antes (las 50 últimas, una lista):
+    · `antes_de` (+ `antes_de_id`): el `created_at` y el `id` de la última que
+      ya se tiene; da las anteriores a ESA. Es un cursor y no un `skip`: con
+      `skip`, una revisión nueva que entre mientras se pagina corre la lista uno
+      y la siguiente tanda repite la última. El `id` desempata dos revisiones con
+      el mismo instante (si no, la segunda se saltaría); por eso el orden lleva
+      también el `id`, que solo cambia el orden entre empatadas (antes, sin fijar).
+    · `limite`: cuántas, de 1 a 200.
+    · `primera=true`: la revisión MÁS ANTIGUA (la «foto de entrada»), en una
+      lista de una (o vacía)."""
     if user["role"] == "driver":
         assigned = await db.vehicles.find_one({"id": vehicle_id, "current_driver_id": user["sub"]})
         if not assigned:
             raise HTTPException(status_code=403, detail="Acceso denegado")
 
-    inspections = await db.inspections.find(
-        {"deleted": {"$ne": True}, "vehicle_id": vehicle_id}, {"_id": 0}
-    ).sort("created_at", -1).to_list(50)
+    q: dict = {"deleted": {"$ne": True}, "vehicle_id": vehicle_id}
+    if primera:
+        # Sin fecha no se sabe si es la primera: fuera (en Mongo, ascendente, irían delante).
+        q["created_at"] = {"$gt": ""}
+        inspections = await db.inspections.find(q, {"_id": 0}).sort(
+            [("created_at", 1), ("id", 1)]).to_list(1)
+    else:
+        tope = max(1, min(int(limite or 50), 200))
+        corte = str(antes_de or "").strip()
+        if corte:
+            desempate = str(antes_de_id or "").strip()
+            q["$or"] = [{"created_at": {"$lt": corte}}] + (
+                [{"created_at": corte, "id": {"$lt": desempate}}] if desempate else [])
+        inspections = await db.inspections.find(q, {"_id": 0}).sort(
+            [("created_at", -1), ("id", -1)]).to_list(tope)
 
     # Enrich with driver name
     driver_ids = list({i["driver_id"] for i in inspections if i.get("driver_id")})
