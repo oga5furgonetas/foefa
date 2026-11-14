@@ -1107,6 +1107,12 @@ async def get_current_user(
     if not credentials:
         raise HTTPException(status_code=401, detail="Se requiere autenticación")
     payload = decode_token(credentials.credentials)
+    # SOLO LAS SESIONES DEL PANEL Y DEL PORTAL (14-11-2026, enlace3 hallazgo 4). El token de la tienda (`scope:
+    # "tienda"`, que cualquiera saca con el registro público y el slug de una empresa) va firmado con la misma clave y
+    # pasaba por aquí: abría rutas del portal en la base de esa empresa y `/auth/me` reventaba (500, sin `role`).
+    # La tienda lo lee con su propia dependencia (`_tienda_cliente_del_token`), que no pasa por aquí.
+    if payload.get("scope") or not payload.get("role"):
+        raise HTTPException(status_code=401, detail="Esta sesión no vale aquí. Vuelve a entrar.")
     # Sesión revocada: el usuario ya no existe (o está deshabilitado) en BD.
     # Los tokens de demo y de mantenimiento no viven en admin_users.
     if (payload.get("role") == "admin" and not payload.get("demo")
@@ -11724,10 +11730,11 @@ async def portal_mi_ficha(user: dict = Depends(require_any_auth)):
     pregunta (gotcha 26).
     """
     d = await db.drivers.find_one({"id": user.get("sub")},
-                                  {"_id": 0, "phone": 1, "telefono": 1, "name": 1, "email": 1})
+                                  {"_id": 0, "phone": 1, "telefono": 1, "movil_personal": 1, "name": 1, "email": 1})
     if not d:
         return {"falta_telefono": False}
-    tel = (d.get("phone") or d.get("telefono") or "").strip()
+    # El móvil del arranque (`movil_personal`) cuenta como teléfono (14-11-2026): no se le pide otro.
+    tel = _telefono_de_ficha(d)
     # Y si tiene contrasena propia o entra con código temporal por correo. La
     # pantalla de "cambiar
     # contrasena" les pedia por tanto la ACTUAL, que no existe, asi que
@@ -11750,6 +11757,16 @@ async def portal_mi_ficha(user: dict = Depends(require_any_auth)):
             # quién es y la contraseña la elige cuando quiera.
             "configurar_cuenta": False if user.get("via") in ("codigo", "enlace") else
             ((_temporal_vigente_de(cuentas) and not (user.get("imp") or user.get("demo"))) if cuentas else None)}
+
+
+def _telefono_de_ficha(d) -> str:
+    """El teléfono que ya tiene una ficha: `phone`, `telefono` o el móvil que guardó el arranque (`movil_personal`)."""
+    d = d if isinstance(d, dict) else {}
+    for campo in ("phone", "telefono", "movil_personal"):
+        v = d.get(campo)
+        if isinstance(v, (str, int)) and not isinstance(v, bool) and str(v).strip():
+            return str(v).strip()
+    return ""
 
 
 def _telefono_limpio(valor) -> str:
@@ -11781,8 +11798,11 @@ async def portal_mi_telefono(data: dict = Body(...), user: dict = Depends(requir
     if user.get("role") == "driver" and (user.get("via") == "enlace" or user.get("lk")):
         # Con la sesión del enlace se pone el teléfono que FALTA (lo que pide el portal), pero no se cambia el que ya
         # hay (14-11-2026): es adonde la empresa manda el enlace nuevo, y quien abriese uno reenviado se lo llevaría.
-        d = await db.drivers.find_one({"id": user.get("sub")}, {"_id": 0, "phone": 1, "telefono": 1})
-        if str((d or {}).get("phone") or (d or {}).get("telefono") or "").strip():
+        # El móvil que guardó el arranque (`movil_personal`, adonde va el enlace por WhatsApp) también es «ya tiene»
+        # (14-11-2026, enlace3 hallazgo 3): si no, la ficha acababa con dos números distintos.
+        d = await db.drivers.find_one({"id": user.get("sub")},
+                                      {"_id": 0, "phone": 1, "telefono": 1, "movil_personal": 1})
+        if _telefono_de_ficha(d):
             raise _Fallo(403, "enlace_sin_cambiar_telefono", _ENLACE_SIN_TELEFONO_NUEVO)
     await db.drivers.update_one({"id": user.get("sub")}, {"$set": {
         "phone": bruto, "telefono_por": "portal",
@@ -15782,20 +15802,27 @@ async def vehicle_ledger_repair(vehicle_id: str, body: dict = Body(default={}), 
         q["panel"] = p
     else:
         raise HTTPException(400, "Indica 'panel' o 'all': true")
-    con_golpes = await db.vehicle_damage_ledger.find(
-        q, {"_id": 0, "golpe_id": 1, "golpe_ids": 1}).to_list(None)
-    res = await db.vehicle_damage_ledger.update_many(q, {"$set": {
-        "status": "repaired", "repaired_at": now_iso,
-        "repaired_note": str(body.get("note") or "")[:200],
-        "repaired_by": user.get("name") or "",
-    }})
+    cierre = {"$set": {"status": "repaired", "repaired_at": now_iso,
+                       "repaired_note": str(body.get("note") or "")[:200],
+                       "repaired_by": user.get("name") or ""}}
+    # ENTRADA A ENTRADA, con una escritura que devuelve lo que ha cerrado (M1, 14-11-2026). Antes se leían los
+    # `golpe_ids` y se cerraba todo después: un golpe que se enlazaba entre medias quedaba dentro de una entrada
+    # cerrada sin estar reparado en su ficha (fuera de «Ya apuntado» y otra vez «nuevo» al día siguiente). Cada
+    # `find_one_and_update` cierra UNA abierta y devuelve cómo estaba al cerrarla: sus golpes son ESOS.
+    cerradas = []
+    for _vuelta in range(5000):
+        e = await db.vehicle_damage_ledger.find_one_and_update(
+            q, cierre, projection={"_id": 0, "vehicle_id": 1, "golpe_id": 1, "golpe_ids": 1})
+        if not e:
+            break
+        cerradas.append(e)
     # Los golpes del repaso de esas entradas quedan reparados en su ficha (S3, 14-11-2026), con su fecha.
-    await _repaso_golpes_reparados(vehicle_id, con_golpes, now_iso)
+    await _repaso_golpes_reparados(vehicle_id, cerradas, now_iso)
     if body.get("all"):
         # Marca de "salió de chapa": la IA sabrá que los daños de fotos de
         # referencia anteriores a esta fecha YA NO EXISTEN.
         await db.vehicles.update_one({"id": vehicle_id}, {"$set": {"body_repaired_at": now_iso}})
-    return {"ok": True, "repaired": res.modified_count}
+    return {"ok": True, "repaired": len(cerradas)}
 
 
 # ─── LO QUE LA IA SABE DE SI MISMA ───────────────────────────────────────────
@@ -16766,6 +16793,15 @@ def _repaso_danos(an) -> list:
     return an.get("damages") if isinstance(an, dict) and isinstance(an.get("damages"), list) else []
 
 
+def _repaso_piezas_finas(part) -> set:
+    """Las piezas finas de un nombre (`piezas.canon`: «Puerta lateral corredera izquierda» y «Puerta corredera izq»
+    son `puerta_corredera_izq`; la delantera izquierda es otra). Un nombre que no se reconoce casa solo consigo
+    mismo (en minúsculas y sin espacios de sobra)."""
+    texto = part if isinstance(part, str) else ""
+    finas = {p for p, _z, _l in piezas.canon(texto)}
+    return finas or {"texto:" + " ".join(texto.lower().split())}
+
+
 def _repaso_totales(an: dict) -> dict:
     """Las cuentas de un análisis con golpes a mano, en una COPIA.
 
@@ -16774,7 +16810,7 @@ def _repaso_totales(an: dict) -> dict:
     · Un análisis de la IA: sus `severity` y `total_damages_count` NO se tocan. Los usan la cola de «Revisión rápida»
       y la autorrevisión (`fiabilidad.puntuar`), y un golpe que la IA ya traía y una persona marca en el repaso
       contaba dos veces. Lo de la persona va aparte: `total_con_repaso` (sin contar dos veces un golpe que la IA ya
-      traía: misma pieza gruesa en la misma foto) y `severidad_con_repaso`. Sin golpes a mano, esos dos no existen:
+      traía: misma pieza fina en la misma foto) y `severidad_con_repaso`. Sin golpes a mano, esos dos no existen:
       deshacer deja el análisis de la IA exactamente como estaba."""
     an = {k: v for k, v in an.items() if k not in _REPASO_TOTALES}
     danos = _repaso_danos(an)
@@ -16791,9 +16827,13 @@ def _repaso_totales(an: dict) -> dict:
         return an
     if not manos:
         return an
-    de_la_ia = {(_canon_panel(d.get("part") if isinstance(d.get("part"), str) else ""), d.get("photo_index"))
-                for d in danos if isinstance(d, dict) and d.get("origen") != "repaso"}
-    nuevos = [d for d in manos if (_canon_panel(d.get("part") or ""), d.get("photo_index")) not in de_la_ia]
+    # Se casa por la PIEZA FINA (M3, 14-11-2026), no por la gruesa: con `_canon_panel` las seis puertas eran «puerta»
+    # y un golpe a mano en la corredera izquierda se daba por el mismo que la IA traía en la delantera izquierda de
+    # esa foto (un daño de menos en `total_con_repaso`).
+    de_la_ia = {(p, d.get("photo_index")) for d in danos if isinstance(d, dict) and d.get("origen") != "repaso"
+                for p in _repaso_piezas_finas(d.get("part"))}
+    nuevos = [d for d in manos
+              if not any((p, d.get("photo_index")) in de_la_ia for p in _repaso_piezas_finas(d.get("part")))]
     try:
         n_ia = int(an.get("total_damages_count") or 0)
     except (TypeError, ValueError):
@@ -16915,10 +16955,25 @@ async def _repaso_poner_dano(inspection_id: str, dano: dict) -> None:
     await _repaso_cambiar_danos(inspection_id, _con)
 
 
-async def _repaso_quitar_dano(inspection_id: str, golpe_id: str) -> None:
-    """Quita el golpe de `analysis.damages` y deja el análisis como estaba antes de él."""
+class _GolpeEnTaller(Exception):
+    """El golpe que se iba a deshacer ha entrado en el taller o se ha reparado mientras tanto (M1, 14-11-2026)."""
+
+
+def _repaso_dano_en_taller(d) -> bool:
+    """¿Este daño de la ficha está ya en el taller o reparado? Entonces deshacer su golpe borraría una reparación."""
+    return isinstance(d, dict) and (bool(d.get("workshop_id"))
+                                    or d.get("repair_status") not in (None, "", "pending"))
+
+
+async def _repaso_quitar_dano(inspection_id: str, golpe_id: str, solo_sin_taller: bool = False) -> None:
+    """Quita el golpe de `analysis.damages` y deja el análisis como estaba antes de él. Con `solo_sin_taller` (el
+    deshacer), si el golpe está ya en el taller o reparado no lo quita: `_GolpeEnTaller` (lo lee en cada intento, así
+    que una reparación que se cuele entre la lectura y la escritura también lo para)."""
     def _sin(an):
         danos = _repaso_danos(an)
+        if solo_sin_taller and any(isinstance(d, dict) and d.get("golpe_id") == golpe_id
+                                   and _repaso_dano_en_taller(d) for d in danos):
+            raise _GolpeEnTaller(golpe_id)
         quedan = [d for d in danos if not (isinstance(d, dict) and d.get("golpe_id") == golpe_id)]
         if len(quedan) == len(danos):
             return _REPASO_SIN_CAMBIO
@@ -17003,7 +17058,8 @@ async def _repaso_libro(insp: dict, pi: int, vista, golpe: dict, por: str, ahora
     raise RuntimeError("el libro de daños de esa pieza cambia sin parar")
 
 
-async def _repaso_libro_soltar(vid, golpe_id: str, ahora: str, reparado: bool = False) -> Optional[str]:
+async def _repaso_libro_soltar(vid, golpe_id: str, ahora: str, reparado: bool = False,
+                               cerrada_es_conflicto: bool = False) -> Optional[str]:
     """Saca un golpe del repaso de su entrada del libro, al deshacerlo o al repararlo desde la ficha. Devuelve qué
     ha pasado con la entrada (None si el golpe no estaba en ninguna):
       el golpe no era el dueño              -> sale de `golpe_ids` y nada más             ("sin_cambios")
@@ -17015,22 +17071,31 @@ async def _repaso_libro_soltar(vid, golpe_id: str, ahora: str, reparado: bool = 
       la creó el golpe y nadie más la tocó   -> se borra                                  ("borrado")
 
     Cada escritura va condicionada a lo que se ha leído (quién es el dueño): dos «deshacer» a la vez de golpes de la
-    misma entrada ya no dejan en `golpe_ids` un golpe deshecho ni a un golpe deshecho de dueño (S3, 14-11-2026)."""
+    misma entrada ya no dejan en `golpe_ids` un golpe deshecho ni a un golpe deshecho de dueño (S3, 14-11-2026).
+
+    `cerrada_es_conflicto` (el deshacer, M1 14-11-2026): si la entrada ya no está abierta es que «reparar pieza» o el
+    taller la han cerrado mientras se deshacía: `_GolpeEnTaller`, y el deshacer lo devuelve todo como estaba. Antes
+    quedaba una entrada reparada de un golpe que ya no existía."""
     for _intento in range(8):
         de_el = {"vehicle_id": vid, "$or": [{"golpe_id": golpe_id}, {"golpe_ids": golpe_id}]}
         e = await db.vehicle_damage_ledger.find_one(de_el)
         if not e:
             return None
+        if cerrada_es_conflicto and e.get("status") != "open":
+            raise _GolpeEnTaller(golpe_id)
+        # Con `cerrada_es_conflicto`, cada escritura exige además que la entrada siga abierta: si se cierra entre la
+        # lectura y la escritura, no casa, se vuelve a leer y salta el conflicto de arriba.
+        abierta = {"status": "open"} if cerrada_es_conflicto else {}
         if e.get("golpe_id") != golpe_id:
             # Solo si sigue sin ser el dueño: si otro «deshacer» se lo acaba de pasar, se vuelve a mirar.
             r = await db.vehicle_damage_ledger.update_one(
-                {"vehicle_id": vid, "golpe_ids": golpe_id, "golpe_id": e.get("golpe_id")},
+                {"vehicle_id": vid, "golpe_ids": golpe_id, "golpe_id": e.get("golpe_id"), **abierta},
                 {"$pull": {"golpe_ids": golpe_id}})
             if not r.matched_count:
                 continue
             await _libro_cerrar_si_no_queda_nada(vid, e, ahora)
             return "sin_cambios"
-        suyo = {"vehicle_id": vid, "golpe_id": golpe_id}
+        suyo = {"vehicle_id": vid, "golpe_id": golpe_id, **abierta}
         otros = [g for g in (e.get("golpe_ids") or []) if g != golpe_id]
         if otros and e.get("status") == "open":
             otra_vez = False
@@ -17071,12 +17136,18 @@ async def _repaso_libro_soltar(vid, golpe_id: str, ahora: str, reparado: bool = 
                 # «Reconstruir flota» la archivó mientras el golpe la tenía (S4): vuelve archivada, no abierta.
                 poner.update({"status": "archived", "archived_at": previa.get("archivada_at") or ahora,
                               "archived_reason": "rebuild_fleet"})
+            # Solo si «Reconstruir flota» no la ha marcado para archivar entre la lectura y la escritura (M1,
+            # 14-11-2026): si no, volvía ABIERTA lo viejo de la IA que la reconstrucción acababa de archivar.
+            archivar = {"ia_previa.archivar": True} if previa.get("archivar") else \
+                {"ia_previa.archivar": {"$exists": False}}
             r = await db.vehicle_damage_ledger.update_one(
-                suyo, {"$set": poner, "$unset": quitar} if poner else {"$unset": quitar})
+                {**suyo, **archivar}, {"$set": poner, "$unset": quitar} if poner else {"$unset": quitar})
             if r.matched_count:
                 return "devuelto_a_ia"
             continue
-        await db.vehicle_damage_ledger.delete_one({**suyo, "status": "open"})
+        b = await db.vehicle_damage_ledger.delete_one({**suyo, "status": "open"})
+        if cerrada_es_conflicto and not getattr(b, "deleted_count", 1):
+            continue
         return "borrado"
     raise RuntimeError("el libro de daños de esa pieza cambia sin parar")
 
@@ -17123,9 +17194,9 @@ async def _repaso_golpes_reparados(vid, entradas: list, ahora: str) -> None:
             logger.warning("libro: el golpe %s no ha quedado reparado en su ficha: %s", gid, ex)
 
 
-async def _repaso_libro_deshacer(vid, golpe_id: str) -> Optional[str]:
+async def _repaso_libro_deshacer(vid, golpe_id: str, cerrada_es_conflicto: bool = False) -> Optional[str]:
     """Quita del libro lo que escribió el golpe al deshacerlo (ver `_repaso_libro_soltar`)."""
-    return await _repaso_libro_soltar(vid, golpe_id, _repaso_ahora())
+    return await _repaso_libro_soltar(vid, golpe_id, _repaso_ahora(), cerrada_es_conflicto=cerrada_es_conflicto)
 
 
 _IA_SIN_TERMINAR = ("pending", "processing", "error", "gemini_failed", "gemini_timeout")
@@ -17261,8 +17332,10 @@ async def _repaso_avisar(user: dict) -> bool:
         return True
     usado = bool(await db.app_meta.find_one({"_id": _REPASO_MARCA_USADO}, {"_id": 1}))
     if not usado and base not in _REPASO_MIRADO:
-        _REPASO_MIRADO.add(base)
         usado = bool(await db.inspections.find_one({"repaso.lados": {"$exists": True}}, {"_id": 0, "id": 1}))
+        # Se apunta como mirada DESPUÉS de que la consulta conteste (M4, 14-11-2026): si fallaba (un tiempo de espera
+        # de Mongo), quedaba apuntada sin haberse mirado y el número no volvía a salir hasta reiniciar.
+        _REPASO_MIRADO.add(base)
     if usado:
         _REPASO_USADO.add(base)
     return usado
@@ -17565,6 +17638,10 @@ async def repaso_marcar_lado(inspection_id: str, data: dict = Body(default={}), 
             "libro": libro, "estado": estado, "cuentas_revision": cuentas}
 
 
+# El MISMO texto de siempre: la pantalla lo traduce casándolo letra a letra (repaso/logica.js, `repaso.err.deshacer.taller`).
+_REPASO_EN_TALLER = "Ese golpe ya está en el taller o reparado: no se puede deshacer desde aquí."
+
+
 @api_router.delete("/inspections/{inspection_id}/repaso/{photo_index}")
 async def repaso_deshacer_lado(inspection_id: str, photo_index: str, user: dict = Depends(require_admin)):
     """Deshace el veredicto de un lado y todo lo que escribió: el golpe de la ficha, su apunte del libro y, si la
@@ -17588,16 +17665,34 @@ async def repaso_deshacer_lado(inspection_id: str, photo_index: str, user: dict 
         an = insp.get("analysis") if isinstance(insp.get("analysis"), dict) else {}
         dano = next((d for d in (an.get("damages") if isinstance(an.get("damages"), list) else [])
                      if isinstance(d, dict) and d.get("golpe_id") == gid), None) or {}
-        en_ficha = bool(dano.get("workshop_id")) or dano.get("repair_status") not in (None, "", "pending")
-        if en_libro or en_ficha:
-            raise HTTPException(status_code=409,
-                                detail="Ese golpe ya está en el taller o reparado: no se puede deshacer desde aquí.")
-    # (2) El lado: el MISMO veredicto que se ha leído (si otra persona lo ha cambiado entre medias, no se toca).
-    r = await db.inspections.update_one({"id": inspection_id, f"repaso.lados.{pi}.at": lado.get("at"),
-                                         f"repaso.lados.{pi}.veredicto": lado.get("veredicto")},
-                                        {"$unset": {f"repaso.lados.{pi}": ""}})
-    if not r.matched_count:
-        raise HTTPException(status_code=404, detail="Ese lado no tiene veredicto")
+        if en_libro or _repaso_dano_en_taller(dano):
+            raise HTTPException(status_code=409, detail=_REPASO_EN_TALLER)
+    # (2) El lado: el MISMO veredicto que se ha leído (si otra persona lo ha cambiado entre medias, no se toca). Con
+    # un golpe, además, solo si su daño de la ficha sigue sin taller ni reparación (M1, 14-11-2026): la escritura va
+    # condicionada a la lista de daños que se acaba de leer; si ha cambiado, se vuelve a leer y a mirar.
+    mismo_lado = {"id": inspection_id, f"repaso.lados.{pi}.at": lado.get("at"),
+                  f"repaso.lados.{pi}.veredicto": lado.get("veredicto")}
+    for _intento in range(8):
+        cond = {}
+        if gid:
+            doc = await db.inspections.find_one(mismo_lado, {"_id": 0, "analysis": 1})
+            if doc is None:
+                raise HTTPException(status_code=404, detail="Ese lado no tiene veredicto")
+            an_ahora = doc.get("analysis")
+            ahora_dano = next((d for d in _repaso_danos(an_ahora)
+                               if isinstance(d, dict) and d.get("golpe_id") == gid), None)
+            if _repaso_dano_en_taller(ahora_dano):
+                raise HTTPException(status_code=409, detail=_REPASO_EN_TALLER)
+            dano = ahora_dano or dano
+            cond = _repaso_cond_analisis(an_ahora)
+        r = await db.inspections.update_one({**mismo_lado, **cond}, {"$unset": {f"repaso.lados.{pi}": ""}})
+        if r.matched_count:
+            break
+        if not gid:
+            raise HTTPException(status_code=404, detail="Ese lado no tiene veredicto")
+    else:
+        raise HTTPException(status_code=409, detail="La revisión ha cambiado mientras se deshacía el golpe. "
+                                                    "Vuelve a intentarlo.")
     libro = None
     if gid:
         # (3) La ficha y (4) el libro. Si cualquiera de los dos no se puede escribir (la ficha o el libro no paran de
@@ -17612,17 +17707,37 @@ async def repaso_deshacer_lado(inspection_id: str, photo_index: str, user: dict 
             except Exception as e3:                              # noqa: BLE001
                 logger.error("repaso: devolviendo el lado %s/%s tras un deshacer fallido: %s", inspection_id, pi, e3)
         try:
-            await _repaso_quitar_dano(inspection_id, gid)
+            await _repaso_quitar_dano(inspection_id, gid, solo_sin_taller=True)
+        except _GolpeEnTaller:
+            # El taller o «reparar pieza» se han colado entre la lectura y la escritura (M1): el golpe se queda.
+            await _revertir(con_dano=False)
+            raise HTTPException(status_code=409, detail=_REPASO_EN_TALLER)
         except RuntimeError:
             await _revertir(con_dano=False)
             raise HTTPException(status_code=409, detail="La revisión ha cambiado mientras se deshacía el golpe. "
                                                         "Vuelve a intentarlo.")
         try:
-            libro = {"accion": await _repaso_libro_deshacer(vid, gid) or "sin_cambios"}
+            libro = {"accion": await _repaso_libro_deshacer(vid, gid, cerrada_es_conflicto=True) or "sin_cambios"}
+        except _GolpeEnTaller:
+            # Su entrada del libro se ha cerrado («reparar pieza») mientras se deshacía: el golpe vuelve a la ficha y
+            # queda reparado, como los demás de esa entrada.
+            await _revertir(con_dano=True)
+            cerrada = await db.vehicle_damage_ledger.find_one(
+                {"vehicle_id": vid, "$or": [{"golpe_id": gid}, {"golpe_ids": gid}]}, {"_id": 0})
+            if cerrada and cerrada.get("status") == "repaired":
+                await _repaso_golpes_reparados(vid, [{"vehicle_id": vid, "golpe_id": gid}],
+                                               cerrada.get("repaired_at") or _repaso_ahora())
+            raise HTTPException(status_code=409, detail=_REPASO_EN_TALLER)
         except RuntimeError:
             await _revertir(con_dano=True)
             raise HTTPException(status_code=409, detail="La revisión ha cambiado mientras se deshacía el golpe. "
                                                         "Vuelve a intentarlo.")
+        if insp.get("forensic_signed"):
+            # Deshacer un golpe de una revisión FIRMADA sigue permitido (lo firmado ya no depende de la ficha), pero
+            # queda apuntado qué, cuándo y quién: el PDF de la firma lo pone en «Quitado o cambiado después de la firma».
+            await db.inspections.update_one({"id": inspection_id}, {"$set": {f"repaso.deshechos.{gid}": {
+                "golpe_id": gid, "part": golpe.get("part"), "severity": golpe.get("severity"),
+                "photo_index": pi, "at": _repaso_ahora(), "por": _texto_cuerpo(user.get("name"), 80) or "?"}}})
     # (5) ¿Estaba repasada?
     await _repaso_reabrir(inspection_id)
     actual = await db.inspections.find_one({"id": inspection_id}, {"_id": 0}) or {}
@@ -18416,10 +18531,13 @@ async def reanalyze_inspection(inspection_id: str, silent: bool = False, _=Depen
 _GENESIS_HASH = "0" * 64
 
 
-def _canonical_inspection_payload(insp: dict, prev_hash: str) -> str:
+def _canonical_inspection_payload(insp: dict, prev_hash: str, contenido: Optional[dict] = None) -> str:
     """Serialización determinista de la inspección para hashear.
     NO usamos json.dumps con sort_keys directamente porque queremos un subconjunto fijo
-    para que cambios futuros en otros campos no rompan la cadena."""
+    para que cambios futuros en otros campos no rompan la cadena.
+
+    `contenido` (las firmas desde el 14-11-2026): la lista exacta de lo firmado (`_firma_contenido`) entra en lo que
+    se firma, como `contenido_firmado`. Sin él (las firmas de antes), el payload es EXACTAMENTE el de siempre."""
     payload = {
         "prev_hash": prev_hash,
         "inspection_id": insp.get("id"),
@@ -18434,7 +18552,130 @@ def _canonical_inspection_payload(insp: dict, prev_hash: str) -> str:
             "executive_summary": (insp.get("analysis") or {}).get("executive_summary"),
         },
     }
+    if contenido is not None:
+        payload["contenido_firmado"] = contenido
     return json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+
+
+# ── LO FIRMADO NO CAMBIA NUNCA (14-11-2026, tercera revisión, IMPORTANTE 1) ──────────────────────────────────────────
+# El PDF de la firma se rehacía en cada descarga con el análisis de HOY: deshacer un golpe en el Repaso o decir «no es
+# un daño» en «Revisión rápida» después de firmar lo quitaba de lo firmado, con la misma firma y el mismo código. Ahora,
+# al firmar, se guarda con la firma la lista exacta de lo que se firma (`contenido`: por cada daño, pieza, gravedad,
+# descripción, foto, caja, origen y quién lo confirmó; y la gravedad de la cabecera), entra en el código de la firma y
+# el PDF construye «lo firmado» desde ESA lista. Lo que cambie después va aparte, con qué, cuándo y quién.
+
+_FIRMA_CONTENIDO_VERSION = 1
+_FIRMA_ORDEN_SEV = {"sin_danos": 0, "leve": 1, "moderado": 2, "grave": 3, "critico": 4}
+
+
+def _firma_clave(e: dict) -> tuple:
+    """Lo que identifica un daño entre la firma y hoy: el golpe del repaso por su id; el de la IA por pieza, foto y
+    caja (lo mismo con lo que el PDF quita los repetidos)."""
+    if e.get("origen") == "repaso" and e.get("golpe_id"):
+        return ("golpe", e.get("golpe_id"))
+    return ("dano", e.get("part"), e.get("photo_index"), tuple(e.get("box_2d") or []))
+
+
+def _firma_danos_de_ficha(insp: dict, feedback: dict) -> list:
+    """Los daños de la revisión tal como entran en su PDF (sin repetidos entre `damages` y `new_damages`), cada uno con
+    su origen (`repaso` | `revision_rapida` | `ia`) y quién lo confirmó. `feedback`: {(scope, índice): veredicto de
+    «Revisión rápida»} de esa revisión."""
+    an = insp.get("analysis") if isinstance(insp.get("analysis"), dict) else {}
+    lado_de_golpe = {lado["golpe"]["golpe_id"]: lado for lado in _repaso_guardados(insp).values()
+                     if lado.get("veredicto") == "golpe" and isinstance(lado.get("golpe"), dict)
+                     and lado["golpe"].get("golpe_id")}
+    salida, vistos = [], {}
+    for scope, campo in (("all", "damages"), ("new", "new_damages")):
+        for k, d in enumerate(an.get(campo) if isinstance(an.get(campo), list) else []):
+            if not isinstance(d, dict):
+                continue
+            box = d.get("box_2d")
+            e = {"part": d.get("part"), "severity": d.get("severity"), "description": d.get("description") or None,
+                 "photo_index": d.get("photo_index"), "box_2d": list(box) if isinstance(box, (list, tuple)) else None,
+                 "confidence": d.get("confidence"), "estimated_cost": d.get("estimated_cost"),
+                 "origen": "ia", "confirmado_por": None, "confirmado_at": None, "golpe_id": None,
+                 "refs": [[scope, k]]}
+            if d.get("origen") == "repaso":
+                lado = lado_de_golpe.get(d.get("golpe_id")) or {}
+                e.update(origen="repaso", golpe_id=d.get("golpe_id"), confidence=None, estimated_cost=None,
+                         confirmado_por=lado.get("por") or None, confirmado_at=lado.get("at") or None)
+            else:
+                f = feedback.get((scope, k)) or {}
+                if f.get("verdict") in ("correct", "corrected"):
+                    e.update(origen="revision_rapida", confirmado_por=f.get("reviewed_by") or "?",
+                             confirmado_at=f.get("created_at"))
+            clave = _firma_clave(e)
+            if clave in vistos:
+                ya = salida[vistos[clave]]
+                ya["refs"].append([scope, k])
+                if e["origen"] == "revision_rapida" and ya["origen"] == "ia":
+                    e["refs"] = ya["refs"]
+                    salida[vistos[clave]] = e
+                continue
+            vistos[clave] = len(salida)
+            salida.append(e)
+    return salida
+
+
+def _firma_gravedad(an, danos: list):
+    """La gravedad de la cabecera del PDF: la del análisis (o «sin_danos» en el de la persona), subida con los golpes
+    marcados en el repaso (S14)."""
+    an = an if isinstance(an, dict) else {}
+    sev = "sin_danos" if an.get("origen") == "repaso" else an.get("severity")
+    for d in danos:
+        if d.get("origen") == "repaso" and _FIRMA_ORDEN_SEV.get(d.get("severity"), -1) > _FIRMA_ORDEN_SEV.get(sev, -1):
+            sev = d.get("severity")
+    return sev
+
+
+async def _firma_feedback(inspection_id: str) -> dict:
+    """{(scope, índice): veredicto} de «Revisión rápida» de una revisión (el último de cada daño)."""
+    return {(f.get("scope"), f.get("damage_index")): f async for f in db.ai_feedback.find(
+        {"inspection_id": inspection_id},
+        {"_id": 0, "scope": 1, "damage_index": 1, "verdict": 1, "reviewed_by": 1, "created_at": 1})}
+
+
+async def _firma_contenido(insp: dict) -> dict:
+    """La lista exacta de lo que se firma, en el momento de firmar."""
+    danos = _firma_danos_de_ficha(insp, await _firma_feedback(insp.get("id")))
+    contenido = {"version": _FIRMA_CONTENIDO_VERSION, "gravedad": _firma_gravedad(insp.get("analysis"), danos),
+                 "danos": danos}
+
+    def _limpio(v):
+        # Lo que se guarda tiene que ser EXACTAMENTE lo que entra en el código: solo tipos de JSON y sin NaN/infinitos
+        # (NaN no es igual a sí mismo y la comprobación fallaría).
+        if isinstance(v, float) and not math.isfinite(v):
+            return None
+        if isinstance(v, dict):
+            return {str(k): _limpio(x) for k, x in v.items()}
+        if isinstance(v, (list, tuple)):
+            return [_limpio(x) for x in v]
+        return v if v is None or isinstance(v, (str, int, float, bool)) else str(v)
+    return _limpio(contenido)
+
+
+def _firma_contenido_cuadra(sig: dict) -> bool:
+    """¿La lista guardada con la firma es la que entró en su código? (el código es el SHA-256 de `payload_canonical`,
+    y la lista va dentro). Solo para las firmas que la llevan."""
+    import hashlib as _hl
+    try:
+        pc = sig.get("payload_canonical") or ""
+        return (_hl.sha256(pc.encode("utf-8")).hexdigest() == sig.get("content_hash")
+                and json.loads(pc).get("contenido_firmado") == sig.get("contenido"))
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
+def _firma_a_dano(e: dict) -> dict:
+    """Un daño de la lista firmada, con la forma que espera el PDF."""
+    d = {"part": e.get("part"), "severity": e.get("severity"), "description": e.get("description") or "",
+         "photo_index": e.get("photo_index"), "box_2d": e.get("box_2d"), "confidence": e.get("confidence"),
+         "estimated_cost": e.get("estimated_cost")}
+    if e.get("origen") == "repaso":
+        d.update(origen="repaso", golpe_id=e.get("golpe_id"))
+    elif e.get("origen") == "revision_rapida":
+        d["_confirmado_por"] = e.get("confirmado_por") or "?"
+    return d
 
 
 async def _last_signature_hash() -> str:
@@ -18475,10 +18716,12 @@ async def sign_inspection(inspection_id: str, data: SignInspectionRequest, reque
     # Calcular hashes con reintento simple ante race condition de prev_hash.
     import hashlib as _hl
     now = datetime.now(timezone.utc).isoformat()
+    # La lista exacta de lo que se firma (14-11-2026): entra en el código y el PDF la lee de aquí, no de la ficha.
+    contenido = await _firma_contenido(insp)
     sig_doc = None
     for attempt in range(3):
         prev_hash = await _last_signature_hash()
-        payload = _canonical_inspection_payload(insp, prev_hash)
+        payload = _canonical_inspection_payload(insp, prev_hash, contenido)
         content_hash = _hl.sha256(payload.encode("utf-8")).hexdigest()
         try:
             sig_doc = {
@@ -18488,6 +18731,7 @@ async def sign_inspection(inspection_id: str, data: SignInspectionRequest, reque
                 "prev_hash": prev_hash,
                 "content_hash": content_hash,
                 "payload_canonical": payload,           # útil para reverificar sin recalcular
+                "contenido": contenido,
                 "signed_by_user_id": user.get("sub"),
                 "signed_by_user_role": user.get("role"),
                 "signed_by_name": user.get("name", ""),
@@ -18880,6 +19124,9 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
     # Sin «hash inmutable» (14-11-2026): el código se calcula al firmar y se puede comprobar que está registrado, que es
     # lo que hace /verify; «inmutable» prometía más de lo que el sistema comprueba.
     story.append(Paragraph(f"Revisión firmada con su código de comprobación · {MARCA}", small))
+    if sig.get("_reconstruida"):
+        # Las firmas de antes no guardaron la lista de lo firmado (14-11-2026): se dice, en una línea discreta.
+        story.append(Paragraph("Firma anterior al 14-11-2026: el contenido se reconstruye de la ficha.", small))
     story.append(Spacer(1, 5*mm))
 
     # Bloque datos
@@ -19121,6 +19368,34 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
         ]))
         story.append(tad)
 
+    # Lo QUITADO o CAMBIADO después de firmar (14-11-2026): lo firmado de arriba no cambia; aquí, qué, cuándo y quién.
+    quitados = sig.get("_quitados") or []
+    if quitados:
+        if not anadidos:
+            story.append(PageBreak())
+        else:
+            story.append(Spacer(1, 6*mm))
+        story.append(Paragraph("Quitado o cambiado después de la firma", h2))
+        story.append(Paragraph(
+            "Esto estaba en lo firmado y después se quitó o se cambió en la ficha de la revisión. Lo firmado (arriba) "
+            "sigue siendo lo que se firmó.", small))
+        story.append(Spacer(1, 2*mm))
+        filas = [["Pieza", "Gravedad", "Qué", "Cuándo", "Quién"]]
+        for a in sorted(quitados, key=lambda x: str(x.get("at") or ""))[:30]:
+            cuando = a.get("cuando") or " ".join(x for x in _repaso_local(a.get("at")) if x)
+            filas.append([Paragraph(str(a.get("part") or "—")[:60], small), str(a.get("severity") or "—"),
+                          Paragraph(str(a.get("que") or ""), small),
+                          cuando or "—", Paragraph(str(a.get("por") or "—")[:40], small)])
+        tq = Table(filas, colWidths=[52*mm, 22*mm, 42*mm, 30*mm, 34*mm])
+        tq.setStyle(TableStyle([
+            ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("LINEBELOW", (0, 0), (-1, -1), 0.3, colors.HexColor("#e5e7eb")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        story.append(tq)
+
     doc.build(story)
     return buf.getvalue()
 
@@ -19290,10 +19565,60 @@ async def forensic_pdf(inspection_id: str, _=Depends(require_admin)):
     def _despues(cuando) -> bool:
         return bool(firmado_at) and bool(cuando) and str(cuando) > firmado_at
 
-    confirmados = {(f.get("scope"), f.get("damage_index")): (f.get("reviewed_by") or "?", f.get("created_at"))
-                   async for f in db.ai_feedback.find(
-                       {"inspection_id": inspection_id, "verdict": {"$in": ["correct", "corrected"]}},
-                       {"_id": 0, "scope": 1, "damage_index": 1, "reviewed_by": 1, "created_at": 1})}
+    # Las firmas desde el 14-11-2026 llevan la lista exacta de lo firmado (`contenido`): lo firmado sale de ahí y lo
+    # que haya cambiado en la ficha después va aparte (añadido / quitado o cambiado). Las de antes no la tienen: se
+    # siguen construyendo de la ficha, como hasta ahora, y el PDF lo dice en una línea.
+    contenido = sig.get("contenido") if isinstance(sig.get("contenido"), dict) else None
+    if contenido is not None and not _firma_contenido_cuadra(sig):
+        raise HTTPException(status_code=500, detail="Lo guardado con esta firma no cuadra con su código "
+                                                    "(estado inconsistente).")
+    feedback = await _firma_feedback(inspection_id)
+    _rep = insp.get("repaso") if isinstance(insp.get("repaso"), dict) else {}
+    deshechos = _rep.get("deshechos") if isinstance(_rep.get("deshechos"), dict) else {}
+    quitados = []
+    insp_pdf = insp
+    if contenido is not None:
+        all_damages, anadidos, quitados = _firma_diferencias(contenido, _firma_danos_de_ficha(insp, feedback),
+                                                             feedback, deshechos)
+        # El coste real del taller no es de lo firmado: se enseña el de hoy, en su golpe.
+        coste = {d.get("golpe_id"): d.get("actual_cost") for d in (_an.get("damages") or [])
+                 if isinstance(d, dict) and d.get("golpe_id") and d.get("actual_cost")}
+        all_damages = [{**d, "actual_cost": coste[d["golpe_id"]]} if d.get("golpe_id") in coste else d
+                       for d in all_damages]
+        # La cabecera, la guardada al firmar (ya cuenta los golpes del repaso de lo firmado).
+        insp_pdf = {**insp, "analysis": {**_an, "severity": contenido.get("gravedad"), "origen": None}}
+    else:
+        all_damages, anadidos = await _firma_reconstruida(insp, feedback, _despues)
+        for gid, r in deshechos.items():
+            # `>=`: un deshacer en el mismo instante que la firma (el reloj de Windows da saltos) también es después.
+            if isinstance(r, dict) and firmado_at and str(r.get("at") or "") >= firmado_at:
+                quitados.append({"part": r.get("part"), "severity": r.get("severity"),
+                                 "que": "Golpe deshecho en el repaso", "at": r.get("at"), "por": r.get("por") or "?"})
+    for a in anadidos + quitados:
+        a["cuando"] = " ".join(x for x in _repaso_local(a.get("at")) if x)
+    # Dedupe por (part, photo_index, hash de box) para no duplicar entre damages y new_damages; si una de las dos
+    # copias la confirmó una persona, se queda esa.
+    seen, dedup = {}, []
+    for d in all_damages:
+        k = (d.get("part"), d.get("photo_index"), tuple(d.get("box_2d") or []))
+        if k in seen:
+            if d.get("_confirmado_por") and not dedup[seen[k]].get("_confirmado_por"):
+                dedup[seen[k]] = d
+            continue
+        seen[k] = len(dedup)
+        dedup.append(d)
+    gemini_incluidos, damages_sugeridos = _filter_damages_for_peritaje(dedup)
+    return await _forensic_pdf_salida(inspection_id, insp_pdf, sig, vehicle, driver_name, raw_bytes_list,
+                                      gemini_incluidos, damages_sugeridos, anadidos, quitados,
+                                      reconstruida=contenido is None)
+
+
+async def _firma_reconstruida(insp: dict, feedback: dict, _despues) -> tuple:
+    """Lo firmado de una firma ANTERIOR al 14-11-2026 (sin lista guardada): se reconstruye de la ficha como siempre,
+    con lo confirmado después de firmar aparte (S5). Devuelve (daños, añadidos)."""
+    _an = insp.get("analysis") or {}
+    confirmados = {k: (f.get("reviewed_by") or "?", f.get("created_at")) for k, f in feedback.items()
+                   if f.get("verdict") in ("correct", "corrected")}
     lado_de_golpe = {lado["golpe"]["golpe_id"]: lado for lado in _repaso_guardados(insp).values()
                      if lado.get("veredicto") == "golpe" and isinstance(lado.get("golpe"), dict)
                      and lado["golpe"].get("golpe_id")}
@@ -19324,21 +19649,66 @@ async def forensic_pdf(inspection_id: str, _=Depends(require_admin)):
                                      "que": "Confirmado en Revisión rápida", "at": por[1], "por": por[0]})
                 por = None
             all_damages.append({**d, "_confirmado_por": por[0]} if por else d)
-    for a in anadidos:
-        a["cuando"] = " ".join(x for x in _repaso_local(a.get("at")) if x)
-    # Dedupe por (part, photo_index, hash de box) para no duplicar entre damages y new_damages; si una de las dos
-    # copias la confirmó una persona, se queda esa.
-    seen, dedup = {}, []
-    for d in all_damages:
-        k = (d.get("part"), d.get("photo_index"), tuple(d.get("box_2d") or []))
-        if k in seen:
-            if d.get("_confirmado_por") and not dedup[seen[k]].get("_confirmado_por"):
-                dedup[seen[k]] = d
-            continue
-        seen[k] = len(dedup)
-        dedup.append(d)
-    gemini_incluidos, damages_sugeridos = _filter_damages_for_peritaje(dedup)
+    return all_damages, anadidos
 
+
+_FIRMA_VEREDICTO = {"wrong": "no es un daño", "no_evaluable": "no se ve", "correct": "acierto",
+                    "corrected": "acierto con la caja corregida"}
+
+
+def _firma_diferencias(contenido: dict, actual: list, feedback: dict, deshechos: dict) -> tuple:
+    """(lo firmado como daños del PDF, añadido después, quitado o cambiado después) entre la lista guardada al firmar
+    y la ficha de hoy (las dos con la forma de `_firma_danos_de_ficha`)."""
+    firm = [e for e in (contenido.get("danos") or []) if isinstance(e, dict)]
+    claves_firm = {_firma_clave(e): e for e in firm}
+    claves_act = {_firma_clave(e): e for e in actual}
+    danos = [_firma_a_dano(e) for e in firm]
+    anadidos, quitados = [], []
+
+    def _fila(e, que, at, por):
+        return {"part": e.get("part"), "severity": e.get("severity"), "que": que, "at": at, "por": por or "—"}
+
+    for clave, e in claves_act.items():
+        f = claves_firm.get(clave)
+        if f is None:
+            if e.get("origen") == "repaso":
+                anadidos.append(_fila(e, "Golpe marcado en el repaso", e.get("confirmado_at"), e.get("confirmado_por")))
+            elif e.get("origen") == "revision_rapida":
+                anadidos.append(_fila(e, "Confirmado en Revisión rápida", e.get("confirmado_at"),
+                                      e.get("confirmado_por")))
+            # Lo que solo marca la IA (un análisis rehecho) no lo ha confirmado nadie: no se añade.
+        elif f.get("origen") == "ia" and e.get("origen") == "revision_rapida":
+            anadidos.append(_fila(e, "Confirmado en Revisión rápida", e.get("confirmado_at"), e.get("confirmado_por")))
+
+    for clave, f in claves_firm.items():
+        e = claves_act.get(clave)
+        if e is None:
+            if f.get("origen") == "repaso":
+                r = deshechos.get(f.get("golpe_id")) if isinstance(deshechos.get(f.get("golpe_id")), dict) else {}
+                quitados.append(_fila(f, "Golpe deshecho en el repaso", r.get("at"), r.get("por")))
+            else:
+                quitados.append(_fila(f, "Ya no está en la ficha de la revisión", None, None))
+            continue
+        if f.get("origen") == "revision_rapida" and e.get("origen") != "revision_rapida":
+            fbs = [feedback.get(tuple(ref)) for ref in (f.get("refs") or []) if isinstance(ref, (list, tuple))]
+            fbs = sorted([x for x in fbs if x], key=lambda x: str(x.get("created_at") or ""))
+            fb = fbs[-1] if fbs else {}
+            que = "Confirmación retirada en Revisión rápida"
+            if _FIRMA_VEREDICTO.get(fb.get("verdict")):
+                que += " («%s»)" % _FIRMA_VEREDICTO[fb["verdict"]]
+            quitados.append(_fila(f, que, fb.get("created_at"), fb.get("reviewed_by")))
+        if f.get("severity") != e.get("severity"):
+            quitados.append(_fila(f, "Gravedad cambiada: %s → %s" % (f.get("severity") or "—", e.get("severity") or "—"),
+                                  None, None))
+        if (f.get("description") or None) != (e.get("description") or None):
+            quitados.append(_fila(f, "Descripción cambiada", None, None))
+    return danos, anadidos, quitados
+
+
+async def _forensic_pdf_salida(inspection_id: str, insp: dict, sig: dict, vehicle: dict, driver_name: str,
+                               raw_bytes_list: list, gemini_incluidos: list, damages_sugeridos: list,
+                               anadidos: list, quitados: list, reconstruida: bool):
+    """La segunda mitad de `forensic_pdf`: las cajas, las fotos anotadas y el PDF."""
     # ENSEMBLE STRICT: cruzar Gemini con YOLO+SAM por foto. Solo dibujamos cajas confirmadas. Lo que confirmó una
     # persona no pasa por ese filtro: va con la caja que dibujó o confirmó.
     refined_per_photo = []
@@ -19371,11 +19741,14 @@ async def forensic_pdf(inspection_id: str, _=Depends(require_admin)):
         annotated_bytes_list.append(_annotate_photo_with_damages(raw, refined_per_photo[i]))
 
     verify_url = f"{_PORTAL_BASE_FRONT}/verify/{sig['content_hash']}"
+    # Lo quitado o cambiado después de firmar y la nota de las firmas de antes viajan en una copia de la firma: la
+    # firma guardada no se toca.
+    sig_pdf = {**sig, "_quitados": quitados or [], "_reconstruida": bool(reconstruida)}
     # Generación PDF en hilo (reportlab es síncrono y CPU-bound).
     loop = asyncio.get_event_loop()
     import functools as _ft
     pdf_bytes = await loop.run_in_executor(
-        None, _ft.partial(_build_forensic_pdf, insp, sig, vehicle, driver_name, annotated_bytes_list, verify_url,
+        None, _ft.partial(_build_forensic_pdf, insp, sig_pdf, vehicle, driver_name, annotated_bytes_list, verify_url,
                           damages_incluidos, damages_sugeridos, anadidos=anadidos)
     )
     fn_plate = re.sub(r"[^A-Za-z0-9]", "", (vehicle.get("license_plate") or "INSP"))
@@ -19421,6 +19794,16 @@ async def verify_hash_public(content_hash: str, request: Request):
     next_sig = await tenant_db.forensic_signatures.find_one(
         {"signed_at": {"$gt": sig.get("signed_at", "")}}, {"_id": 0, "content_hash": 1}
     )
+    extra = {}
+    if isinstance(sig.get("contenido"), dict):
+        # Las firmas desde el 14-11-2026 llevan la lista de lo firmado DENTRO del código: aquí se comprueba que el
+        # código sale de lo guardado y que la lista guardada es la que entró. Las de antes, igual que siempre.
+        if not _firma_contenido_cuadra(sig):
+            return {"valid": False, "error": "Lo guardado con esta firma no cuadra con su código. Contacta con soporte."}
+        extra["contenido_comprobado"] = True
+        extra["disclaimer"] = (f"El código está en el registro de {MARCA} y sale de lo que se guardó al firmar (la "
+                               "revisión y su lista de daños). No compara el PDF que tienes delante. No es una firma "
+                               "electrónica avanzada eIDAS.")
 
     return {
         "valid": True,
@@ -19433,6 +19816,7 @@ async def verify_hash_public(content_hash: str, request: Request):
         "has_next_in_chain": bool(next_sig),
         "disclaimer": (f"Esto solo dice que el código está en el registro de {MARCA}: no vuelve a calcularlo ni compara "
                        "el PDF que tienes delante. No es una firma electrónica avanzada eIDAS."),
+        **extra,
     }
 
 
@@ -21302,7 +21686,8 @@ async def mensajes_enviar(otro_id: str, data: dict = Body(...),
     # los DOS (el mensaje va con la misma clave de conversacion), y el no leido
     # se le cuelga al otro, que es quien no esta mirando la pantalla.
     respuesta_ia = None
-    if _ia_la_llaman(texto):
+    # Sin la IA (M2, 14-11-2026), «@flota» es un mensaje más: ni contesta la IA ni se le apunta presencia.
+    if _ia_la_llaman(texto) and await _ia_danos_de(user):
         centro = await _ia_centro_de(user, _texto_cuerpo(data.get("center"), 20), texto)
         dicho, tarjeta = await _ia_pensar(centro, texto, user, hilo="dm:%s" % doc["conv"])
         respuesta_ia = {
@@ -21663,7 +22048,8 @@ async def chat_post(center: str, data: dict = Body(...), user: dict = Depends(re
     # LA IA SOLO HABLA SI LA LLAMAN. El mensaje de la persona ya esta guardado
     # antes de esto a proposito: si la IA falla, lo que escribio no se pierde.
     respuesta_ia = None
-    if _ia_la_llaman(text):
+    # Sin la IA (M2, 14-11-2026), «@flota» es un mensaje más: ni contesta la IA ni se le apunta presencia.
+    if _ia_la_llaman(text) and await _ia_danos_de(user):
         respuesta_ia = await _ia_sala_responder(center, text, user)
     return {"ok": True, "message": doc, "respuesta_ia": respuesta_ia}
 
@@ -32827,6 +33213,13 @@ async def rebuild_fleet_damages(_=Depends(require_admin)):
     await db.vehicle_damage_ledger.update_many(
         {"status": "open", "source": "human", "ia_previa": {"$exists": True}},
         {"$set": {"ia_previa.archivar": True, "ia_previa.archivada_at": now_iso}})
+    #    Y otra pasada del archivo (M1, 14-11-2026): un golpe del repaso deshecho ENTRE las dos escrituras de arriba
+    #    devolvía su entrada de la IA abierta (la primera ya había pasado y la segunda ya no la encuentra). Lo que se
+    #    deshaga después de marcar `ia_previa.archivar` ya vuelve archivado (`_repaso_libro_soltar` lo exige al
+    #    escribir), así que con esta pasada no queda ventana.
+    arch2 = await db.vehicle_damage_ledger.update_many(
+        {"status": "open", "source": {"$ne": "human"}},
+        {"$set": {"status": "archived", "archived_at": now_iso, "archived_reason": "rebuild_fleet"}})
 
     # 3) Última inspección con fotos por vehículo (analizada o no)
     pipeline = [
@@ -32860,7 +33253,7 @@ async def rebuild_fleet_damages(_=Depends(require_admin)):
     n = len(insp_ids)
     return {
         "ok": True,
-        "archived_ledger_entries": arch.modified_count,
+        "archived_ledger_entries": arch.modified_count + arch2.modified_count,
         "vehicles_reset": len(veh_ids),
         "inspections_requeued": n,
         "message": (f"{n} furgonetas en reconstrucción. El modelo nuevo reanaliza su "
@@ -51731,7 +52124,11 @@ async def tienda_vincular_cuenta(body: dict = Body(...), user: dict = Depends(re
     No vuelve a entrar en ningun sitio: ya ha demostrado quien es con la cuenta
     del trabajo. Aqui solo dice con que correo suyo quiere que le lleguen las
     cosas y que contraseña quiere para la tienda.
+
+    Con la sesión del enlace personal, no (14-11-2026, enlace3 hallazgo 2): crearía una contraseña atada al conductor
+    que sigue abriendo la tienda después de renovar o anular el enlace (regla A1: el enlace no crea contraseñas).
     """
+    _no_con_el_enlace(user)
     did = _tienda_driver(user)
     correo = _tienda_correo(body.get("email"))
     clave = _tienda_clave_ok(body.get("password"))
