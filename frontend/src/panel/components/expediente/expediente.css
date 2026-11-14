@@ -34,14 +34,18 @@
 /* ── Secciones ── */
 .exp-seccion { margin-top: 30px; }
 .exp-hoja h2 { margin: 0; padding-bottom: 6px; border-bottom: 1px solid var(--e-linea-2); font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
+.exp-hoja h2 .exp-cuenta { margin-left: 10px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 14px; font-weight: 500;
+  letter-spacing: 0; color: var(--e-gris); font-variant-numeric: tabular-nums; }
 .exp-sub, .exp-nota { margin: 8px 0 0; font-size: 13px; color: var(--e-gris); }
 .exp-nota { color: var(--e-tinta); }
 
 /* ── El calendario: un cuadradito por día, en columnas de semana ── */
-.exp-cal { --c: 16px; display: flex; gap: 6px; margin-top: 12px; }
+/* Las medidas casan con CalendarioDias.jsx (LADO, HUECO, LETRAS): con ellas parte el calendario en filas. */
+.exp-cal { --c: 16px; display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 .exp-cal-medio { --c: 12px; }
 .exp-cal-chico { --c: 9px; }
-.exp-cal-letras { display: flex; flex-direction: column; gap: 2px; font-size: 9.5px; color: var(--e-gris); }
+.exp-cal-fila { display: flex; gap: 6px; }
+.exp-cal-letras { flex: none; width: 12px; display: flex; flex-direction: column; gap: 2px; font-size: 9.5px; color: var(--e-gris); }
 .exp-cal-letras > span { height: var(--c); line-height: var(--c); }
 .exp-cal-letras > span:first-child { height: 14px; }
 .exp-cal-semanas { display: flex; flex-wrap: wrap; gap: 8px 2px; min-width: 0; }
@@ -58,7 +62,9 @@
 
 /* ── Cada golpe ── */
 .exp-golpe { margin-top: 18px; padding-top: 2px; }
-.exp-golpe + .exp-golpe { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--e-linea); }
+/* Cada golpe acaba en la regla de su última línea: entre uno y otro, aire (una regla más arriba del siguiente saldría
+   sola en lo alto de la hoja impresa cuando el golpe pasa a la siguiente). */
+.exp-golpe + .exp-golpe { margin-top: 34px; }
 .exp-golpe-t { margin: 0; font-size: 14.5px; font-weight: 400; line-height: 1.35; }
 .exp-golpe-t b { font-weight: 700; }
 .exp-desc { margin: 2px 0 0; font-size: 13px; color: var(--e-gris); }
@@ -82,7 +88,7 @@
 .exp-linea > span { color: var(--e-gris); flex: none; max-width: 45%; }
 .exp-linea > div { text-align: right; min-width: 0; }
 .exp-linea b { font-weight: 600; }
-.exp-motivo { display: block; margin-top: 2px; font-size: 12.5px; color: var(--e-gris); }
+.exp-motivo { display: block; margin-top: 2px; font-size: 12.5px; color: var(--e-gris); text-wrap: balance; }
 
 /* ── Cómo entró / cómo está ── */
 .exp-galeria { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 8px; margin-top: 10px; }
@@ -108,12 +114,13 @@
 .exp-boton-linea { height: 44px; padding: 0 16px; font-size: 14px; border-radius: 10px; }
 .exp-aviso { max-width: 210mm; margin: 0 auto 16px; }
 
-/* El ejemplo público: papel de la identidad, con su franja arriba. */
-.exp-publico { min-height: 100vh; background: #f5f6f3; color: #10181a; padding: 0 16px 56px; }
-.exp-franja { max-width: 210mm; margin: 0 auto; padding: 22px 0 18px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px; }
+/* El ejemplo público: el papel de las páginas públicas (sus variables --ld-*, de día o de noche), la cabecera y el pie
+   de portadaComun.jsx y la franja del ejemplo; la hoja, blanca siempre. */
+.exp-publico { background: var(--ld-bg, #f5f6f3); color: var(--ld-text, #10181a); }
+.exp-publico-cuerpo { padding: 0 16px 64px; }
+.exp-franja { max-width: 210mm; margin: 0 auto; padding: 26px 0 22px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px; }
 .exp-franja b { display: block; font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
-.exp-franja p { margin: 2px 0 0; font-size: 14px; color: #545e66; max-width: 52ch; }
-.exp-franja-marca { display: inline-flex; align-items: center; gap: 8px; color: #10181a; font-weight: 800; text-decoration: none; }
+.exp-franja p { margin: 2px 0 0; font-size: 14px; color: var(--ld-muted, #545e66); max-width: 52ch; }
 
 /* ── El móvil: la hoja se ajusta al ancho, sin desbordes ── */
 @media (max-width: 640px) {
@@ -139,9 +146,24 @@
 @media print {
   html:has(.exp-hoja), html:has(.exp-hoja) body, html:has(.exp-hoja) #root, html:has(.exp-hoja) main { background: #fff !important; }
   .exp-no-imprimir { display: none !important; }
-  .exp-fondo, .exp-publico { padding: 0 !important; min-height: 0; background: #fff !important; }
+  .exp-fondo, .exp-publico, .exp-publico-cuerpo { padding: 0 !important; min-height: 0 !important; background: #fff !important; }
+  /* El <main> del panel lleva su margen de pantalla: en papel el margen es el de la hoja (14 mm), nada más. */
+  main:has(> .exp-fondo) { padding: 0 !important; min-height: 0 !important; }
   .exp-hoja { max-width: none; padding: 0; border: 0; border-radius: 0; font-size: 10pt; }
-  .exp-hoja h1 { margin-top: 14px; }
+  /* Más apretado que en pantalla, para que el primer golpe quepa ya en la hoja 1 debajo del calendario cuando el
+     periodo es corto (comprobado con page.pdf con 0, 1, 3 y 12 golpes y con el ejemplo público). */
+  .exp-hoja h1 { margin-top: 12px; font-size: 26px; }
+  .exp-matricula { margin-top: 12px; font-size: 28px; }
+  .exp-modelo { margin-top: 8px; }
+  .exp-cifras { margin-top: 14px; }
+  .exp-cifras > div { padding-top: 8px; }
+  .exp-cifras dd { font-size: 24px; }
+  .exp-seccion { margin-top: 20px; }
+  .exp-golpe { margin-top: 12px; }
+  .exp-golpe + .exp-golpe { margin-top: 24px; }
+  .exp-lineas { margin-top: 4px; }
+  .exp-linea { padding: 4px 0; }
+  .exp-leyenda { margin-top: 6px; }
   .exp-pie-pantalla { display: none; }
   /* Un título nunca se queda solo al pie de una hoja: va con lo primero que tiene debajo. */
   .exp-hoja h2, .exp-golpe-t, .exp-seccion > .exp-sub { break-after: avoid; }

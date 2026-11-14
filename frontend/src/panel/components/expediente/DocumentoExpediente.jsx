@@ -54,6 +54,13 @@ export default function DocumentoExpediente({ datos, empresa }) {
   const largo = (x) => fechaLarga(x, locale)
   const vista = (k) => (VISTAS.includes(k) ? t(`exp.vista.${k}`) : '')
   const persona = (p) => (p && p.nombre) || t('exp.sinNombre')
+  // La pieza en el idioma del documento: por su clave (la misma lista que el repaso, `repaso.p.<clave>`); sin clave, con
+  // «otra» o con una que este panel no conozca, lo que escribió la persona, tal cual (CONTRATO.md R2).
+  const pieza = (g) => {
+    const k = typeof g.pieza_clave === 'string' && g.pieza_clave && g.pieza_clave !== 'otra' ? `repaso.p.${g.pieza_clave}` : ''
+    const traducida = k ? t(k) : ''
+    return (traducida && traducida !== k ? traducida : g.pieza) || t('exp.g.sinPieza')
+  }
   const sev = (s) => { const x = t(`sev.${s}`); return s && x !== `sev.${s}` ? x : '' }
   const cifra = (n) => (typeof n === 'number' && Number.isFinite(n) ? numero(n, locale) : '0')
 
@@ -130,12 +137,14 @@ export default function DocumentoExpediente({ datos, empresa }) {
 
   const titulo = (g, frase) => (
     <h3 className="exp-golpe-t">
-      <b>{g.pieza || t('exp.g.sinPieza')}</b>
+      <b>{pieza(g)}</b>
       {frase && <span> · {frase}</span>}
     </h3>
   )
 
   const sello = (f) => momento(f?.fecha, f?.hora, f?.recibida_at)
+  // Cuántos hay en cada lista, junto a su título: la cifra de arriba (todos los confirmados) es la suma de las dos.
+  const cuantos = (n) => (n > 0 ? <span className="exp-cuenta" data-testid="cuantos">{numero(n, locale)}</span> : null)
   const pie = t('exp.pie').replace('{marca}', marca)
   const matricula = v.matricula || ''
 
@@ -186,34 +195,40 @@ export default function DocumentoExpediente({ datos, empresa }) {
       )}
 
       <section className="exp-seccion" data-testid="bloque-golpes">
-        <h2>{t('exp.golpes.t')}</h2>
+        <h2>{t('exp.golpes.t')}{cuantos(nuevos.length)}</h2>
         {nuevos.length === 0 ? (
           <p className="exp-nota" data-testid="sin-golpes">
             {yaEstaban.length ? t('exp.golpes.ningunoNuevo') : t('exp.golpes.ninguno')}
           </p>
         ) : yaEstaban.length > 0 && <p className="exp-sub">{t('exp.golpes.aparte')}</p>}
-        {nuevos.map((g) => (
-          <div className="exp-golpe" key={g.id} data-testid="golpe">
-            {titulo(g, g.fecha ? t('exp.g.aparece').replace('{f}', largo(g.fecha)) : '')}
-            {g.descripcion && <p className="exp-desc">{g.descripcion}</p>}
-            <div className="exp-par">
-              {g.anterior?.foto_url
-                ? <FotoConCaja src={g.anterior.foto_url} alt={`${vista(g.vista)} · ${largo(g.anterior.fecha)}`}
-                    etiqueta={t('exp.g.fotoAntes')} sello={sello(g.anterior)} quien={g.anterior.conductor?.nombre}
-                    rota={t('exp.fotoRota')} idioma={lang} />
-                : <FotoConCaja src={null} rota={t('exp.g.sinAnterior')} etiqueta={t('exp.g.fotoAntes')} />}
-              <FotoConCaja src={g.foto_url} alt={`${vista(g.vista)} · ${largo(g.fecha)}`} caja={g.box_2d}
-                etiqueta={t('exp.g.fotoGolpe')} sello={sello(g)}
-                quien={g.atribucion?.atribuible ? g.atribucion?.conductor?.nombre : ''}
-                rota={t('exp.fotoRota')} idioma={lang} />
+        {nuevos.map((g) => {
+          /* El nombre en el sello de cada foto, solo si el golpe es atribuible: al lado de «Sin conductor atribuible»,
+             el nombre de quien hizo la revisión anterior se leería como una insinuación. Sin él, fecha y hora. */
+          const conNombre = Boolean(g.atribucion?.atribuible)
+          return (
+            <div className="exp-golpe" key={g.id} data-testid="golpe">
+              {titulo(g, g.fecha ? t('exp.g.aparece').replace('{f}', largo(g.fecha)) : '')}
+              {g.descripcion && <p className="exp-desc">{g.descripcion}</p>}
+              <div className="exp-par">
+                {g.anterior?.foto_url
+                  ? <FotoConCaja src={g.anterior.foto_url} alt={`${vista(g.vista)} · ${largo(g.anterior.fecha)}`}
+                      etiqueta={t('exp.g.fotoAntes')} sello={sello(g.anterior)}
+                      quien={conNombre ? g.anterior.conductor?.nombre : ''}
+                      rota={t('exp.fotoRota')} idioma={lang} />
+                  : <FotoConCaja src={null} rota={t('exp.g.sinAnterior')} etiqueta={t('exp.g.fotoAntes')} />}
+                <FotoConCaja src={g.foto_url} alt={`${vista(g.vista)} · ${largo(g.fecha)}`} caja={g.box_2d}
+                  etiqueta={t('exp.g.fotoGolpe')} sello={sello(g)}
+                  quien={conNombre ? g.atribucion?.conductor?.nombre : ''}
+                  rota={t('exp.fotoRota')} idioma={lang} />
+              </div>
+              {detalle(g, { conConductor: true })}
             </div>
-            {detalle(g, { conConductor: true })}
-          </div>
-        ))}
+          )
+        })}
       </section>
 
       <section className="exp-seccion" data-testid="bloque-ya-estaba">
-        <h2>{t('exp.ya.t')}</h2>
+        <h2>{t('exp.ya.t')}{cuantos(yaEstaban.length)}</h2>
         {yaEstaban.length === 0
           ? <p className="exp-nota">{hayRevisiones ? t('exp.ya.ninguno') : t('exp.periodo.nada')}</p>
           : <p className="exp-sub">{t('exp.ya.sub')}</p>}
@@ -230,7 +245,10 @@ export default function DocumentoExpediente({ datos, empresa }) {
         ))}
       </section>
 
-      {[['entro', fotosEntro, t('exp.entro.t'), t('exp.entro.sub')], ['esta', fotosEsta, t('exp.esta.t'), t('exp.esta.sub')]]
+      {[
+        ['entro', fotosEntro, t('exp.entro.t'), t(fotosEntro.length === 1 ? 'exp.entro.sub1' : 'exp.entro.sub')],
+        ['esta', fotosEsta, t('exp.esta.t'), t(fotosEsta.length === 1 ? 'exp.esta.sub1' : 'exp.esta.sub')],
+      ]
         .map(([clave, fotos, h, sub]) => (
           <section className="exp-seccion" key={clave} data-testid={`bloque-${clave}`}>
             <h2>{h}</h2>
