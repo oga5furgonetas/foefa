@@ -85,6 +85,8 @@ jobs:
         run: node scripts/check-marca.mjs
       - name: Las promociones tienen una sola fecha y un solo importe (servidor = web)
         run: node scripts/check-promo.mjs
+      - name: Las funciones de Pages cargan y los enlaces de reparto llevan su tarjeta
+        run: node scripts/check-funciones-pages.mjs
       - name: Guías de devolución de /devolucion-renting (iguales a lo verificado, recorridos, ayuda para medir y cuentas)
         run: node scripts/check-guias-renting.mjs
       - name: Tokens de la app de reparto, web (letra, color, radio y sombra salen de los tokens)

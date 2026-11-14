@@ -9,8 +9,13 @@
  *
  * Importa cada fichero con Node (que tampoco tiene `window`) y falla si alguno no carga. Una ruta de Pages
  * (`[param].js`, `[[catchall]].js`) se importa igual: el nombre no cambia nada.
+ *
+ * Y LA TARJETA DE LOS ENLACES DE REPARTO (14-11-2026): /repartidores, /invita, /empezar e /iphone son los enlaces
+ * que un repartidor pasa por WhatsApp. Se llama a cada función con el index.html de verdad y se comprueba que la
+ * vista previa es la de la app de ruta (og-repartidores.png) y que no queda la genérica (/og.png: desde la
+ * portada nueva, una furgoneta con un golpe).
  */
-import { readdirSync, statSync, existsSync } from 'node:fs'
+import { readdirSync, statSync, existsSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -41,8 +46,33 @@ for (const f of lista) {
   }
 }
 
+// La tarjeta de los enlaces de reparto, con el index.html de verdad (el que sirve ASSETS en producción).
+const INDEX = readFileSync(join(RAIZ, 'frontend', 'index.html'), 'utf8')
+const TARJETAS = ['repartidores', 'invita', 'empezar', 'iphone']
+for (const nombre of TARJETAS) {
+  const f = join(FUNCIONES, `${nombre}.js`)
+  try {
+    const { onRequestGet } = await import(pathToFileURL(f).href)
+    const r = await onRequestGet({
+      request: new Request(`https://flotadsp.com/${nombre}?ref=abc123`),
+      env: { ASSETS: { fetch: async () => new Response(INDEX, { headers: { 'content-type': 'text/html' } }) } },
+    })
+    const html = await r.text()
+    const imagenes = [...html.matchAll(/<meta\s+property="og:image"\s+content="([^"]*)"/g)].map((m) => m[1])
+    if (imagenes.length !== 1 || !/\/og-repartidores\.png/.test(imagenes[0])) {
+      fallos.push(`frontend/functions/${nombre}.js: la vista previa de /${nombre} no es la de la app de ruta (og:image = ${JSON.stringify(imagenes)})`)
+    }
+    if (!/<meta\s+property="og:title"\s+content="[^"]*ruta de reparto/i.test(html)) {
+      fallos.push(`frontend/functions/${nombre}.js: el título de la vista previa de /${nombre} no habla de la ruta de reparto`)
+    }
+    if (!html.includes('<div id="root">')) fallos.push(`frontend/functions/${nombre}.js: /${nombre} ya no lleva el #root de la app`)
+  } catch (e) {
+    fallos.push(`frontend/functions/${nombre}.js: no se puede llamar: ${String(e?.message || e).split('\n')[0]}`)
+  }
+}
+
 if (!fallos.length) {
-  console.log(`check-funciones-pages: las ${lista.length} funciones de Pages cargan fuera del navegador`)
+  console.log(`check-funciones-pages: las ${lista.length} funciones de Pages cargan fuera del navegador y los ${TARJETAS.length} enlaces de reparto llevan su tarjeta`)
   process.exit(0)
 }
 console.error(`check-funciones-pages: ${fallos.length} función(es) de Pages que no cargan\n`)
