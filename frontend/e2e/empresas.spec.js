@@ -255,13 +255,13 @@ test.describe('/empresas', () => {
     await expect.poll(acciones).toContain('emp_repartidores')
   })
 
-  /* El precio de /planes para N vehículos en un plan, leído de su tarjeta («180€» → 180). */
+  /* El precio de /planes para N vehículos en un plan, leído de su columna de la hoja («180 €» → 180; tanda 4: la hoja
+     ya no son tarjetas, cada plan es una columna `[data-plan]` con su nombre en el h2). */
   async function precioEnPlanes(page, n, nombre) {
     await page.getByLabel('Número de vehículos').fill(String(n))
     const texto = await page.evaluate((nom) => {
-      const titulo = [...document.querySelectorAll('div')].find((d) => d.children.length === 0 && d.textContent.trim() === nom)
-      const tarjeta = titulo.parentElement.parentElement
-      return [...tarjeta.querySelectorAll('span')].find((s) => /€$/.test(s.textContent.trim())).textContent
+      const columna = [...document.querySelectorAll('[data-plan]')].find((c) => c.querySelector('h2')?.textContent.trim() === nom)
+      return [...columna.querySelectorAll('span')].find((s) => /€$/.test(s.textContent.trim())).textContent
     }, nombre)
     return Number(texto.replace(/[^\d,]/g, '').replace(',', '.'))
   }
@@ -296,7 +296,7 @@ test.describe('/empresas', () => {
     await furgonetas.fill('25')
     await page.getByLabel('¿De cuánto fue el último cargo por daños que te pasaron?').fill('1500')
     await expect(page.getByTestId('emp-meses')).toHaveText('Un cargo así equivale a 6 meses de FDS para tu flota.')
-    await expect(page.getByTestId('emp-resultado')).toContainText('al mes con el plan Pro.')
+    await expect(page.getByTestId('emp-resultado')).toContainText('Al mes, con el plan Pro')
     // Sin el segundo dato, solo el precio.
     await page.getByLabel('¿De cuánto fue el último cargo por daños que te pasaron?').fill('')
     await expect(page.getByTestId('emp-meses')).toHaveCount(0)
@@ -364,7 +364,7 @@ test.describe('/empresas', () => {
     const espanol = espanolEn(texto)
     expect(espanol, `queda español: ${espanol.join(', ')}`).toEqual([])
     expect(texto).toContain('Get a 15-minute demo')
-    expect(texto).toContain('costs you')
+    expect(texto).toContain('A month, on the')
     expect(texto).toContain('Choose')
     expect(texto).toContain('100 or more')
     expect(texto).toContain('Who decides whether there’s a dent?')

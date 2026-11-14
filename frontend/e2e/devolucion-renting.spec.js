@@ -551,7 +551,9 @@ test.describe('/devolucion-renting', () => {
     await preparar(page)
     await page.goto('/')
     await expect(page.getByTestId('emp-devolucion')).toHaveAttribute('href', RUTA)
-    await expect(page.getByTestId('emp-devolucion')).toContainText('¿Qué te van a cobrar al devolverlo?')
+    // La banda propia de la portada (tanda 4): su título es el nombre de la herramienta; su botón, «Repasar mi furgoneta».
+    await expect(page.getByTestId('emp-banda-devolucion').getByRole('heading', { level: 2 })).toHaveText('¿Qué te van a cobrar al devolverlo?')
+    await expect(page.getByTestId('emp-devolucion')).toHaveText('Repasar mi furgoneta')
     await expect(page.getByRole('link', { name: '¿Qué te van a cobrar al devolverlo?', exact: true })).toHaveAttribute('href', RUTA)
   })
 })

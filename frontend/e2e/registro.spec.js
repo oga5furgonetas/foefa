@@ -235,3 +235,71 @@ test.describe('fotos de /registro', () => {
   }
 
 })
+
+/* ── TANDA 4 DE DISEÑO (14-11-2026, hallazgo 15): la composición del alta de una empresa. Lo que envía no cambia (lo
+   mira «lo que envía el alta no cambia», arriba) ni el alta de quien reparte solo. ── */
+test('tanda 4 · el alta de una empresa: dos grupos con su regla, el idioma al pie y, desde 1024 px, los pasos que vienen', async ({ page }) => {
+  await preparar(page)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto('/registro?sector=otra&plan=operacion&flota=12', { waitUntil: 'domcontentloaded' })
+  const alta = page.getByTestId('alta-empresa')
+  await expect(alta.getByRole('heading', { level: 2, name: 'Tu empresa' })).toBeVisible()
+  await expect(alta.getByRole('heading', { level: 2, name: 'Tu acceso' })).toBeVisible()
+  expect(await alta.getByRole('heading', { name: 'Tu empresa', exact: true }).evaluate((e) => getComputedStyle(e).borderTopWidth)).toBe('1px')
+  // «Tu empresa» antes del nombre; «Tu acceso» antes del usuario.
+  const y = (l) => l.boundingBox().then((b) => b.y)
+  expect(await y(alta.getByRole('heading', { name: 'Tu empresa', exact: true }))).toBeLessThan(await y(page.getByPlaceholder('Transportes Pérez SL')))
+  expect(await y(alta.getByRole('heading', { name: 'Tu acceso', exact: true }))).toBeLessThan(await y(page.locator('input[autocomplete="username"]')))
+  expect(await y(alta.getByRole('heading', { name: 'Tu acceso', exact: true }))).toBeGreaterThan(await y(page.locator('input[type=email]')))
+  // El idioma, al pie: por debajo del botón de crear la cuenta (antes, en una caja encima del título).
+  const idioma = alta.locator('select')
+  await expect(idioma).toHaveCount(1)
+  expect(await y(idioma)).toBeGreaterThan(await y(page.getByRole('button', { name: /Crear cuenta con plan/ })))
+  // Los cuatro pasos, a la derecha, con las palabras del arranque.
+  const pasos = page.getByTestId('alta-pasos-despues')
+  await expect(pasos).toBeVisible()
+  await expect(pasos.locator('li')).toHaveText(['1Tus furgonetas', '2Tus conductores', '3Dales acceso', '4La primera revisión'])
+  expect((await pasos.boundingBox()).x).toBeGreaterThan((await page.getByPlaceholder('Transportes Pérez SL').boundingBox()).x + 400)
+  // En el móvil, no: lo dice «Cuenta creada».
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(pasos).toBeHidden()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+})
+
+test('tanda 4 · las empresas que reparten (van a su reparto) no ven los pasos del arranque', async ({ page }) => {
+  await preparar(page)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto('/registro?sector=supermercado&plan=reparto', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('alta-empresa')).toBeVisible()
+  await expect(page.getByTestId('alta-pasos-despues')).toHaveCount(0)
+})
+
+test('tanda 4 · «Cuenta creada»: el correo entero en su línea (sin partirse por el guion) e «Ir al panel» como enlace de texto', async ({ page }) => {
+  await preparar(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/registro?sector=otra&plan=operacion&flota=12', { waitUntil: 'domcontentloaded' })
+  await rellenar(page)
+  await page.locator('input[type=email]').fill('oficina@transportes-perez.es')
+  await page.getByRole('button', { name: /Crear cuenta con plan/ }).click()
+  const correo = page.getByTestId('alta-correo')
+  await expect(correo).toHaveText('oficina@transportes-perez.es')
+  const [alto, linea, display] = await correo.evaluate((e) => [e.getBoundingClientRect().height, parseFloat(getComputedStyle(e).lineHeight), getComputedStyle(e).display])
+  expect(display).toBe('block')
+  expect(Math.round(alto / linea)).toBe(1)
+  const panel = page.getByTestId('alta-ir-panel')
+  expect(await panel.evaluate((e) => e.tagName)).toBe('A')
+  await expect(panel).toHaveAttribute('href', '/panel')
+  expect(await panel.evaluate((e) => [getComputedStyle(e).backgroundColor, getComputedStyle(e).borderTopWidth])).toEqual(['rgba(0, 0, 0, 0)', '0px'])
+  await expect(page.getByRole('button', { name: 'Empezar' })).toBeVisible()
+})
+
+test('tanda 4 · el alta de empresa arranca en papel (sin fogonazo oscuro); la de quien reparte solo, en oscuro', async ({ page }) => {
+  await preparar(page)
+  for (const [ruta, clase] of [['/registro?sector=otra&plan=operacion', 'arranque-papel'], ['/registro', 'arranque-papel'], ['/registro?sector=autonomo&plan=autonomo', null]]) {
+    // public/fondo-arranque.js marca <html> en el <head>, antes de que se pinte nada (y antes que React).
+    await page.goto(ruta, { waitUntil: 'domcontentloaded' })
+    const clases = await page.evaluate(() => document.documentElement.className)
+    if (clase) expect(clases, ruta).toContain(clase)
+    else expect(clases, ruta).not.toMatch(/arranque-(papel|noche)/)
+  }
+})

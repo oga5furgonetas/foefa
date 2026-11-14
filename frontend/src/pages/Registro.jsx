@@ -133,6 +133,9 @@ function CabeceraAlta({ elegirIdioma, lang, href = '/' }) {
   )
 }
 
+/* «Ir al panel» en «Cuenta creada»: un enlace de texto, con su zona de toque de 44 px. */
+const ENLACE_PANEL = 'inline-flex min-h-[44px] items-center text-[0.9375rem] font-semibold text-[color:var(--ld-text)] underline decoration-[color:var(--ld-border-strong)] underline-offset-4 hover:decoration-[color:var(--ld-text)]'
+
 /* «¿Ya tienes cuenta? Entrar», al pie de los dos selectores. */
 function YaTienesCuenta() {
   return (
@@ -458,9 +461,12 @@ export default function Registro() {
           <p className="mt-2 text-[15px] text-[color:var(--ld-muted)]">
             {t('alta.reg.plan').replace('{plan}', tx(planInfo.name)).replace('{n}', diasPrueba)}
           </p>
+          {/* El correo, entero y en su propia línea (tanda 4): dentro de la frase se partía por el guion
+              («transportes- / perez.es»). Si no cabe en el ancho, se corta letra a letra, nunca por el guion. */}
           {correoEnviado && (
             <p className="mt-4 text-[16px] leading-relaxed text-[color:var(--ld-text2)]" data-testid="alta-correo-enviado">
-              {t('alta.reg.correo')} <b className="font-semibold text-[color:var(--ld-text)]">{email.trim().toLowerCase()}</b>.
+              {t('alta.reg.correo')}
+              <b className="mt-0.5 block break-all font-mono text-[15px] font-medium text-[color:var(--ld-text)]" data-testid="alta-correo">{email.trim().toLowerCase()}</b>
             </p>
           )}
           {reparte ? (
@@ -480,20 +486,17 @@ export default function Registro() {
                   </li>
                 ))}
               </ol>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <button type="button" className={`${BTN_PRIMARIO} sm:flex-1`} onClick={() => { window.location.href = '/panel/arranque' }}>
+              {/* «Empezar» es la acción; «Ir al panel», un enlace de texto debajo (tanda 4): pesaban lo mismo. */}
+              <div className="mt-8 flex flex-col items-start gap-2">
+                <button type="button" className={`${BTN_PRIMARIO} w-full sm:w-auto sm:min-w-[220px]`} onClick={() => { window.location.href = '/panel/arranque' }}>
                   {t('alta.reg.empezar')}
                 </button>
-                <button type="button" className={`${BTN_SECUNDARIO} sm:flex-1`} onClick={() => { window.location.href = '/panel' }}>
-                  {t('alta.reg.irPanel')}
-                </button>
+                <a href="/panel" className={ENLACE_PANEL} data-testid="alta-ir-panel">{t('alta.reg.irPanel')}</a>
               </div>
             </>
           )}
           {reparte && (
-            <button type="button" className={`mt-3 ${BTN_SECUNDARIO} w-full`} onClick={() => { window.location.href = '/panel' }}>
-              {t('alta.reg.irPanel')}
-            </button>
+            <a href="/panel" className={`mt-2 ${ENLACE_PANEL}`} data-testid="alta-ir-panel">{t('alta.reg.irPanel')}</a>
           )}
         </div>
       </div>
@@ -533,8 +536,16 @@ export default function Registro() {
 
   // Una empresa, en papel; quien reparte solo, con el aspecto de su app (los dos juegos, al final del fichero).
   const S = soloYo ? OSCURO : PAPEL
-  return (
-    <div style={S.wrap} className={soloYo ? undefined : 'ld-root font-sans antialiased'} data-theme={soloYo ? undefined : tema} data-testid={soloYo ? undefined : 'alta-empresa'}>
+  /* COMPOSICIÓN DEL ALTA DE UNA EMPRESA (tanda 4, 14-11-2026): el idioma, al pie (no en una caja encima del título); los
+     campos en dos grupos con su regla y su subtítulo («Tu empresa» / «Tu acceso»); y, desde 1024 px, a la derecha, los
+     cuatro pasos que vienen después (los de «Cuenta creada» y el arranque, con sus mismas palabras). Lo que se envía no
+     cambia. Quien reparte solo (y la app de iPhone, que solo da de alta a quien reparte) sigue exactamente igual. Las
+     empresas que reparten van a su reparto, no al arranque: a ellas no se les enseñan esos pasos. */
+  const conPasos = !soloYo && !reparte
+  const grupo = (texto, id) => (
+    <h2 id={id} style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.01em', color: S.texto, borderTop: '1px solid var(--ld-border)', paddingTop: 16, margin: '32px 0 2px' }}>{texto}</h2>
+  )
+  const formulario = (
       <div style={soloYo ? { ...S.card, maxWidth: 440 } : S.card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: soloYo ? 18 : 28 }}>
           <a href={soloYo ? '/empezar' : '/'} style={{ display: 'flex', alignItems: 'center', gap: 10, color: S.texto, textDecoration: 'none' }}>
@@ -543,18 +554,13 @@ export default function Registro() {
               : <LogoMarca size={28} />}
             <b style={{ fontSize: soloYo ? 17 : 18, fontWeight: soloYo ? 700 : 800 }}>{soloYo ? MARCA.app : MARCA.nombre}</b>
           </a>
-          <div style={{ marginLeft: 'auto' }}>
-            {soloYo ? (
+          {soloYo && (
+            <div style={{ marginLeft: 'auto' }}>
               <select value={idiomaApp} onChange={(e) => cambiarIdioma(e.target.value)} style={S.sel} aria-label="Idioma / Language">
                 {Object.entries(IDIOMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
-            ) : (
-              /* El mismo selector y en el mismo orden que el pie de la portada; cambia la web y el panel a la vez. */
-              <select value={idiomaApp} onChange={(e) => elegirIdioma(e.target.value)} style={S.sel} aria-label="Idioma / Language">
-                {Object.entries(IDIOMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            )}
-          </div>
+            </div>
+          )}
         </div>
         {!soloYo && (
           <h1 style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1, margin: '0 0 18px' }}>{t('alta.reg.titulo')}</h1>
@@ -581,7 +587,7 @@ export default function Registro() {
           </div>
         ) : (
         /* El plan elegido, en una línea con su regla: el nombre, lo que cuesta y la prueba. Sin cajas tintadas. */
-        <div style={{ borderTop: '1px solid var(--ld-border)', borderBottom: '1px solid var(--ld-border)', padding: '12px 0', marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ borderTop: '1px solid var(--ld-border)', padding: '12px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 17 }}>{tt('Plan elegido')}: {tt(planInfo.name)}</div>
             <div style={{ fontSize: 14, color: S.gris, marginTop: 2 }}>
@@ -614,6 +620,7 @@ export default function Registro() {
             🎁 {tt('Te ha invitado un compañero: {n} días gratis', { n: invitacion.dias })}
           </div>
         )}
+        {!soloYo && grupo(tx('Tu empresa'), 'alta-grupo-empresa')}
         <label style={S.lbl}>{soloYo ? tt('Tu nombre') : t('reg.company')}</label>
         <input style={S.inp} value={org} onChange={(e) => onOrg(e.target.value)} placeholder={soloYo ? 'Pepe' : 'Transportes Pérez SL'} />
 
@@ -647,6 +654,7 @@ export default function Registro() {
         )}
 
         {!soloYo && <>
+        {grupo(tx('Tu acceso'), 'alta-grupo-acceso')}
         <label style={S.lbl}>{t('login.user')}</label>
         <input style={S.inp} value={user} onChange={(e) => setUser(e.target.value)} autoComplete="username" />
         </>}
@@ -713,8 +721,48 @@ export default function Registro() {
         <div style={{ textAlign: 'center', marginTop: 16, color: S.gris, fontSize: soloYo ? 13 : 15 }}>
           {soloYo ? tt('¿Ya tienes cuenta?') : t('reg.have')} <a href="/panel/login" style={{ color: S.enlace, textDecoration: 'none', fontWeight: 600 }}>{soloYo ? tt('Entrar') : t('login.btn')}</a>
         </div>
+
+        {/* El idioma, al pie: el mismo selector y en el mismo orden que el pie de la portada; cambia la web y el panel a la vez. */}
+        {!soloYo && (
+          <div style={{ marginTop: 32, paddingTop: 16, borderTop: '1px solid var(--ld-border)' }}>
+            <select value={idiomaApp} onChange={(e) => elegirIdioma(e.target.value)} style={S.sel} aria-label="Idioma / Language" data-testid="alta-idioma-pie">
+              {Object.entries(IDIOMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+        )}
       </div>
+  )
+
+  return (
+    <div style={S.wrap} className={soloYo ? undefined : 'ld-root font-sans antialiased'} data-theme={soloYo ? undefined : tema} data-testid={soloYo ? undefined : 'alta-empresa'}>
+      {conPasos ? (
+        <div className="grid w-full max-w-[480px] lg:max-w-[1040px] lg:grid-cols-[480px_minmax(0,1fr)] lg:gap-24">
+          {formulario}
+          <PasosDespues t={t} />
+        </div>
+      ) : formulario}
     </div>
+  )
+}
+
+/* Desde 1024 px, junto al formulario de una empresa: lo que viene después de crear la cuenta, con las mismas palabras que
+   «Cuenta creada» y que el arranque del panel (alta.p1-p4 en i18nDict.js). En el móvil no sale: lo dice «Cuenta creada». */
+function PasosDespues({ t }) {
+  return (
+    <aside aria-labelledby="alta-despues" className="hidden lg:block" data-testid="alta-pasos-despues">
+      <div className="sticky top-8 pt-[76px]">
+        <h2 id="alta-despues" className="text-[1.0625rem] font-bold text-[color:var(--ld-text)]">{tx('Después de crear la cuenta')}</h2>
+        <p className="mt-1 text-[0.9688rem] leading-relaxed text-[color:var(--ld-muted)]">{t('alta.reg.pasos')}</p>
+        <ol className="mt-5 border-t border-[color:var(--ld-border)]">
+          {['alta.p1.titulo', 'alta.p2.titulo', 'alta.p3.titulo', 'alta.p4.titulo'].map((k, i) => (
+            <li key={k} className="flex items-baseline gap-4 border-b border-[color:var(--ld-border)] py-3.5">
+              <span className="w-5 font-mono text-[0.875rem] tabular-nums text-[color:var(--ld-muted)]">{i + 1}</span>
+              <span className="text-[1.0625rem] font-semibold text-[color:var(--ld-text)]">{t(k)}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </aside>
   )
 }
 
