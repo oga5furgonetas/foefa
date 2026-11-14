@@ -4,16 +4,21 @@ import { LANGS, useT } from '../i18n'
 import { Check, ArrowRight } from 'lucide-react'
 import { API_BASE } from '../lib/apiBase'
 import { medirAccion } from '../lib/analitica'
-import { MARCA } from '../marca'
+import { BTN_SECUNDARIO, CabeceraSimple, useTemaWeb } from './portadaComun'
 import { PLANES_EMPRESA, PLAN_REPARTO, DESCUENTOS_VOLUMEN, COMPLEMENTOS, REGLAS, MESES_ANUAL, PARADAS_GRATIS, promoGratis, fechaPromo, precioMes, precioVehiculo, descuentoVolumen, eur } from '../lib/precios'
 
 /* Tarifa POR VEHÍCULO, con usuarios y conductores ilimitados. Los planes, los
    descuentos y los complementos viven en lib/precios.js (y su porqué, en
-   docs/PRECIOS.md); los de verdad llegan de /billing/planes. */
+   docs/PRECIOS.md); los de verdad llegan de /billing/planes.
+   IDENTIDAD (14-11-2026): la de la portada (tinta sobre papel, día por defecto y la noche con su paleta): los colores
+   salen de las variables --ld-* de index.css; sin degradados, brillos, emojis ni rótulos en mayúsculas espaciadas. El
+   color de cada plan (lib/precios.js) ya no pinta texto: en papel no se leía. */
 const AUTONOMO = { clave: 'autonomo', nombre: 'Repartidor', mensual: 9.99, anual: 99, dias_prueba: 7 }
 const precioAnual = (p, n, tramos) => precioMes(p, n, tramos) * MESES_ANUAL
 const ahorroAnual = (p, n, tramos) => precioMes(p, n, tramos) * (12 - MESES_ANUAL)
-const tarjeta = { background: '#13161b', border: '1px solid rgba(255,255,255,.08)', borderRadius: 20 }
+const V = (n) => `var(--ld-${n})`
+const tarjeta = { background: V('surface'), border: `1px solid ${V('border')}`, borderRadius: 20 }
+const campoNum = { width: 84, height: 44, background: V('surface'), border: `1px solid ${V('border-strong')}`, borderRadius: 10, padding: '0 10px', color: V('text'), fontSize: 16, fontWeight: 600, textAlign: 'center', fontFamily: 'IBM Plex Mono, ui-monospace, monospace' }
 
 /* ── Oferta fundador (06-10-2026): Pro a 6 € por vehículo, congelado 24 meses, para las
    10 primeras empresas. No se suma al descuento por volumen; sí al anual. Antes era
@@ -53,31 +58,30 @@ function FounderOffer() {
 
   if (slots && slots.left <= 0) return null   // agotadas: la oferta desaparece sola
 
-  const inputS = { background: '#0b0d10', border: '1px solid rgba(255,255,255,.12)', borderRadius: 10, padding: '10px 12px', fontSize: 14, color: '#eef1f6', outline: 'none', width: '100%' }
+  const inputS = { background: V('surface'), border: `1px solid ${V('border-strong')}`, borderRadius: 10, padding: '0 12px', height: 44, fontSize: 15, color: V('text'), outline: 'none', width: '100%' }
 
   return (
-    <div style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(145deg,rgba(245,158,11,.10),rgba(249,115,22,.05)), #13161b', border: '1.5px solid rgba(245,158,11,.35)', borderRadius: 20, padding: '26px 28px', marginBottom: 36, boxShadow: '0 0 50px rgba(245,158,11,.08)' }}>
+    <div style={{ position: 'relative', background: V('surface'), border: `1.5px solid ${V('ambar')}`, borderRadius: 20, padding: '26px 28px', marginBottom: 36 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 20 }}>
         <div style={{ minWidth: 260, flex: '1 1 320px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(245,158,11,.15)', borderRadius: 99, padding: '4px 12px', fontSize: 11, fontWeight: 800, color: '#fbbf24', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 12 }}>
-            ⭐ Oferta fundador {slots && slots.left < slots.total ? `· quedan ${slots.left} de ${slots.total} plazas` : '· plazas limitadas'}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: V('ambar'), borderRadius: 6, padding: '4px 10px', fontSize: 13, fontWeight: 700, color: '#10181A', marginBottom: 12 }}>
+            Oferta fundador {slots && slots.left < slots.total ? `· quedan ${slots.left} de ${slots.total} plazas` : '· plazas limitadas'}
           </div>
-          <h2 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 900, lineHeight: 1.2 }}>
-            El plan Pro a <span style={{ color: '#fbbf24' }}>6 € por vehículo, congelado 24 meses</span>
+          <h2 className="ld-titular" style={{ margin: '0 0 8px', fontSize: 26, lineHeight: 1.15 }}>
+            El plan Pro a 6 € por vehículo, congelado 24 meses
           </h2>
-          <p style={{ margin: 0, color: '#94a3b8', fontSize: 14, lineHeight: 1.6, maxWidth: 520 }}>
-            Todo Pro (9 €/vehículo): delegaciones ilimitadas, quién causa los golpes, cuadrante y turnos, plantilla y exportación.
-            Solo para las 10 primeras empresas, <b style={{ color: '#cbd3e0' }}>sin subidas durante dos años</b>. Se suma al pago anual.
+          <p style={{ margin: 0, color: V('muted'), fontSize: 15, lineHeight: 1.6, maxWidth: 520 }}>
+            Todo Pro (9 €/vehículo): delegaciones ilimitadas, qué furgoneta lleva cada uno, cuadrante y turnos, plantilla y exportación.
+            Solo para las 10 primeras empresas, <b style={{ color: V('text') }}>sin subidas durante dos años</b>. Se suma al pago anual.
             Reservar es gratis y sin compromiso: te llamamos y lo activamos juntos.
           </p>
         </div>
 
         <div style={{ flex: '0 1 340px', minWidth: 280 }}>
           {done ? (
-            <div style={{ background: 'rgba(52,211,153,.08)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 14, padding: '18px 20px', textAlign: 'center' }}>
-              <div style={{ fontSize: 26, marginBottom: 6 }}>✅</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: '#34d399', marginBottom: 4 }}>Plaza reservada</div>
-              <div style={{ fontSize: 13, color: '#94a3b8' }}>Te contactamos en menos de 24h para activarla. Sin compromiso.</div>
+            <div style={{ border: `1px solid ${V('border-strong')}`, borderRadius: 14, padding: '18px 20px' }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: V('ok'), marginBottom: 4 }}>Plaza reservada</div>
+              <div style={{ fontSize: 14, color: V('muted') }}>Te contactamos en menos de 24h para activarla. Sin compromiso.</div>
             </div>
           ) : open ? (
             <form onSubmit={reserve} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -87,13 +91,13 @@ function FounderOffer() {
                 <input style={inputS} placeholder="Teléfono" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
                 <input style={inputS} placeholder="Nº de vehículos" value={form.fleet_size} onChange={e => setForm(f => ({ ...f, fleet_size: e.target.value }))} />
               </div>
-              {err && <div style={{ fontSize: 12, color: '#f87171' }}>{err}</div>}
-              <button type="submit" disabled={busy} style={{ background: 'linear-gradient(135deg,#fbbf24,#f59e0b)', border: 'none', borderRadius: 11, padding: '12px 0', fontSize: 14, fontWeight: 900, color: '#0b0d10', cursor: 'pointer', opacity: busy ? .6 : 1 }}>
+              {err && <div style={{ fontSize: 14, fontWeight: 600, color: V('warn') }}>{err}</div>}
+              <button type="submit" disabled={busy} className={BTN_SECUNDARIO}>
                 {busy ? 'Reservando…' : 'Confirmar reserva gratuita'}
               </button>
             </form>
           ) : (
-            <button onClick={() => { medirAccion('fundador_abrir'); setOpen(true) }} style={{ width: '100%', background: 'linear-gradient(135deg,#fbbf24,#f59e0b)', border: 'none', borderRadius: 12, padding: '15px 24px', fontSize: 15, fontWeight: 900, color: '#0b0d10', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 8px 30px rgba(245,158,11,.25)' }}>
+            <button onClick={() => { medirAccion('fundador_abrir'); setOpen(true) }} className={`${BTN_SECUNDARIO} w-full`}>
               Reservar mi plaza fundador <ArrowRight size={16} />
             </button>
           )}
@@ -106,6 +110,7 @@ function FounderOffer() {
 export default function Planes() {
   useTitulo('Planes y precios')
   const { lang, setLang } = useT()
+  const [tema] = useTemaWeb()
   const [billing, setBilling] = useState('monthly') // 'monthly' | 'annual'
   /* El visitante escribe cuántos vehículos tiene y ve SU precio, ya con el
      descuento por volumen. Una tabla de planes obliga a hacer cuentas; esto no. */
@@ -142,43 +147,34 @@ export default function Planes() {
   const pct = descuentoVolumen(furgonetas, tramos)
 
   return (
-    <div style={{ minHeight: '100vh', background: 'radial-gradient(1100px 560px at 72% -12%,rgba(20,231,216,.10),transparent),#0b0d10', color: '#eef1f6', fontFamily: 'Inter Variable,Inter,system-ui,sans-serif', padding: '20px 16px 80px' }}>
-      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-
-        <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 48 }}>
-          <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: '#eef1f6' }}>
-            <img src="/favicon.svg" alt="" width="32" height="32" style={{ borderRadius: 9 }} />
-            <b style={{ fontSize: 16 }}>{MARCA.nombre}</b>
-          </a>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <select value={lang} onChange={(e) => setLang(e.target.value)} style={{ background: '#13161b', color: '#e7ebf2', border: '1px solid rgba(255,255,255,.12)', borderRadius: 9, padding: '6px 10px', fontSize: 13 }}>
-              {Object.entries(LANGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-            <a href="/panel/login" style={{ color: '#8b94a3', fontSize: 13, textDecoration: 'none' }}>Entrar</a>
-          </div>
-        </nav>
+    <div className="ld-root font-sans antialiased" data-theme={tema} style={{ minHeight: '100vh' }}>
+      <CabeceraSimple>
+        <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label="Idioma / Language" style={{ height: 40, background: V('surface'), color: V('text'), border: `1px solid ${V('border-strong')}`, borderRadius: 10, padding: '0 10px', fontSize: 14 }}>
+          {Object.entries(LANGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        <a href="/panel/login" className="inline-flex min-h-[44px] items-center px-1 text-[15px] font-medium text-[color:var(--ld-text)] underline-offset-4 hover:underline">Entrar</a>
+      </CabeceraSimple>
+      <div style={{ maxWidth: 1136, margin: '0 auto', padding: '48px 16px 80px' }}>
 
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(20,231,216,.12)', border: '1px solid rgba(20,231,216,.3)', borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 700, color: '#14E7D8', marginBottom: 16, letterSpacing: '.06em', textTransform: 'uppercase' }}>
-            ✨ 14 días gratis · sin tarjeta
-          </div>
-          <h1 style={{ fontSize: 'clamp(28px,5vw,44px)', fontWeight: 900, margin: '0 0 12px', lineHeight: 1.1 }}>
-            Se paga por vehículo. La gente, gratis.
+          <p style={{ fontSize: 15, fontWeight: 600, color: V('accent'), marginBottom: 14 }}>14 días de prueba, sin tarjeta</p>
+          <h1 className="ld-titular" style={{ fontSize: 'clamp(32px,5vw,52px)', margin: '0 auto 14px', lineHeight: 1.04, maxWidth: 820 }}>
+            Se paga por vehículo. Usuarios y conductores, sin límite.
           </h1>
-          <p style={{ color: '#8b94a3', fontSize: 16, maxWidth: 560, margin: '0 auto 24px' }}>
+          <p style={{ color: V('muted'), fontSize: 17, maxWidth: 560, margin: '0 auto 24px' }}>
             Usuarios de oficina y conductores ilimitados en todos los planes. Sin instalar nada en las furgonetas.
             Mensual sin permanencia, o anual con 2 meses gratis.
           </p>
 
-          <div style={{ display: 'inline-flex', alignItems: 'center', background: '#13161b', border: '1px solid rgba(255,255,255,.1)', borderRadius: 14, padding: 4, gap: 4 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', background: V('surface'), border: `1px solid ${V('border-strong')}`, borderRadius: 12, padding: 4, gap: 4 }}>
             <button onClick={() => setBilling('monthly')}
-              style={{ padding: '8px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, background: billing === 'monthly' ? '#1e293b' : 'transparent', color: billing === 'monthly' ? '#eef1f6' : '#64748b' }}>
+              aria-pressed={billing === 'monthly'} style={{ minHeight: 40, padding: '0 20px', borderRadius: 9, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 15, background: billing === 'monthly' ? V('text') : 'transparent', color: billing === 'monthly' ? V('bg') : V('muted') }}>
               Mensual
             </button>
             <button onClick={() => setBilling('annual')}
-              style={{ padding: '8px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8, background: billing === 'annual' ? '#1e293b' : 'transparent', color: billing === 'annual' ? '#eef1f6' : '#64748b' }}>
+              aria-pressed={billing === 'annual'} style={{ minHeight: 40, padding: '0 20px', borderRadius: 9, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8, background: billing === 'annual' ? V('text') : 'transparent', color: billing === 'annual' ? V('bg') : V('muted') }}>
               Anual
-              <span style={{ background: 'rgba(52,211,153,.15)', color: '#34d399', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap' }}>2 meses gratis</span>
+              <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', color: billing === 'annual' ? V('bg') : V('ok') }}>pagas 10 meses</span>
             </button>
           </div>
         </div>
@@ -188,13 +184,13 @@ export default function Planes() {
         {/* Cuántos vehículos tienes: el precio se calcula con TU flota */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
           <div style={{ ...tarjeta, borderRadius: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', justifyContent: 'center', padding: '14px 22px' }}>
-            <label htmlFor="flota" style={{ fontSize: 14, color: '#cbd5e1', fontWeight: 600 }}>¿Cuántos vehículos tienes?</label>
+            <label htmlFor="flota" style={{ fontSize: 15, color: V('text'), fontWeight: 600 }}>¿Cuántos vehículos tienes?</label>
             <input id="flota" type="range" min="5" max="400" step="5" value={furgonetas}
-              onChange={(e) => setFurgonetas(Number(e.target.value))} style={{ width: 220, accentColor: '#14E7D8' }} />
+              onChange={(e) => setFurgonetas(Number(e.target.value))} style={{ width: 220, accentColor: 'var(--ld-text)' }} />
             <input type="number" min="1" max="5000" value={furgonetas} aria-label="Número de vehículos"
               onChange={(e) => setFurgonetas(Math.max(1, Math.min(5000, Number(e.target.value) || 1)))}
-              style={{ width: 80, background: '#0b0d10', border: '1px solid rgba(255,255,255,.14)', borderRadius: 10, padding: '8px 10px', color: '#eef1f6', fontSize: 15, fontWeight: 800, textAlign: 'center' }} />
-            <span style={{ fontSize: 12.5, fontWeight: 700, color: pct ? '#34d399' : '#64748b' }}>
+              style={campoNum} />
+            <span style={{ fontSize: 14, fontWeight: 600, color: pct ? V('ok') : V('muted') }}>
               {pct ? `−${pct} % por volumen` : `Desde ${tramos[0]?.desde || 50} vehículos, −${tramos[0]?.pct || 10} %`}
             </span>
           </div>
@@ -210,42 +206,40 @@ export default function Planes() {
             return (
               <div key={p.clave} style={{
                 ...tarjeta,
-                background: p.recomendado ? 'linear-gradient(145deg,#0f172a,#0c1929)' : '#13161b',
-                border: p.recomendado ? `2px solid ${p.color}` : tarjeta.border,
+                border: p.recomendado ? `2px solid ${V('text')}` : tarjeta.border,
                 padding: '28px 24px', position: 'relative', display: 'flex', flexDirection: 'column',
-                boxShadow: p.recomendado ? `0 0 40px ${p.color}22` : 'none',
               }}>
                 {p.recomendado && (
-                  <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', background: p.color, borderRadius: 20, padding: '3px 14px', fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', color: '#0b0d10' }}>
+                  <div style={{ position: 'absolute', top: -13, left: 24, background: V('text'), borderRadius: 6, padding: '3px 10px', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', color: V('bg') }}>
                     Recomendado
                   </div>
                 )}
                 <div style={{ marginBottom: 20 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: p.color, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>{p.nombre}</div>
-                  <div style={{ fontSize: 13, color: '#8b94a3', marginBottom: 16 }}>{p.para}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-.01em', marginBottom: 4 }}>{p.nombre}</div>
+                  <div style={{ fontSize: 14, color: V('muted'), marginBottom: 16 }}>{p.para}</div>
                   {aMedida ? (
                     <>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                        <span style={{ fontSize: 15, color: '#8b94a3' }}>desde</span>
-                        <span style={{ fontSize: 44, fontWeight: 900 }}>{p.desde || 12}€</span>
-                        <span style={{ color: '#8b94a3', fontSize: 14 }}>/vehículo</span>
+                        <span style={{ fontSize: 15, color: V('muted') }}>desde</span>
+                        <span className="ld-titular" style={{ fontSize: 44 }}>{p.desde || 12}€</span>
+                        <span style={{ color: V('muted'), fontSize: 15 }}>/vehículo</span>
                       </div>
-                      <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 4 }}>A medida: lo cerramos con vosotros</div>
+                      <div style={{ fontSize: 14, color: V('muted'), marginTop: 4 }}>A medida: lo cerramos con vosotros</div>
                     </>
                   ) : (
                     <>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                        <span style={{ fontSize: 44, fontWeight: 900 }}>{eur(mostrado)}€</span>
-                        <span style={{ color: '#8b94a3', fontSize: 14 }}>/mes</span>
+                        <span className="ld-titular" style={{ fontSize: 44 }}>{eur(mostrado)}€</span>
+                        <span style={{ color: V('muted'), fontSize: 15 }}>/mes</span>
                       </div>
-                      <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 4 }}>
+                      <div style={{ fontSize: 14, color: V('muted'), marginTop: 4 }}>
                         {porVeh !== p.por_vehiculo
-                          ? <><s>{eur(p.por_vehiculo)}€</s> <b style={{ color: '#34d399' }}>{eur(porVeh)}€</b> por vehículo y mes</>
+                          ? <><s>{eur(p.por_vehiculo)}€</s> <b style={{ color: V('ok') }}>{eur(porVeh)}€</b> por vehículo y mes</>
                           : <>{eur(p.por_vehiculo)}€ por vehículo y mes</>}
-                        {minimo && <span style={{ color: '#64748b' }}> · mínimo {p.minimo_vehiculos}</span>}
+                        {minimo && <span> · mínimo {p.minimo_vehiculos}</span>}
                       </div>
                       {billing === 'annual' && (
-                        <div style={{ fontSize: 12, color: '#34d399', fontWeight: 700, marginTop: 4 }}>
+                        <div style={{ fontSize: 14, color: V('ok'), fontWeight: 700, marginTop: 4 }}>
                           {eur(precioAnual(p, furgonetas, tramos))}€/año · ahorras {eur(ahorroAnual(p, furgonetas, tramos))}€
                         </div>
                       )}
@@ -256,22 +250,22 @@ export default function Planes() {
                 <a href={aMedida ? '/contacto?asunto=Plan%20Empresa' : `/registro?plan=${p.clave}&billing=${billing}&flota=${furgonetas}`}
                   onClick={() => medirAccion('plan_elegir')}
                   style={{
-                    display: 'block', textAlign: 'center', padding: '12px 0', borderRadius: 12, fontWeight: 800, fontSize: 14,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', height: 52, borderRadius: 12, fontWeight: 700, fontSize: 16,
                     textDecoration: 'none', marginBottom: 24,
-                    background: p.recomendado ? `linear-gradient(135deg,${p.color},${p.color}cc)` : 'transparent',
-                    color: p.recomendado ? '#0b0d10' : p.color, border: p.recomendado ? 'none' : `1.5px solid ${p.color}`,
+                    background: p.recomendado ? V('firma') : 'transparent',
+                    color: p.recomendado ? V('tinta-firma') : V('text'), border: p.recomendado ? '1.5px solid transparent' : `1.5px solid ${V('border-strong')}`,
                   }}>
-                  {aMedida ? 'Hablamos →' : 'Empezar 14 días gratis →'}
+                  {aMedida ? 'Hablamos →' : 'Empezar la prueba de 14 días →'}
                 </a>
 
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                   {(p.incluye || []).map((f) => (
-                    <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#cbd5e1', lineHeight: 1.45 }}>
-                      <Check size={14} color={p.color} style={{ flexShrink: 0, marginTop: 2 }} /> {f}
+                    <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 14.5, color: V('text2'), lineHeight: 1.45 }}>
+                      <Check size={15} color="var(--ld-ok)" style={{ flexShrink: 0, marginTop: 2 }} /> {f}
                     </li>
                   ))}
                   {(p.no_incluye || []).map((f) => (
-                    <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#475569' }}>
+                    <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: V('muted') }}>
                       <span style={{ fontSize: 14, lineHeight: 1 }}>✕</span> {f}
                     </li>
                   ))}
@@ -288,46 +282,46 @@ export default function Planes() {
           const minRep = reparto.minimo_repartidores || 0
           const mostradoRep = billing === 'annual' ? Math.round(mesRep * MESES_ANUAL / 12) : mesRep
           return (
-            <div id="reparto" style={{ ...tarjeta, border: `1.5px solid ${reparto.color}55`, padding: '26px 28px', marginTop: 40, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 24, alignItems: 'start' }}>
+            <div id="reparto" style={{ ...tarjeta, padding: '26px 28px', marginTop: 40, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 24, alignItems: 'start' }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: reparto.color, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>¿Repartís vuestra propia mercancía?</div>
-                <h2 style={{ fontSize: 24, fontWeight: 900, margin: '0 0 8px', lineHeight: 1.2 }}>Plan {reparto.nombre}: por repartidor, con las furgonetas incluidas</h2>
-                <p style={{ margin: '0 0 16px', color: '#94a3b8', fontSize: 14, lineHeight: 1.6 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: V('accent'), marginBottom: 6 }}>¿Repartís vuestra propia mercancía?</div>
+                <h2 className="ld-titular" style={{ fontSize: 26, margin: '0 0 8px', lineHeight: 1.15 }}>Plan {reparto.nombre}: por repartidor, con las furgonetas incluidas</h2>
+                <p style={{ margin: '0 0 16px', color: V('muted'), fontSize: 15, lineHeight: 1.6 }}>
                   Para el supermercado que lleva la compra a casa y el distribuidor que reparte a negocios. Se paga por repartidor que haya tenido pedidos en el mes; las furgonetas, las tiendas y los usuarios no se cobran.
                 </p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
-                  <label htmlFor="repartidores" style={{ fontSize: 14, color: '#cbd5e1', fontWeight: 600 }}>¿Cuántos repartidores tenéis?</label>
+                  <label htmlFor="repartidores" style={{ fontSize: 15, color: V('text'), fontWeight: 600 }}>¿Cuántos repartidores tenéis?</label>
                   <input id="repartidores" type="number" min="1" max="5000" value={repartidores} aria-label="Número de repartidores"
                     onChange={(e) => setRepartidores(Math.max(1, Math.min(5000, Number(e.target.value) || 1)))}
-                    style={{ width: 80, background: '#0b0d10', border: '1px solid rgba(255,255,255,.14)', borderRadius: 10, padding: '8px 10px', color: '#eef1f6', fontSize: 15, fontWeight: 800, textAlign: 'center' }} />
+                    style={campoNum} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                  <span style={{ fontSize: 40, fontWeight: 900 }}>{eur(mostradoRep)}€</span>
-                  <span style={{ color: '#8b94a3', fontSize: 14 }}>/mes</span>
+                  <span className="ld-titular" style={{ fontSize: 40 }}>{eur(mostradoRep)}€</span>
+                  <span style={{ color: V('muted'), fontSize: 15 }}>/mes</span>
                 </div>
-                <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 4 }}>
+                <div style={{ fontSize: 14, color: V('muted'), marginTop: 4 }}>
                   {porRep !== Number(reparto.por_repartidor)
-                    ? <><s>{eur(reparto.por_repartidor)}€</s> <b style={{ color: '#34d399' }}>{eur(porRep)}€</b> por repartidor activo y mes</>
+                    ? <><s>{eur(reparto.por_repartidor)}€</s> <b style={{ color: V('ok') }}>{eur(porRep)}€</b> por repartidor activo y mes</>
                     : <>{eur(reparto.por_repartidor)}€ por repartidor activo y mes</>}
-                  {repartidores < minRep && <span style={{ color: '#64748b' }}> · mínimo {minRep}</span>}
+                  {repartidores < minRep && <span> · mínimo {minRep}</span>}
                 </div>
                 {billing === 'annual' && (
-                  <div style={{ fontSize: 12, color: '#34d399', fontWeight: 700, marginTop: 4 }}>{eur(mesRep * MESES_ANUAL)}€/año · ahorras {eur(mesRep * (12 - MESES_ANUAL))}€</div>
+                  <div style={{ fontSize: 14, color: V('ok'), fontWeight: 700, marginTop: 4 }}>{eur(mesRep * MESES_ANUAL)}€/año · ahorras {eur(mesRep * (12 - MESES_ANUAL))}€</div>
                 )}
                 <a href={`/registro?sector=supermercado&plan=reparto&billing=${billing}&repartidores=${repartidores}`}
                   onClick={() => medirAccion('plan_elegir')}
-                  style={{ display: 'inline-block', marginTop: 16, padding: '12px 22px', borderRadius: 12, fontWeight: 800, fontSize: 14, textDecoration: 'none', background: `linear-gradient(135deg,${reparto.color},${reparto.color}cc)`, color: '#0b0d10' }}>
-                  Empezar 14 días gratis →
+                  className={`${BTN_SECUNDARIO} mt-4`}>
+                  Empezar la prueba de 14 días →
                 </a>
               </div>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
                 {(reparto.incluye || []).map((f) => (
-                  <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#cbd5e1', lineHeight: 1.45 }}>
-                    <Check size={14} color={reparto.color} style={{ flexShrink: 0, marginTop: 2 }} /> {f}
+                  <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 14.5, color: V('text2'), lineHeight: 1.45 }}>
+                    <Check size={15} color="var(--ld-ok)" style={{ flexShrink: 0, marginTop: 2 }} /> {f}
                   </li>
                 ))}
                 {(reparto.no_incluye || []).map((f) => (
-                  <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#475569' }}>
+                  <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: V('muted') }}>
                     <span style={{ fontSize: 14, lineHeight: 1 }}>✕</span> {f}
                   </li>
                 ))}
@@ -337,25 +331,25 @@ export default function Planes() {
         })()}
 
         {/* Complementos: paga más y obtén… */}
-        <h2 style={{ fontSize: 22, fontWeight: 900, margin: '40px 0 6px' }}>Complementos</h2>
-        <p style={{ color: '#8b94a3', fontSize: 14, margin: '0 0 16px' }}>Se añaden a cualquier plan cuando os hagan falta.</p>
+        <h2 className="ld-titular" style={{ fontSize: 30, margin: '56px 0 6px' }}>Complementos</h2>
+        <p style={{ color: V('muted'), fontSize: 15, margin: '0 0 16px' }}>Se añaden a cualquier plan cuando os hagan falta.</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))', gap: 14, marginBottom: 36 }}>
           {complementos.map((c) => (
             <div key={c.clave} style={{ ...tarjeta, borderRadius: 16, padding: '16px 18px' }}>
-              <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>{c.nombre}</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#14E7D8', marginBottom: 6 }}>{c.precio}</div>
-              <div style={{ fontSize: 12.5, color: '#8b94a3', lineHeight: 1.5 }}>{c.que}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{c.nombre}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: V('accent'), marginBottom: 6 }}>{c.precio}</div>
+              <div style={{ fontSize: 14, color: V('muted'), lineHeight: 1.5 }}>{c.que}</div>
             </div>
           ))}
         </div>
 
         {/* Lo que siempre se pregunta */}
-        <h2 style={{ fontSize: 22, fontWeight: 900, margin: '0 0 16px' }}>Cómo se cuenta</h2>
+        <h2 className="ld-titular" style={{ fontSize: 30, margin: '0 0 16px' }}>Cómo se cuenta</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 14, marginBottom: 36 }}>
           {REGLAS.map(([q, a]) => (
             <div key={q} style={{ ...tarjeta, borderRadius: 16, padding: '16px 18px' }}>
-              <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 6 }}>{q}</div>
-              <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.55 }}>{a}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{q}</div>
+              <div style={{ fontSize: 14.5, color: V('muted'), lineHeight: 1.55 }}>{a}</div>
             </div>
           ))}
         </div>
@@ -363,26 +357,26 @@ export default function Planes() {
         {/* El repartidor que va solo: otro producto, otra tarifa */}
         <div style={{ ...tarjeta, padding: '22px 26px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#eab308', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>¿Repartes tú solo?</div>
-            <div style={{ fontSize: 15, color: '#cbd5e1' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>¿Repartes tú solo?</div>
+            <div style={{ fontSize: 15, color: V('muted') }}>
               La app de ruta para quien reparte por su cuenta: {('gratis_hasta' in autonomo ? !!autonomo.gratis_hasta : promoGratis())
                 ? <><b>gratis y sin límite hasta el {fechaPromo('es-ES', autonomo.gratis_hasta || undefined)}</b>, sin tarjeta. Después, gratis hasta {autonomo.paradas_gratis || PARADAS_GRATIS} paradas al día; sin tope, {eur(autonomo.mensual)}€ al mes o {eur(autonomo.anual)}€ al año.</>
                 : <><b>gratis hasta {autonomo.paradas_gratis || PARADAS_GRATIS} paradas al día</b>, sin tarjeta. Sin tope, {eur(autonomo.mensual)}€ al mes o {eur(autonomo.anual)}€ al año.</>}
             </div>
           </div>
-          <a href="/repartidores" style={{ padding: '11px 22px', borderRadius: 12, border: '1.5px solid #eab308', color: '#eab308', fontWeight: 800, fontSize: 14, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+          <a href="/repartidores" className={BTN_SECUNDARIO}>
             Ver la app de reparto →
           </a>
         </div>
 
         <div style={{ marginTop: 40, textAlign: 'center' }}>
-          <p style={{ color: '#64748b', fontSize: 13 }}>
-            Precios sin IVA. ¿Dudas? <a href="/contacto" style={{ color: '#0FC2BC', textDecoration: 'none' }}>Contacta con nosotros</a>.
+          <p style={{ color: V('muted'), fontSize: 14 }}>
+            Precios sin IVA. ¿Dudas? <a href="/contacto" style={{ color: V('accent'), fontWeight: 600 }}>Contacta con nosotros</a>.
           </p>
           {/* LSSI art. 10: el aviso legal accesible desde cada página pública. */}
-          <p style={{ color: '#64748b', fontSize: 12, marginTop: 8 }}>
+          <p style={{ color: V('muted'), fontSize: 14, marginTop: 8 }}>
             {[['/aviso-legal', 'Aviso legal'], ['/privacidad', 'Privacidad'], ['/terminos', 'Términos'], ['/cookies', 'Cookies']].map(([h, t], i) => (
-              <span key={h}>{i > 0 && ' · '}<a href={h} style={{ color: '#64748b' }}>{t}</a></span>
+              <span key={h}>{i > 0 && ' · '}<a href={h} style={{ color: V('muted') }}>{t}</a></span>
             ))}
           </p>
         </div>

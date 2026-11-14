@@ -4,8 +4,8 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
 /* FUERA DE ESPAÑA (30-10-2026, Dani: «si un tío es de Estados Unidos y abre la aplicación en Estados Unidos, le
    funcione como debe de ser en Estados Unidos; no que le aparezca algo de España ni se le mezcle nada»).
    Un repartidor de Seattle con el navegador en inglés: la ruta en inglés, las distancias en millas, el dinero en
-   dólares, los cortes del WZDx (no de la DGT) y sin zonas de bajas emisiones (allí no hay); la portada con el plan
-   en dólares; las páginas legales en inglés. Nada de red de verdad: la API está simulada. */
+   dólares, los cortes del WZDx (no de la DGT) y sin zonas de bajas emisiones (allí no hay); la portada en inglés;
+   las páginas legales en inglés. Nada de red de verdad: la API está simulada. */
 
 test.describe('fuera de España · Estados Unidos', () => {
   test.use({ locale: 'en-US', timezoneId: 'America/Los_Angeles', viewport: { width: 390, height: 844 } })
@@ -61,11 +61,14 @@ test.describe('fuera de España · Estados Unidos', () => {
     }
   })
 
-  test('la portada en dólares y las páginas legales en inglés', async ({ page }) => {
+  /* Desde el 14-11-2026 la portada («/») es la de empresas con furgonetas, en euros (las empresas son de aquí): ya no
+     enseña el plan del repartidor, que era lo que salía en dólares. Se mira que sale en inglés y sin precios en euros
+     escritos a la española. */
+  test('la portada y las páginas legales en inglés', async ({ page }) => {
     await page.addInitScript(() => { localStorage.setItem('cookie_consent', JSON.stringify({ v: 3, anuncios: false, at: '2026-10-29T00:00:00Z' })) })
     await simularApi(page, 'vacio')
     await page.goto('/', { waitUntil: 'domcontentloaded' })
-    await expect(page.locator('body')).toContainText('$9.99')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Spot the dent the day it appears. Not the day you’re billed for it.')
     await expect(page.locator('body')).not.toContainText('9,99 €')
     await page.goto('/privacidad', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Privacy Policy')

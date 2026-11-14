@@ -243,8 +243,6 @@ setTimeout(() => { try { sessionStorage.removeItem('chunk_curacion') } catch { /
 
 /* Code-splitting: la landing carga al instante; el resto de rutas se descargan
    solo cuando se visitan (panel, portal conductor, legal…). */
-// La portada de empresas también va aparte (17-10-2026): quien llega a /repartidores o abre la app no la usa.
-const Landing = lazy(() => import('./pages/Landing'))
 const Login = lazy(() => import('./pages/Login'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Registro = lazy(() => import('./pages/Registro'))
@@ -273,7 +271,9 @@ const PaseMovil = lazy(() => import('./pages/PaseMovil'))
 const SeguimientoPedido = lazy(() => import('./pages/SeguimientoPedido'))
 const RegaloPagina = lazy(() => import('./pages/RegaloPagina'))
 const Planes = lazy(() => import('./pages/Planes'))
-// La página de venta para empresas (14-11-2026): habla de precios, así que solo en la web, como /planes.
+/* LA PORTADA (14-11-2026): «/» es la página para empresas con furgonetas (antes, la de la app de reparto, que sigue en
+   /repartidores y se enlaza desde abajo); /empresas enseña la misma. Va aparte: quien abre la app no la descarga.
+   Habla de precios, así que solo en la web, como /planes. */
 const Empresas = lazy(() => import('./pages/Empresas'))
 const DriverPortal = lazy(() => import('./pages/driver/DriverPortal'))
 const VerificarCorreoConductor = lazy(() => import('./pages/driver/VerificarCorreoConductor'))
@@ -418,7 +418,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <CookieBanner />
           <Suspense fallback={<RouteLoader />}>
             <Routes>
-              <Route path="/" element={<SoloWeb><Landing /></SoloWeb>} />
+              <Route path="/" element={<SoloWeb><Empresas /></SoloWeb>} />
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/registro" element={<Registro />} />
