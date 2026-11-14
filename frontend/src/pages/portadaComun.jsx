@@ -91,7 +91,7 @@ export function Pie({ lang, tema, setTema }) {
         <nav aria-label={tx('Producto')}>
           <p className="text-[14px] font-bold text-[color:var(--ld-text)]">{tx('Producto')}</p>
           <ul className="mt-2 text-[14px]">
-            {[['/planes', tx('Precios para empresas')], ['/expediente-ejemplo', tx('Un expediente de ejemplo')], ['/peritaje-tecnico', tx('Qué le enseñas al perito')],
+            {[['/planes', tx('Precios para empresas')], ['/expediente-ejemplo', tx('Un expediente de ejemplo')], ['/peritaje-tecnico', tx('Qué le enseñas al perito')], ['/devolucion-renting', tx('¿Qué te cobra tu renting al devolver?')],
               ['/repartidores', tx('App de reparto')], ['/empleo', tx('Ofertas de empleo')], ['/contacto', tx('Contacto')], ['/panel/login', tx('Entrar')]].map(([h, k]) => (
               <li key={h}><a href={h} className={enlace}>{k}</a></li>
             ))}

@@ -338,6 +338,7 @@ const AvisoLegal = lazy(() => import('./legal/AvisoLegal'))
 const Contacto = lazy(() => import('./legal/Contacto'))
 const Seguridad = lazy(() => import('./legal/Seguridad'))
 const PeritajeTecnico = lazy(() => import('./pages/PeritajeTecnico'))
+const DevolucionRenting = lazy(() => import('./pages/DevolucionRenting'))
 const ExpedienteEjemplo = lazy(() => import('./pages/ExpedienteEjemplo'))
 const Verify = lazy(() => import('./pages/Verify'))
 const NotFound = lazy(() => import('./pages/NotFound'))
@@ -448,6 +449,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/security" element={<Seguridad />} />
               <Route path="/seguridad" element={<Seguridad />} />
               <Route path="/peritaje-tecnico" element={<SoloWeb><PeritajeTecnico /></SoloWeb>} />
+              <Route path="/devolucion-renting" element={<SoloWeb><DevolucionRenting /></SoloWeb>} />
+              <Route path="/devolucion-renting/:compania" element={<SoloWeb><DevolucionRenting /></SoloWeb>} />
               <Route path="/expediente-ejemplo" element={<SoloWeb><ExpedienteEjemplo /></SoloWeb>} />
               <Route path="/verify" element={<Verify />} />
               <Route path="/verify/:hash" element={<Verify />} />
