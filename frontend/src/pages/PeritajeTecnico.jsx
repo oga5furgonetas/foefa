@@ -18,9 +18,9 @@ import { ANCHO, BTN_PRIMARIO, BTN_SECUNDARIO, CabeceraSimple, Pie, useTemaWeb } 
      (GET /inspections/{id}/forensic-pdf) y la comprobación pública (GET /verify/{hash}), que dice si el código está
      registrado y enseña fecha, firmante y matrícula en parte oculta. NO vuelve a calcular el código, así que aquí no se
      dice que «cualquier cambio se nota».
-   NUNCA «quién dio el golpe», «admisible en juicio», «certificado» ni «inmutable». */
+   NUNCA «quién dio el golpe» (ni para negarlo: planta la idea), «admisible en juicio», «certificado» ni «inmutable». */
 
-const ALTA = '/registro?sector=otra&plan=completo'   // la misma alta que la portada (Empresas.jsx, ALTA_EMPRESA)
+const ALTA = '/registro?sector=otra&plan=operacion'   // la misma alta que la portada sin tocar la calculadora: el Esencial
 
 const GUARDADO = [
   ['Cada revisión, con sus fotos', 'El conductor fotografía la furgoneta desde el móvil: frontal, trasera y los dos laterales. Cada foto queda con la fecha y la hora en que llegó al servidor, y con quién la hizo. Cada conductor hace una revisión por furgoneta y día.'],
@@ -30,7 +30,7 @@ const GUARDADO = [
 ]
 
 const NO_ES = [
-  ['No dice quién dio el golpe.', 'Dice quién la llevaba, y solo cuando es seguro.'],
+  ['No le pone nombre a un golpe por suposición.', 'Dice quién la llevaba, y solo cuando es seguro.'],
   ['No es una firma electrónica avanzada ni asesoría jurídica.', 'Es el registro de cada revisión: el valor que tenga ante un renting, un cliente o un juzgado lo decide quien lo recibe.'],
   ['No da nada por golpe sin una persona.', 'Un golpe entra en el expediente cuando alguien de tu oficina lo marca o lo confirma.'],
 ]
@@ -40,16 +40,16 @@ export default function PeritajeTecnico() {
   const [tema, setTema] = useTemaWeb()
   const titulo = tx('Qué le enseñas al perito · {marca}', { marca: MARCA.nombre })
   useEffect(() => {
-    const antes = document.title
     document.title = titulo
     try { document.documentElement.lang = lang } catch { /* nada */ }
-    return () => { document.title = antes }
+    // Al salir, el título neutro de la marca (el de index.html).
+    return () => { document.title = MARCA.nombre }
   }, [titulo, lang])
-  const enlace = 'inline-flex min-h-[44px] items-center whitespace-nowrap px-1 text-[15px] font-medium text-[color:var(--ld-text)] underline-offset-4 hover:underline'
-  const h2 = 'ld-titular text-[30px] leading-[1.06] text-[color:var(--ld-text)] [text-wrap:balance] sm:text-[40px]'
+  const enlace = 'inline-flex min-h-[44px] items-center whitespace-nowrap px-1 text-[0.9375rem] font-medium text-[color:var(--ld-text)] underline-offset-4 hover:underline'
+  const h2 = 'ld-titular text-[1.875rem] leading-[1.06] text-[color:var(--ld-text)] [text-wrap:balance] sm:text-[2.5rem]'
 
   return (
-    <div className="ld-root min-h-screen overflow-x-clip font-sans text-[17px] leading-normal antialiased" data-theme={tema}>
+    <div className="ld-root min-h-screen overflow-x-clip font-sans text-[1.0625rem] leading-normal antialiased" data-theme={tema}>
       <CabeceraSimple>
         <a href="/planes" className={`${enlace} hidden sm:inline-flex`}>{tx('Precios')}</a>
         <a href="/contacto" className={`${enlace} hidden sm:inline-flex`}>{tx('Contacto')}</a>
@@ -57,9 +57,9 @@ export default function PeritajeTecnico() {
       </CabeceraSimple>
 
       <header className={`${ANCHO} pb-14 pt-10 sm:pb-20 sm:pt-16`}>
-        <p className="text-[15px] font-semibold text-[color:var(--ld-accent)]">{tx('Para empresas con furgonetas')}</p>
-        <h1 className="ld-titular mt-4 max-w-[760px] text-[40px] leading-[1] text-[color:var(--ld-text)] [text-wrap:balance] sm:text-[56px]">{tx('Qué le enseñas al perito del renting')}</h1>
-        <p className="mt-6 max-w-[620px] text-[18px] leading-[1.5] text-[color:var(--ld-text2)] sm:text-[19px]">
+        <p className="text-[0.9375rem] font-semibold text-[color:var(--ld-accent)]">{tx('Para empresas con furgonetas')}</p>
+        <h1 className="ld-titular mt-4 max-w-[760px] text-[2.5rem] leading-[1] text-[color:var(--ld-text)] [text-wrap:balance] sm:text-[3.5rem]">{tx('Qué le enseñas al perito del renting')}</h1>
+        <p className="mt-6 max-w-[620px] text-[1.125rem] leading-[1.5] text-[color:var(--ld-text2)] sm:text-[1.1875rem]">
           {tx('Cuando devuelves una furgoneta, el perito apunta los daños y te pasa el cargo. Lo que puedes enseñarle es lo que guardaste: la foto de cada lado, con la fecha y la hora en que llegó al servidor, y los golpes que tu oficina marcó el día que aparecieron.')}
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
@@ -74,10 +74,10 @@ export default function PeritajeTecnico() {
           <ol className="border-b border-[color:var(--ld-border)]">
             {GUARDADO.map(([t, d], i) => (
               <li key={t} className="grid gap-2 border-t border-[color:var(--ld-border)] py-6 sm:grid-cols-[56px_minmax(0,1fr)]">
-                <span className="font-mono text-[14px] font-medium text-[color:var(--ld-muted)]">0{i + 1}</span>
+                <span className="font-mono text-[0.875rem] font-medium text-[color:var(--ld-muted)]">0{i + 1}</span>
                 <div>
-                  <h3 className="text-[21px] font-bold leading-[1.2] tracking-[-0.015em] text-[color:var(--ld-text)]">{tx(t)}</h3>
-                  <p className="mt-2 max-w-[640px] text-[16.5px] leading-relaxed text-[color:var(--ld-text2)]">{tx(d)}</p>
+                  <h3 className="text-[1.3125rem] font-bold leading-[1.2] tracking-[-0.015em] text-[color:var(--ld-text)]">{tx(t)}</h3>
+                  <p className="mt-2 max-w-[640px] text-[1.0312rem] leading-relaxed text-[color:var(--ld-text2)]">{tx(d)}</p>
                 </div>
               </li>
             ))}
@@ -89,7 +89,7 @@ export default function PeritajeTecnico() {
         <div className="grid gap-8 border-t border-[color:var(--ld-border)] py-14 sm:py-20 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-16">
           <h2 className={h2}>{tx('La firma de una revisión')}</h2>
           <div className="max-w-[680px]">
-            <p className="text-[17px] leading-relaxed text-[color:var(--ld-text2)]">
+            <p className="text-[1.0625rem] leading-relaxed text-[color:var(--ld-text2)]">
               {tx('Con el plan Pro, la oficina puede firmar una revisión desde el panel. Queda quién la firmó, cuándo y desde qué IP, y un código que cualquiera puede comprobar en nuestra web: dice si la firma está registrada y enseña la fecha, quién firmó y la matrícula en parte oculta. La revisión firmada se descarga en PDF con sus fotos.')}
             </p>
           </div>
@@ -101,7 +101,7 @@ export default function PeritajeTecnico() {
           <h2 className={h2}>{tx('Lo que no es')}</h2>
           <ul className="max-w-[680px] space-y-4" data-testid="perito-no-es">
             {NO_ES.map(([t, d]) => (
-              <li key={t} className="flex gap-3 text-[16.5px] leading-relaxed text-[color:var(--ld-text2)]">
+              <li key={t} className="flex gap-3 text-[1.0312rem] leading-relaxed text-[color:var(--ld-text2)]">
                 <span aria-hidden="true" className="mt-[11px] inline-block h-2 w-2 shrink-0 rounded-full bg-[color:var(--ld-ambar)]" />
                 <span><b className="font-semibold text-[color:var(--ld-text)]">{tx(t)}</b> {tx(d)}</span>
               </li>
@@ -114,7 +114,7 @@ export default function PeritajeTecnico() {
         <div className="grid items-center gap-8 border-t border-[color:var(--ld-border)] py-14 sm:py-[72px] lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-12">
           <div>
             <h2 className={h2}>{tx('¿Cuánto te cuesta?')}</h2>
-            <p className="mt-3 max-w-[560px] text-[16.5px] leading-relaxed text-[color:var(--ld-muted)]">{tx('Haz la cuenta con tus furgonetas y con el último cargo por daños que te pasaron.')}</p>
+            <p className="mt-3 max-w-[560px] text-[1.0312rem] leading-relaxed text-[color:var(--ld-muted)]">{tx('Haz la cuenta con tus furgonetas y con el último cargo por daños que te pasaron.')}</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <a href="/#precio" className={BTN_PRIMARIO}>{tx('Hacer la cuenta')} <ArrowRight size={17} /></a>

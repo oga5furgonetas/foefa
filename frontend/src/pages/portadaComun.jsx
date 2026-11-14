@@ -10,21 +10,23 @@ import { hayPixel, abrirAvisoCookies } from '../lib/metaPixel'
    --ld-* de index.css (día por defecto, noche con su paleta). Sus textos los comprueba scripts/check-textos-ruta.mjs. */
 
 /* La acción principal: 52 px, radio 12, cian con tinta encima (11,5:1). Una por pantalla. */
-export const BTN_PRIMARIO = 'inline-flex h-[52px] items-center justify-center gap-2.5 whitespace-nowrap rounded-[12px] border-[1.5px] border-transparent bg-[color:var(--ld-firma)] px-[22px] text-[16px] font-bold text-[color:var(--ld-tinta-firma)] transition-colors hover:bg-[color:var(--ld-firma-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ld-text)] disabled:opacity-60'
+export const BTN_PRIMARIO = 'inline-flex min-h-[3.25rem] items-center justify-center gap-2.5 whitespace-nowrap rounded-[12px] border-[1.5px] border-transparent bg-[color:var(--ld-firma)] px-[22px] text-[1rem] font-bold text-[color:var(--ld-tinta-firma)] transition-colors hover:bg-[color:var(--ld-firma-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ld-text)] disabled:opacity-60'
 /* La secundaria: con borde, sin relleno. */
-export const BTN_SECUNDARIO = 'inline-flex h-[52px] items-center justify-center gap-2.5 whitespace-nowrap rounded-[12px] border-[1.5px] border-[color:var(--ld-border-strong)] bg-transparent px-[22px] text-[16px] font-bold text-[color:var(--ld-text)] transition-colors hover:border-[color:var(--ld-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ld-text)] disabled:opacity-60'
+export const BTN_SECUNDARIO = 'inline-flex min-h-[3.25rem] items-center justify-center gap-2.5 whitespace-nowrap rounded-[12px] border-[1.5px] border-[color:var(--ld-border-strong)] bg-transparent px-[22px] text-[1rem] font-bold text-[color:var(--ld-text)] transition-colors hover:border-[color:var(--ld-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ld-text)] disabled:opacity-60'
 /* La de la cabecera: la misma firma, más baja. */
-export const BTN_CORTO = 'inline-flex h-10 items-center justify-center whitespace-nowrap rounded-[10px] bg-[color:var(--ld-firma)] px-3.5 text-[14px] font-bold text-[color:var(--ld-tinta-firma)] transition-colors hover:bg-[color:var(--ld-firma-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ld-text)]'
+export const BTN_CORTO = 'inline-flex min-h-[2.5rem] items-center justify-center whitespace-nowrap rounded-[10px] bg-[color:var(--ld-firma)] px-3.5 text-[0.875rem] font-bold text-[color:var(--ld-tinta-firma)] transition-colors hover:bg-[color:var(--ld-firma-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ld-text)]'
 /* Un enlace dentro del texto: el cian en su versión de texto, subrayado al pasar. Zona de toque de 44 px. */
 export const ENLACE = 'inline-flex min-h-[44px] items-center font-semibold text-[color:var(--ld-accent)] underline-offset-4 hover:underline'
 /* El ancho de las páginas públicas, con 16 px de margen en el móvil. */
 export const ANCHO = 'mx-auto w-full max-w-[1200px] px-4 sm:px-8'
 
-/* El logo, plano (el favicon lleva un degradado que aquí no va): la F en papel y el trazo en el cian de la marca. */
+/* El logo, plano (el favicon lleva un degradado que aquí no va): la F en papel y el trazo en el cian de la marca. El
+   cuadrado es tinta de día; de noche, un gris tinta con su borde (--ld-logo, index.css): en tinta pura sobre el papel de
+   noche desaparecía. Fuera de .ld-root, el de siempre. */
 export function LogoMarca({ size = 30 }) {
   return (
     <svg viewBox="0 0 64 64" width={size} height={size} aria-hidden="true" focusable="false" className="shrink-0">
-      <rect width="64" height="64" rx="15" fill="#10181A" />
+      <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="14.5" fill="var(--ld-logo, #10181A)" stroke="var(--ld-logo-borde, transparent)" strokeWidth="1.5" />
       <rect x="15" y="13" width="9" height="38" rx="2.5" fill="#F5F6F3" />
       <rect x="15" y="13" width="31" height="9" rx="2.5" fill="#F5F6F3" />
       <rect x="15" y="28.5" width="21" height="8" rx="2.5" fill="#14E7D8" />
@@ -55,7 +57,7 @@ export function CabeceraSimple({ children }) {
       <div className={`${ANCHO} flex h-[68px] items-center justify-between gap-3`}>
         <a href="/" className="inline-flex items-center gap-2.5 text-[color:var(--ld-text)]">
           <LogoMarca />
-          <span className="text-[19px] font-extrabold tracking-[-0.01em]">{MARCA.nombre}</span>
+          <span className="text-[1.1875rem] font-extrabold tracking-[-0.01em]">{MARCA.nombre}</span>
         </a>
         <div className="flex items-center gap-1 sm:gap-5">{children}</div>
       </div>
@@ -72,13 +74,13 @@ export function Pie({ lang, tema, setTema }) {
         <div>
           <a href="/" className="inline-flex items-center gap-2.5 text-[color:var(--ld-text)]">
             <LogoMarca size={26} />
-            <span className="text-[17px] font-extrabold tracking-[-0.01em]">{MARCA.nombre}</span>
+            <span className="text-[1.0625rem] font-extrabold tracking-[-0.01em]">{MARCA.nombre}</span>
           </a>
-          <p className="mt-3 max-w-xs text-[14px] leading-relaxed text-[color:var(--ld-muted)]">{tx('Revisiones con foto para empresas con furgonetas, y la app de ruta para quien reparte.')}</p>
+          <p className="mt-3 max-w-xs text-[0.875rem] leading-relaxed text-[color:var(--ld-muted)]">{tx('Revisiones con foto para empresas con furgonetas, y la app de ruta para quien reparte.')}</p>
           <div className="mt-5 flex items-center gap-2">
             <label htmlFor="ld-idioma" className="sr-only">Idioma / Language</label>
             <select id="ld-idioma" value={lang} onChange={(e) => cambiarIdioma(e.target.value)}
-              className="h-10 rounded-[10px] border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-surface)] px-2.5 text-[14px] text-[color:var(--ld-text)]">
+              className="h-10 rounded-[10px] border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-surface)] px-2.5 text-[0.875rem] text-[color:var(--ld-text)]">
               {Object.entries(IDIOMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
             <button type="button" onClick={() => setTema((v) => (v === 'dark' ? 'light' : 'dark'))}
@@ -89,8 +91,8 @@ export function Pie({ lang, tema, setTema }) {
           </div>
         </div>
         <nav aria-label={tx('Producto')}>
-          <p className="text-[14px] font-bold text-[color:var(--ld-text)]">{tx('Producto')}</p>
-          <ul className="mt-2 text-[14px]">
+          <p className="text-[0.875rem] font-bold text-[color:var(--ld-text)]">{tx('Producto')}</p>
+          <ul className="mt-2 text-[0.875rem]">
             {[['/planes', tx('Precios para empresas')], ['/expediente-ejemplo', tx('Un expediente de ejemplo')], ['/peritaje-tecnico', tx('Qué le enseñas al perito')], ['/devolucion-renting', tx('¿Qué te cobra tu renting al devolver?')],
               ['/repartidores', tx('App de reparto')], ['/empleo', tx('Ofertas de empleo')], ['/contacto', tx('Contacto')], ['/panel/login', tx('Entrar')]].map(([h, k]) => (
               <li key={h}><a href={h} className={enlace}>{k}</a></li>
@@ -98,8 +100,8 @@ export function Pie({ lang, tema, setTema }) {
           </ul>
         </nav>
         <nav aria-label={tx('Legal')}>
-          <p className="text-[14px] font-bold text-[color:var(--ld-text)]">{tx('Legal')}</p>
-          <ul className="mt-2 text-[14px]">
+          <p className="text-[0.875rem] font-bold text-[color:var(--ld-text)]">{tx('Legal')}</p>
+          <ul className="mt-2 text-[0.875rem]">
             {[['/privacidad', tx('Privacidad')], ['/terminos', tx('Términos')], ['/cookies', tx('Cookies')], ['/aviso-legal', tx('Aviso legal')], ['/security', tx('Seguridad')]].map(([h, k]) => (
               <li key={h}><a href={h} className={enlace}>{k}</a></li>
             ))}
@@ -110,7 +112,11 @@ export function Pie({ lang, tema, setTema }) {
           </ul>
         </nav>
       </div>
-      <p className={`${ANCHO} border-t border-[color:var(--ld-border)] py-5 text-[13px] text-[color:var(--ld-muted)]`}>© {new Date().getFullYear()} {MARCA.nombre}</p>
+      {/* La raya, en un div por dentro del ancho: puesta en el de fuera iba de lado a lado del relleno y era más ancha que
+          todas las demás reglas de la página. */}
+      <div className={ANCHO}>
+        <p className="border-t border-[color:var(--ld-border)] py-5 text-[0.8125rem] text-[color:var(--ld-muted)]">© {new Date().getFullYear()} {MARCA.nombre}</p>
+      </div>
     </footer>
   )
 }

@@ -8,9 +8,9 @@ export default function ContactEn({ form, setForm, busy, done, err, submit }) {
   return (
     <LegalLayout title="Contact">
       {done ? (
-        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-6 text-center">
-          <CheckCircle2 size={32} className="mx-auto mb-2 text-emerald-400" />
-          <p className="font-semibold text-emerald-200">Message sent!</p>
+        <div role="status" className="rounded-[20px] border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-surface)] p-6 text-center">
+          <CheckCircle2 size={32} className="mx-auto mb-2 text-[color:var(--ld-ok)]" />
+          <p className="font-semibold text-[color:var(--ld-text)]">Message sent.</p>
           <p className="mt-1 text-sm text-dark-300">We will reply to {form.email} within 24 working hours.</p>
         </div>
       ) : (
@@ -30,7 +30,7 @@ export default function ContactEn({ form, setForm, busy, done, err, submit }) {
             <div><label className="label">Email *</label><input type="email" required className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
             <div><label className="label">Subject</label><input className="input" placeholder="Demo / Support / Sales…" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} /></div>
             <div><label className="label">Message</label><textarea rows={5} className="input" value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></div>
-            {err && <p className="text-sm text-red-400">{err}</p>}
+            {err && <p role="alert" className="text-sm font-semibold text-[color:var(--ld-warn)]">{err}</p>}
             <button disabled={busy} className="btn-primary flex items-center gap-2 disabled:opacity-50">
               {busy ? <Loader2 className="animate-spin" size={15} /> : <Send size={15} />} Send message
             </button>

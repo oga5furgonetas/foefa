@@ -1820,7 +1820,7 @@ test('Portada · es la de empresas, enlaza la app de reparto y cambia de idioma'
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('El golpe, el día que aparece. No el día que te lo cobran.')
   await expect(page).toHaveTitle(/para empresas con furgonetas/)
-  await expect(page.getByTestId('emp-probar')).toHaveAttribute('href', '/registro?sector=otra&plan=completo&flota=20')
+  await expect(page.getByTestId('emp-probar')).toHaveAttribute('href', '/registro?sector=otra&plan=operacion&flota=20')
   await expect(page.getByTestId('emp-repartidores')).toHaveAttribute('href', '/repartidores')
   await expect(page.getByRole('link', { name: 'Ofertas de empleo' })).toHaveAttribute('href', '/empleo')
   await page.getByLabel('Idioma / Language').selectOption('en')
@@ -1833,7 +1833,7 @@ test('Planes · el repartidor sale aparte con su precio fijo aunque el servidor 
     { clave: 'operacion', nombre: 'Esencial', para: 'Una delegación', por_vehiculo: 5, minimo_vehiculos: 10 }] } }))
   await page.goto('/planes', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('¿Repartes tú solo?')).toBeVisible()
-  await expect(page.getByText(/9,99€ al mes/)).toBeVisible()
+  await expect(page.getByText(/9,99 € al mes/)).toBeVisible()
 })
 
 /* PRECIOS DEL 06-10-2026 (docs/PRECIOS.md): Esencial, Pro y Empresa, descuento por volumen
@@ -1844,8 +1844,8 @@ test('Planes · con 150 vehículos, Pro sale con el −15 % por volumen y hay co
   await expect(page.getByText('Esencial', { exact: true })).toBeVisible()
   await page.getByLabel('Número de vehículos').fill('150')
   await expect(page.getByText('−15 % por volumen')).toBeVisible()
-  await expect(page.getByText('1147,50€').first()).toBeVisible()          // en español, 4 cifras van sin punto
-  await expect(page.getByText('7,65€').first()).toBeVisible()
+  await expect(page.getByText('1.147,50 €').first()).toBeVisible()        // como en la portada: con el separador de miles
+  await expect(page.getByText('7,65 €').first()).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Complementos' })).toBeVisible()
   await expect(page.getByText('Vehículos de colaboradores')).toBeVisible()
 })
@@ -1856,10 +1856,10 @@ test('Planes · Reparto se cobra por repartidor y el alta del súper lo propone 
   await page.goto('/planes', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: /Plan Reparto: por repartidor/ })).toBeVisible()
   await page.getByLabel('Número de repartidores').fill('2')
-  await expect(page.getByText('36€', { exact: true })).toBeVisible()          // mínimo 3 × 12 €
+  await expect(page.getByText('36 €', { exact: true })).toBeVisible()          // mínimo 3 × 12 €
   await page.getByLabel('Número de repartidores').fill('5')
-  await expect(page.getByText('60€', { exact: true })).toBeVisible()
-  await page.getByRole('link', { name: 'Empezar la prueba de 14 días →' }).last().click()
+  await expect(page.getByText('60 €', { exact: true })).toBeVisible()
+  await page.getByRole('link', { name: 'Empezar la prueba de 14 días' }).last().click()
   await expect(page).toHaveURL(/registro\?sector=supermercado&plan=reparto/)
   await expect(page.getByText('Plan elegido')).toBeVisible()
   await expect(page.getByText(/60€\/mes · con 5 repartidores activos/)).toBeVisible()
