@@ -324,6 +324,8 @@ export const A = {
   "Hoy: {matricula}": ["Today: {matricula}", "Hoje: {matricula}", "Aujourd’hui : {matricula}", "Oggi: {matricula}", "Heute: {matricula}"],
   "Enviada hoy": ["Sent today", "Enviada hoje", "Envoyé aujourd’hui", "Inviata oggi", "Heute gesendet"],
   "Enviada hoy · {matricula}": ["Sent today · {matricula}", "Enviada hoje · {matricula}", "Envoyé aujourd’hui · {matricula}", "Inviata oggi · {matricula}", "Heute gesendet · {matricula}"],
+  // Portal web del conductor (14-11-2026): con la sesión de su enlace no hay contraseña ni correo de recuperación que poner.
+  "Entras con tu enlace. Si quieres contraseña, pídesela a tu empresa.": ["You sign in with your link. If you want a password, ask your company for one.", "Entras com o teu link. Se quiseres uma palavra-passe, pede-a à tua empresa.", "Tu entres avec ton lien. Si tu veux un mot de passe, demande-le à ton entreprise.", "Entri con il tuo link. Se vuoi una password, chiedila alla tua azienda.", "Du meldest dich mit deinem Link an. Wenn du ein Passwort möchtest, frag deine Firma danach."],
   // «Mis DNR» del portal del conductor (11-11-2026, tanda 2, zona «dnr»): la casilla del inicio y su pantalla (MisDnr.jsx y
   // dnrVistas.js). Las DNR que le caen, por semana, con si le cuentan; sin cliente ni euros.
   "Mis DNR": ["My DNRs", "As minhas DNR", "Mes DNR", "Le mie DNR", "Meine DNRs"],

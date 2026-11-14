@@ -81,8 +81,10 @@ function formas(v, pieza) {
  * @param {string} zona  una de ZONAS_DIBUJO (o nada: el vehículo sin marcar)
  * @param {string[]} piezas  las piezas que se marcan, si no son las de su zona (p. ej. sin el capó cuando la regla no vale en él)
  * @param {number} ancho en px (el alto sale solo: 2 × ancho)
+ * @param {string} marca  el color de la zona marcada: por defecto el cian de la marca (la herramienta); la portada lo
+ *   pasa en tinta, para que junto a su acción principal no haya un segundo cian (14-11-2026)
  */
-export default function Vehiculo({ tipo = 'furgoneta', zona = null, piezas = null, ancho = 112, titulo, className = '' }) {
+export default function Vehiculo({ tipo = 'furgoneta', zona = null, piezas = null, ancho = 112, titulo, className = '', marca = '#14E7D8' }) {
   const v = tipo === 'turismo' ? TURISMO : FURGONETA
   const marcadas = new Set(piezas || ZONAS_DIBUJO[zona] || [])
   const relleno = (p) => (marcadas.has(p) ? 'var(--dv-marca)' : null)
@@ -93,7 +95,7 @@ export default function Vehiculo({ tipo = 'furgoneta', zona = null, piezas = nul
   ))
   return (
     <svg viewBox="0 0 120 240" width={ancho} height={ancho * 2} role={titulo ? 'img' : undefined} aria-hidden={titulo ? undefined : true}
-      aria-label={titulo || undefined} className={`shrink-0 ${className}`} style={{ '--dv-marca': '#14E7D8', '--dv-cristal': 'var(--ld-surface2)', '--dv-trazo-suave': 'var(--ld-muted)' }} data-zona={zona || ''}>
+      aria-label={titulo || undefined} className={`shrink-0 ${className}`} style={{ '--dv-marca': marca, '--dv-cristal': 'var(--ld-surface2)', '--dv-trazo-suave': 'var(--ld-muted)' }} data-zona={zona || ''}>
       {/* El cuerpo, en papel. */}
       <path d={v.cuerpo} {...linea} fill={relleno('cuerpo') || 'var(--ld-surface)'} />
       {pinta('capo', 'none')}

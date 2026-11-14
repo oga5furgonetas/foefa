@@ -9,7 +9,7 @@ import AccesoConductor, { useAcceso, claseDeEstado } from '../components/AccesoC
 import Matricula from '../../components/Matricula'
 import SelloFoto from '../../components/SelloFoto'
 import { BTN_PRIMARIO, BTN_SECUNDARIO, LogoMarca } from '../../pages/portadaComun'
-import { DESACTIVADO, nocheElegida } from '../../pages/entradaComun'
+import { nocheElegida } from '../../pages/entradaComun'
 import { MARCA } from '../../marca'
 import { diaSello, codigoDe, textoConCodigo } from '../../lib/accesoConductor'
 import { selloDeFecha } from '../../lib/sello'
@@ -185,14 +185,14 @@ function PasoFurgonetas({ estado, sede, setSede, onCambio, onSeguir }) {
       <div className="mt-7 flex flex-wrap gap-3">
         {vista && nuevas > 0 ? (
           <>
-            <button type="button" className={BTN_PRIMARIO} disabled={!!ocupado} onClick={() => enviar(true)}>
+            <button type="button" className={BTN_PRIMARIO} disabled={!!ocupado} aria-busy={ocupado === 'guardar' || undefined} onClick={() => enviar(true)}>
               {ocupado === 'guardar' ? t('alta.guardando') : t(nuevas === 1 ? 'alta.p1.guardar1' : 'alta.p1.guardar').replace('{n}', nuevas)}
             </button>
             <button type="button" className={BTN_SECUNDARIO} disabled={!!ocupado} onClick={() => setVista(null)}>{t('alta.cambiarLista')}</button>
           </>
         ) : texto.trim() && !vista ? (
           <>
-            <button type="button" className={BTN_PRIMARIO} disabled={!!ocupado} onClick={() => enviar(false)}>
+            <button type="button" className={BTN_PRIMARIO} disabled={!!ocupado} aria-busy={ocupado === 'revisar' || undefined} onClick={() => enviar(false)}>
               {ocupado === 'revisar' ? t('alta.revisando') : t('alta.revisar')}
             </button>
             <Link to="/panel/importaciones?t=furgonetas" className={BTN_SECUNDARIO}>{t('alta.excel')}</Link>
@@ -204,7 +204,7 @@ function PasoFurgonetas({ estado, sede, setSede, onCambio, onSeguir }) {
           </>
         ) : (
           <>
-            <button type="button" className={`${BTN_PRIMARIO} ${DESACTIVADO}`} disabled>{t('alta.revisar')}</button>
+            <button type="button" className={BTN_PRIMARIO} disabled>{t('alta.revisar')}</button>
             <Link to="/panel/importaciones?t=furgonetas" className={BTN_SECUNDARIO}>{t('alta.excel')}</Link>
           </>
         )}
@@ -337,14 +337,14 @@ function PasoConductores({ estado, sede, setSede, onCambio, onSeguir }) {
       <div className="mt-7 flex flex-wrap gap-3">
         {vista && nuevos > 0 ? (
           <>
-            <button type="button" className={BTN_PRIMARIO} disabled={!!ocupado} onClick={() => enviar(true)}>
+            <button type="button" className={BTN_PRIMARIO} disabled={!!ocupado} aria-busy={ocupado === 'guardar' || undefined} onClick={() => enviar(true)}>
               {ocupado === 'guardar' ? t('alta.guardando') : t(nuevos === 1 ? 'alta.p2.guardar1' : 'alta.p2.guardar').replace('{n}', nuevos)}
             </button>
             <button type="button" className={BTN_SECUNDARIO} disabled={!!ocupado} onClick={() => setVista(null)}>{t('alta.cambiarLista')}</button>
           </>
         ) : texto.trim() && !vista ? (
           <>
-            <button type="button" className={BTN_PRIMARIO} disabled={!!ocupado} onClick={() => enviar(false)}>
+            <button type="button" className={BTN_PRIMARIO} disabled={!!ocupado} aria-busy={ocupado === 'revisar' || undefined} onClick={() => enviar(false)}>
               {ocupado === 'revisar' ? t('alta.revisando') : t('alta.revisar')}
             </button>
             <Link to="/panel/importaciones?t=conductores" className={BTN_SECUNDARIO}>{t('alta.excel')}</Link>
@@ -356,7 +356,7 @@ function PasoConductores({ estado, sede, setSede, onCambio, onSeguir }) {
           </>
         ) : (
           <>
-            <button type="button" className={`${BTN_PRIMARIO} ${DESACTIVADO}`} disabled>{t('alta.revisar')}</button>
+            <button type="button" className={BTN_PRIMARIO} disabled>{t('alta.revisar')}</button>
             <Link to="/panel/importaciones?t=conductores" className={BTN_SECUNDARIO}>{t('alta.excel')}</Link>
           </>
         )}

@@ -367,7 +367,9 @@ test('el fondo antes de que arranque React: papel en las públicas, oscuro en el
   await page.route(/\/assets\/.*\.js$|\/src\/main\.jsx/, (r) => r.abort())
   for (const [ruta, fondo] of [['/', 'rgb(245, 246, 243)'], ['/empresas', 'rgb(245, 246, 243)'], ['/planes', 'rgb(245, 246, 243)'],
     ['/contacto', 'rgb(245, 246, 243)'], ['/privacidad', 'rgb(245, 246, 243)'], ['/devolucion-renting/ald', 'rgb(245, 246, 243)'],
-    ['/panel/login', 'rgb(6, 10, 20)'], ['/ruta', 'rgb(6, 10, 20)'], ['/conductor', 'rgb(6, 10, 20)']]) {
+    // La puerta del conductor (14-11-2026): su enlace y su entrada son de papel, sin fogonazo oscuro.
+    ['/c', 'rgb(245, 246, 243)'], ['/conductor', 'rgb(245, 246, 243)'],
+    ['/panel/login', 'rgb(6, 10, 20)'], ['/ruta', 'rgb(6, 10, 20)']]) {
     await page.goto(ruta, { waitUntil: 'load' })
     expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), ruta).toBe(fondo)
     const barra = await page.locator('meta[name="theme-color"]').getAttribute('content')
@@ -378,6 +380,66 @@ test('el fondo antes de que arranque React: papel en las públicas, oscuro en el
   await page.goto('/', { waitUntil: 'load' })
   expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(11, 16, 18)')
 })
+
+/* LA PUERTA DEL CONDUCTOR, ANTES DE QUE PINTE NADA (14-11-2026): /c y /conductor arrancan en papel salvo que la noche
+   esté elegida, con la MISMA regla que su pantalla (`nocheElegida()` de lib/tema.js): manda el tema elegido del panel o
+   de la app; sin elegir ninguno, el del pie de la web. Con sesión, /conductor es su portal: arranca como siempre. Se mira
+   con el JavaScript de la app bloqueado (lo que se ve justo al navegar) y con la pantalla ya pintada (la misma regla). */
+const PAPEL = 'rgb(245, 246, 243)'
+const NOCHE = 'rgb(11, 16, 18)'
+const OSCURO = 'rgb(6, 10, 20)'
+for (const [nombre, claves, fondo] of [
+  ['sin elegir nada', {}, PAPEL],
+  ['la noche en el pie de la web', { fds_tema_web: 'dark' }, NOCHE],
+  ['la noche elegida en el panel', { panel_theme: 'dark', panel_theme_elegido: '1' }, NOCHE],
+  ['el día elegido en el panel, aunque el pie diga noche', { panel_theme: 'light', panel_theme_elegido: '1', fds_tema_web: 'dark' }, PAPEL],
+  ['«Mixto» elegido en el panel', { panel_theme: 'hibrido', panel_theme_elegido: '1' }, PAPEL],
+]) {
+  test(`la puerta del conductor antes de arrancar · ${nombre}`, async ({ page }) => {
+    await page.addInitScript((c) => { for (const [k, v] of Object.entries(c)) localStorage.setItem(k, v) }, claves)
+    // Primero, la pantalla pintada: el tema que decide la propia puerta.
+    await simularApi(page, 'vacio')
+    await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+    const tema = await page.getByTestId('entrada-conductor').getAttribute('data-theme')
+    expect(tema === 'dark' ? NOCHE : PAPEL, 'la pantalla y esta prueba no dicen lo mismo').toBe(fondo)
+    // Luego, sin el JavaScript de la app: lo primero que se ve al navegar.
+    await page.route(/\/assets\/.*\.js$|\/src\/main\.jsx/, (r) => r.abort())
+    for (const ruta of ['/c', '/conductor', `/conductor#transportes-perez`]) {
+      await page.goto(ruta, { waitUntil: 'load' })
+      expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), ruta).toBe(fondo)
+      expect(await page.locator('meta[name="theme-color"]').getAttribute('content'), ruta).toBe(fondo === NOCHE ? '#0b1012' : '#f5f6f3')
+    }
+    if (process.env.FOTOS_PORTADA && nombre === 'sin elegir nada') await page.screenshot({ path: path.join(process.env.FOTOS_PORTADA, 'puerta-arranque.png') })
+  })
+}
+
+test('la puerta del conductor antes de arrancar · con sesión, /conductor es su portal y arranca como siempre', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA L.' })))
+  await page.route(/\/assets\/.*\.js$|\/src\/main\.jsx/, (r) => r.abort())
+  await page.goto('/conductor', { waitUntil: 'load' })
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(OSCURO)
+})
+
+for (const [nombre, claves, fondo] of [['sin elegir nada', {}, PAPEL], ['la noche elegida en el panel', { panel_theme: 'dark', panel_theme_elegido: '1' }, NOCHE]]) {
+  for (const ruta of ['/conductor', '/c']) {
+    test(`la puerta del conductor · el cargador de ${ruta}, del mismo color (${nombre})`, async ({ page }) => {
+      await page.addInitScript((c) => { for (const [k, v] of Object.entries(c)) localStorage.setItem(k, v) }, claves)
+      await simularApi(page, 'vacio')
+      // El trozo de la pantalla tarda: lo que se ve es el cargador de ruta (main.jsx).
+      let retener = true
+      await page.route(/\/assets\/.*(DriverPortal|EntrarConEnlace)[^/]*\.js$/, async (r) => {
+        while (retener) await new Promise((ok) => setTimeout(ok, 50))
+        return r.fallback()
+      })
+      await page.goto(ruta, { waitUntil: 'domcontentloaded' })
+      const cargador = page.locator('#root div[style*="min-height: 100vh"]').first()
+      await expect(cargador).toBeVisible()
+      expect(await cargador.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(fondo)
+      retener = false
+      await expect(page.locator('.ld-root')).toBeVisible({ timeout: 15_000 })
+    })
+  }
+}
 
 /* Contacto y las legales: la paleta de las páginas públicas (papel, sin la tarjeta clara con halo del tema del panel). */
 for (const ruta of ['/contacto', '/privacidad', '/cookies']) {
@@ -544,6 +606,16 @@ test('tanda 4 · la banda de la herramienta de devolución: su título, las comp
   expect(await boton.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgba(0, 0, 0, 0)')   // con borde, sin cian
   await expect(banda).toContainText('Gratis. Sin registro. No guardamos nada de tu vehículo.')
   await expect(banda.locator('svg[data-zona="paragolpes"]')).toHaveCount(1)
+  /* Un solo cian por pantalla (14-11-2026): la zona marcada del dibujo, en tinta; el cian es de «Probar con mis
+     furgonetas». En la herramienta (/devolucion-renting) sigue en cian: lo mira devolucion-renting.spec.js. */
+  const marcadas = await banda.locator('svg path[fill="var(--dv-marca)"]').evaluateAll((ps) => ps.map((p) => getComputedStyle(p).fill))
+  expect(marcadas.length).toBeGreaterThan(0)
+  expect(new Set(marcadas)).toEqual(new Set(['rgb(16, 24, 26)']))
+  const cianes = await banda.locator('*').evaluateAll((xs) => xs.filter((x) => {
+    const c = getComputedStyle(x)
+    return [c.fill, c.backgroundColor, c.color, c.stroke].includes('rgb(20, 231, 216)')
+  }).length)
+  expect(cianes, 'un segundo cian en la banda').toBe(0)
   // Va entre «Así funciona» y la banda oscura; la línea suelta de antes ya no está.
   const [como, mia, nave] = await Promise.all(['#como', '[data-testid="emp-banda-devolucion"]', '[data-testid="emp-nave"]']
     .map((s) => page.locator(s).evaluate((e) => e.getBoundingClientRect().top + window.scrollY)))

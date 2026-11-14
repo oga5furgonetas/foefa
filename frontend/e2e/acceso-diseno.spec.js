@@ -255,6 +255,96 @@ test('C2 · la barra de pasos: el actual en tinta, los hechos más claros; el «
   expect(opacidad).toBe('1')
 })
 
+/* UN SOLO «DESACTIVADO» TAMBIÉN FUERA DEL PANEL (14-11-2026): el botón principal de las páginas públicas y de la puerta
+   del conductor (BTN_PRIMARIO) y los del acceso en papel ya no se lavan al 60 %: el color de hueco con la tinta apagada,
+   de día y de noche. Mientras trabaja (`aria-busy`), sigue con su color. */
+const HUECO = { light: 'rgb(218, 223, 216)', dark: 'rgb(44, 54, 59)' }
+const APAGADA = { light: 'rgb(84, 94, 102)', dark: 'rgb(163, 173, 180)' }
+const estiloDe = (loc) => loc.evaluate((el) => [getComputedStyle(el).backgroundColor, getComputedStyle(el).color, getComputedStyle(el).opacity])
+
+test('desactivado · el botón principal de una página pública (devolución): hueco y tinta apagada, de día y de noche', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  for (const tema of ['light', 'dark']) {
+    await page.addInitScript((t) => { try { localStorage.setItem('fds_tema_web', t) } catch { /* nada */ } }, tema)
+    await page.goto('/devolucion-renting', { waitUntil: 'domcontentloaded' })
+    const boton = page.getByTestId('dev-empezar')
+    await expect(boton).toBeDisabled()
+    expect(await estiloDe(boton), tema).toEqual([HUECO[tema], APAGADA[tema], '1'])
+    if (FOTOS_DIR) await boton.screenshot({ path: path.join(FOTOS_DIR, `desactivado-devolucion-${tema}.png`) })
+  }
+})
+
+test('desactivado · /c mientras entra: el botón sigue en su cian (trabajando, no apagado)', async ({ page }) => {
+  await ponerTema(page, 'hibrido')
+  await simularApi(page, 'vacio')
+  let soltar
+  const espera = new Promise((r) => { soltar = r })
+  await page.route(/\/api\/auth\/enlace$/, async (r) => { await espera; return r.fulfill({ status: 500, json: { detail: 'x' } }) })
+  await page.goto(`/c#${TOKEN}`, { waitUntil: 'domcontentloaded' })
+  const boton = page.getByRole('button', { name: DICT['alta.c.entrar'].es })
+  await boton.click()
+  const ocupado = page.getByRole('button', { name: DICT['alta.c.entrando'].es })
+  await expect(ocupado).toBeDisabled()
+  await page.mouse.move(0, 0)   // sin el ratón encima (su tono al pasar) y tras la transición
+  await expect.poll(async () => (await estiloDe(ocupado))[0]).toBe('rgb(20, 231, 216)')
+  expect((await estiloDe(ocupado))[2]).toBe('1')
+  soltar()
+})
+
+test('desactivado · el acceso en papel (arranque): el botón que espera, en hueco; el que trabaja, con su color', async ({ page }) => {
+  await ponerTema(page, 'hibrido')
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await servidor(page, estadoEn(3))
+  let soltar
+  const espera = new Promise((r) => { soltar = r })
+  await page.route(/\/api\/conductores\/[^/]+\/acceso$/, async (r) => { await espera; return r.fallback() })
+  await page.goto('/panel/arranque', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: 'Dales acceso' })).toBeVisible()
+  const fila = page.getByTestId('acceso-conductor').filter({ has: page.getByRole('button', { name: DICT['alta.acc.copiar'].es }) }).first()
+  await fila.getByRole('button', { name: DICT['alta.acc.copiar'].es }).click()
+  const wa = fila.getByRole('button', { name: DICT['alta.acc.whatsapp'].es })
+  await expect(wa).toBeDisabled()
+  expect(await estiloDe(wa)).toEqual([HUECO.light, APAGADA.light, '1'])
+  if (FOTOS_DIR) await fila.screenshot({ path: path.join(FOTOS_DIR, 'desactivado-acceso-papel.png') })
+  soltar()
+  await expect(wa).toBeEnabled()
+  expect((await estiloDe(wa))[0]).toBe('rgb(16, 24, 26)')
+})
+
+/* La ventana «El acceso de…» con la superficie de la página en los tres temas: en «Mixto» iba por portal a `body`, fuera
+   de <main> (donde manda la noche), y salía oscura mientras las demás ventanas salían claras (14-11-2026). */
+for (const [tema, superficie] of [['hibrido', 'rgb(251, 250, 248)'], ['claro', null], ['noche', null]]) {
+  test(`la ventana del acceso en «${tema}»: la misma superficie que las demás ventanas de la página`, async ({ page }, info) => {
+    if (info.project.name === 'movil') await page.setViewportSize({ width: 390, height: 844 })
+    await ponerTema(page, tema)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await servidor(page, estadoEn(5))
+    await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
+    // La superficie de una ventana dentro de la página: un `.ventana` de prueba, puesto donde las demás (en <main>).
+    const deLaPagina = await page.locator('main').evaluate((m) => {
+      const v = document.createElement('div'); v.className = 'ventana'; m.appendChild(v)
+      const c = getComputedStyle(v).backgroundColor; v.remove(); return c
+    })
+    if (superficie) expect(deLaPagina).toBe(superficie)
+    await page.getByTestId('boton-acceso').filter({ hasText: 'Mandar su acceso' }).first().click()
+    const dialogo = page.getByRole('dialog')
+    await expect(dialogo).toBeVisible()
+    expect(await dialogo.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(deLaPagina)
+    // Y su título se lee: la tinta del tema, no la de la noche sobre papel.
+    const titulo = await dialogo.getByRole('heading', { level: 2 }).evaluate((el) => getComputedStyle(el).color)
+    expect(titulo).not.toBe(deLaPagina)
+    // Por encima de la barra de abajo y de la burbuja: lo que hay en su última línea es la ventana.
+    const tapado = await dialogo.evaluate((el) => {
+      const r = el.getBoundingClientRect()
+      const puntos = [[r.left + 12, r.bottom - 12], [r.right - 12, r.bottom - 12], [r.left + r.width / 2, r.bottom - 24]]
+      return puntos.filter(([x, y]) => !el.contains(document.elementFromPoint(x, y))).length
+    })
+    expect(tapado, 'algo tapa la ventana').toBe(0)
+  })
+}
+
 test('C3 · la ventana del acceso: el título a la altura de la X y el estado en mono, en su línea y con su color', async ({ page }, info) => {
   if (info.project.name === 'movil') await page.setViewportSize({ width: 390, height: 844 })
   await ponerTema(page, 'hibrido')

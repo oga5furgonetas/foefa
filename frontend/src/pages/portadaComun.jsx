@@ -10,8 +10,11 @@ import { hayPixel, abrirAvisoCookies } from '../lib/metaPixel'
    encima). Sin degradados, sin brillos, sin rótulos en mayúsculas espaciadas. Los colores salen de las variables
    --ld-* de index.css (día por defecto, noche con su paleta). Sus textos los comprueba scripts/check-textos-ruta.mjs. */
 
-/* La acción principal: 52 px, radio 12, cian con tinta encima (11,5:1). Una por pantalla. */
-export const BTN_PRIMARIO = 'inline-flex min-h-[3.25rem] items-center justify-center gap-2.5 whitespace-nowrap rounded-[12px] border-[1.5px] border-transparent bg-[color:var(--ld-firma)] px-[22px] text-[1rem] font-bold text-[color:var(--ld-tinta-firma)] transition-colors hover:bg-[color:var(--ld-firma-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ld-text)] disabled:opacity-60'
+/* La acción principal: 52 px, radio 12, cian con tinta encima (11,5:1). Una por pantalla.
+   DESACTIVADA (14-11-2026, el mismo «desactivado» de todo el producto, M7): el color de hueco con la tinta apagada, sin
+   bajar la opacidad (el cian lavado parecía roto). Mientras trabaja (`aria-busy`), sigue con su cian y su rueda: no ha
+   dejado de valer. */
+export const BTN_PRIMARIO = 'inline-flex min-h-[3.25rem] items-center justify-center gap-2.5 whitespace-nowrap rounded-[12px] border-[1.5px] border-transparent bg-[color:var(--ld-firma)] px-[22px] text-[1rem] font-bold text-[color:var(--ld-tinta-firma)] transition-colors hover:bg-[color:var(--ld-firma-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ld-text)] disabled:cursor-not-allowed [&:disabled:not([aria-busy=true])]:bg-[color:var(--ld-hueco)] [&:disabled:not([aria-busy=true])]:text-[color:var(--ld-muted)]'
 /* La secundaria: con borde, sin relleno. */
 export const BTN_SECUNDARIO = 'inline-flex min-h-[3.25rem] items-center justify-center gap-2.5 whitespace-nowrap rounded-[12px] border-[1.5px] border-[color:var(--ld-border-strong)] bg-transparent px-[22px] text-[1rem] font-bold text-[color:var(--ld-text)] transition-colors hover:border-[color:var(--ld-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ld-text)] disabled:opacity-60'
 /* La de la cabecera: la misma firma, más baja. */

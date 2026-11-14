@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft, Check, Loader2, Lock } from 'lucide-react'
-import { changeMyPassword, getMiFicha, pedirCodigoClave } from '../../services/api'
+import { changeMyPassword, getMiFicha, pedirCodigoClave, sesionDelEnlace } from '../../services/api'
+import { PantallaEnlace } from './conEnlace'
 
 /* Cambiar la contraseña uno mismo.
 
    Antes esto solo lo podía hacer un admin, así que un conductor que quisiera
    cambiarla tenía que pedírselo a la oficina y decirle cuál quería — es decir,
    contarle su contraseña a otra persona. Ahora se la pone él y nadie más la ve. */
-export default function MiClave({ onBack, obligatoria = false, onSalir }) {
+export default function MiClave(props) {
+  /* Con la sesión de su enlace no hay contraseña que crear ni cambiar (el servidor contesta 403 `enlace_sin_contrasena`),
+     y el consejo de «sal y vuelve a entrar» no le sirve: se le dice que la pida a su empresa (14-11-2026). */
+  if (sesionDelEnlace()) return <PantallaEnlace titulo="Contraseña" onBack={props.onBack} />
+  return <FormularioClave {...props} />
+}
+
+function FormularioClave({ onBack, obligatoria = false, onSalir }) {
   /* CREAR NO ES CAMBIAR. Quien entra con código o con una clave temporal puede
      no tener aún una contraseña propia; el servidor devuelve si tiene cuenta
      (`tiene_clave`) y esta pantalla le pide solo lo que necesita. */

@@ -628,7 +628,7 @@ export default function Empresas() {
 
       {/* ── La herramienta gratuita (/devolucion-renting), con banda propia (tanda 4): antes era una línea suelta al final de
           «Así funciona». Las compañías, escritas (sin logotipos) y las mismas que lib/guiasRenting.js (lo vigila
-          portada.spec.js). El dibujo es el de la propia herramienta (devolucion/Vehiculo.jsx), con una zona marcada. Sin
+          portada.spec.js). El dibujo es el de la propia herramienta (devolucion/Vehiculo.jsx), con una zona marcada en tinta (el único cian es «Probar con mis furgonetas»). Sin
           prometer ahorro ni decir «te lo cobrarán». ── */}
       <section className={ANCHO} data-testid="emp-banda-devolucion" aria-labelledby="emp-devolucion-titulo">
         <div className="grid items-center gap-8 border-t border-[color:var(--ld-border)] py-14 sm:py-[72px] lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:gap-16">
@@ -654,7 +654,7 @@ export default function Empresas() {
             {/* El plano va tumbado (el morro a la derecha): de pie, la caja era el doble de alta que el texto. El hueco es
                 el del dibujo ya girado; el SVG conserva su caja de pie y se gira en su centro. */}
             <span className="flex h-[110px] w-[220px] items-center justify-center lg:h-[150px] lg:w-[300px]">
-              <Vehiculo tipo="furgoneta" zona="paragolpes" className="h-[220px] w-[110px] rotate-90 lg:h-[300px] lg:w-[150px]" />
+              <Vehiculo tipo="furgoneta" zona="paragolpes" marca="var(--ld-text)" className="h-[220px] w-[110px] rotate-90 lg:h-[300px] lg:w-[150px]" />
             </span>
           </figure>
         </div>

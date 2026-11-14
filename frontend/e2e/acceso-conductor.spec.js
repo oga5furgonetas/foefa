@@ -266,7 +266,15 @@ test('con el correo: un formulario; sin contraseña, «Entrar» manda el código
   await expect(page.locator('form input[autocomplete="current-password"][type="password"]')).toHaveCount(1)
   await page.locator('#dr-correo').fill('luis@ejemplo.test')
   await foto(page, `14-entrada-correo-${info.project.name}`)
+  /* La costumbre de siempre (correo, Intro, contraseña) no manda correos por sorpresa (14-11-2026): Intro en el correo
+     con la contraseña vacía solo lleva el cursor a la contraseña. Intro otra vez, con ella vacía, sí pide el código. */
   await page.locator('#dr-correo').press('Enter')
+  await expect(page.locator('#dr-clave')).toBeFocused()
+  await page.waitForTimeout(400)
+  expect(s.lookup).toBe(0)
+  expect(s.login).toHaveLength(0)
+  await expect(page.locator('#driver-code')).toHaveCount(0)
+  await page.keyboard.press('Enter')
   await expect(page.locator('#driver-code')).toBeVisible()
   expect(s.lookup).toBe(1)
   expect(s.login).toHaveLength(0)
@@ -292,6 +300,30 @@ test('con el correo: quien entra cada día con correo + contraseña + Intro no n
   expect(s.lookup).toBe(0)
   expect(s.login).toEqual([expect.objectContaining({ email: 'luis@ejemplo.test', password: 'mi-clave-de-siempre' })])
   expect(await page.evaluate(() => localStorage.getItem('fds_dr_metodo'))).toBeNull()
+})
+
+test('con el correo: correo, Intro, contraseña e Intro (la costumbre de siempre) entra sin ningún código', async ({ page }) => {
+  const s = await prepararCorreo(page)
+  await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+  await page.locator('#dr-correo').fill('luis@ejemplo.test')
+  await page.locator('#dr-correo').press('Enter')
+  await expect(page.locator('#dr-clave')).toBeFocused()
+  await page.keyboard.type('mi-clave-de-siempre')
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('heading', { name: /Hola, LUIS/ })).toBeVisible({ timeout: 15_000 })
+  expect(s.lookup).toBe(0)
+  expect(s.login).toEqual([expect.objectContaining({ email: 'luis@ejemplo.test', password: 'mi-clave-de-siempre' })])
+})
+
+test('con el correo: con la contraseña ya puesta (el gestor de contraseñas), Intro en el correo entra', async ({ page }) => {
+  const s = await prepararCorreo(page)
+  await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+  await page.locator('#dr-correo').fill('luis@ejemplo.test')
+  await page.locator('#dr-clave').fill('la-del-gestor')
+  await page.locator('#dr-correo').press('Enter')
+  await expect(page.getByRole('heading', { name: /Hola, LUIS/ })).toBeVisible({ timeout: 15_000 })
+  expect(s.lookup).toBe(0)
+  expect(s.login).toHaveLength(1)
 })
 
 test('con el correo: con la contraseña inicial de la empresa sigue eligiendo la suya, como siempre', async ({ page }) => {
@@ -377,6 +409,89 @@ test('control: la sesión del CÓDIGO que caduca sigue diciendo «vuelve a entra
   await expect(page.locator('#dr-correo')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText(DICT['dr.caducada'].es)).toBeVisible()
   await expect(page.getByRole('heading', { name: DICT['alta.dr.enlaceTitulo'].es })).toHaveCount(0)
+})
+
+/* El camino de verdad (revisión enlace3, hallazgo 1): quien entra con su enlace queda en `/conductor#<slug de su
+   empresa>`. El interceptor le mandaba a esa MISMA dirección con el mismo «#», el navegador no recargaba y se quedaba
+   en un portal vacío («Hola, Ana» sin nada) en vez de ver «Este acceso ya no vale». */
+const SLUG = 'transportes-perez'
+const cortarSesion = (page) => page.route(/\/api\/(portal|drivers|inspections|driver|auth\/me|conductor|shifts|vehicles)/, (r) => r.fulfill({ status: 401,
+  json: { detail: 'Tu acceso ha cambiado: abre el último enlace que te ha mandado tu empresa.' } }))
+
+test('con el slug en la dirección, abriendo el portal por la mañana con la sesión ya cortada: «Este acceso ya no vale»', async ({ page }, info) => {
+  if (info.project.name === 'movil') await page.setViewportSize({ width: 390, height: 844 })
+  await prepararSesion(page, { lk: 'x', via: 'enlace', exp: enDias(20) }, { cortar: true })
+  await page.goto(`/conductor#${SLUG}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: DICT['alta.dr.enlaceTitulo'].es })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('dr-enlace-caducado')).toHaveText(DICT['alta.dr.enlaceTexto'].es)
+  await expect(page.getByRole('heading', { name: /Hola, Ana/ })).toHaveCount(0)
+  // Sigue en la dirección de su empresa (el «#» no se pierde) y ya sin sesión.
+  expect(page.url()).toMatch(new RegExp(`/conductor#${SLUG}$`))
+  expect(await page.evaluate(() => localStorage.getItem('flota_driver_token'))).toBeNull()
+  await foto(page, `18-enlace-cortado-con-slug-${info.project.name}`)
+})
+
+test('con el slug en la dirección, dentro del portal: el dueño renueva el enlace y a la siguiente petición sale el aviso', async ({ page }, info) => {
+  if (info.project.name === 'movil') await page.setViewportSize({ width: 390, height: 844 })
+  await prepararSesion(page, { lk: 'x', via: 'enlace', exp: enDias(29) })
+  await page.goto(`/conductor#${SLUG}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: /Hola, Ana/ })).toBeVisible({ timeout: 15_000 })
+  // Ahora la empresa le manda uno nuevo: la sesión de este teléfono deja de valer.
+  await cortarSesion(page)
+  await page.getByRole('button', { name: /Hacer la auditoría/ }).click()
+  await expect(page.getByRole('heading', { name: DICT['alta.dr.enlaceTitulo'].es })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText(/No hay vehículos disponibles/)).toHaveCount(0)
+  expect(page.url()).toMatch(new RegExp(`/conductor#${SLUG}$`))
+})
+
+test('con el slug y la sesión del CÓDIGO cortada: «vuelve a entrar con tu correo» (también se quedaba en el portal), sin bucle de recargas', async ({ page }) => {
+  let cargas = 0
+  page.on('load', () => { cargas += 1 })
+  await prepararSesion(page, { via: 'codigo', exp: enDias(20) }, { cortar: true })
+  await page.goto(`/conductor#${SLUG}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('#dr-correo')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText(DICT['dr.caducada'].es)).toBeVisible()
+  await page.waitForTimeout(1500)
+  expect(cargas, 'una carga y una recarga, nada más').toBeLessThanOrEqual(2)
+})
+
+/* La sesión nacida del enlace no tiene contraseña ni correo de recuperación que poner (el servidor contesta 403
+   `enlace_sin_contrasena`): el portal no los ofrece, y dice una línea tranquila en su lugar. Las de código, como siempre. */
+const LINEA_ENLACE = 'Entras con tu enlace. Si quieres contraseña, pídesela a tu empresa.'
+test('el portal con la sesión del enlace: sin «Cambiar mi contraseña» ni «Correo de recuperación», con su línea', async ({ page }, info) => {
+  if (info.project.name === 'movil') await page.setViewportSize({ width: 390, height: 844 })
+  await prepararSesion(page, { lk: 'x', via: 'enlace', exp: enDias(29) })
+  await page.route(/\/api\/portal\/mi-ficha/, (r) => r.fulfill({ json: { falta_telefono: false, tiene_clave: false, configurar_cuenta: false } }))
+  await page.goto(`/conductor#${SLUG}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: /Hola, Ana/ })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('portal-con-enlace')).toHaveText(LINEA_ENLACE)
+  for (const fuera of [/Cambiar mi contraseña/, /Crear mi contraseña/, /Correo de recuperación/, /correo personal/i, /Sal de la cuenta/]) {
+    await expect(page.getByText(fuera)).toHaveCount(0)
+  }
+  await foto(page, `19-portal-enlace-${info.project.name}`)
+})
+
+test('control: el portal con la sesión del código sigue con «Crear mi contraseña» y «Correo de recuperación»', async ({ page }) => {
+  await prepararSesion(page, { via: 'codigo', exp: enDias(29) })
+  await page.route(/\/api\/portal\/mi-ficha/, (r) => r.fulfill({ json: { falta_telefono: false, tiene_clave: false, configurar_cuenta: false } }))
+  await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: /Hola, Ana/ })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('button', { name: /Crear mi contraseña/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Correo de recuperación/ })).toBeVisible()
+  await expect(page.getByTestId('portal-con-enlace')).toHaveCount(0)
+})
+
+test('el portal con la sesión del enlace: si el teléfono ya estaba, el 403 no se le enseña; deja de pedirlo', async ({ page }) => {
+  await prepararSesion(page, { lk: 'x', via: 'enlace', exp: enDias(29) })
+  await page.route(/\/api\/portal\/mi-ficha/, (r) => r.fulfill({ json: { falta_telefono: true, tiene_clave: false, configurar_cuenta: false } }))
+  await page.route(/\/api\/portal\/mi-telefono/, (r) => r.fulfill({ status: 403, json: {
+    detail: 'Con el enlace no se puede cambiar el teléfono. Pide a tu empresa que te lo cambie.', codigo: 'enlace_sin_cambiar_telefono' } }))
+  await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('¿Cuál es tu teléfono?')).toBeVisible({ timeout: 15_000 })
+  await page.getByLabel('Teléfono').fill('612345678')
+  await page.getByRole('button', { name: 'Guardar' }).click()
+  await expect(page.getByText('¿Cuál es tu teléfono?')).toHaveCount(0)
+  await expect(page.getByText(/no se puede cambiar el teléfono/)).toHaveCount(0)
 })
 
 test('la web renueva sola la sesión del conductor a partir del quinto día, una vez al día como mucho', async ({ page }) => {

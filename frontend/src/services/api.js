@@ -47,6 +47,16 @@ export function datosDeSesion(token) {
    el enlace a su empresa. Se quita en cuanto entra otra vez, con el enlace o con su correo. */
 export const ENLACE_CADUCADO = 'fds_dr_enlace_caducado'
 
+/** ¿La sesión del conductor nació de su enlace personal? (`via: "enlace"` o `lk` en el token). Con ella el servidor no
+    deja crear ni cambiar la contraseña, el correo de recuperación ni el teléfono que ya tiene (403
+    `enlace_sin_contrasena` / `enlace_sin_cambiar_telefono`): el portal no se los ofrece. */
+export function sesionDelEnlace() {
+  try {
+    const p = datosDeSesion(localStorage.getItem(DRIVER_TOKEN_KEY))
+    return !!(p && (p.via === 'enlace' || p.lk))
+  } catch { return false }
+}
+
 /* LA WEB RENUEVA SOLA LA SESIÓN DEL CONDUCTOR (A3), como la app de Android: con `POST /auth/renovar` y a partir del
    quinto día (le quedan menos de 25 de los 30), una vez al día como mucho. Si falla (sin red, el enlace ya no vale, un
    conductor sin cuenta), no se molesta a nadie: la sesión sigue como estaba y, si de verdad está cortada, lo dirá la
@@ -176,8 +186,13 @@ api.interceptors.response.use(
       localStorage.removeItem('flota_driver')
       // Para que la pantalla de entrada pueda explicarle por qué está ahí.
       try { sessionStorage.setItem('driver_sesion_caducada', '1') } catch { /* modo privado */ }
-      const slug = (window.location.hash || '')
-      window.location.replace('/conductor' + slug)
+      /* SI YA ESTÁ AHÍ, SE RECARGA (14-11-2026, revisión enlace3, hallazgo 1). Quien entró con su enlace está en
+         `/conductor#<slug de su empresa>`, y `replace` a esa MISMA dirección, con el mismo «#», para el navegador es
+         solo un salto dentro de la página: no recarga, y el portal se quedaba en pantalla vacío, sin el aviso de
+         «Este acceso ya no vale». Sin sesión ya guardada, la recarga no vuelve a caer aquí (no hay bucle). */
+      const destino = '/conductor' + (window.location.hash || '')
+      if (window.location.pathname + window.location.search + window.location.hash === destino) window.location.reload()
+      else window.location.replace(destino)
     }
     return Promise.reject(error)
   }

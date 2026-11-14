@@ -156,8 +156,8 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
     if (!file) return
     const blob = await compressImage(file, 1200, 0.7)
     if (sinIa) {
+      // Sin aviso flotante (14-11-2026): con cuatro fotos se apilaban cuatro «Foto guardada». Lo dice su casilla.
       setPhotos((p) => ({ ...p, [slotId]: blob }))
-      toast.info(t('dr.fotoGuardada'))
       return
     }
     if (!vehicleId) {
@@ -518,7 +518,12 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                         <div className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 shadow-lg">
                           <Check size={13} className="text-white" />
                         </div>
-                        <span className="absolute bottom-2 left-0 right-0 text-center text-[10px] font-bold text-white drop-shadow">{slot.label}</span>
+                        {/* Sin IA, «Foto guardada» va en la propia casilla, en una pastilla oscura que se lee sobre cualquier foto. */}
+                        <span className={`absolute bottom-2 text-center text-[10px] font-bold text-white ${sinIa
+                          ? 'left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-black/65 px-2 py-0.5' : 'left-0 right-0 drop-shadow'}`}>
+                          {slot.label}
+                          {sinIa && <span className="block font-semibold" data-testid={`foto-guardada-${slot.id}`}>{t('dr.fotoGuardada')}</span>}
+                        </span>
                       </>
                     ) : (
                       <>

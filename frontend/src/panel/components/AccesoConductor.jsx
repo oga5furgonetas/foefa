@@ -28,8 +28,8 @@ export const ESTADOS_ACCESO = {
   caducado: 'alta.acc.caducado',
 }
 
-/** «Abierto el 14 nov». Con `sello`, el día como el sello de las fotos («Abierto el 14 NOV»): así lo dicen el arranque
-    y la ventana del acceso (cuarta tanda, C2 y C3); la lista de Conductores sigue con el de siempre. */
+/** «Abierto el 14 nov». Con `sello`, el día como el sello de las fotos («Abierto el 14 NOV»): así lo dicen el arranque,
+    la ventana del acceso (cuarta tanda, C2 y C3) y la etiqueta de la lista de Conductores. */
 export function textoEstado(t, acceso, idioma = 'es', { sello = false } = {}) {
   const e = acceso?.estado || 'sin_enlace'
   const dia = sello ? diaSello(acceso?.abierto_dia, idioma) : diaCorto(acceso?.abierto_dia, idioma)
@@ -44,10 +44,10 @@ const ESTILO = {
     pendiente: 'font-mono text-[13.5px] font-medium text-[color:var(--ld-text)]',
     abierto: 'font-mono text-[13.5px] font-semibold text-[color:var(--ld-ok)]',
     caducado: 'font-mono text-[13.5px] font-semibold text-[color:var(--ld-mid)]',
-    principal: 'inline-flex h-10 items-center justify-center whitespace-nowrap rounded-[10px] bg-[color:var(--ld-text)] px-3.5 text-[14px] font-bold text-[color:var(--ld-bg)] disabled:opacity-60',
-    secundario: 'inline-flex h-10 items-center justify-center whitespace-nowrap rounded-[10px] border-[1.5px] border-[color:var(--ld-border-strong)] px-3.5 text-[14px] font-bold text-[color:var(--ld-text)] hover:border-[color:var(--ld-text)] disabled:opacity-60',
+    principal: 'inline-flex h-10 items-center justify-center whitespace-nowrap rounded-[10px] bg-[color:var(--ld-text)] px-3.5 text-[14px] font-bold text-[color:var(--ld-bg)] disabled:cursor-not-allowed [&:disabled:not([aria-busy=true])]:bg-[color:var(--ld-hueco)] [&:disabled:not([aria-busy=true])]:text-[color:var(--ld-muted)]',
+    secundario: 'inline-flex h-10 items-center justify-center whitespace-nowrap rounded-[10px] border-[1.5px] border-[color:var(--ld-border-strong)] px-3.5 text-[14px] font-bold text-[color:var(--ld-text)] hover:border-[color:var(--ld-text)] disabled:cursor-not-allowed [&:disabled:not([aria-busy=true])]:border-transparent [&:disabled:not([aria-busy=true])]:bg-[color:var(--ld-hueco)] [&:disabled:not([aria-busy=true])]:text-[color:var(--ld-muted)]',
     enlace: 'inline-flex min-h-[40px] items-center text-[14px] font-semibold text-[color:var(--ld-muted)] underline-offset-4 hover:underline',
-    discreto: 'inline-flex min-h-[40px] items-center text-[14px] font-semibold text-[color:var(--ld-text)] underline underline-offset-4 decoration-[color:var(--ld-border-strong)] hover:decoration-[color:var(--ld-text)] disabled:opacity-60',
+    discreto: 'inline-flex min-h-[40px] items-center text-[14px] font-semibold text-[color:var(--ld-text)] underline underline-offset-4 decoration-[color:var(--ld-border-strong)] hover:decoration-[color:var(--ld-text)] disabled:cursor-not-allowed disabled:text-[color:var(--ld-muted)]',
     nota: 'text-[13px] text-[color:var(--ld-muted)]',
     error: 'text-[13.5px] font-semibold text-[color:var(--ld-warn)]',
     caja: 'w-full rounded-[10px] border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-surface)] px-3 py-2 font-mono text-[12.5px] text-[color:var(--ld-text)]',
@@ -189,7 +189,7 @@ export default function AccesoConductor({ c, empresa, onCambio, variante = 'pape
         <div className={`mt-2 ${s.confirmar}`} role="alertdialog" aria-label={t('alta.acc.renovar')}>
           <p className={s.nota}>{a.confirmar}</p>
           <div className="mt-2.5 flex flex-wrap gap-2">
-            <button type="button" className={s.principal} disabled={!!ocupado} onClick={a.confirmarRenovar}>{t('alta.acc.renovarSi')}</button>
+            <button type="button" className={s.principal} disabled={!!ocupado} aria-busy={ocupado === 'renovar' || undefined} onClick={a.confirmarRenovar}>{t('alta.acc.renovarSi')}</button>
             <button type="button" className={s.secundario} disabled={!!ocupado} onClick={() => a.setConfirmar('')}>{t('alta.cancelar')}</button>
           </div>
         </div>
@@ -204,10 +204,10 @@ export default function AccesoConductor({ c, empresa, onCambio, variante = 'pape
       ) : (
         <>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <button type="button" className={s.principal} disabled={!!ocupado} onClick={() => a.mandar(false)}>
+            <button type="button" className={s.principal} disabled={!!ocupado} aria-busy={ocupado === 'wa' || undefined} onClick={() => a.mandar(false)}>
               {ocupado === 'wa' ? t('alta.acc.creando') : t('alta.acc.whatsapp')}
             </button>
-            <button type="button" className={s.secundario} disabled={!!ocupado} onClick={() => a.copiar(false)}>
+            <button type="button" className={s.secundario} disabled={!!ocupado} aria-busy={ocupado === 'copiar' || undefined} onClick={() => a.copiar(false)}>
               {a.copiado ? t('alta.acc.copiado') : t('alta.acc.copiar')}
             </button>
             {conQuitar && estado === 'sin_abrir' && (
@@ -236,8 +236,11 @@ export function DialogoAcceso({ c, empresa, onCambio, onCerrar }) {
   const titulo = t('alta.acc.titulo').replace('{nombre}', c.nombre)
   /* Opaca y por ENCIMA de todo (tercera tanda, A11): con `.card` (medio transparente) se leía la lista a través, y dentro
      del contenido del panel la barra de abajo del móvil (z-40) y el botón del asistente (z-95) le tapaban la última
-     línea y «Anular el enlace». Va a `body` con un portal, así ningún contexto de apilado de la página la deja debajo,
-     y su borde de abajo respeta la zona segura del teléfono. */
+     línea y «Anular el enlace». Va con un portal, así ningún contexto de apilado de la página la deja debajo, y su borde
+     de abajo respeta la zona segura del teléfono.
+     EL PORTAL, DENTRO DE <main> (14-11-2026): en `body` quedaba fuera de donde manda el tema y en «Mixto» salía oscura
+     mientras las demás ventanas salían claras. <main> no hace de contexto de apilado (no lleva z-index, y su animación
+     de entrada no se queda con `transform`), así que la capa z-[100] sigue por encima de la barra y de la burbuja. */
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4" onClick={onCerrar}>
       <div role="dialog" aria-modal="true" aria-label={t('alta.acc.titulo').replace('{nombre}', c.nombre)}
@@ -259,6 +262,6 @@ export function DialogoAcceso({ c, empresa, onCambio, onCerrar }) {
         </div>
       </div>
     </div>,
-    document.body,
+    document.querySelector('main') || document.body,
   )
 }
