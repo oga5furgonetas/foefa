@@ -24,7 +24,7 @@ import {
   getAccesosConductores,
 } from '../api'
 import { DialogoAcceso, textoEstado } from '../components/AccesoConductor'
-import { diaCorto } from '../../lib/accesoConductor'
+import { diaSello } from '../../lib/accesoConductor'
 import { MARCA } from '../../marca'
 import { DIAS_AVISO_CARNET, diasHastaCarnet, fechaCarnet, textoDiasCarnet } from '../../lib/carnet'
 
@@ -1034,13 +1034,14 @@ function BotonAcceso({ fila, onAcceso, conClave = false, movil = false }) {
   if (!fila || !onAcceso) return null
   const e = fila.acceso?.estado || 'sin_enlace'
   const clave = e === 'sin_enlace' && conClave ? 'alta.acc.chip.conClave' : (CHIP_ACCESO[e] || CHIP_ACCESO.sin_enlace)
-  const texto = t(clave).replace('{dia}', diaCorto(fila.acceso?.abierto_dia, lang))
+  // El día con el sello de la casa («Abierto el 14 NOV»), como la ventana (14-11-2026).
+  const texto = t(clave).replace('{dia}', diaSello(fila.acceso?.abierto_dia, lang))
   const tono = e === 'abierto' ? 'border-emerald-500/30 text-emerald-300'
     : e === 'caducado' ? 'border-amber-500/40 text-amber-300'
       : e === 'sin_enlace' && !conClave ? 'border-brand-500/40 text-brand-300' : 'border-dark-700 text-dark-300'
   return (
     <button type="button" data-testid="boton-acceso" data-estado={e === 'sin_enlace' && conClave ? 'con_clave' : e}
-      title={textoEstado(t, fila.acceso, lang)}
+      title={textoEstado(t, fila.acceso, lang, { sello: true })}
       onClick={(ev) => { ev.stopPropagation(); onAcceso(fila) }}
       className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 text-[11.5px] font-semibold hover:bg-white/[0.04] ${tono} ${movil ? 'my-auto mr-1.5 min-h-[36px]' : 'py-1'}`}>
       {e === 'abierto' && <Check size={12} aria-hidden="true" />}

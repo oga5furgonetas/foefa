@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { LogoMarca } from './portadaComun'
 import { MARCA } from '../marca'
-import { temaEfectivo } from '../lib/tema'
+import { nocheElegida } from '../lib/tema'
 
 /* LA PUERTA DEL CONDUCTOR (14-11-2026): la entrada con su correo (/conductor sin sesión) y la del enlace personal (/c).
    No son pantallas de reparto sino la puerta de la casa, así que van con la identidad de la web de la que viene el dueño
@@ -26,24 +26,14 @@ export const ERROR = 'text-[16px] font-semibold text-[color:var(--ld-warn)]'
 export const AVISO = 'rounded-[12px] border-[1.5px] border-[color:var(--ld-ambar)] bg-[color:var(--ld-surface)] px-4 py-3 text-[16px] leading-relaxed'
 export const AVISO_TITULO = 'text-[15px] font-semibold'
 export const AVISO_TEXTO = 'mt-0.5 text-[14px] leading-relaxed text-[color:var(--ld-text2)]'
-/* El botón principal cuando todavía no se puede pulsar (falta escribir algo): tinta apagada sobre el color de hueco, no
-   un cian lavado, que parecía roto (cuarta tanda, C4; la misma regla que M7 en el panel). Va DETRÁS de BTN_PRIMARIO. */
-export const DESACTIVADO = 'disabled:cursor-not-allowed disabled:bg-[color:var(--ld-hueco)] disabled:text-[color:var(--ld-muted)] disabled:!opacity-100 disabled:hover:bg-[color:var(--ld-hueco)]'
 
 /* Dónde va la acción: en el móvil, abajo, al alcance del pulgar; en una pantalla ancha, justo debajo del texto (en el
    ordenador quedaba a 530 px de lo que explica; cuarta tanda, C4). */
 export const ABAJO = 'mt-auto pt-10 md:mt-8 md:pt-0'
 
-/** ¿Ha elegido la noche quien mira? (cuarta tanda, C5). La del panel o la app del conductor (`panel_theme`, también
-    «auto» con el móvil en oscuro) y, si no ha elegido ninguna ahí, la del pie de la web (`fds_tema_web`). Sin elegir
-    nada, papel: es la puerta de la casa. */
-export function nocheElegida() {
-  try {
-    if (temaEfectivo() === 'dark') return true
-    if (localStorage.getItem('panel_theme_elegido')) return false
-    return localStorage.getItem('fds_tema_web') === 'dark'
-  } catch { return false }
-}
+/* ¿Ha elegido la noche quien mira? La regla vive en lib/tema.js (la usan también el cargador de ruta y, escrita sin
+   módulos, public/fondo-arranque.js). Sin elegir nada, papel: es la puerta de la casa. */
+export { nocheElegida }
 
 /** El tema de la puerta, leído una vez al abrir (no cambia a mitad). */
 export function useTemaEntrada() {

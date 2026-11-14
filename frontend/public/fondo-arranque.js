@@ -21,9 +21,28 @@
     /* /registro es también el alta oscura de quien reparte solo: esa llega siempre con `sector=autonomo` (la app, el
        login y los anuncios); sin él, o con el de una empresa, la página es de papel (Registro.jsx decide igual). */
     var altaEmpresa = ruta === '/registro' && !/(?:^|[?&])sector=autonomo(?:&|$)/.test(location.search)
-    if (!CLARAS.test(ruta) && !altaEmpresa) return
+    /* LA PUERTA DEL CONDUCTOR (14-11-2026): /c (su enlace) y /conductor sin sesión (su entrada con el correo) son de
+       papel, y de noche solo si la eligió: la MISMA regla que `nocheElegida()` y `esPuertaConductor()` de
+       src/lib/tema.js (manda el tema elegido del panel o de la app, «auto» con el móvil en oscuro; si no hay ninguno
+       elegido, el del pie de la web). Con sesión, /conductor es su portal y arranca como siempre. */
+    var puerta = false
+    try {
+      puerta = /^\/c(?:\/|$)/.test(ruta) || (/^\/conductor(?:\/|$)/.test(ruta) && !localStorage.getItem('flota_driver'))
+    } catch (e) { puerta = /^\/c(?:\/|$)|^\/conductor(?:\/|$)/.test(ruta) }
+    if (!CLARAS.test(ruta) && !altaEmpresa && !puerta) return
     var noche = false
-    try { noche = localStorage.getItem('fds_tema_web') === 'dark' } catch (e) { /* modo privado */ }
+    try {
+      if (puerta) {
+        var elegido = localStorage.getItem('panel_theme_elegido')
+        var tema = elegido ? (localStorage.getItem('panel_theme') || 'hibrido') : 'hibrido'
+        var oscuroMovil = false
+        try { oscuroMovil = window.matchMedia('(prefers-color-scheme: dark)').matches } catch (e) { /* sin matchMedia */ }
+        if (tema === 'dark' || (tema === 'auto' && oscuroMovil)) noche = true
+        else if (!elegido) noche = localStorage.getItem('fds_tema_web') === 'dark'
+      } else {
+        noche = localStorage.getItem('fds_tema_web') === 'dark'
+      }
+    } catch (e) { /* modo privado */ }
     document.documentElement.classList.add(noche ? 'arranque-noche' : 'arranque-papel')
     var meta = document.querySelector('meta[name="theme-color"]')
     if (meta) meta.setAttribute('content', noche ? '#0b1012' : '#f5f6f3')

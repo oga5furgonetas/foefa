@@ -21,7 +21,7 @@ import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/500.css'
 import '@fontsource/ibm-plex-mono/600.css'
 import { medirVista } from './lib/analitica'
-import { aplicarTema, aplicarLetra, pintarApp, RUTAS_APP, colorDeLaApp } from './lib/tema'
+import { aplicarTema, aplicarLetra, pintarApp, RUTAS_APP, colorDeLaApp, esPuertaConductor, nocheElegida } from './lib/tema'
 import { salirDeLaDemoDeReparto, inicioGuardado } from './panel/auth'
 
 /* Señal de vida para /arranque.js. Ese vigilante espera 10 s y, si esta marca
@@ -396,6 +396,8 @@ function SoloWeb({ children, a = '/ruta' }) {
    no cambian (si se llega a ellos navegando desde una pública, la marca sigue en <html>: por eso se mira la ruta). */
 function papelDeArranque(ruta) {
   if (/^\/panel(\/|$)/.test(ruta)) return null
+  // La puerta del conductor (/c, /conductor sin sesión), con la regla de su pantalla: papel salvo la noche elegida.
+  if (esPuertaConductor(ruta)) return nocheElegida() ? '#0b1012' : '#f5f6f3'
   const html = document.documentElement.classList
   if (html.contains('arranque-noche')) return '#0b1012'
   if (html.contains('arranque-papel')) return '#f5f6f3'

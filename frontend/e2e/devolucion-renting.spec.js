@@ -156,6 +156,9 @@ test.describe('/devolucion-renting', () => {
     }))
     expect(tapado.length).toBeGreaterThan(0)
     expect(tapado.every(Boolean), 'el retrovisor marcado queda tapado').toBe(true)
+    // En la herramienta, la zona marcada sigue en el cian de la marca (la portada la pasa en tinta: 14-11-2026).
+    const rellenos = await page.locator('[data-testid="dev-paso"] svg path[fill="var(--dv-marca)"]').evaluateAll((ps) => ps.map((el) => getComputedStyle(el).fill))
+    expect(new Set(rellenos)).toEqual(new Set(['rgb(20, 231, 216)']))
     await expect(page.locator('[data-testid="dev-paso"] svg[role="img"]')).toHaveAttribute('aria-label', 'Furgoneta vista desde arriba, con la zona marcada: Retrovisores')
     await page.getByTestId('dev-no').click()
 

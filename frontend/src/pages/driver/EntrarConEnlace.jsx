@@ -150,7 +150,7 @@ export default function EntrarConEnlace() {
           <p className={`mt-3 ${TEXTO}`}>{t('alta.c.sub')}</p>
           {error && <p role="alert" className={`mt-4 ${ERROR}`} data-testid="c-error">{error.texto}</p>}
           <div className={ABAJO}>
-            <button type="button" className={`${BTN_PRIMARIO} w-full`} disabled={ocupado} onClick={entrar}>
+            <button type="button" className={`${BTN_PRIMARIO} w-full`} disabled={ocupado} aria-busy={ocupado || undefined} onClick={entrar}>
               {ocupado ? t('alta.c.entrando') : t('alta.c.entrar')}
             </button>
           </div>

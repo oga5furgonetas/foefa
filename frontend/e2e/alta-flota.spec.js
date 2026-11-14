@@ -32,12 +32,6 @@ const selloDia = (iso, lang = 'es') => {
   return `${String(d).padStart(2, '0')} ${new Intl.DateTimeFormat(lang, { month: 'short' }).format(new Date(y, m - 1, d)).replace(/\./g, '').toUpperCase().slice(0, 4)}`
 }
 
-/* «2026-11-14» → «14 nov»: el día como lo dice ahora todo el arranque, igual que el sello de las fotos (A11). */
-const diaDe = (iso, lang = 'es') => {
-  const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
-  return `${d} ${new Intl.DateTimeFormat(lang, { month: 'short' }).format(new Date(y, m - 1, d)).replace(/\./g, '').slice(0, 4)}`
-}
-
 /* Fotos de verdad para que las capturas se parezcan a lo que se verá (las del servidor de pruebas no existen). */
 const FOTOS_LOCALES = ['/demo/van-frontal.jpg', '/demo/van-lateral.jpg', '/demo/van-lateral-golpe-puerta.jpg', '/demo/van-lateral-golpe-paragolpes.jpg']
 const REVISION = { ...ESTADO.revision, fotos: ESTADO.revision.fotos.map((f, i) => ({ ...f, url: FOTOS_LOCALES[i % FOTOS_LOCALES.length] })) }
@@ -643,7 +637,7 @@ test('Conductores en inglés: «mandar uno nuevo» pregunta en inglés y la vent
     id: c.driver_id, name: c.nombre, center: 'NORTE', active: true, phone: c.movil, email: c.email })) }))
   await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
   const abierto = ACCESOS.conductores.find((c) => c.acceso.estado === 'abierto')
-  await page.getByTestId('boton-acceso').filter({ hasText: diaDe(abierto.acceso.abierto_dia, 'en') }).click()
+  await page.getByTestId('boton-acceso').filter({ hasText: selloDia(abierto.acceso.abierto_dia, 'en') }).click()
   const dialogo = page.getByRole('dialog')
   await expect(dialogo.getByTestId('acceso-pista')).toHaveText(DICT['alta.acc.noEntra'].en)
   await dialogo.getByRole('button', { name: DICT['alta.acc.renovar'].en, exact: true }).click()
@@ -699,7 +693,9 @@ test('Conductores: «sin acceso» no cuenta a quien ya entra con su enlace, y ca
   for (const e of ['abierto', 'con_clave', 'caducado', 'sin_enlace', 'sin_abrir']) expect(color(e), e).toHaveLength(1)
   expect(new Set(['abierto', 'caducado', 'sin_enlace'].map((e) => color(e)[0])).size).toBe(3)
   expect(color('con_clave')[0]).not.toBe(color('sin_enlace')[0])
-  await expect(page.getByTestId('boton-acceso').and(page.locator('[data-estado="abierto"]')).first()).toHaveText(`Abierto el ${diaDe('2026-11-12')}`)
+  // El día con el sello de la casa, como la ventana: «Abierto el 12 NOV» (14-11-2026).
+  await expect(page.getByTestId('boton-acceso').and(page.locator('[data-estado="abierto"]')).first()).toHaveText(`Abierto el ${selloDia('2026-11-12')}`)
+  await expect(page.getByTestId('boton-acceso').and(page.locator('[data-estado="abierto"]')).first()).toHaveText('Abierto el 12 NOV')
   await expect(page.getByTestId('boton-acceso').and(page.locator('[data-estado="con_clave"]'))).toHaveText(['Con contraseña'])
   await foto(page, `20-conductores-etiquetas-${info.project.name}`)
 })

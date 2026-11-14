@@ -109,12 +109,17 @@ for (const [nombre, ficha] of [['sin furgoneta asignada', SIN_IA],
     await expect(aMano).toContainText('Escribe los kilómetros que marca el cuadro.')
     if (ficha.vehicle) await expect(aMano).toContainText('La última vez marcaba 48.210 km.')
     if (process.env.FOTOS_CONDUCTOR) await page.screenshot({ path: `${process.env.FOTOS_CONDUCTOR}/sin-ia-antes-${info.project.name}.png`, fullPage: true })
-    // Las cuatro fotos y la del cuadro: guardadas sin preguntar a nadie.
+    /* Las cuatro fotos y la del cuadro: guardadas sin preguntar a nadie. Lo dice la casilla de cada foto, sin un aviso
+       flotante por foto (14-11-2026: salían cuatro «Foto guardada» apilados): tantos «Foto guardada» como fotos. */
     for (let i = 0; i < 4; i++) {
       await page.locator('input[type=file]').nth(i).setInputFiles(FOTO)
-      await expect(page.getByText('Foto guardada').first()).toBeVisible()
+      await expect(page.getByText(`${i + 1} / 6 fotos`)).toBeVisible()
       expect(await textoVisible(page)).not.toMatch(TEXTOS_IA)
     }
+    await page.waitForTimeout(200)
+    if (process.env.FOTOS_CONDUCTOR) await page.screenshot({ path: `${process.env.FOTOS_CONDUCTOR}/sin-ia-cuatro-fotos-${info.project.name}.png` })
+    await expect(page.locator('[data-testid^="foto-guardada-"]')).toHaveCount(4)
+    await expect(page.getByText('Foto guardada', { exact: true })).toHaveCount(4)
     await page.locator('input[type=file]').nth(4).setInputFiles(FOTO)
     await expect(page.getByText('Escribe los km abajo')).toBeVisible()
     expect(await textoVisible(page)).not.toMatch(TEXTOS_IA)

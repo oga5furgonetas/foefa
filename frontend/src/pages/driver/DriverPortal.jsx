@@ -1,17 +1,19 @@
 /* diseño compacto */
 import { useEffect, useState } from 'react'
 import { ClipboardCheck, CalendarDays, CalendarClock, CalendarPlus, LogOut, Lock, Mail, Ban, ShoppingBag, RefreshCw, Route, Gift, ArrowLeft, Store, ChevronRight, Check } from 'lucide-react'
-import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, mercEstado, getTrabajarMas, getAssignedVehicle, DRIVER_TOKEN_KEY } from '../../services/api'
+import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, mercEstado, getTrabajarMas, getAssignedVehicle, DRIVER_TOKEN_KEY, sesionDelEnlace } from '../../services/api'
 import { tx } from '../../lib/idioma'
 import { lista } from '../../lib/lista'
 import { medirSeccion } from '../../lib/analitica'
 import { vigilarVersion } from '../../lib/versionApp'
+import { quitarFondoDeArranque } from '../../lib/tema'
 import DriverLogin from './DriverLogin'
 import InspectionFlow from './InspectionFlow'
 import InspectionDone from './InspectionDone'
 import MisTurnos from './MisTurnos'
 import MiClave from './MiClave'
 import MiCorreoPersonal from './MiCorreoPersonal'
+import { LineaEnlace } from './conEnlace'
 import PedirDias from './PedirDias'
 import TrabajarMas from './TrabajarMas'
 import Tienda from './Tienda'
@@ -215,6 +217,8 @@ export default function DriverPortal() {
      por cambio de ruta solo se veia la de entrada, antes de que nadie entrara:
      todas las visitas salian «sin cuenta» y «se van aqui», y no habia forma de
      saber hasta donde llegan. */
+  // Dentro ya del portal, fuera el papel de la puerta (public/fondo-arranque.js): el portal va con el tema de la app.
+  useEffect(() => { if (driver) quitarFondoDeArranque() }, [driver])
   const seccion = !driver ? 'entrada' : (result ? 'hecho' : vista)
   useEffect(() => { medirSeccion('/conductor/p/' + seccion) }, [seccion])
 
@@ -254,6 +258,8 @@ export default function DriverPortal() {
       await guardarMiTelefono(tel)
       setTelOk(true); setFaltaTel(false)
     } catch (e) {
+      // Con la sesión del enlace no se cambia el teléfono que ya hay (14-11-2026): si ya lo tiene, no hay nada que pedirle.
+      if (e?.response?.data?.codigo === 'enlace_sin_cambiar_telefono') { setFaltaTel(false); return }
       setErrTel(e?.response?.data?.detail || 'No se pudo guardar.')
     } finally { setGuardandoTel(false) }
   }
@@ -362,6 +368,7 @@ export default function DriverPortal() {
       return !!JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).demo
     } catch { return false }
   })()
+  const conEnlace = sesionDelEnlace()
   const extrasProximos = lista(extra?.extras).filter((x) => !x.pasado).length
   const extraPendiente = lista(extra?.vacantes).some((v) => v.mi_estado === 'pendiente')
   // «Sábado, 17 de octubre»: solo la primera en mayúscula (con `capitalize` salía «17 De Octubre»).
@@ -543,6 +550,9 @@ export default function DriverPortal() {
               onClick={() => setVista('tienda')}
             />
           )}
+          {/* Con la sesión de su enlace (14-11-2026) el servidor no deja poner contraseña ni correo de recuperación
+              (403 `enlace_sin_contrasena`): en vez de dos casillas que acaban en un error, una línea tranquila debajo. */}
+          {!conEnlace && <>
           <Casilla
             icono={Lock}
             titulo={tieneClave ? 'Cambiar mi contraseña' : 'Crear mi contraseña'}
@@ -555,7 +565,9 @@ export default function DriverPortal() {
             detalle="Añade un correo personal para recibir códigos"
             onClick={() => setVista('correo')}
           />
+          </>}
           </div>}
+          {!esDemo && conEnlace && <LineaEnlace className="mt-1 px-1" />}
         </div>
       </div>
     </div>

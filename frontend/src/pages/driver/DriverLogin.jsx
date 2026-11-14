@@ -7,7 +7,7 @@ import { useT } from '../../i18n'
 import { BTN_PRIMARIO } from '../portadaComun'
 import {
   MarcoEntrada, TITULO, TEXTO, NOTA, ETIQUETA, CAMPO, CAMPO_CODIGO, ENLACE, FUERTE, ERROR, AVISO, AVISO_TITULO, AVISO_TEXTO,
-  DESACTIVADO, ABAJO, ENLACE_NOTA,
+  ABAJO, ENLACE_NOTA,
 } from '../entradaComun'
 
 /* LA ENTRADA DEL CONDUCTOR CON SU CORREO (14-11-2026; tercera tanda, A9).
@@ -68,11 +68,11 @@ export default function DriverLogin({ onLogin }) {
     setBusy(false)
   }
 
-  const entrarConClave = async () => {
+  const entrarConClave = async (clave) => {
     setBusy(true)
     try {
       /* Slug opcional: el acceso por correo ya resuelve la empresa en el servidor. */
-      const r = await api.post('/auth/driver-login', { email: email.trim(), password, slug: currentSlug() })
+      const r = await api.post('/auth/driver-login', { email: email.trim(), password: clave, slug: currentSlug() })
       if (r.data?.access_token) localStorage.setItem(DRIVER_TOKEN_KEY, r.data.access_token)
       /* El `id` también (11-11-2026): sin él la inspección mandaba driver_id "undefined". */
       entrado({
@@ -92,13 +92,25 @@ export default function DriverLogin({ onLogin }) {
     setBusy(false)
   }
 
-  // Intro en cualquiera de los dos campos hace lo mismo que el botón (es un <form>).
+  /* INTRO EN EL CORREO, CON LA CONTRASEÑA VACÍA, NO MANDA NADA (14-11-2026): lleva el cursor a la contraseña. Era la
+     costumbre de siempre (correo, Intro, contraseña) y mandaba un código por correo que nadie había pedido. Intro otra
+     vez con la contraseña vacía, o «Entrar», sí lo manda; con la contraseña escrita (a mano o el gestor de contraseñas),
+     Intro entra como siempre. La contraseña se lee también del campo: la que pone el gestor puede no haber avisado aún. */
+  const claveEscrita = () => password || claveRef.current?.value || ''
+  const alIntroEnElCorreo = (e) => {
+    if (e.key !== 'Enter' || e.nativeEvent?.isComposing || claveEscrita() || !email.trim()) return
+    e.preventDefault()
+    claveRef.current?.focus()
+  }
+
+  // Intro en la contraseña (o con ella escrita, en el correo) hace lo mismo que el botón (es un <form>).
   const enviar = (e) => {
     e.preventDefault()
     if (busy) return
     setError('')
     if (!email.trim()) { setError(t('dr.introEmail')); return }
-    if (password) entrarConClave()
+    const clave = claveEscrita()
+    if (clave) entrarConClave(clave)
     else pedirCodigo()
   }
 
@@ -165,6 +177,7 @@ export default function DriverLogin({ onLogin }) {
               <label className={ETIQUETA} htmlFor="dr-correo">{t('dr.email')}</label>
               <input id="dr-correo" name="email" type="email" inputMode="email" className={CAMPO} value={email}
                 onChange={(e) => { setEmail(e.target.value); setError('') }}
+                onKeyDown={alIntroEnElCorreo}
                 placeholder={t('dr.emailPh')} autoFocus autoComplete="username" autoCapitalize="none" spellCheck={false} />
 
               <label className={`mt-5 ${ETIQUETA}`} htmlFor="dr-clave">{t('dr.password')}</label>
@@ -182,7 +195,7 @@ export default function DriverLogin({ onLogin }) {
 
               {error && <p role="alert" className={`mt-4 ${ERROR}`} data-testid="dr-error">{error}</p>}
 
-              <button type="submit" disabled={busy} className={`mt-6 ${BTN_PRIMARIO} w-full`}>
+              <button type="submit" disabled={busy} aria-busy={busy || undefined} className={`mt-6 ${BTN_PRIMARIO} w-full`}>
                 {busy ? <>{Girando} {t('dr.verificando')}</> : t('alta.dr.entrar')}
               </button>
             </form>
@@ -198,7 +211,7 @@ export default function DriverLogin({ onLogin }) {
                 onChange={(e) => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setError('') }}
                 autoComplete="one-time-code" autoFocus />
               {error && <p role="alert" className={`mt-4 ${ERROR}`} data-testid="dr-error">{error}</p>}
-              <button type="submit" disabled={busy || code.length !== 6} className={`mt-6 ${BTN_PRIMARIO} ${busy ? '' : DESACTIVADO} w-full`}>
+              <button type="submit" disabled={busy || code.length !== 6} aria-busy={busy || undefined} className={`mt-6 ${BTN_PRIMARIO} w-full`}>
                 {busy ? <>{Girando} {t('dr.verificando')}</> : t('alta.dr.entrar')}
               </button>
               <div className="mt-3 flex flex-col items-center">
