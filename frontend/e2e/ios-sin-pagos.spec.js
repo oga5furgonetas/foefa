@@ -1297,7 +1297,8 @@ for (const [titulo, ios] of [['iPhone', true], ['control · web', false]]) {
       await page.route(/\/api\/ai\/asistente$/, (r) => { preguntas += 1; return r.fulfill({ status: 429, json: { detail: GEMINI_429 } }) })
       await page.goto('/panel', { waitUntil: 'domcontentloaded' })
       await expect(TITULO_DEL_PANEL(page)).toBeVisible({ timeout: 15000 })
-      await page.getByRole('button', { name: 'FDS IA' }).click()
+      // El asistente es el botón «Asistente» de la barra de arriba (ya no una burbuja flotante).
+      await page.getByRole('button', { name: 'Asistente', exact: true }).click()
       const pregunta = page.getByPlaceholder('Escribe tu pregunta…')
       await pregunta.fill('¿Qué ITV caducan este mes?')
       await pregunta.press('Enter')

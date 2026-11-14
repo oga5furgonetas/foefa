@@ -75,8 +75,9 @@ test('La barra de arriba del móvil es del color de la app (y al salir, la de la
   await page.getByRole('navigation', { name: 'Secciones' }).getByRole('button', { name: 'Ajustes' }).click()
   await page.getByRole('radio', { name: 'Oscuro' }).click()
   await expect.poll(color).toBe('#060a14')
+  // Al salir a la portada, la barra es la de la web: la portada es de papel y su barra también (antes se quedaba oscura).
   await page.goto('/', { waitUntil: 'domcontentloaded' })
-  expect(await color()).toBe('#070a0e')
+  expect(await color()).toBe('#f5f6f3')
 })
 
 test('Dentro de la app instalada: sin aviso de cookies y sin ampliar con dos dedos; en el navegador, como siempre', async ({ page, context }) => {
