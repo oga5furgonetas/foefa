@@ -744,3 +744,79 @@ test('el arranque sigue el tema del panel: en noche, de noche', async ({ page, c
   await expect(page.getByTestId('arranque')).toHaveAttribute('data-theme', 'dark')
   await foto(page, '21-arranque-noche')
 })
+
+/* Tanda 6: la espera sin red. El punto verde seguía diciendo «Esta pantalla se pone sola…» encima del aviso rojo; ahora
+   el punto pasa a gris y la frase dice que vuelve a mirar. Al volver la red, como antes. */
+test('la espera sin red: el punto en gris y «Sin conexión: lo vuelvo a mirar…»; al volver, como antes', async ({ page, context }, info) => {
+  test.setTimeout(60_000)
+  if (info.project.name === 'movil') await page.setViewportSize({ width: 390, height: 844 })
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await servidorArranque(page, context, estadoEn(4))
+  let cortado = false
+  await page.route(/\/api\/alta\/estado/, (r) => (cortado ? r.abort('internetdisconnected') : r.fallback()))
+  await page.goto('/panel/arranque', { waitUntil: 'domcontentloaded' })
+  const mirando = page.getByTestId('alta-mirando')
+  const punto = page.getByTestId('alta-mirando-punto')
+  const color = (v) => page.evaluate((x) => {
+    const el = document.createElement('i'); el.style.color = `var(${x})`
+    document.querySelector('[data-testid="arranque"]').appendChild(el)
+    const c = getComputedStyle(el).color; el.remove(); return c
+  }, v)
+  await expect(mirando).toHaveText(DICT['alta.p4.mirando'].es)
+  await expect(punto).toHaveCSS('background-color', await color('--ld-ok'))
+  cortado = true
+  await expect(mirando).toHaveText('Sin conexión: lo vuelvo a mirar en unos segundos.', { timeout: 12_000 })
+  await expect(punto).toHaveCSS('background-color', await color('--ld-muted'))
+  await expect(page.getByTestId('alta-espera-error')).toBeVisible()
+  await expect(page.getByText(DICT['alta.p4.mirando'].es)).toHaveCount(0)
+  await foto(page, `22-espera-sin-red-${info.project.name}`)
+  cortado = false
+  await expect(mirando).toHaveText(DICT['alta.p4.mirando'].es, { timeout: 12_000 })
+  await expect(punto).toHaveCSS('background-color', await color('--ld-ok'))
+  await expect(page.getByTestId('alta-espera-error')).toHaveCount(0)
+})
+
+/* Tanda 6: lo pegado de Excel con sus columnas («Matrícula⇥Modelo⇥Conductor habitual») se parte después de un «⇥» o
+   de un espacio, nunca por dentro de una palabra (a 390 px salía «Modelo⇥Con / ductor»). */
+test('a 390 px lo pegado con tabuladores no se parte dentro de una palabra', async ({ page, context }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await servidorArranque(page, context, estadoEn(1))
+  const TEXTO = 'Matrícula⇥Modelo⇥Conductor habitual⇥Kilómetros'
+  const respuesta = { ...FURGONETAS, lineas: [
+    { n: 1, texto: TEXTO, matricula: null, estado: 'error', motivo: 'No parece una matrícula.', codigo: 'otro', confirmada: false },
+    ...FURGONETAS.lineas.slice(0, 1),
+  ] }
+  await page.route(/\/api\/alta\/furgonetas$/, (r) => r.fulfill({ json: respuesta }))
+  await page.goto('/panel/arranque', { waitUntil: 'domcontentloaded' })
+  await page.getByTestId('alta-furgonetas-texto').fill('Matrícula\tModelo\tConductor habitual\tKilómetros\n1234 ABC')
+  await page.getByRole('button', { name: 'Revisar', exact: true }).click()
+  const fila = page.getByTestId('alta-lineas').locator('li').first()
+  await expect(fila).toContainText('Conductor')
+  // Las líneas tal como las pinta el navegador, letra a letra.
+  const lineas = await fila.locator('.font-mono.break-words').evaluate((el) => {
+    const out = []
+    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      for (let i = 0; i < n.length; i += 1) {
+        const r = document.createRange(); r.setStart(n, i); r.setEnd(n, i + 1)
+        const c = r.getClientRects()[0]
+        if (!c) continue
+        const top = Math.round(c.top)
+        if (!out.length || Math.abs(out.at(-1).top - top) > 3) out.push({ top, t: '' })
+        out.at(-1).t += n.data[i]
+      }
+    }
+    return out.map((x) => x.t)
+  })
+  expect(lineas.length, lineas.join(' | ')).toBeGreaterThan(1)
+  const palabras = TEXTO.split(/[⇥\s]+/)
+  for (const l of lineas) {
+    for (const p of l.split(/[⇥\s]+/).filter(Boolean)) expect(palabras, `«${p}» es un trozo de palabra: ${lineas.join(' | ')}`).toContain(p)
+  }
+  // El texto sigue siendo el mismo (sin caracteres de más).
+  await expect(fila.locator('.font-mono.break-words')).toHaveText(TEXTO)
+  await sinDesborde(page, 'lo pegado con tabuladores')
+})

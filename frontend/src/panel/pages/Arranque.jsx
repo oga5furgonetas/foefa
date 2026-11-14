@@ -91,6 +91,14 @@ function Lineas({ lineas, pinta }) {
   )
 }
 
+/* Lo pegado de Excel con sus columnas («Matrícula⇥Modelo⇥Conductor habitual»): un salto permitido después de cada «⇥»
+   (tanda 6). Sin él, «⇥» pegaba las palabras y `break-words` partía una por dentro («Modelo⇥Con / ductor» a 390 px).
+   Con <wbr>, el texto copiado sigue siendo el mismo. */
+function Partible({ texto }) {
+  const trozos = String(texto ?? '').split('⇥')
+  return trozos.map((x, i) => (i < trozos.length - 1 ? <span key={i}>{x}⇥<wbr /></span> : <span key={i}>{x}</span>))
+}
+
 const claseEstado = (estado) => (estado === 'nueva' || estado === 'nuevo'
   ? 'text-[color:var(--ld-ok)]' : estado === 'error' ? 'text-[color:var(--ld-warn)]' : 'text-[color:var(--ld-muted)]')
 
@@ -145,7 +153,7 @@ function PasoFurgonetas({ estado, sede, setSede, onCambio, onSeguir }) {
               {/* Lo pegado parte por palabras, nunca letra a letra («Matrí / cula» a 390 px, E5); el porqué de la derecha
                   se queda con un 58 % como mucho y se parte en líneas, así a la izquierda siempre cabe una palabra. */}
               <span className="min-w-0 flex-1">
-                {l.matricula ? <Matricula texto={l.matricula} className="text-[15px]" /> : <span className="break-words font-mono text-[15px]">{l.texto}</span>}
+                {l.matricula ? <Matricula texto={l.matricula} className="text-[15px]" /> : <span className="break-words font-mono text-[15px]"><Partible texto={l.texto} /></span>}
               </span>
               <span className={`min-w-0 max-w-[58%] text-right text-[14px] font-semibold ${claseEstado(l.estado)}`}>
                 {l.estado === 'nueva' ? t('alta.p1.nueva') : motivoDe(t, l)}
@@ -161,7 +169,7 @@ function PasoFurgonetas({ estado, sede, setSede, onCambio, onSeguir }) {
                   <li key={l.n} className="border-b border-[color:var(--ld-border)]">
                     <label className="flex min-h-[48px] cursor-pointer items-center gap-3 py-2">
                       <span className="w-7 shrink-0 font-mono text-[13px] tabular-nums text-[color:var(--ld-muted)]">{l.n}</span>
-                      <span className="min-w-0 flex-1 break-words font-mono text-[15px]">{l.texto}</span>
+                      <span className="min-w-0 flex-1 break-words font-mono text-[15px]"><Partible texto={l.texto} /></span>
                       <span className="shrink-0 text-[14px] font-semibold">{t('alta.p1.rarasSi')}</span>
                       <input type="checkbox" className="h-5 w-5 shrink-0 accent-[color:var(--ld-text)]"
                         checked={siSon.includes(l.texto)}
@@ -506,6 +514,7 @@ function Espera({ comprobado, empresa, onAcceso, error }) {
     const id = setInterval(() => setAhora(Date.now()), 1000)
     return () => clearInterval(id)
   }, [])
+  const sinRed = !!error && error === t('alta.err.red')
   const cambia = (id, acceso) => setAccesos((xs) => (xs || []).map((c) => (c.driver_id === id ? { ...c, acceso } : c)))
   const lista = accesos || []
   const abiertos = lista.filter((c) => c.acceso?.estado === 'abierto').length
@@ -516,9 +525,13 @@ function Espera({ comprobado, empresa, onAcceso, error }) {
     <>
       <p className={`mt-3 ${TEXTO}`}>{t('alta.p4.espera')}</p>
       <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1" data-testid="alta-esperando">
-        <p className={`flex items-center gap-2.5 ${GRIS}`}>
-          <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-[color:var(--ld-ok)]" aria-hidden="true" />
-          {t('alta.p4.mirando')}
+        {/* Sin conexión (tanda 6), el punto no sigue en verde diciendo «se pone sola» encima del aviso: pasa a gris y
+            dice que vuelve a mirar (con otro fallo, el punto en gris y la frase de siempre: sigue preguntando sola). Al
+            volver la red, como antes. */}
+        <p className={`flex items-center gap-2.5 ${GRIS}`} data-testid="alta-mirando" data-red={sinRed ? 'no' : 'si'}>
+          <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ${error ? 'bg-[color:var(--ld-muted)]' : 'bg-[color:var(--ld-ok)]'}`}
+            aria-hidden="true" data-testid="alta-mirando-punto" />
+          {t(sinRed ? 'alta.p4.sinRed' : 'alta.p4.mirando')}
         </p>
         {textoHace && <p className="font-mono text-[13.5px] tabular-nums text-[color:var(--ld-muted)]" data-testid="alta-comprobado">{textoHace}</p>}
         {/* Sin conexión, el aviso va aquí, junto a «Comprobado hace…» (E5): al fondo de la página no se veía. */}

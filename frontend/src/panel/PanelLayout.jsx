@@ -998,7 +998,7 @@ export default function PanelLayout() {
             margen); en el ordenador, la burbuja (48 px a 16 px del borde). Se puede bajar hasta que nada quede debajo. */}
         {/* El Chat y el Centro de IA no: su altura va calculada contra la ventana y con el hueco nuevo dejaban de caber
             (salía una barra y la página entera subía comiéndose la cabecera). Ellos, con el de siempre. */}
-        <main key={loc.pathname} className={`animate-fade-in flex-1 overflow-y-auto p-4 md:p-5 ${
+        <main key={loc.pathname} className={`animate-fade-in solo-opacidad flex-1 overflow-y-auto p-4 md:p-5 ${
           curKey === 'chat' || curKey === 'centro-ia' ? 'pb-24 md:pb-5' : 'pb-36 md:pb-20'}`}>
           {/* `ve`: la regla del menú, para que el Inicio solo enseñe casillas de pantallas que este usuario puede abrir. */}
           <Outlet context={{ center, centers, admin, setCenter, ve: (to) => itemVisible({ to }), setAvisoRepaso: setRepasoPend }} />

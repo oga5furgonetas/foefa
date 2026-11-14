@@ -4,7 +4,7 @@ import Matricula from '../../../components/Matricula'
 import { selloDeFecha } from '../../../lib/sello'
 import CalendarioDias from './CalendarioDias'
 import FotoConCaja from './FotoConCaja'
-import { momento, fechaLarga, numero, euros, comoLista } from './formato'
+import { momento, fechaLarga, numero, euros, comoLista, diaLocal } from './formato'
 import './expediente.css'
 
 /* EL EXPEDIENTE DEL VEHÍCULO (14-11-2026, «Antes del perito»): el documento que el dueño de una flota imprime, o
@@ -61,6 +61,15 @@ export default function DocumentoExpediente({ datos, empresa, iaEnPapel = false 
   const posiblesMas = typeof datos?.posibles_ia_mas === 'number' && datos.posibles_ia_mas > 0 ? datos.posibles_ia_mas : 0
 
   const largo = (x) => fechaLarga(x, locale)
+  /* El pie de la foto anterior del anexo («Antes, el 7 de noviembre»): sin el año cuando es el de la revisión, para que
+     quepa en una línea bajo una foto de 148 px (tanda 6); con otro año, entero (y, si no cabe, cortado con «…»). */
+  const fechaPie = (x, deLaRevision) => {
+    // Leídas como `fechaLarga`: el día suelto, tal cual; la marca completa, en la hora local.
+    const a = diaLocal(x) || (x ? new Date(x) : null)
+    const b = diaLocal(deLaRevision) || (deLaRevision ? new Date(deLaRevision) : null)
+    if (!a || !b || Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || a.getFullYear() !== b.getFullYear()) return largo(x)
+    try { return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long' }).format(a) } catch { return largo(x) }
+  }
   const vista = (k) => (VISTAS.includes(k) ? t(`exp.vista.${k}`) : '')
   const persona = (p) => (p && p.nombre) || t('exp.sinNombre')
   // La pieza en el idioma del documento: por su clave (la misma lista que el repaso, `repaso.p.<clave>`); sin clave, con
@@ -319,7 +328,9 @@ export default function DocumentoExpediente({ datos, empresa, iaEnPapel = false 
                   <figure>
                     <FotoConCaja src={p.anterior.foto_url} alt={`${vista(p.vista)} · ${largo(p.anterior.fecha)}`}
                       rota={t('exp.fotoRota')} idioma={lang} />
-                    <figcaption>{largo(p.anterior.fecha) ? t('exp.ia.antes').replace('{f}', largo(p.anterior.fecha)) : t('exp.g.fotoAntes')}</figcaption>
+                    <figcaption title={largo(p.anterior.fecha) ? t('exp.ia.antes').replace('{f}', largo(p.anterior.fecha)) : undefined}>
+                      {largo(p.anterior.fecha) ? t('exp.ia.antes').replace('{f}', fechaPie(p.anterior.fecha, p.fecha)) : t('exp.g.fotoAntes')}
+                    </figcaption>
                   </figure>
                 )}
                 <figure>

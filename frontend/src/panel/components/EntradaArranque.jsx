@@ -98,13 +98,19 @@ export default function EntradaArranque({ onEnCurso } = {}) {
   if (!estado || estado.paso_actual == null) return null
   const n = Math.min(4, Math.max(1, Number(estado.paso_actual) || 1))
   const pasos = Array.isArray(estado.pasos) ? estado.pasos : []
+  /* «paso 1 de 4» no se parte (tanda 6): a 390 px dejaba «de 4» solo en la segunda línea. Lo que va detrás del último
+     « · » va junto; si no cabe, baja entero. */
+  const titulo = t('alta.inicio.titulo').replace('{n}', n)
+  const corte = titulo.lastIndexOf(' · ')
   /* LA EMPRESA RECIÉN DADA DE ALTA (I5): el Inicio es solo esto. El título dice en qué paso va; debajo, los cuatro
      pasos en una lista con reglas (los hechos, en gris con «Hecho»; el de ahora, en tinta; los que faltan, apagados);
      UN botón; y una línea tranquila de lo que vendrá. Sin caja, sin icono. */
   return (
     <section data-testid="inicio-arranque" className="max-w-2xl border-t border-dark-700 pt-7">
       <h2 className="text-[24px] font-extrabold leading-tight tracking-[-0.03em] text-dark-50 sm:text-[28px]">
-        {t('alta.inicio.titulo').replace('{n}', n)}
+        {corte > 0
+          ? <>{titulo.slice(0, corte + 3)}<span className="whitespace-nowrap" data-testid="inicio-arranque-paso">{titulo.slice(corte + 3)}</span></>
+          : titulo}
       </h2>
       <p className="mt-2 text-[15.5px] text-dark-300">{t('alta.inicio.ahora').replace('{paso}', t(PASOS[n - 1]))}</p>
       <ol className="mt-6 border-t border-dark-800">

@@ -97,12 +97,27 @@ function anchoDe(texto) {
 }
 
 /* El mes encima de cada semana de una fila: donde empieza un mes y, en la primera semana de la fila, el mes en curso.
-   El año, en el primer rótulo de la fila y cuando cambia. Cada rótulo cabe antes del siguiente (con 4 px de aire): si
-   con el año no cabe, va sin él (y el año pasa al siguiente); el de la primera semana, si ni así cabe, no se pone. El
-   último de la fila cabe antes del borde (`util`): si ni sin el año cabe, tampoco se pone (no saca la fila de la hoja). */
-function rotulos(fila, col, texto, util) {
+   El año, en el primer rótulo de la fila y cuando cambia. Cada rótulo cabe antes del siguiente (con 4 px de aire).
+   CADA MES SALE (tanda 6, 14-11): nunca se quita un mes para hacerle sitio al año de otro. Si un rótulo no cabe con su
+   año, va sin él y el año pasa al siguiente («nov · dic 2025 · ene…»); enero sale «ene», y solo «2026» cuando ni «ene»
+   cabe. El primero de una fila que no es la primera repite el mes en curso (ya salió en la fila de arriba): solo se pone
+   si cabe con su año, que es lo que le da sentido; si no, se quita ÉL y el año va al primer mes que empieza de verdad.
+   El de la primera semana del periodo, si ni sin el año cabe, no se pone. El último de la fila cabe antes del borde
+   (`util`): si ni sin el año cabe, tampoco se pone (no saca la fila de la hoja). */
+function rotulos(fila, col, texto, util, primeraFila = true) {
+  const out = rotulosCon(fila, col, texto, util, primeraFila, false)
+  if (out.some((r) => r?.conAnio)) return out
+  /* Ningún mes de la fila tiene sitio para «mar 2026» (en alemán a 360 px, los meses de cuatro semanas): el año corto,
+     «Jan ’26», antes que quitar un mes o dejar la fila sin año. */
+  return rotulosCon(fila, col, texto, util, primeraFila, true)
+}
+
+const anioCorto = (texto, d) => `${texto(d, false)} ’${String(d.getFullYear()).slice(-2)}`
+
+function rotulosCon(fila, col, texto, util, primeraFila, corto) {
   const out = fila.map((s) => (s.empiezaMes ? { fecha: s.empiezaMes } : null))
-  if (!out[0] && fila[0]?.primero) out[0] = { fecha: fila[0].primero, opcional: true }
+  if (!out[0] && fila[0]?.primero) out[0] = { fecha: fila[0].primero, opcional: true, repetido: !primeraFila }
+  const cabe = (t, sitio) => anchoDe(t) <= sitio
   let anioVisto = null
   for (let i = 0; i < out.length; i += 1) {
     const r = out[i]
@@ -111,27 +126,24 @@ function rotulos(fila, col, texto, util) {
     const ultimo = j === -1
     const sitio = ultimo ? util - i * col : (j - i) * col - 4
     const anio = r.fecha.getFullYear()
-    const conAnio = texto(r.fecha, true)
+    const conAnio = corto ? anioCorto(texto, r.fecha) : texto(r.fecha, true)
     const solo = texto(r.fecha, false)
-    // La fila sin año todavía y sin sitio para él antes del siguiente rótulo: el siguiente se quita y el año va aquí
-    // (una fila sin año no se lee; con meses de cuatro semanas en el móvil, «abr 2026» no cabe en una).
-    const k = ultimo ? -1 : out.findIndex((x, q) => q > j && x)
-    const sitio2 = k === -1 ? util - i * col : (k - i) * col - 4
-    // El sitio del siguiente rótulo, por si el año puede ir en él (E3, tanda 5: así no se quita ningún mes).
-    const sitioSig = ultimo ? 0 : k === -1 ? util - j * col : (k - j) * col - 4
-    if (anio !== anioVisto && anchoDe(conAnio) <= sitio) { r.texto = conAnio; anioVisto = anio }
-    /* El primer rótulo de la fila sin sitio para su año, pero con sitio sin él, y el siguiente con sitio para el suyo:
-       este va sin año y el año va en el siguiente. Antes se quitaba el siguiente mes («nov 2025 · ene 2026»: faltaba
-       diciembre); ahora se leen todos («nov · dic 2025 · ene 2026»). */
-    else if (anioVisto === null && !ultimo && anchoDe(solo) <= sitio && anchoDe(texto(out[j].fecha, true)) <= sitioSig) {
-      r.texto = solo
+    const pideAnio = anio !== anioVisto
+    if (pideAnio && cabe(conAnio, sitio)) { r.texto = conAnio; r.conAnio = true; anioVisto = anio; continue }
+    if (r.repetido) { out[i] = null; continue }
+    // El último de una fila que aún no tiene año ni corto, en enero: el año solo, porque detrás no queda nadie que lo lleve.
+    if (corto && pideAnio && ultimo && anioVisto === null && r.fecha.getMonth() === 0 && cabe(String(anio), sitio)) {
+      r.texto = String(anio); r.conAnio = true; anioVisto = anio; continue
     }
-    else if (anioVisto === null && !ultimo && anchoDe(conAnio) > sitio && anchoDe(conAnio) <= sitio2) {
-      r.texto = conAnio; anioVisto = anio; out[j] = null
+    if (cabe(solo, sitio)) { r.texto = solo; continue }
+    // Ni «ene» cabe (el calendario más chico): el año solo, que es lo que hace falta para leer la fila.
+    if (pideAnio && r.fecha.getMonth() === 0 && cabe(String(anio), sitio)) { r.texto = String(anio); r.conAnio = true; anioVisto = anio; continue }
+    /* El primer mes del periodo, con dos semanas o menos antes del siguiente (en el móvil, «abr» no cabe en 15 px): se
+       corre a la izquierda, encima de la columna de las letras, lo justo para caber, antes que quitarlo. */
+    if (i === 0 && r.opcional && !r.repetido && cabe(solo, sitio + LETRAS)) {
+      r.texto = solo; r.desplazar = Math.max(0, anchoDe(solo) - sitio); continue
     }
-    // Enero sin sitio para «ene 2025» (el calendario más chico): el año solo, que es lo que hace falta para leer la fila.
-    else if (anio !== anioVisto && r.fecha.getMonth() === 0 && anchoDe(String(anio)) <= sitio) { r.texto = String(anio); anioVisto = anio }
-    else if (anchoDe(solo) <= sitio || (!r.opcional && !ultimo)) r.texto = solo
+    if (!r.opcional && !ultimo) r.texto = solo
     else out[i] = null
   }
   return out
@@ -212,7 +224,7 @@ export default function CalendarioDias({ desde, hasta, calendario, locale, texto
       <div className={`exp-cal${lado < 10 ? ' exp-cal-chico' : ''}`} data-testid="calendario" data-lado={lado}
         style={estilo}>
         {filas.map((fila, f) => {
-          const mes = rotulos(fila, colReal, fmtMes, util)
+          const mes = rotulos(fila, colReal, fmtMes, util, f === 0)
           return (
             <div className="exp-cal-fila" key={f} data-testid="calendario-fila">
               <div className="exp-cal-letras" aria-hidden="true">
@@ -222,7 +234,8 @@ export default function CalendarioDias({ desde, hasta, calendario, locale, texto
               <div className="exp-cal-semanas" role="list">
                 {fila.map((s, i) => (
                   <div className="exp-cal-sem" key={i} role="listitem">
-                    <span className="exp-cal-mes">{mes[i]?.texto || ''}</span>
+                    <span className="exp-cal-mes" style={mes[i]?.desplazar ? { left: -mes[i].desplazar } : undefined}
+                      data-mes={mes[i]?.texto ? isoDia(mes[i].fecha).slice(0, 7) : undefined}>{mes[i]?.texto || ''}</span>
                     {s.dias.map((d, k) => d
                       ? <i key={k} className={`exp-dia exp-dia-${d.estado}`} data-fecha={d.fecha} data-estado={d.estado}
                           title={`${fmtDia(d.fecha)} · ${etiqueta[d.estado]}`} />

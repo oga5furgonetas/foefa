@@ -592,6 +592,17 @@ body:has(.ventana) .burbuja-asistente { display: none; }
     from { opacity: 0; transform: translateY(6px) scale(0.998); }
     to   { opacity: 1; transform: none; }
   }
+  /* Solo el fundido, sin `transform` (tanda 6): para el <main> del panel («animate-fade-in solo-opacidad»: la misma
+     entrada, sin moverse). Mientras dura una animación con transform, el <main> hace de contenedor de lo
+     `position: fixed` de dentro (la fila de botones del Repaso en el móvil) y eso se pintaba al fondo del contenido
+     durante 0,3 s: se veía aparecer tarde. */
+  .animate-fade-in.solo-opacidad {
+    animation-name: ffade-opacidad;
+  }
+  @keyframes ffade-opacidad {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
 
   /* Aparición de modales/popovers: pop con rebote sutil (sin fill-mode: ver arriba) */
   .animate-pop {

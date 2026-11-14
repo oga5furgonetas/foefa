@@ -694,7 +694,9 @@ export default function Repaso() {
           mientras está, la burbuja del asistente no se pone encima de sus botones (en el móvil iba justo ahí). */}
       {barraAbajo && (
         <>
-          <div className="h-[126px] md:hidden" aria-hidden="true" data-testid="hueco-acciones" />
+          {/* El alto de la fila en cada ancho (tanda 6): en dos líneas (52 + 8 + 44 + 20 de relleno + 1 de regla = 125)
+              hasta 640 px; en una (52 + 20 + 1 = 73) de 640 a 767, donde 126 px dejaban aire de sobra. */}
+          <div className="h-[126px] sm:h-[74px] md:hidden" aria-hidden="true" data-testid="hueco-acciones" />
           <style>{'@media (max-width: 767.98px) { .burbuja-asistente { display: none !important; } }'}</style>
         </>
       )}
