@@ -17738,7 +17738,9 @@ async def repaso_deshacer_lado(inspection_id: str, photo_index: str, user: dict 
             # queda apuntado qué, cuándo y quién: el PDF de la firma lo pone en «Quitado o cambiado después de la firma».
             await db.inspections.update_one({"id": inspection_id}, {"$set": {f"repaso.deshechos.{gid}": {
                 "golpe_id": gid, "part": golpe.get("part"), "severity": golpe.get("severity"),
-                "photo_index": pi, "at": _repaso_ahora(), "por": _texto_cuerpo(user.get("name"), 80) or "?"}}})
+                "photo_index": pi, "at": _repaso_ahora(), "por": _texto_cuerpo(user.get("name"), 80) or "?",
+                # Cuándo se marcó: en una firma de antes (sin lista), lo marcado DESPUÉS de firmar no era de lo firmado.
+                "marcado_at": lado.get("at")}}})
     # (5) ¿Estaba repasada?
     await _repaso_reabrir(inspection_id)
     actual = await db.inspections.find_one({"id": inspection_id}, {"_id": 0}) or {}
@@ -19592,7 +19594,9 @@ async def forensic_pdf(inspection_id: str, _=Depends(require_admin)):
         all_damages, anadidos = await _firma_reconstruida(insp, feedback, _despues)
         for gid, r in deshechos.items():
             # `>=`: un deshacer en el mismo instante que la firma (el reloj de Windows da saltos) también es después.
-            if isinstance(r, dict) and firmado_at and str(r.get("at") or "") >= firmado_at:
+            # Y solo lo que se marcó ANTES de firmar: lo marcado y deshecho después nunca estuvo en lo firmado.
+            if (isinstance(r, dict) and firmado_at and str(r.get("at") or "") >= firmado_at
+                    and not (r.get("marcado_at") and str(r.get("marcado_at")) > firmado_at)):
                 quitados.append({"part": r.get("part"), "severity": r.get("severity"),
                                  "que": "Golpe deshecho en el repaso", "at": r.get("at"), "por": r.get("por") or "?"})
     for a in anadidos + quitados:

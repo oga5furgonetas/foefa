@@ -164,6 +164,24 @@ async def test_la_lista_entra_en_el_codigo_y_verify_la_comprueba(t, pdf):
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_en_una_firma_de_antes_lo_marcado_y_deshecho_despues_no_sale_como_quitado(t, pdf):
+    """Firma de antes (sin lista). Un golpe marcado DESPUÉS de firmar y luego deshecho nunca estuvo en lo firmado: no
+    sale en «Quitado o cambiado después de la firma» (lo encontró quien verificó la tanda)."""
+    from datetime import datetime, timedelta, timezone
+    t["inspections"].docs += [revision("r11", V, "drv-ana", marca(11)), revision("r12", V, "drv-ana", marca(12))]
+    for pi in (1, 2, 3, 4):
+        await marcar("r11", pi, "igual")
+    cuando = (datetime.now(timezone.utc) - timedelta(seconds=2)).isoformat()   # la firma, dos segundos antes
+    insp(t, "r12").update(forensic_signed=True, forensic_signed_at=cuando)
+    t["forensic_signatures"].docs.append({"inspection_id": "r12", "content_hash": "cd" * 32, "signed_at": cuando,
+                                          "prev_hash": "0" * 64, "signed_by_name": "Marta R."})
+    await marcar("r12", 3, "golpe", **G1)
+    await deshacer("r12", 3)
+    await server.forensic_pdf("r12", _=MARTA)
+    assert pdf["quitados"] == []
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_una_firma_de_antes_se_sigue_construyendo_de_la_ficha_y_lo_dice(t, pdf):
     """Firma anterior a este cambio: sin `contenido`. Lo firmado sale de la ficha como hasta ahora (deshacer lo
     quita), con la línea «Firma anterior al 14-11-2026…», y el golpe deshecho sale en «Quitado…»."""
