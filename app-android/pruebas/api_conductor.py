@@ -8,6 +8,7 @@ aquí se ve antes que en el móvil.
     py -3 app-android/pruebas/servidor_pruebas.py          # en otra ventana
     py -3 app-android/pruebas/api_conductor.py [http://127.0.0.1:8787/api]
 """
+import base64
 import json
 import sys
 from datetime import date, datetime, timedelta
@@ -343,6 +344,29 @@ def main():
     ok(r.status_code == 200 and z.get("fuente") == "DGT" and z.get("zonas") and isinstance(z.get("paradas"), dict), f"zonas de bajas emisiones cerca de la ruta: {len(z.get('zonas', []))}")
     ok(any(p.get("cliente") == "Café Marina" and p["id"] in z.get("paradas", {}) for p in d["pedidos"]), "la parada de la Marina cae dentro de la ZBE")
     ok(all("caja" not in zona and zona.get("poligonos") for zona in z.get("zonas", [])), "cada zona trae sus polígonos y no la caja interna")
+
+    # EL ALTA DENTRO DE LA APP (14-11-2026). La app borra, al releerla, la sesión de un admin que no diga a qué portal
+    # va (Cuenta.cargar): si el alta no trae `app_destino`, quien se crea la cuenta en la app es expulsado al segundo.
+    print("El alta dentro de la app (auth/register, como Repositorio.crearCuenta): la sesión dice a qué portal va")
+    c.headers.pop("Authorization", None)
+    marca = int(datetime.now().timestamp())
+    correo = f"alta-{marca}@fds.test"
+    r = c.post("/auth/register", json={"org_name": "Alta De Prueba", "username": correo, "password": "clave-de-prueba-1",
+                                       "email": correo, "slug": f"alta-de-prueba-{marca % 9000 + 1000}", "center": "",
+                                       "plan": "autonomo", "sector": "autonomo", "desde_app": True,
+                                       "zona_horaria": "Europe/Madrid", "pais": "es", "idioma": "es"})
+    s3 = r.json() if r.status_code == 200 else {}
+    ok(r.status_code == 200 and bool(s3.get("access_token")), f"auth/register crea la cuenta ({r.status_code})")
+    ok(s3.get("app_destino") == "reparto" and s3.get("role") == "admin", f"el alta dice app_destino reparto ({s3.get('app_destino')})")
+    if s3.get("access_token"):
+        cuerpo = s3["access_token"].split(".")[1]
+        datos_token = json.loads(base64.urlsafe_b64decode(cuerpo + "=" * (-len(cuerpo) % 4)))
+        ok(datos_token.get("app_destino") == "reparto", "y el token del alta también lo lleva")
+        c.headers["Authorization"] = f"Bearer {s3['access_token']}"
+        r = c.get("/reparto/mi-ruta")
+        ok(r.status_code == 200 and isinstance(r.json().get("pedidos"), list), f"con esa sesión, mi-ruta contesta ({r.status_code})")
+        r = c.post("/auth/renovar")
+        ok(r.status_code == 200 and bool(r.json().get("access_token")), f"y se puede renovar ({r.status_code})")
 
     print()
     if fallos:

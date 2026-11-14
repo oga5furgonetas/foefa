@@ -44,6 +44,38 @@ function contenido() {
     </main>`
 }
 
+/* LA MISMA TARJETA EN LOS ENLACES QUE SE PASAN POR WHATSAPP (14-11-2026). /invita?ref=… (el enlace de «Invita a un
+ * compañero»), /empezar e /iphone servían las etiquetas genéricas de index.html, que desde la portada nueva enseñan
+ * una furgoneta con un golpe («El golpe, el día que aparece»): quien pasaba la app de ruta a un compañero le
+ * enseñaba otra cosa. Aquí solo cambia la vista previa (título, descripción e imagen); la página es la misma y React
+ * monta igual. No son páginas para Google: su canonical es /repartidores. */
+export async function conTarjetaDeReparto(context, ruta) {
+  const { request, env } = context
+  const respuesta = await env.ASSETS.fetch(new URL('/index.html', new URL(request.url)))
+  let html = await respuesta.text()
+  const base = 'https://flotadsp.com' // el proxy del dominio reescribe el host: no fiarse de url.origin
+  html = html
+    .replace(/<title>[\s\S]*?<\/title>/i, '')
+    .replace(/<meta\s+name="description"[^>]*>/i, '')
+    .replace(/<meta\s+property="og:(title|description|image|image:alt|image:width|image:height|url)"[^>]*>/gi, '')
+  const cabeza = [
+    `<title>${TITULO}</title>`,
+    `<meta name="description" content="${DESCRIPCION}" />`,
+    `<meta property="og:title" content="${TITULO}" />`,
+    `<meta property="og:description" content="${DESCRIPCION}" />`,
+    `<meta property="og:url" content="${base}${ruta}" />`,
+    `<meta property="og:image" content="${base}/og-repartidores.png?v=promo1231" />`,
+    `<meta property="og:image:width" content="1200" />`,
+    `<meta property="og:image:height" content="630" />`,
+    `<meta property="og:image:alt" content="${TITULO}" />`,
+    `<link rel="canonical" href="${base}/repartidores" />`,
+  ].join('\n    ')
+  html = html.replace('</head>', `    ${cabeza}\n  </head>`)
+  return new Response(html, {
+    headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=0, s-maxage=300' },
+  })
+}
+
 export async function onRequestGet(context) {
   const { request, env } = context
   const url = new URL(request.url)

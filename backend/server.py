@@ -802,6 +802,9 @@ class RegisterRequest(BaseModel):
     acepta_transferencia: Optional[bool] = None
     ref: Optional[str] = None            # código de quien le invitó (programa «invita a un compañero»)
     idioma: Optional[str] = None         # el de la app al darse de alta: en ese idioma le llegan los correos
+    # Por dónde llegó (14-11-2026): lo que traía la dirección de entrada (utm_source, utm_campaign, utm_content, ref,
+    # entrada, referrer). Solo etiquetas cortas (_alta_origen las limpia); un servidor sin esto ignora el campo.
+    origen: Optional[dict] = None
     # Medición de anuncios (02-11-2026). `anuncios`: el permiso de píxeles del aviso de cookies de la web (la app
     # nativa no lo manda: False); sin él no se le cuenta nada a Meta. `fbp`/`fbc`: las cookies _fbp y _fbc del píxel,
     # que la web lee y manda porque la API va en otro dominio y no llegan solas; sin ellas Meta apenas casa el clic.
@@ -5310,6 +5313,11 @@ async def register_dsp(data: RegisterRequest, request: Request):
         for campo, valor in (("meta_fbp", data.fbp), ("meta_fbc", data.fbc)):
             if _meta_cookie(valor):
                 org[campo] = valor
+    # Con qué se dio de alta y por dónde llegó (14-11-2026, _alta_plataforma y _alta_origen).
+    org["alta_plataforma"], org["alta_version"] = _alta_plataforma(data, request)
+    _origen_alta = _alta_origen(data.origen)
+    if _origen_alta:
+        org["alta_origen"] = _origen_alta
     await global_db.organizations.insert_one(dict(org))
     user_id = str(uuid.uuid4())
     await global_db.admin_users.insert_one({
@@ -5370,14 +5378,21 @@ async def register_dsp(data: RegisterRequest, request: Request):
                                getattr(resp, "status_code", "?"))
         except Exception as _ee:
             logger.warning(f"Email de bienvenida no enviado a {recipient}: {_ee}")
+    # A QUÉ PORTAL VA LA SESIÓN DEL ALTA (14-11-2026). La app de Android guarda `app_destino` y, al releer la sesión,
+    # BORRA la de un admin que no diga «reparto» (Cuenta.kt, desde el 28-10-2026). El alta no lo decía: quien se creaba
+    # la cuenta dentro de la app era expulsado un segundo después (el aviso periódico relee la sesión), volvía al
+    # formulario y, al repetir, «ese usuario ya existe» (probado en el emulador con la 2.4.6). Ahora el alta de quien
+    # reparte solo lo dice, en la respuesta y en el token, igual que /auth/app-login: vale para las versiones ya
+    # instaladas. A las empresas no se les cambia nada.
+    app_destino = "reparto" if _org_de_autonomo(org) else None
     token = create_token(user_id, "admin", org_name,
                          org_id=org_id, db_name=org["db_name"], account_type="dsp",
                          centers=org.get("centers"),
-                         horas=SESION_APP_HORAS if _org_de_autonomo(org) else None)
+                         horas=SESION_APP_HORAS if _org_de_autonomo(org) else None, app_destino=app_destino)
     return TokenResponse(access_token=token, role="admin", name=org_name, id=user_id,
                          account_type="dsp", hidden_modules=org_hidden_modules(org), slug=slug,
                          centers=org.get("centers"), meta_event_id=meta_event_id,
-                         correo_bienvenida=correo_bienvenida)
+                         correo_bienvenida=correo_bienvenida, app_destino=app_destino)
 
 
 # El plan como se llama en la web (14-11-2026): el correo decía «Completo» y la web «Pro». Sin plan, no se nombra.
@@ -7495,6 +7510,38 @@ _META_DIAS_CUENTA = 30
 # Las tareas de envío en marcha: el bucle de asyncio solo guarda referencias débiles, y una tarea que no guarda
 # nadie la puede recoger el recolector a medias (un evento perdido sin que nadie se entere).
 _META_TAREAS: set = set()
+
+
+# DE DÓNDE VIENE CADA ALTA (14-11-2026). Hasta hoy la cuenta no guardaba ni con qué se dio de alta (la web, la app de
+# Android, la app del iPhone) ni por dónde llegó, y el embudo de los repartidores no podía decir quién se cae: el
+# servidor recibía `desde_app` y lo tiraba. Son etiquetas cortas, nada personal.
+_ALTA_ORIGEN_CAMPOS = ("utm_source", "utm_medium", "utm_campaign", "utm_content", "ref", "entrada", "referrer")
+
+
+def _alta_plataforma(data, request) -> tuple:
+    """(plataforma, versión) de un alta: «ios_app»; «android», con la versión que dice la cabecera X-FDS-App
+    («android-2.4.6» -> «2.4.6»); o «web»."""
+    cab = _meta_cabecera_app(request).lower()
+    if getattr(data, "desde_ios", None):
+        return "ios_app", ""
+    if cab.startswith("android") or getattr(data, "desde_app", None):
+        return "android", re.sub(r"[^0-9a-z.\-]", "", cab.partition("-")[2])[:20]
+    return "web", ""
+
+
+def _alta_origen(crudo) -> dict:
+    """Por dónde llegó quien se da de alta, limpio: solo las claves de _ALTA_ORIGEN_CAMPOS, en minúsculas, de 80
+    caracteres como mucho y sin nada que no sea letra, número o «_-.:/» (ni un correo ni un texto libre caben)."""
+    if not isinstance(crudo, dict):
+        return {}
+    limpio = {}
+    for k in _ALTA_ORIGEN_CAMPOS:
+        v = crudo.get(k)
+        if isinstance(v, str):
+            v = re.sub(r"[^0-9a-z_\-.:/]", "", v.strip().lower())[:80]
+            if v:
+                limpio[k] = v
+    return limpio
 
 
 def _meta_cabecera_app(request) -> str:
