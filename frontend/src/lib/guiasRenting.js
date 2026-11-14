@@ -917,6 +917,12 @@ const VOCES = {
   tabla: { su: 'su tabla', Su: 'Su tabla', plural: false, noAcepta: 'Su tabla pone' },
 }
 
+/* La condición de Alphabet para lo de fuera (su pág. 6), con sus palabras: entera en el resultado y, corta, en cada
+   paso de fuera. La frase admite dos lecturas («en caso contrario» puede ir con el contrato o con el «reparado»): por
+   eso va entera y entre comillas, y la corta no la resume hacia ninguna. */
+const ALPHABET_FUERA = 'Lo de fuera depende de tu contrato. Su pág. 6: «Sólo en el caso de que el contrato de renting no incluya el seguro obligatorio ni el servicio de reparaciones (es decir, en los casos en los que el seguro sea por cuenta del cliente), el vehículo deberá devolverse totalmente reparado exteriormente. En caso contrario, los daños exteriores serán facturados al cliente».'
+const ALPHABET_FUERA_CORTA = 'Lo de fuera depende de tu contrato: su pág. 6 no lo trata igual si el renting incluye el seguro y el servicio de reparaciones que si el seguro va por tu cuenta. En el resultado tienes su frase entera.'
+
 /* LA EDAD DE CADA DOCUMENTO, a la vista (en la entrada, en cada paso y en el resultado) cuando no trae fecha. */
 const SIN_FECHA = 'sin fecha: puede no ser el que esté en vigor. Pide a tu compañía el vigente.'
 export const VIGENCIA = {
@@ -934,13 +940,30 @@ export const AUTOR = { 'ayvens-furgonetas': 'LeasePlan (hoy Ayvens)', 'ayvens-tu
    factura, coste, cargo o importe para ese caso: o en la propia regla, o en una frase general que lo cubre (esta tabla,
    con su página y sus palabras, y los temas a los que alcanza). Lo demás que no acepta es «Su guía no lo acepta».
    Athlon, Volkswagen Financial Services y BMW (salvo el testigo de avería) no tienen frase general: sus manuales solo
-   dicen qué es aceptable y qué no. scripts/check-guias-renting.mjs lo vigila paso a paso. */
+   dicen qué es aceptable y qué no. scripts/check-guias-renting.mjs lo vigila paso a paso.
+   Cada frase: `pagina` y `cita` (o `fuente` y `url` si está fuera del documento), o `apartado` cuando lo que lo dice es
+   el rótulo «Facturables» de ese apartado; `aplica_a` si solo vale para un vehículo; `condicion` si el documento pone
+   una condición a ese cobro (se enseña con la frase, en el paso y en el resultado).
+   Alphabet: cada cosa con SU página. La 9 es la del habitáculo (no vale para lo de fuera); lo de fuera lo pone bajo
+   «Facturables» en las págs. 28 a 32, con la condición de su pág. 6. */
 const DANOS = ['paragolpes', 'lunas', 'aranazos', 'rozaduras', 'abolladuras', 'pintura', 'retrovisores', 'llantas', 'neumaticos', 'carga']
 const AYVENS_COBRO = { pagina: 3, cita: 'intentaremos evaluar los recargos por daños de manera justa, cobrando por reparación en lugar de por sustitución siempre que sea posible', temas: DANOS }
+const FACTURABLES = 'Facturables'
 export const COBRO = {
   'ayvens-furgonetas': [AYVENS_COBRO],
   'ayvens-turismos': [AYVENS_COBRO],
-  alphabet: [{ pagina: 9, cita: 'Se considerarán daños facturables y, por tanto, serán facturados al cliente', temas: [...DANOS, 'interior', 'limpieza'] }],
+  alphabet: [
+    { pagina: 28, apartado: '8.1 Parabrisas, ópticas, etc', cita: FACTURABLES, temas: ['lunas'], condicion: ALPHABET_FUERA, condicionCorta: ALPHABET_FUERA_CORTA },
+    { pagina: 30, apartado: '8.2 Llantas y tapacubos', cita: FACTURABLES, temas: ['llantas'], condicion: ALPHABET_FUERA, condicionCorta: ALPHABET_FUERA_CORTA },
+    { pagina: 31, apartado: '8.3 Pintura', cita: FACTURABLES, temas: ['aranazos', 'pintura'], condicion: ALPHABET_FUERA, condicionCorta: ALPHABET_FUERA_CORTA },
+    { pagina: 32, apartado: '8.4 Carrocería', cita: FACTURABLES, temas: ['abolladuras', 'paragolpes', 'retrovisores'], condicion: ALPHABET_FUERA, condicionCorta: ALPHABET_FUERA_CORTA },
+    { pagina: 9, cita: 'Se considerarán daños facturables y, por tanto, serán facturados al cliente, aquellos que no presentaba el vehículo en el momento de la entrega', temas: ['interior'] },
+    { pagina: 13, cita: 'Se considerará daños facturables aquellos elementos dañados por roces, abrasiones, rayaduras, que estén producidos por circunstancias distintas a un uso correcto o por manipulación indebida', temas: ['carga'], aplica_a: 'turismo' },
+    { pagina: 16, cita: 'Se considerarán como daños facturables: […] Arañazos con pérdida de pintura o material, que superen los 100 mm de longitud y/o los 5 mm de anchura, por extensión o acumulación', temas: ['carga'], aplica_a: 'furgoneta' },
+    { pagina: 4, cita: 'En el caso de no devolver la segunda llave en el momento de la devolución del vehículo, le será facturado el coste íntegro del duplicado de la llave', temas: ['llaves'] },
+    { pagina: 6, cita: 'Alphabet facturará al cliente por los documentos y accesorios entregados con el vehículo al comienzo del contrato de renting y no devueltos a su finalización', temas: ['llaves'] },
+    { pagina: 20, cita: 'Se facturarán las siguientes labores de limpieza', temas: ['limpieza'] },
+  ],
   hertz: [
     { pagina: 17, cita: 'Si se detectan nuevos daños tras la devolución del vehículo, se le cobrarán, a menos que se trate de un desgaste normal causado por un uso razonable', temas: ['lunas', 'aranazos', 'abolladuras', 'retrovisores', 'llantas', 'neumaticos', 'interior', 'mecanica'] },
     { pagina: 14, cita: 'Cargos por accesorios/piezas que falten', temas: ['accesorios'] },
@@ -952,6 +975,9 @@ export const COBRO = {
    palabra que no es la del documento («enseña solo lo que la guía afirma»): nunca una cifra. `null` en se_cobra: la
    guía solo dice lo que acepta. Los de Hertz cambian «la guía» por «sus condiciones» (es un alquiler); los de Europcar
    quitan «precio fijo» (su tabla da costes medios estimados, pág. 1). */
+/* `paginaCobro`: la página donde está lo que no acepta o lo que cobra, cuando no es la de la regla (la del lector
+   iba escrita dentro del texto, «(página 20) Limpieza…», y salían dos páginas en la misma línea). No es una cifra
+   nueva: el comprobador exige que esa página la nombre el texto verificado o una frase de COBRO del documento. */
 const SUS_CONDICIONES_SIN_TOLERANCIA = { no_se_cobra: 'Sus condiciones no dan tolerancia.' }
 export const AJUSTES = {
   'ayvens-furgonetas': {
@@ -960,18 +986,32 @@ export const AJUSTES = {
     16: { se_cobra: 'Arañazos o abrasiones de más de 10 cm.' },
     20: { condicion: 'Fuera de la zona A del parabrisas (la guía no dice qué es); el centímetro cuenta impacto y ramificaciones.' },
     25: { condicion: 'La guía lo pone en el apartado «Espejos y accesorios externos», sin decir a qué pieza se refiere.' },
+    49: { se_cobra: 'Hay que pagar todos los costes de quitar adhesivos, rótulos y calcomanías (en carrocería o cristales). Remite al contrato de cada cliente.' },
   },
   'ayvens-turismos': {
     14: { se_cobra: 'Arañazos, rozaduras o abrasiones de más de 10 cm; llanta o tapacubos deformado.', condicion: 'Que la llanta o el tapacubos no esté deformado.' },
     15: { se_cobra: 'Arañazos, rozaduras o abrasiones de más de 10 cm; llanta o tapacubos deformado.', condicion: 'Que la llanta o el tapacubos no esté deformado.' },
     18: { se_cobra: null, condicion: null },
+    31: { se_cobra: 'Hay que pagar todos los costes de quitarlos (carrocería o cristales), sea cual sea su tamaño o estado; remite al contrato local.' },
   },
   alphabet: {
+    4: { se_cobra: 'Falta de material en la pieza, o más de un arañazo, corte o picadura en la misma pieza; daños por uso incorrecto o manipulación indebida', paginaCobro: 13 },
     5: { se_cobra: null },
+    7: { se_cobra: 'Daños en superficies que superen el 10% de la superficie de la pieza', paginaCobro: 16 },
+    14: { se_cobra: 'Limpieza especializada de manchas y olores, aspirado de pelo de animal, suciedad o basura que pida aspirado exhaustivo. Si son varias piezas, cuenta como limpieza alta', paginaCobro: 20 },
+    19: { paginaCobro: 30 },
+    20: { paginaCobro: 30 },
+    21: { paginaCobro: 30 },
+    22: { paginaCobro: 30 },
     23: { se_cobra: null },
     26: { no_se_cobra: 'La guía solo dice lo que se cobra.' },
     30: { condicion: 'Se mide en minutos de trabajo de pulido.' },
-    37: { no_se_cobra: 'Devolver todo lo entregado.' },
+    37: { no_se_cobra: 'Devolver todo lo entregado.', se_cobra: 'La segunda llave, por el coste íntegro del duplicado; y los documentos y accesorios no devueltos (su pág. 6).' },
+    38: { se_cobra: 'Si se devuelve rotulado sin haber contratado la desrotulación en la cuota, Alphabet factura su coste y las posibles reparaciones para igualar el aspecto exterior, según el perito.' },
+    39: { se_cobra: 'Si se hicieron sin autorización o fuera del contrato, pueden dar lugar a cargos adicionales por la destransformación y por los daños de montaje o desmontaje.' },
+  },
+  athlon: {
+    9: { no_se_cobra: 'Suciedad de un uso normal que se quite con aspirado o limpieza estándar', se_cobra: 'Manchas o suciedad no derivada de un uso normal', paginaCobro: 11 },
   },
   vwfs: {
     0: { se_cobra: null, condicion: 'Vale también para la rueda de repuesto si la hay.' },
@@ -981,6 +1021,7 @@ export const AJUSTES = {
   bmw: {
     6: { no_se_cobra: 'Daños que solo afectan a la capa de laca, de no más de 40 mm «en capas verticales» (así lo escribe la guía) y no más de 4 ocasiones.' },
     19: { no_se_cobra: 'La guía no lo dice: solo dice lo que no se acepta.' },
+    30: { no_se_cobra: 'Entregar la ficha técnica y el permiso de circulación originales, el impuesto de circulación del año pagado, todos los juegos de llaves, los manuales y el libro de mantenimiento original sellado y los accesorios (navegador, etc.); además, el DNI del titular o, en empresas, CIF, escrituras, poderes y la factura de venta por el Valor Futuro.' },
   },
   arval: {
     0: { no_se_cobra: 'La ficha no da ninguna medida ni dice qué cuenta como desgaste normal en el exterior. Dice que no hace falta hacer reparaciones estéticas o menores del exterior antes de devolver.' },
@@ -1114,7 +1155,7 @@ export const RECORRIDOS = {
       { tema: 'interior', zona: 'interior', regla: 9, si: 'fuera', pregunta: '¿Alguna quemadura de más de 4 mm en el tejido de los asientos?', hallazgo: 'Quemadura de más de 4 mm en un asiento', tambien: [10, 11, 12, 13, 14] },
       { tema: 'llaves', zona: 'documentacion_y_llaves', regla: 30, si: 'fuera', pregunta: '¿Falta algún juego de llaves, algún documento o algún accesorio?', hallazgo: 'Falta una llave, un documento o un accesorio', tambien: [29] },
       { tema: 'limpieza', zona: 'limpieza', regla: 27, si: 'fuera', pregunta: '¿Lo vas a entregar sin limpiar, por dentro o por fuera?', hallazgo: 'Sin limpiar', tambien: [28] },
-      { tema: 'mecanica', zona: 'mecanica', regla: 31, si: 'factura', nota: 'Su pág. 15: se anota cualquier aviso de fallo, avería o falta de mantenimiento del cuadro. Si, además, está encendido alguno de los que el manual de usuario del coche da como avería, el coche no se puede devolver y se factura el Valor Final del contrato.', pregunta: '¿Hay encendido en el cuadro algún testigo que el manual de usuario del coche dé como avería?', hallazgo: 'Testigo de avería encendido', tambien: [32] },
+      { tema: 'mecanica', zona: 'mecanica', regla: 31, si: 'factura', nota: 'Su pág. 15 anota, además, cualquier otro aviso del cuadro: de fallo, de avería o de falta de mantenimiento.', pregunta: '¿Hay encendido en el cuadro algún testigo que el manual de usuario del coche dé como avería?', hallazgo: 'Testigo de avería encendido', tambien: [32] },
     ],
     aparte: [33],
   },
@@ -1212,6 +1253,7 @@ export function vozDe(x) {
     soloAcepta: `${v.Su} solo dice${n} lo que acepta${n}.`,
     noAceptaNinguno: `${v.Su} no acepta${n} ninguno`,
     noDice: `${v.Su} no dice${n}`,
+    dice: `${v.Su} dice${n}`,
   }
 }
 
@@ -1232,12 +1274,41 @@ export function aceptaDe(r, v) {
   return { etiqueta: v.acepta, texto: t }
 }
 
-/* LO QUE NO ACEPTA (o lo que cobra), con la etiqueta del paso si la hay. */
+/* LO QUE NO ACEPTA (o lo que cobra), con la etiqueta del paso si la hay. Cuando el dato es una frase que dice lo que
+   pasa («Si está sucio, la entrega puede cancelarse…», «Con seguro propio…», «Hay que pagar…») va con «Su guía dice»,
+   no con «Su guía no acepta» (que pegado a una frase así se contradice); «Si hay más de una rotura…» sí es lo que no
+   acepta y se queda con su etiqueta. «No da importe; …» se escribe entero con su sujeto. */
+const DICE_LO_QUE_PASA = /^(Si [^;]*?, (la entrega|se podría|el vehículo no se puede|Alphabet factura|pueden dar lugar)|Con |Hay que |El exceso |Los elementos perdidos )/
 export function cobraDe(r, v, si = null) {
   const t = r.se_cobra
+  let m
   if (t == null) return { etiqueta: null, texto: v.soloAcepta }
   if (/^(La guía|La tabla|La ficha|Sus condiciones|No lo dice|Nada dice)/.test(t)) return { etiqueta: null, texto: t }
-  return { etiqueta: si === 'factura' ? v.factura : v.noAcepta, texto: t }
+  if (si === 'factura') return { etiqueta: v.factura, texto: t }
+  if ((m = t.match(/^No da importe(.*)$/s))) return { etiqueta: null, texto: `${v.Su} no da${v.plural ? 'n' : ''} importe${m[1]}` }
+  if (DICE_LO_QUE_PASA.test(t)) return { etiqueta: v.dice, texto: t }
+  return { etiqueta: v.noAcepta, texto: t }
+}
+
+/* La página de lo que no acepta o cobra (a veces no es la de la regla: ver `paginaCobro` en AJUSTES). */
+export const paginaCobroDe = (r) => r.paginaCobro ?? r.pagina
+/* Las dos, para la columna de las tablas: «19 y 20». */
+export const paginasDe = (r) => (r.paginaCobro != null && r.paginaCobro !== r.pagina ? `${r.pagina} y ${r.paginaCobro}` : `${r.pagina}`)
+
+/* Una regla que no da ningún caso aceptable: lo que pide no tiene medida por debajo de la cual valga. */
+export const sinTolerancia = (r) => /ningún caso aceptable|no (da|dan|pone) (caso aceptable|tolerancia)|no admiten? ningun|^(Nada|Ninguno)(?![ ]+dice)\b|no aceptan? ninguno/i.test(r.no_se_cobra || '')
+
+/* EN EL RESULTADO, una cosa que su guía no acepta: lo que dice de ella y su página. Si el documento no describe lo que
+   no acepta (solo dice lo que acepta, o «no lo dice expresamente»), se enseña lo que SÍ acepta o pide: de eso se ha
+   pasado. `sinCobro`: el documento no dice cómo lo cobra (se dice una vez, y no si la propia frase ya habla de precio). */
+const HABLA_DE_PRECIO = /precio|importe|cobr|coste|factur|cargo|penaliz|reclam|abon|pagar|€/i
+export function noAceptaDe(r, v) {
+  const t = r.se_cobra
+  if (t == null || /no lo dice|no dice qu[ée] se cobra|solo dice lo que/i.test(t)) {
+    return { texto: enLinea(aceptaDe(r, v)), pagina: r.pagina, sinCobro: true }
+  }
+  const sinImporte = t.match(/^No da importe(.*)$/s)
+  return { texto: sinImporte ? `${v.Su} no da${v.plural ? 'n' : ''} importe${sinImporte[1]}` : t, pagina: paginaCobroDe(r), sinCobro: !HABLA_DE_PRECIO.test(t) }
 }
 
 /* Una de las dos en una sola línea: «Su guía acepta: hasta 10 cm…», o la frase entera si no lleva etiqueta. */
@@ -1290,8 +1361,28 @@ export function reglasEnOrden(docId, vehiculo) {
   return vistas
 }
 
-/* Las frases de un documento que dicen que cobra lo de un tema (COBRO), para enseñarlas junto a lo que se factura. */
-export const cobroDe = (docId, tema) => (COBRO[docId] || []).filter((b) => b.temas.includes(tema))
+/* Las frases de un documento que dicen que cobra lo de un tema (COBRO), para enseñarlas junto a lo que se factura.
+   Con `vehiculo`, solo las que valen para él (la zona de carga de Alphabet tiene una página por tipo de vehículo). */
+export const cobroDe = (docId, tema, vehiculo = null) => (COBRO[docId] || []).filter((b) => b.temas.includes(tema) && (!vehiculo || !b.aplica_a || vale(b.aplica_a, vehiculo)))
+
+/* Una frase de COBRO dicha en llano: «Lo pone bajo «Facturables» (8.3 Pintura), en su pág. 31», «Lo dice en su
+   pág. 3: «…»». La de Europcar está en su web, no en la tabla: va con su enlace (lo pinta la pantalla). */
+export function baseTexto(b, v, lo = 'Lo') {
+  const n = v.plural ? 'n' : ''
+  if (b.apartado) return `${lo} pone${n} bajo «${b.cita}» (${b.apartado}), en su pág. ${b.pagina}.`
+  return `${lo} dice${n} en su pág. ${b.pagina}: «${b.cita}».`
+}
+
+/* El titular del resultado: lo que cuenta la cifra grande, dicho con las palabras que caben. Con 0, según los pasos
+   que tiene el documento (nunca «0 cosas que su guía dice que se facturan» en un manual que no dice cobrar nada). */
+export function titularDe(pasos, { factura, fuera, cifra }, v) {
+  const n = v.plural ? 'n' : ''
+  const cosa = (uno, varios) => (cifra === 1 ? uno : varios)
+  const hay = cifra ? { f: factura.length > 0, a: fuera.length > 0 } : { f: pasos.some((p) => p.si === 'factura'), a: pasos.some((p) => p.si === 'fuera') }
+  if (hay.f && !hay.a) return cosa(`cosa que ${v.su} dice${n} que se factura`, `cosas que ${v.su} dice${n} que se facturan`)
+  if (hay.a && !hay.f) return cosa(`cosa que ${v.su} no acepta${n}`, `cosas que ${v.su} no acepta${n}`)
+  return cosa(`cosa fuera de lo que ${v.su} da${n} por bueno`, `cosas fuera de lo que ${v.su} da${n} por bueno`)
+}
 
 /* EL RESULTADO, sin pantalla (lo usan Resultado.jsx y el comprobador): qué respuesta cae en cada bloque y la cifra
    grande, que cuenta lo que queda fuera de lo que su guía da por bueno (lo que dice que se factura y lo que no

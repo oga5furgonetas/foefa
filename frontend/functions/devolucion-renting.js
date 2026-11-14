@@ -8,7 +8,7 @@
  * los dos cargan fuera del navegador (scripts/check-funciones-pages.mjs). Solo en español, como la herramienta. */
 import { esc } from './repartidores.js'
 import { MARCA } from '../src/marca.js'
-import { COMPANIAS, DOCUMENTOS, LEIDA_TEXTO, ORDEN_ZONAS, PRECIOS_APARTE, VIGENCIA, ZONAS, documentosDe, regla, tituloCompania, vozDe } from '../src/lib/guiasRenting.js'
+import { COMPANIAS, DOCUMENTOS, LEIDA_TEXTO, ORDEN_ZONAS, PRECIOS_APARTE, VIGENCIA, ZONAS, documentosDe, paginasDe, regla, tituloCompania, vozDe } from '../src/lib/guiasRenting.js'
 
 export const BASE = 'https://flotadsp.com' // el proxy del dominio reescribe el host: no fiarse de url.origin
 export const RUTA = '/devolucion-renting'
@@ -38,7 +38,7 @@ export function tablaHtml(id) {
   return ORDEN_ZONAS.map((z) => {
     const lista = reglas.filter((r) => r.zona === z)
     if (!lista.length) return ''
-    const filas = lista.map((r) => `<tr><th scope="row" style="text-align:left;vertical-align:top;padding:6px 8px 6px 0">${esc(r.dano)}</th><td style="vertical-align:top;padding:6px 8px">${esc(r.no_se_cobra)}</td><td style="vertical-align:top;padding:6px 8px">${esc(r.se_cobra ?? v.soloAcepta)}${r.condicion ? ` ${esc(r.condicion)}` : ''}</td><td style="vertical-align:top;padding:6px 0">pág. ${r.pagina}</td></tr>`).join('')
+    const filas = lista.map((r) => `<tr><th scope="row" style="text-align:left;vertical-align:top;padding:6px 8px 6px 0">${esc(r.dano)}</th><td style="vertical-align:top;padding:6px 8px">${esc(r.no_se_cobra)}</td><td style="vertical-align:top;padding:6px 8px">${esc(r.se_cobra ?? v.soloAcepta)}${r.condicion ? ` ${esc(r.condicion)}` : ''}</td><td style="vertical-align:top;padding:6px 0">pág. ${paginasDe(r)}</td></tr>`).join('')
     return `<h3>${esc(ZONAS[z])}</h3><table style="border-collapse:collapse;width:100%"><thead><tr><th scope="col" style="text-align:left">Daño</th><th scope="col" style="text-align:left">${esc(v.acepta)}</th><th scope="col" style="text-align:left">${esc(v.noAcepta)}</th><th scope="col">Pág.</th></tr></thead><tbody>${filas}</tbody></table>`
   }).join('')
 }

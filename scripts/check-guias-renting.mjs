@@ -29,7 +29,11 @@ import { join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 // La huella de los datos y de cómo se enseñan (14-11-2026: las 9 guías leídas ese día, con los arreglos de la revisión).
-const HUELLA = '5fee655c28413430'
+// Tercera tanda (14-11-2026): Alphabet cobra cada cosa con SU página (lo de fuera, «Facturables» de las págs. 28 a 32
+// con la condición de su pág. 6; el habitáculo, la 9; la carga, la 13 o la 16; la limpieza, la 20; las llaves, la 4 y
+// la 6); las páginas escritas dentro del texto pasan a `paginaCobro`; frases de Ayvens, Alphabet y BMW reescritas para
+// que no se contradigan con su etiqueta; la nota del testigo de BMW, sin repetir la regla. Ninguna cifra cambia.
+const HUELLA = 'b71bbe06e6d254b5'
 
 const RAIZ = process.cwd()
 const MODULO = process.env.GUIAS_MODULO ? resolve(process.env.GUIAS_MODULO) : join(RAIZ, 'frontend', 'src', 'lib', 'guiasRenting.js')
@@ -114,6 +118,18 @@ for (const [id, d] of Object.entries(DOCUMENTOS)) {
   })
   for (const [i, a] of Object.entries(AJUSTES[id] || {})) {
     if ('medida' in a || 'pagina' in a || 'maximo' in a) fallos.push(`${id}: el AJUSTE de la regla ${i} cambia una cifra (solo se ajustan textos)`)
+    // `paginaCobro` no inventa una página: la nombra el texto verificado de esa regla o una frase de COBRO del documento.
+    if ('paginaCobro' in a) {
+      const n = a.paginaCobro
+      const orig = d.reglas[i] || {}
+      const enTexto = new RegExp(`(página|pág\\.|p\\.) ?${n}\\b`).test(`${orig.se_cobra} ${orig.no_se_cobra} ${orig.condicion} ${orig.maximo}`)
+      // …y la frase de COBRO tiene que ser la del tema del paso donde sale esa regla (no otra página cualquiera).
+      const paso = (RECORRIDOS[id]?.pasos || []).find((p) => [p.regla, ...(p.junto || []), ...p.tambien].includes(Number(i)))
+      const enCobro = !!paso && (COBRO[id] || []).some((b) => b.pagina === n && b.temas.includes(paso.tema))
+      if (!Number.isInteger(n) || n < 1 || n > d.paginas || n === orig.pagina) fallos.push(`${id}: el AJUSTE de la regla ${i} pone una página de cobro (${n}) que no vale`)
+      else if (!enTexto && !enCobro) fallos.push(`${id}: el AJUSTE de la regla ${i} pone la página de cobro ${n}, y ni su texto verificado ni COBRO nombran esa página`)
+    }
+    for (const k of ['se_cobra', 'no_se_cobra']) if (typeof a[k] === 'string' && /\((página|p\.) ?\d+\)/.test(a[k]) && !/\(su pág\. \d+\)/.test(a[k])) fallos.push(`${id}: el AJUSTE de la regla ${i} deja una página escrita dentro del texto («${k}»): va en paginaCobro`)
   }
   for (const p of d.precios || []) if (!lleno(p.concepto) || !lleno(p.importe) || !(p.pagina >= 1 && p.pagina <= d.paginas)) fallos.push(`${id}: precio mal formado «${p.concepto}»`)
 
@@ -127,6 +143,10 @@ for (const [id, d] of Object.entries(DOCUMENTOS)) {
   d.reglas.forEach((_, i) => { if (!usadas.includes(i)) fallos.push(`${id}: la regla ${i} no sale en el recorrido`) })
   for (const b of COBRO[id] || []) {
     if (!POSITIVO.test(b.cita) || !(Number.isInteger(b.pagina) || lleno(b.fuente))) fallos.push(`${id}: una frase de COBRO no habla de cobro o no dice dónde está`)
+    if (Number.isInteger(b.pagina) && (b.pagina < 1 || b.pagina > d.paginas)) fallos.push(`${id}: una frase de COBRO está en la página ${b.pagina}, fuera del documento`)
+    if (b.apartado != null && (!lleno(b.apartado) || !/^Facturables?$/.test(b.cita))) fallos.push(`${id}: una frase de COBRO con apartado tiene que ser su rótulo «Facturables»`)
+    if (b.aplica_a != null && !['turismo', 'furgoneta'].includes(b.aplica_a)) fallos.push(`${id}: una frase de COBRO con aplica_a «${b.aplica_a}»`)
+    if ((b.condicion != null && !lleno(b.condicion)) || (b.condicionCorta != null && (!lleno(b.condicionCorta) || !b.condicion))) fallos.push(`${id}: una frase de COBRO con la condición vacía (o con la corta y sin la entera)`)
   }
   for (const p of rec.pasos) {
     const r = regla(id, p.regla)
@@ -140,13 +160,26 @@ for (const [id, d] of Object.entries(DOCUMENTOS)) {
     if (r.medida && ['cm', 'mm', 'por_ciento'].includes(r.medida.unidad) && !p.pregunta.includes(medidaTexto(r.medida))) {
       fallos.push(`${q}: la pregunta no lleva la cifra de su regla («${medidaTexto(r.medida)}»)`)
     }
-    // «Su guía dice que se factura» solo si el documento lo dice para ese caso.
+    // «Su guía dice que se factura» solo si el documento lo dice para ese caso (y para cada vehículo en que se pregunta).
     if (p.si === 'factura') {
-      const general = cobroDe(id, p.tema).length > 0
+      const vehiculos = COMPANIAS.flatMap((c) => Object.entries(c.documentos).filter(([vh, doc]) => doc === id && vale(r.aplica_a, vh)).map(([vh]) => vh))
       const enLaRegla = r.se_cobra != null && POSITIVO.test(`${r.se_cobra} ${r.cita}`) && !NEGATIVO.test(`${r.se_cobra} ${r.condicion || ''}`)
       if (r.se_cobra === null) fallos.push(`${q}: dice «se factura» pero la guía solo dice lo que acepta`)
-      else if (!general && !enLaRegla) fallos.push(`${q}: dice «se factura» y el documento no habla de cobro para ese caso (ni en la regla ni en COBRO)`)
+      else for (const vh of vehiculos) {
+        if (!enLaRegla && !cobroDe(id, p.tema, vh).length) fallos.push(`${q} (${vh}): dice «se factura» y el documento no habla de cobro para ese caso (ni en la regla ni en COBRO)`)
+      }
     }
+  }
+}
+
+/* Alphabet: lo de fuera se factura por lo que pone bajo «Facturables» en sus págs. 28 a 32 (la 9 es la del habitáculo)
+   y siempre con la condición de su pág. 6 a la vista, con sus palabras. */
+{
+  const FUERA = ['paragolpes', 'lunas', 'aranazos', 'rozaduras', 'abolladuras', 'pintura', 'retrovisores', 'llantas', 'neumaticos']
+  for (const b of COBRO.alphabet || []) {
+    if (!b.temas.some((t) => FUERA.includes(t))) continue
+    if (!(b.pagina >= 28 && b.pagina <= 32)) fallos.push(`alphabet: lo de fuera se factura con una frase de su pág. ${b.pagina} (lo de fuera está en las págs. 28 a 32; la 9 es la del habitáculo)`)
+    if (!/pág\. 6/.test(b.condicion || '') || !/En caso contrario, los daños exteriores serán facturados al cliente/.test(b.condicion || '')) fallos.push(`alphabet: el cobro de lo de fuera (pág. ${b.pagina}) no lleva a la vista la condición de su pág. 6`)
   }
 }
 
@@ -209,6 +242,33 @@ if (medidaTexto({ limite: 1.6, unidad: 'mm' }) !== '1,6 mm' || medidaTexto({ lim
 if (vale('turismo', 'furgoneta') || vale('furgoneta', 'turismo') || !vale('ambos', 'turismo') || !vale('furgoneta', 'furgoneta')) fallos.push('vale: una regla de un vehículo vale para el otro')
 for (const c of COMPANIAS) for (const [v, id] of Object.entries(c.documentos)) {
   for (const p of pasosDe(id, v)) for (const r of [p.r, ...p.con, ...p.mas]) if (!vale(r.aplica_a, v)) fallos.push(`${id} (${v}): sale una regla de otro vehículo`)
+}
+
+/* Las frases del resultado, leídas en voz alta: ninguna se contradice con su etiqueta. Bajo «no lo acepta», nunca «no
+   lo dice expresamente» ni «solo dice lo que acepta»; «no acepta:» nunca pegado a una frase que dice lo que pasa; nunca
+   «acepta: nada»; y el titular con 0 no dice «se facturan» de un documento que no dice cobrar nada. */
+for (const f of ['noAceptaDe', 'titularDe', 'paginaCobroDe', 'sinTolerancia']) if (typeof G[f] !== 'function') fallos.push(`guiasRenting.js no tiene ${f}(): el resultado no puede decir bien lo que no acepta`)
+if (typeof G.noAceptaDe === 'function' && typeof G.titularDe === 'function') for (const c of COMPANIAS) for (const [vh, id] of Object.entries(c.documentos)) {
+  const v = G.vozDe(id)
+  const ps = pasosDe(id, vh)
+  for (const p of ps.filter((x) => x.si === 'fuera')) {
+    for (const r of [p.r, ...p.con]) {
+      const x = G.noAceptaDe(r, v)
+      if (/no lo dice expresamente|solo dice lo que acepta|no dice qu[ée] se cobra/i.test(x.texto)) fallos.push(`${id} (${vh}), regla ${r.indice}: bajo «no lo acepta» sale «${x.texto.slice(0, 60)}…»`)
+    }
+  }
+  const t0 = G.titularDe(ps, resumen(ps, ps.map(() => 'no')), v)
+  if (/se facturan?$/.test(t0) && !ps.some((p) => p.si === 'factura')) fallos.push(`${id} (${vh}): con todo «No», el titular dice «${t0}» y el documento no dice cobrar nada`)
+}
+for (const id of Object.keys(DOCUMENTOS)) {
+  const v = G.vozDe(id)
+  DOCUMENTOS[id].reglas.forEach((_, i) => {
+    const r = regla(id, i)
+    const no = G.enLinea(G.cobraDe(r, v))
+    const si = G.enLinea(G.aceptaDe(r, v))
+    if (/no aceptan?: (si [^;]*?, (la entrega|se podría|el vehículo no se puede|alphabet factura|pueden dar lugar)|con |hay que |no da importe|el exceso|los elementos perdidos)/i.test(no)) fallos.push(`${id} regla ${i}: «${no.slice(0, 60)}…» se contradice con su etiqueta`)
+    if (/aceptan?: (nada|ninguno|no lo dice)/i.test(si)) fallos.push(`${id} regla ${i}: «${si.slice(0, 60)}…» se contradice con su etiqueta`)
+  })
 }
 
 /* ── 5. Las palabras ─────────────────────────────────────────────────────────────────────────────────────────── */
