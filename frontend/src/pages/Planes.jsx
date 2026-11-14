@@ -14,9 +14,10 @@ import { PLANES_EMPRESA, PLAN_REPARTO, DESCUENTOS_VOLUMEN, COMPLEMENTOS, REGLAS,
    salen de las variables --ld-* de index.css; sin degradados, brillos, emojis ni rótulos en mayúsculas espaciadas. El
    color de cada plan (lib/precios.js) ya no pinta texto: en papel no se leía. Las letras, en rem: crecen con el tamaño
    de letra del navegador.
-   IDIOMA (14-11-2026): los textos de la página van por tx() (lib/textosRutaB.js), con el mismo idioma y el mismo
-   selector que la portada (el del pie). Lo que llega del servidor o de lib/precios.js (qué incluye cada plan, los
-   complementos y las reglas) se queda en español: fuera del español, una línea lo dice. */
+   IDIOMA (14-11-2026): la página ENTERA va por tx(), con el mismo idioma y el mismo selector que la portada (el del
+   pie). Lo que incluye cada plan, los complementos y «Cómo se cuenta» son las frases fijas de lib/precios.js (las mismas,
+   letra a letra, que manda /billing/planes): se traducen por esa frase, con sus 5 idiomas en lib/textosRutaA.js. Una
+   frase que el servidor cambie y aquí no tenga traducción sale en español, nunca un hueco (lo vigila planes.spec.js). */
 const AUTONOMO = { clave: 'autonomo', nombre: 'Repartidor', mensual: 9.99, anual: 99, dias_prueba: 7 }
 const precioAnual = (p, n, tramos) => precioMes(p, n, tramos) * MESES_ANUAL
 const ahorroAnual = (p, n, tramos) => precioMes(p, n, tramos) * (12 - MESES_ANUAL)
@@ -162,7 +163,6 @@ export default function Planes() {
   }, [])
 
   const pct = descuentoVolumen(furgonetas, tramos)
-  const enEspanol = lang === 'es'
   const nombrePlan = (p) => tx(p.nombre)
   const sufijo = { color: V('muted'), fontSize: rem(15) }
   const fechaFin = (() => { try { return fechaPromo(locale(), autonomo.gratis_hasta || undefined) } catch { return '' } })()
@@ -235,7 +235,7 @@ export default function Planes() {
                 )}
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: rem(22), fontWeight: 800, letterSpacing: '-.01em', marginBottom: 4 }}>{nombrePlan(p)}</div>
-                  <div style={{ fontSize: rem(14), color: V('muted'), marginBottom: 16 }} lang="es">{p.para}</div>
+                  <div style={{ fontSize: rem(14), color: V('muted'), marginBottom: 16 }}>{tx(p.para)}</div>
                   {aMedida ? (
                     <>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
@@ -277,15 +277,15 @@ export default function Planes() {
                   {aMedida ? tx('Hablamos') : tx('Empezar la prueba de {n} días', { n: DIAS_PRUEBA_EMPRESA })} <ArrowRight size={16} aria-hidden="true" />
                 </a>
 
-                <ul lang="es" style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                <ul data-testid="plan-incluye" style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                   {(p.incluye || []).map((f) => (
                     <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: rem(14.5), color: V('text2'), lineHeight: 1.45 }}>
-                      <Check size={15} color="var(--ld-ok)" style={{ flexShrink: 0, marginTop: 2 }} /> {f}
+                      <Check size={15} color="var(--ld-ok)" style={{ flexShrink: 0, marginTop: 2 }} /> {tx(f)}
                     </li>
                   ))}
                   {(p.no_incluye || []).map((f) => (
                     <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: rem(14), color: V('muted'), lineHeight: 1.45 }}>
-                      <span aria-hidden="true" style={{ fontSize: rem(14), lineHeight: 1.45, flexShrink: 0 }}>✕</span> {f}
+                      <span aria-hidden="true" style={{ fontSize: rem(14), lineHeight: 1.45, flexShrink: 0 }}>✕</span> {tx(f)}
                     </li>
                   ))}
                 </ul>
@@ -293,10 +293,6 @@ export default function Planes() {
             )
           })}
         </div>
-        {/* Lo que llega del servidor (qué incluye cada plan, los complementos, cómo se cuenta) no tiene traducción. */}
-        {!enEspanol && (
-          <p data-testid="planes-en-espanol" style={{ fontSize: rem(13), color: V('muted'), margin: '0 0 28px' }}>{tx('Los detalles de cada plan, los complementos y cómo se cuenta están en español.')}</p>
-        )}
 
         {/* Reparto: súper y distribución pagan por repartidor activo, con las furgonetas incluidas */}
         {(() => {
@@ -337,15 +333,15 @@ export default function Planes() {
                   {tx('Empezar la prueba de {n} días', { n: DIAS_PRUEBA_EMPRESA })} <ArrowRight size={16} aria-hidden="true" />
                 </a>
               </div>
-              <ul lang="es" style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
                 {(reparto.incluye || []).map((f) => (
                   <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: rem(14.5), color: V('text2'), lineHeight: 1.45 }}>
-                    <Check size={15} color="var(--ld-ok)" style={{ flexShrink: 0, marginTop: 2 }} /> {f}
+                    <Check size={15} color="var(--ld-ok)" style={{ flexShrink: 0, marginTop: 2 }} /> {tx(f)}
                   </li>
                 ))}
                 {(reparto.no_incluye || []).map((f) => (
                   <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: rem(14), color: V('muted'), lineHeight: 1.45 }}>
-                    <span aria-hidden="true" style={{ fontSize: rem(14), lineHeight: 1.45, flexShrink: 0 }}>✕</span> {f}
+                    <span aria-hidden="true" style={{ fontSize: rem(14), lineHeight: 1.45, flexShrink: 0 }}>✕</span> {tx(f)}
                   </li>
                 ))}
               </ul>
@@ -356,23 +352,23 @@ export default function Planes() {
         {/* Complementos: paga más y obtén… */}
         <h2 className="ld-titular" style={{ fontSize: rem(30), margin: '56px 0 6px' }}>{tx('Complementos')}</h2>
         <p style={{ color: V('muted'), fontSize: rem(15), margin: '0 0 16px' }}>{tx('Se añaden a cualquier plan cuando os hagan falta.')}</p>
-        <div lang="es" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(250px,100%),1fr))', gap: 14, marginBottom: 36 }}>
+        <div data-testid="planes-complementos" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(250px,100%),1fr))', gap: 14, marginBottom: 36 }}>
           {complementos.map((c) => (
             <div key={c.clave} style={{ ...tarjeta, borderRadius: 16, padding: '16px 18px' }}>
-              <div style={{ fontSize: rem(16), fontWeight: 700, marginBottom: 4 }}>{c.nombre}</div>
-              <div style={{ fontSize: rem(14), fontWeight: 700, color: V('accent'), marginBottom: 6 }}>{c.precio}</div>
-              <div style={{ fontSize: rem(14), color: V('muted'), lineHeight: 1.5 }}>{c.que}</div>
+              <div style={{ fontSize: rem(16), fontWeight: 700, marginBottom: 4 }}>{tx(c.nombre)}</div>
+              <div style={{ fontSize: rem(14), fontWeight: 700, color: V('accent'), marginBottom: 6 }}>{tx(c.precio)}</div>
+              <div style={{ fontSize: rem(14), color: V('muted'), lineHeight: 1.5 }}>{tx(c.que)}</div>
             </div>
           ))}
         </div>
 
         {/* Lo que siempre se pregunta */}
         <h2 className="ld-titular" style={{ fontSize: rem(30), margin: '0 0 16px' }}>{tx('Cómo se cuenta')}</h2>
-        <div lang="es" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(300px,100%),1fr))', gap: 14, marginBottom: 36 }}>
+        <div data-testid="planes-reglas" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(300px,100%),1fr))', gap: 14, marginBottom: 36 }}>
           {REGLAS.map(([q, a]) => (
             <div key={q} style={{ ...tarjeta, borderRadius: 16, padding: '16px 18px' }}>
-              <div style={{ fontSize: rem(16), fontWeight: 700, marginBottom: 6 }}>{q}</div>
-              <div style={{ fontSize: rem(14.5), color: V('muted'), lineHeight: 1.55 }}>{a}</div>
+              <div style={{ fontSize: rem(16), fontWeight: 700, marginBottom: 6 }}>{tx(q)}</div>
+              <div style={{ fontSize: rem(14.5), color: V('muted'), lineHeight: 1.55 }}>{tx(a)}</div>
             </div>
           ))}
         </div>

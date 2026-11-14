@@ -60,7 +60,6 @@ export const DICT = {
   'reg.company':   { es: 'Nombre de tu empresa', en: 'Company name', fr: 'Nom de l’entreprise', de: 'Firmenname', it: 'Nome azienda', pt: 'Nome da empresa' },
   'reg.url':       { es: 'Dirección del portal de tus conductores', en: 'Address of your drivers’ portal', fr: 'Adresse du portail de tes chauffeurs', de: 'Adresse des Fahrerportals', it: 'Indirizzo del portale dei tuoi autisti', pt: 'Endereço do portal dos teus motoristas' },
   'reg.urlhint':   { es: 'Tus conductores también pueden entrar por aquí con su correo. Solo letras, números y guiones.', en: 'Your drivers can also sign in here with their email. Letters, numbers and hyphens only.', fr: 'Tes chauffeurs peuvent aussi entrer ici avec leur e-mail. Lettres, chiffres et tirets uniquement.', de: 'Deine Fahrer können sich hier auch mit ihrer E-Mail anmelden. Nur Buchstaben, Zahlen und Bindestriche.', it: 'I tuoi autisti possono entrare anche da qui con la loro email. Solo lettere, numeri e trattini.', pt: 'Os teus motoristas também podem entrar por aqui com o email. Só letras, números e hífenes.' },
-  'reg.center':    { es: 'Código de tu centro / estación', en: 'Your site / depot code', fr: 'Code de votre dépôt', de: 'Code deiner Standort', it: 'Codice della tua sede', pt: 'Código do teu centro' },
   'reg.have':      { es: '¿Ya tienes cuenta?', en: 'Already registered?', fr: 'Déjà inscrit ?', de: 'Schon registriert?', it: 'Già registrato?', pt: 'Já registado?' },
 
   // ── Saludos / Dashboard ──────────────────────────────────────────────────

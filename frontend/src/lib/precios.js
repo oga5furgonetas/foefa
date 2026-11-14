@@ -30,7 +30,6 @@ export const PLANES_EMPRESA = [
     incluye: [
       'Todo lo de Esencial, con delegaciones ilimitadas y un jefe por delegación',
       'Origen de daños: todos los golpes de la flota en una lista, con quién llevaba cada furgoneta cuando es seguro',
-      'Revisión rápida, solo en las cuentas con la IA activa: compara cada foto con la anterior del mismo lado y marca lo que parece nuevo. Se equivoca a menudo, así que cada marca la confirma una persona',
       'Qué furgoneta lleva cada uno: asignación y furgonetas fijas',
       'Cuadrante con motor, turnos y días libres desde el móvil',
       'Plantilla de salida, checklist de apertura y cierre, aparcamiento',

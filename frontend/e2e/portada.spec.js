@@ -386,30 +386,73 @@ for (const ruta of ['/contacto', '/privacidad', '/cookies']) {
   })
 }
 
-test('/planes en otro idioma: sus textos traducidos, el selector de idioma de la portada y una línea para lo del servidor', async ({ page }) => {
+test('/planes en otro idioma: la página ENTERA traducida (también lo de cada plan) y el selector de idioma de la portada', async ({ page }) => {
   await conIdioma(page, 'de')
   await simularApi(page, 'vacio')
   await page.goto('/planes', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Bezahlt wird pro Fahrzeug. Nutzer und Fahrer ohne Begrenzung.')
   await expect(page).toHaveTitle('Tarife und Preise · FDS')
-  await expect(page.getByTestId('planes-en-espanol')).toBeVisible()
-  // Fuera de lo que llega del servidor (marcado lang="es"), ni una frase de la página en español.
+  // Ya no hay una línea que avise de que algo sale en español: no sale nada en español (planes.spec.js lo mira frase a frase).
+  await expect(page.getByTestId('planes-en-espanol')).toHaveCount(0)
+  await expect(page.locator('[lang="es"]')).toHaveCount(0)
   const texto = await page.evaluate(() => {
     const c = document.body.cloneNode(true)
-    c.querySelectorAll('[lang="es"], #ld-idioma, script, style').forEach((n) => n.remove())
+    c.querySelectorAll('#ld-idioma, script, style').forEach((n) => n.remove())
     return c.innerText
   })
-  for (const es of ['Se paga por vehículo', 'Mensual', 'Recomendado', 'por vehículo y mes', 'Empezar la prueba', 'Complementos', 'Cómo se cuenta', '¿Repartes tú solo?', 'Precios sin IVA', 'Oferta fundador', 'gratis']) {
+  for (const es of ['Se paga por vehículo', 'Mensual', 'Recomendado', 'por vehículo y mes', 'Empezar la prueba', 'Complementos', 'Cómo se cuenta', '¿Repartes tú solo?', 'Precios sin IVA', 'Oferta fundador', 'gratis',
+    'Una delegación', 'Todo lo de Esencial', '¿Qué vehículo cuenta?', 'Vehículos de colaboradores', '¿Tengo permanencia?']) {
     expect(texto, es).not.toContain(es)
   }
+  await expect(page.getByText('Alles aus Basis, mit unbegrenzt vielen Standorten und einer Leitung pro Standort')).toBeVisible()
   // El mismo selector de idioma que la portada (el del pie), que cambia la página al momento.
   await page.locator('#ld-idioma').selectOption('es')
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Se paga por vehículo. Usuarios y conductores, sin límite.')
-  await expect(page.getByTestId('planes-en-espanol')).toHaveCount(0)
+  await expect(page.getByText('Todo lo de Esencial, con delegaciones ilimitadas y un jefe por delegación')).toBeVisible()
   // Ya no se contradice: nada de «2 meses gratis» al lado de «pagas 10 meses».
   const cabeza = await page.locator('h1 + p').innerText()
   expect(cabeza).toContain('anual pagando 10 meses')
   expect(cabeza).not.toMatch(/gratis/i)
+})
+
+/* U1 (14-11-2026, tercera tanda): la portada cuenta el arranque como es hoy (/panel/arranque): cuatro pasos, y cada
+   conductor entra con SU enlace, sin correo ni contraseña. Nada de «el enlace de tu empresa y su correo» ni de «subir el
+   Excel», que era el alta de antes. */
+test('la portada cuenta el arranque como es hoy: cuatro pasos y el enlace de cada conductor, sin correo ni contraseña', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const pasos = page.getByTestId('emp-arranque-paso')
+  await expect(pasos).toHaveCount(4)
+  await expect(pasos.nth(0)).toContainText('Pegas las matrículas')
+  await expect(pasos.nth(1)).toContainText('Pegas la lista de conductores')
+  await expect(pasos.nth(2)).toContainText('Le mandas a cada uno su enlace por WhatsApp')
+  await expect(pasos.nth(2)).toContainText('sin correo, sin contraseña y sin instalar nada')
+  await expect(pasos.nth(3)).toContainText('Ves llegar la primera revisión')
+  await expect(page.getByTestId('emp-arranque')).toContainText('Son cuatro pasos y puedes dejarlos a medias.')
+  await expect(page.locator('#como')).toContainText('Cada conductor entra desde el móvil con su propio enlace, sin correo ni contraseña.')
+  // Las preguntas, abiertas: lo mismo.
+  await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true }))
+  await expect(page.locator('body')).toContainText('Son cuatro pasos y puedes dejarlos a medias: pegas las matrículas')
+  await expect(page.locator('body')).toContainText('con su propio enlace, que le mandas por WhatsApp')
+  for (const viejo of [/enlace de tu empresa/i, /su correo\./, /subir el Excel/i, /tres pasos/i, /Excel de furgonetas/i]) {
+    await expect(page.locator('body')).not.toContainText(viejo)
+  }
+  // Y en otro idioma, igual de traducido (sin una frase del arranque en español).
+  await page.locator('#ld-idioma').selectOption('de')
+  await expect(pasos.nth(2)).toContainText('Du schickst jedem seinen Link per WhatsApp')
+  await expect(page.getByTestId('emp-arranque')).not.toContainText('Pegas')
+})
+
+/* U5: lo que enseña Google bajo el título de «/» (functions/index.js) cabe entero (155 caracteres como mucho), dice lo
+   que hace el producto con su precio de verdad y no promete nada. */
+test('la descripción para buscadores de «/» cabe en 155 caracteres y no promete', async () => {
+  const { DESCRIPCION } = await import('../functions/index.js')
+  const { PLANES_EMPRESA, DIAS_PRUEBA_EMPRESA } = await import('../src/lib/precios.js')
+  expect(DESCRIPCION.length, DESCRIPCION).toBeLessThanOrEqual(155)
+  const desde = Math.min(...PLANES_EMPRESA.map((p) => Number(p.por_vehiculo)).filter((x) => x > 0))
+  expect(DESCRIPCION).toContain(`Desde ${desde} € por furgoneta al mes`)
+  expect(DESCRIPCION).toContain(`${DIAS_PRUEBA_EMPRESA} días de prueba`)
+  for (const mal of PROHIBIDO.concat([/ahorr/i, /antes de que/i, /evita/i])) expect(DESCRIPCION).not.toMatch(mal)
 })
 
 test('las páginas del repartidor llevan su logo a /repartidores, no a la portada de empresas', async ({ page }) => {
@@ -445,6 +488,29 @@ test.describe('fotos de las páginas públicas', () => {
           await page.screenshot({ path: path.join(CARPETA, `${nombre}-${ancho}-${tema}.png`), fullPage: true })
         })
       }
+    }
+  }
+})
+
+/* La sección del arranque (U1), día y noche, a 1280 y 390 (solo con FOTOS_PUBLICO=<carpeta>). */
+test.describe('fotos del arranque de la portada', () => {
+  test.skip(!process.env.FOTOS_PUBLICO, 'solo con FOTOS_PUBLICO')
+  for (const ancho of [1280, 390]) {
+    for (const tema of ['dia', 'noche']) {
+      test(`el arranque a ${ancho} (${tema})`, async ({ page }) => {
+        await page.addInitScript((t) => {
+          localStorage.setItem('cookie_consent', JSON.stringify({ v: 3, anuncios: false, at: '2026-11-14T00:00:00Z' }))
+          if (t === 'noche') localStorage.setItem('fds_tema_web', 'dark')
+        }, tema)
+        await page.setViewportSize({ width: ancho, height: ancho > 500 ? 900 : 844 })
+        await simularApi(page, 'vacio')
+        await page.goto('/', { waitUntil: 'domcontentloaded' })
+        const seccion = page.getByTestId('emp-arranque')
+        await seccion.scrollIntoViewIfNeeded()
+        await page.waitForTimeout(400)
+        fs.mkdirSync(process.env.FOTOS_PUBLICO, { recursive: true })
+        await seccion.screenshot({ path: path.join(process.env.FOTOS_PUBLICO, `portada-arranque-${ancho}-${tema}.png`) })
+      })
     }
   }
 })
