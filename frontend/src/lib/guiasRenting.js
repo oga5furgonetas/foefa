@@ -6,8 +6,10 @@
    cobra, la medida, el máximo, la condición, a qué vehículo vale, la PÁGINA y la cita literal. Ninguna cifra se
    «arregla» aquí: si una parece rara, se quita y se dice. Las medidas se enseñan como vienen (cm o mm), sin convertir.
 
-   NO SE TOCA SIN QUERER. scripts/check-guias-renting.mjs guarda una huella de estos datos y falla si cambian; quien
-   cambie una cifra a propósito (una edición nueva de una guía) actualiza la huella con --huella y lo dice.
+   NO SE TOCA SIN QUERER. scripts/check-guias-renting.mjs compara DOCUMENTOS, regla a regla, con una copia de los
+   .verificado.json guardada en el repo (scripts/guias-renting/verificado/), vigila lo que se concluye de las respuestas
+   y guarda una huella de todo; quien cambie algo a propósito (una edición nueva de una guía) copia allí el nuevo
+   .verificado.json, actualiza la huella con --huella y lo dice.
 
    Fuera quedan: Leasys (no se pudo leer) y cualquier guía sin "leido": true.
 
@@ -869,40 +871,94 @@ export const DOCUMENTOS = {
 }
 
 /* ── LO QUE NO SALE DEL JSON: cómo se enseña ─────────────────────────────────────────────────────────────────────────
-   Todo lo de abajo es nuestro (cómo se agrupa y cómo se pregunta), nunca una cifra nueva: las cifras y las frases de
-   cada regla son las de DOCUMENTOS. */
+   Todo lo de abajo es nuestro (cómo se agrupa, cómo se pregunta y cómo se dice), nunca una cifra nueva: las cifras y
+   las frases de cada regla son las de DOCUMENTOS. */
 
-/* Las compañías, en el orden de la lista. `documentos`: el que vale para cada tipo de vehículo. */
+/* Las compañías, en el orden de la lista. `documentos`: el que vale para cada tipo de vehículo. `voz`: cómo se llama
+   su documento al hablar de él (los alquileres no tienen «guía» ni «perito»). `descripcion`: la de los buscadores
+   (155 caracteres como mucho). `enOtra: false`: no sale en «Otra compañía» (Arval no publica su guía de daños). */
 export const COMPANIAS = [
-  { slug: 'ayvens', nombre: 'Ayvens', nombreLargo: 'Ayvens (antes LeasePlan)', tipo: 'renting',
+  { slug: 'ayvens', nombre: 'Ayvens', nombreLargo: 'Ayvens (antes LeasePlan)', tipo: 'renting', voz: 'guia',
     documentos: { furgoneta: 'ayvens-furgonetas', turismo: 'ayvens-turismos' },
-    aviso: 'Ayvens publica dos documentos, uno para furgonetas y vehículos industriales y otro para turismos. Los dos llevan todavía la marca LeasePlan.' },
-  { slug: 'alphabet', nombre: 'Alphabet', nombreLargo: 'Alphabet', tipo: 'renting',
-    documentos: { furgoneta: 'alphabet', turismo: 'alphabet' }, aviso: null },
-  { slug: 'volkswagen-financial-services', nombre: 'Volkswagen Financial Services', nombreLargo: 'Volkswagen Financial Services (Volkswagen Renting S.A.)', tipo: 'renting',
-    documentos: { furgoneta: 'vwfs', turismo: 'vwfs' }, aviso: 'Su manual no separa turismos y furgonetas, ni tiene un apartado para la zona de carga.' },
-  { slug: 'bmw-financial-services', nombre: 'BMW Financial Services', nombreLargo: 'BMW Financial Services (BMW Bank GmbH, sucursal en España)', tipo: 'renting',
-    documentos: { turismo: 'bmw' }, aviso: 'Su manual es solo de turismos. Es el de BMW Financial Services para devolver el coche al final del contrato: habla de Valor Futuro y de Valor Final.' },
-  { slug: 'athlon', nombre: 'Athlon', nombreLargo: 'Athlon', tipo: 'renting',
-    documentos: { furgoneta: 'athlon', turismo: 'athlon' }, aviso: 'Su manual no da ninguna medida: lo que se cobra por fuera depende sobre todo de con quién tengas el seguro.' },
-  { slug: 'arval', nombre: 'Arval', nombreLargo: 'Arval (Arval Service Lease, España)', tipo: 'renting',
+    aviso: 'Ayvens tiene publicados dos documentos de LeasePlan, la marca que tenía antes: uno para furgonetas y vehículos industriales y otro para turismos. Ninguno trae fecha.',
+    descripcion: 'Qué acepta Ayvens (antes LeasePlan) como desgaste normal al devolver un renting y qué no, criterio a criterio y con la página de su guía.' },
+  { slug: 'alphabet', nombre: 'Alphabet', nombreLargo: 'Alphabet', tipo: 'renting', voz: 'guia',
+    documentos: { furgoneta: 'alphabet', turismo: 'alphabet' }, aviso: null,
+    descripcion: 'Qué daños da Alphabet por no facturables al devolver un renting y cuáles factura, criterio a criterio y con la página de su guía.' },
+  { slug: 'volkswagen-financial-services', nombre: 'Volkswagen Financial Services', nombreLargo: 'Volkswagen Financial Services (Volkswagen Renting S.A.)', tipo: 'renting', voz: 'guia',
+    documentos: { furgoneta: 'vwfs', turismo: 'vwfs' }, aviso: 'Su manual no separa turismos y furgonetas, ni tiene un apartado para la zona de carga.',
+    descripcion: 'Qué acepta Volkswagen Financial Services al devolver un renting y qué no, criterio a criterio y con la página de su manual.' },
+  { slug: 'bmw-financial-services', nombre: 'BMW Financial Services', nombreLargo: 'BMW Financial Services (BMW Bank GmbH, sucursal en España)', tipo: 'renting', voz: 'guia',
+    objeto: 'el coche al final del contrato', documentos: { turismo: 'bmw' },
+    aviso: 'El manual que hemos encontrado es solo de turismos. Es el de BMW Financial Services para devolver el coche al final del contrato: habla de Valor Futuro y de Valor Final.',
+    descripcion: 'Qué acepta BMW Financial Services al devolver el coche al final del contrato y qué no, criterio a criterio y con la página de su manual.' },
+  { slug: 'athlon', nombre: 'Athlon', nombreLargo: 'Athlon', tipo: 'renting', voz: 'guia',
+    documentos: { furgoneta: 'athlon', turismo: 'athlon' }, aviso: 'Su manual no da ninguna medida ni dice cómo cobra lo que no acepta. Lo de fuera depende sobre todo de con quién tengas el seguro.',
+    descripcion: 'Qué acepta Athlon al devolver un renting y qué no, zona a zona y con la página de su manual. Lo de fuera depende de tu seguro.' },
+  { slug: 'arval', nombre: 'Arval', nombreLargo: 'Arval (Arval Service Lease, España)', tipo: 'renting', voz: 'ficha', enOtra: false,
     documentos: { furgoneta: 'arval', turismo: 'arval' },
-    aviso: 'Arval no publica su guía de daños: la tiene en su área privada de clientes. Lo que sí publica es su ficha de fin de contrato, con precios. Sirve para las llaves, la documentación, los accesorios, la limpieza y el interior; de la carrocería no da ningún criterio.' },
-  { slug: 'hertz', nombre: 'Hertz', nombreLargo: 'Hertz de España SL', tipo: 'alquiler',
+    aviso: 'Arval no publica su guía de daños: la tiene en su área privada de clientes. Lo que sí publica es su ficha de fin de contrato, con precios. Sirve para las llaves, la documentación, los accesorios, la limpieza y el interior; de la carrocería no da ningún criterio.',
+    descripcion: 'Lo que dice la ficha de fin de contrato de Arval: qué pide al devolver un renting y los precios que publica, con su página.' },
+  { slug: 'hertz', nombre: 'Hertz', nombreLargo: 'Hertz de España SL', tipo: 'alquiler', voz: 'condiciones',
     documentos: { furgoneta: 'hertz', turismo: 'hertz' },
-    aviso: 'Es un alquiler, no un renting. Sus condiciones dicen qué daños se facturan, con medidas. No distinguen turismos y furgonetas.' },
-  { slug: 'europcar', nombre: 'Europcar', nombreLargo: 'Europcar España', tipo: 'alquiler',
+    aviso: 'Es un alquiler, no un renting. Sus condiciones de alquiler dicen qué daños se cobran, con medidas. No distinguen turismos y furgonetas.',
+    descripcion: 'Qué daños cobra Hertz al devolver un vehículo de alquiler según sus condiciones, con las medidas y la página de cada uno.' },
+  { slug: 'europcar', nombre: 'Europcar', nombreLargo: 'Europcar España', tipo: 'alquiler', voz: 'tabla',
     documentos: { furgoneta: 'europcar', turismo: 'europcar' },
-    aviso: 'Es un alquiler, no un renting. Su tabla no dice qué es desgaste normal: dice cuánto cobra por cada daño, por tramos de tamaño (de 2 a 5 cm, de más de 5 a 15 cm y de más de 15 cm), y no dice qué pasa por debajo de 2 cm. Los precios de ejemplo son de dos de sus grupos: turismo Intermediate/Standard y furgoneta Medium Van; los demás grupos tienen otros precios.' },
+    aviso: 'Es un alquiler, no un renting. Su tabla de daños no dice qué es desgaste normal: da costes medios de reparación estimados por la firma AUDATEX (pág. 1), por tramos de tamaño (de 2 a 5 cm, de más de 5 a 15 cm y de más de 15 cm), y no dice qué pasa por debajo de 2 cm. Su página de política de daños dice que con esa tabla se cobran los daños menores; los demás, con el presupuesto de un taller o la valoración de un experto independiente que contrata Europcar, más la inmovilización del vehículo y un cargo administrativo que no publica. La protección que contrates puede reducir o quitar lo que pagas. Los importes de ejemplo son de dos de sus grupos: turismo Intermediate/Standard y furgoneta Medium Van; los demás grupos tienen otros.',
+    descripcion: 'Qué daños pone con precio la tabla de Europcar al devolver un vehículo de alquiler: costes medios estimados, por tramos y con su página.' },
 ]
 
-/* Lo que se enseña en lugar de lo que escribió el lector cuando era una deducción suya o una nota para nosotros
-   («enseña solo lo que la guía afirma»). `null` en se_cobra: la guía solo dice lo que acepta. */
+/* Cómo se nombra el documento de cada compañía en las frases. */
+const VOCES = {
+  guia: { su: 'su guía', Su: 'Su guía', plural: false, noAcepta: 'Su guía no acepta' },
+  ficha: { su: 'su ficha', Su: 'Su ficha', plural: false, noAcepta: 'Su ficha dice' },
+  condiciones: { su: 'sus condiciones', Su: 'Sus condiciones', plural: true, noAcepta: 'Sus condiciones cobran' },
+  tabla: { su: 'su tabla', Su: 'Su tabla', plural: false, noAcepta: 'Su tabla pone' },
+}
+
+/* LA EDAD DE CADA DOCUMENTO, a la vista (en la entrada, en cada paso y en el resultado) cuando no trae fecha. */
+const SIN_FECHA = 'sin fecha: puede no ser el que esté en vigor. Pide a tu compañía el vigente.'
+export const VIGENCIA = {
+  'ayvens-furgonetas': `Documento de LeasePlan (hoy Ayvens), ${SIN_FECHA}`,
+  'ayvens-turismos': `Documento de LeasePlan (hoy Ayvens), ${SIN_FECHA}`,
+  bmw: `Documento ${SIN_FECHA}`,
+  athlon: `Documento ${SIN_FECHA}`,
+  arval: `Documento ${SIN_FECHA}`,
+}
+
+/* De quién es el documento en las citas («LeasePlan (hoy Ayvens), pág. 7»): si no está aquí, el nombre de la compañía. */
+export const AUTOR = { 'ayvens-furgonetas': 'LeasePlan (hoy Ayvens)', 'ayvens-turismos': 'LeasePlan (hoy Ayvens)' }
+
+/* DÓNDE DICE CADA DOCUMENTO QUE COBRA. «Su guía dice que se factura» solo vale si el documento habla de cobro,
+   factura, coste, cargo o importe para ese caso: o en la propia regla, o en una frase general que lo cubre (esta tabla,
+   con su página y sus palabras, y los temas a los que alcanza). Lo demás que no acepta es «Su guía no lo acepta».
+   Athlon, Volkswagen Financial Services y BMW (salvo el testigo de avería) no tienen frase general: sus manuales solo
+   dicen qué es aceptable y qué no. scripts/check-guias-renting.mjs lo vigila paso a paso. */
+const DANOS = ['paragolpes', 'lunas', 'aranazos', 'rozaduras', 'abolladuras', 'pintura', 'retrovisores', 'llantas', 'neumaticos', 'carga']
+const AYVENS_COBRO = { pagina: 3, cita: 'intentaremos evaluar los recargos por daños de manera justa, cobrando por reparación en lugar de por sustitución siempre que sea posible', temas: DANOS }
+export const COBRO = {
+  'ayvens-furgonetas': [AYVENS_COBRO],
+  'ayvens-turismos': [AYVENS_COBRO],
+  alphabet: [{ pagina: 9, cita: 'Se considerarán daños facturables y, por tanto, serán facturados al cliente', temas: [...DANOS, 'interior', 'limpieza'] }],
+  hertz: [
+    { pagina: 17, cita: 'Si se detectan nuevos daños tras la devolución del vehículo, se le cobrarán, a menos que se trate de un desgaste normal causado por un uso razonable', temas: ['lunas', 'aranazos', 'abolladuras', 'retrovisores', 'llantas', 'neumaticos', 'interior', 'mecanica'] },
+    { pagina: 14, cita: 'Cargos por accesorios/piezas que falten', temas: ['accesorios'] },
+  ],
+  europcar: [{ fuente: 'Su página de política de daños', url: 'https://www.europcar.es/es-es/p/informacion-legal/politica-de-gestion-de-danos', cita: 'Los Daños menores encontrados en el Vehículo en el momento de la devolución se le cobrarán de conformidad con dicha lista', temas: [...DANOS, 'interior', 'limpieza', 'accesorios'] }],
+}
+
+/* Lo que se enseña en lugar de lo que escribió el lector cuando era una deducción suya, una nota para nosotros o una
+   palabra que no es la del documento («enseña solo lo que la guía afirma»): nunca una cifra. `null` en se_cobra: la
+   guía solo dice lo que acepta. Los de Hertz cambian «la guía» por «sus condiciones» (es un alquiler); los de Europcar
+   quitan «precio fijo» (su tabla da costes medios estimados, pág. 1). */
+const SUS_CONDICIONES_SIN_TOLERANCIA = { no_se_cobra: 'Sus condiciones no dan tolerancia.' }
 export const AJUSTES = {
   'ayvens-furgonetas': {
-    12: { se_cobra: null, condicion: null },
+    12: { se_cobra: null, condicion: 'Aceptable con 1,6 mm o más, o con lo que exija la ley local.' },
     15: { se_cobra: 'Arañazos o abrasiones de más de 10 cm.' },
-    16: { se_cobra: 'Arañazos o abrasiones de más de 10 cm.', condicion: 'Que la llanta o el tapacubos no esté deformado. La guía lo pone aparte de la cara de la llanta.' },
+    16: { se_cobra: 'Arañazos o abrasiones de más de 10 cm.' },
+    20: { condicion: 'Fuera de la zona A del parabrisas (la guía no dice qué es); el centímetro cuenta impacto y ramificaciones.' },
     25: { condicion: 'La guía lo pone en el apartado «Espejos y accesorios externos», sin decir a qué pieza se refiere.' },
   },
   'ayvens-turismos': {
@@ -915,6 +971,7 @@ export const AJUSTES = {
     23: { se_cobra: null },
     26: { no_se_cobra: 'La guía solo dice lo que se cobra.' },
     30: { condicion: 'Se mide en minutos de trabajo de pulido.' },
+    37: { no_se_cobra: 'Devolver todo lo entregado.' },
   },
   vwfs: {
     0: { se_cobra: null, condicion: 'Vale también para la rueda de repuesto si la hay.' },
@@ -926,68 +983,98 @@ export const AJUSTES = {
     19: { no_se_cobra: 'La guía no lo dice: solo dice lo que no se acepta.' },
   },
   arval: {
+    0: { no_se_cobra: 'La ficha no da ninguna medida ni dice qué cuenta como desgaste normal en el exterior. Dice que no hace falta hacer reparaciones estéticas o menores del exterior antes de devolver.' },
     2: { se_cobra: 'Hay que devolver el vehículo totalmente reparado.' },
   },
   hertz: {
+    0: { no_se_cobra: 'El desgaste normal causado por un uso razonable. Si sus condiciones dan una medida, no se cobra ningún daño menor que esa medida.' },
+    1: { condicion: 'Solo si no se ve el metal/plástico subyacente; si se ve, se cobra aunque mida menos de 10 mm. Sus condiciones no dicen qué pasa con uno de 10 mm justos con el metal a la vista.' },
+    2: { condicion: 'Solo si no se ve el metal/plástico subyacente. Sus condiciones no aclaran si los 10 mm son de cada marca o del conjunto.' },
+    4: { no_se_cobra: 'Sus condiciones no admiten ninguna como desgaste: no dan tolerancia.' },
+    5: { no_se_cobra: 'Sus condiciones no admiten ningún daño como desgaste (no hablan del desgaste de la banda de rodadura).' },
+    6: SUS_CONDICIONES_SIN_TOLERANCIA,
+    7: SUS_CONDICIONES_SIN_TOLERANCIA,
+    8: { ...SUS_CONDICIONES_SIN_TOLERANCIA, condicion: 'Sus condiciones dicen «espejos» sin precisar si son solo los retrovisores exteriores.' },
+    10: { condicion: 'Sus condiciones no dicen si los 10 mm son largo o diámetro.' },
+    11: SUS_CONDICIONES_SIN_TOLERANCIA,
+    12: SUS_CONDICIONES_SIN_TOLERANCIA,
+    13: SUS_CONDICIONES_SIN_TOLERANCIA,
+    14: SUS_CONDICIONES_SIN_TOLERANCIA,
+    16: SUS_CONDICIONES_SIN_TOLERANCIA,
+    17: { ...SUS_CONDICIONES_SIN_TOLERANCIA, condicion: 'Solo vehículos eléctricos (Condiciones de los vehículos eléctricos). Para el resto de vehículos sus condiciones no publican precio de llaves.' },
     20: { condicion: 'Solo vehículos eléctricos.' },
   },
   europcar: {
-    12: { condicion: 'Es el tramo que tiene precio, no un margen sin cobro. Solo el parabrisas tiene fila de chinazo.' },
-    22: { condicion: null },
+    0: { se_cobra: 'Tramos de la tabla: 2-5 cm, >5-15 cm y >15 cm (el más pequeño empieza en 2 cm). Coste medio estimado por pieza y tramo. Ej. turismo Intermediate, puerta delantera: 139,70 / 239,35 / 340,78 €; Medium Van: 159,03 / 279,90 / 400,88 €.' },
+    1: { se_cobra: 'Tramos de la tabla: 2-5 cm, >5-15 cm y >15 cm (el más pequeño empieza en 2 cm). Coste medio estimado por pieza y tramo. Ej. turismo Intermediate, puerta delantera: 250,13 / 381,33 / 514,31 €; Medium Van: 269,63 / 422,10 / 574,68 €.' },
+    12: { se_cobra: 'Chinazo de menos de 10 mm: coste medio estimado (turismo Intermediate 47,25 €; Medium Van 48,00 €). No dice nada del campo de visión ni de chinazos mayores (fuera de eso solo hay luna rota).', condicion: 'Es el tramo que tiene precio, no un margen sin cobro. Solo el parabrisas tiene fila de chinazo.' },
+    22: { condicion: 'Así lo pone su tabla (págs. 4 y 18).' },
   },
 }
 
-const NOTA_EUROPCAR = 'Su tabla pone precio desde 2 cm y no dice qué pasa por debajo.'
+/* Los precios que no son de daños y no van en la tabla de precios: se dicen aparte, con su página. */
+export const PRECIOS_APARTE = {
+  hertz: { indices: [0], texto: 'Su pág. 4 pone además un bloqueo de un mínimo de 200 € en la tarjeta, junto al depósito de combustible: es una retención al recoger el vehículo, no un cargo por daños.' },
+}
 
-/* EL RECORRIDO de cada documento: un paso por regla que se pregunta (`regla`, su índice en DOCUMENTOS) y, en el mismo
-   paso, «También mira» con las demás (`tambien`). `aparte`: las que no tienen pregunta y se enseñan en el resultado.
-   Cada regla del documento sale UNA vez (lo comprueba scripts/check-guias-renting.mjs). Un paso o una regla que no vale
-   para el vehículo elegido (su `aplica_a`) no se enseña.
+/* Lo que su documento dice además y cambia lo que se paga: va en el paso y en el resultado. */
+const NOTA_EUROPCAR = 'Su tabla pone precio desde 2 cm y no dice qué pasa por debajo.'
+const NOTA_VWFS = 'Si tu contrato incluye la póliza de seguros de Volkswagen Financial Services, su manual dice que las reparaciones estéticas (pintura, chapa, parachoques y molduras) no serán necesarias en los últimos 3 meses del contrato (págs. 4, 7, 8 y 9).'
+const NOTA_ZONA_A = 'La guía no dice qué es la zona A del parabrisas.'
+
+/* EL RECORRIDO de cada documento: un paso por regla que se pregunta (`regla`, su índice en DOCUMENTOS), las que se
+   preguntan en la misma pregunta (`junto`) y, en el mismo paso, «También mira» con las demás (`tambien`). `aparte`:
+   las que no tienen pregunta y se enseñan en el resultado. Cada regla del documento sale UNA vez (lo comprueba
+   scripts/check-guias-renting.mjs). Un paso o una regla que no vale para el vehículo elegido (su `aplica_a`) no se enseña.
    `si`: qué dice el resultado si la respuesta es «Sí, alguna»:
-     'factura'      → su guía dice que se factura (cuenta en la cifra grande);
-     'fuera'        → no entra en lo que su guía da por bueno, pero no dice cómo lo cobra;
-     'sin_criterio' → su guía no dice si se cobra (o depende de algo que no preguntamos).
-   `sujeto`: con qué se compara la ayuda para medir («Si la abolladura es…»). `nota`: una línea nuestra, verdadera. */
+     'factura'      → «Su guía dice que se factura»: solo si el documento lo dice para ese caso (ver COBRO);
+     'fuera'        → «Su guía no lo acepta»: no entra en lo que da por bueno y no dice cómo lo cobra;
+     'sin_criterio' → «Su guía no lo dice» (o depende de algo que no preguntamos).
+   La cifra grande del resultado cuenta las dos primeras.
+   `sujeto`: con qué se compara la ayuda para medir («Si la abolladura es…»). `nota`: una línea nuestra, verdadera, que
+   va en el paso y en el resultado. `piezas`: qué se marca en el dibujo si no es lo de su zona. */
 export const RECORRIDOS = {
   'ayvens-furgonetas': {
     pasos: [
       { tema: 'paragolpes', zona: 'paragolpes', regla: 7, si: 'factura', pregunta: '¿Algún arañazo o rozadura en los paragolpes o la rejilla de más de 10 cm, o que no se vaya puliendo?', hallazgo: 'Arañazo en un paragolpes o la rejilla', tambien: [8, 9, 10, 11] },
-      { tema: 'lunas', zona: 'lunas', regla: 20, si: 'factura', pregunta: '¿Algún impacto o grieta en las lunas de más de 1 cm, contando sus ramas?', hallazgo: 'Impacto o grieta de más de 1 cm en una luna', tambien: [21, 22, 23, 24, 29] },
+      { tema: 'lunas', zona: 'lunas', regla: 20, junto: [21], si: 'factura', nota: NOTA_ZONA_A, pregunta: '¿Algún impacto o grieta en las lunas de más de 1 cm, contando sus ramas, o alguno, del tamaño que sea, en la zona A del parabrisas?', hallazgo: 'Impacto o grieta en una luna fuera de lo que acepta', tambien: [22, 23, 24, 29] },
       { tema: 'aranazos', zona: 'carroceria', regla: 0, si: 'factura', pregunta: '¿Algún arañazo o rozadura en la chapa de más de 10 cm, o que no se vaya puliendo?', hallazgo: 'Arañazo en la chapa', tambien: [28, 49] },
       { tema: 'abolladuras', zona: 'carroceria', regla: 1, si: 'factura', sujeto: 'la abolladura', pregunta: '¿Alguna abolladura de más de 2 cm, o más de dos en el mismo panel?', hallazgo: 'Abolladura de más de 2 cm, o más de dos en un panel', tambien: [] },
       { tema: 'pintura', zona: 'pintura', regla: 2, si: 'factura', pregunta: '¿Desconchados de gravilla que cubran más del 25 % de algún panel?', hallazgo: 'Desconchados en más del 25 % de un panel', tambien: [3, 4, 5, 6] },
-      { tema: 'retrovisores', zona: 'retrovisores', regla: 25, si: 'factura', sujeto: 'el arañazo', pregunta: '¿Algún arañazo o marca de más de 5 cm en los retrovisores u otras piezas de fuera?', hallazgo: 'Arañazo de más de 5 cm en un retrovisor', tambien: [26] },
+      { tema: 'retrovisores', zona: 'retrovisores', regla: 25, si: 'factura', sujeto: 'el arañazo', pregunta: '¿Algún arañazo o marca de más de 5 cm en los retrovisores o los accesorios de fuera?', hallazgo: 'Arañazo de más de 5 cm en un retrovisor o un accesorio de fuera', tambien: [26] },
       { tema: 'llantas', zona: 'llantas', regla: 15, si: 'factura', pregunta: '¿Algún arañazo de más de 10 cm en la cara de una llanta o un tapacubos?', hallazgo: 'Arañazo de más de 10 cm en una llanta', tambien: [16, 17] },
       { tema: 'neumaticos', zona: 'neumaticos', regla: 13, si: 'factura', pregunta: '¿Algún neumático con bultos, grietas o cortes?', hallazgo: 'Neumático con bultos, grietas o cortes', tambien: [14, 12, 18, 19] },
       { tema: 'carga', zona: 'zona_de_carga', regla: 30, si: 'factura', pregunta: '¿Algún golpe o arañazo de la zona de carga que se vea desde fuera?', hallazgo: 'Daño de la zona de carga que se ve desde fuera', tambien: [31, 32, 33, 34, 35, 36, 37, 38, 39, 40] },
-      { tema: 'interior', zona: 'interior', regla: 41, si: 'factura', pregunta: '¿Alguna mancha en asientos, moqueta o alfombrillas que no salga con una limpieza normal?', hallazgo: 'Manchas que no salen con una limpieza general', tambien: [42, 43, 44, 45, 46] },
-      { tema: 'llaves', zona: 'documentacion_y_llaves', regla: 50, si: 'factura', pregunta: '¿Te falta algún juego de llaves, el principal o el de repuesto?', hallazgo: 'Falta un juego de llaves', tambien: [51, 52] },
-      { tema: 'limpieza', zona: 'limpieza', regla: 47, si: 'factura', pregunta: '¿Algún mal olor que necesite una limpieza especial para irse?', hallazgo: 'Mal olor que pide limpieza especializada', tambien: [48] },
+      { tema: 'interior', zona: 'interior', regla: 41, si: 'fuera', pregunta: '¿Alguna mancha en asientos, moqueta o alfombrillas que no salga con una limpieza normal?', hallazgo: 'Manchas que no salen con una limpieza general', tambien: [42, 43, 44, 45, 46] },
+      { tema: 'llaves', zona: 'documentacion_y_llaves', regla: 50, si: 'fuera', pregunta: '¿Te falta algún juego de llaves, el principal o el de repuesto?', hallazgo: 'Falta un juego de llaves', tambien: [51, 52] },
+      { tema: 'limpieza', zona: 'limpieza', regla: 47, si: 'fuera', pregunta: '¿Algún mal olor que necesite una limpieza especial para irse?', hallazgo: 'Mal olor que pide limpieza especializada', tambien: [48] },
     ],
     aparte: [27],
   },
   'ayvens-turismos': {
     pasos: [
-      { tema: 'paragolpes', zona: 'paragolpes', regla: 7, si: 'factura', pregunta: '¿Alguna marca o arañazo en los paragolpes o la rejilla de más de 10 cm, o que no se vaya puliendo?', hallazgo: 'Arañazo en un paragolpes o la rejilla', tambien: [8, 9, 10, 11, 12, 13] },
-      { tema: 'lunas', zona: 'lunas', regla: 22, si: 'factura', pregunta: '¿Algún impacto o grieta en el parabrisas de más de 1 cm, contando sus ramas?', hallazgo: 'Impacto o grieta de más de 1 cm en el parabrisas', tambien: [23, 24, 25] },
-      { tema: 'aranazos', zona: 'carroceria', regla: 0, si: 'factura', pregunta: '¿Algún arañazo o desconchado en la chapa de más de 10 cm, o que no se vaya puliendo?', hallazgo: 'Arañazo en la chapa', tambien: [1, 5] },
+      { tema: 'paragolpes', zona: 'paragolpes', regla: 7, si: 'factura', pregunta: '¿Alguna marca o arañazo en los paragolpes o la rejilla de más de 10 cm, o que no se vaya puliendo?', hallazgo: 'Arañazo en un paragolpes o la rejilla', tambien: [8, 11, 12, 13] },
+      { tema: 'rozaduras', zona: 'paragolpes', regla: 9, junto: [10], si: 'factura', sujeto: 'la rozadura', pregunta: '¿Alguna rozadura o abrasión de más de 2 cm en los paragolpes o la rejilla, o alguna que no se vaya puliendo?', hallazgo: 'Rozadura de más de 2 cm en un paragolpes o la rejilla', tambien: [] },
+      { tema: 'lunas', zona: 'lunas', regla: 22, si: 'factura', nota: NOTA_ZONA_A, pregunta: '¿Algún impacto o grieta en el parabrisas de más de 1 cm, contando sus ramas, o alguna grieta, del tamaño que sea, en su zona A?', hallazgo: 'Impacto o grieta en el parabrisas fuera de lo que acepta', tambien: [23, 24, 25] },
+      { tema: 'aranazos', zona: 'carroceria', regla: 0, si: 'factura', pregunta: '¿Algún arañazo o desconchado en la chapa de más de 10 cm, o que no se vaya puliendo?', hallazgo: 'Arañazo en la chapa', tambien: [5] },
+      { tema: 'rozaduras', zona: 'carroceria', regla: 1, si: 'factura', sujeto: 'la rozadura', pregunta: '¿Alguna rozadura o abrasión en la chapa de más de 2 cm, o alguna que no se vaya puliendo?', hallazgo: 'Rozadura de más de 2 cm en la chapa', tambien: [] },
       { tema: 'abolladuras', zona: 'carroceria', regla: 2, si: 'factura', sujeto: 'la abolladura', pregunta: '¿Alguna abolladura de más de 2 cm, o más de dos en el mismo panel?', hallazgo: 'Abolladura de más de 2 cm, o más de dos en un panel', tambien: [] },
       { tema: 'pintura', zona: 'pintura', regla: 3, si: 'factura', pregunta: '¿Marcas de gravilla que cubran más del 25 % de algún panel?', hallazgo: 'Gravilla en más del 25 % de un panel', tambien: [4, 6] },
       { tema: 'retrovisores', zona: 'retrovisores', regla: 26, si: 'factura', sujeto: 'el arañazo', pregunta: '¿Algún arañazo o rozadura de más de 5 cm en la carcasa de un retrovisor, o que no se vaya puliendo?', hallazgo: 'Arañazo de más de 5 cm en un retrovisor', tambien: [27, 28] },
       { tema: 'llantas', zona: 'llantas', regla: 14, si: 'factura', pregunta: '¿Algún arañazo de más de 10 cm en una llanta o un tapacubos, o alguno deformado?', hallazgo: 'Arañazo de más de 10 cm o llanta deformada', tambien: [15, 16, 17] },
       { tema: 'neumaticos', zona: 'neumaticos', regla: 19, si: 'factura', pregunta: '¿Algún neumático con bultos, grietas, cortes o algo clavado?', hallazgo: 'Neumático dañado', tambien: [18, 20, 21] },
-      { tema: 'interior', zona: 'interior', regla: 32, si: 'factura', pregunta: '¿Alguna mancha en asientos, moqueta o alfombrillas que no salga con una limpieza normal?', hallazgo: 'Manchas que no salen con una limpieza general', tambien: [33, 34, 35, 36, 37] },
-      { tema: 'llaves', zona: 'documentacion_y_llaves', regla: 40, si: 'factura', pregunta: '¿Falta algo de lo que te dieron con el coche: llaves, documentación, rueda de repuesto o kit?', hallazgo: 'Falta algo de lo que se entregó con el coche', tambien: [] },
-      { tema: 'limpieza', zona: 'limpieza', regla: 38, si: 'factura', pregunta: '¿Algún mal olor que necesite una limpieza especial para irse?', hallazgo: 'Mal olor que pide limpieza especializada', tambien: [39] },
+      { tema: 'interior', zona: 'interior', regla: 32, si: 'fuera', pregunta: '¿Alguna mancha en asientos, moqueta o alfombrillas que no salga con una limpieza normal?', hallazgo: 'Manchas que no salen con una limpieza general', tambien: [33, 34, 35, 36, 37] },
+      { tema: 'llaves', zona: 'documentacion_y_llaves', regla: 40, si: 'fuera', pregunta: '¿Falta algo de lo que te dieron con el coche: llaves, documentación, rueda de repuesto o kit?', hallazgo: 'Falta algo de lo que se entregó con el coche', tambien: [] },
+      { tema: 'limpieza', zona: 'limpieza', regla: 38, si: 'fuera', pregunta: '¿Algún mal olor que necesite una limpieza especial para irse?', hallazgo: 'Mal olor que pide limpieza especializada', tambien: [39] },
     ],
     aparte: [29, 30, 31],
   },
   alphabet: {
     pasos: [
       { tema: 'paragolpes', zona: 'paragolpes', regla: 34, si: 'factura', pregunta: '¿Algún roce en los paragolpes o las molduras que se haya llevado material?', hallazgo: 'Roce con pérdida de material en un plástico', tambien: [] },
-      { tema: 'lunas', zona: 'lunas', regla: 15, si: 'factura', pregunta: '¿Alguna marca o grieta en el parabrisas de más de 1 cm, o varias que sumen más?', hallazgo: 'Marca o grieta de más de 1 cm en el parabrisas', tambien: [16, 17, 18] },
+      { tema: 'lunas', zona: 'lunas', regla: 15, junto: [16], si: 'factura', pregunta: '¿Alguna marca o grieta en el parabrisas de más de 1 cm, varias que sumen más, o alguna, del tamaño que sea, en la zona de visión del conductor?', hallazgo: 'Marca o grieta en el parabrisas fuera de lo que acepta', tambien: [17, 18] },
       { tema: 'abolladuras', zona: 'carroceria', regla: 32, si: 'factura', pregunta: '¿Alguna abolladura de más de 10 mm, o dos en la misma pieza?', hallazgo: 'Abolladura de más de 10 mm, o dos en una pieza', tambien: [33, 36] },
-      { tema: 'aranazos', zona: 'pintura', regla: 27, si: 'factura', pregunta: '¿Algún arañazo en la pintura de más de 15 mm, o varios en la misma pieza que sumen más?', hallazgo: 'Arañazo de más de 15 mm en la pintura', tambien: [28, 30, 31] },
+      { tema: 'aranazos', zona: 'pintura', regla: 27, si: 'factura', nota: 'Varios pequeños en la misma pieza que sumen más de 15 mm, sin pasar de tres, quedan fuera de lo que acepta, pero la guía no los pone entre los facturables.', pregunta: '¿Algún arañazo en la pintura de más de 15 mm, o más de tres pequeños en la misma pieza?', hallazgo: 'Arañazo de más de 15 mm, o más de tres en una pieza', tambien: [28, 30, 31] },
       { tema: 'pintura', zona: 'pintura', regla: 25, si: 'factura', pregunta: '¿Algún impacto de gravilla de más de 5 mm, o alguno con óxido?', hallazgo: 'Impacto de más de 5 mm o con óxido', tambien: [26, 29] },
       { tema: 'retrovisores', zona: 'retrovisores', regla: 35, si: 'factura', pregunta: '¿Algún roce en la carcasa de un retrovisor que se haya llevado material?', hallazgo: 'Roce con pérdida de material en un retrovisor', tambien: [] },
       { tema: 'llantas', zona: 'llantas', regla: 21, si: 'factura', pregunta: '¿Algún arañazo de más de 4 cm en una llanta de aluminio?', hallazgo: 'Arañazo de más de 4 cm en una llanta', tambien: [22, 23, 19, 20, 24] },
@@ -1001,33 +1088,33 @@ export const RECORRIDOS = {
   },
   vwfs: {
     pasos: [
-      { tema: 'paragolpes', zona: 'paragolpes', regla: 22, si: 'factura', pregunta: '¿Algún arañazo en un paragolpes que llegue a la pintura de base, o alguno muy grande?', hallazgo: 'Arañazo en un paragolpes hasta la pintura de base, o muy grande', tambien: [21, 23, 24] },
-      { tema: 'lunas', zona: 'lunas', regla: 27, si: 'factura', pregunta: '¿Algún chinazo sin reparar con brecha o grieta, o algún cristal roto?', hallazgo: 'Chinazo con grieta, o cristal roto', tambien: [28, 25, 26] },
-      { tema: 'abolladuras', zona: 'carroceria', regla: 14, si: 'fuera', pregunta: '¿Alguna abolladura de 1 cm o más, que necesite pintura, o más de dos en la misma pieza?', hallazgo: 'Abolladura fuera de lo que acepta', tambien: [15, 16, 17, 18, 19, 20] },
-      { tema: 'aranazos', zona: 'pintura', regla: 6, si: 'factura', pregunta: '¿Algún arañazo en la pintura que llegue a la capa de base o a la imprimación?', hallazgo: 'Arañazo hasta la capa de base', tambien: [7, 8, 9, 10, 11, 12, 13] },
-      { tema: 'retrovisores', zona: 'retrovisores', regla: 29, si: 'factura', sujeto: 'el arañazo', pregunta: '¿Algún arañazo o marca de más de 2 cm en la carcasa de un retrovisor?', hallazgo: 'Arañazo de más de 2 cm en un retrovisor', tambien: [] },
+      { tema: 'paragolpes', zona: 'paragolpes', regla: 22, si: 'fuera', nota: NOTA_VWFS, pregunta: '¿Algún arañazo en un paragolpes que llegue a la pintura de base, o alguno muy grande?', hallazgo: 'Arañazo en un paragolpes hasta la pintura de base, o muy grande', tambien: [21, 23, 24] },
+      { tema: 'lunas', zona: 'lunas', regla: 27, junto: [28], si: 'fuera', pregunta: '¿Algún chinazo sin reparar con brecha o grieta, algún cristal roto, o algún impacto en la zona del conductor?', hallazgo: 'Chinazo con grieta, cristal roto o impacto en la zona del conductor', tambien: [25, 26] },
+      { tema: 'abolladuras', zona: 'carroceria', regla: 14, si: 'fuera', nota: NOTA_VWFS, pregunta: '¿Alguna abolladura de 1 cm o más, que necesite pintura, o más de dos en la misma pieza?', hallazgo: 'Abolladura fuera de lo que acepta', tambien: [15, 16, 17, 18, 19, 20] },
+      { tema: 'aranazos', zona: 'pintura', regla: 6, si: 'fuera', nota: NOTA_VWFS, pregunta: '¿Algún arañazo en la pintura que llegue a la capa de base o a la imprimación?', hallazgo: 'Arañazo hasta la capa de base', tambien: [7, 8, 9, 10, 11, 12, 13] },
+      { tema: 'retrovisores', zona: 'retrovisores', regla: 29, si: 'fuera', sujeto: 'el arañazo', pregunta: '¿Algún arañazo o marca de más de 2 cm en la carcasa de un retrovisor?', hallazgo: 'Arañazo de más de 2 cm en un retrovisor', tambien: [] },
       { tema: 'llantas', zona: 'llantas', regla: 4, si: 'fuera', pregunta: '¿Algún roce de más de 0,5 cm en una llanta o un tapacubos, o más de tres en la misma?', hallazgo: 'Roce de más de 0,5 cm, o más de tres en una llanta', tambien: [5] },
       { tema: 'neumaticos', zona: 'neumaticos', regla: 0, si: 'fuera', pregunta: '¿Algún neumático con menos de 2 mm de dibujo en sus ranuras principales?', hallazgo: 'Neumático con menos de 2 mm de dibujo', tambien: [1, 2, 3] },
-      { tema: 'interior', zona: 'interior', regla: 33, si: 'factura', pregunta: '¿Alguna quemadura en asientos, alfombrillas, moqueta, paneles o techo?', hallazgo: 'Quemadura en el interior', tambien: [30, 34, 35, 36, 37, 38, 39] },
-      { tema: 'llaves', zona: 'documentacion_y_llaves', regla: 41, si: 'factura', pregunta: '¿Falta la llave principal o alguna copia, o alguna está dañada?', hallazgo: 'Falta o está dañada una llave', tambien: [40, 42, 43, 44, 45, 46, 47] },
-      { tema: 'limpieza', zona: 'limpieza', regla: 31, si: 'factura', pregunta: '¿Suciedad que no salga aspirando y necesite una limpieza profesional?', hallazgo: 'Suciedad que no sale aspirando', tambien: [32] },
+      { tema: 'interior', zona: 'interior', regla: 33, si: 'fuera', pregunta: '¿Alguna quemadura en asientos, alfombrillas, moqueta, paneles o techo?', hallazgo: 'Quemadura en el interior', tambien: [30, 34, 35, 36, 37, 38, 39] },
+      { tema: 'llaves', zona: 'documentacion_y_llaves', regla: 41, si: 'fuera', pregunta: '¿Falta la llave principal o alguna copia, o alguna está dañada?', hallazgo: 'Falta o está dañada una llave', tambien: [40, 42, 43, 44, 45, 46, 47] },
+      { tema: 'limpieza', zona: 'limpieza', regla: 31, si: 'fuera', pregunta: '¿Suciedad que no salga aspirando y necesite una limpieza profesional?', hallazgo: 'Suciedad que no sale aspirando', tambien: [32] },
       { tema: 'mecanica', zona: 'mecanica', regla: 48, si: 'sin_criterio', pregunta: '¿Hay algún testigo de avería encendido en el cuadro?', hallazgo: 'Testigo de avería encendido', tambien: [] },
     ],
     aparte: [49],
   },
   bmw: {
     pasos: [
-      { tema: 'paragolpes', zona: 'paragolpes', regla: 7, si: 'factura', pregunta: '¿Algún roce o arañazo de más de 30 mm en un paragolpes, o más de uno en el mismo?', hallazgo: 'Roce de más de 30 mm en un paragolpes', tambien: [] },
-      { tema: 'lunas', zona: 'lunas', regla: 18, si: 'factura', pregunta: '¿Algún impacto en el parabrisas de más de 2 mm, más de cinco, o alguno en el campo de visión del conductor?', hallazgo: 'Impacto en el parabrisas fuera de lo que acepta', tambien: [19, 20] },
-      { tema: 'abolladuras', zona: 'carroceria', regla: 4, si: 'factura', sujeto: 'el bollo', pregunta: '¿Algún bollo de más de 20 mm, o más de uno en el mismo lateral?', hallazgo: 'Bollo de más de 20 mm, o más de uno en un lateral', tambien: [5, 21, 22, 23, 24, 25] },
-      { tema: 'aranazos', zona: 'pintura', regla: 1, si: 'factura', pregunta: '¿Algún arañazo de más de 30 mm en los laterales, o más de dos en el mismo lateral?', hallazgo: 'Arañazo de más de 30 mm en un lateral', tambien: [2, 3, 0, 6, 26] },
-      { tema: 'retrovisores', zona: 'retrovisores', regla: 8, si: 'factura', pregunta: '¿Algún roce de más de 2 mm en la carcasa de un retrovisor, o que haya tocado la pintura?', hallazgo: 'Roce en un retrovisor', tambien: [] },
-      { tema: 'llantas', zona: 'llantas', regla: 17, si: 'factura', pregunta: '¿Roces en el borde de alguna llanta que, sumados, pasen de 40 mm?', hallazgo: 'Roces de más de 40 mm en una llanta', tambien: [] },
-      { tema: 'neumaticos', zona: 'neumaticos', regla: 16, si: 'factura', pregunta: '¿Algún neumático con cortes o bultos, pinchado, o distinto del otro del mismo eje?', hallazgo: 'Neumático dañado o distinto en el mismo eje', tambien: [15] },
-      { tema: 'interior', zona: 'interior', regla: 9, si: 'factura', pregunta: '¿Alguna quemadura de más de 4 mm en el tejido de los asientos?', hallazgo: 'Quemadura de más de 4 mm en un asiento', tambien: [10, 11, 12, 13, 14] },
+      { tema: 'paragolpes', zona: 'paragolpes', regla: 7, si: 'fuera', pregunta: '¿Algún roce o arañazo de más de 30 mm en un paragolpes, o más de uno en el mismo?', hallazgo: 'Roce de más de 30 mm, o más de uno, en un paragolpes', tambien: [] },
+      { tema: 'lunas', zona: 'lunas', regla: 18, si: 'fuera', pregunta: '¿Algún impacto en el parabrisas de más de 2 mm, más de cinco, o alguno en el campo de visión del conductor?', hallazgo: 'Impacto en el parabrisas fuera de lo que acepta', tambien: [19, 20] },
+      { tema: 'abolladuras', zona: 'carroceria', regla: 4, si: 'fuera', sujeto: 'el bollo', nota: 'Su pág. 16 lo resume de otra forma: acepta daños de hasta 2 cm de diámetro en piezas verticales, como máximo 1 por panel (no por lateral).', pregunta: '¿Algún bollo de más de 20 mm, más de uno en el mismo lateral, o alguno en el techo, el capó, el portón o por encima de la línea del pase de rueda?', hallazgo: 'Bollo fuera de lo que acepta', tambien: [5, 21, 22, 23, 24, 25] },
+      { tema: 'aranazos', zona: 'pintura', regla: 1, junto: [2], si: 'fuera', nota: 'Su pág. 16 lo resume de otra forma: acepta arañazos de hasta 3 cm de diámetro, como máximo 2 por panel (no por lateral).', pregunta: '¿Algún arañazo de más de 30 mm en los laterales, más de dos en el mismo lateral, o alguno en el techo, el capó, el portón o por encima de la línea del pase de rueda?', hallazgo: 'Arañazo fuera de lo que acepta', tambien: [3, 0, 6, 26] },
+      { tema: 'retrovisores', zona: 'retrovisores', regla: 8, si: 'fuera', pregunta: '¿Algún roce de más de 2 mm en la carcasa de un retrovisor, o que haya tocado la pintura?', hallazgo: 'Roce en un retrovisor', tambien: [] },
+      { tema: 'llantas', zona: 'llantas', regla: 17, si: 'fuera', pregunta: '¿Roces en el borde de alguna llanta que, sumados, pasen de 40 mm, o alguno que se haya llevado material?', hallazgo: 'Roces de más de 40 mm, o con pérdida de material, en una llanta', tambien: [] },
+      { tema: 'neumaticos', zona: 'neumaticos', regla: 16, si: 'fuera', pregunta: '¿Algún neumático con cortes o bultos, pinchado, o distinto del otro del mismo eje?', hallazgo: 'Neumático dañado o distinto en el mismo eje', tambien: [15] },
+      { tema: 'interior', zona: 'interior', regla: 9, si: 'fuera', pregunta: '¿Alguna quemadura de más de 4 mm en el tejido de los asientos?', hallazgo: 'Quemadura de más de 4 mm en un asiento', tambien: [10, 11, 12, 13, 14] },
       { tema: 'llaves', zona: 'documentacion_y_llaves', regla: 30, si: 'fuera', pregunta: '¿Falta algún juego de llaves, algún documento o algún accesorio?', hallazgo: 'Falta una llave, un documento o un accesorio', tambien: [29] },
       { tema: 'limpieza', zona: 'limpieza', regla: 27, si: 'fuera', pregunta: '¿Lo vas a entregar sin limpiar, por dentro o por fuera?', hallazgo: 'Sin limpiar', tambien: [28] },
-      { tema: 'mecanica', zona: 'mecanica', regla: 31, si: 'factura', pregunta: '¿Hay algún testigo de avería encendido en el cuadro?', hallazgo: 'Testigo de avería encendido', tambien: [32] },
+      { tema: 'mecanica', zona: 'mecanica', regla: 31, si: 'factura', nota: 'Su pág. 15: se anota cualquier aviso de fallo, avería o falta de mantenimiento del cuadro. Si, además, está encendido alguno de los que el manual de usuario del coche da como avería, el coche no se puede devolver y se factura el Valor Final del contrato.', pregunta: '¿Hay encendido en el cuadro algún testigo que el manual de usuario del coche dé como avería?', hallazgo: 'Testigo de avería encendido', tambien: [32] },
     ],
     aparte: [33],
   },
@@ -1035,10 +1122,10 @@ export const RECORRIDOS = {
     pasos: [
       { tema: 'exterior', zona: 'carroceria', regla: 1, si: 'sin_criterio', pregunta: '¿Tiene algún daño por fuera, llantas y lunas incluidas?', hallazgo: 'Daño por fuera', nota: 'Lo que se cobra depende de con quién tengas el seguro: con Athlon, por tu cuenta o con franquicia. Tienes las tres reglas en este paso.', tambien: [0, 2, 3, 4, 6] },
       { tema: 'carga', zona: 'zona_de_carga', regla: 5, si: 'sin_criterio', pregunta: '¿Algún golpe por dentro de la zona de carga por llevar la carga suelta?', hallazgo: 'Golpe por dentro por carga mal sujeta', tambien: [7, 8] },
-      { tema: 'interior', zona: 'interior', regla: 10, si: 'factura', pregunta: '¿Alguna mancha, quemadura, corte o grieta en la tapicería?', hallazgo: 'Daño en la tapicería', tambien: [11, 12, 13, 14] },
+      { tema: 'interior', zona: 'interior', regla: 10, si: 'fuera', pregunta: '¿Alguna mancha, quemadura, corte o grieta en la tapicería?', hallazgo: 'Daño en la tapicería', tambien: [11, 12, 13, 14] },
       { tema: 'llaves', zona: 'documentacion_y_llaves', regla: 17, si: 'fuera', pregunta: '¿Falta algo de lo que te dieron: llaves y sus códigos, documentación, rueda de repuesto o kit, accesorios?', hallazgo: 'Falta algo de lo que se entregó', tambien: [18] },
-      { tema: 'limpieza', zona: 'limpieza', regla: 9, si: 'factura', pregunta: '¿Manchas o suciedad que no salgan con un aspirado o una limpieza normal?', hallazgo: 'Suciedad que no sale con una limpieza estándar', tambien: [] },
-      { tema: 'mecanica', zona: 'mecanica', regla: 15, si: 'factura', pregunta: '¿Algún testigo de avería encendido, o un ruido raro de motor o escape?', hallazgo: 'Testigo encendido o ruido anómalo', tambien: [16] },
+      { tema: 'limpieza', zona: 'limpieza', regla: 9, si: 'fuera', pregunta: '¿Manchas o suciedad que no salgan con un aspirado o una limpieza normal?', hallazgo: 'Suciedad que no sale con una limpieza estándar', tambien: [] },
+      { tema: 'mecanica', zona: 'mecanica', regla: 15, si: 'fuera', pregunta: '¿Algún testigo de avería encendido, o un ruido raro de motor o escape?', hallazgo: 'Testigo encendido o ruido anómalo', tambien: [16] },
     ],
     aparte: [],
   },
@@ -1048,7 +1135,7 @@ export const RECORRIDOS = {
       { tema: 'interior', zona: 'interior', regla: 3, si: 'factura', pregunta: '¿Algún daño por dentro: techo, asientos, paneles de puerta, moqueta, volante, salpicadero o guantera?', hallazgo: 'Daño en el interior', tambien: [4] },
       { tema: 'llaves', zona: 'documentacion_y_llaves', regla: 5, si: 'factura', pregunta: '¿Te falta la segunda llave?', hallazgo: 'Falta la segunda llave', tambien: [6, 7] },
       { tema: 'accesorios', zona: 'otros', regla: 8, si: 'factura', pregunta: '¿Falta algún accesorio: chaleco, triángulos o baliza, cable de carga, kit de pinchazos o cubierta del maletero?', hallazgo: 'Falta un accesorio', tambien: [] },
-      { tema: 'limpieza', zona: 'limpieza', regla: 9, si: 'factura', pregunta: '¿Está sucio, por dentro o por fuera?', hallazgo: 'Sin limpiar', tambien: [] },
+      { tema: 'limpieza', zona: 'limpieza', regla: 9, si: 'factura', pregunta: '¿Lo vas a devolver sin limpiar, por dentro o por fuera?', hallazgo: 'Sin limpiar', tambien: [] },
     ],
     aparte: [10, 11],
   },
@@ -1070,7 +1157,8 @@ export const RECORRIDOS = {
   europcar: {
     pasos: [
       { tema: 'paragolpes', zona: 'paragolpes', regla: 4, si: 'factura', nota: NOTA_EUROPCAR, pregunta: '¿Algún arañazo de 2 cm o más en un paragolpes?', hallazgo: 'Arañazo en un paragolpes', tambien: [5, 6, 7] },
-      { tema: 'lunas', zona: 'lunas', regla: 12, si: 'factura', pregunta: '¿Algún chinazo en el parabrisas?', hallazgo: 'Chinazo en el parabrisas', tambien: [13, 14] },
+      { tema: 'lunas', zona: 'lunas', regla: 12, si: 'factura', nota: 'Si el chinazo es de 10 mm o más, su tabla no tiene fila para él: solo pone precio a la luna rota.', pregunta: '¿Algún chinazo de menos de 10 mm en el parabrisas?', hallazgo: 'Chinazo de menos de 10 mm en el parabrisas', tambien: [14] },
+      { tema: 'lunas', zona: 'lunas', regla: 13, si: 'factura', pregunta: '¿Alguna luna rota: el parabrisas, la luneta o una ventanilla?', hallazgo: 'Luna rota', tambien: [] },
       { tema: 'aranazos', zona: 'carroceria', regla: 0, si: 'factura', nota: NOTA_EUROPCAR, pregunta: '¿Algún arañazo de 2 cm o más en la chapa?', hallazgo: 'Arañazo en la chapa', tambien: [2, 3] },
       { tema: 'abolladuras', zona: 'carroceria', regla: 1, si: 'factura', nota: NOTA_EUROPCAR, pregunta: '¿Alguna abolladura de 2 cm o más en la chapa?', hallazgo: 'Abolladura en la chapa', tambien: [] },
       { tema: 'retrovisores', zona: 'retrovisores', regla: 15, si: 'factura', pregunta: '¿Algún daño en la carcasa de un retrovisor?', hallazgo: 'Daño en la carcasa de un retrovisor', tambien: [16] },
@@ -1087,13 +1175,13 @@ export const RECORRIDOS = {
 
 /* Los temas de «Otra compañía», en el orden de la vuelta al vehículo. */
 export const TEMAS = [
-  ['paragolpes', 'Paragolpes'], ['lunas', 'Lunas'], ['aranazos', 'Arañazos'], ['abolladuras', 'Abolladuras'],
+  ['paragolpes', 'Paragolpes'], ['lunas', 'Lunas'], ['aranazos', 'Arañazos'], ['rozaduras', 'Rozaduras'], ['abolladuras', 'Abolladuras'],
   ['pintura', 'Pintura'], ['exterior', 'Daños por fuera'], ['retrovisores', 'Retrovisores'], ['llantas', 'Llantas'],
   ['neumaticos', 'Neumáticos'], ['carga', 'Zona de carga'], ['interior', 'Interior'], ['llaves', 'Llaves y papeles'],
   ['accesorios', 'Accesorios'], ['limpieza', 'Limpieza'], ['mecanica', 'Mecánica'],
 ]
 
-/* ── Las cuentas (sin navegador: las usan también las funciones de Pages) ──────────────────────────────────────── */
+/* ── Las cuentas (sin navegador: las usan también las funciones de Pages y el comprobador) ───────────────────────── */
 
 export const vale = (aplica, vehiculo) => aplica === 'ambos' || aplica === vehiculo
 
@@ -1105,6 +1193,55 @@ export function regla(docId, i) {
 }
 
 export const companiaDe = (slug) => COMPANIAS.find((c) => c.slug === slug) || null
+export const companiaDelDocumento = (docId) => companiaDe(DOCUMENTOS[docId]?.compania)
+
+/* Cómo se habla del documento de una compañía (o de la compañía de un documento). */
+export function vozDe(x) {
+  const c = typeof x === 'string' ? companiaDe(x) || companiaDelDocumento(x) : x
+  const v = VOCES[c?.voz] || VOCES.guia
+  const n = v.plural ? 'n' : ''
+  return {
+    ...v,
+    voz: c?.voz || 'guia',
+    alquiler: c?.tipo === 'alquiler',
+    acepta: `${v.Su} acepta${n}`,
+    pide: `${v.Su} pide${n}`,
+    factura: `${v.Su} dice${n} que se factura`,
+    fuera: `${v.Su} no lo acepta${n}`,
+    sinCriterio: `${v.Su} no lo dice${n}`,
+    soloAcepta: `${v.Su} solo dice${n} lo que acepta${n}.`,
+    noAceptaNinguno: `${v.Su} no acepta${n} ninguno`,
+    noDice: `${v.Su} no dice${n}`,
+  }
+}
+
+/* La etiqueta de cada respuesta «Sí» en el resultado y en la tabla. */
+export const ETIQUETA_SI = { factura: (v) => v.factura, fuera: (v) => v.fuera, sin_criterio: (v) => v.sinCriterio }
+
+/* LO QUE ACEPTA, dicho como lo dice el documento. Cuando el dato es «la guía no pone ningún caso aceptable», «la tabla
+   no lo dice» o «Nada», se escribe la frase entera sin etiqueta (nunca «Acepta: Nada»); cuando es lo que hay que
+   devolver, «Su guía pide». La etiqueta va encima o delante con dos puntos (`enLinea`, que pasa a minúscula). */
+export const minuscula = (t) => (/^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t)
+export function aceptaDe(r, v) {
+  const t = r.no_se_cobra
+  let m
+  if (/^(La guía|La tabla|La ficha|Sus condiciones|Nada dice|No da ningún caso)/.test(t)) return { etiqueta: null, texto: t }
+  if ((m = t.match(/^No lo dice( expresamente)?(.*)$/s))) return { etiqueta: null, texto: `${v.noDice}${m[1] || ''} qué acepta${v.plural ? 'n' : ''}${m[2] || '.'}` }
+  if ((m = t.match(/^(?:Nada|Ninguno)(?![ ]+(?:si|dice)\b)(.*)$/s))) return { etiqueta: null, texto: `${v.noAceptaNinguno}${m[1] || '.'}` }
+  if (/^(Devolver|Entregar|Haber |Borrar |El vehículo limpio|Vehículo limpio)/.test(t)) return { etiqueta: v.pide, texto: t }
+  return { etiqueta: v.acepta, texto: t }
+}
+
+/* LO QUE NO ACEPTA (o lo que cobra), con la etiqueta del paso si la hay. */
+export function cobraDe(r, v, si = null) {
+  const t = r.se_cobra
+  if (t == null) return { etiqueta: null, texto: v.soloAcepta }
+  if (/^(La guía|La tabla|La ficha|Sus condiciones|No lo dice|Nada dice)/.test(t)) return { etiqueta: null, texto: t }
+  return { etiqueta: si === 'factura' ? v.factura : v.noAcepta, texto: t }
+}
+
+/* Una de las dos en una sola línea: «Su guía acepta: hasta 10 cm…», o la frase entera si no lleva etiqueta. */
+export const enLinea = ({ etiqueta, texto }) => (etiqueta ? `${etiqueta}: ${minuscula(texto)}` : texto)
 
 /* Los documentos de una compañía, sin repetir (Alphabet es el mismo para los dos vehículos). */
 export function documentosDe(c) {
@@ -1116,18 +1253,31 @@ export function documentosDe(c) {
   return vistos
 }
 
+/* El vehículo con el que se abre una compañía: el pedido si lo tiene; si no, la furgoneta; si no, el que tenga. */
+export const vehiculoPara = (c, pedido) => (c?.documentos[pedido] ? pedido : c?.documentos.furgoneta ? 'furgoneta' : Object.keys(c?.documentos || {})[0] || 'furgoneta')
+
 /* El titular de la página de cada compañía (la pantalla y la función de Pages dicen lo mismo). */
 export const tituloCompania = (c) => (c.tipo === 'alquiler'
   ? `Qué cobra ${c.nombre} por los daños al devolver un vehículo de alquiler`
-  : `Qué cobra ${c.nombre} al devolver un vehículo de renting`)
+  : `Qué cobra ${c.nombre} al devolver ${c.objeto || 'un vehículo de renting'}`)
 
-/* Los pasos de un documento para un vehículo: solo los que valen, con su regla y su «También mira». */
+/* La entradilla de la página de cada compañía. */
+export function subtituloCompania(c) {
+  if (c.voz === 'ficha') return 'Lo que dice su ficha de fin de contrato: qué pide al devolver el vehículo y qué factura, con la página de cada cosa.'
+  if (c.voz === 'tabla') return 'Lo que su tabla de daños pone a cada daño al devolver el vehículo: costes medios estimados, por tramos, con la página de cada uno.'
+  if (c.voz === 'condiciones') return 'Lo que sus condiciones de alquiler dicen que se cobra al devolver el vehículo, criterio a criterio, con la página de cada uno.'
+  return 'Lo que su guía acepta como desgaste normal y lo que no, criterio a criterio, con la página de cada uno.'
+}
+
+/* Los pasos de un documento para un vehículo: solo los que valen, con su regla, las que van en la misma pregunta
+   (`con`) y su «También mira» (`mas`). */
 export function pasosDe(docId, vehiculo) {
   const rec = RECORRIDOS[docId]
   if (!rec) return []
+  const de = (lista) => (lista || []).map((i) => regla(docId, i)).filter((x) => vale(x.aplica_a, vehiculo))
   return rec.pasos
     .filter((p) => vale(regla(docId, p.regla).aplica_a, vehiculo))
-    .map((p) => ({ ...p, r: regla(docId, p.regla), mas: p.tambien.map((i) => regla(docId, i)).filter((x) => vale(x.aplica_a, vehiculo)) }))
+    .map((p) => ({ ...p, r: regla(docId, p.regla), con: de(p.junto), mas: de(p.tambien) }))
 }
 
 export const aparteDe = (docId, vehiculo) => (RECORRIDOS[docId]?.aparte || []).map((i) => regla(docId, i)).filter((x) => vale(x.aplica_a, vehiculo))
@@ -1135,14 +1285,30 @@ export const aparteDe = (docId, vehiculo) => (RECORRIDOS[docId]?.aparte || []).m
 /* Todas las reglas de un documento que valen para un vehículo, en el orden del recorrido (para las tablas). */
 export function reglasEnOrden(docId, vehiculo) {
   const vistas = []
-  for (const p of pasosDe(docId, vehiculo)) vistas.push(p.r, ...p.mas)
+  for (const p of pasosDe(docId, vehiculo)) vistas.push(p.r, ...p.con, ...p.mas)
   vistas.push(...aparteDe(docId, vehiculo))
   return vistas
 }
 
+/* Las frases de un documento que dicen que cobra lo de un tema (COBRO), para enseñarlas junto a lo que se factura. */
+export const cobroDe = (docId, tema) => (COBRO[docId] || []).filter((b) => b.temas.includes(tema))
+
+/* EL RESULTADO, sin pantalla (lo usan Resultado.jsx y el comprobador): qué respuesta cae en cada bloque y la cifra
+   grande, que cuenta lo que queda fuera de lo que su guía da por bueno (lo que dice que se factura y lo que no
+   acepta). «Su guía no lo dice», «No» y «No lo sé» no cuentan. */
+export function resumen(pasos, respuestas) {
+  const de = (f) => pasos.map((p, i) => ({ p, i })).filter(({ p, i }) => f(p, respuestas[i]))
+  const factura = de((p, r) => r === 'si' && p.si === 'factura')
+  const fuera = de((p, r) => r === 'si' && p.si === 'fuera')
+  const sinCriterio = de((p, r) => r === 'si' && p.si === 'sin_criterio')
+  const no = de((_, r) => r === 'no')
+  const noSe = de((_, r) => r === 'nose')
+  return { factura, fuera, sinCriterio, no, noSe, cifra: factura.length + fuera.length }
+}
+
 /* Una huella corta del recorrido (FNV-1a): va en el enlace compartido y dice si el resultado se hizo con estos datos. */
 export function huellaRecorrido(docId, vehiculo) {
-  const s = JSON.stringify(pasosDe(docId, vehiculo).map((p) => [p.regla, p.si, p.pregunta, p.r.no_se_cobra, p.r.se_cobra, p.r.pagina]))
+  const s = JSON.stringify(pasosDe(docId, vehiculo).map((p) => [p.regla, p.junto || [], p.si, p.pregunta, p.r.no_se_cobra, p.r.se_cobra, p.r.pagina]))
   let h = 0x811c9dc5
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0 }
   return h.toString(36).slice(0, 6)
@@ -1156,9 +1322,11 @@ export function medidaTexto(m) {
   return u ? `${n} ${u}` : n
 }
 
-/* LA AYUDA PARA MEDIR SIN REGLA: solo si el límite de la regla queda a menos de un 10 % de una medida real. Medidas
-   reales: moneda de 10 céntimos 19,75 mm; de 1 € 23,25 mm; de 2 € 25,75 mm; tarjeta bancaria 85,6 × 54 mm; folio A4
-   210 × 297 mm. Siempre «casi» o «algo más de». */
+/* LA AYUDA PARA MEDIR SIN REGLA: solo si la regla da un tope («hasta») en cm o mm y una medida real queda a menos de un
+   10 % de él. Medidas reales: moneda de 10 céntimos 19,75 mm; de 1 € 23,25 mm; de 2 € 25,75 mm; tarjeta bancaria
+   85,6 × 54 mm; folio A4 210 × 297 mm. Siempre «casi» o «algo más de», y siempre dice hacia qué lado se equivoca quien
+   se fíe del objeto: lo que queda cerca del tope se mide con una regla. (Dos reglas guardan el sentido al revés, «menos
+   de» lo que SÍ se cobra: Ayvens furgonetas 12 y Europcar 12. Por eso aquí y en «Otra compañía» solo vale «hasta».) */
 export const OBJETOS = [
   { id: 'moneda10', mm: 19.75, nombre: 'Una moneda de 10 céntimos', corto: 'la moneda', dibujo: 'moneda', rotulo: '10 c' },
   { id: 'moneda1', mm: 23.25, nombre: 'Una moneda de 1 euro', corto: 'la moneda', dibujo: 'moneda', rotulo: '1 €' },
@@ -1168,6 +1336,7 @@ export const OBJETOS = [
   { id: 'folio-corto', mm: 210, nombre: 'El lado corto de un folio A4', corto: 'ese lado', dibujo: 'folio' },
   { id: 'folio-largo', mm: 297, nombre: 'El lado largo de un folio A4', corto: 'ese lado', dibujo: 'folio' },
 ]
+export const MARGEN_AYUDA = 0.1
 
 export function ayudaParaMedir(paso) {
   const m = paso?.r?.medida
@@ -1176,22 +1345,33 @@ export function ayudaParaMedir(paso) {
   let mejor = null
   for (const o of OBJETOS) {
     const d = Math.abs(o.mm - limiteMm) / limiteMm
-    if (d <= 0.1 && (!mejor || d < mejor.d)) mejor = { ...o, d }
+    if (d <= MARGEN_AYUDA && (!mejor || d < mejor.d)) mejor = { ...o, d }
   }
   if (!mejor) return null
   const limite = medidaTexto(m)
   const real = `${String(mejor.mm).replace('.', ',')} mm`
-  const menor = mejor.mm < limiteMm
   return {
     objeto: mejor,
-    texto: menor
-      ? `${mejor.nombre} mide ${real}: casi ${limite}. Si ${paso.sujeto} es claramente más grande que ${mejor.corto}, pasa de ${limite}.`
-      : `${mejor.nombre} mide ${real}: algo más de ${limite}. Si ${paso.sujeto} es más largo que ${mejor.corto}, pasa de ${limite}.`,
+    texto: mejor.mm < limiteMm
+      ? `${mejor.nombre} mide ${real}: casi ${limite}. Si ${paso.sujeto} es claramente más grande que ${mejor.corto}, pasa de ${limite}; si es casi igual, mídelo con una regla.`
+      : `${mejor.nombre} mide ${real}: algo más de ${limite}. Si ${paso.sujeto} llega a ${mejor.corto}, pasa de ${limite}; si se queda un poco corto, también puede pasar: mídelo con una regla.`,
   }
 }
 
-/* «La guía no dice…»: lo que se enseña cuando se_cobra es null. */
-export const SOLO_ACEPTA = 'La guía solo dice lo que acepta.'
-
 /* Cómo se nombra una página: «pág. 7». */
 export const pag = (n) => `pág. ${n}`
+
+/* «OTRA COMPAÑÍA»: lo que piden las compañías de renting que publican su guía, tema a tema, cada una con su nombre, su
+   medida y su página. Sin rango «de X a Y»: dentro de un mismo tema las guías miden cosas distintas (un arañazo, roces
+   sumados, el diámetro de un impacto, el largo con sus ramas), y juntarlas en un rango diría lo que ninguna dice. */
+export function filasOtra(vehiculo) {
+  const renting = COMPANIAS.filter((c) => c.tipo === 'renting' && c.enOtra !== false && c.documentos[vehiculo])
+  return TEMAS.map(([tema, nombre]) => {
+    const filas = []
+    for (const c of renting) {
+      const doc = c.documentos[vehiculo]
+      for (const p of pasosDe(doc, vehiculo).filter((x) => x.tema === tema)) filas.push({ c, doc, p })
+    }
+    return { tema, nombre, zona: filas[0]?.p.zona, filas }
+  }).filter((t) => t.filas.length)
+}

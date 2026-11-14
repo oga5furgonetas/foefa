@@ -1,50 +1,69 @@
-/* «Si lo devolvieras hoy»: lo que SU guía dice que se factura (cada cosa con su regla y su página), lo que queda dentro
-   de lo que acepta, lo que no sabes todavía, lo que la guía dice del proceso, el aviso fijo y la fuente. Nunca «te lo
-   cobrarán»: «su guía dice que se factura». Se guarda o se imprime (hoja de impresión) y se manda: el resultado viaja
+/* «Si lo devolvieras hoy»: lo que SU documento no da por bueno, con tres etiquetas que hablan como él («Su guía dice
+   que se factura» solo si lo dice para ese caso, «Su guía no lo acepta», «Su guía no lo dice»), cada cosa con su regla
+   y su página; lo que has contestado que no (sin decir que lo acepta: debajo, lo que no se ha preguntado de esa zona y
+   tampoco acepta); lo que no sabes todavía; lo que dice del proceso; la edad del documento, el aviso fijo y la fuente.
+   Las cuentas, en guiasRenting.resumen (las vigila scripts/check-guias-renting.mjs). Cada respuesta se puede cambiar.
+   Se guarda o se imprime (hoja de impresión, con la fecha y las direcciones escritas) y se manda: el resultado viaja
    en el propio enlace. */
 import { useState } from 'react'
-import { DOCUMENTOS, aparteDe, companiaDe } from '../../lib/guiasRenting'
+import { DOCUMENTOS, aparteDe, cobraDe, cobroDe, companiaDe, resumen, vozDe } from '../../lib/guiasRenting'
 import { BTN_PRIMARIO, BTN_SECUNDARIO } from '../portadaComun'
 import { MARCA } from '../../marca'
-import { AVISO, ENLACE_TEXTO, Fuente, Mandanosla, Pag, PuertaFds, etiquetaPaso, zonaNombre } from './comun'
+import { ENLACE_TEXTO, Fuente, Mandanosla, Pag, PuertaFds, Vigencia, avisoDe, etiquetaPaso, textoAcepta, textoNoAcepta, zonaNombre } from './comun'
 
 const CONSEJO_REVISAR = /luz natural|seco|al revisarlo|revisar el coche limpio/i
+const hoy = () => new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })
 
-function Item({ titulo, texto, pagina, nota, testid }) {
+function Item({ titulo, nota, children, onCambiar, etiqueta, testid }) {
   return (
     <li className="border-t border-[color:var(--ld-border)] py-3.5 [break-inside:avoid]" data-testid={testid}>
-      <p className="text-[15.5px] font-bold leading-snug text-[color:var(--ld-text)]">{titulo}{nota && <span className="font-semibold text-[color:var(--ld-muted)]"> · {nota}</span>}</p>
-      <p className="mt-1 text-[14px] leading-snug text-[color:var(--ld-text2)]">{texto} {pagina && <Pag n={pagina} />}</p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[15.5px] font-bold leading-snug text-[color:var(--ld-text)]">{titulo}{nota && <span className="font-semibold text-[color:var(--ld-muted)]"> · {nota}</span>}</p>
+        {onCambiar && (
+          <button type="button" onClick={onCambiar} aria-label={`Cambiar la respuesta: ${etiqueta}`} className={`${ENLACE_TEXTO} -my-2 inline-flex min-h-[44px] shrink-0 items-center text-[13.5px] print:hidden`} data-testid="dev-cambiar">Cambiar</button>
+        )}
+      </div>
+      <div className="mt-1 space-y-1.5 text-[14px] leading-snug text-[color:var(--ld-text2)]">{children}</div>
     </li>
   )
 }
 
-function Bloque({ titulo, cuenta, children, testid }) {
+/* La nota del paso (la póliza de VWFS, la zona A, el testigo de BMW…): va también en el resultado. */
+const NotaPaso = ({ p }) => (p.nota ? <p className="flex gap-2.5" data-testid="dev-nota-resultado"><span aria-hidden="true" className="mt-[6px] inline-block h-2 w-2 shrink-0 rounded-full bg-[color:var(--ld-ambar)]" />{p.nota}</p> : null)
+
+function Bloque({ titulo, cuenta, children, pie, testid }) {
   return (
     <section className="mt-9 [break-inside:avoid-page]" data-testid={testid}>
       <h3 className="flex items-baseline justify-between gap-3 text-[18px] font-bold tracking-[-0.01em] text-[color:var(--ld-text)]">{titulo}{cuenta != null && <span className="font-mono text-[14px] font-medium text-[color:var(--ld-muted)]">{cuenta}</span>}</h3>
       <ul className="mt-2.5 border-b border-[color:var(--ld-border)]">{children}</ul>
+      {pie}
     </section>
   )
 }
 
-export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, notas, onRevisar, onEmpezar }) {
+export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, notas, onCambiar, onEmpezar }) {
   const d = DOCUMENTOS[doc]
   const c = companiaDe(compania)
+  const v = vozDe(c)
+  const n = v.plural ? 'n' : ''
   const [copiado, setCopiado] = useState('')
-  const de = (tipo) => pasos.map((p, i) => ({ p, i })).filter(({ p, i }) => respuestas[i] === 'si' && p.si === tipo)
-  const factura = de('factura')
-  const fuera = de('fuera')
-  const sinCriterio = de('sin_criterio')
-  const dentro = pasos.map((p, i) => ({ p, i })).filter(({ i }) => respuestas[i] === 'no')
-  const noSe = pasos.map((p, i) => ({ p, i })).filter(({ i }) => respuestas[i] === 'nose')
+  const { factura, fuera, sinCriterio, no, noSe, cifra } = resumen(pasos, respuestas)
   const consejos = (d.proceso.recomendaciones_antes_de_devolver || []).filter((t) => CONSEJO_REVISAR.test(t))
   const aparte = aparteDe(doc, vehiculo)
   const pr = d.proceso
+  // Dónde dice el documento que cobra lo de cada cosa que «se factura» (si no lo dice la propia regla).
+  const bases = [...new Map(factura.flatMap(({ p }) => cobroDe(doc, p.tema)).map((b) => [b.cita, b])).values()]
+  const titular = fuera.length === 0 ? (cifra === 1 ? `cosa que ${v.su} dice${n} que se factura` : `cosas que ${v.su} dice${n} que se facturan`)
+    : factura.length === 0 ? (cifra === 1 ? `cosa que ${v.su} no acepta${n}` : `cosas que ${v.su} no acepta${n}`)
+      : (cifra === 1 ? `cosa fuera de lo que ${v.su} da${n} por bueno` : `cosas fuera de lo que ${v.su} da${n} por bueno`)
+  const partes = [[factura, `que ${v.su} dice${n} que se factura${factura.length === 1 ? '' : 'n'}`], [fuera, `que no acepta${n}`], [sinCriterio, 'que no dice si se cobra'],
+    [noSe, 'sin saber todavía'], [no, 'que has contestado que no']].filter(([l]) => l.length).map(([l, t]) => `${l.length} ${t}`)
+  const cambiar = (i) => () => onCambiar(i)
+  const tambienNoAcepta = (p) => p.mas.filter((r) => cobraDe(r, v).etiqueta)
 
   async function mandar() {
     const url = window.location.href
-    const titulo = `Lo que la guía de ${c.nombre} dice que se factura`
+    const titulo = `Lo que ${v.su} de ${c.nombre} no da por bueno`
     try {
       if (navigator.share) { await navigator.share({ title: titulo, url }); return }
     } catch (e) { if (e && e.name === 'AbortError') return }
@@ -53,60 +72,107 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
 
   return (
     <div className="mx-auto max-w-[760px] pb-10 pt-6 sm:pt-10" data-testid="dev-resultado">
-      <p className="mb-6 hidden border-b border-[color:var(--ld-border)] pb-3 text-[15px] font-extrabold text-[color:var(--ld-text)] print:block">{MARCA.nombre} · ¿Qué te van a cobrar al devolverlo?</p>
+      <p className="mb-6 hidden border-b border-[color:var(--ld-border)] pb-3 text-[15px] font-extrabold text-[color:var(--ld-text)] print:flex print:justify-between" data-testid="dev-impresion-cabecera">
+        <span>{MARCA.nombre} · ¿Qué te van a cobrar al devolverlo?</span><span className="font-mono text-[13px] font-medium">Hecho el {hoy()}</span>
+      </p>
       <div className="flex items-center justify-between gap-3 text-[14px] text-[color:var(--ld-muted)]">
         <span>Si lo devolvieras hoy</span>
         <span className="font-mono text-[13px]">{c.nombre} · {vehiculo}</span>
       </div>
 
       <div className="mt-5 flex items-end gap-4">
-        <b className={`ld-titular text-[72px] leading-[0.82] tabular-nums ${factura.length ? 'text-[color:var(--ld-warn)]' : 'text-[color:var(--ld-ok)]'}`} data-testid="dev-cifra">{factura.length}</b>
-        <h2 className="pb-1 text-[18px] font-semibold leading-tight text-[color:var(--ld-text)] sm:text-[20px]">
-          {factura.length === 1 ? 'cosa que su guía dice que se factura' : 'cosas que su guía dice que se facturan'}
-        </h2>
+        <b className={`ld-titular text-[72px] leading-[0.82] tabular-nums ${cifra ? 'text-[color:var(--ld-warn)]' : 'text-[color:var(--ld-text)]'}`} data-testid="dev-cifra">{cifra}</b>
+        <h2 className="pb-1 text-[18px] font-semibold leading-tight text-[color:var(--ld-text)] sm:text-[20px]" data-testid="dev-titular">{titular}</h2>
       </div>
-      <p className="mt-3 text-[14.5px] text-[color:var(--ld-muted)]">
-        De {pasos.length} preguntas: {dentro.length} dentro de lo que acepta{fuera.length + sinCriterio.length ? `, ${fuera.length + sinCriterio.length} que su guía no deja claras` : ''}{noSe.length ? `, ${noSe.length} sin saber todavía` : ''}.
-      </p>
+      <p className="mt-3 text-[14.5px] text-[color:var(--ld-muted)]" data-testid="dev-desglose">De {pasos.length} preguntas: {partes.join(', ')}.</p>
+      <Vigencia doc={doc} className="mt-4" />
+      {c.tipo === 'alquiler' && c.aviso && <p className="mt-4 border-l-[3px] border-[color:var(--ld-ambar)] pl-3 text-[14px] leading-snug text-[color:var(--ld-text2)]" data-testid="dev-alquiler">{c.aviso}</p>}
 
       {factura.length > 0 && (
-        <Bloque titulo="Lo que su guía dice que se factura" testid="dev-factura">
-          {factura.map(({ p, i }) => <Item key={i} titulo={p.hallazgo} nota={notas[i]} texto={p.r.se_cobra} pagina={p.r.pagina} testid="dev-item-factura" />)}
+        <Bloque titulo={`Lo que ${v.su} dice${n} que se factura`} cuenta={factura.length} testid="dev-factura"
+          pie={bases.map((b) => (
+            <p key={b.cita} className="mt-2.5 text-[13.5px] leading-snug text-[color:var(--ld-muted)]" data-testid="dev-base-cobro">
+              {b.fuente ? <>Lo dice <a href={b.url} target="_blank" rel="noopener noreferrer" className={ENLACE_TEXTO}>{b.fuente.charAt(0).toLowerCase() + b.fuente.slice(1)}</a></> : <>Lo dice{n ? 'n' : ''} en su <Pag n={b.pagina} /></>}: «{b.cita}».
+            </p>
+          ))}>
+          {factura.map(({ p, i }) => (
+            <Item key={i} titulo={p.hallazgo} nota={notas[i]} etiqueta={p.hallazgo} onCambiar={cambiar(i)} testid="dev-item-factura">
+              <p>{p.r.se_cobra} <Pag n={p.r.pagina} /></p>
+              {p.con.map((r) => <p key={r.indice}>{textoNoAcepta(r, doc, 'factura')} <Pag n={r.pagina} /></p>)}
+              <NotaPaso p={p} />
+            </Item>
+          ))}
         </Bloque>
       )}
       {fuera.length > 0 && (
-        <Bloque titulo="Fuera de lo que su guía da por bueno" testid="dev-fuera">
-          {fuera.map(({ p, i }) => <Item key={i} titulo={p.hallazgo} nota={notas[i]} texto={`Acepta: ${p.r.no_se_cobra}${p.r.se_cobra ? ` Y dice: ${p.r.se_cobra}` : ' No dice cómo lo cobra.'}`} pagina={p.r.pagina} />)}
+        <Bloque titulo={`Lo que ${v.su} no acepta${n}`} cuenta={fuera.length} testid="dev-fuera">
+          {fuera.map(({ p, i }) => (
+            <Item key={i} titulo={p.hallazgo} nota={notas[i]} etiqueta={p.hallazgo} onCambiar={cambiar(i)} testid="dev-item-fuera">
+              <p>{p.r.se_cobra ?? v.soloAcepta} <Pag n={p.r.pagina} /></p>
+              {p.con.map((r) => <p key={r.indice}>{r.se_cobra ?? v.soloAcepta} <Pag n={r.pagina} /></p>)}
+              <p className="text-[color:var(--ld-muted)]">No dice cómo lo cobra.</p>
+              <NotaPaso p={p} />
+            </Item>
+          ))}
         </Bloque>
       )}
       {sinCriterio.length > 0 && (
-        <Bloque titulo="Lo que su guía no dice si se cobra" testid="dev-sin-criterio">
-          {sinCriterio.map(({ p, i }) => <Item key={i} titulo={p.hallazgo} nota={notas[i]} texto={[p.r.se_cobra, p.nota].filter(Boolean).join(' ')} pagina={p.r.pagina} />)}
+        <Bloque titulo={`Lo que ${v.su} no dice${n} si se cobra`} cuenta={sinCriterio.length} testid="dev-sin-criterio">
+          {sinCriterio.map(({ p, i }) => (
+            <Item key={i} titulo={p.hallazgo} nota={notas[i]} etiqueta={p.hallazgo} onCambiar={cambiar(i)} testid="dev-item-sin-criterio">
+              <p>{p.r.se_cobra ?? v.soloAcepta} <Pag n={p.r.pagina} /></p>
+              <NotaPaso p={p} />
+            </Item>
+          ))}
         </Bloque>
       )}
       {noSe.length > 0 && (
         <Bloque titulo="Lo que no sabes todavía" cuenta={noSe.length} testid="dev-nose-lista">
-          {noSe.map(({ p, i }) => <Item key={i} titulo={p.pregunta} texto={`${zonaNombre(p.zona)}. Su guía no lo cobra si: ${p.r.no_se_cobra}`} pagina={p.r.pagina} />)}
+          {noSe.map(({ p, i }) => (
+            <Item key={i} titulo={p.pregunta} etiqueta={etiquetaPaso(p)} onCambiar={cambiar(i)}>
+              <p>{zonaNombre(p.zona)}. {textoAcepta(p.r, doc)} <Pag n={p.r.pagina} /></p>
+              <NotaPaso p={p} />
+            </Item>
+          ))}
           {consejos.length > 0 && (
             <li className="border-t border-[color:var(--ld-border)] py-3.5 text-[14px] leading-snug text-[color:var(--ld-text2)]">
-              <b className="font-semibold text-[color:var(--ld-text)]">Lo que recomienda su guía para mirarlo:</b> {consejos.join(' ')}
+              <b className="font-semibold text-[color:var(--ld-text)]">Lo que recomienda {v.su} para mirarlo:</b> {consejos.join(' ')}
             </li>
           )}
         </Bloque>
       )}
-      {dentro.length > 0 && (
-        <Bloque titulo="Dentro de lo que su guía acepta" cuenta={dentro.length} testid="dev-dentro">
-          {dentro.map(({ p, i }) => <Item key={i} titulo={etiquetaPaso(p)} texto={`Contestaste que no a: ${p.pregunta}`} pagina={p.r.pagina} />)}
+      {no.length > 0 && (
+        <Bloque titulo="Lo que has contestado que no" cuenta={no.length} testid="dev-no-lista">
+          {no.map(({ p, i }) => {
+            const otras = tambienNoAcepta(p)
+            return (
+              <Item key={i} titulo={etiquetaPaso(p)} etiqueta={etiquetaPaso(p)} onCambiar={cambiar(i)} testid="dev-item-no">
+                <p>Contestaste que no a: {p.pregunta} <Pag n={p.r.pagina} /></p>
+                {otras.length > 0 && (
+                  <p className="text-[13.5px] text-[color:var(--ld-muted)]" data-testid="dev-sin-preguntar">
+                    <b className="font-semibold text-[color:var(--ld-text2)]">Sin preguntar, {v.su} tampoco acepta{n} en esta zona:</b>{' '}
+                    {otras.map((r, k) => <span key={r.indice}>{r.dano.charAt(0).toLowerCase() + r.dano.slice(1)} (<Pag n={r.pagina} className="text-[11.5px]" />){k < otras.length - 1 ? '; ' : '.'}</span>)}
+                  </p>
+                )}
+                <NotaPaso p={p} />
+              </Item>
+            )
+          })}
         </Bloque>
       )}
       {aparte.length > 0 && (
-        <Bloque titulo="Más cosas que pide su guía" testid="dev-aparte">
-          {aparte.map((r) => <Item key={r.indice} titulo={r.dano} texto={r.se_cobra ? `${r.no_se_cobra} Se cobra: ${r.se_cobra}` : r.no_se_cobra} pagina={r.pagina} />)}
+        <Bloque titulo={`Más cosas que pide${n} ${v.su}`} testid="dev-aparte">
+          {aparte.map((r) => (
+            <Item key={r.indice} titulo={r.dano}>
+              <p>{textoAcepta(r, doc)}</p>
+              <p>{textoNoAcepta(r, doc)} <Pag n={r.pagina} /></p>
+            </Item>
+          ))}
         </Bloque>
       )}
 
       <section className="mt-9 [break-inside:avoid-page]" data-testid="dev-proceso">
-        <h3 className="text-[18px] font-bold tracking-[-0.01em] text-[color:var(--ld-text)]">Lo que dice su guía de la devolución</h3>
+        <h3 className="text-[18px] font-bold tracking-[-0.01em] text-[color:var(--ld-text)]">Lo que dice{n} {v.su} de la devolución</h3>
         <dl className="mt-2.5 border-b border-[color:var(--ld-border)] text-[14px] leading-snug">
           {[['Quién lo revisa', pr.quien_inspecciona], ['Qué te dan', pr.informe_al_cliente], ['¿Se puede reparar antes?', pr.se_puede_reparar_antes], ['Plazo para discutirlo', pr.plazo_para_discutir]]
             .filter(([, t]) => t).map(([k, t]) => (
@@ -117,7 +183,7 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
         </dl>
       </section>
 
-      <p className="mt-8 border-l-[3px] border-[color:var(--ld-ambar)] pl-3 text-[15px] font-semibold leading-snug text-[color:var(--ld-text)]" data-testid="dev-aviso">{AVISO}</p>
+      <p className="mt-8 border-l-[3px] border-[color:var(--ld-ambar)] pl-3 text-[15px] font-semibold leading-snug text-[color:var(--ld-text)]" data-testid="dev-aviso">{avisoDe(c)}</p>
       <Fuente doc={doc} className="mt-4" />
 
       <div className="mt-8 grid gap-2.5 sm:grid-cols-2 print:hidden">
@@ -125,15 +191,17 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
         <button type="button" onClick={mandar} className={`${BTN_SECUNDARIO} w-full`} data-testid="dev-mandar">Mandárselo a alguien</button>
       </div>
       <p role="status" aria-live="polite" className="mt-2 min-h-[20px] break-all text-[13.5px] text-[color:var(--ld-ok)] print:hidden" data-testid="dev-copiado">{copiado}</p>
-      <p className="mt-1 text-[13.5px] text-[color:var(--ld-muted)] print:hidden">El resultado va en el propio enlace: no se guarda en ningún servidor.</p>
+      <p className="mt-1 text-[13.5px] text-[color:var(--ld-muted)] print:hidden">El resultado va en el propio enlace: no se guarda en nuestros servidores. Si lo mandas, queda donde lo mandes.</p>
       <div className="mt-5 flex flex-wrap gap-x-6 gap-y-1 text-[14.5px] print:hidden">
-        <button type="button" onClick={onRevisar} className={`${ENLACE_TEXTO} min-h-[44px]`} data-testid="dev-revisar">Cambiar una respuesta</button>
-        <button type="button" onClick={onEmpezar} className={`${ENLACE_TEXTO} min-h-[44px]`}>Empezar con otro vehículo</button>
+        <button type="button" onClick={onEmpezar} className={`${ENLACE_TEXTO} min-h-[44px]`} data-testid="dev-otro">Empezar con otro vehículo</button>
         <a href={`/devolucion-renting/${compania}`} className={`${ENLACE_TEXTO} inline-flex min-h-[44px] items-center`}>Ver todos los criterios de {c.nombre}</a>
       </div>
       <div className="mt-6 print:hidden"><Mandanosla doc={doc} /></div>
       <div className="mt-8"><PuertaFds /></div>
-      <p className="mt-6 hidden text-[12px] text-[color:var(--ld-muted)] print:block">Hecho con la herramienta pública de devolución de {MARCA.nombre}: {typeof window !== 'undefined' ? window.location.host : ''}/devolucion-renting. Nada de esto se guarda en ningún servidor.</p>
+      <div className="mt-6 hidden text-[12px] leading-snug text-[color:var(--ld-muted)] print:block" data-testid="dev-impresion-pie">
+        <p>Hecho el {hoy()} con la herramienta pública de devolución de {MARCA.nombre}. Nada de esto se guarda en nuestros servidores.</p>
+        <p className="mt-1 break-all">Este resultado, en línea: {typeof window !== 'undefined' ? window.location.href : ''}</p>
+      </div>
     </div>
   )
 }

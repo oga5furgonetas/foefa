@@ -1,0 +1,536 @@
+{
+ "leido": true,
+ "motivo_no_leido": null,
+ "compania": "BMW Financial Services (BMW Bank GmbH, sucursal en España)",
+ "nombre_del_documento": "Manual de devolución de vehículos. BMW Financial Services",
+ "url_leida": "https://www.bmw.es/content/dam/bmw/marketES/bmw_es/MANUAL-DE-DEVOLUCI%C3%93N-DE-VEH%C3%8DCULOS-BMW.pdf",
+ "edicion": "El documento no muestra fecha, versión ni código en ninguna página. Pista: los metadatos del PDF dicen que se hizo con Canva el 30-06-2026 (CreationDate y ModDate D:20260630095908).",
+ "paginas": 17,
+ "aplica_a": "turismo",
+ "reglas": [
+  {
+   "zona": "pintura",
+   "dano": "Impactos leves en la pintura (laca y color), tipo gravilla",
+   "no_se_cobra": "Hasta 3 impactos de 1 mm que no estén concentrados en una superficie del tamaño de un A4.",
+   "se_cobra": "Retoque o corrección: hasta 5 impactos de 1 mm no concentrados en un A4. Pintar: impactos con corrosión de más de 1 mm, más de 5 impactos o concentrados en un A4.",
+   "medida": {
+    "que": "diametro",
+    "limite": 1,
+    "unidad": "mm",
+    "sentido": "hasta"
+   },
+   "maximo": "3 impactos, no concentrados en un A4",
+   "condicion": "Que no se concentren en una superficie de un A4.",
+   "aplica_a": "turismo",
+   "pagina": 6,
+   "cita": "3 impactos de 1 mm que no se concentren en una superficie de un A4."
+  },
+  {
+   "zona": "pintura",
+   "dano": "Arañazos en los laterales de la carrocería",
+   "no_se_cobra": "Hasta 2 arañazos por lateral de hasta 30 mm, por debajo de la línea superior del pase de rueda.",
+   "se_cobra": "Corrección: 2 arañazos por lateral de entre 30 y 40 mm, nunca por encima de la línea superior del pase de rueda. Pintar: los que superen esas condiciones.",
+   "medida": {
+    "que": "largo",
+    "limite": 30,
+    "unidad": "mm",
+    "sentido": "hasta"
+   },
+   "maximo": "2 por lateral",
+   "condicion": "Que no estén por encima de la línea superior del pase de rueda.",
+   "aplica_a": "turismo",
+   "pagina": 6,
+   "cita": "2 arañazos por lateral de hasta 30 mm"
+  },
+  {
+   "zona": "pintura",
+   "dano": "Arañazos en techo, capó, portón o por encima de la línea del pase de rueda",
+   "no_se_cobra": "La guía no admite ninguno en estas zonas.",
+   "se_cobra": "Se pintan: arañazos en techo, capó, portón o por encima de la línea superior del pase de rueda.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 6,
+   "cita": "Arañazos en techo, capó, portón o por encima de la línea superior del pase de rueda."
+  },
+  {
+   "zona": "pintura",
+   "dano": "Arañazos en la pintura (resumen final del manual)",
+   "no_se_cobra": "Arañazos que no superen los 3 cm de diámetro, como máximo 2 por panel.",
+   "se_cobra": "Lo que supere eso (el resumen no detalla cómo se cobra).",
+   "medida": {
+    "que": "diametro",
+    "limite": 3,
+    "unidad": "cm",
+    "sentido": "hasta"
+   },
+   "maximo": "2 por panel",
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 16,
+   "cita": "Se aceptan sin valorar arañazos que no superen los 3 cm de diámetro. Máximo 2 por panel."
+  },
+  {
+   "zona": "carroceria",
+   "dano": "Leves impactos (bollos) en la carrocería",
+   "no_se_cobra": "1 impacto por lateral de hasta 20 mm, por debajo de la línea superior del pase de rueda, que no afecte a la laca ni esté en vértices o aristas. No vale en techo, capó, portón ni en piezas ya repintadas.",
+   "se_cobra": "Corrección: hasta 1 leve impacto de 30 mm por lateral; por encima de la línea del pase de rueda, techo, capó o portón, no más de 1 por pieza. Pintar: más de 1 impacto por lateral, en techo, capó o portón, y cuando supere 30 mm de diámetro.",
+   "medida": {
+    "que": "diametro",
+    "limite": 20,
+    "unidad": "mm",
+    "sentido": "hasta"
+   },
+   "maximo": "1 por lateral",
+   "condicion": "Por debajo de la línea superior del pase de rueda, sin afectar a la laca, fuera de vértices y aristas; excluidos techo, capó, portón y elementos repintados.",
+   "aplica_a": "turismo",
+   "pagina": 7,
+   "cita": "1 impacto por lateral de hasta 20 mm siempre por debajo de la línea superior"
+  },
+  {
+   "zona": "carroceria",
+   "dano": "Daños de carrocería (resumen final del manual)",
+   "no_se_cobra": "Daños de hasta 2 cm de diámetro en piezas verticales, como máximo 1 por panel.",
+   "se_cobra": "Lo que supere eso (el resumen no detalla cómo se cobra).",
+   "medida": {
+    "que": "diametro",
+    "limite": 2,
+    "unidad": "cm",
+    "sentido": "hasta"
+   },
+   "maximo": "1 por panel",
+   "condicion": "Solo en piezas verticales.",
+   "aplica_a": "turismo",
+   "pagina": 16,
+   "cita": "Se aceptan daños de hasta 2 cm de diámetro en piezas verticales. Máximo 1 por panel."
+  },
+  {
+   "zona": "pintura",
+   "dano": "Daños que se quitan puliendo (solo afectan a la laca)",
+   "no_se_cobra": "Daños que solo afectan a la capa de laca, de no más de 40 mm «en capas verticales» (así lo escribe la guía; seguramente quiere decir piezas verticales) y no más de 4 ocasiones.",
+   "se_cobra": "Corrección: los que superen eso o afecten a la estética del vehículo (arañazos, resinas, etc.).",
+   "medida": {
+    "que": "largo",
+    "limite": 40,
+    "unidad": "mm",
+    "sentido": "hasta"
+   },
+   "maximo": "4 ocasiones",
+   "condicion": "Que solo afecten a la capa de laca; el límite de 40 mm la guía lo pone «en capas verticales».",
+   "aplica_a": "turismo",
+   "pagina": 7,
+   "cita": "No superior a 40 mm en capas verticales. No más de 4 ocasiones."
+  },
+  {
+   "zona": "paragolpes",
+   "dano": "Roces y arañazos en paragolpes",
+   "no_se_cobra": "1 roce o arañazo leve por paragolpes que no supere los 30 mm.",
+   "se_cobra": "Retocar o corrección: 1 arañazo de entre 20 y 40 mm. No se acepta: 1 arañazo de más de 40 mm o más de dos incidencias por paragolpes.",
+   "medida": {
+    "que": "largo",
+    "limite": 30,
+    "unidad": "mm",
+    "sentido": "hasta"
+   },
+   "maximo": "1 por paragolpes",
+   "condicion": "Que sea leve.",
+   "aplica_a": "turismo",
+   "pagina": 8,
+   "cita": "1 leve roce o arañazo por paragolpers que no supere los 30 mm."
+  },
+  {
+   "zona": "retrovisores",
+   "dano": "Componentes pintados (carcasas de retrovisores y similares)",
+   "no_se_cobra": "Roces leves que no superen 2 mm, siempre que no afecten a la pintura ni a la estética.",
+   "se_cobra": "Corrección: daños que afecten a la laca y al color o que superen 2 mm. Pintar: daños en laca y color o en el material base, holguras, roturas o mal funcionamiento.",
+   "medida": {
+    "que": "otro",
+    "limite": 2,
+    "unidad": "mm",
+    "sentido": "hasta"
+   },
+   "maximo": null,
+   "condicion": "Que no afecte a la pintura ni a la estética del vehículo.",
+   "aplica_a": "turismo",
+   "pagina": 8,
+   "cita": "Leves roces que no superen 2 mm, siempre que no afecte a la pintura"
+  },
+  {
+   "zona": "interior",
+   "dano": "Quemaduras en tejido de asientos y respaldos",
+   "no_se_cobra": "Quemadura superficial de no más de 4 mm.",
+   "se_cobra": "Corrección: cuando la quemadura o rotura ha decolorado, degradado o traspasado el material, nunca de más de 6 mm. No se acepta lo que no cumpla esas condiciones.",
+   "medida": {
+    "que": "otro",
+    "limite": 4,
+    "unidad": "mm",
+    "sentido": "hasta"
+   },
+   "maximo": null,
+   "condicion": "Que sea superficial.",
+   "aplica_a": "turismo",
+   "pagina": 9,
+   "cita": "Quemadura superficial en tejidos de respaldo y asientos no superior a 4 mm."
+  },
+  {
+   "zona": "interior",
+   "dano": "Marcas en guarnecidos o asientos de cuero",
+   "no_se_cobra": "Una sola marca por vehículo de no más de 4 mm.",
+   "se_cobra": "Corrección: cuando la quemadura o rotura ha decolorado, degradado o traspasado el material, nunca de más de 6 mm. No se acepta lo que no cumpla esas condiciones.",
+   "medida": {
+    "que": "otro",
+    "limite": 4,
+    "unidad": "mm",
+    "sentido": "hasta"
+   },
+   "maximo": "1 por vehículo",
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 9,
+   "cita": "Guarnecidos o asientos de cuero con una sola marca por vehículo no superior a 4 mm."
+  },
+  {
+   "zona": "interior",
+   "dano": "Quemaduras y cortes en moqueta del piso y del maletero",
+   "no_se_cobra": "Quemadura superficial en moqueta de no más de 5 mm que no afecte al aspecto.",
+   "se_cobra": "Corrección: quemaduras o cortes que afecten al material y no superen 10 mm. No se acepta: más de 10 mm o en zonas de paso o uso frecuente.",
+   "medida": {
+    "que": "otro",
+    "limite": 5,
+    "unidad": "mm",
+    "sentido": "hasta"
+   },
+   "maximo": null,
+   "condicion": "Que sea superficial y no afecte al aspecto.",
+   "aplica_a": "turismo",
+   "pagina": 9,
+   "cita": "Quemadura superficial en moquetas que no supere los 5 mm y no afecte al aspecto."
+  },
+  {
+   "zona": "interior",
+   "dano": "Marcas y roces en revestimientos de plástico, vinilos y similares",
+   "no_se_cobra": "Marcas o roces de uso de menos de 20 mm.",
+   "se_cobra": "Corrección: roces leves sin pérdida de material de no más de 60 mm. No se acepta: roces profundos, roturas, cortes y roces de más de 60 mm.",
+   "medida": {
+    "que": "largo",
+    "limite": 20,
+    "unidad": "mm",
+    "sentido": "menos_de"
+   },
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 10,
+   "cita": "Marcas o roces de uso. Siempre inferiores a 20 mm."
+  },
+  {
+   "zona": "interior",
+   "dano": "Guarnecido del techo interior",
+   "no_se_cobra": "La guía no admite ningún daño en el techo interior.",
+   "se_cobra": "Se valoran como sustitución: roces, quemaduras, deformaciones, deshilachados o roturas.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 10,
+   "cita": "Serán valorados como sustitución: roces, quemaduras, deformaciones, deshilachados o roturas."
+  },
+  {
+   "zona": "interior",
+   "dano": "Autorradios y pantallas",
+   "no_se_cobra": "Solo los daños que cubra la garantía.",
+   "se_cobra": "Se valoran como sustitución: arañazos, impactos o cualquier daño, salvo lo que cubra la garantía.",
+   "medida": null,
+   "maximo": null,
+   "condicion": "Exceptuando daños que cubra la garantía.",
+   "aplica_a": "turismo",
+   "pagina": 14,
+   "cita": "Serán valorados como sustitución arañazos, impactos o cualquier tipo de daño"
+  },
+  {
+   "zona": "neumaticos",
+   "dano": "Profundidad del dibujo de los neumáticos",
+   "no_se_cobra": "Neumáticos con 1,6 mm o más de profundidad total del dibujo (es un mínimo, no un máximo), siempre que no haya marcas, medidas o dibujos distintos en el mismo eje.",
+   "se_cobra": "Neumáticos por debajo de 1,6 mm o con desgaste irregular en toda su superficie.",
+   "medida": null,
+   "maximo": null,
+   "condicion": "Mínimo 1,6 mm de dibujo (iguales o superiores a 1,6 mm, según la página 16).",
+   "aplica_a": "turismo",
+   "pagina": 11,
+   "cita": "Neumáticos que presenten medidas del calado total del dibujo de 1,6 mm."
+  },
+  {
+   "zona": "neumaticos",
+   "dano": "Estado, marca y tipo de los neumáticos",
+   "no_se_cobra": "La guía no da tolerancia para estos casos.",
+   "se_cobra": "No se aceptan: cortes, abombamientos, pérdidas de material o tacos deformados; pinchados o deshinchados; marcas, medidas o dibujos distintos en el mismo eje; neumáticos que no sean de primeras marcas; recauchutados en cualquiera de los cinco; neumáticos estacionales; los que no cumplan la especificación de origen (Runflat).",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 11,
+   "cita": "Marcas, medidas o dibujos diferentes en el mismo eje"
+  },
+  {
+   "zona": "llantas",
+   "dano": "Roces en el borde de las llantas",
+   "no_se_cobra": "Roces en el borde de la llanta que sumados no pasen de 40 mm (el texto añade «o exista pérdida de material», frase confusa).",
+   "se_cobra": "Reparación: los que no cumplan lo anterior. Sustitución: los que superen ampliamente esas medidas, dañen gravemente el material base o deformen la llanta de forma que no se pueda equilibrar.",
+   "medida": {
+    "que": "largo",
+    "limite": 40,
+    "unidad": "mm",
+    "sentido": "hasta"
+   },
+   "maximo": "40 mm sumando todos los roces de la llanta",
+   "condicion": "La medida es la suma de todos los roces del borde.",
+   "aplica_a": "turismo",
+   "pagina": 11,
+   "cita": "Roces en el borde de la llanta que en la suma de ellos no superen los 40 mm"
+  },
+  {
+   "zona": "lunas",
+   "dano": "Impactos en el parabrisas",
+   "no_se_cobra": "Hasta 5 impactos leves que no pasen de 2 mm de diámetro, fuera del ángulo de visión del conductor y que no puedan distraerle.",
+   "se_cobra": "Reparación especial: como máximo un impacto con fisuras, fuera del ángulo de visión, con la zona fisurada de no más de 2 mm de diámetro. Sustitución: si no se cumplen las condiciones anteriores.",
+   "medida": {
+    "que": "diametro",
+    "limite": 2,
+    "unidad": "mm",
+    "sentido": "hasta"
+   },
+   "maximo": "5 por parabrisas",
+   "condicion": "Fuera del ángulo de visión del conductor (página 12). La página 16 añade, con una frase mal construida, que tampoco valen si, aun estando fuera, pueden distraer su atención.",
+   "aplica_a": "turismo",
+   "pagina": 12,
+   "cita": "5 leves impactos, que no superen los 2 mm y fuera del ángulo de visión del conductor."
+  },
+  {
+   "zona": "lunas",
+   "dano": "Arañazos en lunas laterales y luneta trasera",
+   "no_se_cobra": "La guía no lo dice expresamente. Solo dice lo que no se acepta; de ahí se deduce, sin que lo escriba, que un único arañazo de más de 20 mm o arañazos de 20 mm o menos no entrarían en esa frase.",
+   "se_cobra": "No se acepta: más de 1 arañazo de más de 20 mm, cristales no homologados, etc. (no dice si se repara o se sustituye).",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 15,
+   "cita": "Más de 1 arañazo superior a 20 mm, cristales no homologados, etc."
+  },
+  {
+   "zona": "faros_y_pilotos",
+   "dano": "Roces e impactos en faros y pilotos (grupos ópticos)",
+   "no_se_cobra": "Roces leves e impactos leves de 1 mm sin astillamientos.",
+   "se_cobra": "Corrección: roces leves sin pérdida de material que se quitan con pulido. No se acepta: roturas, impactos de más de 1 mm, astillamientos y pilotos con condensación interior.",
+   "medida": {
+    "que": "diametro",
+    "limite": 1,
+    "unidad": "mm",
+    "sentido": "hasta"
+   },
+   "maximo": null,
+   "condicion": "Sin astillamientos.",
+   "aplica_a": "turismo",
+   "pagina": 12,
+   "cita": "Leves roces, leves impactos de 1 mm que no presenten astillamientos."
+  },
+  {
+   "zona": "carroceria",
+   "dano": "Cantos de puertas, por debajo de la línea del pase de rueda",
+   "no_se_cobra": "Daños que sumados no pasen de 40 mm, por debajo de la línea superior del pase de ruedas.",
+   "se_cobra": "No se aceptan los daños que superen esas condiciones.",
+   "medida": {
+    "que": "largo",
+    "limite": 40,
+    "unidad": "mm",
+    "sentido": "hasta"
+   },
+   "maximo": "40 mm sumando todos los daños",
+   "condicion": "Por debajo de la línea superior del pase de ruedas.",
+   "aplica_a": "turismo",
+   "pagina": 13,
+   "cita": "Daños que en su suma no superen los 40 mm"
+  },
+  {
+   "zona": "carroceria",
+   "dano": "Cantos de puertas, por encima de la línea del pase de rueda",
+   "no_se_cobra": "Daños que no pasen de 20 mm si están por encima de la línea superior del pase de ruedas.",
+   "se_cobra": "No se aceptan los daños que superen esas condiciones.",
+   "medida": {
+    "que": "largo",
+    "limite": 20,
+    "unidad": "mm",
+    "sentido": "hasta"
+   },
+   "maximo": null,
+   "condicion": "Por encima de la línea superior del pase de ruedas.",
+   "aplica_a": "turismo",
+   "pagina": 13,
+   "cita": "de encontrarse por encima, que no superen los 20 mm."
+  },
+  {
+   "zona": "carroceria",
+   "dano": "Roces en embellecedores de plástico",
+   "no_se_cobra": "Roces leves de menos de 10 mm que no afecten al aspecto general de la pieza.",
+   "se_cobra": "Corrección: roces leves de entre 10 y 30 mm. No se aceptan reparaciones con diferencias claras de tono o deterioradas.",
+   "medida": {
+    "que": "largo",
+    "limite": 10,
+    "unidad": "mm",
+    "sentido": "menos_de"
+   },
+   "maximo": null,
+   "condicion": "Sin afectar al aspecto general de la pieza.",
+   "aplica_a": "turismo",
+   "pagina": 13,
+   "cita": "Leves roces inferiores a 10 mm en elementos de plástico"
+  },
+  {
+   "zona": "carroceria",
+   "dano": "Roces en embellecedores cromados",
+   "no_se_cobra": "Roces leves y superficiales de menos de 20 mm.",
+   "se_cobra": "Corrección: roces leves de entre 10 y 30 mm (así lo dice la guía para embellecedores, sin distinguir plástico y cromado).",
+   "medida": {
+    "que": "largo",
+    "limite": 20,
+    "unidad": "mm",
+    "sentido": "menos_de"
+   },
+   "maximo": null,
+   "condicion": "Que sean superficiales.",
+   "aplica_a": "turismo",
+   "pagina": 13,
+   "cita": "En cromados leves, roces superficiales menores a 20 mm"
+  },
+  {
+   "zona": "carroceria",
+   "dano": "Impactos en embellecedores cromados",
+   "no_se_cobra": "Impactos leves de menos de 10 mm.",
+   "se_cobra": "Lo que supere eso; la guía no detalla más para impactos en cromados.",
+   "medida": {
+    "que": "diametro",
+    "limite": 10,
+    "unidad": "mm",
+    "sentido": "menos_de"
+   },
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 13,
+   "cita": "o leves impactos inferiores a 10 mm."
+  },
+  {
+   "zona": "pintura",
+   "dano": "Reparaciones anteriores mal hechas",
+   "no_se_cobra": "La guía no da tolerancia.",
+   "se_cobra": "No se aceptan reparaciones con diferencias claras de tono o deterioradas. El perito puede aplicar una reserva de daños si lo ve necesario.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 13,
+   "cita": "Reparaciones que presenten diferencias claras de tonalidad o se encuentren deterioradas."
+  },
+  {
+   "zona": "limpieza",
+   "dano": "Limpieza general a la entrega",
+   "no_se_cobra": "El vehículo limpio por dentro y por fuera.",
+   "se_cobra": "Si no se entrega limpio, se podría reclamar el coste de la limpieza (sin importe publicado).",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 3,
+   "cita": "En caso contrario, se podría reclamar el coste de la limpieza."
+  },
+  {
+   "zona": "limpieza",
+   "dano": "Suciedad y manchas en el interior",
+   "no_se_cobra": "Retirar papeles, arena de playa y envoltorios en cantidad normal.",
+   "se_cobra": "Corrección: manchas que se quitan con una limpieza simple. Sustitución: manchas abrasivas, de humedad, decoloraciones, etc.",
+   "medida": null,
+   "maximo": null,
+   "condicion": "En cantidad normal.",
+   "aplica_a": "turismo",
+   "pagina": 14,
+   "cita": "Retirada de papeles, arena de playa y envoltorios en cantidad normal."
+  },
+  {
+   "zona": "documentacion_y_llaves",
+   "dano": "Cerraduras y llaves",
+   "no_se_cobra": "La guía no da tolerancia.",
+   "se_cobra": "Sustitución: cerraduras forzadas, cilindros o llaves que no sean originales.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 15,
+   "cita": "Cerraduras forzadas, cilindros o llaves no originales."
+  },
+  {
+   "zona": "documentacion_y_llaves",
+   "dano": "Documentación, llaves y accesorios a entregar",
+   "no_se_cobra": "Entregar: ficha técnica y permiso de circulación originales, impuesto de circulación del año pagado, todos los juegos de llaves, manuales y libro de mantenimiento original sellado, accesorios (navegador, etc.); además, DNI del titular o, en empresas, CIF, escrituras, poderes y la factura de venta por el Valor Futuro.",
+   "se_cobra": "La guía no dice qué se cobra si falta algo.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 4,
+   "cita": "Todos los juegos de llaves."
+  },
+  {
+   "zona": "mecanica",
+   "dano": "Testigos de avería encendidos en el cuadro",
+   "no_se_cobra": "La guía no da tolerancia: cualquier aviso se anota.",
+   "se_cobra": "Si además hay encendido un testigo de avería según el manual de usuario, el vehículo no se puede devolver y se factura el Valor Final del contrato.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 15,
+   "cita": "EL VEHÍCULO NO PODRÁ SER DEVUELTO, facturándose el Valor Final establecido en contrato."
+  },
+  {
+   "zona": "mecanica",
+   "dano": "Mantenimientos",
+   "no_se_cobra": "Haber cumplido el programa de mantenimientos en un Servicio Oficial BMW.",
+   "se_cobra": "La guía lo pone como condición para devolver, sin decir qué se cobra si no se cumple.",
+   "medida": null,
+   "maximo": null,
+   "condicion": "En un Servicio Oficial BMW.",
+   "aplica_a": "turismo",
+   "pagina": 3,
+   "cita": "Es necesario haber cumplido el programa de mantenimientos en un Servicio Oficial BMW."
+  },
+  {
+   "zona": "otros",
+   "dano": "Exceso de kilómetros",
+   "no_se_cobra": "Los kilómetros dentro de lo contratado.",
+   "se_cobra": "El exceso de kilómetros se penaliza según el contrato (sin importe en la guía).",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 3,
+   "cita": "El exceso de kilometraje estará sujeto a penalización según contrato."
+  }
+ ],
+ "precios_publicados": [],
+ "proceso": {
+  "quien_inspecciona": "Un perito designado por BMW Financial Services (su proveedor de peritaciones), en el Concesionario Oficial BMW donde se entrega el coche, con un medidor de daños para carrocería y neumáticos. Deben llamar al cliente para la cita; si 48 horas antes del vencimiento no lo han hecho, hay que contactar con Gestión de Vencimientos (91 335 0772, vencimientos@bmw.es).",
+  "informe_al_cliente": "Se firman los «controles de devolución» (titular, recepcionista del taller y perito). La guía no dice si el cliente recibe un informe con fotos.",
+  "plazo_para_discutir": "La guía no da plazo para discutir la peritación; solo remite a Atención al Cliente (vencimientos@bmw.es) para dudas.",
+  "se_puede_reparar_antes": "Sí. Si el coche no se devuelve totalmente reparado, hay que dar parte al seguro para que se abra una orden de reparación en el concesionario de entrega y así evitar que se cobren los daños de la peritación.",
+  "recomendaciones_antes_de_devolver": [
+   "Entregarlo limpio por dentro y por fuera.",
+   "Mantener vigente el seguro a todo riesgo y no darlo de baja hasta confirmar que la aseguradora cubre todos los daños detectados.",
+   "Comprobar si la aseguradora tiene concierto con el Concesionario Oficial BMW donde se hará la entrega.",
+   "Tener hecho el programa de mantenimientos en un Servicio Oficial BMW.",
+   "Llevar todos los juegos de llaves, la documentación y los accesorios.",
+   "Estar al corriente de impuestos, tasas y cargas que afecten a la transferencia."
+  ]
+ },
+ "notas": "Verificado el 14-11-2026: se volvió a bajar el PDF (Chromium sin ventana, 200, application/pdf, 12.920.670 bytes, 17 páginas), idéntico byte a byte al del primer lector.\nSe leyó el texto página a página con pdftotext y además se vieron como imagen las páginas 6, 11, 13 y 14: las fotos son decorativas (coches), no traen medidas.\nMetadatos comprobados: Canva, 30-06-2026, autor «Marketingbmwbank». Sin fecha ni versión visibles.\nLas 34 reglas del primer lector están en el documento con número, unidad, sentido, máximo y página correctos. No se quita ninguna.\nCambio: pulidos (p. 7). La guía dice «en capas verticales», no «piezas verticales»; corregidas condición y cita (ahora literal).\nCambio: lunas laterales y trasera (p. 15). Aclarado que la guía no dice qué se acepta; lo de no cobrar es solo deducción; medida sigue null.\nCambio: parabrisas. El ángulo de visión es de la p. 12; lo de «distraer su atención» es de la p. 16, con frase mal construida.\nNo se añade ninguna regla: no hay más medidas en el documento; todas las cifras (1, 2, 4, 5, 6, 10, 20, 30, 40, 60 mm; 2 y 3 cm; 1,6 mm; A4) ya están recogidas.\nSiguen las incoherencias que señaló el primer lector: paragolpes 30 mm aceptado frente a corrección «entre 20 y 40 mm»; llantas «o exista pérdida de material»; p. 16 en cm y «por panel» frente a p. 6-7 en mm y «por lateral»; p. 3 dice «tu MINI».\nEs de BMW Financial Services (Valor Futuro/Final, factura de venta a BMW Bank), no renting puro; no habla de furgonetas: todo turismo.\nNo publica precios: precios_publicados vacío.\nGuardado en C:\\Users\\dlvie\\AppData\\Local\\Temp\\claude\\34f2eefc27d3445b\\9022e766-4683-4c72-a196-f839ddac5172\\scratchpad\\crecer\\guias\\bmw.verificado.json"
+}

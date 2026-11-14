@@ -48,7 +48,7 @@ export function consentimiento() {
 export function guardarConsentimiento(anuncios) {
   try { localStorage.setItem(CLAVE, JSON.stringify({ v: 3, anuncios: !!anuncios, at: new Date().toISOString() })) } catch { /* nada */ }
   if (!anuncios) retirarPixel()
-  else if (cargado) permisoPixel(true)
+  else if (cargado) { if (!rutaSinPixel()) permisoPixel(true) }
   else cargarPixel()
 }
 
@@ -173,9 +173,32 @@ export function cookiesMeta() {
   return { ...(fbp ? { fbp } : {}), ...(fbc ? { fbc } : {}) }
 }
 
+/* RUTAS SIN PÍXEL (14-11-2026). En /devolucion-renting el # de la dirección lleva las respuestas y las notas de quien
+   repasa su vehículo, y la página dice «No guardamos nada de tu vehículo». El píxel de Meta manda la dirección entera
+   (con el #) en cada PageView, también en cada cambio del historial, y esa herramienta cambia el historial en cada
+   paso. Así que ahí no se carga ninguno; y si ya estaban cargados (se llegó sin recargar desde otra página), se callan
+   mientras se está en ella (pausarPixeles, que llama DevolucionRenting.jsx). */
+const SIN_PIXEL = /^\/devolucion-renting(\/|$)/
+function rutaSinPixel() {
+  try { return SIN_PIXEL.test(window.location.pathname) } catch { return false }
+}
+
+/** Calla los píxeles ya cargados mientras se está en una ruta sin píxel; devuelve con qué se vuelven a abrir. */
+export function pausarPixeles() {
+  if (typeof window === 'undefined' || !cargado || !aceptado()) return () => {}
+  const f = window.fbq
+  const antes = f ? f.disablePushState : undefined
+  try { if (f) f.disablePushState = true } catch { /* nada */ }
+  permisoPixel(false)
+  return () => {
+    try { if (f) f.disablePushState = antes } catch { /* nada */ }
+    if (aceptado()) permisoPixel(true)
+  }
+}
+
 let cargado = false
 export function cargarPixel() {
-  if (cargado || !aceptado() || typeof window === 'undefined') return
+  if (cargado || !aceptado() || typeof window === 'undefined' || rutaSinPixel()) return
   cargado = true
   /* El fragmento oficial de Meta, sin <script> en línea (la CSP no lo deja). */
   const f = window
@@ -234,7 +257,7 @@ function cargarTikTok() {
    (`meta_event_id` del alta). Con el mismo nombre y el mismo id, Meta lo cuenta UNA vez y no dos; TikTok lo admite
    igual (`event_id`). Sin id, la llamada de siempre, con tres argumentos. */
 export function evento(nombre, datos, eventId) {
-  if (!aceptado()) return
+  if (!aceptado() || rutaSinPixel()) return
   cargarPixel()
   const idMeta = eventId ? [{ eventID: eventId }] : []
   const idTT = eventId ? [{ event_id: eventId }] : []
