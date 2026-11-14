@@ -36,15 +36,20 @@ function apuntarHecho(quien) {
   try { localStorage.setItem(HECHO, [...apuntados(), quien].slice(-20).join(' ')) } catch { /* sin almacén: preguntará la próxima vez */ }
 }
 
-export default function EntradaArranque() {
+/* `onEnCurso(sí/no)`: le dice al Inicio si el arranque está a medias (14-11-2026, ARREGLOS-5 I5). Mientras lo está, el
+   Inicio es SOLO esto: ni atajos a cero ni «Todavía no hay flota». Un servidor sin la ruta o un fallo cuentan como «no». */
+export default function EntradaArranque({ onEnCurso } = {}) {
   const { t, lang } = useT()
   const [estado, setEstado] = useState(null)
   const [llego, setLlego] = useState(null)   // la revisión que ha llegado con esta pantalla abierta
   const pendiente = useRef(false)
+  const aviso = useRef(onEnCurso)
+  aviso.current = onEnCurso
 
   useEffect(() => {
     const quien = quienMira()
-    if (arranqueYaHecho(quien)) return undefined
+    const avisar = (enCurso) => { if (typeof aviso.current === 'function') aviso.current(enCurso) }
+    if (arranqueYaHecho(quien)) { avisar(false); return undefined }
     let vivo = true
     let id = null
     const parar = () => {
@@ -56,13 +61,15 @@ export default function EntradaArranque() {
       if (!vivo || document.visibilityState !== 'visible') return
       getAltaEstado().then((r) => {
         const d = r?.data
-        if (!vivo || !d || !Array.isArray(d.pasos)) return
+        if (!vivo) return
+        if (!d || !Array.isArray(d.pasos)) { avisar(false); return }
         if (pendiente.current && d.paso_actual == null && d.revision) setLlego(d.revision)
         pendiente.current = d.paso_actual != null
         setEstado(d)
+        avisar(d.paso_actual != null)
         // Completo: no se vuelve a preguntar, ni ahora ni la próxima vez que se abra el inicio.
         if (d.paso_actual == null) { apuntarHecho(quien); parar() }
-      }).catch(() => {})
+      }).catch(() => { if (vivo) avisar(false) })
     }
     mirar()
     id = setInterval(mirar, CADA_MS)
@@ -72,33 +79,53 @@ export default function EntradaArranque() {
 
   if (llego) {
     return (
+      // Una línea con regla, como el Repaso del Inicio: la matrícula como pieza, el sello en mono y su botón.
       <section role="status" data-testid="inicio-llego-revision"
-        className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.05] p-4 sm:p-5">
+        className="mb-8 flex flex-wrap items-center justify-between gap-x-6 gap-y-4 border-y border-dark-700 py-5">
         <div className="min-w-0">
-          <h2 className="text-[17px] font-semibold text-dark-50">{t('alta.p4.llego')}</h2>
-          <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-dark-300">
+          <h2 className="text-[17px] font-bold tracking-[-0.01em] text-dark-50">{t('alta.p4.llego')}</h2>
+          <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13.5px] text-dark-400">
             {llego.furgoneta?.matricula && <Matricula texto={llego.furgoneta.matricula} className="text-[13px]" />}
-            <span>{t('alta.p4.recibidaEn')} · <span className="font-mono tabular-nums">{selloDeFecha(llego.recibida_at, { idioma: lang }) || [diaSello(llego.dia, lang, { anio: true }), llego.hora].filter(Boolean).join(' · ')}</span></span>
+            <span>{t('alta.p4.recibidaEn')} · <span className="font-mono tabular-nums text-dark-200">{selloDeFecha(llego.recibida_at, { idioma: lang }) || [diaSello(llego.dia, lang, { anio: true }), llego.hora].filter(Boolean).join(' · ')}</span></span>
           </p>
         </div>
-        <Link to="/panel/repaso" className="btn-primary inline-flex min-h-[44px] items-center gap-1.5 px-4 text-[14px]">
-          {t('alta.p4.repasarla')} <ArrowRight size={15} aria-hidden="true" />
+        <Link to="/panel/repaso" className="btn-primary inline-flex min-h-[52px] w-full items-center justify-center gap-1.5 rounded-xl px-6 text-[15px] font-bold sm:w-auto">
+          {t('alta.p4.repasarla')} <ArrowRight size={16} aria-hidden="true" />
         </Link>
       </section>
     )
   }
   if (!estado || estado.paso_actual == null) return null
   const n = Math.min(4, Math.max(1, Number(estado.paso_actual) || 1))
+  const pasos = Array.isArray(estado.pasos) ? estado.pasos : []
+  /* LA EMPRESA RECIÉN DADA DE ALTA (I5): el Inicio es solo esto. El título dice en qué paso va; debajo, los cuatro
+     pasos en una lista con reglas (los hechos, en gris con «Hecho»; el de ahora, en tinta; los que faltan, apagados);
+     UN botón; y una línea tranquila de lo que vendrá. Sin caja, sin icono. */
   return (
-    <section data-testid="inicio-arranque"
-      className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-dark-700 bg-dark-900/60 p-4 sm:p-5">
-      <div className="min-w-0">
-        <h2 className="text-[17px] font-semibold text-dark-50">{t('alta.inicio.titulo').replace('{n}', n)}</h2>
-        <p className="mt-1 text-[13px] text-dark-400">{t('alta.inicio.ahora').replace('{paso}', t(PASOS[n - 1]))}</p>
-      </div>
-      <Link to="/panel/arranque" className="btn-primary inline-flex min-h-[44px] items-center gap-1.5 px-4 text-[14px]">
-        {t('alta.inicio.seguir')} <ArrowRight size={15} aria-hidden="true" />
+    <section data-testid="inicio-arranque" className="max-w-2xl border-t border-dark-700 pt-7">
+      <h2 className="text-[24px] font-extrabold leading-tight tracking-[-0.03em] text-dark-50 sm:text-[28px]">
+        {t('alta.inicio.titulo').replace('{n}', n)}
+      </h2>
+      <p className="mt-2 text-[15.5px] text-dark-300">{t('alta.inicio.ahora').replace('{paso}', t(PASOS[n - 1]))}</p>
+      <ol className="mt-6 border-t border-dark-800">
+        {PASOS.map((clave, i) => {
+          const hecho = !!pasos[i]?.hecho
+          const ahora = i === n - 1
+          return (
+            <li key={clave} aria-current={ahora ? 'step' : undefined}
+              className="flex min-h-[48px] items-center gap-4 border-b border-dark-800 py-2.5">
+              <span className={`w-6 shrink-0 font-mono text-[13px] tabular-nums ${ahora ? 'text-dark-50' : 'text-dark-500'}`}>{String(i + 1).padStart(2, '0')}</span>
+              <span className={`min-w-0 flex-1 text-[15px] ${ahora ? 'font-bold text-dark-50' : hecho ? 'text-dark-300' : 'text-dark-500'}`}>{t(clave)}</span>
+              {hecho && <span className="shrink-0 text-[13px] font-semibold text-ruta-ok-texto">{t('alta.hecho')}</span>}
+              {ahora && !hecho && <span className="shrink-0 text-[13px] font-semibold text-dark-50">{t('alta.inicio.ahoraCorto')}</span>}
+            </li>
+          )
+        })}
+      </ol>
+      <Link to="/panel/arranque" className="btn-primary mt-7 inline-flex min-h-[52px] w-full items-center justify-center gap-1.5 rounded-xl px-7 text-[15px] font-bold sm:w-auto">
+        {t('alta.inicio.seguir')} <ArrowRight size={16} aria-hidden="true" />
       </Link>
+      <p className="mt-10 text-[14px] text-dark-400">{t('alta.inicio.calma')}</p>
     </section>
   )
 }

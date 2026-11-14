@@ -39,30 +39,30 @@ function Nave({ nave, t, basicosArriba }) {
     && !(basicosArriba && (p.id === 'vehiculos' || p.id === 'conductores')))
   const pendiente = pasos.find((p) => !p.hecho && !p.opcional) || (nave.completa ? null : pasos.find((p) => !p.hecho))
   return (
-    <li className={`rounded-xl border p-3 ${nave.completa ? 'border-emerald-500/15 bg-emerald-500/[0.03]' : 'border-white/[0.07] bg-white/[0.02]'}`}>
+    <li className="border-b border-dark-800 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="font-mono text-[13px] font-semibold text-dark-100">{nave.centro}</span>
+        <span className="font-mono text-[14px] font-semibold text-dark-50">{nave.centro}</span>
         {nave.completa && (
-          <span className="inline-flex items-center gap-1 text-[11.5px] text-emerald-300"><Check size={12} />{t('ob.nave.lista')}</span>
+          <span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-ruta-ok-texto"><Check size={13} />{t('ob.nave.lista')}</span>
         )}
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-x-3.5 gap-y-1">
           {pasos.map((p) => (
             <span key={p.id} title={p.opcional ? t('ob.n.recomendado') : undefined}
-              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11.5px] ${
-                p.hecho ? 'bg-emerald-500/10 text-emerald-200'
-                  : p.opcional ? 'bg-white/[0.04] text-dark-400'
-                    : 'bg-amber-500/10 text-amber-200'}`}>
-              {p.hecho ? <Check size={11} /> : <X size={11} />}
+              className={`inline-flex items-center gap-1 text-[12.5px] ${
+                p.hecho ? 'text-dark-300'
+                  : p.opcional ? 'text-dark-500'
+                    : 'font-semibold text-ruta-aviso-texto'}`}>
+              {p.hecho ? <Check size={12} className="text-ruta-ok-texto" /> : <X size={12} />}
               {t(PASO_NAVE[p.id].tit)}
-              {p.hecho && p.n > 0 && <span className="tabular-nums opacity-70">{p.n}</span>}
+              {p.hecho && p.n > 0 && <span className="font-mono tabular-nums text-dark-500">{p.n}</span>}
             </span>
           ))}
         </div>
       </div>
       {pendiente && (
-        <p className="mt-2 text-[12px] leading-relaxed text-dark-300">
+        <p className="mt-1.5 text-[13px] leading-relaxed text-dark-300">
           {t(PASO_NAVE[pendiente.id].falta)}{' '}
-          <Link to={PASO_NAVE[pendiente.id].to} className="inline-flex items-center gap-1 font-semibold text-brand-300 hover:text-brand-200">
+          <Link to={PASO_NAVE[pendiente.id].to} className="inline-flex items-center gap-1 font-semibold text-dark-50 underline underline-offset-4">
             {t('ob.n.ir')} <ArrowRight size={11} />
           </Link>
         </p>
@@ -97,18 +97,18 @@ export default function Activacion() {
     || String(a.centro).localeCompare(String(b.centro), 'es', { sensitivity: 'base' }))
 
   return (
-    <section className="rise mb-6 rounded-2xl border border-dark-700 bg-dark-900/40 p-4 sm:p-5">
+    <section className="mb-8 border-t border-dark-700 pt-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="font-display text-[17px] font-semibold tracking-[-0.02em] text-dark-50">{t('ob.naves.tit')}</h2>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-dark-400">{t('ob.naves.sub')}</p>
+          <h2 className="text-[17px] font-bold tracking-[-0.01em] text-dark-50">{t('ob.naves.tit')}</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-dark-400">{t('ob.naves.sub')}</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <p className="font-display text-[15px] font-semibold tabular-nums text-dark-100">
+            <p className="font-mono text-[15px] font-semibold tabular-nums text-dark-50">
               {`${navesListas}/${naves.length}`}
             </p>
-            <p className="text-[10.5px] text-dark-500">{t('ob.naves.progreso')}</p>
+            <p className="text-[11.5px] text-dark-500">{t('ob.naves.progreso')}</p>
           </div>
           <button onClick={() => { sessionStorage.setItem('ob_oculto', '1'); setOculto(true) }}
             title={t('ob.ocultar')} aria-label={t('ob.ocultar')}
@@ -118,12 +118,12 @@ export default function Activacion() {
         </div>
       </div>
 
-      <div className="mb-4 h-1 overflow-hidden rounded-full bg-white/[0.06]">
-        <div className="h-full rounded-full bg-dark-200 transition-[width] duration-700"
+      <div className="mb-1 h-1 overflow-hidden rounded-full bg-dark-800">
+        <div className="h-full bg-dark-50"
           style={{ width: `${pct}%` }} />
       </div>
 
-      <ul className="grid gap-2">
+      <ul className="border-t border-dark-800">
         {navesOrden.map((n) => <Nave key={n.centro} nave={n} t={t} basicosArriba={false} />)}
       </ul>
     </section>
