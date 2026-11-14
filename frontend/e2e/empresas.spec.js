@@ -47,7 +47,7 @@ function vigilarErrores(page) {
 }
 
 /* Rellena el formulario de la demostración con lo mínimo que vale. */
-async function rellenar(page, { nombre = 'Your name', empresa = 'Company', correo = 'Email', flota = '¿Cuántas furgonetas?' } = {}) {
+async function rellenar(page, { nombre = 'Your name', empresa = 'Your company', correo = 'Email', flota = '¿Cuántas furgonetas?' } = {}) {
   await page.getByLabel(nombre).fill('Marta Gil')
   await page.getByLabel(empresa, { exact: true }).fill('Mensajería Norte')
   await page.getByLabel(correo).fill('marta@ejemplo.com')
@@ -161,9 +161,9 @@ test.describe('/empresas', () => {
     await page.getByLabel('Tu nombre').fill('Marta Gil')
     await enviar.click()
     await expect(page.getByRole('alert')).toHaveText('Pon el nombre de tu empresa.')
-    await expect(page.getByLabel('Empresa', { exact: true })).toBeFocused()
+    await expect(page.getByLabel('Tu empresa', { exact: true })).toBeFocused()
     await expect(page.getByLabel('Tu nombre')).not.toHaveAttribute('aria-invalid', 'true')
-    await page.getByLabel('Empresa', { exact: true }).fill('Mensajería Norte')
+    await page.getByLabel('Tu empresa', { exact: true }).fill('Mensajería Norte')
     await page.getByLabel('Correo').fill('marta@ejemplo')
     await enviar.click()
     await expect(page.getByRole('alert')).toHaveText('Pon un correo válido.')
@@ -198,7 +198,7 @@ test.describe('/empresas', () => {
     await preparar(page)
     await page.goto('/empresas#demo', { waitUntil: 'domcontentloaded' })
     await expect(page.getByTestId('emp-ensenar-cierre')).toHaveCount(1)
-    await rellenar(page, { nombre: 'Tu nombre', empresa: 'Empresa', correo: 'Correo' })
+    await rellenar(page, { nombre: 'Tu nombre', empresa: 'Tu empresa', correo: 'Correo' })
     await page.getByRole('button', { name: 'Pedir la demostración' }).click()
     const recibido = page.getByTestId('emp-recibido')
     await expect(recibido).toHaveText(RECIBIDO)
@@ -217,7 +217,7 @@ test.describe('/empresas', () => {
     })
     await page.goto('/empresas#demo', { waitUntil: 'domcontentloaded' })
     await page.getByLabel('Tu nombre').fill('Marta Gil')
-    await page.getByLabel('Empresa', { exact: true }).fill('Mensajería Norte')
+    await page.getByLabel('Tu empresa', { exact: true }).fill('Mensajería Norte')
     await page.getByLabel('Correo').fill('marta@ejemplo.com')
     await page.getByLabel('¿Cuántas furgonetas?').selectOption('100+')
     const enviar = page.getByRole('button', { name: 'Pedir la demostración' })
@@ -350,7 +350,9 @@ test.describe('/empresas', () => {
     await expect(img).toHaveAttribute('alt', /golpe marcado en la puerta lateral/)
     await img.scrollIntoViewIfNeeded()
     await expect.poll(() => img.evaluate((i) => i.complete && i.naturalWidth)).toBeGreaterThan(0)
-    await expect(page.getByText('Pantalla real del panel, con datos de ejemplo.')).toBeVisible()
+    // Ronda 3 (M3): la foto de la demo no tiene golpe; el pie lo dice sin trampa.
+    await expect(page.getByText('Pantalla real del panel. La foto y el golpe marcado son de ejemplo.')).toBeVisible()
+    await expect(page.getByText('Pantalla real del panel, con datos de ejemplo.')).toHaveCount(0)
   })
 
   /* Palabras que solo dice el español: en minúscula, cualquiera con acento o eñe; con mayúscula, las que pasarían sin
@@ -409,5 +411,165 @@ test.describe('/empresas', () => {
     expect(leads[0].plan).toContain('idioma: en')
     const espanol = espanolEn(await textoSinIdioma(page))
     expect(espanol, `queda español: ${espanol.join(', ')}`).toEqual([])
+  })
+
+  /* ── Ronda 3 (14-11-2026): lo que encontró la revisión final (V9, V11, V12, M8, M9, M10) ── */
+
+  test('ronda 3: el aviso del formulario sale junto al campo que falla y se ve en el móvil (M8)', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await preparar(page)
+    await page.goto('/empresas#demo', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Pedir la demostración' }).click()
+    const aviso = page.getByRole('alert')
+    await expect(aviso).toHaveText('Pon tu nombre.')
+    await expect(page.getByLabel('Tu nombre')).toBeFocused()
+    await expect(aviso).toBeInViewport({ ratio: 1 })
+    await expect(page.getByLabel('Tu nombre')).toBeInViewport()
+    // Justo debajo del campo, no al pie del formulario.
+    const campo = await page.getByLabel('Tu nombre').boundingBox()
+    const caja = await aviso.boundingBox()
+    expect(caja.y).toBeGreaterThanOrEqual(campo.y + campo.height - 1)
+    expect(caja.y - (campo.y + campo.height), 'el aviso va pegado al campo').toBeLessThan(30)
+    // El siguiente que falla, igual (el correo).
+    await page.getByLabel('Tu nombre').fill('Marta Gil')
+    await page.getByLabel('Tu empresa', { exact: true }).fill('Mensajería Norte')
+    await page.getByLabel('Correo').fill('marta@')
+    await page.getByRole('button', { name: 'Pedir la demostración' }).click()
+    await expect(aviso).toHaveText('Pon un correo válido.')
+    await expect(aviso).toBeInViewport({ ratio: 1 })
+    const correo = await page.getByLabel('Correo').boundingBox()
+    const caja2 = await aviso.boundingBox()
+    expect(caja2.y - (correo.y + correo.height)).toBeLessThan(30)
+    await expect(page.getByRole('alert')).toHaveCount(1)
+  })
+
+  test('ronda 3: desde 100 furgonetas recuerda el plan Empresa, a medida, sin quitar el precio (M9)', async ({ page }) => {
+    await preparar(page)
+    await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
+    const furgonetas = page.getByLabel('¿Cuántas furgonetas tienes?')
+    const linea = page.getByTestId('emp-plan-a-medida')
+    await furgonetas.fill('99')
+    await expect(page.getByTestId('emp-precio')).toBeVisible()
+    await expect(linea).toHaveCount(0)
+    await furgonetas.fill('100')
+    await expect(linea).toContainText('Con 100 vehículos o más también tienes el plan Empresa, a medida.')
+    await expect(linea.getByRole('link', { name: 'Cuéntanos tu flota' })).toHaveAttribute('href', '#demo')
+    await expect(page.getByTestId('emp-precio')).toBeVisible()                 // el precio de Pro sigue ahí
+    await furgonetas.fill('300')
+    await expect(linea).toBeVisible()
+    await expect(page.getByTestId('emp-precio')).toBeVisible()
+  })
+
+  test('ronda 3: «Plan Pro» solo en la asignación del día, no en las fichas ni en el portal (V12)', async ({ page }) => {
+    await preparar(page)
+    await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
+    const modulo = page.getByTestId('emp-modulo').filter({ has: page.getByRole('heading', { name: 'Asignación del día y equipo', exact: true }) })
+    const soloPro = modulo.getByTestId('emp-modulo-pro')
+    await expect(soloPro).toHaveText('Plan ProQuién lleva cada furgoneta hoy.')
+    await expect(modulo.getByText('Las fichas de tu gente y el portal de cada conductor en su móvil.')).toBeVisible()
+    // Una sola etiqueta en la casilla: la de la frase de la asignación.
+    await expect(modulo.getByText('Plan Pro', { exact: true })).toHaveCount(1)
+    await expect(modulo.getByText('Las fichas de tu gente y el portal de cada conductor en su móvil.')).not.toContainText('Plan Pro')
+  })
+
+  test('ronda 3: la maqueta dice «sin revisar hoy» y el paso 3, que cada conductor hace una por furgoneta y día (M10, V11)', async ({ page }) => {
+    await preparar(page)
+    await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('sin revisar hoy', { exact: true })).toHaveCount(2)      // el visible y el de los lectores de pantalla
+    await expect(page.getByText('salen sin revisar', { exact: false })).toHaveCount(0)
+    await expect(page.getByText('A qué hora se hace la revisión lo decide cada empresa (cada conductor hace una por furgoneta y día).', { exact: false })).toBeVisible()
+    await expect(page.getByText('Cuándo se hace la revisión lo decide cada empresa', { exact: false })).toHaveCount(0)
+  })
+
+  test('ronda 3: el inglés de la lista del revisor (V9): MOT, dashboard, Enterprise, «checked» y por vehículo', async ({ page }) => {
+    await page.addInitScript(() => { try { localStorage.setItem('fds_idioma', 'en') } catch { /* nada */ } })
+    await preparar(page)
+    await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
+    await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true }))
+    await page.getByLabel('How much was your last damage bill?').fill('1500')
+    const texto = await textoSinIdioma(page)
+    for (const frase of ['The dent nobody owns up to', 'The missed MOT', 'When the van goes back, a damage list follows: if you can’t prove when each mark appeared, you pay.',
+      'Try the demo dashboard', 'Dashboard view · sample data', 'of the fleet checked today', 'not checked today',
+      'Pay yearly: 12 months for the price of 10.', 'Avoid just one bill like that and it covers', 'the Enterprise plan, priced to suit',
+      'The MOT list for the whole fleet', '/vehicle', 'Your company',
+      'What time the check happens is up to each company (each driver does one per van per day).']) {
+      expect(texto, frase).toContain(frase)
+    }
+    for (const mal of ['MOT/inspection', 'nobody caused', 'panel demo', 'Panel view', 'inspected', '/van', 'Company plan', 'Hand it back']) {
+      expect(texto, mal).not.toContain(mal)
+    }
+    await page.getByLabel('How many vans do you run?').fill('150')
+    await expect(page.getByTestId('emp-plan-a-medida')).toContainText('With 100 or more vehicles there’s also the Enterprise plan, priced to suit.')
+    await page.getByLabel('How many vans do you run?').fill('9000')
+    await expect(page.getByTestId('emp-a-medida')).toContainText('For more than 5,000 vehicles, the Enterprise plan is custom-priced.')
+    await expect(page.getByText('A real dashboard screen. The photo and the marked dent are examples.')).toBeVisible()
+  })
+})
+
+/* /peritaje-tecnico, «Cómo funciona la IA de daños» (a donde lleva el pie de /empresas). Ronda 3 (V1): sin lo que
+   /empresas niega ni lo que el servidor no hace. */
+test.describe('/peritaje-tecnico', () => {
+  const PROHIBIDAS = ['Sin discusión', 'quién golpeó', 'al salir y al volver', 'al salir y volver', '90 segundos', '800', '3.000',
+    'Imposible falsificar', 'inmutable', '3 veces', 'Acceso anticipado', 'Tu peritaje siempre llega', 'no manipulable', 'imagen manipulada', 'Confidence scoring']
+
+  for (const [nombre, ancho, alto] of [['ordenador', 1280, 900], ['móvil', 375, 812]]) {
+    test(`dice solo lo que hace el servidor y se lee en ${nombre}`, async ({ page }) => {
+      const fallos = vigilarErrores(page)
+      await page.setViewportSize({ width: ancho, height: alto })
+      await simularApi(page, 'vacio')
+      await page.goto('/peritaje-tecnico', { waitUntil: 'domcontentloaded' })
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText('Cómo funciona la IA de daños')
+      const texto = await page.locator('body').innerText()
+      for (const p of PROHIBIDAS) expect(texto, `no puede decir «${p}»`).not.toContain(p)
+      for (const p of ['No dice quién dio el golpe', 'cada conductor hace una revisión por furgoneta y día', 'No es una firma electrónica avanzada',
+        'Va en el plan Pro', 'las direcciones de sus fotos', 'La IA se equivoca a veces']) {
+        expect(texto, `tiene que decir «${p}»`).toContain(p)
+      }
+      await expect(page.getByRole('link', { name: 'Probar gratis 14 días' })).toHaveAttribute('href', '/registro?sector=otra&plan=completo')
+      await expect(page.getByRole('link', { name: /Hacer la cuenta/ })).toHaveAttribute('href', '/empresas#cuenta')
+      await page.waitForTimeout(300)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(ancho)
+      expect(fallos, fallos.join(' | ')).toHaveLength(0)
+    })
+  }
+
+  test('el pie de /empresas lleva a ella', async ({ page }) => {
+    await simularApi(page, 'vacio')
+    await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('link', { name: 'Cómo funciona la IA de daños' }).click()
+    await expect(page).toHaveURL(/\/peritaje-tecnico$/)
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Cómo funciona la IA de daños')
+  })
+})
+
+/* La política de privacidad (V5): los formularios se conservan hasta que pidas su supresión; nada promete un borrado que
+   no existe. Y la pestaña del detalle de una revisión (V2/M4) dice quién la llevaba, no quién dio el golpe. */
+test.describe('privacidad y la pestaña «¿Quién la llevaba?»', () => {
+  test('la política, en español y en inglés, no promete borrar los formularios «cuando dejen de ser necesarios»', async ({ page }) => {
+    await simularApi(page, 'vacio')
+    await page.goto('/privacidad', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Formularios de contacto y de demostración:', { exact: false }).first()).toBeVisible()
+    let texto = await page.locator('body').innerText()
+    expect(texto).not.toContain('dejen de ser necesarios')
+    expect(texto).toContain('Se conservan hasta que pidas su supresión, escribiendo a')
+    expect(texto).toContain('Formularios de contacto y de demostración: hasta que pidas su supresión.')
+    expect(texto).toContain('en el de demostración también el idioma de la página')
+
+    await page.evaluate(() => { try { localStorage.setItem('fds_idioma', 'en') } catch { /* nada */ } })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Contact and demo forms:', { exact: false }).first()).toBeVisible()
+    texto = await page.locator('body').innerText()
+    expect(texto).not.toContain('no longer needed')
+    expect(texto).toContain('They are kept until you ask us to erase them, by writing to')
+    expect(texto).toContain('Contact and demo forms: until you ask us to erase them.')
+  })
+
+  test('la pestaña del detalle de una revisión se llama «¿Quién la llevaba?» en los 6 idiomas, sin «golpe» ni «hit»', async () => {
+    const { DICT } = await import('../src/i18nDict.js')
+    const p = DICT['insp.tab.who']
+    expect(p.es).toBe('¿Quién la llevaba?')
+    expect(p.en).toBe('Who had it?')
+    expect(Object.keys(p).sort()).toEqual(['de', 'en', 'es', 'fr', 'it', 'pt'])
+    for (const v of Object.values(p)) expect(v).not.toMatch(/golpe|hit|frapp|getroffen|colpit|bateu/i)
   })
 })

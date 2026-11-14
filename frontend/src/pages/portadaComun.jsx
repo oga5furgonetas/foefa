@@ -29,7 +29,11 @@ export const MODULOS_EMPRESA = [
      de vencimientos (solo la consulta el asistente). Se quita «seguro» hasta que salga. */
   [CalendarClock, 'Vencimientos', 'ITV, fin del renting y mantenimientos en un calendario, y la lista de ITV ordenada por lo que caduca antes.'],
   [CalendarDays, 'Cuadrante y días libres', 'El cuadrante se rehace solo con sus reglas, se sincroniza con tu Google Sheets y la gente pide días o se apunta a refuerzos desde el móvil.', ['pro', 'peticion']],
-  [Users, 'Asignación del día y equipo', 'Quién lleva cada furgoneta hoy, las fichas de tu gente y el portal de cada conductor en su móvil.', ['pro']],
+  /* 14-11-2026 (ronda 3, V12): la etiqueta «Plan Pro» iba en toda la casilla, pero las fichas y el portal del conductor
+     también van en Esencial (`_MODULOS_SOLO_PRO` tiene «asignacion», no «conductores»). El quinto elemento parte el texto
+     para /empresas: la etiqueta, solo en la frase de la asignación. La portada sigue pintando el texto entero (el tercero). */
+  [Users, 'Asignación del día y equipo', 'Quién lleva cada furgoneta hoy, las fichas de tu gente y el portal de cada conductor en su móvil.', [],
+    [['Quién lleva cada furgoneta hoy.', 'pro'], ['Las fichas de tu gente y el portal de cada conductor en su móvil.', '']]],
   [ShoppingBasket, 'Reparto a domicilio', 'Para súper y distribución: pedidos, rutas de tus repartidores y un enlace para que el cliente siga su pedido.', ['complemento']],
 ]
 
@@ -73,7 +77,8 @@ export function VistaPanel() {
             <p className="mt-1 text-[12.5px] text-[color:var(--ld-muted)]">{tx('de la flota revisada hoy')}</p>
           </div>
           <dl className="flex flex-wrap gap-x-6 gap-y-3">
-            {[['2', tx('salen sin revisar'), true], ['3', tx('golpes nuevos'), true], ['1', tx('ITV esta semana'), false]].map(([n, k, alerta]) => (
+            {/* «sin revisar hoy» (14-11-2026, M10), no «salen sin revisar»: cuándo se revisa lo decide cada empresa. */}
+            {[['2', tx('sin revisar hoy'), true], ['3', tx('golpes nuevos'), true], ['1', tx('ITV esta semana'), false]].map(([n, k, alerta]) => (
               <div key={k}>
                 <dt className="sr-only">{k}</dt>
                 <dd className={`font-display text-[22px] font-semibold leading-none tabular-nums ${alerta ? 'text-[color:var(--ld-warn)]' : 'text-[color:var(--ld-text)]'}`}>{n}</dd>

@@ -18,7 +18,8 @@ const ALTA = '/registro?sector=otra&plan=completo'
 const DESCRIPCION = `Cada conductor revisa su furgoneta con fotos desde el móvil: ves en qué revisión apareció cada golpe y quién la llevaba, y tienes las fotos con fecha al devolverla al renting. Desde ${desde} € por vehículo y mes, ${DIAS_PRUEBA_EMPRESA} días gratis sin tarjeta.`
 
 export const PUNTOS = [
-  'El conductor hace las fotos de su furgoneta desde el móvil; cuándo se hace la revisión lo decide cada empresa.',
+  // 14-11-2026 (ronda 3, V11): la hora, no cuántas veces: cada conductor hace una por furgoneta y día (server.py, 409).
+  'El conductor hace las fotos de su furgoneta desde el móvil; a qué hora se hace la revisión lo decide cada empresa (cada conductor hace una por furgoneta y día).',
   'Cada revisión queda guardada con su fecha, su hora y quién la hizo.',
   'La detección de daños revisa sola cada foto: la compara con la anterior del mismo lado y marca los golpes que parecen nuevos. No acierta siempre.',
   'Cada furgoneta guarda en su ficha todas sus revisiones con foto, cada una con su fecha y su conductor.',

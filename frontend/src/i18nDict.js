@@ -515,7 +515,8 @@ export const DICT = {
   'insp.damages':          { es: 'daños',              en: 'damages',              fr: 'dommages',               de: 'Schäden',               it: 'danni',                 pt: 'danos' },
   'insp.signed':           { es: 'Firmada',            en: 'Signed',               fr: 'Signée',                 de: 'Unterschrieben',        it: 'Firmata',               pt: 'Assinada' },
   'insp.tab.damages':      { es: 'Daños',              en: 'Damages',              fr: 'Dommages',               de: 'Schäden',               it: 'Danni',                 pt: 'Danos' },
-  'insp.tab.who':          { es: '¿Quién lo golpeó?',  en: 'Who hit it?',          fr: 'Qui l\'a frappé ?',      de: 'Wer hat es getroffen?', it: 'Chi lo ha colpito?',    pt: 'Quem bateu?' },
+  // 14-11-2026: decía «¿Quién lo golpeó?». La pestaña enseña quién llevaba el vehículo en cada revisión, no quién dio el golpe.
+  'insp.tab.who':          { es: '¿Quién la llevaba?', en: 'Who had it?',          fr: 'Qui l\'avait ?',         de: 'Wer hatte das Fahrzeug?', it: 'Chi ce l\'aveva?',    pt: 'Quem a levava?' },
   'insp.no.damage':        { es: 'Sin daños detectados.', en: 'No damage detected.', fr: 'Aucun dommage détecté.', de: 'Keine Schäden erkannt.', it: 'Nessun danno rilevato.', pt: 'Sem danos detetados.' },
   'insp.summary':          { es: 'Resumen del peritaje', en: 'Inspection summary',  fr: 'Résumé du rapport',      de: 'Gutachten-Zusammenfassung', it: 'Riepilogo perizia',   pt: 'Resumo da inspeção' },
   'insp.fraud.not.run':    { es: 'Análisis de fraude no ejecutado', en: 'Fraud analysis not run', fr: 'Analyse fraude non exécutée', de: 'Betrugsanalyse nicht ausgeführt', it: 'Analisi frode non eseguita', pt: 'Análise de fraude não executada' },

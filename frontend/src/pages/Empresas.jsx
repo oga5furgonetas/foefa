@@ -32,6 +32,9 @@ const ALTA_EMPRESA = '/registro?sector=otra&plan=completo'
 /* La calculadora no pinta precio por encima de esto: lib/precios.js no tiene umbral numérico para el plan «Empresa»
    (solo el texto «100 vehículos o más») y /planes corta su campo en 5000 (Planes.jsx). */
 const TOPE_CALCULADORA = 5000
+/* Desde aquí la calculadora recuerda que existe el plan Empresa, a medida (14-11-2026, M9): es el «100 vehículos o más»
+   con que lo describen lib/precios.js y /planes. El precio de Pro se sigue pintando. */
+const DESDE_PLAN_A_MEDIDA = 100
 const TRAMOS_FLOTA = ['1-9', '10-29', '30-99', '100+']
 
 /* Los tres problemas: título, una frase y lo que se ve en el panel en líneas cortas. `true`: solo con el plan Pro
@@ -64,7 +67,10 @@ const PROBLEMAS = [
 const PASOS_EMPRESA = [
   [Upload, 'Creas la cuenta y metes tus furgonetas y tu gente', 'Subes tu Excel o CSV de furgonetas y el de conductores, o los pegas desde Excel: antes de guardar ves cómo queda. También se pueden dar de alta a mano.'],
   [Smartphone, 'Cada conductor entra desde su móvil', 'Desde el navegador, con el enlace de tu empresa y su correo: no tiene que instalar nada.'],
-  [ClipboardList, 'Ves quién ha revisado su furgoneta y qué ha salido', 'En Inspecciones, cada revisión con sus fotos, quién la hizo y los golpes que ha marcado la detección de daños, y aparte las furgonetas sin revisar. Cuándo se hace la revisión lo decide cada empresa.'],
+  /* 14-11-2026 (ronda 3, V11): «Cuándo se hace…» se podía leer como «cuándo y cuántas veces». El servidor deja a cada
+     conductor una revisión por furgoneta y día (server.py, crear inspección: 409 «Ya enviaste la inspección de esta
+     furgoneta hoy»; solo un admin puede repetir). */
+  [ClipboardList, 'Ves quién ha revisado su furgoneta y qué ha salido', 'En Inspecciones, cada revisión con sus fotos, quién la hizo y los golpes que ha marcado la detección de daños, y aparte las furgonetas sin revisar. A qué hora se hace la revisión lo decide cada empresa (cada conductor hace una por furgoneta y día).'],
 ]
 
 const PREGUNTAS_EMPRESA = [
@@ -196,6 +202,12 @@ function Calculadora({ planes, tramos, furgonetas, setFurgonetas }) {
             <p className="mt-2 text-[13.5px] text-[color:var(--ld-muted)]">{tx('El plan {plan} factura como mínimo {n} vehículos.', { plan: tx(plan.nombre), n: plan.minimo_vehiculos })}</p>
           )}
           {pct > 0 && <p className="mt-2 text-[13.5px] text-[color:var(--ld-muted)]">{tx('Ya con el {pct} % de descuento por volumen.', { pct })}</p>}
+          {n >= DESDE_PLAN_A_MEDIDA && (
+            <p className="mt-2 text-[13.5px] text-[color:var(--ld-muted)]" data-testid="emp-plan-a-medida">
+              {tx('Con {n} vehículos o más también tienes el plan {plan}, a medida.', { n: DESDE_PLAN_A_MEDIDA, plan: tx(aMedida.nombre) })}{' '}
+              <a href="#demo" onClick={() => medirAccion('emp_demo_calculadora')} className="inline-flex min-h-[44px] items-center font-semibold text-[color:var(--ld-accent)] hover:underline">{tx('Cuéntanos tu flota')}</a>
+            </p>
+          )}
           {meses != null && (
             <p className="mt-4 text-[17px] font-semibold leading-snug text-[color:var(--ld-ok)]" data-testid="emp-meses">
               {meses > 120 ? tx('Con evitar un cargo así, tienes pagados más de 10 años.')
@@ -235,6 +247,11 @@ function FormularioDemo({ alEnviar }) {
     try { recibido.current.scrollIntoView({ block: 'center' }) } catch { /* navegador viejo */ }
     recibido.current.focus({ preventScroll: true })
   }, [estado])
+  // El aviso de un campo mal, a la vista aunque el campo quede justo al borde de la pantalla (el foco ya está en él).
+  useEffect(() => {
+    if (!falta) return
+    try { document.getElementById('emp-falta')?.scrollIntoView({ block: 'nearest' }) } catch { /* navegador viejo */ }
+  }, [falta])
 
   async function enviar(e) {
     e.preventDefault()
@@ -289,26 +306,31 @@ function FormularioDemo({ alEnviar }) {
   const etiqueta = 'block text-[14px] font-semibold text-[color:var(--ld-text)]'
   // El campo que falla lleva aria-invalid y apunta al aviso.
   const marca = (id) => (falta?.campo === id ? { 'aria-invalid': true, 'aria-describedby': 'emp-falta' } : {})
+  /* El aviso, justo debajo del campo que falla (14-11-2026, M8): antes salía al pie del formulario y en el móvil quedaba
+     unos 700 px más abajo, fuera de la pantalla, con el foco ya en el campo. */
+  const avisoDe = (id) => (falta?.campo === id
+    ? <p id="emp-falta" role="alert" className="mt-1.5 text-[14px] font-semibold text-[color:var(--ld-warn)]">{falta.texto}</p> : null)
   return (
     <form noValidate onSubmit={enviar} onFocus={alAbrir} className="rounded-2xl border border-[color:var(--ld-border)] bg-[color:var(--ld-surface)] p-6 sm:p-8">
       <div className="grid gap-4 sm:grid-cols-2">
         <div><label htmlFor="emp-nombre" className={etiqueta}>{tx('Tu nombre')}</label>
-          <input id="emp-nombre" autoComplete="name" value={f.nombre} onChange={cambia('nombre')} className={campo} {...marca('emp-nombre')} /></div>
-        <div><label htmlFor="emp-empresa" className={etiqueta}>{tx('Empresa')}</label>
-          <input id="emp-empresa" autoComplete="organization" value={f.empresa} onChange={cambia('empresa')} className={campo} {...marca('emp-empresa')} /></div>
+          <input id="emp-nombre" autoComplete="name" value={f.nombre} onChange={cambia('nombre')} className={campo} {...marca('emp-nombre')} />{avisoDe('emp-nombre')}</div>
+        {/* «Tu empresa» (14-11-2026, ronda 3): «Empresa» es también el nombre del plan a medida, que en inglés se llama
+            «Enterprise»; con su propia clave, el campo dice «Your company». */}
+        <div><label htmlFor="emp-empresa" className={etiqueta}>{tx('Tu empresa')}</label>
+          <input id="emp-empresa" autoComplete="organization" value={f.empresa} onChange={cambia('empresa')} className={campo} {...marca('emp-empresa')} />{avisoDe('emp-empresa')}</div>
         <div><label htmlFor="emp-correo" className={etiqueta}>{tx('Correo')}</label>
-          <input id="emp-correo" type="email" autoComplete="email" inputMode="email" value={f.correo} onChange={cambia('correo')} className={campo} {...marca('emp-correo')} /></div>
+          <input id="emp-correo" type="email" autoComplete="email" inputMode="email" value={f.correo} onChange={cambia('correo')} className={campo} {...marca('emp-correo')} />{avisoDe('emp-correo')}</div>
         <div><label htmlFor="emp-telefono" className={etiqueta}>{tx('Teléfono (opcional)')}</label>
           <input id="emp-telefono" type="tel" autoComplete="tel" value={f.telefono} onChange={cambia('telefono')} className={campo} /></div>
         <div><label htmlFor="emp-flota" className={etiqueta}>{tx('¿Cuántas furgonetas?')}</label>
           <select id="emp-flota" value={f.flota} onChange={cambia('flota')} className={campo} {...marca('emp-flota')}>
             <option value="">{tx('Elige')}</option>
             {TRAMOS_FLOTA.map((t) => <option key={t} value={t}>{t === '100+' ? tx('100 o más') : t}</option>)}
-          </select></div>
+          </select>{avisoDe('emp-flota')}</div>
         <div className="sm:col-span-2"><label htmlFor="emp-mensaje" className={etiqueta}>{tx('Mensaje (opcional)')}</label>
           <textarea id="emp-mensaje" rows={3} value={f.mensaje} onChange={cambia('mensaje')} className={campo} /></div>
       </div>
-      {falta && <p id="emp-falta" role="alert" className="mt-4 text-[14px] font-semibold text-[color:var(--ld-warn)]">{falta.texto}</p>}
       {estado === 'error' && <p role="alert" data-testid="emp-error" className="mt-4 text-[14px] font-semibold text-[color:var(--ld-warn)]">{aviso}</p>}
       <button type="submit" disabled={estado === 'enviando'} className={`${BTN_PRIMARIO} mt-6 w-full sm:w-auto`}>
         {estado === 'enviando' ? <><Loader2 size={16} className="animate-spin" /> {tx('Enviando…')}</> : <><Send size={16} /> {tx('Pedir la demostración')}</>}
@@ -464,7 +486,8 @@ export default function Empresas() {
           <img src={lang === 'en' ? '/empresas/inspeccion-golpe-en.jpg' : '/empresas/inspeccion-golpe.jpg'} loading="lazy" decoding="async" width="1200" height="1184" data-testid="emp-captura"
             alt={tx('El detalle de una revisión en el panel: la foto del lateral de la furgoneta con el golpe marcado en la puerta lateral.')}
             className="h-auto w-full rounded-2xl border border-[color:var(--ld-border-strong)] shadow-[0_30px_70px_-40px_rgba(0,0,0,.6)]" />
-          <figcaption className="mt-2 text-center text-[12.5px] text-[color:var(--ld-muted)]">{tx('Pantalla real del panel, con datos de ejemplo.')}</figcaption>
+          {/* 14-11-2026 (ronda 3, M3): la foto de la demo no tiene ningún golpe y la caja marca chapa limpia: el pie lo dice. */}
+          <figcaption className="mt-2 text-center text-[12.5px] text-[color:var(--ld-muted)]">{tx('Pantalla real del panel. La foto y el golpe marcado son de ejemplo.')}</figcaption>
         </figure>
       </Seccion>
 
@@ -473,12 +496,17 @@ export default function Empresas() {
         sub={tx('Lo que entra en cada plan está en la página de precios.')}
         className="border-t border-[color:var(--ld-border)]">
         <ul className="grid gap-px overflow-hidden rounded-2xl border border-[color:var(--ld-border)] bg-[color:var(--ld-border)] sm:grid-cols-2 lg:grid-cols-3">
-          {MODULOS_EMPRESA.map(([Icono, t, d, etiquetas = []]) => (
+          {MODULOS_EMPRESA.map(([Icono, t, d, etiquetas = [], partes]) => (
             <li key={t} className="bg-[color:var(--ld-bg)] p-5" data-testid="emp-modulo">
               <Icono size={19} className="text-[color:var(--ld-accent)]" />
               <h3 className="mt-3 text-[15.5px] font-semibold text-[color:var(--ld-text)]">{tx(t)}</h3>
               {etiquetas.length > 0 && <p className="mt-1.5">{etiquetas.map((k) => <Etiqueta key={k}>{etiquetaModulo(k)}</Etiqueta>)}</p>}
-              <p className="mt-1.5 text-[14px] leading-relaxed text-[color:var(--ld-muted)]">{tx(d)}</p>
+              {/* Una casilla con una parte de Pro y otra que no (el quinto elemento): la etiqueta, solo en su frase. */}
+              {Array.isArray(partes) ? partes.map(([frase, k]) => (
+                <p key={frase} className="mt-1.5 text-[14px] leading-relaxed text-[color:var(--ld-muted)]" data-testid={k ? `emp-modulo-${k}` : undefined}>
+                  {k && <Etiqueta>{etiquetaModulo(k)}</Etiqueta>}{tx(frase)}
+                </p>
+              )) : <p className="mt-1.5 text-[14px] leading-relaxed text-[color:var(--ld-muted)]">{tx(d)}</p>}
             </li>
           ))}
         </ul>
