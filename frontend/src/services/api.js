@@ -163,6 +163,9 @@ export const getAssignedVehicle = () => api.get('/auth/me/assigned-vehicle')
 
 /* ── Vehículos / inspecciones ─────────────────────────────── */
 export const getPortalVehicles = () => api.get('/vehicles/portal')
+/* El expediente de una furgoneta para imprimir (14-11-2026, «Antes del perito»): solo golpes confirmados por una
+   persona. Lo pinta el panel en /panel/vehiculos/:id/expediente. */
+export const getExpedienteAntesDelPerito = (vehicleId) => api.get(`/vehicles/${encodeURIComponent(vehicleId)}/antes-del-perito`)
 /* Lo que le falta a su propia ficha, y como rellenarlo el mismo. */
 export const getMiFicha = () => api.get('/portal/mi-ficha')
 export const guardarMiTelefono = (telefono) => api.post('/portal/mi-telefono', { telefono })

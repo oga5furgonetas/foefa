@@ -282,6 +282,7 @@ const PanelLayout = lazy(() => import('./panel/PanelLayout'))
 const PanelDashboard = lazy(() => import('./panel/pages/Dashboard'))
 const PanelMiDia = lazy(() => import('./panel/pages/MiDia'))
 const PanelVehiculos = lazy(() => import('./panel/pages/Vehiculos'))
+const PanelExpediente = lazy(() => import('./panel/pages/Expediente'))
 const PanelVencimientos = lazy(() => import('./panel/pages/Vencimientos'))
 const PanelRevision = lazy(() => import('./panel/pages/RevisionRapida'))
 const PanelNegocio = lazy(() => import('./panel/pages/Negocio'))
@@ -336,6 +337,7 @@ const AvisoLegal = lazy(() => import('./legal/AvisoLegal'))
 const Contacto = lazy(() => import('./legal/Contacto'))
 const Seguridad = lazy(() => import('./legal/Seguridad'))
 const PeritajeTecnico = lazy(() => import('./pages/PeritajeTecnico'))
+const ExpedienteEjemplo = lazy(() => import('./pages/ExpedienteEjemplo'))
 const Verify = lazy(() => import('./pages/Verify'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
@@ -445,6 +447,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/security" element={<Seguridad />} />
               <Route path="/seguridad" element={<Seguridad />} />
               <Route path="/peritaje-tecnico" element={<SoloWeb><PeritajeTecnico /></SoloWeb>} />
+              <Route path="/expediente-ejemplo" element={<SoloWeb><ExpedienteEjemplo /></SoloWeb>} />
               <Route path="/verify" element={<Verify />} />
               <Route path="/verify/:hash" element={<Verify />} />
               <Route path="/app" element={<AppRedirect />} />
@@ -463,6 +466,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               {/* Panel de administración nuevo (modelo v2). En construcción por módulos.
                   NO afecta a las rutas actuales ni al login en vivo. */}
               <Route path="/panel/login" element={<PanelLogin />} />
+              {/* El expediente de una furgoneta (14-11-2026): fuera de PanelLayout, cuyo guardián mira el último tramo
+                  («expediente», que no es un módulo). La pantalla hace ella misma la cuenta de «vehiculos». */}
+              <Route path="/panel/vehiculos/:id/expediente" element={<PanelExpediente />} />
               <Route path="/panel" element={<PanelLayout />}>
                 {/* Operacional */}
                 <Route index element={<PanelDashboard />} />
