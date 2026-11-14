@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Loader2, Route, Navigation, MessageCircle, Camera, Check, ArrowRight, Mic, FileText } from 'lucide-react'
 import { MARCA } from '../marca'
+import { useTitulo } from '../lib/titulo'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, locale } from '../lib/idioma'
 import { medirAccion, varianteAB } from '../lib/analitica'
 import { evento, eventoUnaVez, hayPixel, abrirAvisoCookies } from '../lib/metaPixel'
@@ -98,6 +99,7 @@ export default function Repartidores() {
   const [version] = useState(versionDe)
   const [verAlta, setVerAlta] = useState(false)
   useMedirInteres()
+  useTitulo(tx('La app de ruta'))
   const capturas = 'es'
   const video = ['es', 'en', 'pt', 'fr', 'it', 'de'].includes(idioma()) ? idioma() : 'es'
 

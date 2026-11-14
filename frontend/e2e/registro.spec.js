@@ -303,3 +303,13 @@ test('tanda 4 · el alta de empresa arranca en papel (sin fogonazo oscuro); la d
     else expect(clases, ruta).not.toMatch(/arranque-(papel|noche)/)
   }
 })
+
+/* TANDA 5 (14-11-2026, U7): o las dos contraseñas llevan pista o ninguna. Las dos la llevan; el alta manda lo mismo. */
+test('tanda 5 · las dos contraseñas llevan su pista', async ({ page }) => {
+  await preparar(page)
+  await page.goto('/registro?sector=otra&plan=operacion&flota=20', { waitUntil: 'domcontentloaded' })
+  const claves = page.locator('input[autocomplete="new-password"]')
+  await expect(claves).toHaveCount(2)
+  await expect(claves.nth(0)).toHaveAttribute('placeholder', 'Al menos 8 caracteres')
+  await expect(claves.nth(1)).toHaveAttribute('placeholder', 'Repite la contraseña')
+})

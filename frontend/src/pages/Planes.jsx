@@ -53,6 +53,13 @@ function enMono(texto) {
     ? <span key={i} className="font-sans font-semibold">{t}</span> : t))
 }
 
+/* Las cifras de una frase de precio («150 € de alta + … + 20 %»), en Plex Mono tabular como las de arriba (tanda 5, U6);
+   el resto de la frase, en la letra de la casa. Va sobre el texto ya traducido: «€150» o «150 €», da igual. */
+function cifrasEnMono(texto) {
+  return String(texto).split(/(\d+(?:[.,]\d+)*)/).map((t, i) => (i % 2
+    ? <span key={i} className="font-mono font-medium tabular-nums text-[color:var(--ld-text)]">{t}</span> : t))
+}
+
 /* Lo que lleva un plan y lo que no: dos listas con reglas, sin ✓ ni ✕ (lo que no lleva va aparte y en gris). */
 function LoQueLleva({ incluye = [], noIncluye = [], testid }) {
   return (
@@ -276,7 +283,7 @@ export default function Planes() {
                       <span className={`${CIFRA} text-[2.5rem] leading-none`}>{enMono(euros(p.desde || 12))}</span>
                       <span className={`text-[0.9375rem] ${MUTED}`}>{tx('/vehículo')}</span>
                     </p>
-                    <p className={`mt-2 text-[0.875rem] ${MUTED}`}>{tx('A medida: lo cerramos con vosotros')}</p>
+                    <p className={`mt-2 text-[0.875rem] ${MUTED}`}>{tx('A medida: lo cerramos contigo')}</p>
                   </>) : (<>
                     <p className="flex flex-wrap items-baseline gap-x-1.5">
                       <span className={`${CIFRA} text-[2.5rem] leading-none`}>{enMono(euros(mostrado))}</span>
@@ -319,7 +326,7 @@ export default function Planes() {
           return (
             <section id="reparto" className={`mt-10 ${SECCION}`}>
               <div className="min-w-0">
-                <p className="text-[0.9375rem] font-semibold text-[color:var(--ld-accent)]">{tx('¿Repartís vuestra propia mercancía?')}</p>
+                <p className="text-[0.9375rem] font-semibold text-[color:var(--ld-accent)]">{tx('¿Repartes tu propia mercancía?')}</p>
                 <h2 className={`${H2} mt-2`}>{tx('Plan {plan}: por repartidor, con las furgonetas incluidas', { plan: nombrePlan(reparto) })}</h2>
                 <p className={`mt-3 text-[0.9688rem] leading-relaxed ${MUTED}`}>
                   {tx('Para el supermercado que lleva la compra a casa y el distribuidor que reparte a negocios. Se paga por repartidor que haya tenido pedidos en el mes; las furgonetas, las tiendas y los usuarios no se cobran.')}
@@ -328,7 +335,7 @@ export default function Planes() {
               <div className="grid min-w-0 gap-8 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:gap-10">
                 <div>
                   <div className="flex items-center justify-between gap-4">
-                    <label htmlFor="repartidores" className="text-[0.9375rem] font-semibold text-[color:var(--ld-text)]">{tx('¿Cuántos repartidores tenéis?')}</label>
+                    <label htmlFor="repartidores" className="text-[0.9375rem] font-semibold text-[color:var(--ld-text)]">{tx('¿Cuántos repartidores tienes?')}</label>
                     <input id="repartidores" type="number" min="1" max="5000" value={repartidores} aria-label={tx('Número de repartidores')}
                       onChange={(e) => setRepartidores(Math.max(1, Math.min(5000, Number(e.target.value) || 1)))} className={CAMPO_N} />
                   </div>
@@ -361,14 +368,14 @@ export default function Planes() {
         <section className={SECCION}>
           <div>
             <h2 className={H2}>{tx('Complementos')}</h2>
-            <p className={`mt-3 text-[0.9688rem] leading-relaxed ${MUTED}`}>{tx('Se añaden a cualquier plan cuando os hagan falta.')}</p>
+            <p className={`mt-3 text-[0.9688rem] leading-relaxed ${MUTED}`}>{tx('Se añaden a cualquier plan cuando te hagan falta.')}</p>
           </div>
           <ul data-testid="planes-complementos" className={`border-b ${REGLA}`}>
             {complementos.map((c) => (
               <li key={c.clave} className={`grid gap-1.5 border-t ${REGLA} py-5 sm:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] sm:gap-8`}>
                 <div>
                   <p className="text-[1.0625rem] font-bold leading-snug text-[color:var(--ld-text)]">{tx(c.nombre)}</p>
-                  <p className="mt-1 text-[0.9062rem] font-semibold leading-snug text-[color:var(--ld-text2)]">{tx(c.precio)}</p>
+                  <p className="mt-1 text-[0.9062rem] font-semibold leading-snug text-[color:var(--ld-text2)]" data-testid="complemento-precio">{cifrasEnMono(tx(c.precio))}</p>
                 </div>
                 <p className="text-[0.9688rem] leading-relaxed text-[color:var(--ld-text2)]">{tx(c.que)}</p>
               </li>

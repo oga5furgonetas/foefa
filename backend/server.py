@@ -6189,7 +6189,7 @@ async def billing_planes(pais: str = ""):
         "holding": {
             "incluye": ["Todo lo de Pro",
                         "WhatsApp con conductores y talleres (2.000 mensajes al mes)",
-                        "API de solo lectura para sacar flota y taller a vuestros sistemas",
+                        "API de solo lectura para sacar flota y taller a tus sistemas",
                         "Implantación y formación por sede incluidas",
                         "Soporte prioritario con persona asignada"],
             "no_incluye": [],
@@ -6197,12 +6197,12 @@ async def billing_planes(pais: str = ""):
         # Reparto: lo que abre `_MODULOS_REPARTO` con `_LIM_REPARTO` (sin lo de Pro).
         "reparto": {
             "incluye": [
-                "Pedidos sin límite: a mano, pegados de vuestro programa o escaneando la caja",
+                "Pedidos sin límite: a mano, pegados de tu programa o escaneando la caja",
                 "Zonas por repartidor y ruta ordenada por tiempo, con franjas y hora estimada",
                 "Navegación con voz, prueba de entrega con foto y cobro a la entrega",
                 "Enlace de seguimiento para el cliente",
                 "La oficina ve el progreso y dónde va cada repartidor en jornada",
-                "Vuestras furgonetas incluidas: fichas, ITV y seguro, revisión con fotos y repaso del día, taller",
+                "Tus furgonetas incluidas: fichas, ITV y seguro, revisión con fotos y repaso del día, taller",
                 "Tiendas o almacenes y usuarios sin límite",
             ],
             "no_incluye": ["Origen de daños de toda la flota, cuadrante y asignación (eso es Pro, por vehículo)"],
@@ -6247,19 +6247,19 @@ COMPLEMENTOS = [
             "por tiempo, navegación, prueba de entrega, seguimiento para el cliente y cobro. "
             "Súper y distribución la llevan incluida en el plan Reparto."},
     {"clave": "whatsapp", "nombre": "WhatsApp", "precio": "150 € de alta + mensajes a precio de Meta + 20 %",
-     "que": "Avisos y conversaciones con conductores y talleres desde vuestro número. Incluido en Empresa."},
+     "que": "Avisos y conversaciones con conductores y talleres desde tu número. Incluido en Empresa."},
     # El informe pericial firmado ya NO es complemento (06-10-2026): la app lo da sin
     # límite en Pro y Empresa (`forensics`) y la página del peritaje dice «va en el plan
     # Pro». Cobrarlo a 9 € era prometer algo que la app no hacía.
     {"clave": "colaboradores", "nombre": "Vehículos de colaboradores", "precio": "3 € por vehículo y mes",
-     "que": "Furgonetas de subcontratas: inspección, documentos y vencimientos. Se marcan en la ficha."},
+     "que": "Furgonetas de subcontratas: revisión, documentos y vencimientos. Se marcan en la ficha."},
     {"clave": "campana", "nombre": "Vehículos de campaña", "precio": "0,30 € por día de alta",
      "que": "Furgonetas de refuerzo en Black Friday o Navidad, solo los días que estén. Se cobran a mes vencido."},
     {"clave": "implantacion", "nombre": "Implantación asistida", "precio": "490 € hasta 50 vehículos · 990 € hasta 200",
      "que": "Cargamos flota y conductores, configuramos sedes y permisos y formamos al equipo. "
             "Gratis con contrato anual de 100 vehículos o más."},
     {"clave": "formacion", "nombre": "Formación presencial", "precio": "300 € por jornada + desplazamiento",
-     "que": "En vuestras sedes."},
+     "que": "En tus sedes."},
 ]
 
 # Cómo entra cada furgoneta en la factura (06-10-2026). Hasta hoy /planes vendía

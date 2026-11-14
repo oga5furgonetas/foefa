@@ -213,7 +213,7 @@ function PlanPicker({ onSelect, furgonetas, setFurgonetas, repartidores, setRepa
         <div className="mt-6 flex flex-wrap justify-center gap-x-6 gap-y-3">
           {reparteSector && (
             <label className={etiquetaN}>
-              {tx('¿Cuántos repartidores tenéis?')}
+              {tx('¿Cuántos repartidores tienes?')}
               <input type="number" min="1" max="5000" value={repartidores} aria-label={tx('Número de repartidores')} className={campoN}
                 onChange={(e) => setRepartidores(Math.max(1, Math.min(5000, Number(e.target.value) || 1)))} />
             </label>
@@ -662,7 +662,9 @@ export default function Registro() {
 
         <label style={S.lbl}>{soloYo ? tt('Contraseña') : t('login.pass')}</label>
         <input style={S.inp} type={soloYo && verPass ? 'text' : 'password'} value={pass} onChange={(e) => setPass(e.target.value)}
-          onKeyDown={(e) => soloYo && e.key === 'Enter' && submit()} autoComplete="new-password" />
+          onKeyDown={(e) => soloYo && e.key === 'Enter' && submit()} autoComplete="new-password"
+          /* Las dos contraseñas con su pista (tanda 5, U7): antes solo la llevaba «Repetir». */
+          placeholder={tt('Al menos 8 caracteres')} data-testid="reg-clave" />
         {soloYo && (
           <button type="button" onClick={() => setVerPass((v) => !v)}
             style={{ background: 'none', border: 'none', color: '#0ea5e9', fontSize: 13, fontWeight: 600, padding: '8px 0 0', cursor: 'pointer' }}>

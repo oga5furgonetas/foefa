@@ -25,7 +25,7 @@ const ALTA = '/registro?sector=otra&plan=operacion'
 export const DESCRIPCION = `Cada conductor fotografía su furgoneta y tú ves la foto de hoy junto a la anterior del mismo lado. Desde ${desde} € por furgoneta al mes, ${DIAS_PRUEBA_EMPRESA} días de prueba.`
 
 export const PASOS = [
-  ['El conductor hace cuatro fotos', 'Frontal, trasera y los dos laterales, más los kilómetros. Desde su móvil, a la hora que decida tu empresa: cada conductor, una revisión por furgoneta y día.'],
+  ['El conductor hace cuatro fotos', 'Frontal, trasera y los dos laterales, más los kilómetros. Desde su móvil, cuando lo diga tu empresa: cada conductor, una revisión por furgoneta y día.'],
   ['Tú repasas el día en unos minutos', 'Cada foto de hoy aparece junto a la anterior del mismo lado. Si está igual, pasas a la siguiente. Si hay algo nuevo, lo marcas sobre la foto.'],
   ['Cada golpe queda con su día', 'Y con quién la llevaba, solo cuando se sabe con seguridad. Cada furgoneta tiene su expediente: cómo entró, qué le ha pasado y cuándo, listo para imprimir.'],
 ]

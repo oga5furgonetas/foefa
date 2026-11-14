@@ -31,7 +31,7 @@ async function abrirRevision(page, { odometro, validar = { valid: true, checked:
   await page.route(/\/api\/inspections\/validate-photo/, (r) => { pedidas?.push('validar'); return r.fulfill({ json: validar }) })
   await page.route(/\/api\/vehicles\/v1\/odometer-photo/, (r) => { pedidas?.push('cuentakilometros'); return r.fulfill({ json: odometro }) })
   await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: /Hacer la auditoría/ }).click()
+  await page.getByRole('button', { name: /Hacer la revisión/ }).click()
   await page.getByRole('button', { name: /1234 ABC/ }).click()
   await expect(page.locator('input[type=file]')).toHaveCount(6)
 }
@@ -149,7 +149,7 @@ test('sin IA: lo que se envía lleva los km a mano y la foto del cuadro', async 
   await page.getByRole('button', { name: /Continuar al checklist/ }).click()
   await page.getByRole('button', { name: /Sí, la lleva/ }).click()
   await page.getByRole('button', { name: /Revisar y enviar/ }).click()
-  await page.getByRole('button', { name: /Enviar inspección/ }).click()
+  await page.getByRole('button', { name: /Enviar revisión/ }).click()
   await expect.poll(() => subidas.length).toBe(1)
   expect(subidas[0]).toContain('"odometer_km":48300')
   expect(subidas[0]).toContain('"odometer_manual":true')

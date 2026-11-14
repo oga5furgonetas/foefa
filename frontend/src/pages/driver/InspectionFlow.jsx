@@ -421,7 +421,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                     </p>
                     {assigned.already_inspected && (
                       <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400">
-                        <Check size={10} /> Ya inspeccionada hoy
+                        <Check size={10} /> Ya revisada hoy
                       </span>
                     )}
                   </div>
@@ -468,7 +468,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
               <div>
                 <p className="text-xs font-bold text-amber-400">Próximamente: incentivos para conductores</p>
                 <p className="mt-0.5 text-[11px] text-dark-500">
-                  Cada mes premiaremos a quienes mantengan su furgoneta en perfecto estado y con inspecciones al día.
+                  Cada mes premiaremos a quienes mantengan su furgoneta en perfecto estado y con sus revisiones al día.
                 </p>
               </div>
             </div>}
@@ -932,7 +932,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
               {sending ? (
                 <><Loader2 size={18} className="animate-spin" /> {t('dr.enviando')}</>
               ) : (
-                <><Shield size={18} /> Enviar inspección</>
+                <><Shield size={18} /> Enviar revisión</>
               )}
             </button>
 

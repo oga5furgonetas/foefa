@@ -95,7 +95,10 @@ export default function Vehiculo({ tipo = 'furgoneta', zona = null, piezas = nul
   ))
   return (
     <svg viewBox="0 0 120 240" width={ancho} height={ancho * 2} role={titulo ? 'img' : undefined} aria-hidden={titulo ? undefined : true}
-      aria-label={titulo || undefined} className={`shrink-0 ${className}`} style={{ '--dv-marca': marca, '--dv-cristal': 'var(--ld-surface2)', '--dv-trazo-suave': 'var(--ld-muted)' }} data-zona={zona || ''}>
+      aria-label={titulo || undefined}
+      /* Las ruedas: de día en tinta; de noche, en el gris del hueco con su contorno (tanda 5, U6). En la tinta de noche
+         (casi blanca) eran cuatro bloques blancos, lo más llamativo del dibujo. */
+      className={`shrink-0 [--dv-rueda:var(--ld-text)] [[data-theme=dark]_&]:[--dv-rueda:var(--ld-hueco)] ${className}`} style={{ '--dv-marca': marca, '--dv-cristal': 'var(--ld-surface2)', '--dv-trazo-suave': 'var(--ld-muted)' }} data-zona={zona || ''}>
       {/* El cuerpo, en papel. */}
       <path d={v.cuerpo} {...linea} fill={relleno('cuerpo') || 'var(--ld-surface)'} />
       {pinta('capo', 'none')}
@@ -113,7 +116,7 @@ export default function Vehiculo({ tipo = 'furgoneta', zona = null, piezas = nul
       {pinta('paragolpes', 'var(--ld-surface)')}
       {pinta('faro', 'var(--ld-surface)')}
       {pinta('piloto', 'var(--ld-surface)')}
-      {pinta('rueda', 'var(--ld-text)')}
+      {pinta('rueda', 'var(--dv-rueda)')}
       {/* El retrovisor, después de la rueda: así nunca queda tapado. */}
       {pinta('retrovisor', 'var(--ld-surface)')}
       {/* La puerta corredera de la furgoneta, en discontinua, y la línea de las puertas traseras. */}

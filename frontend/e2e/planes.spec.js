@@ -165,14 +165,51 @@ test('tanda 4 · complementos y «Cómo se cuenta» son listas con reglas, no re
   await simularApi(page, 'vacio')
   await page.goto('/planes', { waitUntil: 'domcontentloaded' })
   for (const id of ['planes-complementos', 'planes-reglas']) {
+    // /planes llega en un trozo aparte: hasta que está pintada, count() da 0 (no espera). Primero, que se vea.
+    await expect(page.getByTestId(id)).toBeVisible()
     const filas = page.getByTestId(id).locator(':scope > *')
-    expect(await filas.count()).toBeGreaterThan(3)
+    await expect.poll(() => filas.count()).toBeGreaterThan(3)
     for (const f of await filas.all()) {
       expect(await f.evaluate((e) => [getComputedStyle(e).backgroundColor, getComputedStyle(e).borderTopWidth, getComputedStyle(e).borderTopLeftRadius])).toEqual(['rgba(0, 0, 0, 0)', '1px', '0px'])
     }
   }
   await expect(page.getByTestId('emp-cabecera')).toBeVisible()
   await expect(page.getByTestId('emp-probar-menu')).toHaveAttribute('href', '/registro?sector=otra&plan=operacion&flota=40')
+})
+
+/* TANDA 5 (14-11-2026, U3 y U6): las cifras de los complementos en Plex Mono tabular, como las de arriba; y las frases
+   de los planes, de tú y con «revisión». */
+test('tanda 5 · las cifras de «Complementos», en Plex Mono tabular; el resto de la frase, en la letra de la casa', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  await page.goto('/planes', { waitUntil: 'domcontentloaded' })
+  const precios = page.getByTestId('complemento-precio')
+  await expect(precios).toHaveCount(COMPLEMENTOS.length)
+  for (const p of await precios.all()) {
+    const r = await p.evaluate((e) => {
+      const sueltas = [...e.childNodes].filter((n) => n.nodeType === 3 && /\d/.test(n.textContent)).map((n) => n.textContent)
+      const cifras = [...e.querySelectorAll('span')].map((s) => [s.textContent, getComputedStyle(s).fontFamily, getComputedStyle(s).fontVariantNumeric])
+      return { sueltas, cifras, letra: getComputedStyle(e).fontFamily }
+    })
+    expect(r.sueltas, 'ninguna cifra fuera de su pieza mono').toEqual([])
+    expect(r.cifras.length).toBeGreaterThan(0)
+    for (const [t, f, v] of r.cifras) {
+      expect(t).toMatch(/^\d+([.,]\d+)*$/)
+      expect(f).toContain('IBM Plex Mono')
+      expect(v).toBe('tabular-nums')
+    }
+    expect(r.letra).not.toContain('IBM Plex Mono')
+  }
+  await expect(precios.first()).toHaveText('6 € por conductor que la use en el mes')
+})
+
+test('tanda 5 · los planes hablan de tú y dicen «revisión», nunca «inspección»', async ({ page }) => {
+  expect(FRASES.filter((f) => /(?<!\p{L})(vuestr\p{L}*|vosotros|os|sois|tenéis|repartís|elijáis)(?!\p{L})|inspecci[oó]n/iu.test(f))).toEqual([])
+  await simularApi(page, 'vacio')
+  await page.goto('/planes', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('planes-complementos')).toBeVisible()
+  const texto = await textoVisible(page)
+  expect(texto).not.toMatch(/(?<!\p{L})(vuestr\p{L}*|vosotros|os|sois|tenéis|repartís|elijáis)(?!\p{L})|inspecci[oó]n/iu)
+  await expect(page.getByTestId('planes-complementos')).toContainText('Furgonetas de subcontratas: revisión, documentos y vencimientos.')
 })
 
 for (const ancho of [360, 390]) {
