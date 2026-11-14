@@ -7787,6 +7787,19 @@ _DEMO_ORG_ID = "demo"
 _DEMO_DB = "dsp_demo"
 
 
+def _sin_ia_en_vivo(user: Optional[dict] = None) -> bool:
+    """¿Esta petición viene de la demo pública? Entonces NO se llama a la IA (14-11-2026).
+
+    Desde que la demo lleva fotos, las rutas GET que a falta de cajas guardadas
+    le preguntaban a Gemini en directo (`/inspections/{id}/annotated` y
+    `/inspections/{id}/pdf`) lo hacían también con el token de la demo, que
+    cualquiera saca con `/auth/demo-login`. La clave de la IA es gratuita (~20
+    lecturas al día) y la comparte una empresa de verdad: unas cuantas llamadas
+    desde la demo le dejaban sin IA el resto del día. Se mira la base (la demo
+    es `dsp_demo`) y, por si acaso, la marca `demo` del token."""
+    return bool((user or {}).get("demo")) or _current_db_name.get() == _DEMO_DB
+
+
 async def _seed_demo_data():
     """Crea datos sintéticos realistas en dsp_demo si está vacía (idempotente)."""
     ddb = client[_DEMO_DB]
@@ -7829,16 +7842,45 @@ async def _seed_demo_data():
 
     # Inspecciones de los últimos 10 días con algunos daños (para dashboard/€/scoring)
     parts = ["puerta lateral derecha", "paragolpes trasero", "aleta delantera izquierda", "portón trasero"]
+    # CON FOTOS (14-11-2026). La demo salía con `photos: []`: quien llegaba
+    # desde la página de venta («cada conductor revisa su furgoneta con fotos;
+    # si aparece un golpe, sabes qué día fue y quién la llevaba») abría
+    # inspecciones vacías. Ahora cada una lleva las dos fotos de furgoneta que
+    # ya usa la portada (`frontend/public/demo/`): 1 = lateral derecho, 2 =
+    # frontal. URL ABSOLUTA con el origen de la web: el panel la pinta igual que
+    # una relativa, pero los PDF (`/inspections/{id}/pdf`, parte de daño,
+    # `/annotated`) descargan la foto desde el servidor, y con «/demo/…» no hay
+    # de dónde (la de `/pdf` la decodificaba como base64 y salía basura).
+    # `annotated_photos` sigue vacío A PROPÓSITO: con foto anotada el panel no
+    # pinta las cajas (da por hecho que ya van quemadas en la imagen).
+    fotos_demo = [f"{_PORTAL_BASE_FRONT}/demo/van-lateral.jpg", f"{_PORTAL_BASE_FRONT}/demo/van-frontal.jpg"]
+    # Dónde cae cada golpe: foto (1-based, como `photo_index` de la IA), zona y
+    # `box_2d` [ymin, xmin, ymax, xmax] en 0-1000, medidos sobre las fotos para
+    # que la caja quede encima de la pieza (la puerta corredera, el paragolpes y
+    # el canto de las puertas traseras en la lateral; la aleta del lado del
+    # conductor, junto al faro, en la frontal). Área ≥ 0,5 % para que el PDF
+    # también la dibuje (`_is_box_valid`). La zona es la del vocabulario de la
+    # IA (frontal|trasera|lateral_izquierdo|lateral_derecho|techo|otra): la
+    # aleta es chapa del lateral izquierdo aunque se vea en la frontal, y
+    # `salud_flota.zona()` hace caso a la pista antes que al nombre (14-11-2026).
+    sitio_golpe = {
+        "puerta lateral derecha": (1, "lateral_derecho", [590, 500, 700, 600]),
+        "paragolpes trasero": (1, "trasera", [690, 233, 785, 290]),
+        "aleta delantera izquierda": (2, "lateral_izquierdo", [485, 505, 578, 562]),
+        "portón trasero": (1, "trasera", [380, 238, 640, 275]),
+    }
     insps = []
     for day in range(10):
         for j in range(5):
             di = (day + j) % len(drivers)
             vi = (day * 3 + j) % len(vehicles)
             has_dmg = (day * 5 + j) % 9 == 0
+            pieza = parts[(day + j) % len(parts)]
             nd = ([{
-                "part": parts[(day + j) % len(parts)], "severity": ["leve", "moderado", "grave"][(day + j) % 3],
+                "part": pieza, "severity": ["leve", "moderado", "grave"][(day + j) % 3],
                 "description": "Rozadura visible en el panel", "estimated_cost": [90, 240, 520][(day + j) % 3],
-                "confirmed": True, "photo_index": 1,
+                "confirmed": True, "confidence": 0.9, "photo_index": sitio_golpe[pieza][0],
+                "location_hint": sitio_golpe[pieza][1], "box_2d": list(sitio_golpe[pieza][2]),
             }] if has_dmg else [])
             # A la vuelta de ruta (18:00-20:00 UTC, 20-22 h en Espana), que es
             # cuando se hacen; las de hoy, hace un rato. Restando horas a «ahora»
@@ -7850,7 +7892,7 @@ async def _seed_demo_data():
                 created = (vuelta + timedelta(minutes=23 * j)).isoformat()
             insps.append({
                 "id": f"demo-i{day}-{j}", "vehicle_id": vehicles[vi]["id"], "driver_id": drivers[di]["id"],
-                "center": "MADRID", "photos": [], "annotated_photos": [], "notes": "",
+                "center": "MADRID", "photos": list(fotos_demo), "annotated_photos": [], "notes": "",
                 "analysis_status": "ok", "created_at": created, "reviewed": True,
                 "analysis": {
                     "severity": nd[0]["severity"] if nd else "sin_danos",
@@ -7907,10 +7949,34 @@ async def _demo_regenerar():
     marca = await ddb.app_meta.find_one({"_id": "demo_dia"}) or {}
     if marca.get("clave") == clave and await ddb.vehicles.count_documents({}) > 0:
         return
-    for col in ("vehicles", "drivers", "inspections", "daily_assignments", "incidents"):
+    # + lo que sale DE las inspecciones y se queda guardado (14-11-2026): el
+    # libro de daños (`_get_vehicle_ledger` lo rellena la primera vez que se
+    # abre una ficha, dentro de un GET) y las cajas que guarda `/annotated`.
+    # Sin borrarlos, el libro decía «apareció el …» con las fechas de la tanda
+    # anterior contra inspecciones nuevas, y la ventana salía negativa.
+    # `ai_feedback` no: en la demo solo lo escriben rutas POST, que el token de
+    # la demo tiene bloqueadas, y la siembra no lo crea.
+    for col in ("vehicles", "drivers", "inspections", "daily_assignments", "incidents",
+                "vehicle_damage_ledger", "inspection_ai_results"):
         await ddb[col].delete_many({})
     await ddb.shifts.delete_many({"center": "MADRID"})
     await _seed_demo_data()
+    # El libro de daños, rehecho YA con las inspecciones nuevas (14-11-2026).
+    # Al borrarlo arriba, «Origen de daños» y la salud de la flota (que leen el
+    # libro directamente) salían vacías hasta que el visitante abría las fichas
+    # una a una. Se rellena con la misma `_get_vehicle_ledger` que lo hace al
+    # abrir una ficha, para que los apuntes sean idénticos. Esa función usa
+    # `db`, que va a la base de `_current_db_name`: se fija la de la demo solo
+    # para esto y se devuelve la de antes en el `finally` (esto puede correr
+    # dentro de la petición de `demo-login`, con otra base puesta).
+    _tok_db = _current_db_name.set(_DEMO_DB)
+    try:
+        for _v in await ddb.vehicles.find({}, {"_id": 0, "id": 1}).to_list(500):
+            await _get_vehicle_ledger(_v["id"])
+    except Exception as _le:                                 # noqa: BLE001
+        logger.warning("Demo: no se pudo rehacer el libro de daños: %s", _le)
+    finally:
+        _current_db_name.reset(_tok_db)
     drivers = await ddb.drivers.find({}, {"_id": 0, "id": 1, "name": 1}).sort("id", 1).to_list(50)
     ahora = datetime.now(timezone.utc).isoformat()
 
@@ -22026,6 +22092,111 @@ def _atr_certeza(dias: int, conductores: list, severidad: str) -> tuple:
     return "media", "ventana de %d días" % dias
 
 
+# ── QUÉ FOTO VIAJA COMO PRUEBA (14-11-2026) ─────────────────────────────────
+# Hasta hoy la «limpia» y la «con el golpe» eran SIEMPRE la primera foto de
+# cada inspección (o la primera anotada), sin mirar dónde estaba el golpe. Con
+# el golpe en la tercera foto (el lateral), la prueba enseñaba dos frontales
+# donde no se ve nada; y en la demo, que lleva las mismas fotos en todas las
+# inspecciones, las dos eran la misma imagen. Ahora:
+#  1. Foto con el golpe = la foto `photo_index` del daño de ESE panel dentro
+#     del análisis de la inspección que lo vio primero (el libro no guarda el
+#     índice: se casa por la pieza exacta y, si no, por el panel canónico, como
+#     hace ya la salud de la flota).
+#  2. Foto limpia = de la revisión limpia anterior, la de LA MISMA VISTA
+#     (`_vistas_inspeccion`: frontal, trasera, laterales). Si no se sabe la
+#     vista de una de las dos, la del mismo índice. Si las dos saben sus vistas
+#     y la limpia no tiene esa, o no tiene foto en ese índice, la de siempre
+#     (la primera).
+#  3. Sin `photo_index` utilizable: las dos como hasta hoy.
+# En cada posición se prefiere la ANOTADA de ese mismo índice (`annotated_photos`
+# es paralelo a `photos`, con None donde la IA no marcó nada): en la del golpe
+# señala dónde mirar; en la limpia es la misma imagen con las marcas de lo que
+# ya había, que no estorba. Es la preferencia de antes, solo que por posición.
+# Cada función acaba en `_atr_foto_primera`, así que una foto sale vacía
+# exactamente cuando salía antes: la regla «si falta una de las dos fotos no se
+# señala a nadie» no cambia.
+def _atr_foto_primera(ins) -> Optional[str]:
+    """Lo de siempre: la primera anotada o, si no hay, la primera foto."""
+    if not ins:
+        return None
+    anot = [f for f in (ins.get("annotated_photos") or []) if f]
+    return (anot or [f for f in (ins.get("photos") or []) if f] or [None])[0]
+
+
+def _atr_foto_en(ins, k) -> Optional[str]:
+    """La foto de la posición `k` (0-based), anotada si la hay; None si no existe."""
+    # Tipos comprobados (14-11-2026): `photos` o `annotated_photos` que no son
+    # una lista (una cadena también se indexa) no dan foto por posición.
+    fotos = (ins or {}).get("photos") if isinstance(ins, dict) else None
+    if not isinstance(fotos, list) or not isinstance(k, int) or isinstance(k, bool):
+        return None
+    if k < 0 or k >= len(fotos) or not fotos[k] or not isinstance(fotos[k], str):
+        return None
+    anot = ins.get("annotated_photos")
+    anot = anot if isinstance(anot, list) else []
+    a_k = anot[k] if k < len(anot) else None
+    return (a_k if isinstance(a_k, str) and a_k else None) or fotos[k]
+
+
+def _atr_indice_golpe(ins, dano) -> Optional[int]:
+    """Posición (0-based) de la foto donde está ESTE golpe en la inspección que lo vio.
+
+    Con los tipos comprobados (14-11-2026): una inspección guardada a mano o por
+    una ruta vieja con el análisis de forma rara (no es un objeto, `damages` que
+    no es lista, pieza que no es texto, `photo_index` raro) da None, «como
+    antes», en vez de tumbar «Origen de daños» entera con un 500."""
+    if not isinstance(ins, dict) or not isinstance(dano, dict):
+        return None
+    fotos = ins.get("photos")
+    if not isinstance(fotos, list):
+        return None
+    n = len(fotos)
+    a = ins.get("analysis")
+    if not isinstance(a, dict):
+        return None
+    lista = [x for k in ("new_damages", "damages")
+             for x in (a.get(k) if isinstance(a.get(k), list) else []) if isinstance(x, dict)]
+
+    def _texto(v) -> str:
+        return v if isinstance(v, str) else ""
+    pieza = _texto(dano.get("part")).strip().lower()
+    panel = _texto(dano.get("panel")) or _canon_panel(_texto(dano.get("part")))
+
+    def _idx(x):
+        pi = x.get("photo_index")
+        return pi - 1 if isinstance(pi, int) and not isinstance(pi, bool) and 1 <= pi <= n else None
+    # Primero la pieza escrita igual; si no, el mismo panel canónico.
+    for casa in (lambda x: pieza and _texto(x.get("part")).strip().lower() == pieza,
+                 lambda x: panel and _canon_panel(_texto(x.get("part"))) == panel):
+        for x in lista:
+            if casa(x) and _idx(x) is not None:
+                return _idx(x)
+    return None
+
+
+def _atr_fotos_prueba(limpia, actual, dano) -> tuple:
+    """(foto limpia, foto con el golpe) para un apunte del libro. Regla arriba."""
+    k = _atr_indice_golpe(actual, dano)
+    if k is None:
+        return _atr_foto_primera(limpia), _atr_foto_primera(actual)
+    golpe = _atr_foto_en(actual, k)
+    if golpe is None:
+        # Sin foto del golpe en su posición (vacía), todo como antes (14-11-2026):
+        # las dos primeras, de la misma vista entre sí, y no «antes» de la vista k
+        # contra «después» de la vista 1.
+        return _atr_foto_primera(limpia), _atr_foto_primera(actual)
+    if not limpia:
+        return None, golpe
+    j = k
+    va, vl = _vistas_inspeccion(actual), _vistas_inspeccion(limpia)
+    vista = va[k] if k < len(va) else None
+    if vista and vista in vl:
+        j = vl.index(vista)
+    elif vista and any(vl):
+        j = None          # las dos saben sus vistas y la limpia no tiene esa: no se adivina
+    return _atr_foto_en(limpia, j) or _atr_foto_primera(limpia), golpe
+
+
 @api_router.get("/damages/atribucion")
 async def danos_atribucion(center: str = "", dias: int = 120, solo_alta: bool = False,
                            _=Depends(require_admin)):
@@ -22061,7 +22232,12 @@ async def danos_atribucion(center: str = "", dias: int = 120, solo_alta: bool = 
     async for i in db.inspections.find(
             {"vehicle_id": {"$in": vids}},
             {"_id": 0, "id": 1, "vehicle_id": 1, "created_at": 1, "driver_id": 1,
-             "photos": 1, "annotated_photos": 1}):
+             "photos": 1, "annotated_photos": 1,
+             # Para elegir la foto donde está el golpe y la misma vista en la
+             # limpia (14-11-2026, `_atr_fotos_prueba`): solo pieza e índice.
+             "photo_vistas": 1, "photo_roles": 1,
+             "analysis.damages.part": 1, "analysis.damages.photo_index": 1,
+             "analysis.new_damages.part": 1, "analysis.new_damages.photo_index": 1}):
         porveh.setdefault(i["vehicle_id"], []).append(i)
     for v in porveh:
         porveh[v].sort(key=lambda x: x.get("created_at") or "")
@@ -22074,10 +22250,6 @@ async def danos_atribucion(center: str = "", dias: int = 120, solo_alta: bool = 
         c = str(dr.get("email") or "").strip().lower()
         if c:
             persona[dr["id"]] = c
-
-    def _foto(ins):
-        anot = [f for f in (ins.get("annotated_photos") or []) if f]
-        return (anot or [f for f in (ins.get("photos") or []) if f] or [None])[0]
 
     out, resumen = [], {"alta": 0, "media": 0, "baja": 0}
     for d in danos:
@@ -22131,11 +22303,18 @@ async def danos_atribucion(center: str = "", dias: int = 120, solo_alta: bool = 
         certeza, motivo = _atr_certeza(ventana, cond_ids, str(d.get("severity") or ""))
         if not limpia:
             certeza, motivo = "baja", "no hay ninguna foto anterior sin ese golpe"
+        # La foto donde está el golpe y la misma vista en la limpia (14-11-2026).
+        # Ante CUALQUIER fallo al elegirla (datos con forma rara), las dos de
+        # siempre: una foto mal elegida no puede tumbar la pantalla entera.
+        try:
+            foto_limpia, foto_golpe = _atr_fotos_prueba(limpia, actual, d)
+        except Exception as _fe:                             # noqa: BLE001
+            logger.debug("atribucion: foto del golpe %s: %s", d.get("_id"), _fe)
+            foto_limpia, foto_golpe = _atr_foto_primera(limpia), _atr_foto_primera(actual)
         # Regla 5 de este módulo: «siempre viajan las DOS fotos; sin la prueba
         # delante esto no es un dato, es una acusación». Estaba escrita arriba y
         # no se comprobaba en ninguna parte.
-        if certeza == "alta" and not ((_foto(limpia) if limpia else None)
-                                      and (_foto(actual) if actual else None)):
+        if certeza == "alta" and not (foto_limpia and foto_golpe):
             certeza, motivo = "media", "falta una de las dos fotos: no se señala a nadie"
         # El resumen cuenta SIEMPRE, aunque luego no se enseñe: con `solo_alta`
         # el contador decía «58 altas, 0 medias, 0 bajas» y parecía que no había
@@ -22166,9 +22345,9 @@ async def danos_atribucion(center: str = "", dias: int = 120, solo_alta: bool = 
             "motivo": motivo,
             "conductores": [{"id": c, "nombre": nombres.get(c) or "?"} for c in cond_ids],
             # Las dos fotos, que son la prueba. Sin ellas esto no es un dato.
-            "foto_limpia": _foto(limpia) if limpia else None,
+            "foto_limpia": foto_limpia,
             "foto_limpia_fecha": (limpia.get("created_at") or "")[:10] if limpia else None,
-            "foto_golpe": _foto(actual) if actual else None,
+            "foto_golpe": foto_golpe,
         })
 
     return {"danos": out, "resumen": resumen, "total": len(out),
@@ -33181,6 +33360,8 @@ async def inspection_annotated(inspection_id: str, photo_index: int = 0, _=Depen
     # If specific photo requested (not default), return just that one
     single_mode = photo_index > 0
     photo_indices = [photo_index] if single_mode else list(range(len(photos)))
+    # Se mira ANTES: más abajo `for ann_bytes, _, _ in …` reutiliza `_` (14-11-2026).
+    sin_ia = _sin_ia_en_vivo(_)
 
     async def _get_annotated_bytes(idx, start_num=0):
         if idx >= len(photos):
@@ -33215,6 +33396,9 @@ async def inspection_annotated(inspection_id: str, photo_index: int = 0, _=Depen
             guardadas = _cajas_de_cache(ai_result)
             if guardadas is not None:
                 cajas_ia, contesto = guardadas, False
+            elif sin_ia:
+                # Demo pública: la foto sin cajas, sin gastar la IA (14-11-2026).
+                cajas_ia, contesto = [], False
             else:
                 cajas_ia, contesto = await _detectar_cajas_danos(img_bytes)
             boxes = cajas_ia
@@ -33335,6 +33519,7 @@ async def inspection_annotated(inspection_id: str, photo_index: int = 0, _=Depen
 @api_router.get("/inspections/{inspection_id}/pdf")
 async def inspection_pdf(inspection_id: str, boxes: int = 0, _=Depends(require_admin)):
     """Genera un PDF profesional del peritaje de una inspección."""
+    sin_ia = _sin_ia_en_vivo(_)     # demo pública: sin IA en directo (14-11-2026)
     from fastapi.responses import Response
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
@@ -33456,11 +33641,14 @@ async def inspection_pdf(inspection_id: str, boxes: int = 0, _=Depends(require_a
     y -= 16*mm
     # --- Resumen (3 cajas) ---
     box_w = (W - 30*mm - 10*mm) / 3
-    boxes = [("SEVERIDAD", severity.upper(), sev_color),
-             ("DAÑOS", str(len(damages)), colors.HexColor("#2C2C2A")),
-             ("COSTE ESTIMADO", f"{total_cost:.0f} EUR", colors.HexColor("#2C2C2A"))]
+    # `cajas_resumen` y no `boxes` (14-11-2026): con ese nombre pisaba el
+    # parámetro `?boxes=`, la condición de la IA de abajo era siempre verdadera
+    # y cada descarga del PDF, aun con `boxes=0`, gastaba una lectura de la IA.
+    cajas_resumen = [("SEVERIDAD", severity.upper(), sev_color),
+                     ("DAÑOS", str(len(damages)), colors.HexColor("#2C2C2A")),
+                     ("COSTE ESTIMADO", f"{total_cost:.0f} EUR", colors.HexColor("#2C2C2A"))]
     bx = 15*mm
-    for label, val, col in boxes:
+    for label, val, col in cajas_resumen:
         c.setFillColor(colors.HexColor("#F1EFE8"))
         c.roundRect(bx, y-14*mm, box_w, 14*mm, 2*mm, fill=1, stroke=0)
         c.setFillColor(colors.HexColor("#888888"))
@@ -33517,7 +33705,9 @@ async def inspection_pdf(inspection_id: str, boxes: int = 0, _=Depends(require_a
         y -= (img_h + 8*mm)
 
     # --- Foto con daños numerados + leyenda (solo si se pide con ?boxes=1, porque la IA tarda ~15s) ---
-    if photo_bytes and boxes:
+    # En la demo pública no se llama a la IA (14-11-2026, `_sin_ia_en_vivo`):
+    # sin esa sección el PDF sale igual, con sus fotos y sus daños.
+    if photo_bytes and boxes and not sin_ia:
         try:
             boxes, _contesto = await _detectar_cajas_danos(photo_bytes[0])
             if boxes:
