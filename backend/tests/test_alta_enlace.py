@@ -182,7 +182,9 @@ def test_entra_con_la_misma_sesion_que_el_codigo_por_correo_y_sin_elegir_contras
     por_codigo = server.decode_token(c.json()["access_token"])
     for k in ("sub", "role", "name", "org_id", "db_name", "account_type"):
         assert enlace[k] == por_codigo[k], k
-    assert set(enlace) - {"lk"} == set(por_codigo)            # ni un permiso, ni un centro, ni nada más
+    # Ni un permiso, ni un centro, ni nada más. Y SIN `at` (R12, 14-11-2026): la del enlace no cuenta como «recién
+    # entrado» (la del código sí: con ella se puede elegir contraseña sin la actual nada más entrar).
+    assert set(enlace) - {"lk"} == set(por_codigo) - {"at"} and "at" in por_codigo
     assert enlace["role"] == "driver" and "permissions" not in enlace and "allowed_centers" not in enlace
     assert enlace["lk"] == mundo.g["accesos_conductor"].docs[0]["id"] and enlace["via"] == "enlace"
     assert abs(enlace["exp"] - (time.time() + 30 * 86400)) < 120 and abs(enlace["exp"] - por_codigo["exp"]) < 120
@@ -203,7 +205,9 @@ def test_abierto_en_otro_telefono_409_sin_decir_de_quien_es(mundo):
     token, _ = _enlace_abierto(mundo)
     r = _canjear(mundo, token, dispositivo=TEL_OTRO, ip="198.51.100.20")
     assert r.status_code == 409 and r.headers["cache-control"] == "no-store"
-    assert r.json() == {"detail": "Este enlace ya se abrió en otro teléfono. Pide uno nuevo a tu empresa."}
+    assert r.json() == {"detail": "Este enlace ya se abrió en otro teléfono o en otro navegador de este. Ábrelo donde "
+                                  "lo abriste la primera vez o pide uno nuevo a tu empresa.",
+                        "codigo": "enlace_usado_en_otro"}
     assert "Ana" not in r.text and "access_token" not in r.text
     # Y a la dueña de verdad le sigue valiendo.
     assert _canjear(mundo, token).status_code == 200
@@ -213,7 +217,8 @@ def test_sin_identificador_de_telefono_400_antes_de_mirar_nada(mundo):
     token = _crear(mundo).json()["token"]
     for malo in ("", "corto", "a" * 42, "a" * 129, "a" * 42 + "=", "ñ" * 50, 12345, None, ["a" * 43]):
         r = mundo.http.post("/api/auth/enlace", json={"token": token, "dispositivo": malo})
-        assert r.status_code == 400 and r.json() == {"detail": "Falta el identificador de este teléfono. Vuelve a abrir el enlace."}
+        assert r.status_code == 400 and r.json() == {"detail": "Falta el identificador de este teléfono. Vuelve a abrir el enlace.",
+                                                     "codigo": "enlace_sin_telefono"}
     # Un cuerpo que no es JSON, o que no es un objeto, tampoco: 400, nunca un 422 que devuelva lo recibido ni un 500.
     for crudo in (b"token=" + token.encode() + b"&dispositivo=" + TEL_ANA.encode(), b"[1,2]", b"\"" + token.encode() + b"\""):
         r = mundo.http.post("/api/auth/enlace", content=crudo, headers={"Content-Type": "application/json"})
@@ -312,7 +317,8 @@ def test_el_401_es_identico_para_todo_lo_que_no_vale(mundo):
     unica = set(respuestas.values())
     assert len(unica) == 1, respuestas
     status, cuerpo, cache, tipo = unica.pop()
-    assert status == 401 and json.loads(cuerpo) == {"detail": "Este enlace ya no vale. Pide uno nuevo a tu empresa."}
+    assert status == 401 and json.loads(cuerpo) == {"detail": "Este enlace ya no vale. Pide uno nuevo a tu empresa.",
+                                                    "codigo": "enlace_no_vale"}
     assert cache == "no-store"
 
 
@@ -336,10 +342,13 @@ def test_cinco_fallos_con_otro_telefono_cierran_ese_enlace_cinco_minutos(mundo):
     token, _ = _enlace_abierto(mundo)
     for i in range(5):
         assert _canjear(mundo, token, dispositivo=TEL_OTRO, ip=f"198.51.100.{i + 1}").status_code == 409
-    # Desde otra IP y hasta con el teléfono bueno: ese enlace está cerrado un rato (y lo dice como las demás entradas).
-    r = _canjear(mundo, token, ip="198.51.100.99")
-    assert r.status_code == 429 and r.json() == {"detail": "Demasiados intentos fallidos. Espera 5 minutos."}
+    # Desde otra IP, otro teléfono más: ese enlace está cerrado un rato para los que no son el suyo (y lo dice como las
+    # demás entradas). El teléfono bueno sigue entrando (14-11-2026, A4: los toques de otro no le dejan fuera).
+    r = _canjear(mundo, token, dispositivo=TEL_TERCERO, ip="198.51.100.99")
+    assert r.status_code == 429 and r.json() == {"detail": "Demasiados intentos fallidos. Espera 5 minutos.",
+                                                 "codigo": "demasiados_intentos"}
     assert r.headers["cache-control"] == "no-store"
+    assert _canjear(mundo, token, ip="198.51.100.99").status_code == 200
     # Los demás enlaces siguen abriendo.
     otro = _crear(mundo, "d-luis").json()["token"]
     assert _canjear(mundo, otro, dispositivo=TEL_TERCERO, ip="198.51.100.99").status_code == 200
@@ -370,7 +379,7 @@ def test_renovar_pide_permiso_si_ya_se_abrio_y_corta_la_sesion_del_viejo(mundo):
     nuevo = r.json()["token"]
     corta = _mi_ficha(mundo, sesion)
     assert corta.status_code == 401 and corta.json() == {
-        "detail": "Tu acceso ha cambiado: abre el último enlace que te ha mandado tu empresa."}
+        "detail": "Este acceso ya no vale. Pide a tu empresa que te mande el enlace otra vez.", "codigo": "acceso_cambiado"}
     assert _canjear(mundo, viejo, ip="192.0.2.40").status_code == 401
     # El nuevo vale, en el mismo teléfono o en otro (renovar suelta el teléfono de antes).
     assert _canjear(mundo, nuevo, dispositivo=TEL_TERCERO).status_code == 200
@@ -445,8 +454,8 @@ def test_renovar_la_sesion_del_enlace_vale_sin_cuenta_y_se_niega_con_el_enlace_m
     r = mundo.http.post("/api/auth/renovar", headers=_h(sesion))
     assert r.status_code == 200 and r.json()["configurar_cuenta"] is False and r.json()["id"] == "d-ana"
     nueva = server.decode_token(r.json()["access_token"])
-    assert (nueva["lk"], nueva["via"], nueva["at"], nueva["org_id"], nueva["db_name"]) == \
-        (antes["lk"], "enlace", antes["at"], "orga", "dsp_orga")
+    assert (nueva["lk"], nueva["via"], nueva["org_id"], nueva["db_name"]) == (antes["lk"], "enlace", "orga", "dsp_orga")
+    assert "at" not in antes and "at" not in nueva              # nunca «recién entrado» (R12)
     assert mundo.http.delete("/api/conductores/d-ana/acceso", headers=_h(_sesion_admin())).status_code == 200
     assert mundo.http.post("/api/auth/renovar", headers=_h(r.json()["access_token"])).status_code == 401
     # Y sin pasar por la caché: la ruta vuelve a mirar el enlace.
@@ -472,7 +481,8 @@ def test_el_enlace_de_una_empresa_no_entra_en_otra(mundo):
     creado_b = _crear(mundo, "d-ana", admin=adm_b)
     assert creado_b.status_code == 200 and creado_b.json()["nombre"] == "ANA DE LA OTRA EMPRESA"
     assert _crear(mundo, "d-luis", admin=adm_b).status_code == 404
-    assert _crear(mundo, "d-luis", admin=adm_b).json() == {"detail": "Conductor no encontrado"}
+    assert _crear(mundo, "d-luis", admin=adm_b).json() == {"detail": "Conductor no encontrado",
+                                                           "codigo": "conductor_no_encontrado"}
     assert mundo.http.delete("/api/conductores/d-luis/acceso", headers=_h(adm_b)).status_code == 404
     # El de A lleva a la base de A, aunque en B haya una ficha con el mismo id.
     token_a, sesion_a = _enlace_abierto(mundo, "d-ana")
@@ -490,7 +500,7 @@ def test_el_enlace_de_una_empresa_no_entra_en_otra(mundo):
 
 def test_la_plataforma_mirando_la_cuenta_no_crea_enlaces(mundo):
     r = _crear(mundo, admin=_sesion_admin(suplantado=True))
-    assert r.status_code == 403 and r.json() == {"detail": server._SOLO_EL_CLIENTE}
+    assert r.status_code == 403 and r.json() == {"detail": server._SOLO_EL_CLIENTE, "codigo": "solo_el_cliente"}
     assert mundo.g["accesos_conductor"].docs == []
 
 
@@ -499,7 +509,8 @@ def test_con_centros_asignados_solo_los_suyos_y_los_sin_centro_no_cuentan(mundo)
     assert _crear(mundo, "d-ana", admin=jefe).status_code == 200                       # NORTE
     for ajeno in ("d-sur", "d-sin"):                                                  # SUR y sin centro
         r = _crear(mundo, ajeno, admin=jefe)
-        assert r.status_code == 403 and r.json() == {"detail": "No tienes acceso a ese centro"}, ajeno
+        assert r.status_code == 403 and r.json() == {"detail": "No tienes acceso a ese centro",
+                                                     "codigo": "centro_no_visible"}, ajeno
         assert mundo.http.delete(f"/api/conductores/{ajeno}/acceso", headers=_h(jefe)).status_code == 403
     lista = mundo.http.get("/api/conductores/accesos", headers=_h(jefe)).json()
     assert [c["driver_id"] for c in lista["conductores"]] == ["d-ana"]
@@ -584,15 +595,20 @@ def test_el_codigo_por_correo_no_obliga_a_elegir_contrasena_y_la_inicial_si(mund
                                        "hashed_password": inicial, "active": True, "must_change_password": True,
                                        "password_temp_created_at": ahora.isoformat(), "contrasena_inicial": True}])
     assert server._temporal_vigente_de(mundo.a["driver_accounts"].docs)
-    r = mundo.http.post("/api/auth/driver-code/verify",
-                        json={"email": "luis@ejemplo.es", "code": "654321", "slug": "transportes-perez"})
-    assert r.status_code == 200 and r.json()["configurar_cuenta"] is False
-    sesion = r.json()["access_token"]
-    assert server.decode_token(sesion)["via"] == "codigo" and "lk" not in server.decode_token(sesion)
-    assert _mi_ficha(mundo, sesion).json()["configurar_cuenta"] is False
     # Con la contraseña inicial compartida de la empresa sigue obligado a elegir la suya, como hoy.
     c = mundo.http.post("/api/auth/driver-login", json={"email": "luis@ejemplo.es", "password": "inicial-de-la-empresa"})
     assert c.status_code == 200 and c.json()["configurar_cuenta"] is True
     clave = c.json()["access_token"]
     assert "via" not in server.decode_token(clave)
     assert _mi_ficha(mundo, clave).json()["configurar_cuenta"] is True
+    r = mundo.http.post("/api/auth/driver-code/verify",
+                        json={"email": "luis@ejemplo.es", "code": "654321", "slug": "transportes-perez"})
+    assert r.status_code == 200 and r.json()["configurar_cuenta"] is False
+    sesion = r.json()["access_token"]
+    assert server.decode_token(sesion)["via"] == "codigo" and "lk" not in server.decode_token(sesion)
+    assert _mi_ficha(mundo, sesion).json()["configurar_cuenta"] is False
+    # Y desde que entró con el código, la inicial (la de todos) ya no le abre la cuenta (A2, 14-11-2026; el detalle, en
+    # test_acceso_arreglos_enlace.py).
+    c = mundo.http.post("/api/auth/driver-login", json={"email": "luis@ejemplo.es", "password": "inicial-de-la-empresa"},
+                        headers={"X-Forwarded-For": "203.0.113.90"})
+    assert c.status_code == 401 and c.json()["detail"] == "Email o contraseña incorrectos"

@@ -32,8 +32,37 @@ export function mensajeAcceso(t, { nombre, empresa, enlace }) {
 export const urlWhatsApp = (whatsapp, texto) =>
   `https://wa.me/${String(whatsapp || '').replace(/\D/g, '')}?text=${encodeURIComponent(texto)}`
 
-/** «2026-11-14» → «14-11», el día como se dice en la pantalla. */
-export function diaCorto(iso) {
+/** «2026-11-14» → «14 nov», el día como se dice en la pantalla: igual que el sello de las fotos («14 NOV · 09:31»), para
+    que en todo el arranque una misma fecha se escriba de una sola forma (tercera tanda, A11). `idioma`, el del panel. */
+export function diaCorto(iso, idioma = 'es') {
   const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/)
-  return m ? `${m[3]}-${m[2]}` : ''
+  if (!m) return ''
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  let mes
+  try { mes = new Intl.DateTimeFormat(idioma, { month: 'short' }).format(d) } catch { mes = '' }
+  mes = String(mes || '').replace(/\./g, '').slice(0, 4)
+  return mes ? `${Number(m[3])} ${mes}` : `${m[3]}-${m[2]}`
+}
+
+/* LOS PORQUÉS DEL SERVIDOR, EN EL IDIOMA DE LA PANTALLA (tercera tanda, A11 y CONTRATO R12). Las rutas del alta y del
+   enlace mandan, además del texto en español, un `codigo` corto y fijo: con él se dice en el idioma del panel
+   (`alta.cod.<codigo>` en i18nDict.js). Un código que esta pantalla aún no conoce, o un servidor que no lo manda: el
+   texto del servidor, tal cual. `huecos` rellena {nombre}, {texto}… */
+export function codigoDe(x) {
+  if (!x || typeof x !== 'object') return ''
+  const c = x.codigo || (x.detalle && typeof x.detalle === 'object' ? x.detalle.codigo : '') ||
+    (x.detail && typeof x.detail === 'object' ? x.detail.codigo : '')
+  return typeof c === 'string' && /^[a-z_]{2,40}$/.test(c) ? c : ''
+}
+export function textoConCodigo(t, codigo, siNo = '', huecos = {}) {
+  const clave = codigo ? `alta.cod.${codigo}` : ''
+  if (!clave || t(clave) === clave) return siNo
+  // Si al texto traducido le falta un dato que el servidor no ha mandado, vale más su texto entero que un hueco.
+  let falta = false
+  const texto = t(clave).replace(/\{([a-z]+)\}/g, (_, k) => {
+    const v = huecos[k]
+    if (v === undefined || v === null || v === '') { falta = true; return '' }
+    return String(v)
+  })
+  return falta && siNo ? siNo : texto
 }

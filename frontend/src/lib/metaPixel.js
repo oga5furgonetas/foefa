@@ -178,7 +178,9 @@ export function cookiesMeta() {
    (con el #) en cada PageView, también en cada cambio del historial, y esa herramienta cambia el historial en cada
    paso. Así que ahí no se carga ninguno; y si ya estaban cargados (se llegó sin recargar desde otra página), se callan
    mientras se está en ella (pausarPixeles, que llama DevolucionRenting.jsx). */
-const SIN_PIXEL = /^\/devolucion-renting(\/|$)/
+/* Y en `/c` (14-11-2026, tercera tanda, A8): el enlace personal del conductor lleva su token detrás de «#». La pantalla
+   lo quita de la dirección nada más cargar, pero un píxel que se cargase antes lo mandaría entero a Meta. */
+const SIN_PIXEL = /^\/(devolucion-renting|c)(\/|$)/
 function rutaSinPixel() {
   try { return SIN_PIXEL.test(window.location.pathname) } catch { return false }
 }

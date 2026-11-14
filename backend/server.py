@@ -346,8 +346,7 @@ async def _registro_escrituras(request: Request, call_next):
                              "db_name": p.get("db_name"), "role": p.get("role")}
                 except Exception:                                # noqa: BLE001
                     quien = {"sub": "token_invalido"}
-            ip = (request.headers.get("x-forwarded-for") or
-                  (request.client.host if request.client else "") or "").split(",")[0].strip()
+            ip = _rl_key_ip(request)          # la de Fly, no la primera de X-Forwarded-For (14-11-2026)
             doc = {"at": datetime.now(timezone.utc), "method": request.method,
                    "path": request.url.path[:200], "status": response.status_code,
                    "ms": int((time.time() - inicio) * 1000), "ip": ip[:64], **quien}
@@ -1173,7 +1172,7 @@ async def get_current_user(
     # sin `lk`, siguen como siempre.
     if payload.get("role") == "driver" and payload.get("lk"):
         if not await _acceso_sesion_viva(payload):
-            raise HTTPException(status_code=401, detail=_ACCESO_SESION_CORTADA)
+            raise _Fallo(401, "acceso_cambiado", _ACCESO_SESION_CORTADA)
     # Un conductor que entro con una ficha de baja (el login elegia la que
     # fuera) sigue con ese token 30 dias: se le lleva a su ficha activa, en vez
     # de obligarle a salir y entrar sin que nadie sepa por que.
@@ -5104,8 +5103,18 @@ _login_alerted: dict = {}        # para no spamear Telegram con la misma clave
 
 
 def _rl_key_ip(request: Request) -> str:
-    fwd = request.headers.get("x-forwarded-for", "")
-    return (fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "?"))
+    """La IP de quien llama, para los límites y los registros. LA QUE PONE FLY, NO LA QUE DICE QUIEN LLAMA (14-11-2026):
+    se tomaba el PRIMER valor de X-Forwarded-For, que lo escribe el propio cliente; con una IP inventada en cada
+    intento, ningún límite por IP llegaba a contar (80 fallos seguidos, ni un 429). Fly pone `Fly-Client-IP` y AÑADE
+    la IP real al final de X-Forwarded-For: se usa la primera y, si falta (en local), el último valor de la cadena."""
+    fly = str(request.headers.get("fly-client-ip") or "").strip()
+    if fly:
+        return fly
+    fwd = str(request.headers.get("x-forwarded-for") or "")
+    ultima = fwd.split(",")[-1].strip() if fwd else ""
+    if ultima:
+        return ultima
+    return request.client.host if getattr(request, "client", None) else "?"
 
 
 async def _rl_fail(key: str, context: str, tipo: str = "una cuenta"):
@@ -7678,30 +7687,42 @@ async def renovar_sesion(user: dict = Depends(get_current_user), request: Reques
     _exigir_app_al_dia(request)
     if user.get("role") == "driver" and user.get("lk") and not user.get("demo") and not user.get("imp"):
         # La sesión del enlace personal (14-11-2026): la ficha puede no tener correo ni cuenta, así que no se exige
-        # `driver_accounts`; se exige que su enlace siga vivo (sin caché) y la ficha de alta. Copia `lk`, `via` y `at`.
+        # `driver_accounts`; se exige que su enlace siga vivo (sin caché) y la ficha de alta. Copia `lk` y `via`; nunca
+        # `at`: la sesión del enlace no cuenta como «recién entrado» (R12).
         vivo = await _acceso_vivo(await global_db.accesos_conductor.find_one({"id": str(user.get("lk"))}, {"_id": 0}))
         if not vivo or vivo[0].get("id") != user.get("org_id") or vivo[2].get("id") != user.get("sub"):
-            raise HTTPException(401, _ACCESO_SESION_CORTADA)
+            raise _Fallo(401, "acceso_cambiado", _ACCESO_SESION_CORTADA)
         org, _tdb, d = vivo
         token = create_token(d["id"], "driver", d.get("name") or "", org_id=org.get("id"),
                              db_name=_tenant_db_name(org), account_type=org.get("account_type"),
-                             entrada=user.get("at"), enlace=str(user.get("lk")), via=user.get("via") or "enlace")
+                             enlace=str(user.get("lk")), via="enlace")
         return TokenResponse(access_token=token, role="driver", name=d.get("name") or "", id=d["id"],
                              center=d.get("center"), configurar_cuenta=False)
     if user.get("role") == "driver" and not user.get("demo") and not user.get("imp"):
         # El conductor de empresa (29-10-2026): la misma sesión que le dio app-login, mientras su cuenta y su
         # ficha sigan activas (se vuelven a leer, como con el autónomo). Antes solo se renovaba la del autónomo y
         # el conductor volvía a escribir la contraseña cada 30 días.
+        # CONSERVA CÓMO ENTRÓ (14-11-2026, R12): la app de Android renueva a partir del quinto día y guarda el
+        # `configurar_cuenta` de la respuesta; quien entró con el código (`via: codigo`, sin obligación) salía de aquí
+        # obligado a elegir contraseña y con un token sin `via`. Ahora el token nuevo copia `via` y la respuesta es la
+        # de la entrada de ese `via`. Quien entró con el código no necesita cuenta para renovar (puede no tener
+        # contraseña): basta su ficha de alta y que la oficina no le haya quitado el acceso.
+        via = user.get("via") if user.get("via") == "codigo" else None
         cuenta = await db.driver_accounts.find_one({"driver_id": user.get("sub")}, {"_id": 0})
         d = await db.drivers.find_one({"id": user.get("sub")}, {"_id": 0, "id": 1, "name": 1, "center": 1, "active": 1})
-        if not cuenta or not cuenta.get("active", True) or not d or d.get("active") is False:
+        sin_cuenta_vale = via == "codigo" and not cuenta
+        if (not cuenta and not sin_cuenta_vale) or (cuenta and not cuenta.get("active", True)) \
+                or not d or d.get("active") is False:
+            raise HTTPException(401, "Tu sesión ha caducado: entra otra vez")
+        if via and await db.driver_accounts.find_one({"driver_id": d["id"], "active": False}, {"_id": 0, "driver_id": 1}):
             raise HTTPException(401, "Tu sesión ha caducado: entra otra vez")
         org = await get_org(user.get("org_id")) if user.get("org_id") else None
         token = create_token(d["id"], "driver", d.get("name") or "", org_id=(org or {}).get("id"),
                              db_name=_tenant_db_name(org), account_type=(org or {}).get("account_type"),
-                             entrada=user.get("at"))
+                             entrada=user.get("at"), via=via)
+        configurar = False if via else await _configurar_cuenta_de(db, d["id"], (cuenta or {}).get("email") or "")
         return TokenResponse(access_token=token, role="driver", name=d.get("name") or "", id=d["id"], center=d.get("center"),
-                             configurar_cuenta=await _configurar_cuenta_de(db, d["id"], cuenta.get("email") or ""))
+                             configurar_cuenta=configurar)
     if not _sesion_propia_de_admin(user):
         raise HTTPException(403, "Esta sesión no se renueva: entra otra vez con tu correo")
     adm = await global_db.admin_users.find_one({"id": user.get("sub")}, {"_id": 0})
@@ -8637,7 +8658,10 @@ async def driver_code_verify(data: dict, request: Request):
                          org_id=(org or {}).get("id"), db_name=_tenant_db_name(org),
                          account_type=(org or {}).get("account_type"), entrada=time.time(), via="codigo")
     # Quien entra con el código ya ha demostrado que es él (14-11-2026): no se le obliga a elegir contraseña (antes,
-    # dos veces seguidas nada más entrar). Puede ponerse una cuando quiera desde su cuenta.
+    # dos veces seguidas nada más entrar). Puede ponerse una cuando quiera desde su cuenta. Pero la contraseña COMPARTIDA
+    # de la empresa deja de abrir su cuenta desde ya (_retirar_la_compartida): si no, cualquiera que la sepa entraba como
+    # él para siempre.
+    await _retirar_la_compartida(tdb, org, driver["id"])
     return {"access_token": token, "token_type": "bearer", "role": "driver",
             "name": driver.get("name", ""), "id": driver["id"], "center": driver.get("center"),
             "configurar_cuenta": False}
@@ -8678,7 +8702,8 @@ async def _entrar_con_la_inicial(correo: str, password: str, candidates: list) -
     for org, tdb in candidates:
         fichas = [f for f in await tdb.drivers.find(
             {"email": re_correo, "active": {"$ne": False}},
-            {"_id": 0, "id": 1, "active": 1, "created_at": 1, "status": 1}).to_list(20) if f.get("status") != "deleted"]
+            {"_id": 0, "id": 1, "active": 1, "created_at": 1, "status": 1, "inicial_retirada_at": 1}).to_list(20)
+            if f.get("status") != "deleted"]
         ficha = _elegir_ficha(fichas)
         if not ficha:
             continue
@@ -8692,6 +8717,10 @@ async def _entrar_con_la_inicial(correo: str, password: str, candidates: list) -
         if any(c.get("password_changed_at") and not (c.get("must_change_password") or c.get("creada_en_bloque"))
                for c in cuentas):
             ya_la_suya = True                         # ya eligió la suya: con esa, no con la de todos
+            continue
+        if ficha.get("inicial_retirada_at"):
+            # Entró con el código o con su enlace: la de todos ya no le abre (_retirar_la_compartida). El fallo es el de
+            # siempre, sin pistas de por qué.
             continue
         hallados.append((org, tdb, ficha, cuentas, h))
     if len(hallados) != 1:
@@ -8710,9 +8739,71 @@ async def _entrar_con_la_inicial(correo: str, password: str, candidates: list) -
             await tdb.driver_accounts.insert_one(dict(cuenta))
         except DuplicateKeyError:
             return [], False                          # dos entradas a la vez: la otra ya la ha creado
+    # A LA VEZ QUE UNA ENTRADA CON CÓDIGO O ENLACE (14-11-2026): si la retirada marcó la ficha mientras tanto, lo que se
+    # acaba de escribir se deshace. La retirada marca la ficha ANTES de tocar las cuentas y esto escribe la cuenta ANTES
+    # de volver a mirar la marca: en cualquier orden, la de todos acaba sin abrir.
+    if await tdb.drivers.find_one({"id": ficha["id"], "inicial_retirada_at": {"$exists": True}}, {"_id": 0, "id": 1}):
+        await _inutilizar_cuentas(tdb, {"$or": [{"driver_id": ficha["id"]}, {"email": re_correo}], "hashed_password": h})
+        return [], False
     logger.info("Conductor %s entra con la contraseña inicial de la empresa (%s)", ficha["id"][:8],
                 "cuenta puesta con la inicial" if cuentas else "cuenta nueva")
     return [(org, tdb, cuenta)], False
+
+
+def _cuenta_compartida(c: dict, hash_inicial: str = "") -> bool:
+    """¿Abre esta cuenta una contraseña que saben otros? La inicial de la empresa (`contrasena_inicial`, o el mismo hash
+    que la de hoy) o la temporal común en bloque (`creada_en_bloque`), mientras siga siendo temporal: en cuanto la
+    persona elige la suya (change-my-password quita las marcas de temporal) ya no lo es."""
+    if not (c.get("must_change_password") or c.get("creada_en_bloque")):
+        return False
+    return bool(c.get("contrasena_inicial") or c.get("creada_en_bloque")
+                or (hash_inicial and c.get("hashed_password") == hash_inicial))
+
+
+async def _inutilizar_cuentas(tdb, filtro: dict) -> int:
+    """Deja las cuentas del filtro sin ninguna contraseña que alguien sepa (un hash de algo aleatorio que no se guarda) y
+    sin marcas de temporal: no se pueden abrir con contraseña hasta que la persona se ponga una (desde su sesión de código
+    o de contraseña) o la oficina le dé una temporal. La cuenta sigue: su ficha, su acceso y su historial no cambian."""
+    ahora = datetime.now(timezone.utc).isoformat()
+    r = await tdb.driver_accounts.update_many(filtro, {
+        "$set": {"hashed_password": hash_password(secrets.token_urlsafe(32)), "inicial_retirada_at": ahora},
+        "$unset": {"must_change_password": "", "creada_en_bloque": "", "contrasena_inicial": "",
+                   "password_temp_created_at": ""}})
+    return int(getattr(r, "modified_count", 0) or 0)
+
+
+async def _retirar_la_compartida(tdb, org: Optional[dict], driver_id: str) -> None:
+    """LA CONTRASEÑA COMPARTIDA NO SE QUEDA ABIERTA PARA SIEMPRE (14-11-2026, A2). Quien entra con el código del correo o
+    con su enlace no está obligado a elegir contraseña; pero si la de su cuenta es la que saben todos (la inicial de la
+    empresa o la temporal común), un compañero que sepa su correo entraba como él indefinidamente. Al entrar así:
+      1. su ficha (y las gemelas de su mismo correo) queda marcada: la inicial ya no le crea ni le reabre la cuenta
+         (_entrar_con_la_inicial);
+      2. las cuentas suyas que solo abría la compartida se inutilizan (_inutilizar_cuentas), con la condición de que
+         sigan teniendo el hash que se ha visto: si a la vez elige la suya, no se le pisa.
+    El orden (marca primero, cuentas después) y la vuelta a mirar la marca en _entrar_con_la_inicial hacen que dos
+    entradas a la vez acaben siempre con la compartida sin abrir. Quien ya tiene la suya no nota nada. Que falle no puede
+    impedirle entrar: se apunta y sigue."""
+    try:
+        d = await tdb.drivers.find_one({"id": driver_id}, {"_id": 0, "id": 1, "email": 1})
+        if not d:
+            return
+        correo = str(d.get("email") or "").strip().lower()
+        suyas = [{"id": driver_id}] + ([{"email": {"$regex": f"^{re.escape(correo)}$", "$options": "i"}}] if correo else [])
+        await tdb.drivers.update_many({"$or": suyas, "inicial_retirada_at": {"$exists": False}},
+                                      {"$set": {"inicial_retirada_at": datetime.now(timezone.utc).isoformat()}})
+        h = await _hash_inicial_de(org)
+        cuentas = await _cuentas_de(tdb, driver_id, correo)
+        vistas = sorted({c.get("hashed_password") for c in cuentas
+                         if c.get("hashed_password") and _cuenta_compartida(c, h)})
+        if not vistas:
+            return
+        filtro_cuentas = [{"driver_id": driver_id}] + (
+            [{"email": {"$regex": f"^{re.escape(correo)}$", "$options": "i"}}] if correo else [])
+        n = await _inutilizar_cuentas(tdb, {"$and": [{"$or": filtro_cuentas},
+                                                     {"hashed_password": {"$in": vistas}}]})
+        logger.info("Conductor %s entra sin contraseña: la compartida ya no le abre (%d cuenta(s))", driver_id[:8], n)
+    except Exception:                                            # noqa: BLE001
+        logger.exception("No se pudo retirar la contraseña compartida de un conductor")
 
 
 def _temporal_vigente_de(cuentas: list) -> bool:
@@ -9394,6 +9485,7 @@ async def codigo_para_clave(user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Solo para conductores")
     if user.get("imp") or user.get("demo"):
         raise HTTPException(status_code=403, detail=_SOLO_EL_CLIENTE)
+    _no_con_el_enlace(user)
     _rl_public_action(f"clave-codigo:{user['sub']}", 3, 900,
                       detail="Ya te hemos mandado varios códigos: espera unos minutos y mira también el spam.")
     destino = await _destino_codigo_clave(user["sub"])
@@ -9446,6 +9538,8 @@ async def change_my_password(data: dict, user: dict = Depends(get_current_user),
     """
     if user.get("imp") or user.get("demo"):
         raise HTTPException(status_code=403, detail=_SOLO_EL_CLIENTE)
+    # Con la sesión del enlace, nunca: ni cambiarla ni crearla (R12, 14-11-2026).
+    _no_con_el_enlace(user)
     current = _texto_cuerpo(data.get("current_password"))
     new = _texto_cuerpo(data.get("new_password"))
     codigo = re.sub(r"\D", "", str(data.get("codigo") or ""))[:6]   # el de /auth/codigo-clave (02-11-2026)
@@ -9631,10 +9725,13 @@ async def set_driver_password(
     _login_fails.pop(f"drv:{correo}", None)      # si se bloqueó probando, que entre ya con la nueva (02-11-2026)
 
     if existing:
+        # Es SUYA, no la de todos (14-11-2026): sin quitar las marcas de la inicial o de la común, entrar después con el
+        # código la tomaría por compartida y la inutilizaría (_retirar_la_compartida).
         await db.driver_accounts.update_many(
             mias,
             {"$set": {"hashed_password": hashed, "active": True,
-                      "must_change_password": True, "password_temp_created_at": ahora}}
+                      "must_change_password": True, "password_temp_created_at": ahora},
+             "$unset": {"contrasena_inicial": "", "creada_en_bloque": ""}}
         )
         logger.info(f"Password reseteado para conductor {data.driver_id}")
     else:
@@ -11644,7 +11741,7 @@ async def portal_mi_ficha(user: dict = Depends(require_any_auth)):
     return {"falta_telefono": not tel, "nombre": d.get("name"),
             "tiene_clave": tiene,
             # Cambiar la contraseña (02-11-2026): sin la actual si acaba de entrar; si no, con un código a este correo.
-            "clave_sin_actual": user.get("role") == "driver" and _recien_entrado(user),
+            "clave_sin_actual": user.get("role") == "driver" and _recien_entrado(user) and not user.get("lk"),
             "codigo_a": _tapar_destino(destino_codigo) if destino_codigo else None,
             # Si tiene que elegirla ya, con la regla del login y del cambio (_temporal_vigente_de). Sin ninguna cuenta,
             # null: lo decide el login (con el código, que la cree) y no se obliga a quien ya estaba dentro; y la oficina
@@ -11681,6 +11778,12 @@ async def portal_mi_telefono(data: dict = Body(...), user: dict = Depends(requir
     solo = bruto.lstrip("+")
     if not solo.isdigit() or not (9 <= len(solo) <= 15):
         raise HTTPException(400, "Ese numero no parece correcto. Escribelo con los 9 digitos.")
+    if user.get("role") == "driver" and (user.get("via") == "enlace" or user.get("lk")):
+        # Con la sesión del enlace se pone el teléfono que FALTA (lo que pide el portal), pero no se cambia el que ya
+        # hay (14-11-2026): es adonde la empresa manda el enlace nuevo, y quien abriese uno reenviado se lo llevaría.
+        d = await db.drivers.find_one({"id": user.get("sub")}, {"_id": 0, "phone": 1, "telefono": 1})
+        if str((d or {}).get("phone") or (d or {}).get("telefono") or "").strip():
+            raise _Fallo(403, "enlace_sin_cambiar_telefono", _ENLACE_SIN_TELEFONO_NUEVO)
     await db.drivers.update_one({"id": user.get("sub")}, {"$set": {
         "phone": bruto, "telefono_por": "portal",
         "telefono_en": datetime.now(timezone.utc).isoformat()}})
@@ -13486,12 +13589,47 @@ _ACCESO_TTL = 60.0
 _ACCESO_CACHE: dict = {}          # lk -> (expira_ts, vivo, org_id, driver_id)
 _ACCESO_ESPERA_FALLO = 0.5        # segundos que espera cada canje fallido (las pruebas lo ponen a 0)
 _ACCESO_NO_VALE = "Este enlace ya no vale. Pide uno nuevo a tu empresa."
-_ACCESO_OTRO_TELEFONO = "Este enlace ya se abrió en otro teléfono. Pide uno nuevo a tu empresa."
+# El secreto de este navegador se pierde (otro navegador del mismo móvil, modo privado, datos borrados, Safari que borra
+# lo de una web tras días sin abrirla): el texto no puede decir «otro teléfono» a quien tiene SU teléfono en la mano.
+_ACCESO_OTRO_TELEFONO = ("Este enlace ya se abrió en otro teléfono o en otro navegador de este. Ábrelo donde lo abriste "
+                         "la primera vez o pide uno nuevo a tu empresa.")
 _ACCESO_SIN_TELEFONO = "Falta el identificador de este teléfono. Vuelve a abrir el enlace."
-_ACCESO_SESION_CORTADA = "Tu acceso ha cambiado: abre el último enlace que te ha mandado tu empresa."
+_ACCESO_SESION_CORTADA = "Este acceso ya no vale. Pide a tu empresa que te mande el enlace otra vez."
+# Lo que la sesión del enlace no puede hacer (R12): quien tiene el enlace solo demuestra que tiene el mensaje, no que es
+# el conductor (un número equivocado, un mensaje reenviado, el móvil de un compañero).
+_ENLACE_SIN_CLAVE = "Con el enlace no se puede cambiar la contraseña. Pide a tu empresa que te la cambie."
+_ENLACE_SIN_TELEFONO_NUEVO = "Con el enlace no se puede cambiar el teléfono. Pide a tu empresa que te lo cambie."
 _ACCESO_TOKEN_RE = re.compile(r"[0-9a-f]{64}")
 _ACCESO_DISPOSITIVO_RE = re.compile(r"[A-Za-z0-9_-]{43,128}")
 _NO_STORE = {"Cache-Control": "no-store"}
+
+
+class _Fallo(HTTPException):
+    """Un error de las rutas del enlace, de la entrada del conductor y del arranque con su CÓDIGO fijo (R12, 14-11-2026):
+    `{"detail": <lo de siempre>, "codigo": "...", "dato"?: "..."}`. La pantalla traduce por `codigo` (la lista está en
+    CONTRATO-ALTA.md, «Códigos») y, si no lo conoce, enseña `detail`, que no cambia de forma. Es un HTTPException: quien
+    lo capture como tal (p. ej. app-login) lo sigue viendo igual."""
+
+    def __init__(self, status_code: int, codigo: str, detail, headers: Optional[dict] = None, dato=None):
+        super().__init__(status_code=status_code, detail=detail, headers=headers)
+        self.codigo = codigo
+        self.dato = dato
+
+
+@app.exception_handler(_Fallo)
+async def _fallo_con_codigo(request: Request, exc: _Fallo):
+    cuerpo = {"detail": exc.detail, "codigo": exc.codigo}
+    if exc.dato is not None:
+        cuerpo["dato"] = exc.dato
+    return JSONResponse(cuerpo, status_code=exc.status_code, headers=exc.headers)
+
+
+def _no_con_el_enlace(user: dict) -> None:
+    """403 si la sesión nació del enlace personal (R12): con ella no se crea ni se cambia una contraseña, ni se vincula
+    un correo de acceso. Si no, quien abriese primero un enlace reenviado se quedaba con la cuenta, y renovar o anular el
+    enlace no le echaba (la contraseña que se había puesto seguía abriendo)."""
+    if user.get("role") == "driver" and (user.get("via") == "enlace" or user.get("lk")):
+        raise _Fallo(403, "enlace_sin_contrasena", _ENLACE_SIN_CLAVE)
 _ACCESO_SIN_ENLACE = {"estado": "sin_enlace", "creado_dia": None, "abierto_dia": None, "caduca_dia": None}
 _ACCESO_ESTADOS = ("sin_enlace", "sin_abrir", "abierto", "caducado")
 
@@ -13526,8 +13664,22 @@ async def _acceso_empresa(user: dict) -> dict:
     if not org and not user.get("org_id"):
         org = _duena_sin_ficha()
     if not org or _tenant_db_name(org) != _current_db_name.get():
-        raise HTTPException(403, "Tu sesión no corresponde a ninguna empresa: entra otra vez.")
+        raise _Fallo(403, "sesion_sin_empresa", "Tu sesión no corresponde a ninguna empresa: entra otra vez.")
+    # Los días y las horas del enlace y del arranque, en la zona de la empresa (14-11-2026, A14): fuera de /api/reparto/
+    # la zona de la petición es siempre Madrid, y en una empresa de Lisboa «Abierto el…» salía con el día siguiente.
+    _region_actual.set(await _region_de_org(org.get("id")))
     return org
+
+
+async def _acceso_conductores(user: dict) -> dict:
+    """La empresa (como _acceso_empresa) para las rutas del enlace, que exigen poder ver la pantalla de Conductores
+    (14-11-2026, A6): con el enlace se entra como el conductor, y un usuario con permisos solo de «vehiculos» creaba el
+    de cualquiera y lo abría. La misma regla que `canSee` del panel: el super-admin, quien no tiene permisos definidos
+    y quien tiene «conductores». (No `_puede`: ese deja pasar a todos los usuarios de la cuenta dueña.)"""
+    perms = user.get("permissions")
+    if not user.get("sa") and perms is not None and "conductores" not in perms:
+        raise _Fallo(403, "sin_permiso", "No tienes acceso a la pantalla de Conductores.")
+    return await _acceso_empresa(user)
 
 
 async def _acceso_vivo(doc) -> Optional[tuple]:
@@ -13600,10 +13752,56 @@ def _acceso_estado(doc) -> dict:
             "caduca_dia": None if abierto else _alta_local(doc.get("caduca_at"))[0]}
 
 
-def _acceso_movil(ficha: dict) -> tuple:
-    """(móvil tal como está guardado, el mismo para wa.me: cifras sin «+») de una ficha; None si no tiene."""
+# EL NÚMERO PARA WHATSAPP, SIN INVENTAR (14-11-2026, A7). `whatsapp.normaliza_telefono` (la usa todo el servidor para
+# los avisos) solo sabe de España: a 9 cifras sin prefijo les pone 34 y lo demás lo deja tal cual. En una empresa de
+# Portugal «912 345 678» salía 34912345678 (el número de otra persona) y en una de Francia «06 12 34 56 78» salía
+# 0612345678, que wa.me no entiende. Aquí, el número se respeta si lleva «+» o «00»; sin prefijo, se monta SOLO con la
+# regla segura del país de la empresa (sus móviles se distinguen sin dudas); lo demás no se monta: sin destinatario,
+# WhatsApp pregunta a quién. (patrón nacional, prefijo, cuántas cifras del principio se quitan: el 0 de marcar)
+_MOVIL_PAIS = {
+    "es": (re.compile(r"[67]\d{8}"), "34", 0),
+    "pt": (re.compile(r"9[1236]\d{7}"), "351", 0),
+    "fr": (re.compile(r"0[67]\d{8}"), "33", 1),
+    "it": (re.compile(r"3\d{8,9}"), "39", 0),
+    "de": (re.compile(r"01[5-7]\d{8,9}"), "49", 1),
+    "gb": (re.compile(r"07\d{9}"), "44", 1),
+    "ie": (re.compile(r"08[3-9]\d{7}"), "353", 1),
+}
+
+
+def _movil_wa(crudo, pais: str = "es") -> str:
+    """El móvil en cifras con su prefijo de país, sin «+» (como lo quiere wa.me), o "" si no se puede montar seguro."""
+    s = re.sub(r"[^0-9+]", "", str(crudo or ""))
+    if s.startswith("00"):
+        s = "+" + s[2:]
+    if s.startswith("+"):
+        d = s[1:]
+        return d if d.isdigit() and 8 <= len(d) <= 15 and not d.startswith("0") else ""
+    if not s.isdigit():
+        return ""
+    regla = _MOVIL_PAIS.get(str(pais or "").lower())
+    if not regla:
+        return ""
+    patron, prefijo, quitar = regla
+    if patron.fullmatch(s):
+        return prefijo + s[quitar:]
+    # El mismo móvil con el prefijo del país delante y sin «+» («34612345678»): es él, no un número inventado.
+    if s.startswith(prefijo) and patron.fullmatch(("0" * quitar) + s[len(prefijo):]):
+        return s
+    return ""
+
+
+def _pais_de(org: Optional[dict]) -> str:
+    """El país de la empresa, con la misma regla que _region_de_org (sin país conocido, España)."""
+    p = str((org or {}).get("pais") or "").lower()
+    return p if p in PAISES_REPARTO else "es"
+
+
+def _acceso_movil(ficha: dict, pais: str = "es") -> tuple:
+    """(móvil tal como está guardado, el mismo para wa.me: cifras con su prefijo, sin «+») de una ficha; None si no
+    tiene o si no se puede montar sin inventar (_movil_wa)."""
     movil = str(ficha.get("movil_personal") or ficha.get("phone") or "").strip() or None
-    return movil, (whatsapp.normaliza_telefono(movil) or None) if movil else None
+    return movil, (_movil_wa(movil, pais) or None) if movil else None
 
 
 def _sin_centro_visible(user: dict, centro: str) -> bool:
@@ -13621,9 +13819,9 @@ async def _acceso_ficha_admin(user: dict, driver_id: str) -> dict:
         {"_id": 0, "id": 1, "name": 1, "center": 1, "active": 1, "status": 1, "merged_into": 1,
          "movil_personal": 1, "phone": 1, "email": 1})
     if not ficha:
-        raise HTTPException(404, "Conductor no encontrado")
+        raise _Fallo(404, "conductor_no_encontrado", "Conductor no encontrado")
     if _sin_centro_visible(user, ficha.get("center")):
-        raise HTTPException(403, "No tienes acceso a ese centro")
+        raise _Fallo(403, "centro_no_visible", "No tienes acceso a ese centro")
     return ficha
 
 
@@ -13649,7 +13847,11 @@ async def _acceso_fuera_por_baja(user: dict, driver_id: str) -> None:
 
 async def _accesos_de(user: dict, org: dict, center: Optional[str]) -> tuple:
     """([fila por conductor de alta que ve el usuario, con el estado de su enlace], cuentas por estado)."""
-    q = {"active": {"$ne": False}, **_filtro_centro(user, center)}
+    try:
+        q = {"active": {"$ne": False}, **_filtro_centro(user, center)}
+    except HTTPException as e:
+        raise _Fallo(e.status_code, "centro_no_visible" if e.status_code == 403 else "centro_ajeno", e.detail) from None
+    pais = _pais_de(org)
     fichas = [f for f in await db.drivers.find(
         q, {"_id": 0, "id": 1, "name": 1, "center": 1, "active": 1, "status": 1, "merged_into": 1,
             "movil_personal": 1, "phone": 1, "email": 1}).to_list(None)
@@ -13663,7 +13865,7 @@ async def _accesos_de(user: dict, org: dict, center: Optional[str]) -> tuple:
             docs[d.get("driver_id")] = d
     filas, cuentas = [], {e: 0 for e in _ACCESO_ESTADOS}
     for f in sorted(fichas, key=lambda f: (str(f.get("name") or "").casefold(), f["id"])):
-        movil, wa = _acceso_movil(f)
+        movil, wa = _acceso_movil(f, pais)
         acceso = _acceso_estado(docs.get(f["id"]))
         cuentas[acceso["estado"]] += 1
         filas.append({"driver_id": f["id"], "nombre": f.get("name") or "", "center": f.get("center") or None,
@@ -13672,30 +13874,59 @@ async def _accesos_de(user: dict, org: dict, center: Optional[str]) -> tuple:
     return filas, cuentas
 
 
+async def _accesos_cuentas(user: dict, org: dict) -> tuple:
+    """(cuántos conductores de alta ve el usuario, cuántos enlaces hay en cada estado) con la MISMA regla que
+    _accesos_de, pero sin listas: de cada ficha y de cada enlace solo lo que decide si cuenta y en qué estado."""
+    q = {"active": {"$ne": False}, **_filtro_centro(user, None)}
+    ids = [f["id"] async for f in db.drivers.find(
+        q, {"_id": 0, "id": 1, "center": 1, "active": 1, "status": 1, "merged_into": 1})
+        if _ficha_de_alta(f) and not _sin_centro_visible(user, f.get("center"))]
+    cuentas = {e: 0 for e in _ACCESO_ESTADOS}
+    vistos = set()
+    if ids:
+        ahora = datetime.now(timezone.utc)
+        async for d in global_db.accesos_conductor.find(
+                {"org_id": org["id"], "driver_id": {"$in": ids}},
+                {"_id": 0, "driver_id": 1, "caduca_at": 1, "abierto_at": 1}):
+            if d.get("driver_id") in vistos:
+                continue
+            vistos.add(d.get("driver_id"))
+            if d.get("abierto_at"):
+                cuentas["abierto"] += 1
+            else:
+                caduca = _fecha_utc(d.get("caduca_at"))
+                cuentas["sin_abrir" if caduca and caduca > ahora else "caducado"] += 1
+    cuentas["sin_enlace"] = len(ids) - len(vistos)
+    return len(ids), cuentas
+
+
 @api_router.post("/conductores/{driver_id}/acceso")
 async def crear_acceso_conductor(driver_id: str, data: dict = Body(default={}), user: dict = Depends(require_admin)):
     """Crea (o renueva) el enlace personal de un conductor y lo devuelve UNA vez: solo se guarda su hash, así que no se
     puede volver a enseñar. Sin abrir, se crea otro sin preguntar; ya abierto, hace falta `renovar: true`."""
     if user.get("imp"):
-        raise HTTPException(403, _SOLO_EL_CLIENTE)
+        raise _Fallo(403, "solo_el_cliente", _SOLO_EL_CLIENTE)
     renovar = _dict_cuerpo(data).get("renovar") is True
-    org = await _acceso_empresa(user)
+    org = await _acceso_conductores(user)
     ficha = await _acceso_ficha_admin(user, driver_id)
     nombre = ficha.get("name") or "Este conductor"
     if not _ficha_de_alta(ficha):
-        raise HTTPException(409, {"codigo": "de_baja",
-                                  "mensaje": "%s está de baja. Reactívala antes de mandarle su acceso." % nombre})
+        raise _Fallo(409, "de_baja", {"codigo": "de_baja",
+                                      "mensaje": "%s está de baja. Reactívala antes de mandarle su acceso." % nombre},
+                     dato=ficha.get("name") or "")
     if await db.driver_accounts.find_one({"driver_id": ficha["id"], "active": False}, {"_id": 0, "driver_id": 1}):
-        raise HTTPException(409, {"codigo": "acceso_quitado",
-                                  "mensaje": "A %s le quitaron el acceso al portal. Vuelve a dárselo en su ficha y "
-                                             "después mándale el enlace." % nombre})
-    ya_abierto = {"codigo": "ya_abierto",
-                  "mensaje": "%s ya entra con su enlace desde su teléfono. Si lo renuevas, el anterior deja de valer "
-                             "y tendrá que abrir el nuevo." % nombre}
+        raise _Fallo(409, "acceso_quitado", {"codigo": "acceso_quitado",
+                                             "mensaje": "A %s le quitaron el acceso al portal. Vuelve a dárselo en su "
+                                                        "ficha y después mándale el enlace." % nombre},
+                     dato=ficha.get("name") or "")
+    ya_abierto = _Fallo(409, "ya_abierto", {"codigo": "ya_abierto",
+                                            "mensaje": "%s ya entra con su enlace desde su teléfono. Si lo renuevas, el "
+                                                       "anterior deja de valer y tendrá que abrir el nuevo." % nombre},
+                        dato=ficha.get("name") or "")
     clave = {"org_id": org["id"], "driver_id": ficha["id"]}
     previo = await global_db.accesos_conductor.find_one(clave, {"_id": 0, "id": 1, "abierto_at": 1})
     if previo and previo.get("abierto_at") and not renovar:
-        raise HTTPException(409, ya_abierto)
+        raise ya_abierto
     token = secrets.token_hex(32)
     ahora = datetime.now(timezone.utc)
     nuevo = {"id": uuid.uuid4().hex, "token_hash": _sha256_hex(token), **clave,
@@ -13710,12 +13941,12 @@ async def crear_acceso_conductor(driver_id: str, data: dict = Body(default={}), 
     except DuplicateKeyError:
         actual = await global_db.accesos_conductor.find_one(clave, {"_id": 0, "id": 1, "abierto_at": 1})
         if actual and actual.get("abierto_at") and not renovar:
-            raise HTTPException(409, ya_abierto)
+            raise ya_abierto
         await global_db.accesos_conductor.replace_one(clave, dict(nuevo), upsert=True)
     if previo:
         _ACCESO_CACHE.pop(previo.get("id"), None)
     await _audit(user, "acceso_conductor", {"driver_id": ficha["id"], "renovado": bool(previo)})
-    _movil, wa = _acceso_movil(ficha)
+    _movil, wa = _acceso_movil(ficha, _pais_de(org))
     return JSONResponse({"driver_id": ficha["id"], "nombre": ficha.get("name") or "", "empresa": org.get("name") or MARCA,
                          "token": token, "ruta": "/c#" + token, "whatsapp": wa, "renovado": bool(previo),
                          "acceso": _acceso_estado(nuevo)}, headers=_NO_STORE)
@@ -13724,7 +13955,7 @@ async def crear_acceso_conductor(driver_id: str, data: dict = Body(default={}), 
 @api_router.get("/conductores/accesos")
 async def accesos_conductores(center: Optional[str] = None, user: dict = Depends(require_admin)):
     """Cada conductor de alta que ve el usuario, con el estado de su enlace. Nunca tokens ni hashes."""
-    org = await _acceso_empresa(user)
+    org = await _acceso_conductores(user)
     filas, cuentas = await _accesos_de(user, org, center)
     return {"empresa": org.get("name") or MARCA, "conductores": filas, "cuentas": cuentas}
 
@@ -13732,7 +13963,7 @@ async def accesos_conductores(center: Optional[str] = None, user: dict = Depends
 @api_router.delete("/conductores/{driver_id}/acceso")
 async def quitar_acceso_conductor(driver_id: str, user: dict = Depends(require_admin)):
     """Quita el enlace de un conductor: deja de valer, y la sesión abierta con él también. Se puede repetir."""
-    org = await _acceso_empresa(user)
+    org = await _acceso_conductores(user)
     ficha = await _acceso_ficha_admin(user, driver_id)
     await _acceso_borrar(org["id"], ficha["id"])
     await _audit(user, "acceso_conductor_quitado", {"driver_id": ficha["id"]})
@@ -13744,14 +13975,14 @@ def _acceso_limite(clave: str) -> None:
     try:
         _rl_check(clave)
     except HTTPException as e:
-        raise HTTPException(e.status_code, e.detail, headers=_NO_STORE) from None
+        raise _Fallo(e.status_code, "demasiados_intentos", e.detail, headers=_NO_STORE) from None
 
 
 async def _acceso_no_vale(rl_ip: str, ip: str):
     """El 401 del canje: el mismo para todo lo que no vale, con su fallo apuntado (sin el token) y su espera."""
     await _rl_fail(rl_ip, "enlace de conductor (IP %s)" % ip, "un conductor")
     await asyncio.sleep(_ACCESO_ESPERA_FALLO)
-    raise HTTPException(401, _ACCESO_NO_VALE, headers=_NO_STORE)
+    raise _Fallo(401, "enlace_no_vale", _ACCESO_NO_VALE, headers=_NO_STORE)
 
 
 @auth_router.post("/enlace")
@@ -13764,7 +13995,7 @@ async def entrar_con_enlace(request: Request):
         data = {}
     dispositivo = data.get("dispositivo") if isinstance(data.get("dispositivo"), str) else ""
     if not _ACCESO_DISPOSITIVO_RE.fullmatch(dispositivo):
-        raise HTTPException(400, _ACCESO_SIN_TELEFONO, headers=_NO_STORE)
+        raise _Fallo(400, "enlace_sin_telefono", _ACCESO_SIN_TELEFONO, headers=_NO_STORE)
     ip = _rl_key_ip(request)
     rl_ip = "ip:%s" % ip
     _acceso_limite(rl_ip)
@@ -13772,8 +14003,10 @@ async def entrar_con_enlace(request: Request):
     if not _ACCESO_TOKEN_RE.fullmatch(token):
         await _acceso_no_vale(rl_ip, ip)
     h = _sha256_hex(token)
+    # El límite POR ENLACE solo cuenta y solo castiga los toques sin el secreto del teléfono con que se abrió (14-11-2026,
+    # A4): se miraba antes que el secreto, y cinco toques desde otro teléfono (el mensaje reenviado) dejaban fuera
+    # cinco minutos al teléfono bueno. Ahora se mira justo antes del 409.
     rl_enl = "enl:" + h[:32]
-    _acceso_limite(rl_enl)
     doc = await global_db.accesos_conductor.find_one({"token_hash": h}, {"_id": 0})
     vivo = await _acceso_vivo(doc)
     if not vivo:
@@ -13794,17 +14027,22 @@ async def entrar_con_enlace(request: Request):
             if not doc or doc.get("dispositivo_hash") is None:
                 await _acceso_no_vale(rl_ip, ip)
     if not secrets.compare_digest(str(doc.get("dispositivo_hash")), huella):
+        _acceso_limite(rl_enl)
         contexto = "enlace de conductor abierto en otro teléfono (IP %s)" % ip
         await _rl_fail(rl_ip, contexto, "un conductor")
         await _rl_fail(rl_enl, contexto, "un conductor")
-        raise HTTPException(409, _ACCESO_OTRO_TELEFONO, headers=_NO_STORE)
+        raise _Fallo(409, "enlace_usado_en_otro", _ACCESO_OTRO_TELEFONO, headers=_NO_STORE)
     await global_db.accesos_conductor.update_one({"id": doc["id"]}, {"$set": {"ultimo_uso_at": ahora}})
+    # Solo la IP: los toques de otro teléfono siguen contando para el límite y el aviso de ese enlace aunque el bueno entre.
     _rl_ok(rl_ip)
-    _rl_ok(rl_enl)
-    # La MISMA sesión que la del código por correo (driver_code_verify), más el enlace del que nace.
+    # La sesión del conductor (rol driver, su empresa, 30 días) más el enlace del que nace. SIN `at` (R12): no cuenta
+    # como «recién entrado», así que no cambia la contraseña sin la actual; y con `via: enlace`, ni con ella
+    # (_no_con_el_enlace). Quien tiene el enlace solo demuestra que tiene el mensaje.
     sesion = create_token(ficha["id"], "driver", ficha.get("name") or "", org_id=org.get("id"),
-                          db_name=_tenant_db_name(org), account_type=org.get("account_type"), entrada=time.time(),
+                          db_name=_tenant_db_name(org), account_type=org.get("account_type"),
                           enlace=doc["id"], via="enlace")
+    # La contraseña compartida de la empresa deja de abrir su cuenta (A2), como al entrar con el código.
+    await _retirar_la_compartida(_tdb, org, ficha["id"])
     logger.info("Entrada con el enlace personal: conductor %s (org %s)", ficha["id"], org.get("id"))
     return JSONResponse({"access_token": sesion, "token_type": "bearer", "role": "driver",
                          "name": ficha.get("name") or "", "id": ficha["id"], "center": ficha.get("center"),
@@ -13823,21 +14061,22 @@ _ALTA_MAX_LINEAS = 300
 _ALTA_MAX_TEXTO = 20000
 _ALTA_DEMASIADAS = "Son demasiadas líneas: pega como mucho 300 de una vez."
 _ALTA_OTRO_CENTRO = "Es de un centro que no tienes asignado."
+_ALTA_CABECERA = "Es la cabecera de la lista: no se da de alta."
 _ALTA_TROZO_MOVIL = re.compile(r"[0-9+()\-. ]+")
 _ALTA_MOVIL_AL_FINAL = re.compile(r"^(.*?)\s+([+(]?[0-9][0-9 +()\-.]*)$")
 
 
-def _alta_lineas(data: dict, vacio: str) -> list:
+def _alta_lineas(data: dict, vacio: str, codigo_vacio: str) -> list:
     """Las líneas no vacías del cuadro, recortadas. 400 si no hay ninguna o son demasiadas."""
     crudo = data.get("texto")
     texto = crudo if isinstance(crudo, str) else ""
     if len(texto) > _ALTA_MAX_TEXTO:
-        raise HTTPException(400, _ALTA_DEMASIADAS)
+        raise _Fallo(400, "demasiadas_lineas", _ALTA_DEMASIADAS)
     lineas = [x.strip() for x in texto.splitlines() if x.strip()]
     if not lineas:
-        raise HTTPException(400, vacio)
+        raise _Fallo(400, codigo_vacio, vacio)
     if len(lineas) > _ALTA_MAX_LINEAS:
-        raise HTTPException(400, _ALTA_DEMASIADAS)
+        raise _Fallo(400, "demasiadas_lineas", _ALTA_DEMASIADAS)
     return lineas
 
 
@@ -13848,9 +14087,9 @@ async def _alta_centro(user: dict, center, varias: str) -> Optional[str]:
     elegido = center.strip().upper() if isinstance(center, str) else ""
     if elegido:
         if elegido not in naves:
-            raise HTTPException(400, "Ese centro no es de tu empresa.")
+            raise _Fallo(400, "centro_ajeno", "Ese centro no es de tu empresa.")
         if not _user_can_see_center(user, elegido):
-            raise HTTPException(403, "No tienes acceso a ese centro")
+            raise _Fallo(403, "centro_no_visible", "No tienes acceso a ese centro")
         return elegido
     if not naves:
         return None
@@ -13858,8 +14097,8 @@ async def _alta_centro(user: dict, center, varias: str) -> Optional[str]:
     if len(visibles) == 1:
         return visibles[0]
     if not visibles:
-        raise HTTPException(403, "No tienes acceso a ese centro")
-    raise HTTPException(400, varias)
+        raise _Fallo(403, "centro_no_visible", "No tienes acceso a ese centro")
+    raise _Fallo(400, "elige_sede", varias)
 
 
 def _alta_kilometros(notes) -> Optional[int]:
@@ -13877,26 +14116,30 @@ def _alta_kilometros(notes) -> Optional[int]:
 async def alta_estado(user: dict = Depends(require_admin)):
     """En qué paso del arranque va la empresa, sacado de sus datos, y la revisión más reciente (la que acaba de
     llegar mientras se espera). Con centros asignados, solo lo de sus centros. Nada de la IA."""
+    # BARATA (14-11-2026, A12): el Inicio de todas las empresas la pregunta mientras el arranque no está hecho, y antes
+    # leía las fichas enteras de todos los conductores y CONTABA todas las revisiones de la flota (con `deleted != true`,
+    # que en Mongo recorre la colección entera). Ahora: las fichas con cuatro campos, los enlaces con tres, y de las
+    # revisiones solo las dos últimas (`revisiones` vale 0, 1 o 2 = «dos o más»: la pantalla solo distingue 0, 1 y más).
     org = await _acceso_empresa(user)
     filtro_c = _filtro_centro(user)
     furgonetas = await db.vehicles.count_documents({"status": {"$nin": ["deleted", "baja"]}, **filtro_c})
-    filas, accesos = await _accesos_de(user, org, None)
+    n_conductores, accesos = await _accesos_cuentas(user, org)
     q_rev = {"deleted": {"$ne": True}}
     if filtro_c:
         q_rev["vehicle_id"] = {"$in": [v["id"] async for v in db.vehicles.find(filtro_c, {"_id": 0, "id": 1})
                                        if v.get("id")]}
-    revisiones = await db.inspections.count_documents(q_rev)
-    hechos = {"furgonetas": furgonetas > 0, "conductores": len(filas) > 0,
+    ultimas = await db.inspections.find(
+        q_rev, {"_id": 0, "id": 1, "vehicle_id": 1, "driver_id": 1, "created_at": 1, "photos": 1,
+                "photo_roles": 1, "photo_vistas": 1, "notes": 1, "combustible": 1}
+    ).sort("created_at", -1).limit(2).to_list(2)
+    revisiones = len(ultimas)
+    hechos = {"furgonetas": furgonetas > 0, "conductores": n_conductores > 0,
               # Quien ya entra por correo no necesita enlace: con una revisión, el acceso está dado.
               "acceso": accesos["abierto"] > 0 or revisiones > 0, "revision": revisiones > 0}
     pasos = [{"id": k, "hecho": hechos[k]} for k in ("furgonetas", "conductores", "acceso", "revision")]
     paso_actual = next((i for i, p in enumerate(pasos, start=1) if not p["hecho"]), None)
     revision = None
     if revisiones:
-        ultimas = await db.inspections.find(
-            q_rev, {"_id": 0, "id": 1, "vehicle_id": 1, "driver_id": 1, "created_at": 1, "photos": 1,
-                    "photo_roles": 1, "photo_vistas": 1, "notes": 1, "combustible": 1}
-        ).sort("created_at", -1).limit(1).to_list(1)
         if ultimas:
             insp = ultimas[0]
             veh = await db.vehicles.find_one({"id": insp.get("vehicle_id")},
@@ -13921,41 +14164,106 @@ async def alta_estado(user: dict = Depends(require_admin)):
                 "combustible_pct": pct if isinstance(pct, int) and not isinstance(pct, bool) else None}
     return {"empresa": org.get("name") or MARCA,
             "centros": sorted(_naves_que_ve(user, await _centros_de_la_empresa())),
-            "furgonetas": furgonetas, "conductores": len(filas), "accesos": accesos, "revisiones": revisiones,
+            "furgonetas": furgonetas, "conductores": n_conductores, "accesos": accesos, "revisiones": revisiones,
             "pasos": pasos, "paso_actual": paso_actual, "revision": revision}
 
 
-def _alta_parece_matricula(clave: str) -> bool:
+# LO QUE NO ES UNA MATRÍCULA NO ENTRA SIN PREGUNTAR (14-11-2026, A11). Bastaba con 4-10 caracteres con alguna letra y
+# alguna cifra: «Furgo 1», «Calle 5», «VAN 12», «Furgoneta 2» y «Total: 3» salían como matrículas nuevas y se guardaban.
+# Ahora una matrícula es una de las formas de verdad (España, también las antiguas; Portugal, Francia, Italia, Reino
+# Unido; Alemania con su separador); lo que solo tiene letras y cifras sale «dudosa» y entra solo si se confirma.
+_MATRICULA_FORMAS = [re.compile(p) for p in (
+    r"\d{4}[A-Z]{3}",                 # 1234 ABC
+    r"[A-Z]{1,2}\d{4}[A-Z]{1,2}",     # M-1234-AB, GC 1234 B
+    r"[A-Z]{1,2}\d{6}",               # M-123456
+    r"[A-Z]\d{4}[A-Z]{3}",            # R-1234-BCD (remolques, especiales)
+    r"[A-Z]{2}\d{2}[A-Z]{2}",         # AB-12-CD (Portugal)
+    r"\d{2}[A-Z]{2}\d{2}",            # 12-AB-34 (Portugal)
+    r"\d{4}[A-Z]{2}",                 # 12-34-AB (Portugal)
+    r"[A-Z]{2}\d{4}",                 # AB-12-34 (Portugal)
+    r"[A-Z]{2}\d{3}[A-Z]{2}",         # AB-123-CD (Francia, Italia)
+    r"[A-Z]{2}\d{2}[A-Z]{3}",         # AB12 CDE (Reino Unido)
+)]
+_MATRICULA_ALEMANA = re.compile(r"[A-ZÄÖÜ]{1,3}[ -][A-Z]{1,2}[ -]?\d{1,4}[EH]?")
+_CABECERAS_MATRICULA = {"matricula", "matriculas", "placa", "placas", "vehiculo", "vehiculos", "furgoneta",
+                        "furgonetas", "plate", "plates", "registration", "matricola", "kennzeichen", "immatriculation"}
+
+
+def _alta_primera_columna(linea: str) -> str:
+    """De una línea pegada de Excel («1234 ABC⇥Ford Transit», «1234 ABC;48000 km»), la primera columna."""
+    return next((t.strip() for t in re.split(r"[\t;,]", linea) if t.strip()), "")
+
+
+def _alta_es_cabecera(texto: str, palabras: set) -> bool:
+    """¿Es una línea de cabecera? Sin cifras y hecha solo de palabras de cabecera (por columnas)."""
+    if any(c.isdigit() for c in texto) or "@" in texto:
+        return False
+    trozos = [re.sub(r"[^a-z ]", " ", _imp_norm(t)).split() for t in re.split(r"[\t;,]", texto)]
+    trozos = [t for t in trozos if t]
+    # Cada columna, una palabra de cabecera o varias unidas («Nombre y apellidos», «Matrícula del vehículo»).
+    return bool(trozos) and all(" ".join(t) in palabras or (all(w in palabras or w in ("y", "de", "del", "la", "el")
+                                                                for w in t) and any(w in palabras for w in t))
+                                for t in trozos)
+
+
+def _alta_parece_matricula(clave: str, texto: str = "") -> bool:
+    """¿Tiene una forma de matrícula de verdad? (`clave`: sin espacios ni guiones, en mayúsculas)."""
+    if not 4 <= len(clave) <= 10:
+        return False
+    if any(p.fullmatch(clave) for p in _MATRICULA_FORMAS):
+        return True
+    return bool(_MATRICULA_ALEMANA.fullmatch(re.sub(r"\s+", " ", str(texto or "").strip().upper())))
+
+
+def _alta_dudosa(clave: str) -> bool:
+    """Letras y cifras, pero sin forma de matrícula: «Furgo 1», «Calle 5». Entra solo si se confirma."""
     return 4 <= len(clave) <= 10 and any(c.isdigit() for c in clave) and any(c.isalpha() for c in clave)
 
 
 @api_router.post("/alta/furgonetas")
 async def alta_furgonetas(data: dict = Body(default={}), user: dict = Depends(require_admin)):
-    """Matrículas pegadas, una por línea: qué pasa con cada una y, con `guardar`, el alta de las nuevas."""
+    """Matrículas pegadas, una por línea: qué pasa con cada una y, con `guardar`, el alta de las nuevas. Lo dudoso
+    («Furgo 1») sale aparte y solo entra si viene en `confirmadas` (la lista de lo que el dueño confirmó)."""
     data = _dict_cuerpo(data)
-    lineas = _alta_lineas(data, "Pega o escribe al menos una matrícula.")
+    await _acceso_empresa(user)
+    lineas = _alta_lineas(data, "Pega o escribe al menos una matrícula.", "sin_matriculas")
     centro = await _alta_centro(user, data.get("center"), "Elige la sede de estas furgonetas: tienes varias.")
     guardar = data.get("guardar") is True
+    confirmadas = {_veh_clave(x) for x in (data.get("confirmadas") if isinstance(data.get("confirmadas"), list) else [])
+                   if isinstance(x, str) and x.strip()}
     _conocidos, flota = await _veh_contexto()
     vistas, salida = set(), []
     for n, texto in enumerate(lineas, start=1):
-        clave = _veh_clave(texto)
-        fila = {"n": n, "texto": texto, "matricula": None, "estado": "error", "motivo": None}
-        if not _alta_parece_matricula(clave):
-            fila["motivo"] = "No parece una matrícula."
-        else:
-            fila["matricula"] = _veh_matricula(texto)
-            if clave in vistas:
-                fila["motivo"] = "Repetida en la lista."
-            elif clave in flota:
-                if _user_can_see_center(user, flota[clave].get("center") or ""):
-                    fila.update(estado="ya_estaba", motivo="Ya la tienes dada de alta.")
-                else:
-                    fila["motivo"] = _ALTA_OTRO_CENTRO
-            else:
-                fila["estado"] = "nueva"
-            vistas.add(clave)
+        columna = _alta_primera_columna(texto)
+        clave = _veh_clave(columna)
+        fila = {"n": n, "texto": texto, "matricula": None, "estado": "error", "motivo": None, "codigo": None,
+                "confirmada": False}
         salida.append(fila)
+        if _alta_es_cabecera(columna, _CABECERAS_MATRICULA):       # «Matrícula⇥Modelo⇥Km»: manda la primera
+            fila.update(motivo=_ALTA_CABECERA, codigo="cabecera")
+            continue
+        conocida = 4 <= len(clave) <= 10 and clave in flota
+        if not conocida and not _alta_parece_matricula(clave, columna):
+            if not _alta_dudosa(clave):
+                fila.update(motivo="No parece una matrícula.", codigo="matricula_rara")
+                continue
+            if clave not in confirmadas and clave not in vistas:
+                fila.update(matricula=_veh_matricula(columna), estado="dudosa",
+                            motivo="¿Seguro que es una matrícula?", codigo="matricula_dudosa")
+                vistas.add(clave)
+                continue
+            fila["confirmada"] = clave in confirmadas
+        fila["matricula"] = _veh_matricula(columna)
+        if clave in vistas:
+            fila.update(estado="error", motivo="Repetida en la lista.", codigo="matricula_repetida")
+        elif conocida:
+            if _user_can_see_center(user, flota[clave].get("center") or ""):
+                fila.update(estado="ya_estaba", motivo="Ya la tienes dada de alta.", codigo="matricula_ya_estaba")
+            else:
+                fila.update(motivo=_ALTA_OTRO_CENTRO, codigo="otro_centro")
+        else:
+            fila["estado"] = "nueva"
+        vistas.add(clave)
     creadas = []
     if guardar:
         ahora = datetime.now(timezone.utc).isoformat()
@@ -13971,48 +14279,63 @@ async def alta_furgonetas(data: dict = Body(default={}), user: dict = Depends(re
                 creadas.append({"id": nueva["id"], "matricula": nueva["license_plate"]})
             except DuplicateKeyError:
                 # Otra alta a la vez con la misma: ya está, que es lo que se quería.
-                fila.update(estado="ya_estaba", motivo="Ya la tienes dada de alta.")
+                fila.update(estado="ya_estaba", motivo="Ya la tienes dada de alta.", codigo="matricula_ya_estaba")
     return {"lineas": salida, "nuevas": sum(f["estado"] == "nueva" for f in salida),
             "ya_estaban": sum(f["estado"] == "ya_estaba" for f in salida),
             "errores": sum(f["estado"] == "error" for f in salida),
+            "dudosas": sum(f["estado"] == "dudosa" for f in salida),
             "center": centro, "guardado": guardar, "creadas": creadas}
 
 
+_CABECERAS_PERSONA = {"nombre", "nombres", "name", "apellido", "apellidos", "nombre completo", "conductor",
+                      "conductores", "conductora", "repartidor", "repartidores", "persona", "telefono", "telefonos",
+                      "tel", "tlf", "telf", "movil", "moviles", "celular", "whatsapp", "phone", "mobile", "correo",
+                      "correos", "correo electronico", "email", "mail", "dni", "nif", "centro", "sede", "nave"}
+
+
 def _alta_partir_persona(linea: str) -> list:
-    """Los trozos de una línea «Nombre, móvil, correo». Separan el tabulador, «;» y «,»; sin ninguno, un correo suelto
-    y un móvil al final de la línea también valen («Ana López 612345678»)."""
+    """Las columnas de una línea «Nombre, móvil, correo», cada una con sus trozos separados por comas. Separan columnas
+    el tabulador y «;»; dentro de una columna, la «,». Sin ningún separador, un correo suelto y un móvil al final de la
+    línea también valen («Ana López 612345678»)."""
     if re.search(r"[\t;,]", linea):
-        return [t.strip() for t in re.split(r"[\t;,]", linea) if t.strip()]
+        return [[t.strip() for t in col.split(",") if t.strip()] for col in re.split(r"[\t;]", linea) if col.strip()]
     palabras = linea.split()
-    correos = [w for w in palabras if _EMAIL_RE.fullmatch(w)]
+    correos = [[w] for w in palabras if _EMAIL_RE.fullmatch(w)]
     resto = " ".join(w for w in palabras if not _EMAIL_RE.fullmatch(w))
     m = _ALTA_MOVIL_AL_FINAL.match(resto)
     if m and sum(c.isdigit() for c in m.group(2)) >= 3:
-        return [m.group(1).strip(), m.group(2).strip()] + correos
-    return ([resto] if resto else []) + correos
+        return [[m.group(1).strip()], [m.group(2).strip()]] + correos
+    return ([[resto]] if resto else []) + correos
 
 
-def _alta_persona(linea: str) -> dict:
-    """{nombre, movil (+E.164 o None), email, motivo (el error de la línea o None)} de una línea."""
+def _alta_persona(linea: str, pais: str = "es") -> dict:
+    """{nombre, movil (+E.164 o None), email, motivo, codigo, dato} de una línea.
+    NOMBRES CON COMA (14-11-2026, A11): «López García, Ana, 612 345 678» se quedaba en «López García Ana». Lo que va entre
+    comas y no es un móvil ni un correo es parte del nombre y se junta con su coma; entre columnas (tabulador o «;»),
+    con un espacio. EL MÓVIL, SIN INVENTAR: con el prefijo que lleve o con la regla del país de la empresa (_movil_wa)."""
     nombre, moviles, correos = [], [], []
-    for t in _alta_partir_persona(linea):
-        if _EMAIL_RE.fullmatch(t):
-            correos.append(t.lower())
-        elif _ALTA_TROZO_MOVIL.fullmatch(t) and any(c.isdigit() for c in t):
-            moviles.append(t)
-        else:
-            nombre.append(t)
+    for columna in _alta_partir_persona(linea):
+        partes = []
+        for t in columna:
+            if _EMAIL_RE.fullmatch(t):
+                correos.append(t.lower())
+            elif _ALTA_TROZO_MOVIL.fullmatch(t) and any(c.isdigit() for c in t):
+                moviles.append(t)
+            else:
+                partes.append(t)
+        if partes:
+            nombre.append(", ".join(partes))
     persona = {"nombre": re.sub(r"\s+", " ", " ".join(nombre)).strip() or None, "movil": None,
-               "email": correos[0] if correos else None, "motivo": None}
+               "email": correos[0] if correos else None, "motivo": None, "codigo": None, "dato": None}
     if sum(c.isalpha() for c in (persona["nombre"] or "")) < 3:
-        persona["motivo"] = "Falta el nombre."
+        persona.update(motivo="Falta el nombre.", codigo="falta_nombre")
     elif moviles:
         crudo = re.sub(r"\s+", " ", moviles[0]).strip()
-        e164 = whatsapp.normaliza_telefono(crudo) if sum(c.isdigit() for c in crudo) >= 9 else ""
+        e164 = _movil_wa(crudo, pais)
         if e164:
             persona["movil"] = "+" + e164
         else:
-            persona["motivo"] = "El móvil «%s» no parece un número." % crudo
+            persona.update(motivo="El móvil «%s» no parece un número." % crudo, codigo="telefono_raro", dato=crudo)
     return persona
 
 
@@ -14027,7 +14350,9 @@ async def alta_conductores(data: dict = Body(default={}), user: dict = Depends(r
     """Conductores pegados, uno por línea («Nombre, móvil» y, si se quiere, el correo): qué pasa con cada uno y, con
     `guardar`, el alta de los nuevos con las MISMAS reglas que el alta a mano (`create_driver`)."""
     data = _dict_cuerpo(data)
-    lineas = _alta_lineas(data, "Pega o escribe al menos un conductor.")
+    org = await _acceso_empresa(user)
+    pais = _pais_de(org)
+    lineas = _alta_lineas(data, "Pega o escribe al menos un conductor.", "sin_conductores")
     centro = await _alta_centro(user, data.get("center"), "Elige la sede de estos conductores: tienes varias.")
     guardar = data.get("guardar") is True
     por_movil, por_correo, por_nombre = {}, {}, {}
@@ -14037,9 +14362,10 @@ async def alta_conductores(data: dict = Body(default={}), user: dict = Depends(r
         if not _ficha_de_alta(f):
             continue
         for tel in (f.get("movil_personal"), f.get("phone")):
-            e164 = whatsapp.normaliza_telefono(tel) if tel else ""
-            if e164:
-                por_movil.setdefault(e164, f)
+            # Con la regla del país y con la de siempre: un móvil guardado antes de esta regla también cuenta.
+            for e164 in {_movil_wa(tel, pais), whatsapp.normaliza_telefono(tel) if tel else ""}:
+                if e164:
+                    por_movil.setdefault(e164, f)
         if str(f.get("email") or "").strip():
             por_correo.setdefault(str(f["email"]).strip().lower(), f)
         if f.get("name"):
@@ -14047,9 +14373,16 @@ async def alta_conductores(data: dict = Body(default={}), user: dict = Depends(r
     vistos_movil, vistos_correo, vistos_nombre = set(), set(), set()
     salida = []
     for n, texto in enumerate(lineas, start=1):
-        p = _alta_persona(texto)
+        if _alta_es_cabecera(texto, _CABECERAS_PERSONA):
+            # «Nombre, Teléfono» pegado con la columna de Excel: no es una persona (14-11-2026, A11).
+            salida.append({"n": n, "texto": texto, "nombre": None, "movil": None, "email": None, "estado": "error",
+                           "motivo": _ALTA_CABECERA, "aviso": None, "codigo": "cabecera", "aviso_codigo": None,
+                           "dato": None})
+            continue
+        p = _alta_persona(texto, pais)
         fila = {"n": n, "texto": texto, "nombre": p["nombre"], "movil": p["movil"], "email": p["email"],
-                "estado": "error", "motivo": p["motivo"], "aviso": None}
+                "estado": "error", "motivo": p["motivo"], "aviso": None, "codigo": p["codigo"], "aviso_codigo": None,
+                "dato": p["dato"]}
         salida.append(fila)
         if p["motivo"]:
             continue
@@ -14063,17 +14396,21 @@ async def alta_conductores(data: dict = Body(default={}), user: dict = Depends(r
             vistos_correo.add(p["email"])
         vistos_nombre.add(nombre_n)
         if repetida:
-            fila["motivo"] = "Repetida en la lista."
+            fila.update(motivo="Repetida en la lista.", codigo="conductor_repetido")
             continue
         ya = (por_movil.get(movil) if movil else None) or (por_correo.get(p["email"]) if p["email"] else None) \
             or (por_nombre.get(nombre_n) if not movil and not p["email"] else None)
         if ya:
             if _sin_centro_visible(user, ya.get("center")):
-                fila["motivo"] = _ALTA_OTRO_CENTRO
+                fila.update(motivo=_ALTA_OTRO_CENTRO, codigo="otro_centro")
             else:
-                fila.update(estado="ya_estaba", motivo="Ya está dado de alta como «%s»." % (ya.get("name") or ""))
+                como = str(ya.get("name") or "")
+                # Sin el punto de cierre si el nombre ya acaba en punto («Luis P.»): no «Luis P.».» (panel2, 13).
+                fila.update(estado="ya_estaba", codigo="conductor_ya_estaba", dato=como,
+                            motivo="Ya está dado de alta como «%s»%s" % (como, "" if como.endswith(".") else "."))
             continue
-        fila.update(estado="nuevo", aviso=None if movil else "Sin móvil: tendrás que copiarle el enlace.")
+        fila.update(estado="nuevo", aviso=None if movil else "Sin móvil: tendrás que copiarle el enlace.",
+                    aviso_codigo=None if movil else "sin_movil")
     creados = []
     if guardar:
         for fila in salida:
@@ -14087,7 +14424,8 @@ async def alta_conductores(data: dict = Body(default={}), user: dict = Depends(r
             except HTTPException as e:
                 if e.status_code not in (400, 409):
                     raise
-                fila.update(estado="error", motivo=_alta_mensaje(e.detail), aviso=None)
+                fila.update(estado="error", motivo=_alta_mensaje(e.detail), aviso=None, codigo="alta_rechazada",
+                            aviso_codigo=None, dato=None)
     return {"lineas": salida, "nuevos": sum(f["estado"] == "nuevo" for f in salida),
             "ya_estaban": sum(f["estado"] == "ya_estaba" for f in salida),
             "errores": sum(f["estado"] == "error" for f in salida),
@@ -14509,6 +14847,8 @@ async def portal_solicitar_correo_personal(data: dict, request: Request,
                                             user: dict = Depends(require_any_auth)):
     if user.get("role") != "driver":
         raise HTTPException(403, "Solo conductores")
+    # Un correo personal verificado abre la cuenta con un código: con la sesión del enlace, no (R12, 14-11-2026).
+    _no_con_el_enlace(user)
     _rl_public_action(f"drv-recovery:{user['sub']}:{_rl_key_ip(request)}", 3, 3600)
     return await driver_recovery_email_request(user["sub"], data, user)
 
@@ -29978,7 +30318,7 @@ async def _partner_apunta(doc: dict, request: Request, recurso: str, params: dic
             "at": datetime.now(timezone.utc).isoformat(),
             "partner": doc.get("partner"), "token_id": doc.get("id"),
             "db_name": doc.get("db_name"), "recurso": recurso, "params": params,
-            "ip": (request.client.host if request.client else None),
+            "ip": _rl_key_ip(request),   # la de quien llama (Fly-Client-IP), no la del proxy de Fly
             # 90 días: es un registro de auditoría, no un histórico eterno.
             "expira_en": datetime.now(timezone.utc) + timedelta(days=90),
         })

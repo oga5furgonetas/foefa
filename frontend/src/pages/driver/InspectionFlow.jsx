@@ -136,9 +136,17 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
     return () => { blobUrlCache.current.forEach((url) => URL.revokeObjectURL(url)) }
   }, [])
 
+  /* UNA CUENTA SIN LECTOR AUTOMÁTICO (14-11-2026, tercera tanda, A10 / CONTRATO R9). El servidor lo dice en la ficha
+     del portal (`sin_ia: true`): entonces esta pantalla no nombra la IA ni espera a que lea nada. Cada foto se guarda
+     tal cual («Foto guardada»), sin llamar a comprobarla, y los km se escriben a mano desde el principio (la foto del
+     cuadro sigue siendo obligatoria: es la prueba). Sin el campo, o con `false`, todo exactamente como antes. */
+  const [sinIa, setSinIa] = useState(false)
   useEffect(() => {
     getAssignedVehicle()
-      .then((r) => r.data?.assigned && setAssigned(r.data))
+      .then((r) => {
+        setSinIa(r.data?.sin_ia === true)
+        if (r.data?.assigned) setAssigned(r.data)
+      })
       .catch(() => {})
   }, [])
 
@@ -147,6 +155,11 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
     e.target.value = ''
     if (!file) return
     const blob = await compressImage(file, 1200, 0.7)
+    if (sinIa) {
+      setPhotos((p) => ({ ...p, [slotId]: blob }))
+      toast.info(t('dr.fotoGuardada'))
+      return
+    }
     if (!vehicleId) {
       setPhotos((p) => ({ ...p, [slotId]: blob }))
       return
@@ -176,6 +189,11 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
     e.target.value = ''
     if (!file) return
     const blob = await compressImage(file, 1280, 0.8)
+    if (sinIa) {
+      // Sin lector: la foto se guarda como prueba y los km ya se están escribiendo abajo (no se tocan).
+      setOdoPhoto(blob)
+      return
+    }
     setOdoBusy(true); setOdoError(''); setOdoKm(null); setOdoManual(''); setOdoServicioCaido(false); setOdoSinLector(false)
     try {
       const r = await readOdometer(vehicleId, blob)
@@ -215,7 +233,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
   // lo juzga el servidor al subir la auditoría (`odometer_rejected` si no cuadra, para que lo vea la oficina).
   // Hasta el 29-10-2026 sin límites no salía el campo y el conductor no podía seguir ni a mano.
   const odoLim = odoLimites || { min: 0, max: 999999, dias: 1, actual: 0 }
-  const odoManualValido = odoBloqueado
+  const odoManualValido = (odoBloqueado || sinIa)
     && Number.isFinite(odoManualNum)
     && odoManualNum >= odoLim.min && odoManualNum <= odoLim.max
   const odoKmFinal = odoKm > 0 ? odoKm : (odoManualValido ? odoManualNum : null)
@@ -318,6 +336,8 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
   const otherVehicles = vehicles.filter((v) => !assigned?.vehicle || v.id !== assigned.vehicle.id)
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId) || assigned?.vehicle
   const photosOk = Object.keys(photos).length
+  // Los km que tenía apuntados (de la lista del portal o de su furgoneta de hoy): solo de referencia, no son un tope.
+  const kmAnteriores = Number(selectedVehicle?.mileage || (assigned?.vehicle?.id === vehicleId ? assigned.vehicle.mileage : 0) || 0)
   const today = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
@@ -523,8 +543,8 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                   onClick={() => odoRef.current?.click()}
                   disabled={odoBusy}
                   className={`relative flex h-28 w-full flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl border-2 border-dashed transition-all ${
-                    odoKmFinal > 0 ? 'border-emerald-500/50 bg-emerald-500/5' :
-                    odoSinLector  ? 'border-dark-700' :
+                    odoKmFinal > 0 && odoPhoto ? 'border-emerald-500/50 bg-emerald-500/5' :
+                    odoSinLector || (sinIa && odoPhoto) ? 'border-dark-700' :
                     odoError      ? 'border-amber-500/50 bg-amber-500/5' :
                                     'border-brand-500/30 bg-brand-500/5 hover:border-brand-500/60'
                   }`}
@@ -538,7 +558,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                     <>
                       <img src={getBlobUrl(odoPhoto)} className="absolute inset-0 h-full w-full object-cover" alt={t('dr.odo.alt')} />
                       <div className="absolute inset-0 bg-black/40" />
-                      {(odoKmFinal > 0 || !odoSinLector) && (
+                      {(odoKmFinal > 0 || !(odoSinLector || sinIa)) && (
                         <div className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full ${odoKmFinal > 0 ? 'bg-emerald-500' : 'bg-amber-500'}`}>
                           {odoKmFinal > 0 ? <Check size={13} className="text-white" />
                                           : <span className="text-[13px] font-black text-white">!</span>}
@@ -546,18 +566,36 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                       )}
                       <div className={`absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-dark-900/90 px-4 py-1 text-xs font-black ring-1 ${
                         odoKmFinal > 0 ? 'text-emerald-300 ring-emerald-500/30'
-                          : odoSinLector ? 'text-dark-100 ring-dark-700' : 'text-amber-300 ring-amber-500/30'}`}>
-                        {odoKmFinal > 0 ? `${odoKmFinal.toLocaleString()} km` : odoSinLector ? t('dr.odo.kmAMano') : t('dr.kmSinLeer')}
+                          : (odoSinLector || sinIa) ? 'text-dark-100 ring-dark-700' : 'text-amber-300 ring-amber-500/30'}`}>
+                        {odoKmFinal > 0 ? `${odoKmFinal.toLocaleString()} km` : (odoSinLector || sinIa) ? t('dr.odo.kmAMano') : t('dr.kmSinLeer')}
                       </div>
                     </>
                   ) : (
                     <>
                       <Gauge size={24} className="text-brand-400" />
                       <span className="text-xs font-semibold text-dark-300">{t('dr.fotoCuenta')}</span>
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-brand-500">{t('dr.oblKmAuto')}</span>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-brand-500">{t(sinIa ? 'dr.required' : 'dr.oblKmAuto')}</span>
                     </>
                   )}
                 </button>
+                {/* Sin lector, los km a mano desde el principio, como un dato más de la revisión (no como un fallo). */}
+                {sinIa && (
+                  <div className="mt-2 rounded-xl border border-dark-700 bg-dark-900/60 px-3 py-2" data-testid="odo-a-mano">
+                    <label htmlFor="odo-km" className="block text-etiqueta text-dark-100">{t('dr.odo.escribeKm')}</label>
+                    {kmAnteriores > 0 && (
+                      <p className="mt-1 text-pie text-dark-400">
+                        {t('dr.odo.ultima').replace('{km}', kmAnteriores.toLocaleString())}
+                      </p>
+                    )}
+                    <input id="odo-km"
+                      type="tel" inputMode="numeric" value={odoManual}
+                      onChange={(e) => setOdoManual(e.target.value.replace(/\D/g, '').slice(0, 7))}
+                      placeholder={t('dr.odo.kmCuadro')}
+                      className={`mt-2 w-full rounded-lg border-2 bg-dark-900/60 px-3 py-2 text-center text-titulo tabular-nums text-dark-50 outline-none ${
+                        odoManual === '' ? 'border-dark-700' : odoKmFinal > 0 ? 'border-emerald-500/60' : 'border-red-500/60'}`}
+                    />
+                  </div>
+                )}
                 {odoError && (
                   <div className={`mt-1.5 rounded-xl border px-3 py-2 ${odoSinLector ? 'border-dark-700 bg-dark-900/60' : 'border-amber-500/30 bg-amber-500/10'}`}
                     data-testid="odo-aviso">
@@ -887,7 +925,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
               className="btn-primary flex w-full items-center justify-center gap-2 py-4 text-base font-bold"
             >
               {sending ? (
-                <><Loader2 size={18} className="animate-spin" /> Enviando la revisión…</>
+                <><Loader2 size={18} className="animate-spin" /> {t('dr.enviando')}</>
               ) : (
                 <><Shield size={18} /> Enviar inspección</>
               )}
@@ -895,7 +933,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
 
             {sending && (
               <p className="text-center text-xs text-dark-500">
-                Se están subiendo las fotos. Puede tardar unos segundos…
+                {t('dr.subiendo')}
               </p>
             )}
           </div>

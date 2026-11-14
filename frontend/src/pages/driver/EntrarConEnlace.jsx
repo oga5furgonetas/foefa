@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useT } from '../../i18n'
 import { useTitulo } from '../../lib/titulo'
-import { API_BASE, DRIVER_TOKEN_KEY } from '../../services/api'
+import { API_BASE, DRIVER_TOKEN_KEY, ENLACE_CADUCADO } from '../../services/api'
 import { BTN_PRIMARIO, BTN_SECUNDARIO } from '../portadaComun'
-import { MarcoEntrada, TITULO, TEXTO, ERROR, AVISO } from '../entradaComun'
+import { MarcoEntrada, TITULO, TEXTO, ERROR, AVISO, ENLACE } from '../entradaComun'
 
 /* ENTRAR CON EL ENLACE PERSONAL (14-11-2026, CONTRATO-ALTA §1.6–1.9). El dueño le manda a cada conductor, por su
    WhatsApp, un enlace `/c#<token>`. Con un toque en «Entrar» queda dentro de su portal: sin correo, sin contraseña y sin
@@ -40,12 +40,23 @@ export function secretoDelTelefono() {
   return dispositivoEnMemoria
 }
 
-/* El token, leído una sola vez al cargar el módulo de la pantalla (y no en cada pintado): después ya no está en la
-   dirección. Se acepta también escrito como ruta (`/c/<token>`), por si alguien lo copia así. */
+/* El token, leído una sola vez al abrir la pantalla (y no en cada pintado): después ya no está en la dirección. Se
+   acepta también escrito como ruta (`/c/<token>`), por si alguien lo copia así.
+   LO NORMAL DE UN MÓVIL NO LO ROMPE (14-11-2026, tercera tanda, A4): la dirección se queda en `/c` a secas nada más
+   cargar, así que recargar sin cobertura, o que el navegador descargue la pestaña, dejaba al conductor sin enlace y la
+   pantalla le decía «ya no vale» con el enlace vivo. Ahora el token se guarda en la memoria de ESTA pestaña
+   (`sessionStorage`, que se va al cerrarla y no la ve ninguna otra) hasta que el canje sale bien, o hasta que el
+   servidor dice que ese enlace ya no sirve; entonces se borra. */
+const PENDIENTE = 'fds_enlace_pendiente'
 function leerToken(deRuta) {
-  const delFragmento = (window.location.hash || '').replace(/^#/, '').trim()
-  return delFragmento || String(deRuta || '').trim()
+  const nuevo = (window.location.hash || '').replace(/^#/, '').trim() || String(deRuta || '').trim()
+  if (nuevo) {
+    try { sessionStorage.setItem(PENDIENTE, nuevo) } catch { /* sin almacén: vale mientras no se recargue */ }
+    return nuevo
+  }
+  try { return sessionStorage.getItem(PENDIENTE) || '' } catch { return '' }
 }
+const olvidarToken = () => { try { sessionStorage.removeItem(PENDIENTE) } catch { /* sin almacén */ } }
 
 function haySesionDelPanel() {
   try { return !!localStorage.getItem('flota_token') } catch { return false }
@@ -58,7 +69,8 @@ export default function EntrarConEnlace() {
   const [token] = useState(() => leerToken(deRuta))
   const [avisoPanel, setAvisoPanel] = useState(() => haySesionDelPanel())
   const [ocupado, setOcupado] = useState(false)
-  const [error, setError] = useState(() => (leerToken(deRuta) ? null : { texto: t('alta.c.e401'), final: true }))
+  // Sin enlace (se abrió `/c` a secas, u otra pestaña): no es que no valga, es que aquí no está.
+  const [error, setError] = useState(() => (token ? null : { texto: t('alta.c.sinToken'), final: true, titulo: 'alta.c.titulo' }))
 
   // Fuera de la dirección cuanto antes, y que esta página no mande la dirección a nadie.
   useEffect(() => {
@@ -88,21 +100,25 @@ export default function EntrarConEnlace() {
     }
     let j = null
     try { j = await r.json() } catch { j = null }
-    const detalle = typeof j?.detail === 'string' && j.detail ? j.detail : ''
     if (r.ok && j?.access_token) {
       try {
         localStorage.setItem(DRIVER_TOKEN_KEY, j.access_token)
         localStorage.setItem('flota_driver', JSON.stringify({
           id: j.id, name: j.name, email: j.email || null, center: j.center || null, configurar_cuenta: false,
         }))
+        localStorage.removeItem(ENLACE_CADUCADO)
       } catch {
         setError({ texto: t('alta.c.eOtro') }); setOcupado(false); return
       }
+      olvidarToken()
       window.location.replace(`/conductor${j.slug ? `#${j.slug}` : ''}`)
       return
     }
-    if (r.status === 401) setError({ texto: detalle || t('alta.c.e401'), final: true })
-    else if (r.status === 409) setError({ texto: detalle || t('alta.c.e409'), final: true })
+    /* Los porqués, siempre en el idioma de la pantalla (A8): el servidor los manda en español y son los mismos textos.
+       Con 401 o 409 ese enlace ya no le sirve a este navegador: se olvida. Con lo demás se puede volver a intentar. */
+    if (r.status === 401 || r.status === 409) olvidarToken()
+    if (r.status === 401) setError({ texto: t('alta.c.e401'), final: true })
+    else if (r.status === 409) setError({ texto: t('alta.c.e409'), final: true })
     else if (r.status === 429) setError({ texto: t('alta.c.e429'), final: true })
     else setError({ texto: t('alta.c.eOtro') })
     setOcupado(false)
@@ -121,10 +137,11 @@ export default function EntrarConEnlace() {
         </section>
       ) : error?.final ? (
         <section className="flex flex-1 flex-col" aria-labelledby="c-titulo">
-          <h1 id="c-titulo" className={TITULO}>{t('alta.c.noEntra')}</h1>
+          <h1 id="c-titulo" className={TITULO}>{t(error.titulo || 'alta.c.noEntra')}</h1>
           <p role="alert" className={`mt-3 ${TEXTO}`} data-testid="c-error">{error.texto}</p>
+          {/* La salida es pedir el enlace a su empresa (lo dice el texto). Entrar con correo es para quien lo tiene. */}
           <div className="mt-auto pt-10">
-            <a href="/conductor" className={`${BTN_SECUNDARIO} w-full`}>{t('alta.c.conCorreo')}</a>
+            <a href="/conductor" className={ENLACE}>{t('alta.dr.tengoCorreo')}</a>
           </div>
         </section>
       ) : (

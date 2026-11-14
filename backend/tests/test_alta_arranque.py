@@ -144,14 +144,22 @@ def test_las_matriculas_se_revisan_linea_a_linea_antes_de_guardar(mundo):
     mundo.a["vehicles"].docs.append({"id": "v1", "license_plate": "5678KLM", "status": "active", "center": "PRINCIPAL"})
     r = _furgonetas(mundo, "1234 ABC\n5678-klm\n\n  1234abc  \nfurgo de Juan\nABCD\n12345")
     assert r.status_code == 200, r.text
+    # Cada línea con su `codigo` (R12) y `confirmada` (A11), y la cuenta de dudosas (14-11-2026).
     assert r.json() == {"lineas": [
-        {"n": 1, "texto": "1234 ABC", "matricula": "1234 ABC", "estado": "nueva", "motivo": None},
-        {"n": 2, "texto": "5678-klm", "matricula": "5678 KLM", "estado": "ya_estaba", "motivo": "Ya la tienes dada de alta."},
-        {"n": 3, "texto": "1234abc", "matricula": "1234 ABC", "estado": "error", "motivo": "Repetida en la lista."},
-        {"n": 4, "texto": "furgo de Juan", "matricula": None, "estado": "error", "motivo": "No parece una matrícula."},
-        {"n": 5, "texto": "ABCD", "matricula": None, "estado": "error", "motivo": "No parece una matrícula."},
-        {"n": 6, "texto": "12345", "matricula": None, "estado": "error", "motivo": "No parece una matrícula."}],
-        "nuevas": 1, "ya_estaban": 1, "errores": 4, "center": "PRINCIPAL", "guardado": False, "creadas": []}
+        {"n": 1, "texto": "1234 ABC", "matricula": "1234 ABC", "estado": "nueva", "motivo": None, "codigo": None,
+         "confirmada": False},
+        {"n": 2, "texto": "5678-klm", "matricula": "5678 KLM", "estado": "ya_estaba", "motivo": "Ya la tienes dada de alta.",
+         "codigo": "matricula_ya_estaba", "confirmada": False},
+        {"n": 3, "texto": "1234abc", "matricula": "1234 ABC", "estado": "error", "motivo": "Repetida en la lista.",
+         "codigo": "matricula_repetida", "confirmada": False},
+        {"n": 4, "texto": "furgo de Juan", "matricula": None, "estado": "error", "motivo": "No parece una matrícula.",
+         "codigo": "matricula_rara", "confirmada": False},
+        {"n": 5, "texto": "ABCD", "matricula": None, "estado": "error", "motivo": "No parece una matrícula.",
+         "codigo": "matricula_rara", "confirmada": False},
+        {"n": 6, "texto": "12345", "matricula": None, "estado": "error", "motivo": "No parece una matrícula.",
+         "codigo": "matricula_rara", "confirmada": False}],
+        "nuevas": 1, "ya_estaban": 1, "errores": 4, "dudosas": 0, "center": "PRINCIPAL", "guardado": False,
+        "creadas": []}
     assert len(mundo.a["vehicles"].docs) == 1                       # sin guardar, nada
 
 
@@ -174,14 +182,15 @@ def test_guardar_da_de_alta_solo_las_nuevas_en_su_sede(mundo):
 def test_la_sede_de_las_furgonetas(mundo):
     adm_b = _sesion_admin("adm-b", "orgb")
     r = _furgonetas(mundo, "1234 ABC", admin=adm_b)
-    assert r.status_code == 400 and r.json() == {"detail": "Elige la sede de estas furgonetas: tienes varias."}
+    assert r.status_code == 400 and r.json() == {"detail": "Elige la sede de estas furgonetas: tienes varias.",
+                                                 "codigo": "elige_sede"}
     assert _furgonetas(mundo, "1234 ABC", admin=adm_b, center="sur").json()["center"] == "SUR"
     r = _furgonetas(mundo, "1234 ABC", admin=adm_b, center="MADRID")
-    assert r.status_code == 400 and r.json() == {"detail": "Ese centro no es de tu empresa."}
+    assert r.status_code == 400 and r.json() == {"detail": "Ese centro no es de tu empresa.", "codigo": "centro_ajeno"}
     jefe = _sesion_admin("adm-b-norte", "orgb")
     assert _furgonetas(mundo, "1234 ABC", admin=jefe).json()["center"] == "NORTE"          # la única que ve
     r = _furgonetas(mundo, "1234 ABC", admin=jefe, center="SUR")
-    assert r.status_code == 403 and r.json() == {"detail": "No tienes acceso a ese centro"}
+    assert r.status_code == 403 and r.json() == {"detail": "No tienes acceso a ese centro", "codigo": "centro_no_visible"}
     # La que ya está en un centro que no ve: ni «ya la tienes» ni se toca.
     mundo.b["vehicles"].docs.append({"id": "vs", "license_plate": "2222 SSS", "status": "active", "center": "SUR"})
     fila = _furgonetas(mundo, "2222SSS", admin=jefe, guardar=True).json()["lineas"][0]
@@ -203,7 +212,8 @@ def test_lo_que_no_se_puede_revisar_se_dice(mundo):
                        ("1234 ABC\n" * 301, "Son demasiadas líneas: pega como mucho 300 de una vez."),
                        ("x" * 20001, "Son demasiadas líneas: pega como mucho 300 de una vez.")):
         r = _furgonetas(mundo, texto)
-        assert r.status_code == 400 and r.json() == {"detail": msg}, texto
+        codigo = "sin_matriculas" if msg.startswith("Pega") else "demasiadas_lineas"
+        assert r.status_code == 400 and r.json() == {"detail": msg, "codigo": codigo}, texto
     assert _furgonetas(mundo, "1234 ABC\n" * 300).status_code == 200
     r = mundo.http.post("/api/alta/furgonetas", json=[1, 2], headers=_h(_sesion_admin()))
     assert r.status_code in (400, 422) and r.status_code != 500
@@ -229,14 +239,17 @@ def test_los_conductores_se_revisan_linea_a_linea(mundo):
     assert r.status_code == 200, r.text
     c = r.json()
     lineas = {f["n"]: f for f in c["lineas"]}
+    # Con su `codigo`, `aviso_codigo` y `dato` (R12, 14-11-2026).
     assert lineas[1] == {"n": 1, "texto": "Ana Gómez, 612 345 678", "nombre": "Ana Gómez", "movil": "+34612345678",
                          "email": None, "estado": "ya_estaba", "motivo": "Ya está dado de alta como «Ana López».",
-                         "aviso": None}
+                         "aviso": None, "codigo": "conductor_ya_estaba", "aviso_codigo": None, "dato": "Ana López"}
     assert lineas[2] == {"n": 2, "texto": "Luis Pérez\t698765432\tluis@ejemplo.es", "nombre": "Luis Pérez",
                          "movil": "+34698765432", "email": "luis@ejemplo.es", "estado": "ya_estaba",
-                         "motivo": "Ya está dado de alta como «Luis Pérez».", "aviso": None}
+                         "motivo": "Ya está dado de alta como «Luis Pérez».", "aviso": None,
+                         "codigo": "conductor_ya_estaba", "aviso_codigo": None, "dato": "Luis Pérez"}
     assert lineas[3] == {"n": 3, "texto": "Rosa Martín", "nombre": "Rosa Martín", "movil": None, "email": None,
-                         "estado": "nuevo", "motivo": None, "aviso": "Sin móvil: tendrás que copiarle el enlace."}
+                         "estado": "nuevo", "motivo": None, "aviso": "Sin móvil: tendrás que copiarle el enlace.",
+                         "codigo": None, "aviso_codigo": "sin_movil", "dato": None}
     assert (lineas[4]["nombre"], lineas[4]["movil"], lineas[4]["estado"]) == ("Pedro Ruiz", "+34611223344", "nuevo")
     assert (lineas[5]["nombre"], lineas[5]["movil"], lineas[5]["email"], lineas[5]["estado"]) == \
         ("Juan", "+34600111222", "juan@ejemplo.es", "nuevo")
@@ -244,7 +257,8 @@ def test_los_conductores_se_revisan_linea_a_linea(mundo):
     assert (lineas[7]["estado"], lineas[7]["motivo"]) == ("error", "El móvil «612 34» no parece un número.")
     assert (lineas[8]["estado"], lineas[8]["motivo"]) == ("error", "Repetida en la lista.")       # el móvil de la 1
     assert (lineas[9]["estado"], lineas[9]["motivo"]) == ("error", "Repetida en la lista.")       # el nombre de la 3
-    assert (lineas[10]["estado"], lineas[10]["motivo"]) == ("ya_estaba", "Ya está dado de alta como «Rosa M.».")
+    # Sin «.».» al final cuando el nombre ya acaba en punto (panel2, 13).
+    assert (lineas[10]["estado"], lineas[10]["motivo"]) == ("ya_estaba", "Ya está dado de alta como «Rosa M.»")
     assert lineas[11]["estado"] == "nuevo"                     # la ficha de baja no cuenta como «ya está»
     assert (c["nuevos"], c["ya_estaban"], c["errores"]) == (4, 3, 4)
     assert c["center"] == "PRINCIPAL" and c["guardado"] is False and c["creados"] == []
@@ -271,19 +285,22 @@ def test_guardar_da_de_alta_a_los_nuevos_como_el_alta_a_mano(mundo):
 def test_la_sede_de_los_conductores(mundo):
     adm_b = _sesion_admin("adm-b", "orgb")
     r = _conductores(mundo, "Nuevo Uno, 600000001", admin=adm_b)
-    assert r.status_code == 400 and r.json() == {"detail": "Elige la sede de estos conductores: tienes varias."}
+    assert r.status_code == 400 and r.json() == {"detail": "Elige la sede de estos conductores: tienes varias.",
+                                                 "codigo": "elige_sede"}
     r = _conductores(mundo, "Nuevo Uno, 600000001", admin=adm_b, center="SUR", guardar=True)
     assert r.status_code == 200 and r.json()["center"] == "SUR"
     assert [d["center"] for d in mundo.b["drivers"].docs if d["name"] == "Nuevo Uno"] == ["SUR"]
     jefe = _sesion_admin("adm-b-norte", "orgb")
     assert _conductores(mundo, "Otro Más", admin=jefe).json()["center"] == "NORTE"
     assert _conductores(mundo, "Otro Más", admin=jefe, center="SUR").status_code == 403
-    assert _conductores(mundo, "Otro Más", admin=jefe, center="LEJOS").json() == {"detail": "Ese centro no es de tu empresa."}
+    assert _conductores(mundo, "Otro Más", admin=jefe, center="LEJOS").json() == {
+        "detail": "Ese centro no es de tu empresa.", "codigo": "centro_ajeno"}
     # Uno de un centro que no ve: no se dice cómo se llama ni se duplica.
     fila = _conductores(mundo, "Sergio Sur", admin=jefe).json()["lineas"][0]
     assert fila["estado"] == "error" and fila["motivo"] == "Es de un centro que no tienes asignado."
     vacio = _conductores(mundo, "  \n ")
-    assert vacio.status_code == 400 and vacio.json() == {"detail": "Pega o escribe al menos un conductor."}
+    assert vacio.status_code == 400 and vacio.json() == {"detail": "Pega o escribe al menos un conductor.",
+                                                         "codigo": "sin_conductores"}
 
 
 def test_la_lista_pegada_y_el_enlace_casan_de_principio_a_fin(mundo):

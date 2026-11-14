@@ -115,6 +115,10 @@ const _NOISE = [
   'WebAssembly.instantiate', 'WebAssembly.compile',
 ]
 const _reported = new Set()
+/* SIN EL «#» (14-11-2026, tercera tanda, A8). Detrás de «#» viajan cosas que no salen del teléfono: el enlace personal
+   del conductor (`/c#<token>`), el pase al móvil, el slug del portal, las respuestas de /devolucion-renting. El informe
+   de un error va al servidor y de allí a Telegram, así que se manda la dirección sin él, en toda la web. */
+const sinFragmento = (url) => String(url || '').split('#')[0]
 function reportError(message, stack) {
   try {
     const msg = String(message || '').slice(0, 500)
@@ -124,7 +128,7 @@ function reportError(message, stack) {
     fetch(`${API_BASE}/client-error`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: msg, stack: String(stack || '').slice(0, 800), url: window.location.href }),
+      body: JSON.stringify({ message: msg, stack: String(stack || '').slice(0, 800), url: sinFragmento(window.location.href) }),
     }).catch(() => {})
   } catch { /* reportar nunca debe romper la app */ }
 }
@@ -225,7 +229,7 @@ class ErrorBoundary extends React.Component {
           </button>
           <button
             onClick={() => {
-              const txt = `${MARCA.nombre} error\n${window.location.href}\n${new Date().toISOString()}\n\n${this.state.detail}`
+              const txt = `${MARCA.nombre} error\n${sinFragmento(window.location.href)}\n${new Date().toISOString()}\n\n${this.state.detail}`
               navigator.clipboard?.writeText(txt).catch(() => {})
             }}
             style={{ padding: '11px 18px', borderRadius: 10, border: '1px solid #333338', background: 'transparent', color: '#b0b0b8', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}

@@ -25,6 +25,12 @@ const FURGONETAS = fx('alta-furgonetas.json')
 const CONDUCTORES = fx('alta-conductores.json')
 const FOTOS_DIR = process.env.FOTOS_ALTA || ''
 
+/* «2026-11-14» → «14 nov»: el día como lo dice ahora todo el arranque, igual que el sello de las fotos (A11). */
+const diaDe = (iso, lang = 'es') => {
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
+  return `${d} ${new Intl.DateTimeFormat(lang, { month: 'short' }).format(new Date(y, m - 1, d)).replace(/\./g, '').slice(0, 4)}`
+}
+
 /* Fotos de verdad para que las capturas se parezcan a lo que se verá (las del servidor de pruebas no existen). */
 const FOTOS_LOCALES = ['/demo/van-frontal.jpg', '/demo/van-lateral.jpg', '/demo/van-lateral-golpe-puerta.jpg', '/demo/van-lateral-golpe-paragolpes.jpg']
 const REVISION = { ...ESTADO.revision, fotos: ESTADO.revision.fotos.map((f, i) => ({ ...f, url: FOTOS_LOCALES[i % FOTOS_LOCALES.length] })) }
@@ -222,8 +228,13 @@ test('el alta de una flota, de la web a «ha llegado la primera revisión»', as
   const sinMovil = ACCESOS.conductores.find((c) => !c.whatsapp)
   const abierto = ACCESOS.conductores.find((c) => c.acceso.estado === 'abierto')
   await expect(fila(conMovil).getByTestId('acceso-estado')).toHaveText('Sin mandar')
-  await expect(fila(abierto).getByTestId('acceso-estado')).toHaveText(`Abierto el ${abierto.acceso.abierto_dia.slice(8, 10)}-${abierto.acceso.abierto_dia.slice(5, 7)}`)
+  await expect(fila(abierto).getByTestId('acceso-estado')).toHaveText(`Abierto el ${diaDe(abierto.acceso.abierto_dia)}`)
   await expect(fila(abierto).getByRole('button', { name: 'Mandar por WhatsApp' })).toHaveCount(0)
+  // Junto a «Abierto el…», qué hacer si dice que no le entra (A4).
+  await expect(fila(abierto).getByTestId('acceso-pista')).toHaveText(DICT['alta.acc.noEntra'].es)
+  // Los móviles, agrupados como en Conductores (A7): «612 345 678», no «+34612345678».
+  await expect(fila(conMovil)).toContainText(conMovil.movil.replace(/^\+34(\d{3})(\d{3})(\d{3})$/, '$1 $2 $3'))
+  await expect(page.getByTestId('arranque')).not.toContainText(conMovil.movil)
   await expect(fila(sinMovil).getByText('Sin móvil: WhatsApp te preguntará a quién mandarlo.')).toBeVisible()
   await foto(page, `05-dales-acceso-${info.project.name}`)
 
@@ -253,10 +264,10 @@ test('el alta de una flota, de la web a «ha llegado la primera revisión»', as
   expect(wa2.url().startsWith('https://wa.me/?text=')).toBe(true)
   await wa2.close()
 
-  // Ya abierto: «Renovar» pregunta con lo que dice el servidor y, al confirmar, pide `renovar: true`.
-  await fila(abierto).getByRole('button', { name: 'Renovar', exact: true }).click()
-  await expect(fila(abierto).getByRole('alertdialog')).toContainText('Si lo renuevas, el anterior deja de valer')
-  await fila(abierto).getByRole('button', { name: 'Renovar el enlace' }).click()
+  // Ya abierto: «Mandar uno nuevo» pregunta antes (el anterior deja de valer) y, al confirmar, pide `renovar: true`.
+  await fila(abierto).getByRole('button', { name: 'Mandar uno nuevo', exact: true }).click()
+  await expect(fila(abierto).getByRole('alertdialog')).toHaveText(new RegExp(DICT['alta.acc.yaAbierto'].es.slice(0, 40)))
+  await fila(abierto).getByRole('button', { name: 'Sí, crear uno nuevo' }).click()
   await expect(fila(abierto).getByTestId('acceso-estado')).toHaveText('Enlace creado, sin abrir')
   expect(s.pedidas.filter((p) => p.ruta === 'acceso' && p.id === abierto.driver_id).map((p) => p.cuerpo)).toEqual([{}, { renovar: true }])
   await foto(page, `06-acceso-mandado-${info.project.name}`)
@@ -267,17 +278,30 @@ test('el alta de una flota, de la web a «ha llegado la primera revisión»', as
   await expect(page.getByRole('heading', { name: 'La primera revisión' })).toBeVisible()
   await expect(page.getByText('Esta pantalla se pone sola en cuanto llegue. No hace falta recargar.')).toBeVisible()
   await expect(page.getByText(/rueda de repuesto/)).toBeVisible()
+  // La espera no es una página en blanco (A11): que está mirando, quién ha abierto su enlace, qué hacer si no llega.
+  await expect(page.getByTestId('alta-esperando')).toContainText(/Comprobado a las \d{2}:\d{2}:\d{2}/)
+  const espera = page.getByTestId('alta-espera-accesos')
+  await expect(espera).toContainText(`Han abierto su enlace (${s.accesos.conductores.filter((c) => c.acceso.estado === 'abierto').length})`)
+  await expect(espera).toContainText('Aún sin abrir')
+  await expect(page.getByRole('heading', { name: 'Si no llega' })).toBeVisible()
+  await expect(page.getByText(DICT['alta.p4.paso2'].es)).toBeVisible()
   await foto(page, `07-esperando-${info.project.name}`)
+  await page.getByTestId('alta-volver-acceso').click()
+  await expect(page.getByRole('heading', { name: 'Dales acceso' })).toBeVisible()
+  await page.getByRole('button', { name: 'Esperar la primera revisión' }).click()
+  await expect(page.getByRole('heading', { name: 'La primera revisión' })).toBeVisible()
   const antes = s.estadoPedidos
   s.poner(estadoEn(5))
   await expect(page.getByRole('heading', { name: 'Ha llegado la primera revisión' })).toBeVisible({ timeout: 12_000 })
   expect(s.estadoPedidos).toBeGreaterThan(antes)
   const rev = page.getByTestId('alta-revision')
   await expect(rev.getByTestId('matricula')).toHaveText(new RegExp(REVISION.furgoneta.matricula.replace(' ', '\\s*')))
-  await expect(rev.getByTestId('alta-recibida')).toHaveText(`Recibida en el servidor el ${REVISION.dia.slice(8, 10)}-${REVISION.dia.slice(5, 7)} a las ${REVISION.hora}`)
+  await expect(rev.getByTestId('alta-recibida')).toHaveText(`Recibida en el servidor el ${diaDe(REVISION.dia)} a las ${REVISION.hora}`)
   await expect(rev.getByText(`Hecha por ${REVISION.conductor.nombre}`)).toBeVisible()
   await expect(rev.locator('img')).toHaveCount(REVISION.fotos.length)
   await expect(rev.getByTestId('sello-foto')).toHaveCount(REVISION.fotos.length)
+  // Cada foto dice qué lado es (antes, cuatro sellos iguales y ninguna pista).
+  await expect(rev.locator('figcaption')).toHaveText(REVISION.fotos.map((f) => DICT[{ frontal: 'alta.vista.frontal', trasera: 'alta.vista.trasera', lateral_izq: 'alta.vista.izq', lateral_der: 'alta.vista.der' }[f.vista] || 'alta.vista.otra'].es))
   await expect(page.getByText(/hecha a las/i)).toHaveCount(0)
   await foto(page, `08-ha-llegado-${info.project.name}`)
   // Y deja de preguntar: ya ha llegado.
@@ -454,4 +478,246 @@ test('Importaciones: sin el módulo de turnos no sale la pestaña «Turnos»; co
   await expect(page.getByRole('tab', { name: /Turnos/ })).toBeVisible()
   await page.getByRole('tab', { name: /Turnos/ }).click()
   await expect(page.getByRole('link', { name: /Subir en Turnos/ })).toBeVisible()
+})
+
+/* ══ TERCERA TANDA (14-11-2026): lo que encontró la segunda revisión, dado la vuelta ══════════════════════════════ */
+
+/* A11 / R12: los porqués del servidor llegan con un `codigo` y la pantalla los dice en su idioma; uno que no conoce,
+   o un servidor que no lo manda, se enseña tal cual (revisión panel2, hallazgo 5). */
+const CON_CODIGOS = {
+  ...FURGONETAS,
+  lineas: FURGONETAS.lineas.map((l) => ({ ...l, codigo: { 'Ya la tienes dada de alta.': 'matricula_ya_estaba', 'Repetida en la lista.': 'matricula_repetida', 'No parece una matrícula.': 'matricula_rara' }[l.motivo] })),
+}
+test('el arranque en inglés: los motivos de cada línea y los errores, por su código, en inglés', async ({ page, context }) => {
+  await entrarComoAdmin(page)
+  await page.addInitScript(() => localStorage.setItem('flota_lang', 'en'))
+  await simularApi(page, 'vacio')
+  await servidorArranque(page, context, estadoEn(1))
+  await page.route(/\/api\/alta\/furgonetas$/, (r) => r.fulfill({ json: CON_CODIGOS }))
+  await page.goto('/panel/arranque', { waitUntil: 'domcontentloaded' })
+  await page.getByTestId('alta-furgonetas-texto').fill(FURGONETAS.lineas.map((l) => l.texto).join('\n'))
+  await page.getByRole('button', { name: DICT['alta.revisar'].en, exact: true }).click()
+  const lineas = page.getByTestId('alta-lineas')
+  await expect(lineas).toContainText(DICT['alta.cod.matricula_ya_estaba'].en)
+  await expect(lineas).toContainText(DICT['alta.cod.matricula_repetida'].en)
+  for (const l of FURGONETAS.lineas) if (l.motivo) await expect(page.getByText(l.motivo)).toHaveCount(0)
+  // Un error de la ruta con su código, en inglés; uno sin código, el texto del servidor tal cual.
+  await page.route(/\/api\/alta\/furgonetas$/, (r) => r.fulfill({ status: 400, json: { detail: 'Elige la sede de estas furgonetas: tienes varias.', codigo: 'elige_sede' } }))
+  await page.getByTestId('alta-furgonetas-texto').fill('1234 ABC')
+  await page.getByRole('button', { name: DICT['alta.revisar'].en, exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveText(DICT['alta.cod.elige_sede'].en)
+  // El dato que lleva la frase (el nombre, aquí) va en `dato`.
+  await page.route(/\/api\/alta\/furgonetas$/, (r) => r.fulfill({ status: 403, json: { detail: 'Tu sesión no corresponde a ninguna empresa: entra otra vez.', codigo: 'sesion_sin_empresa' } }))
+  await page.getByTestId('alta-furgonetas-texto').fill('1234 ABE')
+  await page.getByRole('button', { name: DICT['alta.revisar'].en, exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveText(DICT['alta.cod.sesion_sin_empresa'].en)
+  await page.route(/\/api\/alta\/furgonetas$/, (r) => r.fulfill({ status: 400, json: { detail: 'Un texto que esta pantalla no conoce.', codigo: 'algo_nuevo' } }))
+  await page.getByTestId('alta-furgonetas-texto').fill('1234 ABD')
+  await page.getByRole('button', { name: DICT['alta.revisar'].en, exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveText('Un texto que esta pantalla no conoce.')
+})
+
+test('el arranque: los conductores, con el código y con el nombre con el que ya está; sin dato que poner, el del servidor', async ({ page, context }) => {
+  await entrarComoAdmin(page)
+  await page.addInitScript(() => localStorage.setItem('flota_lang', 'de'))
+  await simularApi(page, 'vacio')
+  await servidorArranque(page, context, estadoEn(2))
+  const lineas = [
+    { ...CONDUCTORES.lineas[0] },
+    { ...CONDUCTORES.lineas[1], codigo: 'conductor_ya_estaba', dato: 'LUIS P.' },
+    { ...CONDUCTORES.lineas[2], aviso_codigo: 'sin_movil' },
+    { n: 4, texto: 'Rosa, 612 34', nombre: 'Rosa', movil: null, email: null, estado: 'error', motivo: 'El móvil «612 34» no parece un número.', codigo: 'telefono_raro', dato: '612 34', aviso: null },
+    { n: 5, texto: 'Lucía, 699 1', nombre: 'Lucía', movil: null, email: null, estado: 'error', motivo: 'El móvil «699 1» no parece un número.', codigo: 'telefono_raro', aviso: null },
+  ]
+  await page.route(/\/api\/alta\/conductores$/, (r) => r.fulfill({ json: { ...CONDUCTORES, lineas, errores: 1 } }))
+  await page.goto('/panel/arranque', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('tab', { name: DICT['alta.p2.pegar'].de }).click()
+  await page.getByTestId('alta-conductores-texto').fill('x')
+  await page.getByRole('button', { name: DICT['alta.revisar'].de, exact: true }).click()
+  const vista = page.getByTestId('alta-lineas')
+  await expect(vista).toContainText(DICT['alta.cod.conductor_ya_estaba'].de.replace('{nombre}', 'LUIS P.'))
+  await expect(vista).toContainText(DICT['alta.cod.sin_movil'].de)
+  await expect(vista).toContainText(DICT['alta.cod.telefono_raro'].de.replace('{movil}', '612 34'))
+  // Sin el trozo del móvil en la línea, el texto alemán quedaría con un hueco: se enseña el del servidor, entero.
+  await expect(vista).toContainText('El móvil «699 1» no parece un número.')
+  // El nombre con el que ya está, sin «.».» al final (revisión panel2, hallazgo 13).
+  await expect(vista).not.toContainText('».')
+  // Los móviles, agrupados (A7).
+  await expect(vista).toContainText('677 123 456')
+  await expect(vista).not.toContainText('+34677123456')
+})
+
+/* A11: «Furgo 1», «VAN 12»… no entran sin más: salen aparte con «¿Seguro que es una matrícula?» y solo se guardan las
+   que se confirman (revisión panel2, hallazgo 6). */
+test('el arranque: lo que no parece una matrícula sale aparte y solo entra si se confirma', async ({ page, context }, info) => {
+  if (info.project.name === 'movil') await page.setViewportSize({ width: 390, height: 844 })
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  const s = await servidorArranque(page, context, estadoEn(1))
+  const respuesta = {
+    ...FURGONETAS,
+    lineas: [
+      ...FURGONETAS.lineas.slice(0, 3),
+      { n: 4, texto: 'Furgo 1', matricula: 'FURGO 1', estado: 'dudosa', motivo: '¿Seguro que es una matrícula?', codigo: 'matricula_dudosa', confirmada: false },
+      { n: 5, texto: 'VAN 12', matricula: 'VAN 12', estado: 'dudosa', motivo: '¿Seguro que es una matrícula?', codigo: 'matricula_dudosa', confirmada: false },
+    ],
+  }
+  await page.route(/\/api\/alta\/furgonetas$/, (r) => {
+    const b = r.request().postDataJSON()
+    s.pedidas.push({ ruta: 'furgonetas', ...b })
+    return r.fulfill({ json: b.guardar ? { ...respuesta, guardado: true, creadas: [{ id: 'v1', matricula: '1234 ABC' }, ...(b.confirmadas || []).map((x, i) => ({ id: `r${i}`, matricula: x }))] } : respuesta })
+  })
+  await page.goto('/panel/arranque', { waitUntil: 'domcontentloaded' })
+  await page.getByTestId('alta-furgonetas-texto').fill('1234 ABC\n5678-klm\n1234abc\nFurgo 1\nVAN 12')
+  await page.getByRole('button', { name: 'Revisar', exact: true }).click()
+  const raras = page.getByTestId('alta-raras')
+  await expect(raras).toContainText('¿Seguro que es una matrícula?')
+  await expect(raras.getByRole('checkbox')).toHaveCount(2)
+  await expect(page.getByTestId('alta-lineas').locator('li')).toHaveCount(3)
+  // Sin confirmar, solo la nueva de verdad.
+  await expect(page.getByRole('button', { name: 'Guardar 1 furgoneta' })).toBeVisible()
+  await raras.getByRole('checkbox').first().check()
+  await foto(page, `18-matriculas-raras-${info.project.name}`)
+  await page.getByRole('button', { name: 'Guardar 2 furgonetas' }).click()
+  await expect(page.getByText('2 furgonetas guardadas.')).toBeVisible()
+  expect(s.pedidas.at(-1)).toMatchObject({ guardar: true, confirmadas: ['Furgo 1'] })
+  await sinDesborde(page, 'las raras')
+})
+
+test('el arranque: las pestañas de los conductores se mueven con las flechas y dicen su panel', async ({ page, context }) => {
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await servidorArranque(page, context, estadoEn(2))
+  await page.goto('/panel/arranque', { waitUntil: 'domcontentloaded' })
+  const filas = page.getByRole('tab', { name: 'Uno a uno' })
+  const pegar = page.getByRole('tab', { name: 'Pegar una lista' })
+  await expect(page.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'alta-pestana-filas')
+  await filas.focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(pegar).toBeFocused()
+  await expect(pegar).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByTestId('alta-conductores-texto')).toBeVisible()
+  await expect(filas).toHaveAttribute('tabindex', '-1')
+  await page.keyboard.press('ArrowLeft')
+  await expect(filas).toBeFocused()
+  await expect(page.getByTestId('alta-fila').first()).toBeVisible()
+})
+
+/* A4 y A8 (revisión enlace, hallazgo 7): en el panel en inglés, «Send a new one» pregunta en inglés, no con el texto
+   del servidor; y junto a «Opened on…» va la pista de cuándo hace falta. */
+test('Conductores en inglés: «mandar uno nuevo» pregunta en inglés y la ventana es opaca y por encima de todo', async ({ page, context }, info) => {
+  const movil = info.project.name === 'movil'
+  if (movil) await page.setViewportSize({ width: 390, height: 844 })
+  await entrarComoAdmin(page)
+  await page.addInitScript(() => localStorage.setItem('flota_lang', 'en'))
+  await simularApi(page, 'vacio')
+  await servidorArranque(page, context, estadoEn(5))
+  await page.route(/\/api\/drivers(\?|$)/, (r) => r.fulfill({ json: ACCESOS.conductores.map((c) => ({
+    id: c.driver_id, name: c.nombre, center: 'NORTE', active: true, phone: c.movil, email: c.email })) }))
+  await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
+  const abierto = ACCESOS.conductores.find((c) => c.acceso.estado === 'abierto')
+  await page.getByTestId('boton-acceso').filter({ hasText: diaDe(abierto.acceso.abierto_dia, 'en') }).click()
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo.getByTestId('acceso-pista')).toHaveText(DICT['alta.acc.noEntra'].en)
+  await dialogo.getByRole('button', { name: DICT['alta.acc.renovar'].en, exact: true }).click()
+  const pregunta = dialogo.getByRole('alertdialog')
+  await expect(pregunta).toContainText(DICT['alta.acc.yaAbierto'].en)
+  await expect(pregunta).not.toContainText('Si lo renuevas')
+  // Opaca: su fondo no deja ver la lista (revisión panel2, hallazgo 3).
+  const fondo = await dialogo.evaluate((el) => getComputedStyle(el).backgroundColor)
+  expect(fondo).not.toMatch(/rgba\([^)]*,\s*0?\.\d+\)/)
+  // Por encima de la barra de abajo del móvil y del botón del asistente: lo que hay en su última línea es la ventana.
+  const tapado = await dialogo.evaluate((el) => {
+    const r = el.getBoundingClientRect()
+    const puntos = [[r.left + 12, r.bottom - 12], [r.right - 12, r.bottom - 12], [r.left + r.width / 2, r.bottom - 24]]
+    return puntos.filter(([x, y]) => !el.contains(document.elementFromPoint(x, y))).length
+  })
+  expect(tapado, 'algo tapa la ventana').toBe(0)
+  await foto(page, `19-conductores-ventana-${info.project.name}`)
+})
+
+/* A11: «sin acceso» ya no cuenta a quien entra con su enlace; y con sesenta conductores se ve de un vistazo quién ha
+   entrado (revisión panel2, hallazgo 4). */
+test('Conductores: «sin acceso» no cuenta a quien ya entra con su enlace, y cada etiqueta dice en qué está', async ({ page, context }, info) => {
+  if (info.project.name === 'movil') await page.setViewportSize({ width: 390, height: 844 })
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await servidorArranque(page, context, estadoEn(5))
+  const estados = ['sin_enlace', 'sin_abrir', 'abierto', 'caducado']
+  const drivers = []
+  const filas = []
+  for (let i = 0; i < 12; i++) {
+    const e = estados[i % 4]
+    drivers.push({ id: `d${i}`, name: `Conductor ${String(i).padStart(2, '0')}`, center: 'NORTE', active: true, phone: `61000${String(1000 + i)}`, email: null })
+    filas.push({ driver_id: `d${i}`, nombre: drivers[i].name, center: 'NORTE', movil: null, whatsapp: null, email: null,
+      acceso: { estado: e, creado_dia: e === 'sin_enlace' ? null : '2026-11-10', abierto_dia: e === 'abierto' ? '2026-11-12' : null, caduca_dia: null } })
+  }
+  // Con contraseña: d0 (sin enlace) y d1 (enlace sin abrir).
+  await page.route(/\/api\/conductores\/accesos/, (r) => r.fulfill({ json: { empresa: 'Transportes Pérez', conductores: filas, cuentas: {} } }))
+  await page.route(/\/api\/drivers(\?|$)/, (r) => r.fulfill({ json: drivers }))
+  await page.route(/\/api\/auth\/driver-accounts/, (r) => r.fulfill({ json: [{ driver_id: 'd0', email: 'a@b.es', active: true }, { driver_id: 'd1', email: 'c@d.es', active: true }] }))
+  await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('boton-acceso')).toHaveCount(12)
+  // Sin acceso: ni contraseña ni enlace abierto. De 12: 3 abiertos y 2 con contraseña fuera → 7.
+  const chip = page.getByRole('button', { name: /^sin acceso \(\d+\)$/ })
+  await expect(chip).toHaveText('sin acceso (7)')
+  await chip.click()
+  await expect(page.getByTestId('boton-acceso')).toHaveCount(7)
+  await expect(page.getByTestId('boton-acceso').and(page.locator('[data-estado="abierto"]'))).toHaveCount(0)
+  await expect(page.getByTestId('boton-acceso').and(page.locator('[data-estado="con_clave"]'))).toHaveCount(0)
+  await chip.click()
+  // Las etiquetas: abierto en verde con su marca; con contraseña, neutra; caducado, ámbar; solo «Mandar su acceso» lleva el color de acción.
+  const tonos = await page.getByTestId('boton-acceso').evaluateAll((bs) => bs.map((b) => [b.dataset.estado, getComputedStyle(b).color]))
+  const color = (e) => [...new Set(tonos.filter(([x]) => x === e).map(([, c]) => c))]
+  for (const e of ['abierto', 'con_clave', 'caducado', 'sin_enlace', 'sin_abrir']) expect(color(e), e).toHaveLength(1)
+  expect(new Set(['abierto', 'caducado', 'sin_enlace'].map((e) => color(e)[0])).size).toBe(3)
+  expect(color('con_clave')[0]).not.toBe(color('sin_enlace')[0])
+  await expect(page.getByTestId('boton-acceso').and(page.locator('[data-estado="abierto"]')).first()).toHaveText(`Abierto el ${diaDe('2026-11-12')}`)
+  await expect(page.getByTestId('boton-acceso').and(page.locator('[data-estado="con_clave"]'))).toHaveText(['Con contraseña'])
+  await foto(page, `20-conductores-etiquetas-${info.project.name}`)
+})
+
+/* A12 (revisión servidor2, IMPORTANTE 6, y flota 9): con el arranque completo, el inicio deja de preguntar; y la próxima
+   vez ni pregunta. Mientras falte algo, sigue preguntando. */
+test('el inicio: con el arranque hecho deja de preguntar por él, y la próxima vez ni pregunta', async ({ page, context }) => {
+  await page.clock.install()
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  const s = await servidorArranque(page, context, estadoEn(5))
+  await page.goto('/panel', { waitUntil: 'domcontentloaded' })
+  await expect.poll(() => s.estadoPedidos).toBe(1)
+  await page.clock.fastForward(95_000)
+  await page.waitForTimeout(300)
+  expect(s.estadoPedidos).toBe(1)
+  expect(await page.evaluate(() => localStorage.getItem('fds_arranque_hecho'))).toBe('org1:a1')
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await page.clock.fastForward(65_000)
+  await page.waitForTimeout(300)
+  expect(s.estadoPedidos).toBe(1)
+  await expect(page.getByTestId('inicio-arranque')).toHaveCount(0)
+})
+
+test('control: con el arranque a medias el inicio sigue preguntando', async ({ page, context }) => {
+  await page.clock.install()
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  const s = await servidorArranque(page, context, estadoEn(3))
+  await page.goto('/panel', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('inicio-arranque')).toContainText('paso 3 de 4')
+  const antes = s.estadoPedidos
+  await page.clock.fastForward(61_000)
+  await expect.poll(() => s.estadoPedidos).toBeGreaterThan(antes)
+  expect(await page.evaluate(() => localStorage.getItem('fds_arranque_hecho'))).toBeNull()
+})
+
+/* A11 (revisión panel2, hallazgo 12): con el panel en noche, el arranque también (sin el papel blanco de golpe). */
+test('el arranque sigue el tema del panel: en noche, de noche', async ({ page, context }) => {
+  await entrarComoAdmin(page)
+  await page.addInitScript(() => { localStorage.setItem('panel_theme', 'dark'); localStorage.setItem('panel_theme_elegido', '1') })
+  await simularApi(page, 'vacio')
+  await servidorArranque(page, context, estadoEn(4))
+  await page.goto('/panel/arranque', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('arranque')).toHaveAttribute('data-theme', 'dark')
+  await foto(page, '21-arranque-noche')
 })

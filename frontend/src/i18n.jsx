@@ -26,7 +26,9 @@ function detect() {
   const saved = localStorage.getItem('flota_lang')
   if (saved && LANGS[saved]) return saved
   const nav = (navigator.language || 'es').slice(0, 2).toLowerCase()
-  return LANGS[nav] ? nav : 'en'
+  /* Un idioma que no tenemos (rumano, árabe…), en español, no en inglés (14-11-2026, tercera tanda, A13): quien lo ve
+     es casi siempre el conductor de una flota española, o alguien de su oficina, y lo más probable es que lea español. */
+  return LANGS[nav] ? nav : 'es'
 }
 
 export function LangProvider({ children }) {
