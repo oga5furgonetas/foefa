@@ -9,7 +9,8 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
    asistente, las ventanas y el botón desactivado. Lo que se vigila aquí es lo que se ve y se puede medir:
    · M1 · el menú sin cuadraditos de colores: el icono de cada grupo va sin fondo y en gris; el del grupo activo, en tinta.
    · M2 · sin la tarjeta «Acceso Fundador»; «Portal Conductor» es una línea más del menú, sin caja de color.
-   · M3 · la burbuja no sale en «Repaso» ni mientras haya una ventana abierta.
+   · M3 · el asistente (desde la tanda 6, un botón de la barra de arriba y no una burbuja) no sale en «Repaso», y su
+     ventana no se ve mientras haya otra ventana abierta.
    · M4 · la barra de abajo: sin «Revisión rápida» (las empresas nuevas), «Repaso» va segundo; con ella, la de siempre.
    · M5 · el selector de sede, sin mono ni mayúsculas espaciadas.
    · M6 · la ventana «El acceso de…»: opaca, borde de 1 px, sin sombra, por encima de la barra de abajo.
@@ -78,22 +79,55 @@ test('Menú · iconos sin cuadradito de color, sin «Acceso Fundador», y «Port
 })
 
 /* ── M3 ────────────────────────────────────────────────────────────────────────────────────────────────────────── */
-test('Burbuja · sale en el Inicio, no en «Repaso», y se esconde mientras hay una ventana abierta', async ({ page }) => {
+/* El asistente, un botón de la barra de arriba (tanda 6, zona panel): flotando siempre tapaba algo. */
+test('Asistente · un botón en la barra de arriba: sale en el Inicio, no en «Repaso», y su ventana se esconde con una ventana abierta', async ({ page, isMobile }) => {
   await montar(page)
   await page.goto('/panel', { waitUntil: 'domcontentloaded' })
-  await expect(burbuja(page).last()).toBeVisible()
-  // Sin recargar: con el menú de la propia app.
+  const boton = page.getByRole('button', { name: 'Asistente', exact: true })
+  await expect(boton).toBeVisible()
+  // En la barra de arriba (no flotando sobre la página), de 36 px, con borde de 1 px, sin relleno cian ni sombra.
+  expect(await boton.evaluate((b) => !!b.closest('header') && !b.closest('main'))).toBe(true)
+  const est = await boton.evaluate((b) => {
+    const s = getComputedStyle(b)
+    return { ancho: b.offsetWidth, alto: b.offsetHeight, borde: s.borderTopWidth, fondo: s.backgroundColor, sombra: s.boxShadow, pos: s.position }
+  })
+  expect(est).toMatchObject({ ancho: 36, alto: 36, borde: '1px', sombra: 'none' })
+  expect(est.fondo).toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
+  // Ya no hay burbuja flotante.
+  await expect(page.getByTestId('burbuja-asistente')).toHaveCount(0)
+  // Abre la ventana de siempre: arriba a la derecha en el ordenador, casi a pantalla entera en el móvil.
+  await boton.click()
+  const ventana = page.getByTestId('ventana-asistente')
+  await expect(ventana).toBeVisible()
+  await expect(ventana.getByPlaceholder('Escribe tu pregunta…')).toBeVisible()
+  const v = await ventana.boundingBox()
+  const vista = page.viewportSize()
+  if (isMobile) {
+    expect(v.width).toBeGreaterThanOrEqual(vista.width - 20)
+    expect(v.height).toBeGreaterThanOrEqual(vista.height * 0.8)
+  } else {
+    expect(v.y).toBeLessThan(80)
+    expect(vista.width - (v.x + v.width)).toBeLessThanOrEqual(24)
+  }
+  // Escape la cierra; el botón la vuelve a abrir.
+  await page.keyboard.press('Escape')
+  await expect(ventana).toBeHidden()
+  // Sin recargar: con el menú de la propia app. En el Repaso no sale.
   await page.evaluate(() => { window.history.pushState({}, '', '/panel/repaso'); window.dispatchEvent(new PopStateEvent('popstate')) })
   await expect(page).toHaveURL(/\/panel\/repaso/)
-  await expect(burbuja(page)).toBeHidden()
+  await expect(boton).toHaveCount(0)
   await page.evaluate(() => { window.history.pushState({}, '', '/panel/conductores'); window.dispatchEvent(new PopStateEvent('popstate')) })
-  await expect(burbuja(page).last()).toBeVisible()
-  await page.getByTestId('boton-acceso').filter({ hasText: 'Mandar su acceso' }).first().click()
+  await expect(boton).toBeVisible()
+  await boton.click()
+  await expect(ventana).toBeVisible()
+  // Con una ventana del panel abierta, la del asistente no se ve (el clic, por código: en el móvil la del asistente
+  // tapa la lista).
+  await page.getByTestId('boton-acceso').filter({ hasText: 'Mandar su acceso' }).first().evaluate((b) => b.click())
   await expect(page.getByRole('dialog', { name: /^El acceso de/ })).toBeVisible()
-  await expect(burbuja(page)).toBeHidden()
+  await expect(ventana).toBeHidden()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog', { name: /^El acceso de/ })).toHaveCount(0)
-  await expect(burbuja(page).last()).toBeVisible()
+  await expect(boton).toBeVisible()
 })
 
 /* ── M4 ────────────────────────────────────────────────────────────────────────────────────────────────────────── */

@@ -937,6 +937,17 @@ export default function PanelLayout() {
 
           <span className="hidden md:inline-flex"><BotonAyuda abrir={() => setAyudaOpen(true)} /></span>
 
+          {/* EL ASISTENTE, UN BOTÓN AQUÍ Y NO UNA BURBUJA FLOTANTE (14-11-2026, tanda 6): flotando siempre tapaba algo
+              (las cifras del Inicio, los avatares y las acciones de las listas). Junto a la ayuda, en el ordenador y en
+              el móvil; abre la misma ventana de siempre. Ni en el Centro de IA (es él mismo), ni en una cuenta sin la IA
+              (`ia: false` en /org/billing, CONTRATO R10: ni se monta, y se espera a saberlo para no enseñarlo y
+              quitarlo); en el Repaso, el arranque y el expediente no sale (`fuera`, M3: ahí manda la foto), y con la
+              hoja del menú abierta su ventana se esconde sin desmontarse (no se pierde la conversación). */}
+          {curKey !== 'centro-ia' && !!billing && billing.ia !== false && (
+            <AsistenteBurbuja center={center} centers={centers} setCenter={setCenter}
+              fuera={sinBurbuja} escondida={menuOpen} />
+          )}
+
           {/* Tema: híbrido → noche → día → híbrido.
               Tres estados en un botón necesitan que el título diga a dónde
               vas, no dónde estás: si no, hay que pulsar para averiguarlo. */}
@@ -1059,17 +1070,7 @@ export default function PanelLayout() {
         idUsuario={admin?.id || admin?.sub} />
       <LiveNotifier center={center} centers={centers} ve={(k) => moduloOk(k) && (SIEMPRE_VISIBLES.has(k) || canSee(k))}
         sobreEscribir={curKey === 'chat'} />
-      {/* En el Centro de IA la burbuja sobra (y en el móvil tapaba el botón de enviar). */}
-      {/* Con la hoja del menú abierta, la burbuja se esconde (sin desmontarla: no se pierde la conversación): iba por
-          encima y tapaba el número rojo de Días libres (foto del 10-11-2026). `setCenter`: para elegir el centro
-          ahí mismo con «Todos». En el Chat, en el móvil, tapaba el botón de enviar (foto del 11-11-2026): allí va más
-          arriba, por encima de la caja de escribir (sigue a mano, como siempre). */}
-      {/* Una cuenta sin la IA (`ia: false` en /org/billing, CONTRATO R10) no tiene asistente: ni se monta. Se espera a
-          saberlo, para no enseñarla un instante y quitarla. */}
-      {/* Ni en el Repaso, el arranque o el expediente (14-11-2026, M3): ahí manda la foto y su botón, y la burbuja
-          tapaba las dos cosas. Con una ventana abierta se esconde sola (`.burbuja-asistente` en index.css). */}
-      {curKey !== 'centro-ia' && !!billing && billing.ia !== false && <AsistenteBurbuja center={center} centers={centers} setCenter={setCenter}
-        escondida={menuOpen || sinBurbuja} sobreEscribir={curKey === 'chat'} />}
+      {/* El asistente ya no flota aquí: es un botón de la barra de arriba (ver la cabecera, 14-11-2026, tanda 6). */}
     </div>
   )
 }

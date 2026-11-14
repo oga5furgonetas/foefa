@@ -328,8 +328,8 @@ test.describe('E1 · Conductores en el móvil', () => {
       await expect(page.getByTestId('dato-orden')).toHaveCount(5)
       const movil = await leerTarjetas(page)
       expect(movil.map((f) => [f.nombre, f.dato])).toEqual(esperado)
-      // La etiqueta, la misma que en la tabla y con su color, no un texto suelto.
-      if (valor === 'contrato') await expect(page.getByTestId('dato-orden').filter({ hasText: 'ETT' }).first()).toHaveClass(/bg-purple-500/)
+      // La etiqueta, la misma que en la tabla: desde la tanda 6 (14-11-2026), en texto gris y sin pastilla de color.
+      if (valor === 'contrato') await expect(page.getByTestId('dato-orden').filter({ hasText: 'ETT' }).first()).toHaveClass(/text-dark-300/)
       // Al revés, justo al revés (sin empates por nivel; por contrato, los grupos al revés).
       await page.getByRole('button', { name: 'De la A a la Z' }).click()
       await expect(page.getByRole('button', { name: 'De la Z a la A' })).toBeVisible()

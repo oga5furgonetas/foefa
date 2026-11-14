@@ -518,14 +518,18 @@ test.describe('I11 · detalles de las fotos', () => {
     await expect(page.getByRole('button', { name: 'Órdenes de taller. 1 abierta', exact: true })).toBeVisible({ timeout: 30000 })
   })
 
-  test('al final de la página, nada queda debajo de la burbuja de la IA', async ({ page }) => {
+  /* Desde la tanda 6 (14-11-2026) el asistente no flota: es un botón de la barra de arriba, fuera de <main>. Al final
+     de la página nada de la página queda debajo de él. */
+  test('al final de la página, nada queda debajo del botón de la IA', async ({ page }) => {
     await entrar(page, { centro: 'OGA5' })
     await page.goto('/panel', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('Salidas de hoy')).toBeVisible({ timeout: 30000 })
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
-    const burbuja = await page.getByTitle(/IA$/).last().boundingBox()
-    const fondo = await page.locator('main > *').last().evaluate((el) => el.getBoundingClientRect().bottom)
-    expect(fondo).toBeLessThanOrEqual(burbuja.y)
+    const boton = page.getByTitle(/IA$/).last()
+    expect(await boton.evaluate((b) => !!b.closest('header') && !b.closest('main'))).toBe(true)
+    const caja = await boton.boundingBox()
+    const main = await page.locator('main').boundingBox()
+    expect(caja.y + caja.height).toBeLessThanOrEqual(main.y)
   })
 
   test('en el Chat del móvil la burbuja sigue a mano, pero por encima de la caja de escribir: no tapa ni el texto ni Enviar', async ({ page }) => {
@@ -565,8 +569,8 @@ test.describe('I11 · detalles de las fotos', () => {
     const enviar = await page.getByRole('button', { name: 'Enviar' }).boundingBox()
     const caja = await page.getByPlaceholder(/@flota/).boundingBox()
     expect(f.y + f.height).toBeLessThanOrEqual(Math.min(enviar.y, caja.y))
-    // Pegada a la burbuja, a su misma altura.
-    expect(Math.abs((f.y + f.height) - (b.y + b.height))).toBeLessThanOrEqual(1)
+    // Desde la tanda 6 (14-11-2026) el asistente es un botón de la barra de arriba: la furgoneta no lo pisa.
+    expect(f.y).toBeGreaterThanOrEqual(b.y + b.height)
   })
 
   test('el botón de menú de la cabecera del móvil se ve igual (36 px) pero responde en 44 px', async ({ page }) => {
@@ -604,17 +608,22 @@ test.describe('I11 · detalles de las fotos', () => {
     await expect.poll(sobra).toBeLessThanOrEqual(0)
   })
 
-  test('con la hoja del menú abierta, la burbuja no tapa nada', async ({ page }) => {
+  /* Desde la tanda 6 (14-11-2026) el asistente es un botón de la barra de arriba; lo que no puede tapar la hoja del
+     menú es su ventana: se esconde mientras la hoja está abierta y vuelve, con la misma conversación, al cerrarla. */
+  test('con la hoja del menú abierta, la ventana del asistente no tapa nada', async ({ page }) => {
     await page.setViewportSize(MOVIL)
     await entrar(page, { centro: 'OGA5', escenario: 'vacio' })
     await page.goto('/panel', { waitUntil: 'domcontentloaded' })
-    const burbuja = page.getByTitle(/IA$/).last()
-    await expect(burbuja).toBeVisible({ timeout: 30000 })
-    await barraAbajo(page).getByRole('button', { name: /^Menú/ }).click()
-    await expect(page.getByRole('dialog')).toBeVisible()
-    await expect(burbuja).toBeHidden()
+    const boton = page.getByTitle(/IA$/).last()
+    await expect(boton).toBeVisible({ timeout: 30000 })
+    await boton.click()
+    const ventana = page.getByTestId('ventana-asistente')
+    await expect(ventana).toBeVisible()
+    await page.locator('header').getByRole('button', { name: /^Menú/ }).click()
+    await expect(page.getByRole('dialog', { name: /Menú/ })).toBeVisible()
+    await expect(ventana).toBeHidden()
     await page.keyboard.press('Escape')
-    await expect(burbuja).toBeVisible()
+    await expect(ventana).toBeVisible()
   })
 })
 

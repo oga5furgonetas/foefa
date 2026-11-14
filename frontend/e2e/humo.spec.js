@@ -462,7 +462,9 @@ test.describe('Cuadrante', () => {
       : json({ mensajes: [] })(route)))
     await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('Rutas (cuenta de 1)')).toBeVisible({ timeout: 15000 })
-    await page.getByRole('button', { name: 'Asistente', exact: true }).click()
+    // El del cuadrante, dentro de la página: «Asistente» también se llama el botón del asistente general de la barra de
+    // arriba (tanda 6, 14-11-2026).
+    await page.locator('main').getByRole('button', { name: 'Asistente', exact: true }).click()
     await page.getByLabel('Mensaje para el asistente del cuadrante').fill('Sari esta semana no puede')
     await page.getByRole('button', { name: 'Enviar' }).click()
     await expect(page.getByText('He entendido esto:')).toBeVisible()
@@ -4382,8 +4384,9 @@ test('Inicio · casillas con su número; lo urgente con globito y cada una lleva
   expect(fallos).toEqual([])
 })
 
-/* En el móvil, la IA ya no tapa «Menú» de la barra de abajo (Dani, 17-10-2026: «es muy incómodo»). */
-test('Panel en el móvil · la burbuja de la IA queda por encima de la barra de abajo', async ({ page }) => {
+/* En el móvil, la IA ya no tapa «Menú» de la barra de abajo (Dani, 17-10-2026: «es muy incómodo»). Desde la tanda 6
+   (14-11-2026) no es una burbuja sino un botón de la barra de arriba: sigue sin pisarla. */
+test('Panel en el móvil · el botón de la IA queda por encima de la barra de abajo', async ({ page }) => {
   const fallos = vigilar(page)
   await page.setViewportSize({ width: 390, height: 844 })
   await entrarComoAdmin(page)
