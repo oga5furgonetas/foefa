@@ -20,7 +20,7 @@ export default function Pareja({ t, lado, hoy, antes, modo, dibujar, caja, onCaj
   if (modo === 'deslizador' && !dibujar) {
     return (
       <div className="relative mx-auto w-full max-w-[860px] overflow-hidden rounded-xl bg-dark-800" data-testid="deslizador">
-        <CompareSlider beforeUrl={antes.url} afterUrl={lado.foto_url} />
+        <CompareSlider beforeUrl={antes.url} afterUrl={lado.foto_url} etiquetaAhora={t('repaso.hoy')} etiquetaAntes={t('repaso.antes')} />
         <SelloFoto fecha={hoy.fecha} quien={hoy.quien} />
         <SelloFoto fecha={antes.fecha} quien={antes.quien} className="!left-auto right-2.5" />
       </div>

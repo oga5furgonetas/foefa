@@ -466,15 +466,9 @@ html[data-panel-theme='light'] [class*='hover:text-white']:hover { color: rgb(va
     bottom: 22%;
     width: 3px;
     border-radius: 99px;
-    background: linear-gradient(180deg, #fb923c, #ea6800);
-    box-shadow: 0 0 12px rgba(249, 115, 22, 0.5);
-    animation: navbar-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    /* El cian de la marca, liso (14-11-2026): antes era un naranja con brillo que no era de la paleta. */
+    background: #14e7d8;
   }
-  @keyframes navbar-in {
-    from { transform: scaleY(0); opacity: 0; }
-    to   { transform: scaleY(1); opacity: 1; }
-  }
-
   /* Cabecera de grupo del menú: fila completa clicable, con identidad */
   .nav-ghead {
     @apply flex w-full items-center gap-2.5 rounded-xl px-2 py-2 transition-colors duration-150;

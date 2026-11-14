@@ -838,7 +838,7 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
               { id: 'info',         label: 'Info',          count: null },
               { id: 'gemelo',       label: 'Gemelo 3D',     count: null },
               { id: 'inspecciones', label: 'Inspecciones',  count: numInsps },
-              { id: 'expediente',  label: 'Expediente',    count: null },
+              { id: 'expediente',  label: 'Cronología',    count: null },
               { id: 'historial',    label: t('vh.tab.history'), count: null },
               { id: 'docs',         label: 'Documentos',    count: docs?.length ?? null },
             ].map(tab => (
