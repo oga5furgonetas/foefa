@@ -422,3 +422,12 @@ plataforma (iOS); no hay campo para explicar el motivo. Apple contestó al momen
 de reparto. If your submission is rejected during this review, you don't need to request another expedited review when
 you resubmit. Your resubmission will be automatically returned to the expedited queue.» Apple avisa de que pedirlo
 muchas veces puede hacer que deje de concederlo: no volver a pedirlo para esta versión.
+
+## Consulta a Apple por el retraso (14-11-2026)
+
+Un día después de que Apple aceptase la revisión urgente, la 2.4.1 seguía en «Waiting for Review» (leído por la API,
+solo lectura). Dani: «Sí, escríbeles». Con su sesión en su Chrome (entró él; el navegador con la sesión de Apple es el
+«Browser 1») se abrió una consulta a App Review preguntando por el estado del envío. **Caso 30000015420992.** Apple
+contesta por correo a la cuenta de Dani. No se ha vuelto a pedir la revisión urgente (Apple avisa de que repetirlo
+puede hacer que deje de concederla) y no hay que pedirla otra vez para esta versión. Una tarea en el PC
+(`vigilar_apple.py`, fuera del repo) mira el estado cada 10 minutos por la API y avisa si cambia.
