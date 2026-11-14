@@ -60,7 +60,13 @@ export default function Boton({
   cargando = false, disabled = false, href, onClick, className = '', type = 'button', testid, ...resto
 }) {
   const forma = FORMA[variante] || FORMA.normal
-  const clases = `inline-flex items-center justify-center text-center disabled:opacity-50 ${forma} ${colores(variante, tono, contorno, relleno)} ${className}`
+  /* DESACTIVADO (14-11-2026, M7, el mismo de todo el producto): el hueco y la tinta apagada, nunca el color de su tono
+     lavado al 50 %, que parecía roto. Cargando no cuenta: sigue con su color y la rueda (no ha dejado de valer). */
+  const apagado = disabled && !cargando
+  const color = !apagado ? colores(variante, tono, contorno, relleno)
+    : variante === 'texto' || (variante === 'icono' && !relleno) ? 'text-dark-400'
+      : contorno ? 'border border-ruta-borde text-dark-400' : 'bg-dark-800 text-dark-400'
+  const clases = `inline-flex items-center justify-center text-center disabled:cursor-not-allowed ${forma} ${color} ${className}`
   const tam = ICONO[variante] || 20
   const dentro = (
     <>

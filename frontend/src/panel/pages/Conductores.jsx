@@ -84,15 +84,9 @@ const diaApp = (iso) => {
 function initials(n) {
   return (n || '?').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
-const PALETTE = [
-  'from-violet-500 to-indigo-600', 'from-blue-500 to-cyan-500',
-  'from-emerald-500 to-teal-600', 'from-amber-500 to-orange-500',
-  'from-rose-500 to-pink-600',    'from-sky-400 to-blue-600',
-]
-function avatarGrad(name) {
-  let h = 0; for (const c of name || '') h = (h * 31 + c.charCodeAt(0)) | 0
-  return PALETTE[Math.abs(h) % PALETTE.length]
-}
+// Los avatares sin foto, en gris liso con las iniciales en tinta (14-11-2026, M8): un degradado de color por persona
+// era color sin significado, y competía con los estados (abierto, sin abrir) que sí lo tienen.
+const AVATAR_LISO = 'bg-dark-800 text-dark-100'
 
 const NIVEL = { pleno: ['Pleno','bg-emerald-500/15 text-emerald-300'], L1: ['L1','bg-sky-500/15 text-sky-300'], L2: ['L2','bg-amber-500/15 text-amber-300'], L3: ['L3','bg-red-500/15 text-red-300'] }
 const CONTRATO = { empresa: ['Empresa','bg-brand-500/15 text-brand-300'], ett: ['ETT','bg-purple-500/15 text-purple-300'] }
@@ -103,7 +97,7 @@ function Avatar({ driver, size = 10 }) {
   const txt = size >= 16 ? 'text-2xl' : size >= 12 ? 'text-lg' : 'text-xs'
   return driver.photo_url
     ? <img src={driver.photo_url} alt="" className={`${sz} rounded-full object-cover`} />
-    : <div className={`${sz} shrink-0 flex items-center justify-center rounded-full bg-gradient-to-br ${avatarGrad(driver.name)} ${txt} font-bold text-white shadow-md`}>{initials(driver.name)}</div>
+    : <div className={`${sz} shrink-0 flex items-center justify-center rounded-full ${AVATAR_LISO} ${txt} font-bold`}>{initials(driver.name)}</div>
 }
 
 // ── Helpers scoring ───────────────────────────────────────────────────────────
@@ -209,7 +203,7 @@ function PodiumCard({ d, position, size = 90 }) {
       <div className={`w-full rounded-2xl border ${BORDER[position]} bg-dark-900 p-4 shadow-xl ${GLOW[position]} flex flex-col items-center gap-2`}>
         <span className="text-3xl">{MEDAL[position]}</span>
         {/* Avatar initials */}
-        <div className={`h-12 w-12 shrink-0 flex items-center justify-center rounded-full bg-gradient-to-br ${avatarGrad(d.name)} text-sm font-bold text-white shadow-md`}>
+        <div className={`h-12 w-12 shrink-0 flex items-center justify-center rounded-full ${AVATAR_LISO} text-sm font-bold`}>
           {(d.name || '?').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0,2).toUpperCase()}
         </div>
         <ScoreDisplay score={d.total} size={size} />
@@ -1521,10 +1515,8 @@ Cancelar: no hacer nada.`)) {
       {/* Con el menú «Más» abierto, la cabecera por encima de lo que viene debajo (la animación de entrada la hace
           su propia capa y, sin esto, las pestañas tapaban el menú). */}
       <header className={`rise mb-6 ${verMas ? 'relative z-30' : ''}`}>
-        {center && center !== 'Todos' && (
-          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-brand-400/80">{center}</p>
-        )}
-        <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
+        {/* Sin el rótulo del centro en mono espaciado encima (14-11-2026, M8): la sede ya la dice el selector de arriba. */}
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <h1 className="font-display text-[clamp(28px,3.4vw,42px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">
             {t('drv.title')}{drivers && <span className="text-dark-500"> · {(drivers || []).length}</span>}
           </h1>
@@ -1575,9 +1567,8 @@ Cancelar: no hacer nada.`)) {
               </div>
               <button
                 onClick={() => setModal({ driver: null })}
-                className="group relative flex min-h-[44px] flex-1 items-center justify-center gap-1.5 overflow-hidden rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-lg shadow-brand-500/25 transition-all duration-300 [text-shadow:0_1px_1px_rgba(0,0,0,0.15)] hover:-translate-y-px hover:shadow-xl hover:shadow-brand-500/30 hover:brightness-110 active:translate-y-0 active:scale-[0.98] sm:min-h-0 sm:flex-none"
+                className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-brand-400 px-4 py-2.5 text-[13.5px] font-semibold text-brand-tinta transition-colors hover:bg-brand-300 active:bg-brand-500 sm:min-h-0 sm:flex-none"
               >
-                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/20 to-transparent" />
                 <Plus size={15} /> {t('drv.add')}
               </button>
             </div>
@@ -1878,13 +1869,13 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, deBaja =
   const [cl, cc] = CONTRATO[driver?.contrato] || []
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={onClose}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
       {/* Panel — mitad de pantalla */}
       <div
-        className="relative z-10 flex w-full max-w-2xl flex-col rounded-2xl border border-dark-700 bg-dark-900 shadow-2xl shadow-black/50 overflow-hidden"
+        className="relative z-10 flex w-full max-w-2xl flex-col ventana rounded-2xl overflow-hidden"
         style={{ maxHeight: '85vh' }}
         onClick={e => e.stopPropagation()}
       >
@@ -1903,7 +1894,7 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, deBaja =
                 <div className="h-10 w-10 overflow-hidden rounded-full">
                   {previewUrl
                     ? <img src={previewUrl} alt="" className="h-full w-full object-cover" />
-                    : <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${avatarGrad(driver.name)} text-sm font-bold text-white`}>{initials(driver.name)}</div>}
+                    : <div className={`flex h-full w-full items-center justify-center ${AVATAR_LISO} text-sm font-bold`}>{initials(driver.name)}</div>}
                 </div>
                 <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
                   {photoBusy ? <Loader2 size={14} className="animate-spin text-white" /> : <Camera size={14} className="text-white" />}
@@ -2237,7 +2228,7 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, deBaja =
               type="submit"
               form="driver-form"
               disabled={busy}
-              className="flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-semibold text-brand-tinta shadow-lg shadow-brand-500/25 hover:bg-brand-600 disabled:opacity-50 transition-colors"
+              className="btn-primary flex items-center gap-2 px-5"
             >
               {busy ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
               {busy ? t('ui.saving') : t('ui.save')}

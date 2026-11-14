@@ -452,8 +452,6 @@ export const DICT = {
   'nav.logout':     { es: 'Salir',            en: 'Log out',       fr: 'Déconnexion',     de: 'Abmelden',        it: 'Esci',           pt: 'Sair' },
   'nav.admin':      { es: 'Administrador',    en: 'Administrator', fr: 'Administrateur',  de: 'Administrator',   it: 'Amministratore', pt: 'Administrador' },
   'nav.all':        { es: 'Todos',            en: 'All',           fr: 'Tous',            de: 'Alle',            it: 'Tutti',          pt: 'Todos' },
-  'nav.founder':    { es: 'Acceso Fundador',  en: 'Founder Access', fr: 'Accès Fondateur', de: 'Gründerzugang',  it: 'Accesso Fondatore', pt: 'Acesso Fundador' },
-  'nav.founder.sub':{ es: "Recibirás primero las funciones nuevas.", en: "You'll get new features first.", fr: "Vous recevrez en premier les nouvelles fonctions.", de: "Du erhältst neue Funktionen zuerst.", it: "Riceverai per primo le nuove funzioni.", pt: "Receberás primeiro as funções novas." },
   'nav.impersonate':{ es: 'Estás viendo como', en: 'Viewing as', fr: 'Vous consultez en tant que', de: 'Anzeige als', it: 'Stai visualizzando come', pt: 'Estás a ver como' },
   'nav.back.super': { es: '← Volver a super-admin', en: '← Back to super-admin', fr: '← Retour super-admin', de: '← Zurück zu Super-Admin', it: '← Torna a super-admin', pt: '← Voltar a super-admin' },
   'nav.client':     { es: 'cliente', en: 'client', fr: 'client', de: 'Kunde', it: 'cliente', pt: 'cliente' },

@@ -1312,8 +1312,8 @@ export default function OrdenesTrabajo() {
 
       {/* ══ ALTA ══════════════════════════════════════════════════ */}
       {nueva && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setNueva(null)}>
-          <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl bg-dark-900 p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setNueva(null)}>
+          <div className="max-h-[92vh] w-full max-w-md overflow-y-auto ventana rounded-2xl p-6" onClick={(e) => e.stopPropagation()}>
             <div className="mb-5 flex items-center gap-2">
               <h2 className="text-[19px] font-bold">Nueva orden de trabajo</h2>
               <button onClick={() => setNueva(null)} className="ml-auto text-dark-500 hover:text-dark-200"><X size={19} /></button>

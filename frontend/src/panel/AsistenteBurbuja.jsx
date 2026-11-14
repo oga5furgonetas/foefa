@@ -264,7 +264,8 @@ export default function AsistenteBurbuja({ center, centers, setCenter, escondida
     // En el móvil, por ENCIMA de la barra de abajo (52 px + la zona segura): antes tapaba «Menú» (Dani, 17-10-2026).
     // `sobreEscribir` (el Chat, 11-11-2026): en el móvil tapaba el botón de enviar; allí va más arriba, por encima de la
     // caja de escribir, y su ventana es igual de más baja para no salirse por arriba. En el ordenador, donde siempre.
-    <div className={`fixed ${sobreEscribir ? 'bottom-[calc(env(safe-area-inset-bottom,0px)_+_8.5rem)]' : 'bottom-[calc(env(safe-area-inset-bottom,0px)_+_4.25rem)]'} right-4 z-[95] flex-col items-end md:bottom-4 ${
+    // `burbuja-asistente`: con una ventana del panel abierta (`.ventana`), index.css la esconde (M6, 14-11-2026).
+    <div className={`burbuja-asistente fixed ${sobreEscribir ? 'bottom-[calc(env(safe-area-inset-bottom,0px)_+_8.5rem)]' : 'bottom-[calc(env(safe-area-inset-bottom,0px)_+_4.25rem)]'} right-4 z-[95] flex-col items-end md:bottom-4 ${
       escondida ? 'hidden' : 'flex'}`}>
       {abierto && (
         <div onPaste={pegarImagenes}

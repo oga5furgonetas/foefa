@@ -450,8 +450,8 @@ function Chip({ activo, onClick, color, titulo, sub, vivo }) {
 
 function Ventana({ titulo, onClose, children }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label={titulo}>
-      <div className="w-full max-w-xl rounded-2xl border border-dark-700 bg-dark-950 p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label={titulo}>
+      <div className="w-full max-w-xl ventana rounded-2xl p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-[15px] font-bold text-dark-50">{titulo}</h2>
           <button onClick={onClose} className="rounded p-1 text-dark-400" aria-label="Cerrar"><X size={16} /></button>

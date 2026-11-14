@@ -217,8 +217,8 @@ function PasteModal({ drivers, vehicles, onApply, onClose }) {
   const withD = matched.filter(m => m.driver_id).length
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative mx-4 flex w-full max-w-2xl flex-col gap-4 rounded-xl border border-dark-700 bg-dark-900 p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="relative mx-4 flex w-full max-w-2xl flex-col gap-4 ventana rounded-xl p-5" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-bold text-dark-50">{t('asgn.paste.title')}</h2>

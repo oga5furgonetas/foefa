@@ -225,8 +225,8 @@ function TallerModal({ vehicle, onConfirm, onCancel }) {
   const valid = form.description.trim().length >= 3
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onCancel}>
-      <div className="relative mx-4 w-full max-w-md rounded-2xl border border-dark-700 bg-dark-900 p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onCancel}>
+      <div className="relative mx-4 w-full max-w-md ventana rounded-2xl p-6" onClick={e => e.stopPropagation()}>
         <button onClick={onCancel} className="absolute right-4 top-4 rounded-lg p-1.5 text-dark-300 hover:bg-dark-800 hover:text-white transition"><X size={15} /></button>
 
         <div className="mb-5 flex items-center gap-3">
@@ -311,8 +311,8 @@ function MaintModal({ kind, currentKm, onSave, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative mx-4 w-full max-w-sm rounded-2xl border border-dark-700 bg-dark-900 p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="relative mx-4 w-full max-w-sm ventana rounded-2xl p-6" onClick={e => e.stopPropagation()}>
         <button onClick={onClose} className="absolute right-4 top-4 rounded-lg p-1.5 text-dark-300 hover:bg-dark-800 hover:text-white transition"><X size={15} /></button>
         <h2 className="mb-4 text-sm font-bold text-dark-50">Registrar: {meta.label}</h2>
         <div className="space-y-3">
@@ -1674,9 +1674,9 @@ function BolsasModal({ vehicle, onGuardar, onClose }) {
        dia compensa unas y no las otras, y `text-slate-100` sobre `bg-slate-800`
        da 1,01:1 —texto claro sobre fondo claro—. Lo canto `check-contraste`
        antes de desplegarlo. */
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xs rounded-2xl border border-dark-700 bg-dark-900 p-5 shadow-xl">
+        className="w-full max-w-xs ventana rounded-2xl p-5">
         <h3 className="text-sm font-bold text-dark-50">Bolsas de {vehicle.license_plate}</h3>
         <p className="mt-1 text-[12px] text-dark-400">
           Cuántas quedan ahora mismo en la furgoneta.
@@ -1757,9 +1757,9 @@ function AddVehicleModal({ centers, onSaved, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
       <div
-        className="relative w-full max-w-xl rounded-2xl border border-dark-700 bg-dark-900 shadow-2xl"
+        className="relative w-full max-w-xl ventana rounded-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

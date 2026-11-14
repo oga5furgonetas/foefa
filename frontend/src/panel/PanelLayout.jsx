@@ -3,7 +3,7 @@ import { NavLink, Navigate, Outlet, useNavigate, useLocation } from 'react-route
 import {
   LayoutDashboard, Users, CalendarClock, CalendarCheck, CalendarRange, Activity, CheckCircle2, ClipboardList,
   ClipboardCheck, Truck, Wrench, Hammer, BellRing, KeyRound, Building2, BrainCircuit, FileUp,
-  Settings, Shield, LogOut, Zap, Inbox, ChevronRight, ChevronDown, AlertTriangle, BookUser,
+  Settings, Shield, LogOut, Zap, Inbox, ChevronDown, AlertTriangle, BookUser,
   Search, Sun, Moon, Contrast, MapPin, Mail, UserCircle2, Languages, ShieldAlert, Menu,
   CircleHelp, Briefcase, Store, UserCheck, ImagePlus, Loader2, Bell, BellOff, MessageCircle,
   MessagesSquare, Euro, FileSpreadsheet, PackageX, Clock, Route, HeartPulse, Sparkles, Columns2,
@@ -45,7 +45,8 @@ const ROUTE_FEATURE = {
 // Menú ÚNICO agrupado por intención (sin pestañas: todo el mapa visible siempre).
 // Vencimientos fusiona en una página ITV + Renting + Casas de alquiler; las rutas
 // antiguas siguen vivas (deep-links, paleta ⌘K) — solo cambia la navegación.
-// Cada grupo tiene identidad propia: icono en chip de color + etiqueta grande.
+// Los grupos van en gris y en tinta el de la pantalla abierta (14-11-2026): sin cuadraditos de colores, que eran
+// color sin significado. El cian solo marca la pantalla activa (la raya de `.nav-item-active`).
 /* ── AVISOS DEL MENU ───────────────────────────────────────────────────────
    Ruta -> cuantas cosas hay esperando respuesta en ella. Se pinta en rojo al
    lado del nombre. Vive aparte del menu para que anadir un aviso nuevo sea una
@@ -75,13 +76,13 @@ const AVISO_TITULO = { '/panel/repaso': 'repaso.menu.aviso' }
 const GRUPO_FIJO = 'nav.g.today'
 
 const NAV_DEF = [
-  { g: 'nav.g.today', gIcon: Sun, iconCls: 'text-amber-400', iconBg: 'bg-amber-500/10', items: [
+  { g: 'nav.g.today', gIcon: Sun, items: [
     { to: '/panel', labelKey: 'nav.dashboard', icon: LayoutDashboard, end: true },
     { to: '/panel/mi-dia', labelKey: 'nav.miDia', icon: Sun },
     { to: '/panel/chat', labelKey: 'nav.chat', icon: MessageCircle },
     { to: '/panel/centro-ia', labelKey: 'nav.centroIA', icon: Sparkles },
   ]},
-  { g: 'nav.g.fleet', gIcon: Truck, iconCls: 'text-emerald-400', iconBg: 'bg-emerald-500/10', items: [
+  { g: 'nav.g.fleet', gIcon: Truck, items: [
     { to: '/panel/vehiculos', labelKey: 'nav.vehicles', icon: Truck },
     { to: '/panel/repaso', labelKey: 'nav.repaso', icon: Columns2 },
     { to: '/panel/estado-flota', labelKey: 'nav.estadoFlota', icon: HeartPulse },
@@ -91,12 +92,12 @@ const NAV_DEF = [
     { to: '/panel/vencimientos', labelKey: 'nav.grp.expiry', icon: CalendarClock },
     { to: '/panel/aparcamiento', labelKey: 'nav.parking', icon: MapPin },
   ]},
-  { g: 'nav.g.taller', gIcon: Wrench, iconCls: 'text-orange-400', iconBg: 'bg-orange-500/10', items: [
+  { g: 'nav.g.taller', gIcon: Wrench, items: [
     { to: '/panel/incidencias', labelKey: 'nav.incidents', icon: AlertTriangle },
     { to: '/panel/ordenes', labelKey: 'nav.ordenes', icon: Hammer },
     { to: '/panel/talleres', labelKey: 'nav.workshops', icon: Wrench },
   ]},
-  { g: 'nav.g.reparto', gIcon: Zap, iconCls: 'text-sky-400', iconBg: 'bg-sky-500/10', items: [
+  { g: 'nav.g.reparto', gIcon: Zap, items: [
     { to: '/panel/reparto', labelKey: 'nav.reparto', icon: Route },
     { to: '/panel/asignacion', labelKey: 'nav.assign', icon: ClipboardCheck },
     { to: '/panel/plantilla', labelKey: 'nav.template', icon: FileSpreadsheet },
@@ -106,14 +107,14 @@ const NAV_DEF = [
     { to: '/panel/turnos', labelKey: 'nav.shifts', icon: CalendarCheck },
     { to: '/panel/checklist-operativo', labelKey: 'nav.checklist', icon: CheckCircle2 },
   ]},
-  { g: 'nav.g.personas', gIcon: Users, iconCls: 'text-violet-400', iconBg: 'bg-violet-500/10', items: [
+  { g: 'nav.g.personas', gIcon: Users, items: [
     { to: '/panel/conductores', labelKey: 'nav.drivers', icon: Users },
     { to: '/panel/incorporaciones', labelKey: 'nav.incorporaciones', icon: UserCheck },
     { to: '/panel/empleo', labelKey: 'nav.empleo', icon: Briefcase },
     { to: '/panel/contactos', labelKey: 'nav.contacts', icon: BookUser },
     { to: '/panel/conversaciones', labelKey: 'nav.conversaciones', icon: MessagesSquare },
   ]},
-  { g: 'nav.g.system', gIcon: Settings, iconCls: 'text-dark-300', iconBg: 'bg-white/[0.07]', items: [
+  { g: 'nav.g.system', gIcon: Settings, items: [
     { to: '/panel/actividad', labelKey: 'nav.activity', icon: Activity },
     { to: '/panel/importaciones', labelKey: 'nav.imports', icon: FileUp },
     { to: '/panel/ia-peritaje', labelKey: 'nav.ai', icon: BrainCircuit },
@@ -699,9 +700,14 @@ export default function PanelLayout() {
      módulo de la empresa, no el permiso de cada persona: a quien no tenía «Revisión» o «Vehículos» (ni el Inicio)
      le salía el botón y, al tocarlo, el guardián lo devolvía a otra pantalla sin decir nada. Si quedan menos de
      cuatro, se rellena con las primeras pantallas que sí puede abrir, en el orden del menú. */
+  /* «Repaso» en el segundo sitio (14-11-2026, M4) solo para quien NO tiene «Revisión rápida» (las empresas nuevas): la
+     flota que ya trabaja con la Revisión rápida conserva su barra exactamente como estaba. */
+  const conRevision = itemVisible({ to: '/panel/revision' })
   const barraAbajo = [
     { to: '/panel', label: t('nav.dashboard'), icon: LayoutDashboard, end: true },
-    { to: '/panel/revision', label: t('nav.revision'), icon: CheckCircle2 },
+    conRevision
+      ? { to: '/panel/revision', label: t('nav.revision'), icon: CheckCircle2 }
+      : { to: '/panel/repaso', label: t('nav.repaso'), icon: Columns2 },
     { to: '/panel/asignacion', label: t('nav.assign'), icon: ClipboardCheck },
     { to: '/panel/vehiculos', label: t('nav.vehicles'), icon: Truck },
   ].filter((it) => itemVisible(it))
@@ -709,6 +715,7 @@ export default function PanelLayout() {
     if (barraAbajo.length >= 4) break
     if (!barraAbajo.some((b) => b.to === it.to)) barraAbajo.push({ to: it.to, label: it.label, icon: it.icon, end: it.end })
   }
+  const sinBurbuja = /^\/panel\/(repaso|arranque)(\/|$)/.test(loc.pathname) || /^\/panel\/vehiculos\/[^/]+\/expediente/.test(loc.pathname)
   const globoMenu = avisosMenu > 0 ? (
     <span aria-hidden="true"
       className="absolute -right-1.5 -top-1.5 min-w-[18px] rounded-full bg-red-600 px-1 text-center text-[10px] font-bold leading-[18px] text-white">
@@ -763,19 +770,20 @@ export default function PanelLayout() {
           {groups.map((g) => {
             const fijo = g.key === GRUPO_FIJO
             const isClosed = !fijo && grupoAbierto !== g.key
-            // Si el grupo cerrado contiene la ruta activa, se marca con un punto
-            const holdsActive = isClosed && g.items.some((it) =>
+            // El grupo de la pantalla abierta, en tinta (icono y nombre), también plegado: así se sabe dónde estás
+            // sin un punto de color. Los demás, en gris.
+            const deAqui = g.items.some((it) =>
               it.end ? loc.pathname === it.to : loc.pathname.startsWith(it.to))
             return (
               <div key={g.key} className="pt-1.5 first:pt-0">
-                <button onClick={() => toggleGroup(g.key)} className="nav-ghead group">
-                  <span className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg ${g.iconBg}`}>
-                    <g.gIcon size={14} className={g.iconCls} />
+                <button onClick={() => toggleGroup(g.key)} className="nav-ghead group" aria-expanded={!isClosed}>
+                  <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center">
+                    <g.gIcon size={15} className={deAqui ? 'text-dark-100' : 'text-dark-500 transition-colors group-hover:text-dark-300'} />
                   </span>
-                  <span className={`text-[13px] font-semibold tracking-tight transition-colors ${isClosed ? 'text-dark-400 group-hover:text-dark-200' : 'text-dark-100'}`}>
+                  <span className={`text-[13px] font-semibold tracking-tight transition-colors ${deAqui ? 'text-dark-50'
+                    : isClosed ? 'text-dark-400 group-hover:text-dark-200' : 'text-dark-200'}`}>
                     {g.g}
                   </span>
-                  {holdsActive && <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />}
                   {!fijo && (
                     <ChevronDown
                       size={14}
@@ -835,23 +843,12 @@ export default function PanelLayout() {
           ))}
         </nav>
 
-        {/* Badge Fundador */}
-        <div className="mx-3 mb-2 rounded-lg border border-amber-500/20 bg-amber-500/8 px-3 py-2">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs">⭐</span>
-            <span className="text-xs font-bold text-amber-400">{t('nav.founder')}</span>
-          </div>
-          <p className="mt-0.5 text-[10px] leading-snug text-amber-600">{t('nav.founder.sub')}</p>
-        </div>
-
-        {/* Portal Conductor */}
-        <div className="border-t border-dark-800 p-3">
-          <NavLink
-            to="/panel/portal-conductor"
-            className={({ isActive }) => `flex items-center justify-between rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${isActive ? 'border-brand-500 bg-brand-500/20 text-brand-200' : 'border-brand-500/40 bg-brand-500/10 text-brand-300 hover:bg-brand-500/20'}`}
-          >
-            <span className="flex items-center gap-2"><Shield size={15} /> {t('nav.portal')}</span>
-            <ChevronRight size={14} />
+        {/* «Portal Conductor», una línea más del menú, al pie (14-11-2026). Antes iba en una caja cian y encima una
+            tarjeta dorada «Acceso Fundador» que no hacía nada: dos manchas de color sin nada que decir. */}
+        <div className="border-t border-dark-800 px-3 py-2">
+          <NavLink to="/panel/portal-conductor"
+            className={({ isActive }) => `nav-item ${isActive ? 'nav-item-active' : ''}`}>
+            <Shield size={16} /> {t('nav.portal')}
           </NavLink>
         </div>
       </div>
@@ -961,8 +958,10 @@ export default function PanelLayout() {
 
           {/* Filtro de CENTRO — si solo tiene 1 centro asignado se muestra fijo */}
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg bg-dark-800/60 p-1 md:flex-none">
+            {/* La sede elegida, en tinta sobre un relleno neutro y con la letra de la casa (14-11-2026, M5): el cian
+                queda para la pantalla activa del menú. */}
             {singleCenter ? (
-              <span className="rounded-md bg-brand-500/20 px-3 py-1 text-xs font-semibold text-brand-300">
+              <span className="rounded-md bg-dark-700 px-3 py-1 text-[12.5px] font-semibold tracking-normal text-dark-50">
                 {singleCenter}
               </span>
             ) : (
@@ -970,8 +969,8 @@ export default function PanelLayout() {
                 <button
                   key={c}
                   onClick={() => setCenter(c)}
-                  className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
-                    center === c ? 'bg-brand-500/20 text-brand-300' : 'text-dark-400 hover:text-dark-200'
+                  className={`rounded-md px-3 py-1 text-[12.5px] font-semibold tracking-normal transition-colors ${
+                    center === c ? 'bg-dark-700 text-dark-50' : 'text-dark-400 hover:text-dark-200'
                   }`}
                 >
                   {c === 'Todos' ? t('nav.all') : c}
@@ -1066,8 +1065,10 @@ export default function PanelLayout() {
           arriba, por encima de la caja de escribir (sigue a mano, como siempre). */}
       {/* Una cuenta sin la IA (`ia: false` en /org/billing, CONTRATO R10) no tiene asistente: ni se monta. Se espera a
           saberlo, para no enseñarla un instante y quitarla. */}
+      {/* Ni en el Repaso, el arranque o el expediente (14-11-2026, M3): ahí manda la foto y su botón, y la burbuja
+          tapaba las dos cosas. Con una ventana abierta se esconde sola (`.burbuja-asistente` en index.css). */}
       {curKey !== 'centro-ia' && !!billing && billing.ia !== false && <AsistenteBurbuja center={center} centers={centers} setCenter={setCenter}
-        escondida={menuOpen} sobreEscribir={curKey === 'chat'} />}
+        escondida={menuOpen || sinBurbuja} sobreEscribir={curKey === 'chat'} />}
     </div>
   )
 }

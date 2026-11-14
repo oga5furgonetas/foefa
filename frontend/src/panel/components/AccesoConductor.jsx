@@ -215,7 +215,7 @@ export function DialogoAcceso({ c, empresa, onCambio, onCerrar }) {
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4" onClick={onCerrar}>
       <div role="dialog" aria-modal="true" aria-label={t('alta.acc.titulo').replace('{nombre}', c.nombre)}
-        className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-dark-700 bg-dark-900 p-5 shadow-2xl shadow-black/50 sm:rounded-2xl"
+        className="max-h-[90dvh] w-full max-w-md overflow-y-auto ventana rounded-t-2xl p-5 sm:rounded-2xl"
         style={{ paddingBottom: 'max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))' }}
         onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-start justify-between gap-3">

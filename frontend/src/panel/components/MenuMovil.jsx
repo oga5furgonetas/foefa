@@ -69,8 +69,10 @@ export default function MenuMovil({ abierto, cerrar, groups, extras = [], t, acc
           {groups.map((g) => (
             <div key={g.key} className="mb-3">
               <div className="flex items-center gap-2 px-3 pb-1 pt-2">
-                {g.gIcon && <g.gIcon size={13} className={g.iconCls} />}
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-dark-500">{g.g}</span>
+                {/* Como en el menú lateral (14-11-2026): el icono del grupo en gris, sin color propio, y el nombre en
+                    letra normal, sin mayúsculas espaciadas. */}
+                {g.gIcon && <g.gIcon size={14} className="text-dark-500" />}
+                <span className="text-[12.5px] font-semibold text-dark-400">{g.g}</span>
               </div>
               {g.items.map((it) => (
                 <NavLink key={it.to} to={it.to} end={it.end} onClick={cerrar} className={fila}>
