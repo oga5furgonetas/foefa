@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test'
 import { simularApi, entrarComoAdmin } from './api-simulada.js'
 
-/* LA PÁGINA DE VENTA PARA EMPRESAS (/empresas, 14-11-2026).
+/* LA PÁGINA DE VENTA PARA EMPRESAS (/empresas, 14-11-2026). Desde la tanda «Antes del perito» (14-11-2026) es también
+   la portada («/»): lo propio de la portada nueva (titular, producto, sin IA, 390 px) está en portada.spec.js.
    Lo que no puede fallar en una página a la que se manda a un dueño de flota por correo o por teléfono: que cargue,
    que en un móvil se vea el titular y el botón sin deslizar y sin desplazarse de lado, que los botones lleven a su
    sitio (el alta de FLOTA, no el selector de sectores), que el formulario de la demostración se envíe UNA vez con lo
@@ -12,7 +13,7 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
    rejilla, la captura real, la cabecera fija y el inglés con mayúsculas y con el formulario enviado. */
 
 const RECIBIDO = '¡Recibido! Te respondemos en menos de 24 horas hábiles.'
-// El alta a la que llevan los tres «Probar gratis»: la de flota (sector «Otra flota», plan Pro).
+// El alta a la que llevan los tres «Probar con mis furgonetas»: la de flota (sector «Otra flota», plan Pro).
 const ALTA = '/registro?sector=otra&plan=completo'
 
 /* La API simulada y, encima, lo que estas pruebas miran: los eventos de analítica y el formulario. */
@@ -59,7 +60,7 @@ test.describe('/empresas', () => {
     const fallos = vigilarErrores(page)
     const { eventos } = await preparar(page)
     await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Deja de pagar golpes que no son tuyos')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('El golpe, el día que aparece. No el día que te lo cobran.')
     await expect(page).toHaveTitle(/para empresas con furgonetas/)
     await expect.poll(() => eventos.some((e) => e.tipo === 'vista' && e.ruta === '/empresas')).toBe(true)
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
@@ -109,7 +110,7 @@ test.describe('/empresas', () => {
     }
   })
 
-  test('los tres «Probar gratis» llevan al alta de FLOTA, con las furgonetas de la calculadora', async ({ page }) => {
+  test('los tres «Probar con mis furgonetas» llevan al alta de FLOTA, con las furgonetas de la calculadora', async ({ page }) => {
     const { acciones } = await preparar(page)
     await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
     const botones = [page.getByTestId('emp-probar-menu'), page.getByTestId('emp-probar'), page.getByTestId('emp-probar-cierre')]
@@ -125,7 +126,7 @@ test.describe('/empresas', () => {
     }
     await furgonetas.fill('35')
     const boton = page.getByTestId('emp-probar')
-    await expect(boton).toHaveText(/Probar gratis 14 días/)
+    await expect(boton).toHaveText('Probar con mis furgonetas')
     await boton.click()
     await expect(page).toHaveURL(/\/registro\?sector=otra&plan=completo&flota=35$/)
     await expect.poll(acciones).toContain('emp_probar_arriba')
@@ -141,10 +142,10 @@ test.describe('/empresas', () => {
   test('«Que me la enseñen en 15 minutos» baja al formulario', async ({ page }) => {
     const { acciones } = await preparar(page)
     await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
-    await page.getByTestId('emp-ensenar').click()
+    await page.getByTestId('emp-ensenar-cierre').click()
     await expect(page).toHaveURL(/\/empresas#demo$/)
     await expect(page.getByLabel('Tu nombre')).toBeInViewport()
-    await expect.poll(acciones).toContain('emp_demo_boton')
+    await expect.poll(acciones).toContain('emp_demo_cierre')
   })
 
   test('el formulario valida (foco y aria-invalid en el primer campo que falla) y envía UNA vez con el cuerpo correcto', async ({ page }) => {
@@ -232,23 +233,26 @@ test.describe('/empresas', () => {
     await expect(page.getByTestId('emp-recibido')).toHaveCount(0)
   })
 
-  test('se miden la demo del panel, los precios y los 10 s en la página; la demo caída no promete tiempos', async ({ page }) => {
+  test('se miden los 10 s, el expediente de ejemplo, los planes y la puerta a /repartidores', async ({ page }) => {
     await page.clock.install()
     const { acciones } = await preparar(page)
-    await page.route('**/api/auth/demo-login', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }))
     await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     await page.clock.fastForward(10_500)
     await expect.poll(acciones).toContain('emp_10s')
-    await page.getByRole('button', { name: 'Ver la demo del panel' }).click()
-    const aviso = page.getByText('La demo no responde ahora mismo. Puedes crear la cuenta o pedir que te la enseñemos.', { exact: false })
-    await expect(aviso).toBeVisible()
-    await expect(page.getByText('son dos minutos', { exact: false })).toHaveCount(0)
-    await expect(page.locator('p[role="status"] a[href="#demo"]')).toHaveText('Pedir la demostración')
-    await expect.poll(acciones).toContain('emp_demo_panel')
-    await page.getByRole('link', { name: 'Ver precios' }).click()
+    // Sin demo del panel (enseñaba la IA) ni captura: el héroe ya enseña el producto.
+    await expect(page.getByRole('button', { name: 'Ver la demo del panel' })).toHaveCount(0)
+    await page.getByTestId('emp-expediente').click()
+    await expect(page).toHaveURL(/\/expediente-ejemplo$/)
+    await expect.poll(acciones).toContain('emp_expediente_arriba')
+    await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('link', { name: 'Ver qué lleva cada plan' }).click()
     await expect(page).toHaveURL(/\/planes$/)
-    await expect.poll(acciones).toContain('emp_precios_arriba')
+    await expect.poll(acciones).toContain('emp_precios_modulos')
+    await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
+    await page.getByTestId('emp-repartidores').click()
+    await expect(page).toHaveURL(/\/repartidores$/)
+    await expect.poll(acciones).toContain('emp_repartidores')
   })
 
   /* El precio de /planes para N vehículos en un plan, leído de su tarjeta («180€» → 180). */
@@ -325,42 +329,12 @@ test.describe('/empresas', () => {
     await expect(page.getByTestId('emp-meses')).toHaveText('Con evitar un cargo así, tienes pagados más de 10 años.')
   })
 
-  test('la rejilla se titula «Las pantallas del panel» y marca lo que es de Pro, a petición o complemento', async ({ page }) => {
-    await preparar(page)
-    await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('Las pantallas del panel', { exact: true })).toBeVisible()
-    await expect(page.getByText('Todo lo que lleva', { exact: true })).toHaveCount(0)
-    const modulo = (t) => page.getByTestId('emp-modulo').filter({ has: page.getByRole('heading', { name: t, exact: true }) })
-    await expect(modulo('Cuadrante y días libres')).toContainText('Plan Pro')
-    await expect(modulo('Cuadrante y días libres')).toContainText('Se activa a petición')
-    await expect(modulo('Asignación del día y equipo')).toContainText('Plan Pro')
-    await expect(modulo('Reparto a domicilio')).toContainText('Complemento')
-    for (const t of ['Revisiones con foto e IA', 'Taller y estado de la flota', 'Vencimientos']) {
-      await expect(modulo(t)).not.toContainText('Plan Pro')
-      await expect(modulo(t)).not.toContainText('Complemento')
-    }
-    await expect(modulo('Revisiones con foto e IA')).toContainText('la IA marca los golpes que parecen nuevos')
-  })
-
-  test('la captura real del panel carga, con su texto alternativo y su pie', async ({ page }) => {
-    await preparar(page)
-    await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
-    const img = page.getByTestId('emp-captura')
-    await expect(img).toHaveAttribute('loading', 'lazy')
-    await expect(img).toHaveAttribute('alt', /golpe marcado en la puerta lateral/)
-    await img.scrollIntoViewIfNeeded()
-    await expect.poll(() => img.evaluate((i) => i.complete && i.naturalWidth)).toBeGreaterThan(0)
-    // Ronda 3 (M3): la foto de la demo no tiene golpe; el pie lo dice sin trampa.
-    await expect(page.getByText('Pantalla real del panel. La foto y el golpe marcado son de ejemplo.')).toBeVisible()
-    await expect(page.getByText('Pantalla real del panel, con datos de ejemplo.')).toHaveCount(0)
-  })
-
   /* Palabras que solo dice el español: en minúscula, cualquiera con acento o eñe; con mayúscula, las que pasarían sin
      traducir en esta página (nombres de planes, de pantallas, del formulario…). Los nombres propios (el titular del
      aviso legal, los conductores de ejemplo) no cuentan. */
   function espanolEn(texto) {
     const palabras = texto.match(/\b(el|la|los|las|del|de|y|en|es|un|una|al|se|lo|su|sus|para|con|que|por|sin|tus?|cada|furgonetas?|empresas?|precios?|cuenta|gratis|golpes?|mes|meses|dias|revision)\b/gi) || []
-    const mayusculas = texto.match(/\b(Esencial|Empresa|Inspecciones|Elige|Zona|Precios|Entrar|Probar|Correo|Mensaje|Vencimientos|Cuadrante|Taller|Complemento|Pantalla|Revisión|Revisiones|Origen|Informe|Plan Pro|Demostración)\b/g) || []
+    const mayusculas = texto.match(/\b(Esencial|Empresa|Inspecciones|Elige|Zona|Precios|Entrar|Probar|Correo|Mensaje|Vencimientos|Cuadrante|Taller|Complemento|Pantalla|Revisión|Revisiones|Origen|Informe|Plan Pro|Demostración|Repaso|Golpe|Lateral|Antes|Hoy|Frontal|Trasera|Enviada|Expediente)\b/g) || []
     const acentos = texto.match(/(?<![\p{L}])\p{Ll}*[áéíóúñ]\p{Ll}*|[¿¡]/gu) || []
     return [...new Set([...palabras, ...mayusculas, ...acentos])]
   }
@@ -377,7 +351,7 @@ test.describe('/empresas', () => {
     await page.addInitScript(() => { try { localStorage.setItem('fds_idioma', 'en') } catch { /* nada */ } })
     await preparar(page)
     await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Stop paying for damage you didn’t cause')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Spot the dent the day it appears. Not the day you’re billed for it.')
     await expect(page).toHaveTitle(/for van fleets/)
     // Todo a la vista: las respuestas, la cuenta con su segunda línea y los avisos del formulario.
     await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true }))
@@ -391,8 +365,7 @@ test.describe('/empresas', () => {
     expect(texto).toContain('costs you')
     expect(texto).toContain('Choose')
     expect(texto).toContain('100 or more')
-    expect(texto).toContain('Due dates')
-    await expect(page.getByTestId('emp-captura')).toHaveAttribute('src', '/empresas/inspeccion-golpe-en.jpg')
+    expect(texto).toContain('Who decides whether there’s a dent?')
     // Por encima del tope, también en inglés.
     await page.getByLabel('How many vans do you run?').fill('9000')
     await expect(page.getByTestId('emp-a-medida')).toHaveText(/^For more than 5,000 vehicles, the .+ plan is custom-priced\. Tell us about your fleet$/)
@@ -460,90 +433,63 @@ test.describe('/empresas', () => {
     await expect(page.getByTestId('emp-precio')).toBeVisible()
   })
 
-  test('ronda 3: «Plan Pro» solo en la asignación del día, no en las fichas ni en el portal (V12)', async ({ page }) => {
-    await preparar(page)
-    await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
-    const modulo = page.getByTestId('emp-modulo').filter({ has: page.getByRole('heading', { name: 'Asignación del día y equipo', exact: true }) })
-    const soloPro = modulo.getByTestId('emp-modulo-pro')
-    await expect(soloPro).toHaveText('Plan ProQuién lleva cada furgoneta hoy.')
-    await expect(modulo.getByText('Las fichas de tu gente y el portal de cada conductor en su móvil.')).toBeVisible()
-    // Una sola etiqueta en la casilla: la de la frase de la asignación.
-    await expect(modulo.getByText('Plan Pro', { exact: true })).toHaveCount(1)
-    await expect(modulo.getByText('Las fichas de tu gente y el portal de cada conductor en su móvil.')).not.toContainText('Plan Pro')
-  })
-
-  test('ronda 3: la maqueta dice «sin revisar hoy» y el paso 3, que cada conductor hace una por furgoneta y día (M10, V11)', async ({ page }) => {
-    await preparar(page)
-    await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('sin revisar hoy', { exact: true })).toHaveCount(2)      // el visible y el de los lectores de pantalla
-    await expect(page.getByText('salen sin revisar', { exact: false })).toHaveCount(0)
-    await expect(page.getByText('A qué hora se hace la revisión lo decide cada empresa (cada conductor hace una por furgoneta y día).', { exact: false })).toBeVisible()
-    await expect(page.getByText('Cuándo se hace la revisión lo decide cada empresa', { exact: false })).toHaveCount(0)
-  })
-
-  test('ronda 3: el inglés de la lista del revisor (V9): MOT, dashboard, Enterprise, «checked» y por vehículo', async ({ page }) => {
+  test('ronda 3: el inglés de la lista del revisor (V9): Enterprise, por vehículo y «checked»', async ({ page }) => {
     await page.addInitScript(() => { try { localStorage.setItem('fds_idioma', 'en') } catch { /* nada */ } })
     await preparar(page)
     await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
     await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true }))
     await page.getByLabel('How much was your last damage bill?').fill('1500')
     const texto = await textoSinIdioma(page)
-    for (const frase of ['The dent nobody owns up to', 'The missed MOT', 'When the van goes back, a damage list follows: if you can’t prove when each mark appeared, you pay.',
-      'Try the demo dashboard', 'Dashboard view · sample data', 'of the fleet checked today', 'not checked today',
-      'Pay yearly: 12 months for the price of 10.', 'Avoid just one bill like that and it covers', 'the Enterprise plan, priced to suit',
-      'The MOT list for the whole fleet', '/vehicle', 'Your company',
-      'What time the check happens is up to each company (each driver does one per van per day).']) {
+    for (const frase of ['Not checked today', 'Pay yearly: 12 months for the price of 10.', 'Avoid just one bill like that and it covers',
+      'the Enterprise plan, priced to suit', '/vehicle', 'Your company', 'Example with made-up data', 'Only Luis P. drove it between the two photos.']) {
       expect(texto, frase).toContain(frase)
     }
-    for (const mal of ['MOT/inspection', 'nobody caused', 'panel demo', 'Panel view', 'inspected', '/van', 'Company plan', 'Hand it back']) {
+    for (const mal of ['MOT/inspection', 'nobody caused', 'panel demo', 'Panel view', 'inspected', '/van', 'Company plan', 'Hand it back', 'AI']) {
       expect(texto, mal).not.toContain(mal)
     }
     await page.getByLabel('How many vans do you run?').fill('150')
     await expect(page.getByTestId('emp-plan-a-medida')).toContainText('With 100 or more vehicles there’s also the Enterprise plan, priced to suit.')
     await page.getByLabel('How many vans do you run?').fill('9000')
     await expect(page.getByTestId('emp-a-medida')).toContainText('For more than 5,000 vehicles, the Enterprise plan is custom-priced.')
-    await expect(page.getByText('A real dashboard screen. The photo and the marked dent are examples.')).toBeVisible()
   })
 })
 
-/* /peritaje-tecnico, «Cómo funciona la IA de daños» (a donde lleva el pie de /empresas). Ronda 3 (V1): sin lo que
-   /empresas niega ni lo que el servidor no hace. */
+/* /peritaje-tecnico, «Qué le enseñas al perito» (14-11-2026; antes «Cómo funciona la IA de daños», a donde lleva el pie
+   de las páginas públicas). Sin promesas de la IA ni lo que el servidor no hace, con la identidad de la portada. */
 test.describe('/peritaje-tecnico', () => {
-  const PROHIBIDAS = ['Sin discusión', 'quién golpeó', 'al salir y al volver', 'al salir y volver', '90 segundos', '800', '3.000',
-    'Imposible falsificar', 'inmutable', '3 veces', 'Acceso anticipado', 'Tu peritaje siempre llega', 'no manipulable', 'imagen manipulada', 'Confidence scoring',
-    // 14-11-2026 (r3, V1 y V2): el aviso de la foto antigua no salta nunca (el servidor guarda la foto sin EXIF) y el
-    // conductor no firma desde el portal (su tarjeta lee `id` y la subida contesta `inspection_id`).
-    'más de un día antes', 'Al acabar puede firmarla', 'la declaración que aceptó']
+  const PROHIBIDAS = ['Sin discusión', 'quién golpeó', 'al salir y al volver', '90 segundos', 'Imposible falsificar', 'inmutable', 'certificad',
+    'Acceso anticipado', 'no manipulable', 'Confidence scoring', 'más de un día antes', 'Al acabar puede firmarla', 'la declaración que aceptó',
+    'IA', 'detecta', 'Revisión rápida', 'hecha a las', 'verificad', 'gratis']
 
-  for (const [nombre, ancho, alto] of [['ordenador', 1280, 900], ['móvil', 375, 812]]) {
+  for (const [nombre, ancho, alto] of [['ordenador', 1280, 900], ['móvil', 390, 844]]) {
     test(`dice solo lo que hace el servidor y se lee en ${nombre}`, async ({ page }) => {
       const fallos = vigilarErrores(page)
       await page.setViewportSize({ width: ancho, height: alto })
       await simularApi(page, 'vacio')
       await page.goto('/peritaje-tecnico', { waitUntil: 'domcontentloaded' })
-      await expect(page.getByRole('heading', { level: 1 })).toHaveText('Cómo funciona la IA de daños')
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText('Qué le enseñas al perito del renting')
       const texto = await page.locator('body').innerText()
       for (const p of PROHIBIDAS) expect(texto, `no puede decir «${p}»`).not.toContain(p)
-      for (const p of ['No dice quién dio el golpe', 'cada conductor hace una revisión por furgoneta y día', 'No es una firma electrónica avanzada',
-        'Va en el plan Pro', 'las direcciones de sus fotos', 'La IA se equivoca a veces',
-        'Con el plan Pro, la oficina la firma después desde el panel.', 'Con el plan Pro: las fotos y los golpes marcados',
-        'avisa si su primera foto es casi igual a la de otra revisión de esa furgoneta de los últimos 30 días o si la matrícula que lee la IA no es la suya.']) {
+      for (const p of ['No dice quién dio el golpe.', 'Cada conductor hace una revisión por furgoneta y día.', 'No es una firma electrónica avanzada',
+        'Con el plan Pro, la oficina puede firmar una revisión desde el panel.', 'con la fecha y la hora en que llegó al servidor',
+        'queda sin conductor atribuible y se dice por qué', 'El expediente solo lleva los golpes que ha marcado o confirmado una persona.']) {
         expect(texto, `tiene que decir «${p}»`).toContain(p)
       }
-      await expect(page.getByRole('link', { name: 'Probar gratis 14 días' })).toHaveAttribute('href', '/registro?sector=otra&plan=completo')
-      await expect(page.getByRole('link', { name: /Hacer la cuenta/ })).toHaveAttribute('href', '/empresas#cuenta')
+      await expect(page.getByRole('link', { name: 'Probar con mis furgonetas' })).toHaveAttribute('href', '/registro?sector=otra&plan=completo')
+      await expect(page.getByRole('link', { name: 'Ver un expediente de ejemplo' })).toHaveAttribute('href', '/expediente-ejemplo')
+      await expect(page.getByRole('link', { name: /Hacer la cuenta/ })).toHaveAttribute('href', '/#precio')
       await page.waitForTimeout(300)
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(ancho)
       expect(fallos, fallos.join(' | ')).toHaveLength(0)
     })
   }
 
-  test('el pie de /empresas lleva a ella', async ({ page }) => {
+  test('el pie de la portada lleva a ella', async ({ page }) => {
     await simularApi(page, 'vacio')
-    await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
-    await page.getByRole('link', { name: 'Cómo funciona la IA de daños' }).click()
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('link', { name: 'Qué le enseñas al perito' }).click()
     await expect(page).toHaveURL(/\/peritaje-tecnico$/)
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Cómo funciona la IA de daños')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Qué le enseñas al perito del renting')
   })
 })
 

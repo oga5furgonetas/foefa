@@ -180,7 +180,7 @@ export default function Repartidores() {
             🎁 {promoGratis() ? tx('Te ha invitado un compañero · gratis y sin límite hasta el {fecha}', { fecha: fechaPromo(locale()) }) : tx('Te ha invitado un compañero: {n} días gratis', { n: invitacion.dias })}
           </p>
         )}
-        <p className="text-[12.5px] font-bold uppercase tracking-[0.14em] text-brand-300">{tx('Para quien reparte solo')}</p>
+        <p className="text-[14px] font-semibold text-brand-300">{tx('Para quien reparte solo')}</p>
         <h1 className="mt-1.5 font-display text-[32px] font-extrabold leading-[1.05] text-dark-50">{tx('Tu ruta de reparto, ordenada sola.')}</h1>
         <p className="mt-2 text-[15px] leading-snug text-dark-300">{tx('Haz una foto a la etiqueta o escanea el paquete: la app ordena las paradas por tiempo y te lleva con voz hasta cada puerta.')}</p>
         {/* 10-10-2026: lo que promete el anuncio, arriba del todo (antes solo salía junto al formulario). */}
@@ -209,7 +209,7 @@ export default function Repartidores() {
           </div>
           {verAlta ? alta(true) : (
             <button onClick={() => { medirAccion('rep_abrir_alta'); setVerAlta(true) }}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 py-4 text-[17px] font-extrabold text-[#04121a] shadow-[0_12px_30px_-10px_rgba(20,231,216,.6)] active:scale-[.99]">
+              className="mt-4 flex h-[56px] w-full items-center justify-center gap-2 rounded-[12px] bg-brand-400 text-[17px] font-bold text-[#10181a] hover:bg-brand-500">
               {tx('Crear mi cuenta gratis')} <ArrowRight size={19} />
             </button>
           )}
