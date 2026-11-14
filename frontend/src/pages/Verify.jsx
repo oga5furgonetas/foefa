@@ -95,7 +95,9 @@ export default function Verify() {
               <Item label="Fecha inspección" value={fmt(data.inspection_date)} />
               <Item label="Fecha firma" value={fmt(data.signed_at)} />
               <Item label="Hash anterior" value={data.prev_hash} mono />
-              <Item label="Hash siguiente" value={data.has_next_in_chain ? 'sí (cadena continuada)' : 'no (última firma)'} />
+              {/* «hay firmas posteriores» (14-11-2026): has_next_in_chain solo mira si hay otra firma después en esa
+                  empresa; no comprueba que el enlace cuadre. Decía «cadena continuada». */}
+              <Item label="Hash siguiente" value={data.has_next_in_chain ? 'sí (hay firmas posteriores)' : 'no (última firma)'} />
             </dl>
             <div className="mt-5 border-t border-emerald-500/20 pt-4 text-xs text-dark-400">
               <b className="text-dark-200">Código de la firma:</b>

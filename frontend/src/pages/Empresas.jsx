@@ -486,7 +486,8 @@ export default function Empresas() {
           <img src={lang === 'en' ? '/empresas/inspeccion-golpe-en.jpg' : '/empresas/inspeccion-golpe.jpg'} loading="lazy" decoding="async" width="1200" height="1184" data-testid="emp-captura"
             alt={tx('El detalle de una revisión en el panel: la foto del lateral de la furgoneta con el golpe marcado en la puerta lateral.')}
             className="h-auto w-full rounded-2xl border border-[color:var(--ld-border-strong)] shadow-[0_30px_70px_-40px_rgba(0,0,0,.6)]" />
-          {/* 14-11-2026 (ronda 3, M3): la foto de la demo no tiene ningún golpe y la caja marca chapa limpia: el pie lo dice. */}
+          {/* 14-11-2026 (ronda 3, M3): la foto es de la demo, con el golpe dibujado (scripts/demo-fotos-golpes.py): el pie
+              dice que la foto y el golpe son de ejemplo. */}
           <figcaption className="mt-2 text-center text-[12.5px] text-[color:var(--ld-muted)]">{tx('Pantalla real del panel. La foto y el golpe marcado son de ejemplo.')}</figcaption>
         </figure>
       </Seccion>

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { simularApi } from './api-simulada.js'
+import { simularApi, entrarComoAdmin } from './api-simulada.js'
 
 /* LA PÁGINA DE VENTA PARA EMPRESAS (/empresas, 14-11-2026).
    Lo que no puede fallar en una página a la que se manda a un dueño de flota por correo o por teléfono: que cargue,
@@ -510,7 +510,10 @@ test.describe('/empresas', () => {
    /empresas niega ni lo que el servidor no hace. */
 test.describe('/peritaje-tecnico', () => {
   const PROHIBIDAS = ['Sin discusión', 'quién golpeó', 'al salir y al volver', 'al salir y volver', '90 segundos', '800', '3.000',
-    'Imposible falsificar', 'inmutable', '3 veces', 'Acceso anticipado', 'Tu peritaje siempre llega', 'no manipulable', 'imagen manipulada', 'Confidence scoring']
+    'Imposible falsificar', 'inmutable', '3 veces', 'Acceso anticipado', 'Tu peritaje siempre llega', 'no manipulable', 'imagen manipulada', 'Confidence scoring',
+    // 14-11-2026 (r3, V1 y V2): el aviso de la foto antigua no salta nunca (el servidor guarda la foto sin EXIF) y el
+    // conductor no firma desde el portal (su tarjeta lee `id` y la subida contesta `inspection_id`).
+    'más de un día antes', 'Al acabar puede firmarla', 'la declaración que aceptó']
 
   for (const [nombre, ancho, alto] of [['ordenador', 1280, 900], ['móvil', 375, 812]]) {
     test(`dice solo lo que hace el servidor y se lee en ${nombre}`, async ({ page }) => {
@@ -522,7 +525,9 @@ test.describe('/peritaje-tecnico', () => {
       const texto = await page.locator('body').innerText()
       for (const p of PROHIBIDAS) expect(texto, `no puede decir «${p}»`).not.toContain(p)
       for (const p of ['No dice quién dio el golpe', 'cada conductor hace una revisión por furgoneta y día', 'No es una firma electrónica avanzada',
-        'Va en el plan Pro', 'las direcciones de sus fotos', 'La IA se equivoca a veces']) {
+        'Va en el plan Pro', 'las direcciones de sus fotos', 'La IA se equivoca a veces',
+        'Con el plan Pro, la oficina la firma después desde el panel.', 'Con el plan Pro: las fotos y los golpes marcados',
+        'avisa si su primera foto es casi igual a la de otra revisión de esa furgoneta de los últimos 30 días o si la matrícula que lee la IA no es la suya.']) {
         expect(texto, `tiene que decir «${p}»`).toContain(p)
       }
       await expect(page.getByRole('link', { name: 'Probar gratis 14 días' })).toHaveAttribute('href', '/registro?sector=otra&plan=completo')
@@ -568,8 +573,66 @@ test.describe('privacidad y la pestaña «¿Quién la llevaba?»', () => {
     const { DICT } = await import('../src/i18nDict.js')
     const p = DICT['insp.tab.who']
     expect(p.es).toBe('¿Quién la llevaba?')
-    expect(p.en).toBe('Who had it?')
+    // r3 (14-11-2026): «quién la conducía» en los otros cinco (sonaban forzados); en italiano «lo» (furgone, veicolo).
+    expect(p).toEqual({ es: '¿Quién la llevaba?', en: 'Who was driving?', fr: 'Qui la conduisait ?', de: 'Wer ist gefahren?',
+      it: 'Chi lo guidava?', pt: 'Quem a conduzia?' })
     expect(Object.keys(p).sort()).toEqual(['de', 'en', 'es', 'fr', 'it', 'pt'])
     for (const v of Object.values(p)) expect(v).not.toMatch(/golpe|hit|frapp|getroffen|colpit|bateu/i)
   })
+})
+
+/* EL AVISO DE TRAMPA DEL DETALLE DE UNA REVISIÓN (r3, V3, 14-11-2026). /peritaje-tecnico promete que el detalle «avisa»
+   de la matrícula distinta o de la foto repetida, y con una sola señal (40 o 50 puntos, menos de 70) el bloque salía en
+   verde, «Sin indicios de fraude», con el motivo debajo. Ahora cualquier motivo lo pone en ámbar; sin motivos sigue en
+   verde, y la línea de debajo dice lo que se mira, no «EXIF correcto · pHash único · matrícula coincide». */
+test.describe('el aviso de trampa del detalle de una revisión', () => {
+  const PANEL = 'div.fixed.inset-0.z-40'
+  const revision = (id, vehiculo, fraud_score, fraud_reasons) => ({
+    id, vehicle_id: vehiculo, driver_id: 'd1', center: 'MADRID', photos: [], annotated_photos: [], notes: '',
+    analysis_status: 'ok', created_at: new Date(Date.now() - 3600000).toISOString(), fraud_score, fraud_reasons,
+    analysis: { severity: 'leve', total_damages_count: 0, total_estimated_cost: 0, damages: [], new_damages: [] },
+  })
+  const MATRICULA = { type: 'plate_mismatch', detail: "IA leyó '9999 ZZZ' pero el vehículo asignado es '1000 BCD'", weight: 40 }
+
+  for (const [nombre, idioma, sinFraude, sospecha, limpio] of [
+    ['español', 'es', 'Sin indicios de fraude', 'Indicios sospechosos', 'Sin avisos. Se mira si la primera foto repite'],
+    ['inglés', 'en', 'No fraud signs', 'Suspicious signs', 'No warnings. It checks whether the first photo repeats'],
+  ]) {
+    test(`con un solo motivo (40/100) sale en ámbar; sin motivos, en verde y sin «EXIF correcto» (${nombre})`, async ({ page }) => {
+      const conMotivo = revision('f1', 'v1', 40, [MATRICULA])
+      const limpia = revision('f2', 'v2', 0, [])
+      await entrarComoAdmin(page, { centros: ['MADRID'] })
+      // El idioma del panel (flota_lang), DESPUÉS de entrarComoAdmin, que lo pone en español.
+      if (idioma !== 'es') await page.addInitScript((l) => { try { localStorage.setItem('flota_lang', l) } catch { /* nada */ } }, idioma)
+      await simularApi(page, 'vacio')
+      await page.route(/\/api\/inspections(\?|$)/, (r) => r.fulfill({ json: [conMotivo, limpia] }))
+      await page.route(/\/api\/inspections\/f\d$/, (r) => r.fulfill({ json: r.request().url().endsWith('f1') ? conMotivo : limpia }))
+      await page.route(/\/api\/inspections\/f\d\/forensic$/, (r) => r.fulfill({ json: { signed: false } }))
+      await page.route(/\/api\/vehicles(\?|$)/, (r) => r.fulfill({ json: [
+        { id: 'v1', license_plate: '1000 BCD', center: 'MADRID', status: 'activo' },
+        { id: 'v2', license_plate: '1001 BCD', center: 'MADRID', status: 'activo' },
+      ] }))
+      await page.route(/\/api\/drivers(\?|$)/, (r) => r.fulfill({ json: [{ id: 'd1', name: 'Carlos Ruiz' }] }))
+      await page.goto('/panel/inspecciones', { waitUntil: 'domcontentloaded' })
+
+      // Con la matrícula distinta (40 puntos): ámbar, «Indicios sospechosos», y el motivo debajo.
+      await page.getByRole('button', { name: /1000\s*BCD/ }).click({ timeout: 30_000 })
+      const bloque = page.locator(`${PANEL} div.rounded-lg.border`, { hasText: '(40/100)' })
+      await expect(bloque).toContainText(sospecha)
+      await expect(bloque).not.toContainText(sinFraude)
+      await expect(bloque).toHaveClass(/border-amber-500/)
+      await expect(bloque).toContainText('9999 ZZZ')
+      await expect(page.getByTestId('insp-fraude-limpio')).toHaveCount(0)
+      await page.locator(`${PANEL} button.btn-ghost`).first().click()
+      await expect(page.locator(PANEL)).toHaveCount(0)
+
+      // Sin motivos (0 puntos): como antes, verde y «Sin indicios de fraude»; debajo, lo que se mira.
+      await page.getByRole('button', { name: /1001\s*BCD/ }).click()
+      const verde = page.locator(`${PANEL} div.rounded-lg.border`, { hasText: '(0/100)' })
+      await expect(verde).toContainText(sinFraude)
+      await expect(verde).toHaveClass(/border-emerald-500/)
+      await expect(page.getByTestId('insp-fraude-limpio')).toContainText(limpio)
+      await expect(page.locator(PANEL)).not.toContainText(/EXIF|pHash/)
+    })
+  }
 })

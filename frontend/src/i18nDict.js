@@ -198,6 +198,8 @@ export const DICT = {
   'vh.ev.repair':     { es: 'Panel reparado', en: 'Panel repaired', fr: 'Panneau réparé', de: 'Panel repariert', it: 'Pannello riparato', pt: 'Painel reparado' },
   'vh.ev.repair.all': { es: 'Salió de chapa — daños reparados', en: 'Body shop done — damages repaired', fr: 'Sortie de carrosserie — dommages réparés', de: 'Karosserie fertig — Schäden repariert', it: 'Uscita da carrozzeria — danni riparati', pt: 'Saiu da funilaria — danos reparados' },
   'vh.dispute':       { es: 'Parte de disputa', en: 'Dispute report', fr: 'Rapport de litige', de: 'Streitfall-Bericht', it: 'Rapporto di contestazione', pt: 'Relatório de disputa' },
+  // r3 (14-11-2026): window.open devolvió null (el navegador bloqueó la ventana del parte).
+  'vh.dispute.bloqueada':  { es: 'Permite las ventanas emergentes para abrir el parte', en: 'Allow pop-ups to open the report', fr: 'Autorisez les fenêtres pop-up pour ouvrir le rapport', de: 'Erlaube Pop-up-Fenster, um den Bericht zu öffnen', it: 'Consenti le finestre pop-up per aprire il rapporto', pt: 'Permite as janelas pop-up para abrir o relatório' },
   'vh.dispute.preparando': { es: 'Preparando el parte…', en: 'Preparing the report…', fr: 'Préparation du rapport…', de: 'Bericht wird erstellt…', it: 'Preparazione del rapporto…', pt: 'A preparar o relatório…' },
   // La pestaña de inspecciones de la ficha: el historial entero y la foto de entrada (14-11-2026).
   'vh.insp.mas':      { es: 'Ver revisiones más antiguas', en: 'Show older checks', fr: 'Voir les inspections plus anciennes', de: 'Ältere Inspektionen anzeigen', it: 'Vedi le ispezioni più vecchie', pt: 'Ver inspeções mais antigas' },
@@ -517,7 +519,9 @@ export const DICT = {
   'insp.signed':           { es: 'Firmada',            en: 'Signed',               fr: 'Signée',                 de: 'Unterschrieben',        it: 'Firmata',               pt: 'Assinada' },
   'insp.tab.damages':      { es: 'Daños',              en: 'Damages',              fr: 'Dommages',               de: 'Schäden',               it: 'Danni',                 pt: 'Danos' },
   // 14-11-2026: decía «¿Quién lo golpeó?». La pestaña enseña quién llevaba el vehículo en cada revisión, no quién dio el golpe.
-  'insp.tab.who':          { es: '¿Quién la llevaba?', en: 'Who had it?',          fr: 'Qui l\'avait ?',         de: 'Wer hatte das Fahrzeug?', it: 'Chi ce l\'aveva?',    pt: 'Quem a levava?' },
+  // r3 (14-11-2026): en los otros idiomas, «quién la conducía» (sonaba forzado). En italiano «lo»: el panel la llama
+  // «furgone» o «veicolo», los dos masculinos; en francés y portugués «la/a» (camionnette, carrinha).
+  'insp.tab.who':          { es: '¿Quién la llevaba?', en: 'Who was driving?',     fr: 'Qui la conduisait ?',    de: 'Wer ist gefahren?',     it: 'Chi lo guidava?',       pt: 'Quem a conduzia?' },
   'insp.no.damage':        { es: 'Sin daños detectados.', en: 'No damage detected.', fr: 'Aucun dommage détecté.', de: 'Keine Schäden erkannt.', it: 'Nessun danno rilevato.', pt: 'Sem danos detetados.' },
   'insp.summary':          { es: 'Resumen del peritaje', en: 'Inspection summary',  fr: 'Résumé du rapport',      de: 'Gutachten-Zusammenfassung', it: 'Riepilogo perizia',   pt: 'Resumo da inspeção' },
   'insp.fraud.not.run':    { es: 'Análisis de fraude no ejecutado', en: 'Fraud analysis not run', fr: 'Analyse fraude non exécutée', de: 'Betrugsanalyse nicht ausgeführt', it: 'Analisi frode non eseguita', pt: 'Análise de fraude não executada' },
@@ -525,6 +529,14 @@ export const DICT = {
   'insp.fraud.high':       { es: 'POSIBLE FRAUDE',     en: 'POSSIBLE FRAUD',       fr: 'FRAUDE POSSIBLE',        de: 'MÖGLICHER BETRUG',      it: 'POSSIBILE FRODE',       pt: 'POSSÍVEL FRAUDE' },
   'insp.fraud.mid':        { es: 'Indicios sospechosos', en: 'Suspicious signs',   fr: 'Signes suspects',        de: 'Verdächtige Anzeichen', it: 'Indizi sospetti',       pt: 'Indícios suspeitos' },
   'insp.fraud.none':       { es: 'Sin indicios de fraude', en: 'No fraud signs',   fr: 'Aucun indice de fraude', de: 'Keine Betrugszeichen',  it: 'Nessun indizio di frode', pt: 'Sem indícios de fraude' },
+  // r3 (14-11-2026): sustituye «EXIF correcto · pHash único · matrícula coincide.», escrito a mano: las fotos se guardan
+  // sin EXIF, el pHash solo mira la primera foto y la matrícula solo se compara si la IA la leyó. Dice lo que se mira.
+  'insp.fraud.clean':      { es: 'Sin avisos. Se mira si la primera foto repite la de otra revisión de los últimos 30 días y, si la IA leyó la matrícula, si es la suya.',
+    en: 'No warnings. It checks whether the first photo repeats one from another check in the last 30 days and, if the AI read the plate, whether it matches.',
+    fr: 'Aucun avertissement. On vérifie si la première photo reprend celle d\'une autre inspection des 30 derniers jours et, si l\'IA a lu la plaque, si c\'est la bonne.',
+    de: 'Keine Hinweise. Geprüft wird, ob das erste Foto das einer anderen Inspektion der letzten 30 Tage wiederholt und, falls die KI das Kennzeichen gelesen hat, ob es passt.',
+    it: 'Nessun avviso. Si controlla se la prima foto ripete quella di un\'altra ispezione degli ultimi 30 giorni e, se l\'IA ha letto la targa, se è la sua.',
+    pt: 'Sem avisos. Verifica-se se a primeira foto repete a de outra inspeção dos últimos 30 dias e, se a IA leu a matrícula, se é a dela.' },
   'insp.fraud.recheck':    { es: 'Recomprobar',        en: 'Re-check',             fr: 'Revérifier',             de: 'Erneut prüfen',         it: 'Ricontrolla',           pt: 'Reverificar' },
   'insp.fraud.plate':      { es: 'Matrícula no coincide', en: 'Plate mismatch',    fr: 'Plaque non concordante', de: 'Kennzeichen stimmt nicht', it: 'Targa non corrisponde', pt: 'Matrícula não coincide' },
   'insp.fraud.old.photo':  { es: 'Foto antigua',       en: 'Old photo',            fr: 'Ancienne photo',         de: 'Altes Foto',            it: 'Foto vecchia',          pt: 'Foto antiga' },

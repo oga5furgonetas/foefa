@@ -336,7 +336,9 @@ function FraudBlock({ insp }) {
     )
   }
 
-  const level = score >= 85 ? 'high' : score >= 70 ? 'mid' : 'low'
+  // r3 (14-11-2026): con algún motivo y menos de 70 puntos (una matrícula distinta pesa 40, una foto repetida 50) salía
+  // en verde «Sin indicios de fraude» con el motivo debajo. Con cualquier motivo es, como poco, ámbar; sin motivos, igual.
+  const level = score >= 85 ? 'high' : (score >= 70 || reasons.length > 0) ? 'mid' : 'low'
   const cls = level === 'high' ? 'border-red-500/40 bg-red-500/10 text-red-200'
             : level === 'mid' ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
             : 'border-emerald-500/30 bg-emerald-500/5 text-emerald-200'
@@ -358,7 +360,7 @@ function FraudBlock({ insp }) {
           ))}
         </ul>
       ) : (
-        <p className="text-xs opacity-80">EXIF correcto · pHash único · matrícula coincide.</p>
+        <p className="text-xs opacity-80" data-testid="insp-fraude-limpio">{t('insp.fraud.clean')}</p>
       )}
       {err && <p className="mt-2 text-xs text-red-400">{err}</p>}
     </div>

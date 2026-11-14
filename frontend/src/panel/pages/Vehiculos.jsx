@@ -702,7 +702,8 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
     const base = insps || []
     if (!hayMasInsps) { buildDisputeDoc(base, eventosHistorial(base), entradaDe(base, true), ''); return }
     const w = window.open('', '_blank')
-    if (!w) return
+    // r3 (14-11-2026): con la ventana bloqueada por el navegador, se avisa; antes no pasaba nada y no se sabía por qué.
+    if (!w) { showToast(t('vh.dispute.bloqueada'), false); return }
     w.document.write('<!doctype html><meta charset="utf-8"><title>Parte de disputa</title>'
       + '<p style="font:14px sans-serif;margin:40px">Preparando el parte…</p>')
     w.document.close()
@@ -710,6 +711,7 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
     setPreparandoParte(true)
     let todas = base
     let completa = false
+    let sinCursor = false   // r3 (14-11-2026): la tanda con cursor no trajo nada nuevo
     try {
       while (todas.length < TOPE_PARTE) {
         const ult = todas[todas.length - 1]
@@ -720,13 +722,15 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
         const nuevas = llegan.filter((i) => !ya.has(i.id))
         todas = [...todas, ...nuevas]
         if (llegan.length < TANDA_INSP) { completa = true; break }
-        if (!nuevas.length) break   // un servidor viejo que no entiende el cursor: no se sabe si hay más
+        if (!nuevas.length) { sinCursor = true; break }   // un servidor viejo que no entiende el cursor: no se sabe si hay más
       }
     } catch { /* una tanda falló: se escribe con lo que hay, y lo dice */ }
     if (vidActual.current !== vid) { try { w.close() } catch { /* ya cerrada */ } return }
     if (!completa && totalInsps != null && todas.length >= totalInsps) completa = true
     setInsps(todas)
-    setHayMasInsps(!completa)
+    // Sin cursor, «Ver revisiones más antiguas» no traería nada nuevo: se quita, como hace cargarMasInsps (r3,
+    // 14-11-2026). El parte sigue diciendo arriba que puede no estar completo.
+    setHayMasInsps(!completa && !sinCursor)
     setPreparandoParte(false)
     const ent = entradaDe(todas, completa)
     const aviso = completa ? '' : `Este parte incluye las ${todas.length} revisiones más recientes`
@@ -819,7 +823,9 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
 </body></html>`
     // La ventana abierta en el clic mientras se cargaban las revisiones; si no, como antes.
     const w = ventana || window.open('', '_blank')
-    if (!w || w.closed) return
+    // Bloqueada por el navegador (r3, 14-11-2026): se avisa. Cerrada por el usuario mientras se preparaba: nada.
+    if (!w) { showToast(t('vh.dispute.bloqueada'), false); return }
+    if (w.closed) return
     if (ventana) w.document.open()
     w.document.write(html)
     w.document.close()

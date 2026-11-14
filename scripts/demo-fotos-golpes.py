@@ -168,8 +168,10 @@ PARAMS = {
     "puerta": dict(c=(0.5, 0.52), env=(0.44, 0.34), dent=(0.02, -0.02, 0.34, 0.36), fuerza=0.22, n=90,
                    largo=0.85, grueso=0.32, ang=-3.0, rayas=0.75, velo=0.22, brillo=0.35, color=(96, 97, 100)),
     # Paragolpes de plástico negro: el plástico rozado queda gris claro.
-    "paragolpes": dict(c=(0.36, 0.4), env=(0.3, 0.22), dent=(0.0, 0.0, 0.3, 0.2), fuerza=0.1, n=70,
-                       largo=0.75, grueso=0.3, ang=6.0, rayas=0.9, velo=0.35, brillo=0.0, color=(178, 177, 175)),
+    # r3 (14-11-2026): casi no se veía sobre el negro y la mancha tapaba el catadióptrico rojo. Ahora va más clara
+    # (gris claro, más rayas y más veladura) y más abajo, en la esquina del paragolpes, lejos del catadióptrico.
+    "paragolpes": dict(c=(0.3, 0.56), env=(0.2, 0.22), dent=(0.0, 0.0, 0.3, 0.2), fuerza=0.1, n=80,
+                       largo=0.75, grueso=0.3, ang=6.0, rayas=1.0, velo=0.5, brillo=0.15, color=(206, 205, 201)),
     # Canto de la puerta trasera: hundido y rayado casi en vertical (marcha atrás contra un poste).
     "porton": dict(c=(0.72, 0.5), env=(0.28, 0.34), dent=(0.0, 0.0, 0.3, 0.24), fuerza=0.4, n=90,
                    largo=0.55, grueso=0.38, ang=84.0, rayas=1.0, velo=0.6, brillo=0.3, color=(72, 73, 78)),

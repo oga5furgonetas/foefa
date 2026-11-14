@@ -391,6 +391,34 @@ test.describe('El parte para imprimir: entero y con la pareja del servidor', () 
   })
 })
 
+/* RONDA 3, revisión de regresiones (14-11-2026): la ventana bloqueada y el «Ver más» tras un servidor viejo. */
+test.describe('El parte: la ventana bloqueada y el «Ver más» de después', () => {
+  for (const [nombre, total] of [['con menos de 50 (el camino de siempre)', 3], ['con 80 (cargando las demás)', 80]]) {
+    test(`si el navegador bloquea la ventana, lo dice ${nombre}`, async ({ page }) => {
+      // Falla con el código de antes: no pasaba nada y no se sabía por qué.
+      const fallos = vigilar(page)
+      await page.addInitScript(() => { window.open = () => null })
+      await abrirFicha(page, flota(total))
+      await page.waitForLoadState('networkidle')
+      await page.getByRole('button', { name: 'Historial' }).click()
+      await page.getByRole('button', { name: 'Parte de disputa' }).click()
+      await expect(page.getByText('Permite las ventanas emergentes para abrir el parte')).toBeVisible()
+      // Y el botón no se queda girando.
+      await expect(page.getByRole('button', { name: 'Parte de disputa' })).toBeEnabled()
+      expect(fallos, fallos.join(' | ')).toHaveLength(0)
+    })
+  }
+
+  test('tras el parte con un servidor que ignora el cursor, «Ver revisiones más antiguas» se va, como al pulsarlo', async ({ page }) => {
+    // Falla con el código de antes: el botón seguía, y pulsarlo no traía nada.
+    const { html } = await abrirParteCon(page, flota(80), { viejo: true })
+    expect(filasInspeccion(html)).toHaveLength(50)
+    expect(avisoDe(html)).toContain('Este parte incluye las 50 revisiones más recientes')
+    await pestanaInspecciones(page).click()
+    await expect(page.getByRole('button', { name: 'Ver revisiones más antiguas' })).toHaveCount(0)
+  })
+})
+
 test.describe('Origen de daños con la cuenta vacía', () => {
   for (const [nombre, respuesta, texto] of [
     ['dice qué hace falta para que salga algo', { status: 200, body: { danos: [], resumen: {}, total: 0 } }, /Todavía no hay golpes atribuidos/],

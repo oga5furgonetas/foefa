@@ -9,8 +9,10 @@ import { DIAS_PRUEBA_EMPRESA } from '../lib/precios'
    discusión.», «al salir y al volver», «90 segundos», «800-3.000€», «Imposible falsificar», «paga 3 veces el plan» y un
    «Acceso anticipado» que ningún código respalda. Ahora cada frase tiene detrás lo que hace el servidor hoy (la tabla
    frase → fichero está en el informe del encargo):
-   - la revisión: una por conductor, furgoneta y día (server.py, crear inspección, 409); la firma del conductor al acabar
-     (driver/InspectionDone.jsx) o de la oficina (Inspecciones.jsx, ForensicSignBlock);
+   - la revisión: una por conductor, furgoneta y día (server.py, crear inspección, 409); la firma, de la oficina
+     (Inspecciones.jsx, ForensicSignBlock). 14-11-2026: aquí NO se dice que firme el conductor: la tarjeta de firma de
+     driver/InspectionDone.jsx lee `result.id` y /inspections/upload contesta `inspection_id`, así que su botón se queda
+     apagado y hoy el conductor no firma desde el portal (la app nativa no firma);
    - la IA: `confidence` por golpe; por debajo de 0,65 queda como sugerido; el PDF pone el % y separa lo que no llega;
    - la firma: POST /inspections/{id}/sign guarda quién, cuándo, la IP y un SHA-256 de un subconjunto fijo de la
      revisión (_canonical_inspection_payload: las DIRECCIONES de las fotos, no la imagen) encadenado con la firma
@@ -18,24 +20,25 @@ import { DIAS_PRUEBA_EMPRESA } from '../lib/precios'
    - el PDF (GET /inspections/{id}/forensic-pdf, solo la oficina) y la comprobación pública (GET /verify/{hash}), que
      dice si el código está registrado y enseña fecha, firmante y matrícula en parte oculta. NO vuelve a calcular el
      código, así que aquí no se dice que «cualquier cambio se nota»;
-   - los avisos de trampa (_calculate_fraud_score): la primera foto con fecha interna de más de 24 h, casi igual a otra de
-     los últimos 30 días, o la matrícula leída distinta.
+   - los avisos de trampa (_calculate_fraud_score): la primera foto casi igual a otra de los últimos 30 días, o la
+     matrícula leída distinta. 14-11-2026: el aviso de «foto hecha más de un día antes» (old_photo) se quitó de aquí:
+     lee el EXIF de la foto YA GUARDADA y _process_image_sync la vuelve a guardar sin EXIF, así que no salta nunca.
    NUNCA «admisible en juicio» ni «quién dio el golpe». Solo en español, como antes. */
 
 const ALTA = '/registro?sector=otra&plan=completo'   // la misma alta que /empresas (Empresas.jsx, ALTA_EMPRESA)
 
 const PASOS = [
   [Camera, 'El conductor revisa la furgoneta con fotos',
-    'Desde el móvil, a la hora que decida tu empresa: cada conductor hace una revisión por furgoneta y día. Al acabar puede firmarla aceptando una declaración; si no la firma él, la puede firmar la oficina desde el panel.'],
+    'Desde el móvil, a la hora que decida tu empresa: cada conductor hace una revisión por furgoneta y día. Con el plan Pro, la oficina la firma después desde el panel.'],
   [ShieldCheck, 'La IA marca los golpes que parecen nuevos',
     'Compara cada foto con la anterior del mismo lado y marca la pieza, la gravedad y cuánto está de segura. No acierta siempre: lo que no tiene claro queda como sugerencia, y con el plan Pro confirmas o descartas cada golpe en Revisión rápida.'],
   [FileLock2, 'La revisión firmada sale en un informe en PDF',
-    'Con las fotos y los golpes marcados, quién la firmó, cuándo y desde qué IP, y un código que cualquiera puede comprobar en nuestra web.'],
+    'Con el plan Pro: las fotos y los golpes marcados, quién la firmó, cuándo y desde qué IP, y un código que cualquiera puede comprobar en nuestra web.'],
 ]
 
 const INFORME = [
   ['Las fotos con los golpes marcados', 'Cada golpe con su pieza, su gravedad, su coste estimado y su % de confianza. Los que no llegan al 50 % o no tienen la caja clara salen aparte, como sugerencias para que los mire una persona.'],
-  ['La firma', 'Quién firmó, la fecha y la hora, la IP desde la que firmó y la declaración que aceptó.'],
+  ['La firma', 'Quién firmó, la fecha y la hora, la IP desde la que firmó y el texto que quedó con la firma.'],
   ['Un código SHA-256', 'Calculado al firmar con los datos de la revisión (fecha, furgoneta, conductor, las direcciones de sus fotos y el resumen del análisis) y encadenado con el de la firma anterior de tu empresa.'],
   ['Un QR a la comprobación', 'Cualquiera puede ver en nuestra web, con ese código, que la firma está registrada, la fecha de la revisión y de la firma, quién la firmó y la matrícula en parte oculta.'],
 ]
@@ -113,7 +116,7 @@ export default function PeritajeTecnico() {
           ))}
         </div>
         <p className="mt-6 text-center text-sm text-dark-400">
-          Además, en cualquier plan, el detalle de cada revisión avisa si su primera foto se hizo más de un día antes, si es casi igual a la de otra revisión de esa furgoneta de los últimos 30 días o si la matrícula que lee la IA no es la suya.
+          Además, en todos los planes de flota, el detalle de cada revisión avisa si su primera foto es casi igual a la de otra revisión de esa furgoneta de los últimos 30 días o si la matrícula que lee la IA no es la suya.
         </p>
       </section>
 

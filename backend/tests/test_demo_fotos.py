@@ -522,3 +522,80 @@ async def test_el_pdf_solo_llama_a_la_ia_si_se_pide(demo, monkeypatch, boxes, es
     for rotulo in ("SEVERIDAD", "COSTE ESTIMADO", "LEVE", "90 EUR"):
         assert rotulo in texto, rotulo
     assert ("LOCALIZACION DE DA" in texto) == bool(esperadas)
+
+
+# ── Los dos PDF que salen del producto con lo que dicen de la firma (r3, 14-11-2026) ──
+# `_build_forensic_pdf` (el informe pericial) y `_build_damage_report_pdf` (el parte de
+# daño, el que va al renting o al seguro) cambiaron sus frases de integridad y ninguna
+# prueba los ejecutaba. Aquí se generan con una revisión mínima y se lee lo que dicen.
+
+def _frases_del_pdf(cuerpo: bytes) -> str:
+    """Las cadenas que pinta el PDF (`(…) Tj`), sin escapes, unidas por un espacio.
+    ReportLab escribe «é» como «\\351» (cp1252) y escapa los paréntesis; al partir una
+    línea quita el espacio, así que se une con uno y se juntan los dobles."""
+    import re
+    texto = _texto_del_pdf(cuerpo)
+    sueltas = []
+    for s in re.findall(r"\((.*?)(?<!\\)\) Tj", texto):
+        s = re.sub(r"\\([0-7]{3})", lambda m: bytes([int(m.group(1), 8)]).decode("cp1252", "replace"), s)
+        sueltas.append(re.sub(r"\\([()\\])", r"\1", s))
+    return re.sub(r" +", " ", " ".join(sueltas))
+
+
+_VIEJAS = ("hash inmutable", "sellado", "selladas con hash", "sello temporal", "sin alteración",
+           "Fotografía original", "criterios de veracidad", "Verifica este peritaje", "Hash de esta inspección")
+
+
+def _bytes_jpeg():
+    import io
+    from PIL import Image
+    b = io.BytesIO()
+    Image.new("RGB", (64, 48), (200, 200, 200)).save(b, format="JPEG")
+    return b.getvalue()
+
+
+_FH = "ab" * 32
+_INSP_PDF = {"id": "insp-1", "vehicle_id": "v", "created_at": "2026-11-14T10:00:00", "photos": ["https://x/a.jpg"],
+             "analysis": {"severity": "leve", "total_estimated_cost": 90, "executive_summary": "Una rozadura."}}
+_GOLPE_PDF = {"part": "puerta", "severity": "leve", "confidence": 0.9, "box_2d": [100, 100, 300, 300],
+              "estimated_cost": 90}
+
+
+def test_el_informe_pericial_sale_y_dice_lo_que_hace_la_firma():
+    sig = {"signed_by_name": "Ana", "signed_at": "2026-11-14T11:00:00", "client_ip": "1.2.3.4",
+           "content_hash": _FH, "prev_hash": "0" * 64, "revision": 1, "signature_text": "Firmado."}
+    jpg = _bytes_jpeg()
+    pdf = server._build_forensic_pdf(_INSP_PDF, sig, {"license_plate": "1234 BCD"}, "Carlos", [jpg, jpg],
+                                     f"https://ejemplo.test/verify/{_FH}", [_GOLPE_PDF],
+                                     [dict(_GOLPE_PDF, confidence=0.3)])
+    assert pdf.startswith(b"%PDF")
+    frases = _frases_del_pdf(pdf)
+    for nueva in ("Revisión firmada con cadena de custodia",
+                  "El código de la firma se calcula con las direcciones de estas fotos y queda encadenado con el de la firma anterior.",
+                  "Cada daño incluido tiene confianza", "50 %, caja delimitada y gravedad.",
+                  "no entran en el peritaje (el motivo va en cada fila)",
+                  "Código de la firma", "Código de la firma anterior", "Comprueba este código",
+                  "introduce el código en el verificador público"):
+        assert nueva in frases, nueva
+    for vieja in _VIEJAS:
+        assert vieja not in frases, vieja
+
+
+@pytest.mark.parametrize("firmada", [True, False])
+def test_el_parte_de_dano_sale_y_no_promete_fotos_selladas(firmada):
+    insp = dict(_INSP_PDF, forensic_hash=_FH) if firmada else dict(_INSP_PDF)
+    pdf = server._build_damage_report_pdf(insp, {"license_plate": "1234 BCD"}, "Carlos", _GOLPE_PDF, _bytes_jpeg())
+    assert pdf.startswith(b"%PDF")
+    frases = _frases_del_pdf(pdf)
+    assert "registro fotográfico con fecha y hora de la revisión" in frases
+    assert "Foto de la revisión con el daño marcado automáticamente." in frases
+    if firmada:
+        assert ("Revisión firmada: código de la firma " + _FH[:24]) in frases
+        assert "calculado al firmar con los datos de la revisión y las direcciones de sus fotos; se comprueba en" in frases
+        assert f"/verify/{_FH})." in frases
+        assert "Revisión sin firmar." not in frases
+    else:
+        assert "Revisión sin firmar." in frases
+        assert "código de la firma" not in frases
+    for vieja in _VIEJAS:
+        assert vieja not in frases, vieja

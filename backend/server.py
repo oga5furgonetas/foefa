@@ -16027,8 +16027,9 @@ async def _refine_damage_boxes_with_yolo_sam(inspection_id: str, photo_index_0ba
     """Cruza cajas Gemini con detecciones YOLO+SAM ya almacenadas en inspection_ai_results.
     Cuando hay coincidencia (IoU≥0.3) → caja YOLO/SAM (geométricamente precisa)
                                        + label semántica Gemini (qué es el daño).
-    Sin coincidencia → mantiene Gemini SOLO si confidence ≥ 0.7 (compromiso de veracidad).
-    Sin detecciones YOLO disponibles → degrada elegantemente a Gemini sin cambios."""
+    Sin coincidencia → mantiene la caja de Gemini marcada como no verificada (_verified False, borde discontinuo).
+    Se descartan las cajas inválidas y las que ocupan más del 15 % de la foto (la pieza entera, no el golpe).
+    (14-11-2026: decía «mantiene Gemini SOLO si confidence ≥ 0.7», y el código nunca miró esa confianza aquí.)"""
     ai_doc = await db.inspection_ai_results.find_one(
         {"inspection_id": inspection_id, "photo_index": photo_index_0based}, {"_id": 0}
     )
@@ -16222,7 +16223,9 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
     if damages_incluidos:
         story.append(Spacer(1, 4*mm))
         story.append(Paragraph(f"Daños incluidos en el peritaje ({len(damages_incluidos)})", h2))
-        story.append(Paragraph("Cada daño cumple los criterios de veracidad: confianza ≥ 50%, caja delimitada, severidad clasificada.", small))
+        # Decía «cumple los criterios de veracidad» (14-11-2026): son umbrales (_filter_damages_for_peritaje), no
+        # una prueba de que el golpe sea real.
+        story.append(Paragraph("Cada daño incluido tiene confianza ≥ 50 %, caja delimitada y gravedad.", small))
         story.append(Spacer(1, 2*mm))
         tdata = [["Pieza", "Severidad", "Confianza", "Foto", "Coste est."]]
         for d in damages_incluidos[:30]:
@@ -16250,7 +16253,7 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
     if damages_sugeridos:
         story.append(Spacer(1, 4*mm))
         story.append(Paragraph(f"Sugerencias no incluidas ({len(damages_sugeridos)})", h2))
-        story.append(Paragraph("La IA detectó estos posibles daños pero NO cumplen el umbral de veracidad para formar parte del peritaje. Revisión humana recomendada.", small))
+        story.append(Paragraph("La IA detectó estos posibles daños, pero no entran en el peritaje (el motivo va en cada fila). Revisión humana recomendada.", small))
         story.append(Spacer(1, 2*mm))
         tdata2 = [["Pieza", "Severidad", "Confianza", "Motivo de exclusión"]]
         for d in damages_sugeridos[:20]:
@@ -16285,8 +16288,9 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
         ["Firmado por", sig.get("signed_by_name", "—")],
         ["Fecha de firma", (sig.get("signed_at") or "")[:19].replace("T", " ")],
         ["IP del firmante", sig.get("client_ip", "—")],
-        ["Hash de esta inspección", Paragraph(sig.get("content_hash", "—"), mono)],
-        ["Hash anterior en la cadena", Paragraph(sig.get("prev_hash", "—"), mono)],
+        # «Código de la firma» (14-11-2026), el mismo nombre que /verify y /peritaje-tecnico; decía «Hash de esta inspección».
+        ["Código de la firma", Paragraph(sig.get("content_hash", "—"), mono)],
+        ["Código de la firma anterior", Paragraph(sig.get("prev_hash", "—"), mono)],
         ["Revisión", str(sig.get("revision", 1))],
     ]
     st = Table(sig_rows, colWidths=[55*mm, 119*mm])
@@ -16311,8 +16315,10 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
         qr_png = _generate_qr_png(verify_url)
         qr_img = Image(_io.BytesIO(qr_png), width=32*mm, height=32*mm)
         qr_tbl = Table([[qr_img,
-                         Paragraph(f"<b>Verifica este peritaje</b><br/>{verify_url}<br/><br/>"
-                                   f"Escanea el QR o introduce el hash en el verificador público.", body)]],
+                         # «Comprueba este código» (14-11-2026): /verify dice si el código está registrado; no
+                         # compara este PDF. Decía «Verifica este peritaje».
+                         Paragraph(f"<b>Comprueba este código</b><br/>{verify_url}<br/><br/>"
+                                   f"Escanea el QR o introduce el código en el verificador público.", body)]],
                        colWidths=[36*mm, 138*mm])
         qr_tbl.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
         story.append(qr_tbl)
@@ -16354,9 +16360,11 @@ def _build_damage_report_pdf(insp: dict, vehicle: dict, driver_name: str,
 
     sev = (dmg.get("severity") or "").capitalize()
     fecha = (insp.get("created_at") or "")[:16].replace("T", " ")
+    # Decía «registro fotográfico con sello temporal» (14-11-2026): no hay sellado de tiempo de un tercero; lo que lleva
+    # es la fecha y la hora en que se hizo la revisión (created_at).
     story = [
         Paragraph("PARTE DE DAÑO DE VEHÍCULO", h1),
-        Paragraph(f"Documento generado por {MARCA} — registro fotográfico con sello temporal", small),
+        Paragraph(f"Documento generado por {MARCA} — registro fotográfico con fecha y hora de la revisión", small),
         Spacer(1, 6 * mm),
     ]
 
@@ -16396,15 +16404,21 @@ def _build_damage_report_pdf(insp: dict, vehicle: dict, driver_name: str,
             ratio = min(max_w / iw, max_h / ih)
             story.append(RLImage(_io.BytesIO(annotated_photo), width=iw * ratio, height=ih * ratio))
             story.append(Spacer(1, 2 * mm))
-            story.append(Paragraph("Fotografía original de la inspección con el daño señalizado automáticamente.", small))
+            # «Fotografía original» fuera (14-11-2026): la foto se guarda reducida a 2048 px y recomprimida al subirla
+            # (_process_image_sync); es la foto de la revisión tal como quedó guardada, con la caja dibujada encima.
+            story.append(Paragraph("Foto de la revisión con el daño marcado automáticamente.", small))
         except Exception as _ie:
             logger.warning(f"parte PDF: imagen no embebible: {_ie}")
 
     story.append(Spacer(1, 6 * mm))
     fh = insp.get("forensic_hash") or ""
-    integrity = (f"Integridad: las fotos originales están selladas con hash SHA-256 ({fh[:24]}…) "
-                 f"en el momento de la subida." if fh else
-                 "Las fotos originales se conservan sin alteración en el sistema.")
+    # Decía «las fotos originales están selladas con hash SHA-256 … en el momento de la subida» y, sin firma, «se
+    # conservan sin alteración» (14-11-2026). Las dos eran falsas: el código (forensic_hash) se calcula AL FIRMAR
+    # (POST /inspections/{id}/sign) con los datos de la revisión y las DIRECCIONES de sus fotos
+    # (_canonical_inspection_payload), no con la imagen; y las fotos se reducen y recomprimen al subirlas.
+    integrity = (f"Revisión firmada: código de la firma {fh[:24]}… (calculado al firmar con los datos de la revisión "
+                 f"y las direcciones de sus fotos; se comprueba en {_PORTAL_BASE_FRONT}/verify/{fh})." if fh else
+                 "Revisión sin firmar.")
     story.append(Paragraph(
         f"{integrity} Inspección {insp.get('id', '')} · Generado el "
         f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} · {_DOMINIO_FRONT}", small))
