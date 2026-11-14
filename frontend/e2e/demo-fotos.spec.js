@@ -12,10 +12,12 @@ const CARPETA = process.env.CAPTURAS_DEMO_FOTOS || ''
 // Los golpes como los siembra `sitio_golpe` en `_seed_demo_data`: (foto 1-based, zona, caja 0-1000).
 const SITIO = {
   'puerta lateral derecha': [1, 'lateral_derecho', [590, 500, 700, 600]],
-  'aleta delantera izquierda': [2, 'lateral_izquierdo', [485, 505, 578, 562]],
+  // La aleta es la trasera derecha desde el 14-11-2026 (la delantera izquierda iba en la frontal, sin foto con el golpe).
+  'aleta trasera derecha': [1, 'lateral_derecho', [615, 308, 708, 425]],
 }
 
-const inspeccionDemo = (origen, { id = 'demo-i0-0', pieza = 'puerta lateral derecha', vehiculo = 'demo-v0' } = {}) => {
+const inspeccionDemo = (origen, { id = 'demo-i0-0', pieza = 'puerta lateral derecha', vehiculo = 'demo-v0',
+  lateral = 'van-lateral.jpg' } = {}) => {
   const [photo_index, location_hint, box_2d] = SITIO[pieza]
   const golpe = {
     part: pieza, severity: 'leve', description: 'Rozadura visible en el panel', estimated_cost: 90,
@@ -23,7 +25,7 @@ const inspeccionDemo = (origen, { id = 'demo-i0-0', pieza = 'puerta lateral dere
   }
   return {
     id, vehicle_id: vehiculo, driver_id: 'demo-d0', center: 'MADRID',
-    photos: [`${origen}/demo/van-lateral.jpg`, `${origen}/demo/van-frontal.jpg`], annotated_photos: [], notes: '',
+    photos: [`${origen}/demo/${lateral}`, `${origen}/demo/van-frontal.jpg`], annotated_photos: [], notes: '',
     analysis_status: 'ok', created_at: new Date(Date.now() - 25 * 60000).toISOString(), reviewed: true,
     analysis: {
       severity: 'leve', urgency: 'puede_esperar', risk: 'bajo', circulation_safe: true, critical_damages_count: 0,
@@ -80,8 +82,9 @@ test('Demo con fotos · la Revisión rápida enseña la foto y el golpe marcado 
 
 /* LO QUE VE QUIEN ABRE LA DEMO (14-11-2026). La Revisión rápida de la demo real sale VACÍA: todas sus inspecciones van
    `reviewed: True`. Donde el visitante ve la foto y la caja es en el detalle de una inspección, en /panel/inspecciones.
-   Se abren dos, con la forma exacta que siembra el servidor: la puerta (foto 1, la lateral) y la aleta (foto 2, la
-   frontal), y en cada una se mide que la foto carga y que la caja cae dentro y en su sitio. */
+   Se abren dos, con la forma exacta que siembra el servidor: la puerta y la aleta trasera derecha (las dos en la foto 1,
+   la lateral; la aleta, con su golpe dibujado), y en cada una se mide que la foto carga y que la caja cae dentro y en
+   su sitio. */
 const PANEL = 'div.fixed.inset-0.z-40'   // el detalle de la inspección (Detail, Inspecciones.jsx)
 
 async function cajaEnSuSitio(page, url, caja) {
@@ -106,7 +109,8 @@ async function cajaEnSuSitio(page, url, caja) {
 
 test('Demo con fotos · el detalle de una inspección enseña la foto y la caja del golpe en su sitio', async ({ page, baseURL }, info) => {
   const puerta = inspeccionDemo(baseURL)
-  const aleta = inspeccionDemo(baseURL, { id: 'demo-i3-3', pieza: 'aleta delantera izquierda', vehiculo: 'demo-v1' })
+  const aleta = inspeccionDemo(baseURL, { id: 'demo-i3-3', pieza: 'aleta trasera derecha', vehiculo: 'demo-v1',
+    lateral: 'van-lateral-golpe-puerta-aleta.jpg' })
   await entrarComoAdmin(page, { centros: ['MADRID'] })
   await simularApi(page, 'vacio')
   await page.route(/\/api\/inspections(\?|$)/, (r) => r.fulfill({ json: [puerta, aleta] }))
@@ -132,11 +136,12 @@ test('Demo con fotos · el detalle de una inspección enseña la foto y la caja 
   await page.locator(`${PANEL} button.btn-ghost`).first().click()
   await expect(page.locator(PANEL)).toHaveCount(0)
 
-  // La aleta: foto 2 (la frontal). Abre en la 1, sin caja; en la 2, la caja.
+  // La aleta trasera derecha: también en la foto 1 (la lateral con el golpe), y en la 2 sin caja.
   await page.getByRole('button', { name: /1001\s*BCD/ }).click()
-  await expect(page.locator(`${PANEL} div.border-orange-400.absolute`)).toHaveCount(0)
+  await cajaEnSuSitio(page, aleta.photos[0], SITIO['aleta trasera derecha'][2])
   await page.locator(`${PANEL} button.shrink-0`).nth(1).click()
-  await cajaEnSuSitio(page, aleta.photos[1], SITIO['aleta delantera izquierda'][2])
+  await expect(page.locator(`${PANEL} img[class="w-full"]`)).toHaveAttribute('src', aleta.photos[1])
+  await expect(page.locator(`${PANEL} div.border-orange-400.absolute`)).toHaveCount(0)
   if (CARPETA) await page.screenshot({ path: `${CARPETA}/r2-inspeccion-aleta-${info.project.name}.png`, fullPage: false })
 })
 
@@ -168,6 +173,12 @@ const origenDemo = (o) => [
     pieza: 'puerta lateral derecha', severity: 'grave', aparecio: '2026-11-07', ventana_dias: 1, certeza: 'alta',
     conductores: [{ id: 'demo-d0', nombre: 'Carlos Ruiz' }],
     foto_limpia: 'van-lateral.jpg', foto_limpia_fecha: '2026-11-06', foto_golpe: 'van-lateral-golpe-puerta.jpg' }),
+  filaDemo(o, { ledger_id: 'l4', matricula: '2462 JKL', part: 'aleta trasera derecha', panel: 'aleta',
+    pieza: 'aleta trasera derecha', severity: 'leve', aparecio: '2026-11-11', ventana_dias: 1, certeza: 'baja',
+    motivo: 'daño leve: puede salir de un roce o del lavado',
+    conductores: [{ id: 'demo-d4', nombre: 'Ion Popescu' }, { id: 'demo-d6', nombre: 'Diego Fernández' }],
+    foto_limpia: 'van-lateral-golpe-puerta.jpg', foto_limpia_fecha: '2026-11-10',
+    foto_golpe: 'van-lateral-golpe-puerta-aleta.jpg' }),
 ]
 
 test('Demo con fotos · «Origen de daños» abre con un golpe de un solo conductor y su antes y después', async ({ page, baseURL }, info) => {
@@ -175,7 +186,7 @@ test('Demo con fotos · «Origen de daños» abre con un golpe de un solo conduc
   await entrarComoAdmin(page, { centros: ['MADRID'] })
   await simularApi(page, 'vacio')
   await page.route(/\/api\/damages\/atribucion/, (r) => r.fulfill({
-    json: { danos: filas, resumen: { alta: 1, media: 1, baja: 1 }, total: filas.length, truncado: false },
+    json: { danos: filas, resumen: { alta: 1, media: 1, baja: 2 }, total: filas.length, truncado: false },
   }))
   await page.goto('/panel/origen-danos', { waitUntil: 'domcontentloaded' })
 
@@ -209,4 +220,16 @@ test('Demo con fotos · «Origen de daños» abre con un golpe de un solo conduc
   }
   await expect(page.getByText('No hay foto anterior')).toHaveCount(0)
   if (CARPETA) await page.screenshot({ path: `${CARPETA}/origen-demo-media-${info.project.name}.png`, fullPage: false })
+
+  // «Sin acotar»: la aleta trasera de la 2462 JKL, con su pareja de verdad (la limpia ya lleva la puerta; la del golpe,
+  // además la aleta). Antes, la aleta delantera iba con la misma foto a los dos lados y salía «No hay foto anterior».
+  await page.getByRole('button', { name: /^Sin acotar/ }).click()
+  await page.getByRole('button', { name: /2462\s*JKL/ }).click()
+  expect(filas[3].foto_limpia).not.toBe(filas[3].foto_golpe)
+  for (const url of [filas[3].foto_limpia, filas[3].foto_golpe]) {
+    const img = page.locator(`img[src="${url}"]`)
+    await expect.poll(() => img.evaluate((el) => el.complete && el.naturalWidth)).toBeGreaterThan(0)
+  }
+  await expect(page.getByText('No hay foto anterior')).toHaveCount(0)
+  if (CARPETA) await page.screenshot({ path: `${CARPETA}/origen-demo-aleta-${info.project.name}.png`, fullPage: false })
 })

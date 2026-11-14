@@ -34,6 +34,7 @@ CAJAS = {
     "puerta": [590, 500, 700, 600],      # puerta corredera, lateral
     "paragolpes": [690, 233, 785, 290],  # paragolpes trasero, lateral
     "porton": [380, 238, 640, 275],      # canto de las puertas traseras, lateral
+    "aleta": [615, 308, 708, 425],       # aleta trasera derecha, encima de la rueda trasera, lateral
 }
 
 # Qué imagen lleva qué golpes. Los nombres son los que usa la siembra.
@@ -41,12 +42,12 @@ VARIANTES = {
     "van-lateral-golpe-puerta.jpg": ("van-lateral.jpg", ["puerta"]),
     "van-lateral-golpe-paragolpes.jpg": ("van-lateral.jpg", ["paragolpes"]),
     "van-lateral-golpe-paragolpes-porton.jpg": ("van-lateral.jpg", ["paragolpes", "porton"]),
+    # La 2462 JKL: la puerta (07-11) y, después, la aleta trasera derecha.
+    "van-lateral-golpe-puerta-aleta.jpg": ("van-lateral.jpg", ["puerta", "aleta"]),
 }
-# SIN variante de la aleta (frontal), a propósito: en esa foto la furgoneta va
-# lejos y a 600 px de ancho ocupa unos 125 px; la aleta son unos 10. Ningún
-# roce dibujado ahí se ve a tamaño de pantalla sin parecer un borrón pintado
-# encima, y una «foto con el golpe» en la que no se ve el golpe tampoco prueba
-# nada. La aleta de la demo sigue con la frontal de siempre.
+# La aleta era la DELANTERA IZQUIERDA, en la frontal, sin variante: allí la
+# furgoneta va lejos y a 600 px la aleta son unos 10 px (14-11-2026). Se cambió
+# en la siembra por la TRASERA DERECHA, que en la lateral es grande.
 
 TOPE_BYTES = 200_000
 
@@ -172,16 +173,23 @@ PARAMS = {
     # Canto de la puerta trasera: hundido y rayado casi en vertical (marcha atrás contra un poste).
     "porton": dict(c=(0.72, 0.5), env=(0.28, 0.34), dent=(0.0, 0.0, 0.3, 0.24), fuerza=0.4, n=90,
                    largo=0.55, grueso=0.38, ang=84.0, rayas=1.0, velo=0.6, brillo=0.3, color=(72, 73, 78)),
+    # Aleta trasera derecha (chapa blanca sobre la rueda): rozadura casi horizontal sobre el arco y una
+    # abolladura poco honda (al arrimarse a un bolardo o a una columna de garaje).
+    "aleta": dict(c=(0.46, 0.58), env=(0.42, 0.3), dent=(0.04, -0.06, 0.3, 0.34), fuerza=0.26, n=90,
+                  largo=0.8, grueso=0.28, ang=-8.0, rayas=0.75, velo=0.25, brillo=0.3, color=(92, 93, 97)),
 }
 
 
 def genera(nombre: str) -> Path:
     base, piezas = VARIANTES[nombre]
-    rng = np.random.default_rng(sum(map(ord, nombre)))
     with Image.open(DEMO / base) as im:
         arr = np.asarray(im.convert("RGB"), dtype=np.float32).copy()
+    # Semilla POR GOLPE, no por imagen (14-11-2026): el mismo golpe sale igual en
+    # todas las fotos que lo llevan. Si no, en el antes y después de «Origen de
+    # daños» (la limpia ya lleva la puerta; la del golpe, la puerta y la aleta)
+    # la rozadura de la puerta cambiaba de forma entre las dos fotos.
     for p in piezas:
-        _pinta_golpe(arr, p, rng)
+        _pinta_golpe(arr, p, np.random.default_rng(sum(map(ord, p))))
     out = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
     destino = DEMO / nombre
     for calidad in (86, 82, 78, 74, 70):
