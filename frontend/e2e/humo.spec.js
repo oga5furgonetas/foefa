@@ -803,7 +803,7 @@ test.describe('Usuarios', () => {
       ]) }))
     await page.goto('/panel/usuarios', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('Mery', { exact: true })).toBeVisible({ timeout: 15000 })
-    await expect(page.getByText('ve 7 de 31 pantallas')).toBeVisible()
+    await expect(page.getByText('ve 7 de 32 pantallas')).toBeVisible()
     await page.getByRole('button', { name: 'Quién ve cada pantalla' }).click()
     const fila = (nombre) => page.locator('tr', { has: page.locator('td', { hasText: new RegExp(`^${nombre}$`) }) })
     // Mery: el Cuadrante sí y los Días libres no (van cada uno por su lado);
@@ -817,7 +817,7 @@ test.describe('Usuarios', () => {
     await expect(fila('Asignación diaria').locator('td').nth(2)).toHaveText('siempre')
     await expect(fila('Vehículos').locator('td').nth(3).getByLabel('la ve')).toBeVisible()
     await page.getByRole('button', { name: 'Editar' }).first().click()
-    await expect(page.getByText('Ve 7 de 31 pantallas del menú.')).toBeVisible()
+    await expect(page.getByText('Ve 7 de 32 pantallas del menú.')).toBeVisible()
     await expect(page.getByText('· va con Talleres')).toBeVisible()
     await expect(page.getByText('· va con Vehículos')).toBeVisible()
     // El Cuadrante se marca y desmarca como cualquier otra.
@@ -825,7 +825,7 @@ test.describe('Usuarios', () => {
     await expect(cuadrante).toHaveAttribute('aria-pressed', 'true')
     await cuadrante.click()
     await expect(cuadrante).toHaveAttribute('aria-pressed', 'false')
-    await expect(page.getByText('Ve 6 de 31 pantallas del menú.')).toBeVisible()
+    await expect(page.getByText('Ve 6 de 32 pantallas del menú.')).toBeVisible()
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })
