@@ -558,6 +558,7 @@ export default function Empresas() {
             <H2>{tx('Así funciona')}</H2>
             <p className="mt-3.5 text-[15.5px] leading-relaxed text-[color:var(--ld-muted)]">{tx('Sin aparatos en la furgoneta ni nada que instalar en la oficina. Los conductores entran desde el móvil con el enlace de tu empresa.')}</p>
           </div>
+          <div>
           <ol>
             {PASOS.map(([n, t, d, recorte]) => (
               <li key={n} className="grid gap-5 border-t border-[color:var(--ld-border)] py-7 last:border-b md:grid-cols-[minmax(0,1fr)_300px] md:gap-10" data-testid="emp-paso">
@@ -570,6 +571,14 @@ export default function Empresas() {
               </li>
             ))}
           </ol>
+          {/* La herramienta pública de devolución (/devolucion-renting): lo que SU guía de renting dice que se factura. */}
+          <a href="/devolucion-renting" onClick={() => medirAccion('emp_devolucion')} data-testid="emp-devolucion"
+            className="group flex min-h-[64px] items-center justify-between gap-3 border-b border-[color:var(--ld-border)] py-5 text-[16px] leading-snug">
+            <span><b className="block font-semibold text-[color:var(--ld-text)]">{tx('¿Qué te van a cobrar al devolverla?')}</b>
+              <span className="mt-0.5 block font-semibold text-[color:var(--ld-accent)] underline-offset-4 group-hover:underline">{tx('Míralo con la guía de tu compañía')}</span></span>
+            <ArrowRight size={17} aria-hidden="true" className="shrink-0 text-[color:var(--ld-text)] transition-transform group-hover:translate-x-0.5" />
+          </a>
+          </div>
         </div>
       </section>
 
