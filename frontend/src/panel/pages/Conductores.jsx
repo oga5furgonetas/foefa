@@ -8,7 +8,7 @@ import ImportarMoviles from '../components/ImportarMoviles'
 import { useEscape } from '../../lib/useEscape'
 import { usePlan } from '../../lib/usePlan'
 import {
-  Loader2, Search, Plus, X, Pencil, UserCheck, FileSpreadsheet, Phone, Mail, IdCard, Car,
+  Loader2, Search, Plus, X, Pencil, FileSpreadsheet, Phone, Mail, IdCard, Car,
   MapPin, FileText, Building2, Save, Camera, Trophy, TrendingUp, TrendingDown, Minus, Flame,
   BarChart2, ChevronDown, ChevronUp, AlertCircle, Lock, LockOpen, Eye, EyeOff, ShieldCheck,
   Share2, Smartphone, ArrowRightLeft, KeyRound, MoreHorizontal, UserMinus, RotateCcw, Check,
@@ -43,7 +43,16 @@ const sinCentro = (d) => !String(d?.center || '').trim()
    (la misma regla que enseña el campo en la ficha), y el acceso solo si se sabe quién tiene cuenta. */
 const FALTAS = [
   { id: 'centro', clave: 'drv.f.sinCentro', falta: (d) => sinCentro(d) },
-  { id: 'correo', clave: 'drv.f.sinCorreo', falta: (d) => !String(d?.email || '').trim() },
+  /* «Sin correo» solo le falta a quien entraría con contraseña (14-11-2026, ARREGLOS-5 N1): quien entra con su enlace
+     personal (abierto o mandado sin abrir) no lo necesita, y en una empresa que no usa contraseñas (nadie tiene cuenta)
+     el correo no le falta a nadie: el acceso es el enlace, y lo que falte lo dice «sin acceso». Con un servidor viejo,
+     sin datos del enlace, como siempre. */
+  { id: 'correo', clave: 'drv.f.sinCorreo', falta: (d, cuentas, _app, accesos) => {
+    if (String(d?.email || '').trim()) return false
+    if (!accesos) return true
+    if (['abierto', 'sin_abrir'].includes(accesos[d.id]?.acceso?.estado)) return false
+    return (cuentas || []).length > 0
+  } },
   { id: 'reparto', clave: 'drv.f.sinId', falta: (d) => !String(d?.transporter_id || '').trim(), soloReparto: true },
   /* Con acceso es quien tiene contraseña O ya ha abierto su enlace personal en su teléfono (tercera tanda, A11): el que
      entra con el enlace no tiene cuenta con contraseña, y contarlo «sin acceso» mandaba a buscar a quien ya entra. */
@@ -161,11 +170,12 @@ function TrendIcon({ trend, size = 12 }) {
 
 function PillarBars({ s }) {
   const bars = [
-    { label: '📋', v: s.compliance,  max: 30, color: '#38bdf8' },
-    { label: '⏰', v: s.punctuality, max: 15, color: '#a78bfa' },
-    { label: '📸', v: s.evidence,    max: 15, color: '#22d3ee' },
-    { label: '🔍', v: s.honesty,     max: 15, color: '#2dd4bf' },
-    { label: '🛡️', v: s.conservation,max: 25, color: '#34d399' },
+    // Cada pilar con su nombre corto, no con un emoji (14-11-2026, ARREGLOS-5 N1: la casa no usa emojis).
+    { label: 'Cump.', v: s.compliance,  max: 30, color: '#38bdf8' },
+    { label: 'Punt.', v: s.punctuality, max: 15, color: '#a78bfa' },
+    { label: 'Evid.', v: s.evidence,    max: 15, color: '#22d3ee' },
+    { label: 'Hon.',  v: s.honesty,     max: 15, color: '#2dd4bf' },
+    { label: 'Cons.', v: s.conservation,max: 25, color: '#34d399' },
   ]
   return (
     <div className="flex gap-1 items-end h-10">
@@ -195,13 +205,13 @@ function PodiumCard({ d, position, size = 90 }) {
   const HEIGHT = { 1: 'pt-0', 2: 'pt-8', 3: 'pt-16' }
   const GLOW   = { 1: 'shadow-amber-500/20', 2: 'shadow-slate-400/10', 3: 'shadow-orange-700/10' }
   const BORDER = { 1: 'border-amber-400/40', 2: 'border-slate-400/30', 3: 'border-orange-700/30' }
-  const MEDAL  = { 1: '🥇', 2: '🥈', 3: '🥉' }
   const STREAK_COLOR = !d.clean_streak || d.clean_streak < 3 ? 'text-dark-500'
     : d.clean_streak >= 10 ? 'text-amber-400' : 'text-orange-400'
   return (
     <div className={`flex flex-col items-center ${HEIGHT[position]}`}>
       <div className={`w-full rounded-2xl border ${BORDER[position]} bg-dark-900 p-4 shadow-xl ${GLOW[position]} flex flex-col items-center gap-2`}>
-        <span className="text-3xl">{MEDAL[position]}</span>
+        {/* El puesto en cifra, no una medalla dibujada (14-11-2026, ARREGLOS-5 N1). */}
+        <span className="cifra text-2xl font-semibold text-dark-100">{position}</span>
         {/* Avatar initials */}
         <div className={`h-12 w-12 shrink-0 flex items-center justify-center rounded-full ${AVATAR_LISO} text-sm font-bold`}>
           {(d.name || '?').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0,2).toUpperCase()}
@@ -274,11 +284,11 @@ function DriverRow({ s, rank, showCenter, expanded, onToggle }) {
             {/* Barras de pilares */}
             <div className="grid grid-cols-5 gap-2 mb-3">
               {[
-                { l: '📋 Cumpl.', v: s.compliance,  max: 30, c: 'bg-sky-500' },
-                { l: '⏰ Puntual.', v: s.punctuality,max: 15, c: 'bg-violet-500' },
-                { l: '📸 Evidencia', v: s.evidence, max: 15, c: 'bg-cyan-500' },
-                { l: '🔍 Honest.', v: s.honesty,    max: 15, c: 'bg-teal-500' },
-                { l: '🛡️ Conserv.', v: s.conservation,max: 25, c: 'bg-emerald-500' },
+                { l: 'Cumpl.', v: s.compliance,  max: 30, c: 'bg-sky-500' },
+                { l: 'Puntual.', v: s.punctuality,max: 15, c: 'bg-violet-500' },
+                { l: 'Evidencia', v: s.evidence, max: 15, c: 'bg-cyan-500' },
+                { l: 'Honest.', v: s.honesty,    max: 15, c: 'bg-teal-500' },
+                { l: 'Conserv.', v: s.conservation,max: 25, c: 'bg-emerald-500' },
               ].map(b => (
                 <div key={b.l}>
                   <div className="flex justify-between text-[9px] text-dark-500 mb-0.5">
@@ -586,7 +596,7 @@ function ScoringView({ center }) {
           {data?.prize_min_days != null && (
             <span className="ml-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-amber-400"
               title="Para optar al premio: al menos el 35% de los días del mes con asignación en el cuadrante. Los daños marcados como falso positivo en Revisión Rápida no penalizan.">
-              🏆 Premio: mín. {data.prize_min_days} días asignados
+              Premio: mín. {data.prize_min_days} días asignados
             </span>
           )}
         </div>
@@ -1036,14 +1046,20 @@ function BotonAcceso({ fila, onAcceso, conClave = false, movil = false }) {
   const clave = e === 'sin_enlace' && conClave ? 'alta.acc.chip.conClave' : (CHIP_ACCESO[e] || CHIP_ACCESO.sin_enlace)
   // El día con el sello de la casa («Abierto el 14 NOV»), como la ventana (14-11-2026).
   const texto = t(clave).replace('{dia}', diaSello(fila.acceso?.abierto_dia, lang))
-  const tono = e === 'abierto' ? 'border-emerald-500/30 text-emerald-300'
-    : e === 'caducado' ? 'border-amber-500/40 text-amber-300'
-      : e === 'sin_enlace' && !conClave ? 'border-brand-500/40 text-brand-300' : 'border-dark-700 text-dark-300'
+  /* ACCIÓN Y ESTADO NO SE PARECEN (14-11-2026, ARREGLOS-5 N1): «Mandar su acceso» es lo único que pide hacer algo y va
+     como enlace subrayado en tinta, como en la espera del arranque; lo demás es estado y va en mono con su color
+     (abierto, hecho; caducado, aviso; sin abrir o con contraseña, gris). Sin pastillas: los dos se tocan igual y abren
+     la misma ventana. */
+  const accion = e === 'sin_enlace' && !conClave
+  const tono = e === 'abierto' ? 'font-mono text-[11.5px] text-emerald-300'
+    : e === 'caducado' ? 'font-mono text-[11.5px] text-amber-300'
+      : accion ? 'text-[12.5px] font-semibold text-dark-100 underline decoration-dark-500 underline-offset-4 hover:decoration-dark-100'
+        : 'font-mono text-[11.5px] text-dark-400'
   return (
     <button type="button" data-testid="boton-acceso" data-estado={e === 'sin_enlace' && conClave ? 'con_clave' : e}
       title={textoEstado(t, fila.acceso, lang, { sello: true })}
       onClick={(ev) => { ev.stopPropagation(); onAcceso(fila) }}
-      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 text-[11.5px] font-semibold hover:bg-white/[0.04] ${tono} ${movil ? 'my-auto mr-1.5 min-h-[36px]' : 'py-1'}`}>
+      className={`inline-flex items-center gap-1 whitespace-nowrap ${accion ? '' : 'underline-offset-4 hover:underline'} ${tono} ${movil ? 'my-auto mr-1.5 min-h-[44px] px-1' : 'min-h-[28px]'}`}>
       {e === 'abierto' && <Check size={12} aria-hidden="true" />}
       {e === 'sin_enlace' && conClave && <Lock size={11} aria-hidden="true" />}
       {texto}
@@ -1056,6 +1072,9 @@ function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deB
   // De una baja no se dice lo que le falta: no se va a completar (11-11-2026, equipo-6).
   const faltan = deBaja ? [] : faltasQueCuentan({ conIdReparto, cuentasOk, appOk: !!appInfo })
     .filter((f) => f.id !== 'centro' && f.falta(d, accounts, appInfo, accesos))
+    /* «Sin acceso» no se repite (14-11-2026, ARREGLOS-5 N1): si la tarjeta lleva la etiqueta de su enlace («Mandar su
+       acceso», «Sin abrir», «Caducado»), ya dice en qué está. El filtro de arriba sigue contándolos. */
+    .filter((f) => !(f.id === 'acceso' && acceso && onAcceso))
   const tel = String(d.phone || '').replace(/[^\d+]/g, '')
   return (
     <li className={`flex items-stretch border-b border-dark-800/50 last:border-0 ${deBaja ? 'opacity-70' : ''}`}>
@@ -1065,11 +1084,13 @@ function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deB
           {/* En dos líneas si hace falta, no cortado con «…» (11-11-2026, revisión de la tanda 2): a 390 px caben unas
               28 letras y un nombre compuesto con dos apellidos («MARÍA DEL CARMEN FERNÁNDEZ RODRÍGUEZ») se perdía. */}
           <span className="line-clamp-2 break-words text-[13.5px] font-semibold text-dark-100">{String(d.name || '').replace(/\s+/g, ' ').trim()}</span>
-          <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[12px] text-dark-400">
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12px] text-dark-400">
             {sinCentro(d)
               ? <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-amber-300">sin centro</span>
               : <span>{d.center}</span>}
-            {tel && <span className="cifra text-dark-400">· {verTelefono(d.phone)}</span>}
+            {/* Sin «·» delante (14-11-2026, ARREGLOS-5 N1): al partirse la línea a 390 px se quedaba suelto al principio
+                de la segunda. Los datos se separan con el hueco. */}
+            {tel && <span className="cifra text-dark-400">{verTelefono(d.phone)}</span>}
             {datoOrden && <DatoDeOrden d={d} col={datoOrden} nombre={t(COLUMNA_ORDEN[datoOrden])} />}
             {d.traslado?.centro && (
               <span className="whitespace-nowrap rounded-full bg-sky-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-sky-300">
@@ -1077,7 +1098,8 @@ function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deB
               </span>
             )}
             {faltan.map((f) => (
-              <span key={f.id} className="whitespace-nowrap rounded-full bg-dark-800 px-2 py-0.5 text-[10.5px] font-semibold text-amber-300">{t(f.clave)}</span>
+              // Lo que falta, en texto de aviso, sin pastilla (14-11-2026, ARREGLOS-5 N1).
+              <span key={f.id} className="whitespace-nowrap text-[11.5px] font-semibold text-amber-300">{t(f.clave)}</span>
             ))}
             {/* La app sin actualizar, también en el móvil (11-11-2026, equipo-5): «sin app» va entre las faltas. */}
             {appInfo && versionMenor(appInfo.conductores?.[d.id]?.app, appInfo.ultima) && (
@@ -1096,7 +1118,7 @@ function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deB
       {/* El número se lee en la tarjeta; el botón redondo llama. Así el nombre tiene casi todo el ancho. */}
       {tel ? (
         <a href={`tel:${tel}`} aria-label={`${t('drv.llamar')} ${verTelefono(d.phone)}`} title={t('drv.llamar')}
-          className="my-auto mr-2 flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-300 active:bg-brand-500/30">
+          className="my-auto mr-2 flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-dark-700 text-dark-200 active:bg-dark-800">
           <Phone size={17} />
         </a>
       ) : (
@@ -1115,6 +1137,17 @@ const COLUMNA_ORDEN = { name: 'drv.o.nombre', center: 'drv.o.centro', alojamient
   email: 'drv.o.correo', contrato: 'drv.o.contrato', nivel: 'drv.o.nivel' }
 const NO_SALE_EN_TARJETA = ['alojamiento', 'email', 'contrato', 'nivel']
 
+/* LAS COLUMNAS SIN NADA NO SE PINTAN (14-11-2026, ARREGLOS-5 N1). Una empresa nueva no tiene alojamiento, correo,
+   contrato ni nivel en ninguna ficha: cuatro columnas de «—» la hacían parecer una hoja de cálculo a medio rellenar.
+   Se cuentan sobre TODAS las fichas de la lista (activas o bajas), no sobre lo que deja el buscador o un filtro, para
+   que las columnas no aparezcan y desaparezcan al escribir. En cuanto una ficha tiene el dato, la columna vuelve (y
+   también su orden en el móvil): la flota que los usa los sigue viendo todos. */
+const tieneDato = (d, col) => !!String(d?.[col] ?? '').trim()
+const columnasConDato = (fichas) => new Set(NO_SALE_EN_TARJETA.filter((c) => (fichas || []).some((d) => tieneDato(d, c))))
+
+// Lo vacío, siempre el mismo guion y en la letra de la casa (en una celda de cifras, la mono lo dibujaba más corto).
+const VACIO = <span className="font-sans text-dark-500">—</span>
+
 /* El dato por el que se ordena, con el mismo texto que la celda de la tabla: la etiqueta de contrato o de nivel, el
    correo o el alojamiento tal cual, y «—» si la ficha no lo tiene. Discreto, como el teléfono. El correo puede partirse
    detrás de la «@» y, si aun así no cabe, por donde haga falta; el alojamiento, en dos líneas como mucho (entero en el
@@ -1124,13 +1157,13 @@ function DatoDeOrden({ d, col, nombre }) {
     const [l, c] = (col === 'nivel' ? NIVEL : CONTRATO)[d[col]] || []
     return c
       ? <span data-testid="dato-orden" title={nombre} className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${c}`}>{l}</span>
-      : <span data-testid="dato-orden" title={nombre} className="text-dark-500">· —</span>
+      : <span data-testid="dato-orden" title={nombre} className="text-dark-500">—</span>
   }
   const v = d[col] || ''
-  if (!v) return <span data-testid="dato-orden" title={nombre} className="text-dark-500">· —</span>
+  if (!v) return <span data-testid="dato-orden" title={nombre} className="text-dark-500">—</span>
   if (col === 'email') {
-    // Se parte detrás de la «@» y de cada «.», no en mitad de una palabra; el «·» de delante va pegado (espacio duro)
-    // para no quedarse solo en una línea.
+    // Se parte detrás de la «@» y de cada «.», no en mitad de una palabra. Sin «·» delante (14-11-2026): los datos de
+    // la tarjeta se separan con el hueco.
     const trozos = v.replace(/[@.]/g, (c) => `${c}\n`).split('\n')
     return (
       <span data-testid="dato-orden" title={`${nombre}: ${v}`} className="min-w-0 max-w-full text-dark-500 [overflow-wrap:anywhere]">
@@ -1139,7 +1172,7 @@ function DatoDeOrden({ d, col, nombre }) {
     )
   }
   return (
-    <span data-testid="dato-orden" title={`${nombre}: ${v}`} className="line-clamp-2 min-w-0 max-w-full text-dark-500 [overflow-wrap:anywhere]">· {v}</span>
+    <span data-testid="dato-orden" title={`${nombre}: ${v}`} className="line-clamp-2 min-w-0 max-w-full text-dark-500 [overflow-wrap:anywhere]">{v}</span>
   )
 }
 
@@ -1158,10 +1191,14 @@ function useEstrecho() {
   return si
 }
 
-function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = false, deBaja = false, appInfo = null, onAbrir, accesos = null, onAcceso = null }) {
+function TablaConductores({ list, columnas = null, accounts, cuentasOk = false, conIdReparto = false, deBaja = false, appInfo = null, onAbrir, accesos = null, onAcceso = null }) {
   const { t } = useT()
   const estrecho = useEstrecho()
-  const [orden, setOrden] = useState({ col: 'name', asc: true })
+  const hay = useMemo(() => columnas || columnasConDato(list), [columnas, list])
+  const [ordenElegido, setOrden] = useState({ col: 'name', asc: true })
+  // Si la columna por la que se ordenaba deja de pintarse (nadie tiene ya ese dato), se vuelve al nombre.
+  const orden = useMemo(() => (NO_SALE_EN_TARJETA.includes(ordenElegido.col) && !hay.has(ordenElegido.col)
+    ? { col: 'name', asc: true } : ordenElegido), [ordenElegido, hay])
   const datoOrden = NO_SALE_EN_TARJETA.includes(orden.col) ? orden.col : null
 
   const filas = useMemo(() => {
@@ -1176,8 +1213,10 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
     return ms
   }, [list, orden])
 
+  /* Las cabeceras, todas iguales: letra normal, sin mayúsculas espaciadas (14-11-2026, ARREGLOS-5 N1; «Acceso» salía
+     en mayúsculas y las demás no, porque un botón no hereda el `uppercase`). */
   const Cab = ({ col, children, alinea = 'text-left' }) => (
-    <th className={`px-2 py-2 ${alinea} text-[10px] font-medium uppercase tracking-wider text-dark-500`}>
+    <th className={`px-2 py-2 ${alinea} text-[11.5px] font-medium text-dark-500`}>
       <button
         onClick={() => setOrden((o) => ({ col, asc: o.col === col ? !o.asc : true }))}
         className={`inline-flex items-center gap-1 hover:text-dark-300 ${orden.col === col ? 'text-dark-300' : ''}`}>
@@ -1199,7 +1238,8 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
         <label htmlFor="orden-conductores">{t('drv.ordenarPor')}</label>
         <select id="orden-conductores" value={orden.col} onChange={(e) => setOrden({ col: e.target.value, asc: true })}
           className="min-h-[44px] min-w-0 flex-1 rounded-lg border border-dark-700 bg-dark-950 px-2 text-[13px] text-dark-100">
-          {Object.entries(COLUMNA_ORDEN).map(([col, clave]) => <option key={col} value={col}>{t(clave)}</option>)}
+          {Object.entries(COLUMNA_ORDEN).filter(([col]) => !NO_SALE_EN_TARJETA.includes(col) || hay.has(col))
+            .map(([col, clave]) => <option key={col} value={col}>{t(clave)}</option>)}
         </select>
         <button type="button" onClick={() => setOrden((o) => ({ ...o, asc: !o.asc }))}
           aria-label={orden.asc ? t('drv.ordenAZ') : t('drv.ordenZA')} title={t('drv.ordenVuelta')}
@@ -1223,14 +1263,14 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
               <th className="w-8 px-2 py-2"></th>
               <Cab col="name">Nombre</Cab>
               <Cab col="center">Centro</Cab>
-              <Cab col="alojamiento">Alojamiento</Cab>
+              {hay.has('alojamiento') && <Cab col="alojamiento">Alojamiento</Cab>}
               <Cab col="phone">Teléfono</Cab>
-              <Cab col="email">Correo</Cab>
-              <Cab col="contrato">Contrato</Cab>
-              <Cab col="nivel">Nivel</Cab>
+              {hay.has('email') && <Cab col="email">Correo</Cab>}
+              {hay.has('contrato') && <Cab col="contrato">Contrato</Cab>}
+              {hay.has('nivel') && <Cab col="nivel">Nivel</Cab>}
               {/* «Acceso» y no «PIN» (10-11-2026): no hay ningún PIN; dice si tiene cuenta con contraseña. */}
-              <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-dark-500">Acceso</th>
-              {appInfo && <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-dark-500">App</th>}
+              <th className="px-2 py-2 text-left text-[11.5px] font-medium text-dark-500">Acceso</th>
+              {appInfo && <th className="px-2 py-2 text-left text-[11.5px] font-medium text-dark-500">App</th>}
             </tr>
           </thead>
           <tbody>
@@ -1257,24 +1297,26 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
                       </span>
                     )}
                   </td>
-                  <td className="max-w-[150px] truncate px-2 py-1 text-dark-500">{d.alojamiento || '—'}</td>
+                  {hay.has('alojamiento') && <td className="max-w-[150px] truncate px-2 py-1 text-dark-500">{d.alojamiento || VACIO}</td>}
                   <td className="cifra px-2 py-1 text-dark-400">
-                    {d.phone ? verTelefono(d.phone) : '—'}
+                    {d.phone ? verTelefono(d.phone) : VACIO}
                   </td>
-                  <td className="max-w-[210px] truncate px-2 py-1 text-dark-500">{d.email || '—'}</td>
+                  {hay.has('email') && <td className="max-w-[210px] truncate px-2 py-1 text-dark-500">{d.email || VACIO}</td>}
+                  {hay.has('contrato') && (
+                    <td className="whitespace-nowrap px-2 py-1">
+                      {cc ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cc}`}>{cl}</span> : VACIO}
+                    </td>
+                  )}
+                  {hay.has('nivel') && (
+                    <td className="whitespace-nowrap px-2 py-1">
+                      {nc ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${nc}`}>{nl}</span> : VACIO}
+                    </td>
+                  )}
                   <td className="whitespace-nowrap px-2 py-1">
-                    {cc ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cc}`}>{cl}</span>
-                        : <span className="text-dark-500">—</span>}
-                  </td>
-                  <td className="whitespace-nowrap px-2 py-1">
-                    {nc ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${nc}`}>{nl}</span>
-                        : <span className="text-dark-500">—</span>}
-                  </td>
-                  <td className="whitespace-nowrap px-2 py-1 text-center">
                     {/* El candado: tiene contraseña. El botón: su enlace personal (14-11-2026). */}
                     {/* Sin datos del enlace (servidor viejo), el candado de siempre; con ellos, lo dice la etiqueta. */}
                     {!accesos?.[d.id] && (hasAcc ? <Lock size={11} className="mr-1.5 inline text-lime-400" title="Tiene acceso al portal" />
-                      : <span className="text-dark-700">—</span>)}
+                      : VACIO)}
                     {!deBaja && <BotonAcceso fila={accesos?.[d.id]} onAcceso={onAcceso} conClave={hasAcc} />}
                   </td>
                   {appInfo && <td className="whitespace-nowrap px-2 py-1"><CeldaApp info={appInfo.conductores?.[d.id]} ultima={appInfo.ultima} /></td>}
@@ -1392,6 +1434,19 @@ export default function Conductores() {
   [list, accounts, conIdReparto, cuentasOk, enBajas, appInfo, accesos])
   const filtroVivo = faltas.find((f) => f.id === filtro) || null
   const vistos = filtroVivo ? list.filter((d) => filtroVivo.falta(d, accounts, appInfo, accesos)) : list
+  // Qué columnas tienen algo, sobre todas las fichas de la lista que se mira (ni el buscador ni el filtro las cambian).
+  const columnas = useMemo(() => columnasConDato(enBajas ? bajas : drivers), [enBajas, bajas, drivers])
+  /* LAS CONTRASEÑAS, EN «MÁS OPCIONES» (14-11-2026, ARREGLOS-5 N1). La inicial de los nuevos y la temporal común son
+     ajustes de vez en cuando y, en una empresa que entra con enlace, ni se usan: eran dos franjas encima de la lista
+     todos los días. Van plegadas, a un toque, al final de la fila de los filtros. Se recuerda abierto en este navegador (quien las usa
+     no tiene que volver a abrirlas), y van siempre montadas: plegar no pierde una clave a medio escribir ni el
+     resultado de aplicar la temporal. */
+  const [verOpciones, setVerOpciones] = useState(() => { try { return localStorage.getItem('conductores_opciones') === '1' } catch { return false } })
+  const cambiarOpciones = () => setVerOpciones((v) => {
+    try { localStorage.setItem('conductores_opciones', v ? '0' : '1') } catch { /* sin almacén */ }
+    return !v
+  })
+  const vacia = Array.isArray(drivers) && drivers.length === 0
   const conChipBajas = enBajas || (Array.isArray(bajas) && bajas.length > 0)
   /* El chip «Bajas (N)»: con los filtros y también cuando no hay ningún activo o la búsqueda no casa con nadie (segunda
      revisión, F12): una nave que se ha quedado sin activos tiene que poder llegar a sus bajas para reactivarlas. */
@@ -1504,7 +1559,8 @@ Cancelar: no hacer nada.`)) {
   const TABS = [
     { id: 'directorio', label: t('drv.title') },
     // `corto`: lo que dice en el móvil, para que las tres quepan en una línea (11-11-2026, revisión de la tanda 2).
-    { id: 'ranking',    label: `🏆 ${t('sc.ranking')}`, corto: `🏆 ${t('drv.tabRanking')}` },
+    // Sin el trofeo delante (14-11-2026, ARREGLOS-5 N1): la casa no usa emojis.
+    { id: 'ranking',    label: t('sc.ranking'), corto: t('drv.tabRanking') },
     // Pestaña y no entrada de menú: es mantenimiento que se hace de vez en
     // cuando, no una tarea del día.
     { id: 'fichas',     label: 'Fichas duplicadas', corto: t('drv.tabDuplicadas') },
@@ -1566,9 +1622,13 @@ Cancelar: no hacer nada.`)) {
                   </>
                 )}
               </div>
+              {/* Con la lista vacía, la acción de la pantalla es «Importar la lista» (abajo, en cian): aquí, con borde,
+                  para que no haya dos principales (14-11-2026, ARREGLOS-5 N2). Con conductores, cian como siempre. */}
               <button
                 onClick={() => setModal({ driver: null })}
-                className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-brand-400 px-4 py-2.5 text-[13.5px] font-semibold text-brand-tinta transition-colors hover:bg-brand-300 active:bg-brand-500 sm:min-h-0 sm:flex-none"
+                className={`flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-[13.5px] font-semibold transition-colors sm:min-h-0 sm:flex-none ${vacia
+                  ? 'border border-dark-700 text-dark-200 hover:border-dark-600 hover:text-dark-100'
+                  : 'bg-brand-400 text-brand-tinta hover:bg-brand-300 active:bg-brand-500'}`}
               >
                 <Plus size={15} /> {t('drv.add')}
               </button>
@@ -1591,13 +1651,13 @@ Cancelar: no hacer nada.`)) {
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Tabs: la elegida en tinta, no en cian (14-11-2026, ARREGLOS-5 N3: un solo cian por pantalla). */}
       <div className="flex gap-0 border-b border-dark-800 mb-6">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`min-h-[44px] px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px sm:min-h-0 sm:px-4 ${
               tab === t.id
-                ? 'border-brand-400 text-brand-300'
+                ? 'border-dark-50 text-dark-50'
                 : 'border-transparent text-dark-500 hover:text-dark-300'
             }`}>
             {t.corto ? <><span className="sm:hidden">{t.corto}</span><span className="hidden sm:inline">{t.label}</span></> : t.label}
@@ -1610,40 +1670,33 @@ Cancelar: no hacer nada.`)) {
         !drivers
           ? <div className="flex items-center gap-2 py-16 text-dark-400"><Loader2 size={18} className="animate-spin" /> {t('ui.loading')}</div>
           : list.length === 0 && q && drivers.length > 0 && !enBajas
-            ? <div className="rounded-2xl border border-dashed border-dark-700 py-12 text-center">
-                <p className="font-medium text-dark-300">Nadie coincide con «{q}»</p>
+            ? <div className="pt-2">
+                <p className="font-medium text-dark-200">Nadie coincide con «{q}»</p>
                 <p className="mt-1 text-sm text-dark-500">Se busca por nombre, correo, sede, nº de empleado y teléfono.</p>
-                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                <div className="mt-4 flex flex-wrap items-center gap-2">
                   <button onClick={() => setQ('')} className="btn-ghost px-3 py-1.5 text-sm">Borrar búsqueda</button>
                   {chipBajas}
                 </div>
               </div>
           : list.length === 0 && !enBajas
-            ? <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-dark-700 px-6 py-20 text-center">
-                <UserCheck size={44} className="mb-4 text-dark-500" />
-                <p className="text-base font-semibold text-dark-100">{t('drv.empty')}{center !== 'Todos' ? ` en ${center}` : ''}</p>
-                <p className="mt-1.5 max-w-md text-sm leading-relaxed text-dark-400">{t('alta.drv.vacio')}</p>
-                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                  <button onClick={() => setVerImportar(true)} className="btn-primary flex items-center gap-1.5 px-4 py-2 text-sm">
-                    <FileSpreadsheet size={14} /> {t('drv.importar')}
+            /* CONDUCTORES VACÍO (14-11-2026, ARREGLOS-5 N2): texto a la izquierda bajo la regla de las pestañas, sin caja de puntos ni
+               icono; UNA acción, «Importar la lista», en cian, y «Añadir uno a uno» como enlace. */
+            ? <div data-testid="conductores-vacio" className="pt-2">
+                <h2 className="font-display text-[20px] font-bold tracking-[-0.02em] text-dark-50">{t('drv.empty')}{center !== 'Todos' ? ` en ${center}` : ''}</h2>
+                <p className="mt-2 max-w-[34rem] text-[14px] leading-relaxed text-dark-400">{t('alta.drv.vacio')}</p>
+                <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3">
+                  <button onClick={() => setVerImportar(true)}
+                    className="flex h-[52px] items-center rounded-xl bg-brand-400 px-6 text-[15px] font-semibold text-brand-tinta transition-colors hover:bg-brand-300 active:bg-brand-500">
+                    {t('drv.importarLista')}
                   </button>
-                  <button onClick={() => setModal({ driver: null })} className="btn-ghost flex items-center gap-1.5 px-4 py-2 text-sm">
-                    <Plus size={14} /> {t('drv.add')}
+                  <button onClick={() => setModal({ driver: null })}
+                    className="inline-flex min-h-[44px] items-center text-[14px] font-semibold text-dark-100 underline decoration-dark-500 underline-offset-4 hover:decoration-dark-100">
+                    {t('drv.unoAUno')}
                   </button>
                   {chipBajas}
                 </div>
               </div>
             : <div className="flex flex-col">
-                {/* EN EL MÓVIL, LOS AVISOS DE CONTRASEÑAS DEBAJO DE LA LISTA (11-11-2026, revisión de la tanda 2): son
-                    ajustes de vez en cuando y, encima, ocupaban media pantalla: al abrir Conductores no se veía ningún
-                    conductor sin bajar. En el ordenador siguen arriba, como siempre.
-                    Se pintan UNA vez y los baja el CSS (`order-last`), no dos copias según el ancho (11-11-2026, segunda
-                    revisión): al girar el móvil se desmontaba una y se montaba la otra vacía, y se perdía el resultado de
-                    aplicar la temporal o la clave a medio escribir. */}
-                <div className="order-last mt-3 sm:order-none sm:mt-0">
-                  <ContrasenaInicial />
-                  <AvisoAccesos list={list} center={center} onHecho={load} />
-                </div>
                 {centers.length > 1 && list.some(sinCentro) && (
                   <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[12.5px] text-amber-200">
                     <AlertCircle size={13} className="shrink-0" />
@@ -1659,9 +1712,11 @@ Cancelar: no hacer nada.`)) {
                     <button onClick={() => setAviso('')} aria-label="Cerrar" className="shrink-0 text-emerald-300/70 hover:text-emerald-200"><X size={14} /></button>
                   </div>
                 )}
-                {/* Solo los que tienen a alguien (o el que está puesto, para poder quitarlo). «Bajas», al final. */}
-                {(faltas.some((f) => f.n > 0 || f.id === filtro) || conChipBajas) && (
-                  <div role="group" aria-label={t('drv.filtros')} className="mb-3 flex flex-wrap items-center gap-2">
+                {/* Solo los que tienen a alguien (o el que está puesto, para poder quitarlo). «Bajas», al final; y, a la
+                    derecha, «Más opciones» (las contraseñas), siempre. */}
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  {(faltas.some((f) => f.n > 0 || f.id === filtro) || conChipBajas) && (
+                  <div role="group" aria-label={t('drv.filtros')} className="flex flex-wrap items-center gap-2">
                     {faltas.filter((f) => f.n > 0 || f.id === filtro).map((f) => (
                       <button key={f.id} aria-pressed={filtro === f.id}
                         title={f.id === 'app' ? t('drv.f.sinAppAyuda') : undefined}
@@ -1680,7 +1735,19 @@ Cancelar: no hacer nada.`)) {
                     )}
                     {chipBajas}
                   </div>
-                )}
+                  )}
+                  <button type="button" data-testid="mas-opciones" onClick={cambiarOpciones}
+                    aria-expanded={verOpciones} aria-controls="opciones-conductores" title={t('drv.masOpcionesAyuda')}
+                    className="ml-auto flex min-h-[44px] items-center gap-1 px-1 text-[12.5px] font-medium text-dark-400 hover:text-dark-100 sm:min-h-0 sm:py-1">
+                    {t('drv.masOpciones')}
+                    <ChevronDown size={14} aria-hidden="true" className={`transition-transform ${verOpciones ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
+                {/* Las dos contraseñas, montadas siempre (ver `verOpciones`): plegadas, no se ven ni ocupan sitio. */}
+                <div id="opciones-conductores" data-testid="opciones-conductores" hidden={!verOpciones}>
+                  <ContrasenaInicial />
+                  <AvisoAccesos list={list} center={center} onHecho={load} />
+                </div>
                 {filtro === 'app' && filtroVivo && (
                   <p data-testid="ayuda-sin-app" className="mb-3 text-[12.5px] text-dark-400">{t('drv.f.sinAppAyuda')}</p>
                 )}
@@ -1690,7 +1757,7 @@ Cancelar: no hacer nada.`)) {
                     Pulsa otra vez «Bajas» para volver a las activas.
                   </p>
                 )}
-                <TablaConductores list={vistos} accounts={enBajas ? [] : accounts} cuentasOk={cuentasOk && !enBajas}
+                <TablaConductores list={vistos} columnas={columnas} accounts={enBajas ? [] : accounts} cuentasOk={cuentasOk && !enBajas}
                   conIdReparto={conIdReparto && !enBajas} deBaja={enBajas} appInfo={enBajas ? null : appInfo}
                   onAbrir={(d) => setModal({ driver: d, deBaja: enBajas })}
                   accesos={enBajas ? null : accesos} onAcceso={setDialogoAcceso} />

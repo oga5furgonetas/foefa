@@ -226,8 +226,9 @@ function MenuUsuario({ admin, showAdmin, lang, setLang, langs, onLogout, t }) {
         className={`flex items-center gap-2 rounded-lg border px-1.5 py-1 transition-colors ${
           abierto ? 'border-dark-600 bg-dark-800' : 'border-transparent hover:bg-dark-800/70'}`}
       >
-        <span className="grid h-7 w-7 flex-none place-items-center overflow-hidden rounded-md bg-brand-400 text-[11px] font-bold"
-              style={{ color: 'rgb(var(--brand-tinta))' }}>
+        {/* Gris, no cian (14-11-2026, ARREGLOS-5 N3): el cian es la acción principal de cada pantalla, y el avatar fijo
+            de la cabecera era un segundo cian en todas. */}
+        <span className="grid h-7 w-7 flex-none place-items-center overflow-hidden rounded-md bg-dark-700 text-[11px] font-bold text-dark-50">
           {foto ? <img src={foto} alt="" className="h-full w-full object-cover" /> : iniciales}
         </span>
         <span className="hidden text-left leading-tight sm:block">
