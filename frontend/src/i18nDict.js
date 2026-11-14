@@ -373,6 +373,8 @@ export const DICT = {
   'trial.reactivate': { es: 'Reactivar →', en: 'Reactivate →', fr: 'Réactiver →', de: 'Reaktivieren →', it: 'Riattiva →', pt: 'Reativar →' },
   'trial.goto':       { es: 'Pasar a', en: 'Switch to', fr: 'Passer à', de: 'Wechseln zu', it: 'Passa a', pt: 'Mudar para' },
   'trial.contact':    { es: 'Contactar', en: 'Contact', fr: 'Contacter', de: 'Kontakt', it: 'Contatta', pt: 'Contactar' },
+  'trial.write.us':   { es: 'Escríbenos y te lo activamos', en: 'Contact us and we\'ll activate it', fr: 'Écrivez-nous et nous l\'activons', de: 'Schreib uns und wir schalten es frei', it: 'Scrivici e te lo attiviamo', pt: 'Fala connosco e ativamos o teu plano' },
+  'trial.pay.error':  { es: 'No se ha podido abrir el pago. Inténtalo en un momento o escríbenos.', en: 'We couldn\'t open the payment. Try again in a moment or contact us.', fr: 'Impossible d\'ouvrir le paiement. Réessayez dans un instant ou écrivez-nous.', de: 'Die Zahlung konnte nicht geöffnet werden. Versuch es gleich noch einmal oder schreib uns.', it: 'Non è stato possibile aprire il pagamento. Riprova tra un momento o scrivici.', pt: 'Não foi possível abrir o pagamento. Tenta daqui a pouco ou fala connosco.' },
 
   // ── Comunes de UI ────────────────────────────────────────────────────────
   'ui.save':          { es: 'Guardar',        en: 'Save',         fr: 'Enregistrer',   de: 'Speichern',    it: 'Salva',          pt: 'Guardar' },

@@ -8199,10 +8199,14 @@ async def driver_lookup(data: dict, request: Request):
     _rl_public_action(f"drv-code-email:{email}", 3, 900)
     # Search only active/trial organizations. Never disclose the matching
     # company before the user proves control of the registered mailbox.
+    # TODAS, sin tope (14-11-2026): con `to_list(500)` y sin orden, al pasar de 500 empresas (cada autónomo que se da
+    # de alta crea una) Mongo devolvía 500 cualesquiera y el conductor de una empresa que quedase fuera —la más nueva,
+    # típicamente— no recibía nunca el código, sin ningún error. Son pocos campos por empresa: caben todas.
+    # OJO: sin tope, esta ruta pública hace una consulta por empresa, en serie; hoy son unos pocos cientos, con miles hará falta un índice global de correos de conductor.
     orgs = await global_db.organizations.find(
         {"status": {"$in": ["active", "trial"]}, "db_name": {"$exists": True}},
         {"_id": 0, "id": 1, "slug": 1, "name": 1, "account_type": 1, "db_name": 1}
-    ).to_list(500)
+    ).to_list(None)
     if slug:
         hinted = [o for o in orgs if o.get("slug") == slug]
         if hinted:
@@ -8286,10 +8290,13 @@ async def driver_code_verify(data: dict, request: Request):
     _rl_public_action(f"drv-verify-email:{email}", 10, 900)
     now = datetime.now(timezone.utc)
     expected = hashlib.sha256(f"{SECRET_KEY}:{code}".encode()).hexdigest()
+    # TODAS, sin tope (14-11-2026): lo mismo que al pedir el código; con `to_list(500)` el código llegaba (o no) pero
+    # la empresa del conductor podía quedar fuera de las 500 y aquí el código «no era válido».
+    # OJO: sin tope, esta ruta pública hace una consulta por empresa, en serie; hoy son unos pocos cientos, con miles hará falta un índice global de correos de conductor.
     orgs = await global_db.organizations.find(
         {"status": {"$in": ["active", "trial"]}, "db_name": {"$exists": True}},
         {"_id": 0, "id": 1, "slug": 1, "name": 1, "account_type": 1, "db_name": 1}
-    ).to_list(500)
+    ).to_list(None)
     orgs = list({ _tenant_db_name(o): o for o in reversed(orgs) }.values())
     if not any(_tenant_db_name(o) == _DEFAULT_DB_NAME for o in orgs):
         orgs.append({"id": OWNER_ORG_ID, "slug": "", "name": MARCA,
@@ -8492,10 +8499,13 @@ async def driver_login(data: DriverLoginRequest, request: Request):
         org = await _set_tenant_by_slug(data.slug)
         candidates = [(org, db)]
     else:
+        # TODAS, sin tope (14-11-2026), como al pedir el código por correo: con `to_list(500)` el conductor de una
+        # empresa que quedase fuera de las 500 (la más nueva) oía «Email o contraseña incorrectos» con la buena.
+        # OJO: sin tope, esta ruta pública hace una consulta por empresa, en serie; hoy son unos pocos cientos, con miles hará falta un índice global de correos de conductor.
         orgs = await global_db.organizations.find(
             {"status": {"$in": ["active", "trial"]}, "db_name": {"$exists": True}},
             {"_id": 0, "id": 1, "slug": 1, "name": 1, "account_type": 1, "db_name": 1}
-        ).to_list(500)
+        ).to_list(None)
         orgs = list({ _tenant_db_name(o): o for o in reversed(orgs) }.values())
         if not any(_tenant_db_name(o) == _DEFAULT_DB_NAME for o in orgs):
             orgs.append({"id": OWNER_ORG_ID, "slug": "", "name": MARCA,
