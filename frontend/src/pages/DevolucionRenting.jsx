@@ -174,7 +174,7 @@ export default function DevolucionRenting() {
     return () => { document.title = antes }
   }, [titulo])
   // Los píxeles de anuncios no ven nada de aquí (el # lleva las respuestas y las notas).
-  useEffect(() => pausarPixeles(), [])
+  useEffect(() => { pausarPixeles() }, [])
   const enlace = 'inline-flex min-h-[44px] items-center whitespace-nowrap px-1 text-[15px] font-medium text-[color:var(--ld-text)] underline-offset-4 hover:underline'
 
   return (
