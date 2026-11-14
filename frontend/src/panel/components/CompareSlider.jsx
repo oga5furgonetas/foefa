@@ -3,7 +3,7 @@ import { useRef, useState } from 'react'
 /* Comparador antes/después con divisor arrastrable.
    Base = foto de REFERENCIA (estado anterior); superpuesta y recortada por la
    izquierda = foto ACTUAL. Arrastra el divisor para revelar el cambio. */
-export default function CompareSlider({ beforeUrl, afterUrl }) {
+export default function CompareSlider({ beforeUrl, afterUrl, etiquetaAhora = 'AHORA', etiquetaAntes = 'ANTES (referencia)' }) {
   const [pos, setPos] = useState(50)
   const boxRef = useRef(null)
 
@@ -29,7 +29,7 @@ export default function CompareSlider({ beforeUrl, afterUrl }) {
 
       {/* Divisor */}
       <div className="pointer-events-none absolute inset-y-0" style={{ left: `${pos}%` }}>
-        <div className="h-full w-0.5 bg-white/90 shadow-[0_0_10px_rgba(0,0,0,.9)]" />
+        <div className="h-full w-0.5 bg-white/90" />
         <div className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white px-2 py-1 text-[11px] font-black text-black shadow-lg">
           ⇄
         </div>
@@ -42,10 +42,10 @@ export default function CompareSlider({ beforeUrl, afterUrl }) {
           papel— y eso aqui las dejaba en 2:1, ilegibles. Un valor literal no
           lo toca ninguna compensacion. Medido por `check-contraste.mjs`. */}
       <span className="pointer-events-none absolute left-2 top-2 rounded bg-black/75 px-2 py-0.5 text-[10px] font-bold text-[#fdba74]">
-        AHORA
+        {etiquetaAhora}
       </span>
       <span className="pointer-events-none absolute right-2 top-2 rounded bg-black/75 px-2 py-0.5 text-[10px] font-bold text-[#6ee7b7]">
-        ANTES (referencia)
+        {etiquetaAntes}
       </span>
     </div>
   )

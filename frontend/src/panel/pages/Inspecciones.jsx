@@ -94,7 +94,7 @@ export default function Inspecciones() {
 
   async function openForensicPdf(id) {
     try { const url = await fetchAuthedBlob(`/inspections/${id}/forensic-pdf`); window.open(url, '_blank') }
-    catch (e) { setErr(e?.response?.data?.detail || 'No se pudo generar el peritaje (debe estar firmado).') }
+    catch (e) { setErr(e?.response?.data?.detail || 'No se pudo generar el informe de la revisión (tiene que estar firmada).') }
   }
 
   if (err) return <p className="text-red-400">{err}</p>
@@ -398,7 +398,7 @@ function ForensicSignBlock({ inspId, onPdf, fmt }) {
         <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-300">
           <FileSignature size={16} /> {t('insp.sign.unsigned')}
         </div>
-        <p className="mb-3 text-xs text-dark-400">Para generar el peritaje técnico con cadena de custodia hash, esta inspección debe estar firmada. Si el conductor no firmó, puedes firmarla tú como administrador.</p>
+        <p className="mb-3 text-xs text-dark-400">Para generar el informe de la revisión, con su fecha, sus fotos y su código de comprobación, esta inspección tiene que estar firmada. Si el conductor no firmó, puedes firmarla tú como administrador.</p>
         {err && <p className="mb-2 text-xs text-red-400">{err}</p>}
         <button onClick={sign} disabled={signing} className="btn-primary flex items-center gap-2 disabled:opacity-50">
           {signing ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
@@ -562,7 +562,7 @@ function QuienTimeline({ vehicleId, dmap, currentId, fmtDay }) {
 
   return (
     <div className="mt-3">
-      <p className="mb-3 text-xs text-dark-500">Cada vez que apareció un <b className="text-dark-300">{t('insp.new.damage')}</b>, el responsable es el conductor que tenía la furgoneta ese día.</p>
+      <p className="mb-3 text-xs text-dark-500">Cada vez que apareció un <b className="text-dark-300">{t('insp.new.damage')}</b>, aquí sale quién llevaba la furgoneta ese día. Eso no dice quién dio el golpe.</p>
       <div className="space-y-3">
         {insps.map((i) => {
           const nuevos = i.analysis?.new_damages || []
@@ -588,7 +588,7 @@ function QuienTimeline({ vehicleId, dmap, currentId, fmtDay }) {
           )
         })}
       </div>
-      <p className="mt-3 text-[11px] text-dark-500">¿Un golpe no salió como "nuevo"? Márcalo en <b>Revisión rápida → "daño que la IA no vio"</b>: queda registrado y la IA aprende para detectarlo la próxima vez.</p>
+      <p className="mt-3 text-[11px] text-dark-500">¿Un golpe no salió como "nuevo"? Márcalo en <b>Revisión rápida → "daño que la IA no vio"</b>: queda apuntado con su foto y su fecha.</p>
     </div>
   )
 }

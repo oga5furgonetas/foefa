@@ -243,8 +243,6 @@ setTimeout(() => { try { sessionStorage.removeItem('chunk_curacion') } catch { /
 
 /* Code-splitting: la landing carga al instante; el resto de rutas se descargan
    solo cuando se visitan (panel, portal conductor, legal…). */
-// La portada de empresas también va aparte (17-10-2026): quien llega a /repartidores o abre la app no la usa.
-const Landing = lazy(() => import('./pages/Landing'))
 const Login = lazy(() => import('./pages/Login'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Registro = lazy(() => import('./pages/Registro'))
@@ -273,7 +271,9 @@ const PaseMovil = lazy(() => import('./pages/PaseMovil'))
 const SeguimientoPedido = lazy(() => import('./pages/SeguimientoPedido'))
 const RegaloPagina = lazy(() => import('./pages/RegaloPagina'))
 const Planes = lazy(() => import('./pages/Planes'))
-// La página de venta para empresas (14-11-2026): habla de precios, así que solo en la web, como /planes.
+/* LA PORTADA (14-11-2026): «/» es la página para empresas con furgonetas (antes, la de la app de reparto, que sigue en
+   /repartidores y se enlaza desde abajo); /empresas enseña la misma. Va aparte: quien abre la app no la descarga.
+   Habla de precios, así que solo en la web, como /planes. */
 const Empresas = lazy(() => import('./pages/Empresas'))
 const DriverPortal = lazy(() => import('./pages/driver/DriverPortal'))
 const VerificarCorreoConductor = lazy(() => import('./pages/driver/VerificarCorreoConductor'))
@@ -282,8 +282,10 @@ const PanelLayout = lazy(() => import('./panel/PanelLayout'))
 const PanelDashboard = lazy(() => import('./panel/pages/Dashboard'))
 const PanelMiDia = lazy(() => import('./panel/pages/MiDia'))
 const PanelVehiculos = lazy(() => import('./panel/pages/Vehiculos'))
+const PanelExpediente = lazy(() => import('./panel/pages/Expediente'))
 const PanelVencimientos = lazy(() => import('./panel/pages/Vencimientos'))
 const PanelRevision = lazy(() => import('./panel/pages/RevisionRapida'))
+const PanelRepaso = lazy(() => import('./panel/pages/Repaso'))
 const PanelNegocio = lazy(() => import('./panel/pages/Negocio'))
 const PanelGastos = lazy(() => import('./panel/pages/Gastos'))
 const PanelAnalitica = lazy(() => import('./panel/pages/Analitica'))
@@ -336,6 +338,7 @@ const AvisoLegal = lazy(() => import('./legal/AvisoLegal'))
 const Contacto = lazy(() => import('./legal/Contacto'))
 const Seguridad = lazy(() => import('./legal/Seguridad'))
 const PeritajeTecnico = lazy(() => import('./pages/PeritajeTecnico'))
+const ExpedienteEjemplo = lazy(() => import('./pages/ExpedienteEjemplo'))
 const Verify = lazy(() => import('./pages/Verify'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
@@ -418,7 +421,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <CookieBanner />
           <Suspense fallback={<RouteLoader />}>
             <Routes>
-              <Route path="/" element={<SoloWeb><Landing /></SoloWeb>} />
+              <Route path="/" element={<SoloWeb><Empresas /></SoloWeb>} />
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/registro" element={<Registro />} />
@@ -445,6 +448,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/security" element={<Seguridad />} />
               <Route path="/seguridad" element={<Seguridad />} />
               <Route path="/peritaje-tecnico" element={<SoloWeb><PeritajeTecnico /></SoloWeb>} />
+              <Route path="/expediente-ejemplo" element={<SoloWeb><ExpedienteEjemplo /></SoloWeb>} />
               <Route path="/verify" element={<Verify />} />
               <Route path="/verify/:hash" element={<Verify />} />
               <Route path="/app" element={<AppRedirect />} />
@@ -463,6 +467,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               {/* Panel de administración nuevo (modelo v2). En construcción por módulos.
                   NO afecta a las rutas actuales ni al login en vivo. */}
               <Route path="/panel/login" element={<PanelLogin />} />
+              {/* El expediente de una furgoneta (14-11-2026): fuera de PanelLayout, cuyo guardián mira el último tramo
+                  («expediente», que no es un módulo). La pantalla hace ella misma la cuenta de «vehiculos». */}
+              <Route path="/panel/vehiculos/:id/expediente" element={<PanelExpediente />} />
               <Route path="/panel" element={<PanelLayout />}>
                 {/* Operacional */}
                 <Route index element={<PanelDashboard />} />
@@ -484,6 +491,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <Route path="actividad" element={<PanelActividad />} />
                 {/* Furgonetas */}
                 <Route path="revision" element={<PanelRevision />} />
+                <Route path="repaso" element={<PanelRepaso />} />
                 <Route path="inspecciones" element={<PanelInspecciones />} />
                 <Route path="vehiculos" element={<PanelVehiculos />} />
                 <Route path="vencimientos" element={<PanelVencimientos />} />

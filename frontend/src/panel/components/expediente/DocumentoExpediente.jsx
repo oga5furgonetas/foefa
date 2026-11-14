@@ -1,0 +1,270 @@
+import { useT, LANG_LOCALE } from '../../../i18n'
+import { MARCA } from '../../../marca'
+import Matricula from '../../../components/Matricula'
+import { selloDeFecha } from '../../../lib/sello'
+import CalendarioDias from './CalendarioDias'
+import FotoConCaja from './FotoConCaja'
+import { momento, fechaLarga, numero, euros, comoLista } from './formato'
+import './expediente.css'
+
+/* EL EXPEDIENTE DEL VEHÍCULO (14-11-2026, «Antes del perito»): el documento que el dueño de una flota imprime, o
+   guarda en PDF, y pone encima de la mesa el día que devuelve la furgoneta al renting o le pasan un cargo.
+   UNA sola pieza para el panel (/panel/vehiculos/:id/expediente, con los datos de GET /vehicles/{id}/antes-del-perito)
+   y para el ejemplo público (/expediente-ejemplo, con datos inventados): `datos` tiene la forma EXACTA de esa respuesta
+   (CONTRATO.md §C).
+   Lo que sale y lo que no, a propósito:
+   - solo golpes confirmados por una persona (el servidor no manda otros); nada de la IA, ni importes estimados: el
+     coste es el que se apuntó al repararlo;
+   - «quién la llevaba» solo cuando el servidor dice `atribuible`; si no, «Sin conductor atribuible» y el motivo en
+     llano. Nunca quién dio el golpe;
+   - las fechas son las de llegada al servidor, en la zona de la empresa, tal como vienen (formato.js);
+   - al imprimir: A4, márgenes de 14 mm, un golpe nunca partido entre dos hojas, y en el pie de cada hoja la frase de
+     las fechas y el número de página (expediente.css y el <style> de abajo, con los textos en su idioma). */
+
+const VISTAS = ['frontal', 'trasera', 'lateral_izq', 'lateral_der']
+
+// El pie de cada hoja impresa: letra pequeña y gris, pegado arriba de su margen.
+const CAJA_PIE = 'font-size: 8pt; color: #545e66; vertical-align: top; padding-top: 3mm;'
+// Una cadena para `content:` de CSS: entre comillas y sin nada que la rompa.
+const cadenaCss = (s) => `"${String(s ?? '').replace(/[\\"]/g, '\\$&').replace(/[\r\n]+/g, ' ')}"`
+
+function Linea({ etiqueta, children, testid }) {
+  return (
+    <div className="exp-linea" data-testid={testid}>
+      <span>{etiqueta}</span>
+      <div>{children}</div>
+    </div>
+  )
+}
+
+export default function DocumentoExpediente({ datos, empresa }) {
+  const { t, lang } = useT()
+  const locale = LANG_LOCALE[lang] || 'es-ES'
+  const marca = MARCA.nombre
+  const v = datos?.vehiculo || {}
+  const periodo = datos?.periodo || {}
+  const c = datos?.cuentas || {}
+  const golpes = comoLista(datos?.golpes).filter((g) => g && typeof g === 'object')
+  const nuevos = golpes.filter((g) => !g.ya_estaba)
+  const yaEstaban = golpes.filter((g) => g.ya_estaba)
+  const fotosEntro = comoLista(datos?.como_entro?.fotos).filter((f) => f && VISTAS.includes(f.vista))
+  const fotosEsta = comoLista(datos?.como_esta?.fotos).filter((f) => f && VISTAS.includes(f.vista))
+  const hayRevisiones = Boolean(periodo.desde && periodo.hasta)
+
+  const largo = (x) => fechaLarga(x, locale)
+  const vista = (k) => (VISTAS.includes(k) ? t(`exp.vista.${k}`) : '')
+  const persona = (p) => (p && p.nombre) || t('exp.sinNombre')
+  const sev = (s) => { const x = t(`sev.${s}`); return s && x !== `sev.${s}` ? x : '' }
+  const cifra = (n) => (typeof n === 'number' && Number.isFinite(n) ? numero(n, locale) : '0')
+
+  const modelo = [
+    v.modelo,
+    v.fin_renting ? t('exp.renting').replace('{f}', largo(v.fin_renting)) : '',
+    typeof v.km === 'number'
+      ? (v.km_fecha
+        ? t('exp.km').replace('{n}', numero(v.km, locale)).replace('{f}', largo(v.km_fecha))
+        : t('exp.km.sinFecha').replace('{n}', numero(v.km, locale)))
+      : '',
+  ].filter(Boolean)
+
+  const motivo = (a) => {
+    switch (a?.motivo) {
+      case 'varios_conductores': {
+        const nombres = comoLista(a.conductores).map(persona)
+        return nombres.length
+          ? t('exp.m.varios_conductores').replace('{n}', nombres.join(', '))
+          : t('exp.m.varios_conductores.sin')
+      }
+      case 'varios_dias':
+        return typeof a.dias === 'number' ? t('exp.m.varios_dias').replace('{n}', numero(a.dias, locale)) : t('exp.m.varios_dias.sin')
+      case 'anterior_sin_repasar': return t('exp.m.anterior_sin_repasar')
+      case 'sin_foto_anterior': return t('exp.m.sin_foto_anterior')
+      case 'ya_estaba': return t('exp.m.ya_estaba')
+      case 'sin_conductor': return t('exp.m.sin_conductor')
+      default: return ''
+    }
+  }
+
+  const dias = (n) => (n === 0 ? t('exp.dias0') : n === 1 ? t('exp.dias1') : t('exp.diasN').replace('{n}', numero(n, locale)))
+
+  const estado = (r) => {
+    switch (r?.estado) {
+      case 'abierto': return t('exp.e.abierto')
+      case 'en_taller': return r.orden_numero != null && r.orden_numero !== ''
+        ? t('exp.e.en_tallerOrden').replace('{n}', String(r.orden_numero)) : t('exp.e.en_taller')
+      case 'reparado': return r.reparado_at ? t('exp.e.reparado').replace('{f}', largo(r.reparado_at)) : t('exp.e.reparadoSin')
+      default: return t('exp.e.desconocido')
+    }
+  }
+
+  // Las líneas que van debajo de las fotos de cada golpe.
+  const detalle = (g, { conConductor }) => {
+    const a = g.atribucion || {}
+    const coste = euros(g.reparacion?.coste, locale)
+    return (
+      <div className="exp-lineas">
+        {conConductor && (a.atribuible && a.conductor
+          ? (
+            <Linea etiqueta={t('exp.g.llevo')} testid="atribucion">
+              <b>{persona(a.conductor)}</b>{typeof a.dias === 'number' ? ` (${dias(a.dias)})` : ''}
+            </Linea>
+          ) : (
+            <Linea etiqueta={t('exp.g.conductor')} testid="atribucion">
+              <b>{t('exp.g.sinAtribuible')}</b>
+              {motivo(a) && <span className="exp-motivo" data-testid="motivo">{motivo(a)}</span>}
+            </Linea>
+          ))}
+        {sev(g.gravedad) && <Linea etiqueta={t('exp.g.gravedad')}>{sev(g.gravedad)}</Linea>}
+        {g.confirmado_por && (
+          <Linea etiqueta={t('exp.g.marcado')}>
+            {g.confirmado_at
+              ? t('exp.g.marcadoEl').replace('{p}', g.confirmado_por).replace('{f}', largo(g.confirmado_at))
+              : g.confirmado_por}
+          </Linea>
+        )}
+        <Linea etiqueta={t('exp.g.estado')} testid="estado"><b>{estado(g.reparacion)}</b></Linea>
+        {coste && <Linea etiqueta={t('exp.g.coste')} testid="coste">{coste}</Linea>}
+      </div>
+    )
+  }
+
+  const titulo = (g, frase) => (
+    <h3 className="exp-golpe-t">
+      <b>{g.pieza || t('exp.g.sinPieza')}</b>
+      {frase && <span> · {frase}</span>}
+    </h3>
+  )
+
+  const sello = (f) => momento(f?.fecha, f?.hora, f?.recibida_at)
+  const pie = t('exp.pie').replace('{marca}', marca)
+  const matricula = v.matricula || ''
+
+  return (
+    <article className="exp-hoja" data-testid="expediente">
+      {/* El pie y el número de cada hoja impresa, con los textos en el idioma del panel. */}
+      <style>{`@page { size: A4; margin: 14mm;
+  @bottom-left { content: ${cadenaCss(pie)}; ${CAJA_PIE} font-family: 'Archivo Variable', Archivo, system-ui, sans-serif; }
+  @bottom-right { content: ${cadenaCss(matricula ? `${matricula} · ` : '')} counter(page) " / " counter(pages); ${CAJA_PIE} font-family: 'IBM Plex Mono', ui-monospace, monospace; } }`}</style>
+
+      <header className="exp-cabecera">
+        <div className="exp-enc">
+          <span><b>{marca}</b></span>
+          {datos?.generado_at && (
+            <span className="exp-mono" data-testid="generado">
+              {t('exp.generado').replace('{f}', selloDeFecha(datos.generado_at, { idioma: lang }))}
+            </span>
+          )}
+        </div>
+        <h1>{t('exp.titulo')}</h1>
+        {empresa && <p className="exp-empresa" data-testid="empresa">{empresa}</p>}
+        <div className="exp-matricula"><Matricula texto={matricula} /></div>
+        {modelo.length > 0 && <p className="exp-modelo">{modelo.join(' · ')}</p>}
+        <p className="exp-periodo" data-testid="periodo">
+          {!hayRevisiones ? t('exp.periodo.nada')
+            : periodo.desde === periodo.hasta ? t('exp.periodo.uno').replace('{d}', largo(periodo.desde))
+              : t('exp.periodo').replace('{d}', largo(periodo.desde)).replace('{h}', largo(periodo.hasta))}
+        </p>
+        <dl className="exp-cifras" data-testid="cifras">
+          <div><dt>{t('exp.c.revisiones')}</dt><dd>{cifra(c.revisiones)}</dd></div>
+          <div><dt>{t('exp.c.conductores')}</dt><dd>{cifra(c.conductores)}</dd></div>
+          <div><dt>{t('exp.c.golpes')}</dt><dd>{cifra(c.golpes)}</dd></div>
+          <div><dt>{t('exp.c.reparados')}</dt><dd>{cifra(c.reparados)}</dd></div>
+        </dl>
+      </header>
+
+      {hayRevisiones && (
+        <section className="exp-seccion exp-seccion-cal" data-testid="bloque-calendario">
+          <h2>{t('exp.cal.t')}</h2>
+          <CalendarioDias desde={periodo.desde} hasta={periodo.hasta} calendario={datos?.calendario} locale={locale}
+            textos={{ revisada: t('exp.cal.revisada'), sin: t('exp.cal.sin'), golpe: t('exp.cal.golpe') }} />
+          <div className="exp-leyenda">
+            <span className="exp-ley-revisada">{t('exp.cal.revisada')}</span>
+            <span className="exp-ley-sin_revisar">{t('exp.cal.sin')}</span>
+            <span className="exp-ley-golpe">{t('exp.cal.golpe')}</span>
+          </div>
+        </section>
+      )}
+
+      <section className="exp-seccion" data-testid="bloque-golpes">
+        <h2>{t('exp.golpes.t')}</h2>
+        {nuevos.length === 0 ? (
+          <p className="exp-nota" data-testid="sin-golpes">
+            {yaEstaban.length ? t('exp.golpes.ningunoNuevo') : t('exp.golpes.ninguno')}
+          </p>
+        ) : yaEstaban.length > 0 && <p className="exp-sub">{t('exp.golpes.aparte')}</p>}
+        {nuevos.map((g) => (
+          <div className="exp-golpe" key={g.id} data-testid="golpe">
+            {titulo(g, g.fecha ? t('exp.g.aparece').replace('{f}', largo(g.fecha)) : '')}
+            {g.descripcion && <p className="exp-desc">{g.descripcion}</p>}
+            <div className="exp-par">
+              {g.anterior?.foto_url
+                ? <FotoConCaja src={g.anterior.foto_url} alt={`${vista(g.vista)} · ${largo(g.anterior.fecha)}`}
+                    etiqueta={t('exp.g.fotoAntes')} sello={sello(g.anterior)} quien={g.anterior.conductor?.nombre}
+                    rota={t('exp.fotoRota')} idioma={lang} />
+                : <FotoConCaja src={null} rota={t('exp.g.sinAnterior')} etiqueta={t('exp.g.fotoAntes')} />}
+              <FotoConCaja src={g.foto_url} alt={`${vista(g.vista)} · ${largo(g.fecha)}`} caja={g.box_2d}
+                etiqueta={t('exp.g.fotoGolpe')} sello={sello(g)}
+                quien={g.atribucion?.atribuible ? g.atribucion?.conductor?.nombre : ''}
+                rota={t('exp.fotoRota')} idioma={lang} />
+            </div>
+            {detalle(g, { conConductor: true })}
+          </div>
+        ))}
+      </section>
+
+      <section className="exp-seccion" data-testid="bloque-ya-estaba">
+        <h2>{t('exp.ya.t')}</h2>
+        {yaEstaban.length === 0
+          ? <p className="exp-nota">{hayRevisiones ? t('exp.ya.ninguno') : t('exp.periodo.nada')}</p>
+          : <p className="exp-sub">{t('exp.ya.sub')}</p>}
+        {yaEstaban.map((g) => (
+          <div className="exp-golpe exp-golpe-ya" key={g.id} data-testid="golpe-ya">
+            {titulo(g, g.fecha ? t('exp.ya.cuando').replace('{f}', largo(g.fecha)) : '')}
+            {g.descripcion && <p className="exp-desc">{g.descripcion}</p>}
+            <div className="exp-par">
+              <FotoConCaja src={g.foto_url} alt={`${vista(g.vista)} · ${largo(g.fecha)}`} caja={g.box_2d}
+                sello={sello(g)} rota={t('exp.fotoRota')} idioma={lang} />
+              {detalle(g, { conConductor: true })}
+            </div>
+          </div>
+        ))}
+      </section>
+
+      {[['entro', fotosEntro, t('exp.entro.t'), t('exp.entro.sub')], ['esta', fotosEsta, t('exp.esta.t'), t('exp.esta.sub')]]
+        .map(([clave, fotos, h, sub]) => (
+          <section className="exp-seccion" key={clave} data-testid={`bloque-${clave}`}>
+            <h2>{h}</h2>
+            {fotos.length === 0
+              ? <p className="exp-nota">{hayRevisiones ? t('exp.sinFotos') : t('exp.periodo.nada')}</p>
+              : <p className="exp-sub">{sub}</p>}
+            <div className="exp-galeria">
+              {[...fotos].sort((a, b) => VISTAS.indexOf(a.vista) - VISTAS.indexOf(b.vista)).map((f) => (
+                <figure key={`${f.vista}-${f.inspection_id}-${f.photo_index}`}>
+                  <FotoConCaja src={f.foto_url} alt={`${vista(f.vista)} · ${largo(f.fecha)}`} sello={sello(f)}
+                    rota={t('exp.fotoRota')} idioma={lang} />
+                  <figcaption>{vista(f.vista)}</figcaption>
+                </figure>
+              ))}
+            </div>
+          </section>
+        ))}
+
+      <section className="exp-seccion exp-prueba" data-testid="bloque-prueba">
+        <h2>{t('exp.prueba.t')}</h2>
+        <div className="exp-prueba-cols">
+          <div>
+            <h3>{t('exp.prueba.siT')}</h3>
+            <p>{t('exp.prueba.si').replace('{marca}', marca)}</p>
+          </div>
+          <div>
+            <h3>{t('exp.prueba.noT')}</h3>
+            <p>{t('exp.prueba.no')}</p>
+          </div>
+        </div>
+        <p className="exp-prueba-lee">{t('exp.prueba.lee')}</p>
+      </section>
+
+      <footer className="exp-pie-pantalla">{pie}</footer>
+    </article>
+  )
+}

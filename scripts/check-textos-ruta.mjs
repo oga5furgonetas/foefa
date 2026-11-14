@@ -15,7 +15,7 @@ const FICHEROS = [
   'pages/RegaloPagina.jsx', 'pages/RutaApp.jsx', 'pages/RutaCuenta.jsx', 'pages/SeguimientoPedido.jsx', 'lib/guia.js',
   'pages/Registro.jsx', 'legal/CookieBanner.jsx', 'pages/Repartidores.jsx', 'pages/PaseMovil.jsx', 'lib/compartir.js',
   'pages/driver/AntesPuerta.jsx', 'pages/driver/AjustesMovil.jsx', 'pages/OpinionRuta.jsx', 'pages/OpinionCorreo.jsx',
-  'pages/AvisoManana.jsx', 'pages/Landing.jsx', 'pages/Iphone.jsx',
+  'pages/AvisoManana.jsx', 'pages/Iphone.jsx',
   // Lo que pide la calle (30-10-2026): lo que dice el cliente y el mapa con lo de la DGT.
   'pages/driver/ClienteDice.jsx', 'panel/components/MapaReparto.jsx',
   // Los ajustes de la ruta que ve quien reparte por su cuenta (30-10-2026): la parte con tx() de la pantalla del panel.
@@ -38,9 +38,12 @@ const FICHEROS = [
   'pages/driver/MisDnr.jsx', 'pages/driver/dnrVistas.js',
   // Su ejemplo de la pantalla de entrega, «¿Cómo sé si tiene preferencia?» (11-11-2026, R11).
   'pages/driver/EjemploPreferencia.jsx',
-  // La página de venta para empresas (14-11-2026) y las piezas que comparte con la portada (la rejilla de la empresa,
-  // la vista del panel y el pie).
+  // La portada para empresas (/ y /empresas, 14-11-2026) y las piezas que comparte con las demás páginas públicas
+  // con la identidad nueva (el pie).
   'pages/Empresas.jsx', 'pages/portadaComun.jsx',
+  // «Qué le enseñas al perito» (/peritaje-tecnico, 14-11-2026): con la identidad y el pie de la portada, en su idioma.
+  'pages/PeritajeTecnico.jsx',
+  'pages/ExpedienteEjemplo.jsx',
 ]
 // Las piezas de la app de reparto (06-11-2026, diseño compacto): todo pages/driver/piezas/, sin nombrarlas una a una; si
 // no, sus textos no se comprueban y las claves que se mudan a ellas se dan por muertas.
@@ -52,14 +55,14 @@ const DE_DATOS = ['Repartidor', 'Bizum', 'Transferencia']
 const LISTAS = ['MOTIVOS', 'DONDE', 'DONDE_CORTO', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO', 'VENTAJAS', 'FORMAS', 'DEJAR', 'ATAJOS_HORARIO',
   // Dónde se dejó, en las frases de «La última vez» y de la memoria de la puerta (08-11-2026): tx(SITIO[donde]).
   'SITIO', 'SITIOS',
-  // La portada (/): lo que hace la app, la IA y lo de la empresa.
-  'PASOS_PORTADA', 'FUNCIONES_RUTA', 'PREGUNTAS_PORTADA', 'IA_PORTADA', 'MODULOS_EMPRESA',
   // La guía de iPhone (/iphone).
   'PASOS', 'QUE_FUNCIONA',
   // «Mis DNR» (11-11-2026, V5): cómo la marcó y por qué no pasó la foto, [lo que se ve, la frase larga, …] (MisDnr.jsx).
   'COMO', 'FOTO',
-  // /empresas (14-11-2026): los tres problemas con lo que se ve en el panel, los pasos para empezar y las preguntas.
-  'PROBLEMAS', 'PASOS_EMPRESA', 'PREGUNTAS_EMPRESA']
+  // La portada para empresas (/ y /empresas, 14-11-2026): sus preguntas.
+  'PREGUNTAS_EMPRESA',
+  // /peritaje-tecnico (14-11-2026): lo que queda guardado y lo que no es.
+  'GUARDADO', 'NO_ES']
 
 const usadas = new Set(DE_DATOS)
 const cadenas = (trozo) => [...trozo.matchAll(/'((?:\\'|[^'])*)'/g)].map((m) => m[1].replace(/\\'/g, "'"))

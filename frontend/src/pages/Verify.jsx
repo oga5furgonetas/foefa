@@ -4,7 +4,8 @@ import { ShieldCheck, ShieldAlert, Search, Loader2, AlertTriangle } from 'lucide
 import { API_BASE } from '../services/api'
 import { MARCA } from '../marca'
 
-// Página pública SIN auth para verificar un peritaje técnico por hash.
+// Página pública SIN auth para comprobar si el código (hash) de un informe firmado está en el registro de FDS.
+// No dice que el documento sea auténtico: no recalcula el código ni compara el PDF que se tenga delante.
 // El backend devuelve solo info mínima no sensible (matrícula enmascarada, fecha, firmante).
 export default function Verify() {
   const { hash: hashParam } = useParams()
@@ -30,13 +31,13 @@ export default function Verify() {
     setLoading(true); setErr(''); setData(null)
     const cleaned = cleanHash(h)
     if (cleaned.length !== 64) {
-      setErr(`El hash debe tener 64 caracteres hexadecimales. Te falta ${64 - cleaned.length} (probablemente lo has copiado incompleto del PDF).`)
+      setErr(`El código tiene 64 caracteres (números y letras de la a a la f). Te faltan ${64 - cleaned.length}: seguramente se ha copiado incompleto del PDF.`)
       setLoading(false); return
     }
     try {
       const r = await fetch(`${API_BASE}/verify/${cleaned}`)
       const j = await r.json()
-      if (!r.ok) throw new Error(j?.detail || 'Error de verificación')
+      if (!r.ok) throw new Error(j?.detail || 'No se pudo comprobar el código')
       setData(j)
     } catch (e) { setErr(String(e.message || e)) }
     setLoading(false)
@@ -55,20 +56,20 @@ export default function Verify() {
       </nav>
 
       <main className="mx-auto max-w-2xl px-5 py-12">
-        <h1 className="mb-2 text-3xl font-extrabold">Verificador de peritaje</h1>
-        <p className="mb-7 text-dark-400">Introduce el hash SHA-256 del peritaje (lo encuentras en el PDF o escaneando su QR).</p>
+        <h1 className="mb-2 text-3xl font-extrabold">Comprobar un informe</h1>
+        <p className="mb-7 text-dark-400">Escribe el código de comprobación del informe (está en el PDF y en su QR). Aquí se mira si ese código está en el registro de {MARCA.nombre}.</p>
 
         <form onSubmit={(e) => { e.preventDefault(); if (hash) verify(hash) }} className="mb-6 flex gap-2">
           <input
             value={hash}
             onChange={(e) => setHash(e.target.value)}
-            placeholder="abcdef1234… (64 caracteres hex)"
+            placeholder="abcdef1234… (64 caracteres)"
             className="input flex-1 font-mono text-sm"
             spellCheck={false}
             autoComplete="off"
           />
           <button disabled={!hash || loading} className="btn-primary flex items-center gap-2 disabled:opacity-50">
-            {loading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />} Verificar
+            {loading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />} Comprobar
           </button>
         </form>
 
@@ -86,18 +87,18 @@ export default function Verify() {
                 {/* «Firma registrada», no «Peritaje auténtico» (14-11-2026): esta página comprueba que el código existe en
                     el registro de firmas; no vuelve a calcularlo ni compara el PDF que tengas delante. */}
                 <div className="text-xl font-bold text-emerald-200">Firma registrada</div>
-                <div className="text-xs text-dark-400">Hash registrado en la cadena de custodia de {MARCA.nombre}.</div>
+                <div className="text-xs text-dark-400">El código está en el registro de {MARCA.nombre}. Compara estos datos con los del PDF que tienes delante.</div>
               </div>
             </div>
             <dl className="grid grid-cols-2 gap-4 text-sm">
               <Item label="Matrícula" value={data.vehicle_plate_masked || '—'} />
               <Item label="Firmado por" value={data.signed_by_name || '—'} />
-              <Item label="Fecha inspección" value={fmt(data.inspection_date)} />
+              <Item label="Revisión recibida" value={fmt(data.inspection_date)} />
               <Item label="Fecha firma" value={fmt(data.signed_at)} />
-              <Item label="Hash anterior" value={data.prev_hash} mono />
+              <Item label="Código anterior" value={data.prev_hash} mono />
               {/* «hay firmas posteriores» (14-11-2026): has_next_in_chain solo mira si hay otra firma después en esa
                   empresa; no comprueba que el enlace cuadre. Decía «cadena continuada». */}
-              <Item label="Hash siguiente" value={data.has_next_in_chain ? 'sí (hay firmas posteriores)' : 'no (última firma)'} />
+              <Item label="Código siguiente" value={data.has_next_in_chain ? 'sí (hay firmas posteriores)' : 'no (última firma)'} />
             </dl>
             <div className="mt-5 border-t border-emerald-500/20 pt-4 text-xs text-dark-400">
               <b className="text-dark-200">Código de la firma:</b>
@@ -113,9 +114,9 @@ export default function Verify() {
           <div className="rounded-2xl border border-amber-500/40 bg-amber-500/5 p-6">
             <div className="mb-2 flex items-center gap-3">
               <ShieldAlert size={28} className="text-amber-400" />
-              <div className="text-lg font-bold text-amber-200">Hash no encontrado</div>
+              <div className="text-lg font-bold text-amber-200">Código no encontrado</div>
             </div>
-            <p className="text-sm text-dark-300">{data.error || `Este hash no corresponde a ningún peritaje firmado en ${MARCA.nombre}.`}</p>
+            <p className="text-sm text-dark-300">{data.error || `Este código no está en el registro de informes firmados de ${MARCA.nombre}.`}</p>
           </div>
         )}
       </main>

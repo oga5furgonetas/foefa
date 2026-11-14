@@ -34,10 +34,10 @@ const PANEL = [
 ]
 
 const PUBLICAS = [
-  ['/', 'Landing'], ['/login', 'Login'], ['/planes', 'Planes'], ['/empresas', 'Empresas'], ['/invita?ref=ABCDE1', 'Landing de invitación'],
+  ['/', 'Portada (empresas)'], ['/login', 'Login'], ['/planes', 'Planes'], ['/empresas', 'Empresas'], ['/invita?ref=ABCDE1', 'Landing de invitación'],
   ['/registro', 'Registro'], ['/contacto', 'Contacto'], ['/iphone', 'Guía de iPhone'],
   ['/security', 'Seguridad'], ['/peritaje-tecnico', 'Peritaje'],
-  ['/verify', 'Verificador'], ['/privacidad', 'Privacidad'],
+  ['/verify', 'Comprobar un informe'], ['/privacidad', 'Privacidad'],
   ['/terminos', 'Términos'], ['/encargo', 'Encargo del tratamiento'], ['/cookies', 'Cookies'],
   ['/aviso-legal', 'Aviso legal'], ['/conductor', 'Portal del conductor'],
   // El alta CON plan y flota elegidos: es lo que ve el cliente justo despues
@@ -133,7 +133,7 @@ test.describe('Páginas públicas', () => {
 })
 
 /* FURGONETAS FIJAS (pestaña de la Plantilla del día): la tabla de conductores
-   con su principal, la nota de responsabilidad y la fila de aparcamiento. */
+   con su principal, la nota de confianza y la fila de aparcamiento. */
 test.describe('Furgonetas fijas', () => {
   const AFINIDAD = {
     center: 'NORTE',
@@ -803,7 +803,7 @@ test.describe('Usuarios', () => {
       ]) }))
     await page.goto('/panel/usuarios', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('Mery', { exact: true })).toBeVisible({ timeout: 15000 })
-    await expect(page.getByText('ve 7 de 31 pantallas')).toBeVisible()
+    await expect(page.getByText('ve 7 de 32 pantallas')).toBeVisible()
     await page.getByRole('button', { name: 'Quién ve cada pantalla' }).click()
     const fila = (nombre) => page.locator('tr', { has: page.locator('td', { hasText: new RegExp(`^${nombre}$`) }) })
     // Mery: el Cuadrante sí y los Días libres no (van cada uno por su lado);
@@ -817,7 +817,7 @@ test.describe('Usuarios', () => {
     await expect(fila('Asignación diaria').locator('td').nth(2)).toHaveText('siempre')
     await expect(fila('Vehículos').locator('td').nth(3).getByLabel('la ve')).toBeVisible()
     await page.getByRole('button', { name: 'Editar' }).first().click()
-    await expect(page.getByText('Ve 7 de 31 pantallas del menú.')).toBeVisible()
+    await expect(page.getByText('Ve 7 de 32 pantallas del menú.')).toBeVisible()
     await expect(page.getByText('· va con Talleres')).toBeVisible()
     await expect(page.getByText('· va con Vehículos')).toBeVisible()
     // El Cuadrante se marca y desmarca como cualquier otra.
@@ -825,7 +825,7 @@ test.describe('Usuarios', () => {
     await expect(cuadrante).toHaveAttribute('aria-pressed', 'true')
     await cuadrante.click()
     await expect(cuadrante).toHaveAttribute('aria-pressed', 'false')
-    await expect(page.getByText('Ve 6 de 31 pantallas del menú.')).toBeVisible()
+    await expect(page.getByText('Ve 6 de 32 pantallas del menú.')).toBeVisible()
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })
@@ -1786,29 +1786,18 @@ test('App · sin sesión arranca en Empezar: crear cuenta, entrar y probar a la 
   await expect(page.getByText('Gratis y sin límite hasta el 31 de diciembre · sin tarjeta')).toBeVisible()
 })
 
-/* LA PORTADA (21-10-2026): primero la app de reparto gratis con todo lo que hace; detrás, la IA y la empresa. */
-test('Portada · vende la app de reparto gratis primero, con la IA y la empresa detrás, y cambia de idioma', async ({ page }) => {
+/* LA PORTADA (14-11-2026, «Antes del perito»): «/» es la de empresas con furgonetas; la de la app de reparto está en
+   /repartidores y se enlaza abajo. Lo de la portada, a fondo, en portada.spec.js. */
+test('Portada · es la de empresas, enlaza la app de reparto y cambia de idioma', async ({ page }) => {
   const fallos = vigilar(page)
   await page.goto('/', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('La app de reparto gratis')
-  await expect(page).toHaveTitle(/La app de reparto gratis/)
-  // El alta del repartidor, arriba y sin tarjeta; el precio sale de lib/precios.js.
-  await expect(page.getByRole('link', { name: /Crear mi cuenta gratis/ }).first()).toHaveAttribute('href', '/registro?sector=autonomo&plan=autonomo')
-  await expect(page.getByText(/^(Gratis y sin límite hasta el 31 de diciembre|Gratis hasta 15 paradas al día) · sin tarjeta$/).first()).toBeVisible()
-  // Todas las funciones, la IA y la empresa con su panel (que dice que los datos son de ejemplo).
-  await expect(page.getByRole('heading', { name: 'Todo lo que hace por ti, gratis' })).toBeVisible()
-  await expect(page.getByText('Escanea un paquete y te dice en qué parada va')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'La IA que mira por tu flota' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: '¿Tienes una empresa de reparto o una flota?' })).toBeVisible()
-  await expect(page.getByText('Vista del panel · datos de ejemplo')).toBeVisible()
-  await expect(page.getByRole('link', { name: /Crear cuenta de empresa/ })).toHaveAttribute('href', '/registro')
-  // El tablón de empleo, en la cabecera al lado de Funciones (y en el pie).
-  await expect(page.getByRole('navigation').first().getByRole('link', { name: 'Empleo', exact: true })).toHaveAttribute('href', '/empleo')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('El golpe, el día que aparece. No el día que te lo cobran.')
+  await expect(page).toHaveTitle(/para empresas con furgonetas/)
+  await expect(page.getByTestId('emp-probar')).toHaveAttribute('href', '/registro?sector=otra&plan=completo&flota=20')
+  await expect(page.getByTestId('emp-repartidores')).toHaveAttribute('href', '/repartidores')
   await expect(page.getByRole('link', { name: 'Ofertas de empleo' })).toHaveAttribute('href', '/empleo')
-  // El idioma que se elige aquí es el que luego tiene la app.
   await page.getByLabel('Idioma / Language').selectOption('en')
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('The free delivery app')
-  await expect(page.getByRole('heading', { name: 'Everything it does for you, free' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Spot the dent the day it appears. Not the day you’re billed for it.')
   expect(fallos).toEqual([])
 })
 
@@ -1843,7 +1832,7 @@ test('Planes · Reparto se cobra por repartidor y el alta del súper lo propone 
   await expect(page.getByText('36€', { exact: true })).toBeVisible()          // mínimo 3 × 12 €
   await page.getByLabel('Número de repartidores').fill('5')
   await expect(page.getByText('60€', { exact: true })).toBeVisible()
-  await page.getByRole('link', { name: 'Empezar 14 días gratis →' }).last().click()
+  await page.getByRole('link', { name: 'Empezar la prueba de 14 días →' }).last().click()
   await expect(page).toHaveURL(/registro\?sector=supermercado&plan=reparto/)
   await expect(page.getByText('Plan elegido')).toBeVisible()
   await expect(page.getByText(/60€\/mes · con 5 repartidores activos/)).toBeVisible()

@@ -1,167 +1,129 @@
-import { Link } from 'react-router-dom'
-import { ShieldCheck, FileLock2, Camera, AlertTriangle, Check, ArrowRight } from 'lucide-react'
-import { LANGS, useT } from '../i18n'
+import { useEffect } from 'react'
+import { ArrowRight } from 'lucide-react'
 import { MARCA } from '../marca'
-import { DIAS_PRUEBA_EMPRESA } from '../lib/precios'
+import { tx, useIdioma } from '../lib/idioma'
+import { ANCHO, BTN_PRIMARIO, BTN_SECUNDARIO, CabeceraSimple, Pie, useTemaWeb } from './portadaComun'
 
-/* «CÓMO FUNCIONA LA IA DE DAÑOS» (/peritaje-tecnico): a donde lleva el pie de /empresas y de la portada.
-   Reescrita el 14-11-2026 (ronda 3, V1) con el tono de /empresas: decía «Demuestra quién golpeó cada vehículo. Sin
-   discusión.», «al salir y al volver», «90 segundos», «800-3.000€», «Imposible falsificar», «paga 3 veces el plan» y un
-   «Acceso anticipado» que ningún código respalda. Ahora cada frase tiene detrás lo que hace el servidor hoy (la tabla
-   frase → fichero está en el informe del encargo):
-   - la revisión: una por conductor, furgoneta y día (server.py, crear inspección, 409); la firma, de la oficina
-     (Inspecciones.jsx, ForensicSignBlock). 14-11-2026: aquí NO se dice que firme el conductor: la tarjeta de firma de
-     driver/InspectionDone.jsx lee `result.id` y /inspections/upload contesta `inspection_id`, así que su botón se queda
-     apagado y hoy el conductor no firma desde el portal (la app nativa no firma);
-   - la IA: `confidence` por golpe; por debajo de 0,65 queda como sugerido; el PDF pone el % y separa lo que no llega;
-   - la firma: POST /inspections/{id}/sign guarda quién, cuándo, la IP y un SHA-256 de un subconjunto fijo de la
-     revisión (_canonical_inspection_payload: las DIRECCIONES de las fotos, no la imagen) encadenado con la firma
-     anterior de la empresa; solo con el plan Pro (`forensics`);
-   - el PDF (GET /inspections/{id}/forensic-pdf, solo la oficina) y la comprobación pública (GET /verify/{hash}), que
-     dice si el código está registrado y enseña fecha, firmante y matrícula en parte oculta. NO vuelve a calcular el
-     código, así que aquí no se dice que «cualquier cambio se nota»;
-   - los avisos de trampa (_calculate_fraud_score): la primera foto casi igual a otra de los últimos 30 días, o la
-     matrícula leída distinta. 14-11-2026: el aviso de «foto hecha más de un día antes» (old_photo) se quitó de aquí:
-     lee el EXIF de la foto YA GUARDADA y _process_image_sync la vuelve a guardar sin EXIF, así que no salta nunca.
-   NUNCA «admisible en juicio» ni «quién dio el golpe». Solo en español, como antes. */
+/* «QUÉ LE ENSEÑAS AL PERITO» (/peritaje-tecnico, rehecha el 14-11-2026 con la portada nueva). A donde lleva el pie de
+   las páginas públicas. Antes era «Cómo funciona la IA de daños»: desde esta tanda la IA no se vende ni se promete (de
+   cada 100 golpes que marca, unos 25 son reales, backend/fiabilidad.py), así que la página cuenta lo que queda guardado
+   y quién decide. Cada frase tiene detrás lo que hace el servidor al acabar la tanda «Antes del perito»:
+   - la revisión: una por conductor, furgoneta y día (server.py, crear inspección, 409); la fecha de cada foto es la de
+     llegada al servidor (lib/sello.js), nunca «hecha a las…»;
+   - el repaso del día (GET /api/repaso/dia y POST /api/inspections/{id}/repaso): una persona marca cada golpe;
+   - el expediente (GET /api/vehicles/{id}/antes-del-perito): solo golpes confirmados por una persona, y «quién la
+     llevaba» solo con `atribuible: true` (un único conductor entre las dos fotos, un día o menos y la foto anterior de
+     ese lado marcada «igual»); si no, sin conductor atribuible y el motivo;
+   - la firma (POST /inspections/{id}/sign, solo con el plan Pro, `forensics`): quién, cuándo, la IP y un código; el PDF
+     (GET /inspections/{id}/forensic-pdf) y la comprobación pública (GET /verify/{hash}), que dice si el código está
+     registrado y enseña fecha, firmante y matrícula en parte oculta. NO vuelve a calcular el código, así que aquí no se
+     dice que «cualquier cambio se nota».
+   NUNCA «quién dio el golpe», «admisible en juicio», «certificado» ni «inmutable». */
 
-const ALTA = '/registro?sector=otra&plan=completo'   // la misma alta que /empresas (Empresas.jsx, ALTA_EMPRESA)
+const ALTA = '/registro?sector=otra&plan=completo'   // la misma alta que la portada (Empresas.jsx, ALTA_EMPRESA)
 
-const PASOS = [
-  [Camera, 'El conductor revisa la furgoneta con fotos',
-    'Desde el móvil, a la hora que decida tu empresa: cada conductor hace una revisión por furgoneta y día. Con el plan Pro, la oficina la firma después desde el panel.'],
-  [ShieldCheck, 'La IA marca los golpes que parecen nuevos',
-    'Compara cada foto con la anterior del mismo lado y marca la pieza, la gravedad y cuánto está de segura. Se equivoca a menudo, sobre todo con los golpes leves: sirve para saber dónde mirar, no es un veredicto. Lo que no tiene claro queda como sugerencia, y con el plan Pro confirmas o descartas cada golpe en Revisión rápida.'],
-  [FileLock2, 'La revisión firmada sale en un informe en PDF',
-    'Con el plan Pro: las fotos y los golpes marcados, quién la firmó, cuándo y desde qué IP, y un código que cualquiera puede comprobar en nuestra web.'],
+const GUARDADO = [
+  ['Cada revisión, con sus fotos', 'El conductor fotografía la furgoneta desde el móvil: frontal, trasera y los dos laterales. Cada foto queda con la fecha y la hora en que llegó al servidor, y con quién la hizo. Cada conductor hace una revisión por furgoneta y día.'],
+  ['Cada golpe, marcado por una persona', 'En el repaso del día, alguien de tu oficina ve la foto de hoy junto a la anterior del mismo lado y marca lo nuevo sobre la foto. El expediente solo lleva los golpes que ha marcado o confirmado una persona.'],
+  ['Quién la llevaba, solo cuando es seguro', 'Si entre las dos fotos la llevó una sola persona, en un día o menos, y la foto anterior de ese lado se repasó y estaba igual, el golpe dice quién la llevaba. Si no, queda sin conductor atribuible y se dice por qué.'],
+  ['El expediente de cada furgoneta', 'Cómo entró, cómo está, cada golpe con su foto y la anterior del mismo lado, y un calendario con los días revisados y los que no. Listo para imprimir.'],
 ]
 
-const INFORME = [
-  ['Las fotos con los golpes marcados', 'Cada golpe con su pieza, su gravedad, su coste estimado y su % de confianza. Los que no llegan al 50 % o no tienen la caja clara salen aparte, como sugerencias para que los mire una persona.'],
-  ['La firma', 'Quién firmó, la fecha y la hora, la IP desde la que firmó y el texto que quedó con la firma.'],
-  ['Un código SHA-256', 'Calculado al firmar con los datos de la revisión (fecha, furgoneta, conductor, las direcciones de sus fotos y el resumen del análisis) y encadenado con el de la firma anterior de tu empresa.'],
-  ['Un QR a la comprobación', 'Cualquiera puede ver en nuestra web, con ese código, que la firma está registrada, la fecha de la revisión y de la firma, quién la firmó y la matrícula en parte oculta.'],
+const NO_ES = [
+  ['No dice quién dio el golpe.', 'Dice quién la llevaba, y solo cuando es seguro.'],
+  ['No es una firma electrónica avanzada ni asesoría jurídica.', 'Es el registro de cada revisión: el valor que tenga ante un renting, un cliente o un juzgado lo decide quien lo recibe.'],
+  ['No da nada por golpe sin una persona.', 'Un golpe entra en el expediente cuando alguien de tu oficina lo marca o lo confirma.'],
 ]
 
 export default function PeritajeTecnico() {
-  const { lang, setLang } = useT()
+  const lang = useIdioma()
+  const [tema, setTema] = useTemaWeb()
+  const titulo = tx('Qué le enseñas al perito · {marca}', { marca: MARCA.nombre })
+  useEffect(() => {
+    const antes = document.title
+    document.title = titulo
+    try { document.documentElement.lang = lang } catch { /* nada */ }
+    return () => { document.title = antes }
+  }, [titulo, lang])
+  const enlace = 'inline-flex min-h-[44px] items-center whitespace-nowrap px-1 text-[15px] font-medium text-[color:var(--ld-text)] underline-offset-4 hover:underline'
+  const h2 = 'ld-titular text-[30px] leading-[1.06] text-[color:var(--ld-text)] [text-wrap:balance] sm:text-[40px]'
+
   return (
-    <div className="min-h-screen bg-dark-950 text-dark-50">
-      {/* Nav */}
-      <nav className="border-b border-dark-800">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3">
-          <Link to="/" className="flex items-center gap-2">
-            <img src="/favicon.svg" alt="" width="32" height="32" className="rounded-lg" />
-            <b>{MARCA.nombre}</b>
-          </Link>
-          {/* En el móvil (375 px) no caben los cinco: «Precios» y «Contacto» se pisaban con la marca (14-11-2026). */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Link to="/planes" className="hidden text-sm text-dark-300 hover:text-dark-100 sm:inline">Precios</Link>
-            <Link to="/contacto" className="hidden text-sm text-dark-300 hover:text-dark-100 sm:inline">Contacto</Link>
-            <Link to="/panel/login" className="rounded-lg border border-dark-700 px-3 py-1.5 text-sm hover:bg-dark-800">Entrar</Link>
-            <select value={lang} onChange={(e) => setLang(e.target.value)} className="rounded-lg border border-dark-800 bg-dark-900 px-2 py-1 text-xs">
-              {Object.entries(LANGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-          </div>
-        </div>
-      </nav>
+    <div className="ld-root min-h-screen overflow-x-clip font-sans text-[17px] leading-normal antialiased" data-theme={tema}>
+      <CabeceraSimple>
+        <a href="/planes" className={`${enlace} hidden sm:inline-flex`}>{tx('Precios')}</a>
+        <a href="/contacto" className={`${enlace} hidden sm:inline-flex`}>{tx('Contacto')}</a>
+        <a href="/panel/login" className={enlace}>{tx('Entrar')}</a>
+      </CabeceraSimple>
 
-      {/* Arriba */}
-      <section className="mx-auto max-w-4xl px-5 py-14 text-center">
-        <span className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-sky-500/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-sky-300">
-          <ShieldCheck size={14} /> Revisiones con foto e IA
-        </span>
-        <h1 className="mx-auto max-w-3xl text-4xl font-extrabold leading-tight md:text-5xl">
-          Cómo funciona la <span className="text-sky-400">IA de daños</span>
-        </h1>
-        <p className="mx-auto mt-5 max-w-2xl text-lg text-dark-300">
-          Marca los golpes que parecen nuevos en cada revisión con foto y te dice quién llevaba la furgoneta en cada revisión. No dice quién dio el golpe.
+      <header className={`${ANCHO} pb-14 pt-10 sm:pb-20 sm:pt-16`}>
+        <p className="text-[15px] font-semibold text-[color:var(--ld-accent)]">{tx('Para empresas con furgonetas')}</p>
+        <h1 className="ld-titular mt-4 max-w-[760px] text-[40px] leading-[1] text-[color:var(--ld-text)] [text-wrap:balance] sm:text-[56px]">{tx('Qué le enseñas al perito del renting')}</h1>
+        <p className="mt-6 max-w-[620px] text-[18px] leading-[1.5] text-[color:var(--ld-text2)] sm:text-[19px]">
+          {tx('Cuando devuelves una furgoneta, el perito apunta los daños y te pasa el cargo. Lo que puedes enseñarle es lo que guardaste: la foto de cada lado, con la fecha y la hora en que llegó al servidor, y los golpes que tu oficina marcó el día que aparecieron.')}
         </p>
-        <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-          <Link to={ALTA} className="rounded-lg bg-gradient-to-r from-sky-500 to-sky-700 px-6 py-3 text-base font-bold text-white shadow-lg shadow-sky-900/40 hover:from-sky-400 hover:to-sky-600">
-            Probar gratis {DIAS_PRUEBA_EMPRESA} días
-          </Link>
-          <Link to="/empresas" className="rounded-lg border border-dark-700 px-5 py-3 text-base font-semibold text-dark-200 hover:bg-dark-800">
-            Ver todo lo que hace para tu empresa →
-          </Link>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <a href={ALTA} className={BTN_PRIMARIO}>{tx('Probar con mis furgonetas')}</a>
+          <a href="/expediente-ejemplo" className={BTN_SECUNDARIO}>{tx('Ver un expediente de ejemplo')}</a>
         </div>
-        <p className="mt-3 text-xs text-dark-500">Sin tarjeta durante la prueba.</p>
-      </section>
+      </header>
 
-      {/* Cómo funciona */}
-      <section className="border-y border-dark-800 bg-dark-900/40 py-14">
-        <div className="mx-auto max-w-5xl px-5">
-          <h2 className="mb-12 text-center text-3xl font-extrabold">En tres pasos</h2>
-          <div className="grid gap-8 md:grid-cols-3">
-            {PASOS.map(([Icono, titulo, texto], i) => (
-              <Step key={titulo} n={i + 1} icon={<Icono size={26} />} title={titulo} text={texto} />
+      <section className={ANCHO}>
+        <div className="grid gap-8 border-t border-[color:var(--ld-border)] py-14 sm:py-20 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-16">
+          <h2 className={h2}>{tx('Lo que queda guardado')}</h2>
+          <ol className="border-b border-[color:var(--ld-border)]">
+            {GUARDADO.map(([t, d], i) => (
+              <li key={t} className="grid gap-2 border-t border-[color:var(--ld-border)] py-6 sm:grid-cols-[56px_minmax(0,1fr)]">
+                <span className="font-mono text-[14px] font-medium text-[color:var(--ld-muted)]">0{i + 1}</span>
+                <div>
+                  <h3 className="text-[21px] font-bold leading-[1.2] tracking-[-0.015em] text-[color:var(--ld-text)]">{tx(t)}</h3>
+                  <p className="mt-2 max-w-[640px] text-[16.5px] leading-relaxed text-[color:var(--ld-text2)]">{tx(d)}</p>
+                </div>
+              </li>
             ))}
+          </ol>
+        </div>
+      </section>
+
+      <section className={ANCHO}>
+        <div className="grid gap-8 border-t border-[color:var(--ld-border)] py-14 sm:py-20 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-16">
+          <h2 className={h2}>{tx('La firma de una revisión')}</h2>
+          <div className="max-w-[680px]">
+            <p className="text-[17px] leading-relaxed text-[color:var(--ld-text2)]">
+              {tx('Con el plan Pro, la oficina puede firmar una revisión desde el panel. Queda quién la firmó, cuándo y desde qué IP, y un código que cualquiera puede comprobar en nuestra web: dice si la firma está registrada y enseña la fecha, quién firmó y la matrícula en parte oculta. La revisión firmada se descarga en PDF con sus fotos.')}
+            </p>
           </div>
         </div>
       </section>
 
-      {/* El informe */}
-      <section className="mx-auto max-w-5xl px-5 py-14">
-        <h2 className="mb-3 text-center text-3xl font-extrabold">Qué lleva el informe pericial</h2>
-        <p className="mb-10 text-center text-dark-400">Va en el plan Pro. Lo descarga la oficina desde el detalle de cada revisión firmada.</p>
-        <div className="grid gap-3 md:grid-cols-2">
-          {INFORME.map(([t, d]) => (
-            <div key={t} className="flex gap-3 rounded-xl border border-dark-800 bg-dark-900/50 p-4">
-              <Check className="mt-0.5 shrink-0 text-emerald-400" size={18} />
-              <div>
-                <div className="font-semibold">{t}</div>
-                <div className="text-sm text-dark-400">{d}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-        <p className="mt-6 text-center text-sm text-dark-400">
-          Además, en todos los planes de flota, el detalle de cada revisión avisa si su primera foto es casi igual a la de otra revisión de esa furgoneta de los últimos 30 días o si la matrícula que lee la IA no es la suya.
-        </p>
-      </section>
-
-      {/* Lo que no es */}
-      <section className="mx-auto max-w-3xl px-5 pb-14">
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6">
-          <div className="mb-2 flex items-center gap-2 text-sm font-bold uppercase text-amber-300">
-            <AlertTriangle size={16} /> Lo que no es
-          </div>
-          <ul className="space-y-2 text-sm leading-relaxed text-dark-300">
-            <li><b>No dice quién dio el golpe.</b> Dice en qué revisión apareció y quién llevaba la furgoneta.</li>
-            <li><b>No es una firma electrónica avanzada</b> ni asesoría jurídica. Es un registro técnico de la revisión: el valor que tenga ante un cliente, un renting o un juzgado lo decide quien lo recibe.</li>
-            <li><b>La IA se equivoca a veces.</b> Por eso cada golpe lleva su % de confianza en el informe, y con el plan Pro lo confirmas o lo descartas tú.</li>
+      <section className={ANCHO}>
+        <div className="grid gap-8 border-t border-[color:var(--ld-border)] py-14 sm:py-20 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-16">
+          <h2 className={h2}>{tx('Lo que no es')}</h2>
+          <ul className="max-w-[680px] space-y-4" data-testid="perito-no-es">
+            {NO_ES.map(([t, d]) => (
+              <li key={t} className="flex gap-3 text-[16.5px] leading-relaxed text-[color:var(--ld-text2)]">
+                <span aria-hidden="true" className="mt-[11px] inline-block h-2 w-2 shrink-0 rounded-full bg-[color:var(--ld-ambar)]" />
+                <span><b className="font-semibold text-[color:var(--ld-text)]">{tx(t)}</b> {tx(d)}</span>
+              </li>
+            ))}
           </ul>
         </div>
       </section>
 
-      {/* Cierre */}
-      <section className="mx-auto max-w-3xl px-5 pb-24 text-center">
-        <h2 className="mb-3 text-2xl font-extrabold">¿Cuánto te cuesta y cuánto te ahorra?</h2>
-        <p className="mb-7 text-dark-400">Haz la cuenta con tus furgonetas y con el último cargo por daños que te pasaron.</p>
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <Link to="/empresas#cuenta" className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-sky-500 to-sky-700 px-7 py-3.5 text-base font-bold text-white shadow-lg shadow-sky-900/40 hover:from-sky-400 hover:to-sky-600">
-            Hacer la cuenta <ArrowRight size={17} />
-          </Link>
-          <Link to="/contacto?asunto=Peritaje" className="rounded-lg border border-dark-700 px-5 py-3.5 text-base font-semibold text-dark-200 hover:bg-dark-800">
-            Escríbenos
-          </Link>
+      <section className={ANCHO}>
+        <div className="grid items-center gap-8 border-t border-[color:var(--ld-border)] py-14 sm:py-[72px] lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-12">
+          <div>
+            <h2 className={h2}>{tx('¿Cuánto te cuesta?')}</h2>
+            <p className="mt-3 max-w-[560px] text-[16.5px] leading-relaxed text-[color:var(--ld-muted)]">{tx('Haz la cuenta con tus furgonetas y con el último cargo por daños que te pasaron.')}</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <a href="/#precio" className={BTN_PRIMARIO}>{tx('Hacer la cuenta')} <ArrowRight size={17} /></a>
+            <a href="/contacto?asunto=Peritaje" className={BTN_SECUNDARIO}>{tx('Escríbenos')}</a>
+          </div>
         </div>
       </section>
 
-      <footer className="border-t border-dark-800 py-6 text-center text-xs text-dark-500">
-        © {new Date().getFullYear()} {MARCA.nombre} · <Link to="/privacidad" className="hover:text-dark-300">Privacidad</Link> · <Link to="/terminos" className="hover:text-dark-300">Términos</Link> · <Link to="/contacto" className="hover:text-dark-300">Contacto</Link>
-      </footer>
-    </div>
-  )
-}
-
-function Step({ n, icon, title, text }) {
-  return (
-    <div className="relative rounded-2xl border border-dark-800 bg-dark-900 p-6">
-      <div className="absolute -top-4 left-6 flex h-8 w-8 items-center justify-center rounded-full bg-sky-500 text-sm font-extrabold text-white">{n}</div>
-      <div className="mb-3 text-sky-400">{icon}</div>
-      <h3 className="mb-2 text-lg font-bold">{title}</h3>
-      <p className="text-sm text-dark-400">{text}</p>
+      <Pie lang={lang} tema={tema} setTema={setTema} />
     </div>
   )
 }

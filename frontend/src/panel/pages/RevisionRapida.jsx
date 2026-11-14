@@ -496,8 +496,8 @@ function Autoexamen({ datos, total, alRevisar, recargar }) {
                 ))}
               </div>
               <p className="mt-1.5 text-[11px] leading-snug text-dark-500">
-                En las rojas la IA ya no afirma un daño leve o moderado: lo manda a
-                revisar. Un daño grave se sigue avisando siempre.
+                En las rojas la IA se equivoca a menudo: un daño leve o moderado ahí no
+                lo da por bueno, te lo deja a ti. Uno grave se avisa siempre, para que lo mire una persona.
               </p>
             </div>
           )}

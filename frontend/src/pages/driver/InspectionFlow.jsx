@@ -160,7 +160,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
       }
       setPhotoErrors((errs) => { const next = { ...errs }; delete next[slotId]; return next })
       setPhotos((p) => ({ ...p, [slotId]: blob }))
-      toast.success(r.data?.checked ? '✅ Foto verificada' : '📷 Foto capturada')
+      toast.success(r.data?.checked ? '✅ Foto revisada' : '📷 Foto capturada')
     } catch {
       setPhotos((p) => ({ ...p, [slotId]: blob }))
     }
@@ -870,7 +870,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
               className="btn-primary flex w-full items-center justify-center gap-2 py-4 text-base font-bold"
             >
               {sending ? (
-                <><Loader2 size={18} className="animate-spin" /> Analizando con IA…</>
+                <><Loader2 size={18} className="animate-spin" /> Enviando la revisión…</>
               ) : (
                 <><Shield size={18} /> Enviar inspección</>
               )}
@@ -878,7 +878,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
 
             {sending && (
               <p className="text-center text-xs text-dark-500">
-                La IA está analizando las fotos. Puede tardar unos segundos…
+                Se están subiendo las fotos. Puede tardar unos segundos…
               </p>
             )}
           </div>

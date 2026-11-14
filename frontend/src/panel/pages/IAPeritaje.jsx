@@ -284,7 +284,7 @@ export default function IAPeritaje() {
             <div className="flex items-start gap-3">
               <Sparkles size={18} className="text-brand-400 mt-0.5 shrink-0" />
               <div>
-                <div className="font-semibold text-sm text-brand-200 mb-1">Two-Pass AI Annotation</div>
+                <div className="font-semibold text-sm text-brand-200 mb-1">Fotos con lo que marca la IA (puede equivocarse)</div>
                 <div className="text-xs text-dark-400 leading-relaxed">
                   Las inspecciones nuevas generan fotos anotadas automáticamente. Para las antiguas,
                   usa el botón de abajo para lanzar el reanálisis en lote (máx. 20 a la vez para no saturar la API).

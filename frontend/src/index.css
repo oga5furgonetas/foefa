@@ -162,63 +162,70 @@ html[data-panel-theme='light'] .bg-dark-800.text-white,
 html[data-panel-theme='light'] .bg-dark-900.text-white { color: rgb(var(--dk-50)); }
 html[data-panel-theme='light'] [class*='hover:text-white']:hover { color: rgb(var(--dk-50)); }
 
-/* ── Tema claro/oscuro de la LANDING pública (solo .ld-root) ──────────────── */
-/* En la barra de la landing no caben cinco elementos en un telefono: el boton
-   principal se salia de la pantalla y "Acceder" partia en dos lineas. */
-@media (max-width: 700px) { .ld-solo-ancho { display: none !important; } }
-
-/* Rejilla bento de la landing: seis columnas en escritorio, dos en movil.
-   Con seis en un telefono cada pieza quedaria en una tira ilegible. */
-.ld-bento { grid-template-columns: repeat(6, 1fr); }
-@media (max-width: 760px) {
-  .ld-bento { grid-template-columns: repeat(2, 1fr); }
-  .ld-bento > * { grid-column: span 2 !important; }
-}
-
+/* ── LAS PÁGINAS PÚBLICAS (solo .ld-root): la identidad del 14-11-2026 ─────────────────────────────────────────────
+   Tinta sobre papel. El cian del logo es la firma y va en UNA cosa por pantalla (la acción principal, relleno con
+   tinta encima); en texto, su versión oscura. Tres colores con significado: hecho, fallo y avisar. Sin degradados, sin
+   brillos ni manchas. Día (papel) por defecto; la noche, con su paleta. Contrastes medidos con la fórmula de la WCAG
+   (busqueda/interfaces.md §3.3): tinta 16,6:1 sobre papel y 16,3:1 de noche; gris 6,1:1 / 8,4:1; cian en texto
+   5,6:1 / 12,3:1; hecho 5,5:1 / 10,3:1; fallo 6,1:1 / 8,4:1; ámbar en texto 7,2:1 / 11,9:1. --ld-dim es el mismo
+   gris que --ld-muted: por debajo de él ya no se lee (el #64748b de antes daba 4,16:1). */
 .ld-root {
-  --ld-bg: #080a0e;
-  --ld-surface: #0e1116;
-  --ld-surface2: #13161b;
-  --ld-text: #eef1f6;
-  --ld-muted: #94a3b8;
-  --ld-dim: #64748b;
-  --ld-border: rgba(255, 255, 255, 0.08);
-  --ld-border-strong: rgba(255, 255, 255, 0.12);
-  --ld-fill: rgba(255, 255, 255, 0.05);
-  --ld-nav: rgba(8, 10, 14, 0.85);
-  /* Tonos de TEXTO con significado. El cian y el ámbar de la marca se leen
-     bien sobre oscuro, pero sobre blanco se quedan en ~2:1 y no pasan el
-     4,5:1 de la WCAG: en claro van en su versión oscura. */
-  --ld-accent: #14e7d8;
-  --ld-warn: #fbbf24;
-  --ld-ok: #34d399;
-  --ld-mid: #fb923c;
-  /* El degradado del titular: el cian de marca en oscuro; en claro, su
-     versión oscura (el cian claro sobre blanco no llega al 3:1 de un texto
-     grande). */
-  --ld-grad-a: #14e7d8;
-  --ld-grad-b: #0aacd3;
+  --ld-bg: #f5f6f3;
+  --ld-surface: #ffffff;
+  --ld-surface2: #eceee9;
+  --ld-text: #10181a;
+  --ld-text2: #2b363a;
+  --ld-muted: #545e66;
+  --ld-dim: #545e66;
+  --ld-border: rgba(16, 24, 26, 0.12);
+  --ld-border-strong: rgba(16, 24, 26, 0.22);
+  --ld-fill: rgba(16, 24, 26, 0.04);
+  --ld-nav: rgba(245, 246, 243, 0.94);
+  --ld-firma: #14e7d8;
+  --ld-firma-hover: #0fd3c5;
+  --ld-tinta-firma: #10181a;
+  --ld-accent: #0b6e69;
+  --ld-ok: #0a7346;
+  --ld-warn: #b42318;
+  --ld-mid: #7a4500;
+  --ld-ambar: #ffc233;
+  --ld-hueco: #dadfd8;
+  /* La banda de «Salió de una nave»: tinta de día; de noche, una superficie (tinta clara sería un foco). */
+  --ld-banda: #10181a;
+  --ld-banda-texto: #f5f6f3;
+  --ld-banda-suave: #b9c2c6;
+  --ld-banda-linea: rgba(245, 246, 243, 0.22);
   background: var(--ld-bg);
   color: var(--ld-text);
+  color-scheme: light;
 }
-.ld-root[data-theme='light'] {
-  --ld-bg: #f5f8fc;
-  --ld-surface: #ffffff;
-  --ld-surface2: #eef2f8;
-  --ld-text: #0f172a;
-  --ld-muted: #475569;
-  --ld-dim: #64748b;
-  --ld-border: rgba(15, 23, 42, 0.1);
-  --ld-border-strong: rgba(15, 23, 42, 0.16);
-  --ld-fill: rgba(15, 23, 42, 0.04);
-  --ld-nav: rgba(255, 255, 255, 0.85);
-  --ld-accent: #0b7285;
-  --ld-warn: #b45309;
-  --ld-ok: #047857;
-  --ld-mid: #c2410c;
-  --ld-grad-a: #0b7c8a;
-  --ld-grad-b: #0a5f86;
+.ld-root[data-theme='dark'] {
+  --ld-bg: #0b1012;
+  --ld-surface: #141b1e;
+  --ld-surface2: #1a2327;
+  --ld-text: #e9edef;
+  --ld-text2: #d3d9dc;
+  --ld-muted: #a3adb4;
+  --ld-dim: #a3adb4;
+  --ld-border: rgba(233, 237, 239, 0.12);
+  --ld-border-strong: rgba(233, 237, 239, 0.24);
+  --ld-fill: rgba(233, 237, 239, 0.05);
+  --ld-nav: rgba(11, 16, 18, 0.94);
+  --ld-accent: #14e7d8;
+  --ld-ok: #4cd68a;
+  --ld-warn: #ff8a80;
+  --ld-mid: #ffc233;
+  --ld-hueco: #2c363b;
+  --ld-banda: #141b1e;
+  --ld-banda-texto: #e9edef;
+  --ld-banda-suave: #a3adb4;
+  --ld-banda-linea: rgba(233, 237, 239, 0.16);
+  color-scheme: dark;
 }
+/* Titulares: Archivo 800, interletra −0,03em, un pelo estrecha (como el boceto). */
+.ld-root .ld-titular { font-weight: 800; letter-spacing: -0.03em; font-stretch: 96%; }
+/* Cifras, fechas y matrículas: Plex Mono tabular. */
+.ld-root .ld-cifra { font-variant-numeric: tabular-nums; }
 
 @layer base {
   /* FONDO PLANO. Antes llevaba dos degradados radiales de marca fijos detrás
@@ -459,15 +466,9 @@ html[data-panel-theme='light'] [class*='hover:text-white']:hover { color: rgb(va
     bottom: 22%;
     width: 3px;
     border-radius: 99px;
-    background: linear-gradient(180deg, #fb923c, #ea6800);
-    box-shadow: 0 0 12px rgba(249, 115, 22, 0.5);
-    animation: navbar-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    /* El cian de la marca, liso (14-11-2026): antes era un naranja con brillo que no era de la paleta. */
+    background: #14e7d8;
   }
-  @keyframes navbar-in {
-    from { transform: scaleY(0); opacity: 0; }
-    to   { transform: scaleY(1); opacity: 1; }
-  }
-
   /* Cabecera de grupo del menú: fila completa clicable, con identidad */
   .nav-ghead {
     @apply flex w-full items-center gap-2.5 rounded-xl px-2 py-2 transition-colors duration-150;
