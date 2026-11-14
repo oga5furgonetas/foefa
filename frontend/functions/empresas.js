@@ -21,7 +21,7 @@ export const PUNTOS = [
   // 14-11-2026 (ronda 3, V11): la hora, no cuántas veces: cada conductor hace una por furgoneta y día (server.py, 409).
   'El conductor hace las fotos de su furgoneta desde el móvil; a qué hora se hace la revisión lo decide cada empresa (cada conductor hace una por furgoneta y día).',
   'Cada revisión queda guardada con su fecha, su hora y quién la hizo.',
-  'La detección de daños revisa sola cada foto: la compara con la anterior del mismo lado y marca los golpes que parecen nuevos. No acierta siempre.',
+  'La detección de daños mira sola cada foto, la compara con la anterior del mismo lado y señala lo que parece un golpe nuevo. Se equivoca a menudo: sirve para saber dónde mirar; la prueba son las fotos con su fecha.',
   'Cada furgoneta guarda en su ficha todas sus revisiones con foto, cada una con su fecha y su conductor.',
   'Su historial sale en un parte para imprimir o guardar en PDF, con la foto del golpe y la de la misma vista en la revisión anterior, de los últimos daños nuevos.',
   'La lista de ITV de toda la flota, ordenada por lo que caduca antes, y un calendario con el fin de cada renting y una fecha estimada para el aceite, las ruedas y las pastillas, según los kilómetros que hace cada furgoneta.',

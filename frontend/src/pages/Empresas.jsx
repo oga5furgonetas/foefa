@@ -44,7 +44,7 @@ const PROBLEMAS = [
     texto: 'Aparece una abolladura y nadie sabe cuándo fue, así que la acaba pagando la empresa.',
     ve: [
       ['Cada revisión, con sus fotos, su fecha, su hora y quién la hizo.', false],
-      ['La detección de daños revisa sola cada foto: la compara con la anterior del mismo lado y marca los golpes que parecen nuevos. No acierta siempre.', false],
+      ['La detección de daños mira sola cada foto, la compara con la anterior del mismo lado y señala lo que parece un golpe nuevo. Se equivoca a menudo: sirve para saber dónde mirar; la prueba son las fotos con su fecha.', false],
       ['Qué furgonetas no se han revisado hoy y cuáles llevan más de una semana sin mirarse.', false],
       ['Revisión rápida: confirmas o descartas, uno a uno, los golpes marcados.', true],
       ['Origen de daños: para cada golpe, la última foto en la que estaba bien y quién la llevó desde entonces. Dice quién la llevaba, no quién dio el golpe.', true],

@@ -31,7 +31,7 @@ const PASOS = [
   [Camera, 'El conductor revisa la furgoneta con fotos',
     'Desde el móvil, a la hora que decida tu empresa: cada conductor hace una revisión por furgoneta y día. Con el plan Pro, la oficina la firma después desde el panel.'],
   [ShieldCheck, 'La IA marca los golpes que parecen nuevos',
-    'Compara cada foto con la anterior del mismo lado y marca la pieza, la gravedad y cuánto está de segura. No acierta siempre: lo que no tiene claro queda como sugerencia, y con el plan Pro confirmas o descartas cada golpe en Revisión rápida.'],
+    'Compara cada foto con la anterior del mismo lado y marca la pieza, la gravedad y cuánto está de segura. Se equivoca a menudo, sobre todo con los golpes leves: sirve para saber dónde mirar, no es un veredicto. Lo que no tiene claro queda como sugerencia, y con el plan Pro confirmas o descartas cada golpe en Revisión rápida.'],
   [FileLock2, 'La revisión firmada sale en un informe en PDF',
     'Con el plan Pro: las fotos y los golpes marcados, quién la firmó, cuándo y desde qué IP, y un código que cualquiera puede comprobar en nuestra web.'],
 ]
