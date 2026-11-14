@@ -25,7 +25,7 @@ const MODULES = [
     ['dashboard', 'nav.dashboard'], ['mi-dia', 'nav.miDia'], ['chat', 'nav.chat'],
   ]},
   { g: 'nav.g.fleet', items: [
-    ['vehiculos', 'nav.vehicles'], ['inspecciones', 'nav.inspections'], ['revision', 'nav.revision'],
+    ['vehiculos', 'nav.vehicles'], ['repaso', 'nav.repaso'], ['inspecciones', 'nav.inspections'], ['revision', 'nav.revision'],
     ['origen-danos', 'nav.origen'],
     // «Vencimientos» es UNA entrada del menú con tres partes: sale en cuanto
     // se marca cualquiera de las tres.
