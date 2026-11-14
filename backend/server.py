@@ -7875,11 +7875,34 @@ async def _seed_demo_data():
         "aleta delantera izquierda": (2, "lateral_izquierdo", [485, 505, 578, 562]),
         "portón trasero": (1, "trasera", [380, 238, 640, 275]),
     }
+    # LA FOTO CON EL GOLPE (14-11-2026). Con las mismas dos fotos en todas las
+    # inspecciones, «Origen de daños» ponía como «limpia» y «con el golpe» la
+    # misma imagen: no había antes y después, y la caja marcaba chapa limpia.
+    # `scripts/demo-fotos-golpes.py` dibuja el golpe dentro de la caja de cada
+    # pieza de `sitio_golpe` sobre la lateral; aquí, cada combinación de golpes
+    # que ya tiene la furgoneta, con su imagen. La aleta (frontal) no tiene: en
+    # esa foto la furgoneta va lejos y el golpe no se vería (lo explica el guion).
+    lateral_con = {
+        frozenset(): "van-lateral.jpg",
+        frozenset({"puerta lateral derecha"}): "van-lateral-golpe-puerta.jpg",
+        frozenset({"paragolpes trasero"}): "van-lateral-golpe-paragolpes.jpg",
+        frozenset({"paragolpes trasero", "portón trasero"}): "van-lateral-golpe-paragolpes-porton.jpg",
+    }
     insps = []
     for day in range(10):
         for j in range(5):
             di = (day + j) % len(drivers)
             vi = (day * 3 + j) % len(vehicles)
+            # UN GOLPE QUE SE PUEDA ACOTAR (14-11-2026). Con el reparto de arriba
+            # ningún golpe salía en «Un solo conductor», que es lo que abre
+            # «Origen de daños» y lo que vende la página: el único golpe no leve
+            # con revisión anterior (el portón) tenía tres días de hueco. Esta
+            # revisión (Carlos Ruiz, víspera de la puerta grave de la 2462 JKL,
+            # que también hizo él) pasa de la 3924 RST a la 2462 JKL: ahora es su
+            # foto limpia, a un día y con una sola persona entre las dos. Mismos
+            # totales: solo cambia de furgoneta una revisión sin golpes.
+            if (day, j) == (8, 0):
+                vi = 2
             has_dmg = (day * 5 + j) % 9 == 0
             pieza = parts[(day + j) % len(parts)]
             nd = ([{
@@ -7910,6 +7933,19 @@ async def _seed_demo_data():
                     "image_quality_warnings": [], "critical_damages": [],
                 },
             })
+    # Las fotos, por furgoneta y de la más vieja a la más nueva: limpia hasta la
+    # revisión que ve un golpe, y desde ella la lateral con ese golpe (se
+    # acumulan). El orden sale del bucle (día hacia atrás, j hacia delante), no
+    # de `created_at`, para que no dependa de la hora a la que se siembra.
+    vistos: dict = {}
+    for ins in sorted(insps, key=lambda x: (-int(x["id"].split("-")[1][1:]), int(x["id"].split("-")[2]))):
+        ya = vistos.setdefault(ins["vehicle_id"], set())
+        ya.update(d["part"] for d in ins["analysis"]["new_damages"])
+        lat = frozenset(p for p in ya if sitio_golpe[p][0] == 1)
+        # Una combinación sin imagen (no la hay con esta siembra) se queda con la
+        # más grande que sí tenga: nunca una foto con un golpe que no ha pasado.
+        mejor = max((k for k in lateral_con if k <= lat), key=len)
+        ins["photos"] = [f"{_PORTAL_BASE_FRONT}/demo/{lateral_con[mejor]}", fotos_demo[1]]
     await ddb.inspections.insert_many(insps)
 
     # Cuadrante de hoy + incidencias abiertas
