@@ -135,3 +135,24 @@ async def test_la_primera_revision(base):
     assert [i["id"] for i in await server.get_vehicle_inspections("v1", primera=True, user=ADMIN)] == ["i0000"]
     # Furgoneta sin revisiones: lista vacía, no un error.
     assert await server.get_vehicle_inspections("v9", primera=True, user=ADMIN) == []
+
+
+# ── M2 (ronda 3, 14-11-2026): el total de revisiones de la furgoneta ────────
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_solo_total_da_cuantas_hay(base):
+    """Falla con el código de antes: no existía `solo_total` (la ficha decía «50» teniendo 121)."""
+    r = await server.get_vehicle_inspections("v1", solo_total=True, user=ADMIN)
+    assert r == {"total": 121}                  # sin la borrada ni la de otra furgoneta
+    assert await server.get_vehicle_inspections("v9", solo_total=True, user=ADMIN) == {"total": 0}
+    # Sin el parámetro, la respuesta de siempre: una lista.
+    assert isinstance(await server.get_vehicle_inspections("v1", user=ADMIN), list)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_solo_total_un_conductor_sin_la_furgoneta_no_lo_ve(base):
+    base["vehicles"] = Col([{"id": "v1", "current_driver_id": "d1"}])
+    with pytest.raises(server.HTTPException) as e:
+        await server.get_vehicle_inspections("v1", solo_total=True, user={"sub": "d2", "role": "driver"})
+    assert e.value.status_code == 403
+    assert await server.get_vehicle_inspections("v1", solo_total=True, user={"sub": "d1", "role": "driver"}) == {"total": 121}

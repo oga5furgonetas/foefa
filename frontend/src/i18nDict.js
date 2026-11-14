@@ -198,6 +198,7 @@ export const DICT = {
   'vh.ev.repair':     { es: 'Panel reparado', en: 'Panel repaired', fr: 'Panneau réparé', de: 'Panel repariert', it: 'Pannello riparato', pt: 'Painel reparado' },
   'vh.ev.repair.all': { es: 'Salió de chapa — daños reparados', en: 'Body shop done — damages repaired', fr: 'Sortie de carrosserie — dommages réparés', de: 'Karosserie fertig — Schäden repariert', it: 'Uscita da carrozzeria — danni riparati', pt: 'Saiu da funilaria — danos reparados' },
   'vh.dispute':       { es: 'Parte de disputa', en: 'Dispute report', fr: 'Rapport de litige', de: 'Streitfall-Bericht', it: 'Rapporto di contestazione', pt: 'Relatório de disputa' },
+  'vh.dispute.preparando': { es: 'Preparando el parte…', en: 'Preparing the report…', fr: 'Préparation du rapport…', de: 'Bericht wird erstellt…', it: 'Preparazione del rapporto…', pt: 'A preparar o relatório…' },
   // La pestaña de inspecciones de la ficha: el historial entero y la foto de entrada (14-11-2026).
   'vh.insp.mas':      { es: 'Ver revisiones más antiguas', en: 'Show older checks', fr: 'Voir les inspections plus anciennes', de: 'Ältere Inspektionen anzeigen', it: 'Vedi le ispezioni più vecchie', pt: 'Ver inspeções mais antigas' },
   'vh.insp.mas.err':  { es: 'No se han podido cargar las revisiones más antiguas', en: 'Couldn’t load the older checks', fr: 'Impossible de charger les inspections plus anciennes', de: 'Ältere Inspektionen konnten nicht geladen werden', it: 'Impossibile caricare le ispezioni più vecchie', pt: 'Não foi possível carregar as inspeções mais antigas' },

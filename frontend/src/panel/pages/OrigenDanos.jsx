@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Loader2, ShieldAlert, Camera, ChevronRight, Info } from 'lucide-react'
 import { getAtribucionDanos } from '../api'
@@ -76,12 +76,23 @@ function Prueba({ d }) {
         <img src={d.foto_limpia} alt="" loading="lazy"
           className="h-36 w-full rounded-lg border border-dark-700 object-cover" />
         <figcaption className="mt-1 text-[11px] text-dark-500">
-          Limpia el <span className="cifra text-dark-400">{d.foto_limpia_fecha}</span>
+          {/* Con el mismo formato que «Con el golpe el …» (14-11-2026, M7): salía en ISO, 2026-11-12. */}
+          Limpia el <span className="cifra text-dark-400">{fechaEs(d.foto_limpia_fecha)}</span>
         </figcaption>
       </figure>
       <FotoGolpe d={d} />
     </div>
   )
+}
+
+/* EL GRUPO CON QUE SE ABRE (14-11-2026, R1): siempre «Un solo conductor». Si ese no tenía ningún golpe y otro sí,
+   la pantalla abría en «No hay golpes en este grupo» con golpes en las otras pestañas. Ahora abre en el primero que
+   tenga, en el orden de los botones; si «Un solo conductor» tiene, o no hay ninguno, como siempre. */
+const GRUPOS = ['alta', 'media', 'baja']
+function grupoInicial(datos) {
+  const ds = Array.isArray(datos?.danos) ? datos.danos : []
+  if (!ds.length) return 'alta'
+  return GRUPOS.find((k) => ds.some((d) => d?.certeza === k)) || 'todos'
 }
 
 export default function OrigenDanos() {
@@ -91,11 +102,15 @@ export default function OrigenDanos() {
   const [cargando, setCargando] = useState(true)
   const [filtro, setFiltro] = useState('alta')
   const [abierto, setAbierto] = useState(null)
+  const elegido = useRef(false)   // el usuario ya pulsó un grupo: no se le cambia
 
   useEffect(() => {
     setCargando(true)
     getAtribucionDanos(center, 200)
-      .then((r) => setDatos(r.data))
+      .then((r) => {
+        setDatos(r.data)
+        if (!elegido.current) setFiltro(grupoInicial(r.data))
+      })
       // Con `error` (14-11-2026): un fallo del servidor no se confunde con «no hay golpes».
       .catch(() => setDatos({ danos: [], resumen: {}, error: true }))
       .finally(() => setCargando(false))
@@ -134,7 +149,7 @@ export default function OrigenDanos() {
           ['media', 'Varios posibles', r.media],
           ['baja', 'Sin acotar', r.baja],
           ['todos', 'Todos', datos?.total]].map(([k, txt, n]) => (
-          <button key={k} onClick={() => { setFiltro(k); setAbierto(null) }}
+          <button key={k} onClick={() => { elegido.current = true; setFiltro(k); setAbierto(null) }}
             className={`rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
               filtro === k ? 'bg-dark-700 text-dark-100' : 'bg-dark-800/60 text-dark-400 hover:text-dark-200'}`}>
             {txt} {n != null && <span className="cifra ml-1 text-dark-500">{n}</span>}

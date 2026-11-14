@@ -1,5 +1,13 @@
+/* global process */
+import path from 'path'
 import { test, expect } from '@playwright/test'
 import { simularApi, entrarComoAdmin } from './api-simulada.js'
+
+// Con FOTOS_PRODUCTO=<carpeta> guarda la foto de la pantalla (ronda 3, 14-11-2026).
+async function fotoDe(page, nombre) {
+  const dir = process.env.FOTOS_PRODUCTO
+  if (dir) await page.screenshot({ path: path.join(dir, `${nombre}-${test.info().project.name}.png`) })
+}
 
 /* ORIGEN DE DAÑOS: LA PRUEBA NO PUEDE SER LA MISMA FOTO DOS VECES (14-11-2026). La pantalla enseña «limpia el …» y
    «con el golpe el …» lado a lado antes del nombre de quien llevaba la furgoneta. Si las dos URL son la misma imagen
@@ -63,4 +71,58 @@ test('Origen de daños · dos URL distintas siguen saliendo como pareja', async 
   // El nombre en la cabecera, como hoy (solo a partir de la anchura de tableta).
   const ancho = page.viewportSize()?.width || 0
   await expect(page.getByRole('button', { name: /Ana Pérez/ })).toHaveCount(ancho >= 768 ? 1 : 0)
+})
+
+/* RONDA 3 (14-11-2026): la fecha de la foto limpia como la del golpe (M7) y el grupo con que se abre (R1). */
+test('Origen de daños · «Limpia el 12/11/2026», con el mismo formato que «Con el golpe el 13/11/2026»', async ({ page, baseURL }) => {
+  // Falla con el código de antes: salía «Limpia el 2026-11-12».
+  await abrir(page, dano('l4', `${baseURL}/demo/van-frontal.jpg`, `${baseURL}/demo/van-lateral.jpg`))
+  await expect(page.getByText('Limpia el 12/11/2026')).toBeVisible()
+  await expect(page.getByText('Con el golpe el 13/11/2026')).toBeVisible()
+  await expect(page.getByText('2026-11-12')).toHaveCount(0)
+  await fotoDe(page, 'origen-fechas')
+})
+
+async function abrirGrupos(page, danos) {
+  const fallos = []
+  page.on('pageerror', (e) => fallos.push(e.message))
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  const resumen = { alta: 0, media: 0, baja: 0 }
+  for (const d of danos) if (d.certeza in resumen) resumen[d.certeza] += 1
+  await page.route(/\/api\/damages\/atribucion/, (r) => r.fulfill({
+    json: { danos, resumen, total: danos.length, truncado: false },
+  }))
+  await page.goto('/panel/origen-danos', { waitUntil: 'domcontentloaded' })
+  return fallos
+}
+const conCerteza = (id, certeza, matricula) => ({ ...dano(id, null, null), certeza, matricula })
+const grupo = (page, nombre) => page.getByRole('button', { name: new RegExp(`^${nombre}`) })
+const fondo = (b) => b.evaluate((el) => el.className.includes('bg-dark-700 '))
+
+test('Origen de daños · sin golpes de un solo conductor, abre en el primer grupo que tenga', async ({ page }) => {
+  // Falla con el código de antes: abría en «Un solo conductor» con «No hay golpes en este grupo».
+  const fallos = await abrirGrupos(page, [conCerteza('a', 'baja', '1111AAA'), conCerteza('b', 'media', '2222BBB')])
+  await expect(page.getByRole('button', { name: /2222/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /1111/ })).toHaveCount(0)
+  await expect(page.getByText('No hay golpes en este grupo.')).toHaveCount(0)
+  expect(await fondo(grupo(page, 'Varios posibles'))).toBe(true)
+  await fotoDe(page, 'origen-grupo')
+  // Y lo que pulse el usuario manda: «Un solo conductor» sigue diciendo que está vacío.
+  await grupo(page, 'Un solo conductor').click()
+  await expect(page.getByText('No hay golpes en este grupo.')).toBeVisible()
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('Origen de daños · con golpes de un solo conductor, abre en ese grupo como siempre', async ({ page }) => {
+  await abrirGrupos(page, [conCerteza('a', 'media', '1111AAA'), conCerteza('b', 'alta', '2222BBB')])
+  await expect(page.getByRole('button', { name: /2222/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /1111/ })).toHaveCount(0)
+  expect(await fondo(grupo(page, 'Un solo conductor'))).toBe(true)
+})
+
+test('Origen de daños · solo «Sin acotar», abre ahí', async ({ page }) => {
+  await abrirGrupos(page, [conCerteza('a', 'baja', '1111AAA')])
+  await expect(page.getByRole('button', { name: /1111/ })).toBeVisible()
+  expect(await fondo(grupo(page, 'Sin acotar'))).toBe(true)
 })
