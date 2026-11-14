@@ -75,10 +75,11 @@ function recontar(d) {
 
 /* El servidor de mentira: guarda lo que se le manda y contesta con la forma del contrato.
    `srv.retraso` (ms) hace que tarde en contestar a los POST; `srv.falloPost` / `srv.falloDelete` ({ status, detail })
-   hacen que conteste con ese error; `srv.libro` cambia lo que dice del libro al apuntar un golpe; `srv.diaDe(fecha)`
+   hacen que conteste con ese error; `srv.libro` cambia lo que dice del libro al apuntar un golpe (y `srv.libroDeshacer`
+   al deshacerlo: «borrado» si no se dice); `srv.diaDe(fecha)`
    da otro día cuando se pide una fecha concreta, y `srv.retrasoDia` hace que tarde en darlo. */
 async function abrir(page, elDia, { tema = null, idioma = null } = {}) {
-  const srv = { dia: elDia, posts: [], deletes: [], pedidas: [], retraso: 0, retrasoDia: 0, falloPost: null, falloDelete: null, libro: null, diaDe: null }
+  const srv = { dia: elDia, posts: [], deletes: [], pedidas: [], retraso: 0, retrasoDia: 0, falloPost: null, falloDelete: null, libro: null, libroDeshacer: null, diaDe: null }
   await entrarComoAdmin(page)
   if (tema) {
     await page.addInitScript((t) => {
@@ -135,7 +136,7 @@ async function abrir(page, elDia, { tema = null, idioma = null } = {}) {
       Object.assign(lado, { veredicto: null, veredicto_por: null, veredicto_at: null, golpe: null })
       recontar(srv.dia)
       return r.fulfill({ json: {
-        ok: true, inspection_id: rev.id, photo_index: k, libro: eraGolpe ? { accion: 'borrado' } : null, estado: rev.estado,
+        ok: true, inspection_id: rev.id, photo_index: k, libro: eraGolpe ? (srv.libroDeshacer || { accion: 'borrado' }) : null, estado: rev.estado,
         cuentas_revision: { lados: rev.lados.length, con_veredicto: rev.lados.filter((l) => l.veredicto).length, golpes: 0 },
       } })
     }
@@ -766,9 +767,63 @@ test('Repaso · la pieza va por su clave y se nombra traducida; «ya había un g
   expect(srv.posts[0].body).toMatchObject({ pieza_clave: 'puerta_del_izq', part: 'Puerta delantera izquierda' })
   await expect(page.getByTestId('repaso-aviso'))
     .toHaveText('The log already had open damage on: Left sliding door. This one has been recorded alongside it.')
+  // Una fila por golpe (CONTRATO M3): el que se acaba de apuntar junto al que ya estaba sale también en «Ya apuntado».
+  await expect(lista).toContainText('Front left door')
+  await expect(lista).toContainText('Rear bumper')
   await tab(page, 3).click()
   await expect(page.getByTestId('decidido')).toContainText('Front left door')
 })
+
+test('Repaso · los errores nuevos del servidor: el lado deshecho mientras se guardaba y los permisos', async ({ page, baseURL }) => {
+  const srv = await abrir(page, dia(baseURL))
+  await expect(page.getByTestId('mesa')).toBeVisible()
+  const antes = srv.pedidas.length
+  srv.falloPost = { status: 409, detail: 'Ese lado se ha deshecho mientras se guardaba el golpe. Vuelve a mirarlo.' }
+  await botonIgual(page).click()
+  await expect(page.getByTestId('repaso-aviso'))
+    .toHaveText('Otra persona ha deshecho ese lado mientras se guardaba el golpe. No ha quedado nada a medias: ya ves cómo está ahora.')
+  // Como el otro 409: se trae el día como está.
+  await expect.poll(() => srv.pedidas.length).toBe(antes + 1)
+  Object.assign(srv, { falloPost: { status: 403, detail: 'No tienes permiso para esa pantalla' } })
+  await botonIgual(page).click()
+  await expect(page.getByTestId('repaso-aviso')).toHaveText('Tu usuario no tiene permiso para esta pantalla. Pídeselo a quien administra la cuenta.')
+  Object.assign(srv, { falloPost: { status: 403, detail: 'Tu cuenta no tiene esa pantalla' } })
+  await botonIgual(page).click()
+  await expect(page.getByTestId('repaso-aviso')).toHaveText('Tu cuenta no tiene esta pantalla activada.')
+})
+
+for (const accion of ['pasa_a_otro', 'queda_revision_rapida']) {
+  test(`Repaso · deshacer un golpe cuando el libro dice «${accion}»: su fila sale de «Ya apuntado» y el día se pone al día`, async ({ page, baseURL }) => {
+    const srv = await abrir(page, dia(baseURL))
+    await tab(page, 3).click()
+    await page.getByRole('button', { name: 'Hay un golpe nuevo' }).click()
+    await dibujarCaja(page)
+    const form = page.getByTestId('form-golpe')
+    await form.getByRole('button', { name: 'Puerta lateral corredera izquierda' }).click()
+    await form.getByRole('button', { name: 'Moderado' }).click()
+    await form.getByRole('button', { name: 'Guardar el golpe' }).click()
+    const lista = page.getByTestId('ya-apuntado')
+    await expect(lista).toContainText('Puerta lateral corredera izquierda')
+    // En el servidor, al deshacerlo, la entrada del libro se queda con otro golpe (o con lo que confirmó otra persona
+    // en «Revisión rápida»): esa fila solo la sabe el servidor.
+    srv.libroDeshacer = { accion }
+    const otra = accion === 'pasa_a_otro'
+      ? { golpe_id: 'g-otro', pieza: 'Puerta trasera derecha', pieza_clave: 'puerta_tras_der', vista: 'lateral_der', origen: 'repaso' }
+      : { golpe_id: null, pieza: 'Puerta lateral corredera izquierda', pieza_clave: null, vista: null, origen: 'revision_rapida' }
+    srv.dia.revisiones[0].ya_apuntado = [{
+      ledger_id: null, panel: 'puerta', gravedad: 'leve', desde: '2026-11-10', inspection_id: 'otra', en_taller: false,
+      de_esta_revision: false, foto_url: null, box_2d: null, ...otra,
+    }]
+    const antes = srv.pedidas.length
+    await page.getByTestId('ultimo').getByRole('button', { name: 'Deshacer' }).click()
+    await expect.poll(() => srv.deletes.length).toBe(1)
+    await expect.poll(() => srv.pedidas.length).toBe(antes + 1)
+    await expect(tab(page, 3)).toHaveAttribute('aria-selected', 'true')
+    await expect(tab(page, 3)).toHaveAttribute('data-veredicto', '')
+    await expect(lista.locator('li')).toHaveCount(1)
+    await expect(lista).toContainText(otra.pieza)
+  })
+}
 
 /* Las fotos para mirar: la mesa en los tres temas del panel, y lo demás en el de por defecto. */
 for (const tema of ['hibrido', 'light', 'dark']) {

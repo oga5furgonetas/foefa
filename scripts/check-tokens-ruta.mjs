@@ -46,7 +46,6 @@ const DIBUJOS_DEL_MAPA = new Set([
 const EXCEPCIONES = {
   'pages/driver/MiRuta.jsx': [3, '«Navegar con» (ElegirNavegador): lo comparten Ajustes y el portal, que no se rediseñan; el resto de MiRuta está limpio'],
   'pages/driver/AjustesMovil.jsx': [9, 'Ajustes de la app: no se rediseñan, les llegó solo el tema'],
-  'pages/driver/DriverLogin.jsx': [21, 'la entrada del portal del conductor: no se rediseña'],
   'pages/driver/MiClave.jsx': [47, 'cuenta del portal (cambiar la contraseña): no se rediseña'],
   'pages/driver/MiCorreoPersonal.jsx': [9, 'cuenta del portal (correo personal de recuperación): no se rediseña'],
   'pages/driver/VerificarCorreoConductor.jsx': [4, 'cuenta del portal (verificar el correo): no se rediseña'],

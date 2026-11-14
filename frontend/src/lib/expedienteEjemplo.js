@@ -10,12 +10,13 @@
    La historia, coherente con las fotos, con sus sellos y con la regla del servidor (`_perito_atribucion`: cuentan los
    conductores de TODAS las revisiones entre la foto anterior y la del golpe, las dos incluidas):
    - entra el lunes 18 de mayo de 2026 con un roce en el paragolpes trasero (ya estaba; se repara el 4 de junio);
-   - el jueves 12 de noviembre, en la revisión de Luis P. (18:07), aparece el golpe de la puerta corredera. La foto
-     anterior de ese lado es del miércoles 11 (18:12), la hizo Ana L. y la oficina la marcó «igual». Entre las dos
-     fotos hay dos personas (Ana L. y Luis P.): SIN conductor atribuible. Lo marca la oficina (Marta R.) ese día;
+   - el miércoles 11 de noviembre (18:12) Luis P. hace su revisión y la oficina marca ese lado «igual»;
+   - el jueves 12, en la revisión de Luis P. (18:07), aparece el golpe de la puerta corredera. Entre las dos fotos
+     solo la llevó él, pasó un día y la anterior se marcó «igual» → atribuible: «la llevaba Luis P.». Lo marca la
+     oficina (Marta R.) ese día. Es el golpe del héroe de la portada;
    - el viernes 13 Iván R. hace la suya y la oficina marca ese lado «igual» (el golpe de la puerta ya estaba apuntado);
-   - el sábado 14, en la de Iván R., aparece una rozadura en el panel trasero: entre las dos fotos solo la llevó él,
-     en un día, y la anterior se marcó «igual» → atribuible. */
+   - el sábado 14, en la de Ana L., aparece una rozadura en el panel trasero: entre las dos fotos hay dos personas
+     (Iván R. y Ana L.) → SIN conductor atribuible (`varios_conductores`). */
 
 const FOTO = {
   limpia: '/demo/van-lateral.jpg',
@@ -73,7 +74,8 @@ const R = {
 
 /* Lo que enseña el héroe de la portada, sacado de la misma historia: la matrícula, el lado, la pieza (su clave es la
    de `repaso.p.<clave>`), la foto anterior y la del golpe con su fecha y quién hizo cada revisión, quién lo marcó y la
-   atribución que da el servidor (aquí NO atribuible: dos personas entre las dos fotos). Las fechas son Date locales
+   atribución que da el servidor (atribuible: las dos fotos las hizo Luis P., con un día entre ellas y la anterior
+   repasada como «igual»). Las fechas son Date locales
    con los mismos números que el sello del expediente. */
 const fechaLocal = ([f, h]) => {
   const [y, m, d] = f.split('-').map(Number)
@@ -85,11 +87,11 @@ export const EJEMPLO_HEROE = {
   lado: 'lateral_der',
   pieza: 'Puerta lateral corredera derecha',
   piezaClave: 'corredera_der',
-  antes: { fecha: fechaLocal(R.antes), quien: ANA.nombre },
+  antes: { fecha: fechaLocal(R.antes), quien: LUIS.nombre },
   hoy: { fecha: fechaLocal(R.puerta), quien: LUIS.nombre },
   marcadoPor: OFICINA,
-  atribuible: false,
-  motivo: 'varios_conductores',
+  atribuible: true,
+  motivo: null,
 }
 
 export const EMPRESA_EJEMPLO = 'Transportes del Noroeste, S. L. (ejemplo)'
@@ -134,10 +136,10 @@ export const EXPEDIENTE_EJEMPLO = {
       ya_estaba: false,
       anterior: {
         inspection_id: 'ej-r-1111', photo_index: 4, foto_url: FOTO.limpia,
-        ...llegada(...R.antes), conductor: ANA, veredicto: 'igual',
+        ...llegada(...R.antes), conductor: LUIS, veredicto: 'igual',
       },
       reparacion: { estado: 'abierto', orden_numero: null, reparado_at: null, coste: null },
-      atribucion: { atribuible: false, motivo: EJEMPLO_HEROE.motivo, dias: 1, conductor: null, conductores: [ANA, LUIS] },
+      atribucion: { atribuible: EJEMPLO_HEROE.atribuible, motivo: EJEMPLO_HEROE.motivo, dias: 1, conductor: LUIS, conductores: [LUIS] },
     },
     {
       id: 'ej-g-panel', origen: 'repaso',
@@ -152,7 +154,7 @@ export const EXPEDIENTE_EJEMPLO = {
         ...llegada(...R.igual), conductor: IVAN, veredicto: 'igual',
       },
       reparacion: { estado: 'abierto', orden_numero: null, reparado_at: null, coste: null },
-      atribucion: { atribuible: true, motivo: null, dias: 1, conductor: IVAN, conductores: [IVAN] },
+      atribucion: { atribuible: false, motivo: 'varios_conductores', dias: 1, conductor: null, conductores: [IVAN, ANA] },
     },
   ],
   calendario,

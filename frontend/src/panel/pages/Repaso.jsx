@@ -163,8 +163,10 @@ export default function Repaso() {
     let d = conLado(d0, revId, ladoNuevo)
     const r = d.revisiones.find((x) => x.id === revId)
     const g = ladoNuevo.golpe
-    // El golpe recién apuntado entra en «Ya apuntado» de esa furgoneta (en todas sus revisiones del día).
-    if (g && libro && (libro.accion === 'nuevo' || libro.accion === 'sustituye_ia')) {
+    /* El golpe recién apuntado entra en «Ya apuntado» de esa furgoneta (en todas sus revisiones del día). También
+       con «ya_apuntado»: el servidor da una fila por GOLPE (CONTRATO M3), con el mismo `ledger_id` que la entrada que
+       ya estaba; así no se vuelve a marcar al día siguiente. */
+    if (g && libro && (libro.accion === 'nuevo' || libro.accion === 'sustituye_ia' || libro.accion === 'ya_apuntado')) {
       const entrada = {
         ledger_id: libro.ledger_id ?? null, golpe_id: g.golpe_id, pieza: g.pieza, pieza_clave: g.pieza_clave ?? null,
         panel: g.panel, gravedad: g.gravedad, desde: d.fecha, inspection_id: revId, vista: ladoNuevo.vista,
@@ -233,13 +235,17 @@ export default function Repaso() {
       const l0 = r0?.lados.find((x) => x.photo_index === objetivo.k)
       const golpeId = l0?.golpe?.golpe_id
       d = conLado(d, objetivo.r, { photo_index: objetivo.k, veredicto: null, veredicto_por: null, veredicto_at: null, golpe: null })
-      if (golpeId && (accion === 'borrado' || accion === 'devuelto_a_ia')) {
+      /* La fila de ese golpe sale de «Ya apuntado» sea cual sea lo que hizo el libro (CONTRATO M3/M4: una fila por
+         golpe). Con «pasa_a_otro» la entrada pasa a otro golpe y con «queda_revision_rapida» se queda con lo que
+         confirmó otra persona: esas filas las sabe el servidor, así que el día se vuelve a pedir sin moverse de aquí. */
+      if (golpeId) {
         d = { ...d, revisiones: d.revisiones.map((x) => ({ ...x, ya_apuntado: (x.ya_apuntado || []).filter((a) => a.golpe_id !== golpeId) })) }
       }
       setDia(d)
       setPila((p) => p.filter((x) => !(x.r === objetivo.r && x.k === objetivo.k)))
       irA(objetivo.r, objetivo.k)
       enfocarMesa()
+      if (accion === 'pasa_a_otro' || accion === 'queda_revision_rapida') cargar(true)
     } catch (e) {
       setAviso({ tono: 'error', texto: textoDeError(t, e) })
       /* Otra persona ya lo deshizo (404) o el golpe pasó al taller (409): lo de la pantalla ya no es verdad. Se trae

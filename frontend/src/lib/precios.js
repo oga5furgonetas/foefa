@@ -143,7 +143,7 @@ export const promoGratis = (hoy = new Date()) => hoy <= new Date(`${GRATIS_SIN_L
 export const fechaPromo = (loc = 'es-ES', dia = GRATIS_SIN_LIMITE_HASTA) => new Date(`${dia}T12:00:00`)
   .toLocaleDateString(loc, { day: 'numeric', month: 'long' })
 
-/* Pagando un año se pagan 10 meses: dos salen gratis. */
+/* Pagando un año se pagan 10 meses (así lo dice /planes: «anual pagando 10 meses»). */
 export const MESES_ANUAL = 10
 
 /* EL PLAN REPARTIDOR FUERA DEL EURO (30-10-2026, docs/EXPANSION-INTERNACIONAL-30-10.md §5): [al mes, al año] por
@@ -179,6 +179,6 @@ export const REGLAS = [
   ['¿Pago por usuario o por conductor?', 'No. Usuarios de oficina y conductores ilimitados en todos los planes: se paga por vehículo. Solo el reparto va por repartidor: como complemento (6 €) en los planes de flota, o como plan Reparto (12 €, furgonetas incluidas) si sois un súper o un distribuidor.'],
   ['¿Y si la flota crece o baja a mitad de mes?', 'Ese mes no se toca: la factura siguiente ya sale con los vehículos que tengas. Nunca se cobra a toro pasado.'],
   ['¿Furgonetas de subcontratas o de campaña?', 'Se marcan en la ficha de cada una: las de colaboradores a 3 € al mes y las de campaña a 0,30 € por día que estén, fuera del plan.'],
-  ['¿Tengo permanencia?', 'Mensual: no, cancelas cuando quieras. Anual: un año, con 2 meses gratis.'],
+  ['¿Tengo permanencia?', 'Mensual: no, cancelas cuando quieras. Anual: un año, pagando 10 meses.'],
   ['¿Mis datos?', 'Son tuyos. Si os vais, os los devolvemos o los borramos, lo que elijáis: lo dice el contrato de encargo del tratamiento, que va incluido.'],
 ]

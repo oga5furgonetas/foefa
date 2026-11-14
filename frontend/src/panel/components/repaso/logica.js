@@ -241,6 +241,8 @@ const ERRORES = {
     'Acceso restringido a administradores': 'repaso.err.soloadmin',
     'No tienes acceso a ese centro': 'repaso.err.centro',
     'No tienes acceso a esa revisión': 'repaso.err.revision',
+    'No tienes permiso para esa pantalla': 'repaso.err.permiso',
+    'Tu cuenta no tiene esa pantalla': 'repaso.err.modulo',
   },
   404: {
     'Revisión no encontrada': 'repaso.err.norevision',
@@ -249,6 +251,7 @@ const ERRORES = {
   409: {
     'Ese lado ya tiene veredicto. Deshazlo antes de cambiarlo.': 'repaso.err.yadecidido',
     'Ese golpe ya está en el taller o reparado: no se puede deshacer desde aquí.': 'repaso.err.deshacer.taller',
+    'Ese lado se ha deshecho mientras se guardaba el golpe. Vuelve a mirarlo.': 'repaso.err.deshecho',
   },
   500: {
     'No se ha podido guardar el golpe. No ha quedado nada a medias: vuelve a marcarlo.': 'repaso.err.golpe500',

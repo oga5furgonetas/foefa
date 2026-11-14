@@ -45,6 +45,10 @@ PRIMEROS = {
     "repartidores", "cn", "zh", "empezar", "ruta", "instalar",
     # La pagina de venta para empresas (14-11-2026).
     "empresas",
+    # El enlace personal del conductor, `/c#<token>` (14-11-2026): el token va en
+    # el fragmento y no llega aqui; se mide como `/c` (un cliente que lo mande en
+    # la ruta, `/c/<token>`, queda `/c/:x` o el patron `/c/:token`).
+    "c",
 }
 SEGMENTOS = ("visitante", "demo", "conductor", "cliente", "propio")
 _RANGO = {s: i for i, s in enumerate(SEGMENTOS)}

@@ -258,6 +258,18 @@ class Col:
                 return SimpleNamespace(deleted_count=1)
         return SimpleNamespace(deleted_count=0)
 
+    async def find_one_and_delete(self, q=None, projection=None, sort=None, **_):
+        """Como Mongo: borra el PRIMER documento que casa (en el orden de `sort` si lo hay) y lo devuelve tal como
+        estaba (con la proyección de exclusión aplicada), o None si no casa ninguno. Lo usa dar de baja a un conductor
+        (`_limpiar_correo_personal_conductor`)."""
+        idx = [i for i, d in enumerate(self.docs) if _casa(d, q)]
+        for campo, sentido in reversed(sort or []):
+            idx.sort(key=lambda i: (self.docs[i].get(campo) is None, self.docs[i].get(campo) or ""),
+                     reverse=sentido < 0)
+        if not idx:
+            return None
+        return _proyecta(self.docs.pop(idx[0]), projection)
+
     async def delete_many(self, q):
         antes = len(self.docs)
         self.docs = [d for d in self.docs if not _casa(d, q)]

@@ -8,6 +8,7 @@ import { selloDeFecha } from '../lib/sello'
 import { PLANES_EMPRESA, DESCUENTOS_VOLUMEN, MESES_ANUAL, DIAS_PRUEBA_EMPRESA, precioMes, descuentoVolumen } from '../lib/precios'
 import { COMPANY } from '../legal/config'
 import Matricula from '../components/Matricula'
+import { EJEMPLO_HEROE } from '../lib/expedienteEjemplo'
 import SelloFoto from '../components/SelloFoto'
 import { ANCHO, BTN_CORTO, BTN_PRIMARIO, BTN_SECUNDARIO, ENLACE, LogoMarca, Pie, useTemaWeb } from './portadaComun'
 
@@ -51,17 +52,12 @@ const TRAMOS_FLOTA = ['1-9', '10-29', '30-99', '100+']
    vez de recortarlo sin avisar al enviar; el mensaje dice cuánto queda al acercarse. */
 const LARGO = { nombre: 120, empresa: 120, correo: 254, telefono: 30, mensaje: 800 }
 
-/* El ejemplo del héroe y de los recortes: datos INVENTADOS (lo dice debajo). Es la MISMA furgoneta y el MISMO golpe que
-   /expediente-ejemplo: el golpe de la puerta corredera del lateral derecho, que aparece el 12 de noviembre de 2026 (la
-   llevó Luis P.); la foto anterior de ese lado es del 11 (Ana L.). Las horas, en la hora local de quien mira, como el
-   sello de verdad. El 12-11-2026 es jueves.
-   UNIFICAR CON expedienteEjemplo.js AL INTEGRAR: esa zona exporta estos mismos datos del golpe (fechas, nombres y
-   pieza: aquí, «la puerta corredera»); entonces se importan de allí y esta constante desaparece. */
-const EJEMPLO = {
-  matricula: '5678KLM',
-  antes: { fecha: new Date(2026, 10, 11, 18, 12), quien: 'Ana L.' },
-  hoy: { fecha: new Date(2026, 10, 12, 18, 7), quien: 'Luis P.' },
-}
+/* El ejemplo del héroe y de los recortes: datos INVENTADOS (lo dice debajo). Sale de lib/expedienteEjemplo.js, así que
+   es la MISMA furgoneta y el MISMO golpe que /expediente-ejemplo: el de la puerta corredera del lateral derecho, que
+   aparece el 12 de noviembre de 2026; la foto anterior de ese lado es del 11 y las dos las hizo Luis P., con la anterior
+   repasada como «igual»: por la regla del servidor (`_perito_atribucion`) ese golpe SÍ tiene conductor atribuible. Las
+   horas, en la hora local de quien mira, como el sello de verdad. El 12-11-2026 es jueves. */
+const EJEMPLO = EJEMPLO_HEROE
 /* Las fotos del ejemplo (las de la demo: la misma furgoneta, lateral derecho, sin golpe y con un golpe dibujado en la
    puerta corredera). El encuadre acerca la puerta: la foto se pinta al 190 % del ancho y se mueve; el cerco va en
    coordenadas de la foto entera (el golpe está hacia x 610-715 e y 400-460 de 1200 × 675). */

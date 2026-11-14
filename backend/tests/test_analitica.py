@@ -43,6 +43,14 @@ def test_lo_que_no_es_nuestro_se_guarda_como_otra():
     assert an.limpiar_ruta("/.env") == "/otra"
 
 
+def test_el_enlace_del_conductor_se_mide_como_c_y_nunca_con_su_token():
+    token = "9f86d081884c7d659a2f0b1c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e4f506"
+    assert an.limpiar_ruta("/c") == "/c"
+    assert an.limpiar_ruta("/c#" + token) == "/c"
+    assert an.limpiar_ruta("/c/:token") == "/c/:token"
+    assert an.limpiar_ruta("/c/" + token) == "/c/:x"
+
+
 def test_los_robots_y_lo_mal_formado_no_se_guardan():
     cuerpo = {"sid": "abcdef1234567890", "tipo": "vista", "ruta": "/"}
     assert an.evento_desde(cuerpo, "Mozilla/5.0 (compatible; Googlebot/2.1)", None, AHORA) is None

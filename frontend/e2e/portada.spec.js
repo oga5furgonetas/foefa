@@ -66,12 +66,12 @@ for (const ruta of ['/', '/empresas']) {
       await expect(producto).toBeVisible()
       await expect(producto.getByTestId('matricula')).toHaveText('E5678 KLM')
       await expect(producto.getByText('Lateral derecho', { exact: true })).toBeVisible()
-      // Dos sellos a la vista (uno por foto), con la fecha y quién la hizo.
+      // Dos sellos a la vista (uno por foto), con la fecha y quién la hizo: las dos, Luis P. (lib/expedienteEjemplo.js).
       const sellos = producto.locator('[data-testid="sello-foto"]:visible')
       await expect(sellos).toHaveCount(2)
       // En el móvil (menos de 640 px), sin el año ni el nombre: no caben en media pantalla.
       const movil = page.viewportSize().width < 640
-      await expect(sellos.nth(0)).toHaveText(movil ? '11 NOV · 18:12' : '11 NOV 2026 · 18:12 · Ana L.')
+      await expect(sellos.nth(0)).toHaveText(movil ? '11 NOV · 18:12' : '11 NOV 2026 · 18:12 · Luis P.')
       await expect(sellos.nth(1)).toHaveText(movil ? '12 NOV · 18:07' : '12 NOV 2026 · 18:07 · Luis P.')
       await expect(producto.getByText('Antes', { exact: true })).toBeVisible()
       await expect(producto.getByText('Hoy', { exact: true })).toBeVisible()

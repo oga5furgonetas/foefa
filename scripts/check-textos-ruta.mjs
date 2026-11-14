@@ -44,6 +44,8 @@ const FICHEROS = [
   // «Qué le enseñas al perito» (/peritaje-tecnico, 14-11-2026): con la identidad y el pie de la portada, en su idioma.
   'pages/PeritajeTecnico.jsx',
   'pages/ExpedienteEjemplo.jsx',
+  // /planes (14-11-2026): va entera por tx(), con el pie de la portada para elegir idioma.
+  'pages/Planes.jsx',
 ]
 // Las piezas de la app de reparto (06-11-2026, diseño compacto): todo pages/driver/piezas/, sin nombrarlas una a una; si
 // no, sus textos no se comprueban y las claves que se mudan a ellas se dan por muertas.

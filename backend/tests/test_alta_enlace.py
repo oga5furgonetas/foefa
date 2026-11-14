@@ -75,10 +75,8 @@ def montar_mundo(monkeypatch):
     monkeypatch.setattr(server, "client", Cliente())
     monkeypatch.setattr(server, "global_db", g)
     monkeypatch.setattr(server, "_ACCESO_ESPERA_FALLO", 0)
-
-    async def _sin_correo_personal(*a, **k):        # dar de baja limpia su correo personal: aquí no se prueba eso
-        return None
-    monkeypatch.setattr(server, "_limpiar_correo_personal_conductor", _sin_correo_personal)
+    # Dar de baja limpia también el correo personal del conductor (`_limpiar_correo_personal_conductor`, con
+    # `find_one_and_delete`): la base de mentira ya lo tiene, así que se prueba de verdad, sin rodeos.
     for cache in (server._ACCESO_CACHE, server._ADMIN_EXISTS_CACHE, server._FICHA_ACTIVA_CACHE,
                   server._login_fails, server._public_actions, server._login_alerted):
         cache.clear()
@@ -400,7 +398,11 @@ def test_quitar_el_enlace_corta_la_sesion_y_se_puede_repetir(mundo):
 
 def test_dar_de_baja_corta_la_sesion_y_reactivar_no_la_revive(mundo):
     token, sesion = _enlace_abierto(mundo)
+    # Su correo personal de recuperación se va con la baja (find_one_and_delete); el de otro conductor se queda.
+    mundo.a["driver_recovery_emails"] = Col([{"driver_id": "d-ana", "email_norm": "ana@personal.es"},
+                                             {"driver_id": "d-rosa", "email_norm": "rosa@personal.es"}])
     assert mundo.http.delete("/api/drivers/d-ana", headers=_h(_sesion_admin())).status_code == 200
+    assert [d["driver_id"] for d in mundo.a["driver_recovery_emails"].docs] == ["d-rosa"]
     assert mundo.g["accesos_conductor"].docs == []
     assert _mi_ficha(mundo, sesion).status_code == 401
     assert mundo.http.patch("/api/drivers/d-ana", json={"active": True}, headers=_h(_sesion_admin())).status_code == 200

@@ -719,6 +719,10 @@ class InspectionAnalysis(BaseModel):
     critical_damages: list = []
     new_damages: List[Damage] = []
     damages: List[Damage] = []
+    # Con golpes marcados a mano en el repaso sobre un análisis de la IA (CONTRATO M9): las cuentas de la IA no se
+    # tocan y lo de la persona va aparte. Sin golpes a mano no existen (None).
+    total_con_repaso: Optional[int] = None
+    severidad_con_repaso: Optional[str] = None
 
     @model_validator(mode="after")
     def _severidad_coherente(self):
@@ -5725,7 +5729,7 @@ PLAN_TARIFAS = {
     "reparto":   {"por_vehiculo": 0, "minimo_vehiculos": 0, "por_repartidor": 12, "minimo_repartidores": 3, "rango": 1},
 }
 # Descuento por volumen sobre el precio por vehículo (docs/PRECIOS.md §5): desde 50
-# vehículos −10 %, desde 150 −15 %, desde 300 −20 %. El anual (2 meses gratis) se suma aparte.
+# vehículos −10 %, desde 150 −15 %, desde 300 −20 %. El anual (pagando 10 meses) se suma aparte.
 DESCUENTOS_VOLUMEN = ((300, 20), (150, 15), (50, 10))
 
 

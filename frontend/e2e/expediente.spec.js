@@ -31,12 +31,29 @@ const NO_ATRIB = NUEVOS.filter((g) => !g.atribucion?.atribuible)
 const VISTAS = ['frontal', 'trasera', 'lateral_izq', 'lateral_der']
 const NOMBRE_VISTA = { frontal: 'Frontal', trasera: 'Trasera', lateral_izq: 'Lateral izquierdo', lateral_der: 'Lateral derecho' }
 const GRAVEDAD = { leve: 'Leve', moderado: 'Moderado', grave: 'Grave', critico: 'Crítico' }
-const ESTADO = { abierto: 'Pendiente de reparar' }
+/* Los estados de reparación que puede dar el servidor (CONTRATO §C y M8), como los dice la pantalla. Un «reparado»
+   con fecha lleva la fecha larga: los golpes nuevos del fichero no lo traen. */
+const ESTADO = { abierto: 'Pendiente de reparar', en_taller: 'En el taller', reparado: 'Reparado', desconocido: 'Sin estado apuntado' }
+const estadoDe = (r) => {
+  if (r.estado === 'en_taller' && r.orden_numero != null && r.orden_numero !== '') return `En el taller (orden ${r.orden_numero})`
+  if (r.estado === 'reparado' && r.reparado_at) throw new Error('un reparado con fecha: esta prueba no calcula la fecha larga')
+  return ESTADO[r.estado] ?? ESTADO.desconocido
+}
 const MOTIVO = {
   anterior_sin_repasar: 'Nadie marcó la foto anterior de este lado como «igual».',
   sin_foto_anterior: 'No hay una foto anterior de este lado con la que compararla.',
   ya_estaba: 'Ya estaba en la primera foto de este lado.',
   sin_conductor: 'Las revisiones entre las dos fotos no tienen conductor apuntado.',
+}
+/* El motivo como lo dice la pantalla, también los que llevan un dato (los nombres de la ventana o los días): el fichero
+   del servidor trae un golpe por motivo (CONTRATO M12). */
+const motivoDe = (a) => {
+  if (a.motivo === 'varios_conductores') {
+    const n = (a.conductores || []).map((p) => p.nombre || 'Sin nombre')
+    return n.length ? `Entre las dos fotos la llevó más de una persona (${n.join(', ')}).` : 'Entre las dos fotos la llevó más de una persona.'
+  }
+  if (a.motivo === 'varios_dias') return typeof a.dias === 'number' ? `Entre las dos fotos pasaron ${a.dias} días.` : 'Entre las dos fotos pasó más de un día.'
+  return MOTIVO[a.motivo]
 }
 const dia = (f) => { const [y, m, d] = f.slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d) }
 const largo = (f) => new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }).format(dia(f))
@@ -175,7 +192,7 @@ test.describe('El expediente en el panel', () => {
     await expect(g).toContainText(GRAVEDAD[ATRIB.gravedad])
     // confirmado_at puede venir sin microsegundos: se lee igual.
     await expect(g).toContainText(`${ATRIB.confirmado_por}, el ${largo(ATRIB.confirmado_at)}`)
-    await expect(g.getByTestId('estado')).toHaveText(`Estado${ESTADO[ATRIB.reparacion.estado]}`)
+    await expect(g.getByTestId('estado')).toHaveText(`Estado${estadoDe(ATRIB.reparacion)}`)
     await expect(g.getByTestId('coste')).toHaveCount(ATRIB.reparacion.coste == null ? 0 : 1)
     // Nunca «quién dio el golpe».
     await expect(hoja(page)).not.toContainText(/culpable|responsable|dio el golpe/i)
@@ -223,10 +240,10 @@ test.describe('El expediente en el panel', () => {
       const el = golpeDe(page, g)
       await expect(el).toHaveCount(1)
       await expect(el.getByTestId('atribucion')).toContainText('Sin conductor atribuible')
-      await expect(el.getByTestId('motivo')).toHaveText(MOTIVO[g.atribucion.motivo])
-      await expect(el.getByTestId('atribucion')).toHaveText(`Quién la llevabaSin conductor atribuible${MOTIVO[g.atribucion.motivo]}`)
+      await expect(el.getByTestId('motivo')).toHaveText(motivoDe(g.atribucion))
+      await expect(el.getByTestId('atribucion')).toHaveText(`Quién la llevabaSin conductor atribuible${motivoDe(g.atribucion)}`)
       await expect(el.getByTestId('sello-foto')).toHaveText(g.anterior?.foto_url ? [sello(g.anterior), sello(g)] : [sello(g)])
-      await expect(el.getByTestId('estado')).toHaveText(`Estado${ESTADO[g.reparacion.estado]}`)
+      await expect(el.getByTestId('estado')).toHaveText(`Estado${estadoDe(g.reparacion)}`)
     }
   })
 
@@ -528,16 +545,18 @@ test.describe('El ejemplo público', () => {
     await expect(hoja(page).getByTestId('matricula')).toHaveText(/5678 KLM/)
     await expect(page.getByTestId('golpe')).toHaveCount(2)
     await expect(page.getByTestId('golpe-ya')).toHaveCount(1)
-    // El golpe de la puerta (el del héroe de la portada): dos personas entre las dos fotos, sin nombre en los sellos.
+    // El golpe de la puerta (el del héroe de la portada): las dos fotos las hizo Luis P., un día entre ellas y la
+    // anterior marcada «igual» → atribuible, con el nombre en los dos sellos.
     const puerta = page.getByTestId('golpe').first()
     await expect(puerta.getByRole('heading')).toHaveText('Puerta lateral corredera derecha · aparece el 12 de noviembre de 2026')
-    await expect(puerta.getByTestId('motivo')).toHaveText('Entre las dos fotos la llevó más de una persona (Ana L., Luis P.).')
-    await expect(puerta.getByTestId('sello-foto')).toHaveText(['11 NOV 2026 · 18:12', '12 NOV 2026 · 18:07'])
+    await expect(puerta.getByTestId('atribucion')).toHaveText('Entre las dos fotos la llevóLuis P. (1 día)')
+    await expect(puerta.getByTestId('sello-foto')).toHaveText(['11 NOV 2026 · 18:12 · Luis P.', '12 NOV 2026 · 18:07 · Luis P.'])
     await expect(puerta).toContainText('Marta R., el 12 de noviembre de 2026')
-    // El del panel trasero: atribuible, con el nombre en los dos sellos.
+    // El del panel trasero: dos personas entre las dos fotos (Iván R. y Ana L.), sin nombre en los sellos.
     const panel = page.getByTestId('golpe').nth(1)
-    await expect(panel.getByTestId('atribucion')).toHaveText('Entre las dos fotos la llevóIván R. (1 día)')
-    await expect(panel.getByTestId('sello-foto')).toHaveText(['13 NOV 2026 · 18:15 · Iván R.', '14 NOV 2026 · 14:40 · Iván R.'])
+    await expect(panel.getByTestId('atribucion')).toContainText('Sin conductor atribuible')
+    await expect(panel.getByTestId('motivo')).toHaveText('Entre las dos fotos la llevó más de una persona (Iván R., Ana L.).')
+    await expect(panel.getByTestId('sello-foto')).toHaveText(['13 NOV 2026 · 18:15', '14 NOV 2026 · 14:40'])
     await expect(page.getByTestId('golpe-ya').getByTestId('estado')).toHaveText('EstadoReparado el 4 de junio de 2026')
     // Solo hay fotos de un lado: «Cómo entró» y «Cómo está hoy» lo dicen así, y lo nombran.
     for (const [b, sub] of [['bloque-entro', 'La primera foto de este lado.'], ['bloque-esta', 'La última foto de este lado.']]) {
@@ -575,6 +594,15 @@ test.describe('El ejemplo público', () => {
     expect(g.atribucion.atribuible).toBe(EJEMPLO_HEROE.atribuible)
     expect(g.atribucion.motivo).toBe(EJEMPLO_HEROE.motivo)
     expect(g.atribucion.conductores.map((p) => p.nombre)).toContain(EJEMPLO_HEROE.hoy.quien)
+    // La frase del héroe («Solo la llevó Luis P. entre las dos fotos») tiene que ser verdad: atribuible, las dos fotos
+    // de la misma persona y esa persona es la que nombra.
+    expect(EJEMPLO_HEROE.atribuible).toBe(true)
+    expect(EJEMPLO_HEROE.antes.quien).toBe(EJEMPLO_HEROE.hoy.quien)
+    expect(g.atribucion.conductor?.nombre).toBe(EJEMPLO_HEROE.hoy.quien)
+    expect(g.atribucion.conductores.map((p) => p.nombre)).toEqual([EJEMPLO_HEROE.hoy.quien])
+    // Y el ejemplo sigue enseñando las otras dos salidas: uno sin conductor atribuible con su motivo y uno que ya estaba.
+    expect(EXPEDIENTE_EJEMPLO.golpes.some((y) => !y.ya_estaba && !y.atribucion.atribuible && y.atribucion.motivo)).toBe(true)
+    expect(EXPEDIENTE_EJEMPLO.golpes.some((y) => y.ya_estaba && y.atribucion.motivo === 'ya_estaba')).toBe(true)
     expect(g.confirmado_por).toBe(EJEMPLO_HEROE.marcadoPor)
     // La regla del servidor (`_perito_atribucion`), golpe a golpe: atribuible solo con la anterior marcada «igual», un
     // día o menos y una sola persona en las dos revisiones (incluidas las dos); la anterior la hizo esa persona.

@@ -22,6 +22,11 @@ const FILTERS = ['Todas', 'grave', 'critico', 'moderado', 'leve', 'sin_danos']
 
 const eur = (n) => (n ? `${Number(n).toLocaleString('es')} €` : '—')
 
+/* Con golpes marcados a mano en el repaso sobre un análisis de la IA, las cuentas de la IA no se tocan y lo de la
+   persona va aparte (CONTRATO M9): la ficha enseña lo que suma todo. */
+const sevDe = (a) => a?.severidad_con_repaso || a?.severity
+const danosDe = (a) => a?.total_con_repaso ?? a?.total_damages_count ?? 0
+
 export default function Inspecciones() {
   const { center } = useOutletContext()
   const { t, lang } = useT()
@@ -84,7 +89,7 @@ export default function Inspecciones() {
     return insps.filter((i) => {
       const v = vmap[i.vehicle_id] || {}
       if (center !== 'Todos' && !(v.center || '').toUpperCase().includes(center.toUpperCase())) return false
-      const s = i.analysis?.severity || 'sin_analisis'
+      const s = sevDe(i.analysis) || 'sin_analisis'
       if (sev !== 'Todas' && s !== sev) return false
       // Sin espacios en los dos lados: «5995lyf» encuentra «5995 LYF».
       if (q && !(v.plate || '').replace(/\s/g, '').toLowerCase().includes(q.replace(/\s/g, '').toLowerCase())) return false
@@ -200,7 +205,7 @@ export default function Inspecciones() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {list.map((i) => {
             const v = vmap[i.vehicle_id] || {}
-            const s = i.analysis?.severity || 'sin_analisis'
+            const s = sevDe(i.analysis) || 'sin_analisis'
             return (
               <button key={i.id} onClick={() => { setSel(i); getInspection(i.id).then((r) => setSel((s) => (s && s.id === i.id ? r.data : s))).catch(() => {}) }} className="card-hover overflow-hidden text-left">
                 <div className="relative h-36 bg-dark-800">
@@ -215,7 +220,7 @@ export default function Inspecciones() {
                 </div>
                 <div className="p-3">
                   <div className="flex items-center justify-between"><span className="font-bold">{v.plate || '—'}</span><span className="text-xs text-dark-500">{fmt(i.created_at)}</span></div>
-                  <div className="mt-1 flex items-center justify-between text-xs text-dark-400"><span>{i.analysis?.total_damages_count || 0} {t((i.analysis?.total_damages_count || 0) === 1 ? 'insp.damage1' : 'insp.damages')}</span><span>{eur(i.analysis?.total_estimated_cost)}</span></div>
+                  <div className="mt-1 flex items-center justify-between text-xs text-dark-400"><span>{danosDe(i.analysis)} {t(danosDe(i.analysis) === 1 ? 'insp.damage1' : 'insp.damages')}</span><span>{eur(i.analysis?.total_estimated_cost)}</span></div>
                 </div>
               </button>
             )
@@ -246,7 +251,7 @@ function Detail({ insp, plate, dmap, onClose, onPdf, fmt, fmtDay, sevLabel, onDa
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-dark-800 bg-dark-900/95 px-5 py-3 backdrop-blur">
           <div className="flex items-center gap-2">
             <span className="text-lg font-bold">{plate || t('insp.title')}</span>
-            <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${SEV_CLS[a.severity] || SEV_CLS.sin_analisis}`}>{sevLabel(a.severity) || a.severity || '—'}</span>
+            <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${SEV_CLS[sevDe(a)] || SEV_CLS.sin_analisis}`}>{sevLabel(sevDe(a)) || sevDe(a) || '—'}</span>
           </div>
           <button onClick={onClose} className="btn-ghost p-2"><X size={18} /></button>
         </div>
@@ -270,7 +275,7 @@ function Detail({ insp, plate, dmap, onClose, onPdf, fmt, fmtDay, sevLabel, onDa
 
           {/* resumen compacto (chips, no parrafo) */}
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            <span className="rounded-full bg-dark-800 px-2.5 py-1">{a.total_damages_count || 0} {t((a.total_damages_count || 0) === 1 ? 'insp.damage1' : 'insp.damages')}</span>
+            <span className="rounded-full bg-dark-800 px-2.5 py-1">{danosDe(a)} {t(danosDe(a) === 1 ? 'insp.damage1' : 'insp.damages')}</span>
             <span className="rounded-full bg-dark-800 px-2.5 py-1 font-semibold text-dark-200">{eur(a.total_estimated_cost)}</span>
             <span className="rounded-full bg-dark-800 px-2.5 py-1">{fmt(insp.created_at)}</span>
             {insp.driver_id && dmap[insp.driver_id] && <span className="flex items-center gap-1 rounded-full bg-dark-800 px-2.5 py-1"><User size={11} /> {dmap[insp.driver_id]}</span>}

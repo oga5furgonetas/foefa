@@ -17,6 +17,13 @@ import DocumentoExpediente from '../components/expediente/DocumentoExpediente'
    pantalla sin el menú, que es lo que se quiere al leerla y al imprimirla. El fondo va en un <main> para que el tema
    «híbrido» (que solo aclara <main>) también lo pinte de papel. */
 
+const ERRORES_EXP = {
+  'Esa furgoneta no existe': 'exp.err.noexiste',
+  'No tienes acceso a esa furgoneta': 'exp.err.acceso',
+  'No tienes permiso para esa pantalla': 'repaso.err.permiso',
+  'Tu cuenta no tiene esa pantalla': 'repaso.err.modulo',
+}
+
 export default function Expediente() {
   const { id } = useParams()
   const { t } = useT()
@@ -45,7 +52,9 @@ export default function Expediente() {
       .catch((e) => {
         if (!vivo) return
         const det = e?.response?.data?.detail
-        setEstado({ cargando: false, datos: null, error: typeof det === 'string' && det ? det : t('exp.error') })
+        // Los mensajes fijos del servidor (CONTRATO §C y M6), en el idioma de quien mira; otro, tal cual.
+        const clave = typeof det === 'string' ? ERRORES_EXP[det.trim()] : null
+        setEstado({ cargando: false, datos: null, error: clave ? t(clave) : (typeof det === 'string' && det ? det : t('exp.error')) })
       })
     return () => { vivo = false }
   }, [id, puede, intento]) // eslint-disable-line react-hooks/exhaustive-deps

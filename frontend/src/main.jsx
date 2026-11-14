@@ -387,10 +387,22 @@ function SoloWeb({ children, a = '/ruta' }) {
 
 /* Mientras se descarga el trozo de una pantalla. En la app del repartidor, con su papel (o el oscuro) y el cian
    de la marca: el negro con un círculo naranja de antes era lo primero que se veía al abrir la app. */
+/* En las páginas públicas claras, public/fondo-arranque.js marca <html> con `arranque-papel` (o `arranque-noche`)
+   antes de pintar: mientras baja el trozo se sigue con ese papel, sin el destello oscuro. El panel y la app de reparto
+   no cambian (si se llega a ellos navegando desde una pública, la marca sigue en <html>: por eso se mira la ruta). */
+function papelDeArranque(ruta) {
+  if (/^\/panel(\/|$)/.test(ruta)) return null
+  const html = document.documentElement.classList
+  if (html.contains('arranque-noche')) return '#0b1012'
+  if (html.contains('arranque-papel')) return '#f5f6f3'
+  return null
+}
+
 function RouteLoader() {
   const app = RUTAS_APP.test(window.location.pathname)
-  const fondo = app ? colorDeLaApp() : '#0a0b0f'
-  const claro = app && fondo !== '#060a14'
+  const papel = app ? null : papelDeArranque(window.location.pathname)
+  const fondo = app ? colorDeLaApp() : papel || '#0a0b0f'
+  const claro = (app && fondo !== '#060a14') || papel === '#f5f6f3'
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: fondo }}>
       <div style={{ width: 28, height: 28, border: `3px solid ${claro ? 'rgba(17,17,20,.1)' : 'rgba(255,255,255,.1)'}`, borderTopColor: '#0FC2BC', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
