@@ -139,7 +139,9 @@ test.describe('El expediente en el panel', () => {
     }
     // El orden del documento.
     const orden = await hoja(page).locator('section').evaluateAll((s) => s.map((x) => x.dataset.testid))
-    expect(orden).toEqual(['bloque-calendario', 'bloque-golpes', 'bloque-ya-estaba', 'bloque-entro', 'bloque-esta', 'bloque-prueba'])
+    // El anexo de lo que marca la IA (CONTRATO R8) va al final, solo si el servidor manda algo en `posibles_ia`.
+    expect(orden).toEqual(['bloque-calendario', 'bloque-golpes', 'bloque-ya-estaba', 'bloque-entro', 'bloque-esta', 'bloque-prueba',
+      ...(FIXTURE.posibles_ia?.length ? ['bloque-posibles-ia'] : [])])
     // Un cuadradito por día, con el estado del servidor, y su leyenda.
     const dias = page.getByTestId('calendario').locator('[data-fecha]')
     expect(await dias.evaluateAll((d) => d.map((x) => `${x.dataset.fecha}:${x.dataset.estado}`)))
@@ -325,6 +327,34 @@ test.describe('El expediente en el panel', () => {
     expect(anchoSemanas).toBeLessThanOrEqual(0)
   })
 
+  /* Con periodos largos el calendario se compacta (cuadradito mínimo: dos o tres años en dos filas) y el primer golpe
+     sigue cabiendo en la hoja 1. Comprobado además mirando el PDF real (page.pdf) de 1, 3, 6, 12 y 24 meses. */
+  for (const meses of [1, 3, 6, 12, 24, 36]) {
+    test(`al imprimir en A4 con ${meses} meses de revisiones, el primer golpe cabe entero en la hoja 1`, async ({ page }) => {
+      const d = copia()
+      const hasta = new Date(Date.UTC(2026, 10, 12))
+      const desde = new Date(Date.UTC(2026, 10 - meses, 13))
+      const n = Math.round((hasta - desde) / 864e5) + 1
+      d.periodo = { desde: desde.toISOString().slice(0, 10), hasta: '2026-11-12', dias: n }
+      d.calendario = Array.from({ length: n }, (_, k) => {
+        const f = new Date(desde.getTime() + k * 864e5)
+        return { fecha: f.toISOString().slice(0, 10), estado: [0, 6].includes(f.getUTCDay()) ? 'sin_revisar' : k % 17 === 3 ? 'golpe' : 'revisada', revisiones: 1 }
+      })
+      const mm = 96 / 25.4
+      await page.setViewportSize({ width: Math.floor(182 * mm), height: 1200 })
+      await abrir(page, { datos: d })
+      await expect(hoja(page)).toBeVisible()
+      await page.waitForLoadState('networkidle')
+      await page.emulateMedia({ media: 'print' })
+      const abajo = await page.getByTestId('golpe').first().evaluate((g) => g.getBoundingClientRect().bottom - document.querySelector('[data-testid="expediente"]').getBoundingClientRect().top)
+      expect(abajo, 'el primer golpe cabe entero en la primera hoja').toBeLessThanOrEqual(269 * mm)
+      // Todos los días, una sola vez, y nada fuera de la hoja.
+      expect(await page.getByTestId('calendario').locator('[data-fecha]').count()).toBe(n)
+      const sale = await page.getByTestId('calendario').evaluate((c) => Math.max(...[...c.querySelectorAll('.exp-cal-semanas')].map((x) => x.scrollWidth - x.clientWidth)))
+      expect(sale).toBeLessThanOrEqual(0)
+    })
+  }
+
   test('al imprimir en A4, el primer golpe empieza en la hoja 1, debajo del calendario, sin partirse', async ({ page }) => {
     // El ancho de la hoja A4 por dentro (210 − 2 × 14 mm a 96 ppp) y su alto útil (297 − 2 × 14 mm).
     const mm = 96 / 25.4
@@ -419,7 +449,7 @@ test.describe('El expediente en el panel', () => {
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
-  test('nada de la IA: solo pide el expediente, y el fichero del servidor solo trae golpes confirmados por una persona', async ({ page }) => {
+  test('nada de la IA fuera del anexo: solo pide el expediente, y los golpes del fichero son todos confirmados por una persona', async ({ page }) => {
     // El fichero de ejemplo del servidor: cada golpe viene del Repaso o de Revisión rápida y lleva quién lo confirmó.
     for (const g of FIXTURE.golpes) {
       expect(['repaso', 'revision_rapida']).toContain(g.origen)
@@ -431,7 +461,74 @@ test.describe('El expediente en el panel', () => {
     // La pantalla no pide revisiones, ni daños, ni la cola de la IA: solo el expediente de esa furgoneta.
     expect(pedidas.filter((p) => /inspections|damage|review|ledger|analy|fraud|ia-|ai/i.test(p))).toEqual([])
     expect(pedidas).toContain('/api/vehicles/veh-5678/antes-del-perito')
-    await expect(hoja(page)).not.toContainText(/\bIA\b|inteligencia artificial|detecta|estimad/i)
+    // Todo el documento menos el anexo final (que dice claramente lo que es): ni la IA ni importes estimados.
+    const sinAnexo = await hoja(page).evaluate((h) => [...h.children].filter((x) => x.dataset.testid !== 'bloque-posibles-ia').map((x) => x.textContent).join(' '))
+    expect(sinAnexo).not.toMatch(/\bIA\b|inteligencia artificial|detecta|estimad/i)
+  })
+
+  /* EL ANEXO (CONTRATO R8): lo que marcó la IA y nadie ha confirmado ni descartado, al final, en pequeño y en gris, sin
+     conductor, sin gravedad, sin coste y sin contar en ninguna cifra ni en el calendario. */
+  const POSIBLES = [
+    { inspeccion_id: 'insp-ia-1', fecha: '2026-11-10T07:40:00+00:00', pieza: 'puerta trasera izq', vista: 1,
+      foto_url: '/demo/van-lateral-golpe-paragolpes.jpg', box_2d: [600, 200, 760, 330],
+      anterior: { foto_url: '/demo/van-lateral.jpg', fecha: '2026-11-07T07:52:00+00:00' } },
+    { inspeccion_id: 'insp-ia-2', fecha: '2026-11-03T08:05:00+00:00', pieza: '', vista: null, foto_url: null, box_2d: null, anterior: null },
+  ]
+  test('el anexo: su título, la nota, cada posible daño con su fecha, su pieza tal cual y sus fotos, y «y n más»', async ({ page }) => {
+    const fallos = vigilar(page)
+    const d = copia()
+    d.posibles_ia = POSIBLES
+    d.posibles_ia_mas = 3
+    await abrir(page, { datos: d })
+    const anexo = page.getByTestId('bloque-posibles-ia')
+    await expect(anexo.getByRole('heading', { level: 2 })).toHaveText('Posibles daños que marca la IA, sin confirmar por una persona')
+    await expect(anexo).toContainText('La IA se equivoca a menudo: nada de esto está confirmado.')
+    // Al final del todo, después de «Qué prueba y qué no».
+    const orden = await hoja(page).locator('section').evaluateAll((x) => x.map((e) => e.dataset.testid))
+    expect(orden.at(-1)).toBe('bloque-posibles-ia')
+    const items = anexo.getByTestId('posible-ia')
+    await expect(items).toHaveCount(2)
+    // El primero: la pieza como la dijo la IA (sin traducir ni poner mayúscula), la fecha, las dos fotos y la caja a trazos.
+    await expect(items.nth(0).locator('.exp-ia-texto')).toHaveText('puerta trasera izq · en la revisión del 10 de noviembre de 2026')
+    await expect(items.nth(0).locator('figcaption')).toHaveText(['Antes, el 7 nov 2026', 'Lo que marca la IA'])
+    await expect(items.nth(0).locator('img')).toHaveCount(2)
+    await expect(items.nth(0).getByTestId('caja-ia')).toHaveCount(1)
+    expect(await items.nth(0).getByTestId('caja-ia').getAttribute('style')).toContain('top: 60%')
+    // En gris: la foto sin color y la caja gris a trazos, no la roja de un golpe.
+    expect(await items.nth(0).locator('img').first().evaluate((i) => getComputedStyle(i).filter)).toBe('grayscale(1)')
+    expect(await items.nth(0).getByTestId('caja-ia').evaluate((c) => getComputedStyle(c).borderTopStyle)).toBe('dashed')
+    // El segundo: sin pieza, sin foto y sin anterior, lo dice sin romperse.
+    await expect(items.nth(1).locator('.exp-ia-texto')).toHaveText('Pieza sin nombre · en la revisión del 3 de noviembre de 2026')
+    await expect(items.nth(1)).toContainText('Sin foto')
+    await expect(items.nth(1).locator('img')).toHaveCount(0)
+    await expect(anexo.getByTestId('posibles-ia-mas')).toHaveText('y 3 más, sin confirmar')
+    // Sin conductor, sin gravedad, sin coste, sin sello con nombre; y nada de esto es un golpe del expediente.
+    await expect(anexo).not.toContainText(/Quién la llevaba|Gravedad|Coste|€|Estado|Lo marcó/)
+    await expect(anexo.getByTestId('sello-foto')).toHaveCount(0)
+    await expect(anexo.getByTestId('golpe')).toHaveCount(0)
+    await expect(anexo.getByTestId('caja-golpe')).toHaveCount(0)
+    // No cuenta en ninguna cifra ni en el calendario: los de arriba son los del servidor, tal cual.
+    await expect(page.getByTestId('cifras').locator('div', { hasText: 'golpes confirmados' })).toHaveText(`golpes confirmados${FIXTURE.cuentas.golpes}`)
+    await expect(page.getByTestId('golpe')).toHaveCount(NUEVOS.length)
+    expect(await page.getByTestId('calendario').locator('[data-estado="golpe"]').evaluateAll((x) => x.map((e) => e.dataset.fecha)))
+      .toEqual(FIXTURE.calendario.filter((x) => x.estado === 'golpe').map((x) => x.fecha))
+    expect(await sinDesbordes(page)).toBe(true)
+    await foto(page, 'anexo')
+    // Al imprimir, una pareja de fotos nunca se parte entre dos hojas, y la nota no se queda sola al pie.
+    await page.emulateMedia({ media: 'print' })
+    expect(await items.nth(0).evaluate((i) => getComputedStyle(i).breakInside)).toBe('avoid')
+    expect(await anexo.locator('.exp-sub').evaluate((i) => getComputedStyle(i).breakAfter)).toBe('avoid')
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('sin posibles daños de la IA (lista vacía o sin el campo), no hay anexo', async ({ page }) => {
+    for (const extra of [{ posibles_ia: [], posibles_ia_mas: 0 }, { posibles_ia: undefined, posibles_ia_mas: undefined }]) {
+      await page.unrouteAll({ behavior: 'ignoreErrors' })
+      await abrir(page, { datos: { ...copia(), ...extra } })
+      await expect(hoja(page)).toBeVisible()
+      await expect(page.getByTestId('bloque-posibles-ia')).toHaveCount(0)
+      await expect(hoja(page)).not.toContainText('Posibles daños')
+    }
   })
 
   test('un error del servidor se dice con su texto, y se puede reintentar', async ({ page }) => {
@@ -545,6 +642,9 @@ test.describe('El ejemplo público', () => {
     await expect(hoja(page).getByTestId('matricula')).toHaveText(/5678 KLM/)
     await expect(page.getByTestId('golpe')).toHaveCount(2)
     await expect(page.getByTestId('golpe-ya')).toHaveCount(1)
+    // El ejemplo público no lleva el anexo de la IA: solo lo confirmado por una persona.
+    await expect(page.getByTestId('bloque-posibles-ia')).toHaveCount(0)
+    await expect(hoja(page)).not.toContainText(/\bIA\b/)
     // El golpe de la puerta (el del héroe de la portada): las dos fotos las hizo Luis P., un día entre ellas y la
     // anterior marcada «igual» → atribuible, con el nombre en los dos sellos.
     const puerta = page.getByTestId('golpe').first()

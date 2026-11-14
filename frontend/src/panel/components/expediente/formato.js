@@ -44,6 +44,17 @@ export function fechaLarga(x, locale = 'es-ES') {
   }
 }
 
+/** «11 nov 2026» (en el idioma del panel), para los pies de foto pequeños. '' si la fecha no vale. */
+export function fechaCorta(x, locale = 'es-ES') {
+  const d = comoFecha(x)
+  if (!d) return ''
+  try {
+    return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric' }).format(d).replace(/\./g, '')
+  } catch {
+    return ''
+  }
+}
+
 /** Días entre dos «AAAA-MM-DD» (b − a), contando días de calendario y no horas (el cambio de hora no lo tuerce). */
 export function diasEntre(a, b) {
   const x = diaLocal(a)

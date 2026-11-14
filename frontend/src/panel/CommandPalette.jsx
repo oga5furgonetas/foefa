@@ -4,6 +4,7 @@ import { Search, Truck, User, CornerDownLeft, Sparkles, Loader2 } from 'lucide-r
 import { getVehicles, getDrivers, askAssistant } from './api'
 import { useT } from '../i18n'
 import { lista } from '../lib/lista'
+import { usePlan } from '../lib/usePlan'
 
 /* ── Paleta de comandos (Ctrl/Cmd+K) ──────────────────────────────────────
    Salta a cualquier módulo, furgoneta (por matrícula/marca/modelo) o conductor
@@ -46,6 +47,9 @@ export default function CommandPalette({ open, onClose, pages }) {
   const [data, setData] = useState(_cache)
   const [asking, setAsking] = useState(false)
   const [answer, setAnswer] = useState(null) // { q, text } | { q, error }
+  // Una cuenta sin la IA (`ia: false` en /org/billing, CONTRATO R10) no ofrece «Preguntar a la IA».
+  const { billing } = usePlan()
+  const conIA = billing?.ia !== false
 
   useEffect(() => {
     if (!open) return
@@ -111,7 +115,7 @@ export default function CommandPalette({ open, onClose, pages }) {
 
   if (!open) return null
 
-  const canAsk = q.trim().length >= 8
+  const canAsk = conIA && q.trim().length >= 8
 
   function goTo(r) {
     if (r.type === 'ask') { ask(); return }

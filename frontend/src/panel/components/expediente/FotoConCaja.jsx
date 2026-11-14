@@ -4,7 +4,8 @@ import SelloFoto from '../../../components/SelloFoto'
 /* UNA FOTO DEL EXPEDIENTE (14-11-2026): la imagen con su proporción de verdad (sin recortar: la caja del golpe va en
    tanto por mil de la foto entera, `box_2d` = [ymin, xmin, ymax, xmax] de 0 a 1000), su sello de fecha abajo y, si
    hace falta, una etiqueta arriba («Antes», «Con el golpe»). Si la foto no carga, un hueco del mismo tamaño que lo
-   dice, sin sello, para que el documento no se descoloque ni enseñe un icono roto. */
+   dice, sin sello, para que el documento no se descoloque ni enseñe un icono roto.
+   Con `tono="ia"` (el anexo de lo que marca la IA sin confirmar) la caja va en gris y a trazos: no es un golpe. */
 
 function cajaValida(b) {
   if (!Array.isArray(b) || b.length !== 4) return null
@@ -14,7 +15,7 @@ function cajaValida(b) {
   return { top: `${y0 / 10}%`, left: `${x0 / 10}%`, height: `${(y1 - y0) / 10}%`, width: `${(x1 - x0) / 10}%` }
 }
 
-export default function FotoConCaja({ src, alt, sello, quien, caja, etiqueta, rota, idioma }) {
+export default function FotoConCaja({ src, alt, sello, quien, caja, etiqueta, rota, idioma, tono }) {
   const [fallo, setFallo] = useState(false)
   const pos = cajaValida(caja)
   const sinFoto = !src || fallo
@@ -23,7 +24,9 @@ export default function FotoConCaja({ src, alt, sello, quien, caja, etiqueta, ro
       {sinFoto
         ? <span className="exp-foto-hueco">{rota}</span>
         : <img src={src} alt={alt} loading="eager" onError={() => setFallo(true)} />}
-      {!sinFoto && pos && <span className="exp-caja" style={pos} data-testid="caja-golpe" aria-hidden="true" />}
+      {!sinFoto && pos && (tono === 'ia'
+        ? <span className="exp-caja exp-caja-ia" style={pos} data-testid="caja-ia" aria-hidden="true" />
+        : <span className="exp-caja" style={pos} data-testid="caja-golpe" aria-hidden="true" />)}
       {etiqueta && <span className="exp-etiqueta">{etiqueta}</span>}
       {/* El sello es de la foto: sin foto que se vea, no hay de qué dar fecha. */}
       {sello && !sinFoto && <SelloFoto fecha={sello} quien={quien || ''} idioma={idioma} />}

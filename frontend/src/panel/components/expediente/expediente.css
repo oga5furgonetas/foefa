@@ -41,15 +41,18 @@
 
 /* ── El calendario: un cuadradito por día, en columnas de semana ── */
 /* Las medidas casan con CalendarioDias.jsx (LADO, HUECO, LETRAS): con ellas parte el calendario en filas. */
-.exp-cal { --c: 16px; display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.exp-cal { --c: 16px; --h: 2px; display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 .exp-cal-medio { --c: 12px; }
 .exp-cal-chico { --c: 9px; }
+.exp-cal-mini { --c: 6px; --h: 1px; }
+.exp-cal-mini .exp-dia { border-radius: 1px; }
+.exp-cal-mini .exp-cal-letras { font-size: 8px; }
 .exp-cal-fila { display: flex; gap: 6px; }
-.exp-cal-letras { flex: none; width: 12px; display: flex; flex-direction: column; gap: 2px; font-size: 9.5px; color: var(--e-gris); }
+.exp-cal-letras { flex: none; width: 12px; display: flex; flex-direction: column; gap: var(--h); font-size: 9.5px; color: var(--e-gris); }
 .exp-cal-letras > span { height: var(--c); line-height: var(--c); }
 .exp-cal-letras > span:first-child { height: 14px; }
-.exp-cal-semanas { display: flex; flex-wrap: wrap; gap: 8px 2px; min-width: 0; }
-.exp-cal-sem { display: flex; flex-direction: column; gap: 2px; width: var(--c); }
+.exp-cal-semanas { flex: 1; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 8px var(--h); min-width: 0; }
+.exp-cal-sem { display: flex; flex-direction: column; gap: var(--h); width: var(--c); }
 .exp-cal-mes { position: relative; height: 14px; font-size: 10px; line-height: 12px; color: var(--e-gris); white-space: nowrap; overflow: visible; }
 .exp-dia { display: block; width: var(--c); height: var(--c); border-radius: 2px; background: var(--e-tinta); }
 .exp-dia-sin_revisar { background: var(--e-vacio); }
@@ -101,6 +104,25 @@
 .exp-prueba p { margin: 4px 0 0; font-size: 13px; color: #2b363a; }
 .exp-prueba .exp-prueba-lee { margin-top: 14px; font-weight: 600; color: var(--e-tinta); }
 
+/* ── El anexo de lo que marca la IA sin confirmar: pequeño y en gris, para que se lea como lo que es ── */
+.exp-ia { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--e-linea-2); color: var(--e-gris); }
+.exp-ia h2 { font-size: 14px; font-weight: 700; color: var(--e-gris); border-bottom-color: var(--e-linea); }
+.exp-ia .exp-sub { font-size: 12.5px; }
+.exp-ia-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; align-items: start;
+  padding: 10px 0; border-bottom: 1px solid var(--e-linea); }
+.exp-ia-item:first-of-type { margin-top: 4px; }
+.exp-ia-texto { margin: 0; font-size: 12.5px; line-height: 1.4; }
+.exp-ia-texto b { font-weight: 600; color: #2b363a; }
+.exp-ia-fotos { display: flex; gap: 6px; justify-content: flex-end; }
+.exp-ia-fotos figure { margin: 0; width: 148px; min-width: 0; }
+.exp-ia-fotos figcaption { margin-top: 3px; font-size: 11px; line-height: 1.3; color: var(--e-gris); }
+.exp-ia .exp-foto img { filter: grayscale(1); opacity: 0.85; }
+/* El hueco de una foto que no hay: del tamaño de una foto (4:3), sin estirarse a lo alto de la fila. */
+.exp-ia .exp-foto-sin { height: auto; min-height: 0; aspect-ratio: 4 / 3; padding: 8px; }
+.exp-ia .exp-foto-hueco { font-size: 11px; }
+.exp-caja-ia { border: 2px dashed var(--e-gris); border-radius: 6px; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.8); }
+.exp-ia-mas { margin: 10px 0 0; font-size: 12.5px; }
+
 .exp-pie-pantalla { margin-top: 32px; padding-top: 10px; border-top: 1px solid var(--e-linea); font-size: 11px; color: var(--e-gris); }
 
 /* ── Lo de fuera de la hoja: la barra del panel y la franja del ejemplo ── */
@@ -134,7 +156,11 @@
   .exp-par, .exp-galeria, .exp-prueba-cols { grid-template-columns: 1fr; }
   .exp-golpe-ya .exp-par { gap: 6px; }
   .exp-foto-sin { min-height: 90px; padding: 20px 12px; }
+  .exp-ia .exp-foto-sin { min-height: 0; padding: 8px; }
   .exp-linea > span { max-width: 50%; }
+  .exp-ia-item { grid-template-columns: 1fr; }
+  .exp-ia-fotos { justify-content: flex-start; }
+  .exp-ia-fotos figure { width: calc(50% - 3px); }
   .exp-boton { width: 100%; }
   .exp-barra .exp-boton-linea { width: auto; }
 }
@@ -167,6 +193,9 @@
   .exp-pie-pantalla { display: none; }
   /* Un título nunca se queda solo al pie de una hoja: va con lo primero que tiene debajo. */
   .exp-hoja h2, .exp-golpe-t, .exp-seccion > .exp-sub { break-after: avoid; }
-  .exp-golpe, .exp-galeria figure, .exp-cifras, .exp-prueba, .exp-seccion-cal, .exp-foto { break-inside: avoid; }
+  .exp-golpe, .exp-galeria figure, .exp-cifras, .exp-prueba, .exp-seccion-cal, .exp-foto, .exp-ia-item { break-inside: avoid; }
+  /* El título del anexo y su nota van con el primer posible daño: nunca solos al pie de una hoja. */
+  .exp-ia > .exp-sub { break-after: avoid; }
+  .exp-ia { margin-top: 26px; }
   .exp-hoja, .exp-hoja * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
