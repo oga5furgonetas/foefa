@@ -4,6 +4,8 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { test, expect } from '@playwright/test'
 import { simularApi, entrarComoAdmin } from './api-simulada.js'
+import { DICT } from '../src/i18nDict.js'
+import { EXPEDIENTE_EJEMPLO, EJEMPLO_HEROE } from '../src/lib/expedienteEjemplo.js'
 
 /* EL EXPEDIENTE DEL VEHÍCULO (14-11-2026, «Antes del perito»): /panel/vehiculos/:id/expediente y su ejemplo público.
    La respuesta del servidor es `fixtures/expediente.json`, con la forma EXACTA de GET /vehicles/{id}/antes-del-perito
@@ -44,7 +46,13 @@ const sello = (x) => {
   return `${String(d.getDate()).padStart(2, '0')} ${mes} ${d.getFullYear()} · ${x.hora}`
 }
 const dias = (n) => (n === 1 ? '1 día' : `${n} días`)
-const golpeDe = (page, g) => page.getByTestId('golpe').filter({ has: page.getByRole('heading', { name: g.pieza }) })
+/* El nombre de la pieza como lo pinta el documento (CONTRATO.md R2): por su clave de la lista del repaso
+   (`repaso.p.<clave>`), y sin clave, con «otra» o con una desconocida, el texto tal cual. */
+const nombrePieza = (g, lang = 'es') => {
+  const e = g.pieza_clave && g.pieza_clave !== 'otra' ? DICT[`repaso.p.${g.pieza_clave}`] : null
+  return (e && (e[lang] || e.en)) || g.pieza
+}
+const golpeDe = (page, g, lang = 'es') => page.getByTestId('golpe').filter({ has: page.getByRole('heading', { name: nombrePieza(g, lang) }) })
 
 function vigilar(page) {
   const fallos = []
@@ -66,16 +74,18 @@ function fotoDemo(url) {
   return 'van-lateral.jpg'
 }
 
-async function abrir(page, { datos = FIXTURE, estado = 200, billing = { org_name: 'Transportes Ruiz, S. L.' }, ruta = RUTA } = {}) {
+async function abrir(page, { datos = FIXTURE, estado = 200, billing = { org_name: 'Transportes Ruiz, S. L.' }, ruta = RUTA, lang } = {}) {
   await entrarComoAdmin(page)
+  if (lang) await page.addInitScript((l) => localStorage.setItem('flota_lang', l), lang)
   await simularApi(page, 'lleno')
   const pedidas = []
   page.on('request', (r) => { if (r.url().includes('/api/')) pedidas.push(new URL(r.url()).pathname) })
   await page.route('**/api/org/billing', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(billing) }))
   await page.route('**/api/vehicles/*/antes-del-perito', (route) => route.fulfill({
     status: estado, contentType: 'application/json', body: JSON.stringify(datos) }))
-  await page.route('https://fotos.ejemplo/**', (route) => route.fulfill({
-    status: 200, contentType: 'image/jpeg', body: fs.readFileSync(path.join(DEMO, fotoDemo(route.request().url()))) }))
+  await page.route('https://fotos.ejemplo/**', (route) => (route.request().url().includes('/rota/')
+    ? route.fulfill({ status: 404, contentType: 'text/plain', body: 'no' })
+    : route.fulfill({ status: 200, contentType: 'image/jpeg', body: fs.readFileSync(path.join(DEMO, fotoDemo(route.request().url()))) })))
   await page.goto(ruta, { waitUntil: 'domcontentloaded' })
   return pedidas
 }
@@ -149,7 +159,7 @@ test.describe('El expediente en el panel', () => {
     await expect(page.getByTestId('golpe')).toHaveCount(NUEVOS.length)
     const g = golpeDe(page, ATRIB)
     await expect(g).toHaveCount(1)
-    await expect(g.getByRole('heading')).toHaveText(`${ATRIB.pieza} · aparece el ${largo(ATRIB.fecha)}`)
+    await expect(g.getByRole('heading')).toHaveText(`${nombrePieza(ATRIB)} · aparece el ${largo(ATRIB.fecha)}`)
     await expect(g).toContainText(ATRIB.descripcion)
     const quien = ATRIB.atribucion.conductor.nombre
     await expect(g.getByTestId('sello-foto')).toHaveText([
@@ -194,8 +204,9 @@ test.describe('El expediente en el panel', () => {
       await expect(el.getByTestId('motivo')).toHaveText(texto)
       // La línea entera: la etiqueta de «sin atribuir», no la de «la llevó <nombre>».
       await expect(el.getByTestId('atribucion')).toHaveText(`Quién la llevabaSin conductor atribuible${texto}`)
-      // Sin atribuir, el sello de la foto del golpe no lleva nombre.
-      await expect(el.getByTestId('sello-foto').last()).toHaveText(sello(g))
+      // Sin atribuir, ningún sello lleva nombre: ni el de la foto del golpe ni el de la anterior (al lado de «sin
+      // conductor atribuible», el nombre de quien hizo la revisión anterior se leería como una insinuación).
+      await expect(el.getByTestId('sello-foto')).toHaveText(g.anterior ? [sello(g.anterior), sello(g)] : [sello(g)])
       if (motivo === 'sin_foto_anterior') {
         await expect(el).toContainText('No hay foto anterior de este lado')
         await expect(el.locator('img')).toHaveCount(1)
@@ -214,9 +225,104 @@ test.describe('El expediente en el panel', () => {
       await expect(el.getByTestId('atribucion')).toContainText('Sin conductor atribuible')
       await expect(el.getByTestId('motivo')).toHaveText(MOTIVO[g.atribucion.motivo])
       await expect(el.getByTestId('atribucion')).toHaveText(`Quién la llevabaSin conductor atribuible${MOTIVO[g.atribucion.motivo]}`)
-      await expect(el.getByTestId('sello-foto').last()).toHaveText(sello(g))
+      await expect(el.getByTestId('sello-foto')).toHaveText(g.anterior?.foto_url ? [sello(g.anterior), sello(g)] : [sello(g)])
       await expect(el.getByTestId('estado')).toHaveText(`Estado${ESTADO[g.reparacion.estado]}`)
     }
+  })
+
+  test('las cuentas casan: los golpes confirmados de arriba son los nuevos más los que ya estaban, cada lista con el suyo', async ({ page }) => {
+    await abrir(page)
+    await expect(page.getByTestId('bloque-golpes').getByRole('heading', { level: 2 })).toHaveText(`Golpes nuevos${NUEVOS.length}`)
+    await expect(page.getByTestId('bloque-ya-estaba').getByRole('heading', { level: 2 })).toHaveText(`Ya estaba al empezar${YA.length}`)
+    expect(NUEVOS.length + YA.length).toBe(FIXTURE.cuentas.golpes)
+    await expect(page.getByTestId('cifras').locator('div', { hasText: 'golpes confirmados' })).toHaveText(`golpes confirmados${FIXTURE.cuentas.golpes}`)
+  })
+
+  test('una foto que no carga deja su hueco con el aviso y sin sello: no se da fecha de lo que no se ve', async ({ page }) => {
+    const fallos = vigilar(page)
+    const d = copia()
+    const g = d.golpes.find((x) => x.id === ATRIB.id)
+    g.foto_url = 'https://fotos.ejemplo/rota/golpe.jpg'
+    await abrir(page, { datos: d })
+    const el = golpeDe(page, g)
+    await expect(el.getByText('La foto no se ha podido cargar')).toBeVisible()
+    // Queda el sello de la anterior, que sí se ve; el del hueco, no.
+    await expect(el.getByTestId('sello-foto')).toHaveText([`${sello(g.anterior)} · ${g.anterior.conductor.nombre}`])
+    await expect(el.getByTestId('caja-golpe')).toHaveCount(0)
+    expect(fallos.filter((f) => !/404/.test(f)), fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('las piezas, por su clave y en el idioma del documento; la que no tiene clave, como se escribió', async ({ page }) => {
+    const d = copia()
+    const [a, b, c] = [d.golpes.find((x) => x.id === ATRIB.id), d.golpes.find((x) => x.id === NO_ATRIB[0].id), d.golpes.find((x) => x.id === YA[0].id)]
+    a.pieza_clave = 'corredera_der'; a.pieza = 'Puerta lateral corredera derecha'
+    b.pieza_clave = 'otra'; b.pieza = 'Tapa del depósito'
+    c.pieza_clave = 'clave-que-no-existe'; c.pieza = 'Moldura del techo'
+    await abrir(page, { datos: d, lang: 'en' })
+    await expect(hoja(page).getByRole('heading', { level: 1 })).toHaveText('Vehicle record')
+    await expect(golpeDe(page, a, 'en').getByRole('heading')).toHaveText(`Right sliding door · appears on ${new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(dia(a.fecha))}`)
+    await expect(golpeDe(page, b, 'en')).toHaveCount(1)
+    await expect(page.getByTestId('golpe-ya').getByRole('heading')).toContainText('Moldura del techo')
+    // Ni una pieza de la lista en español, y «golpe» en inglés como lo dice el repaso: «damage», nunca «dent».
+    await expect(hoja(page)).not.toContainText('Puerta lateral corredera derecha')
+    await expect(hoja(page)).not.toContainText(/\bdents?\b/i)
+    await expect(page.getByTestId('bloque-golpes').getByRole('heading', { level: 2 })).toHaveText(`${DICT['exp.golpes.t'].en}${NUEVOS.length}`)
+    expect(DICT['exp.golpes.t'].en.toLowerCase()).toContain(DICT['repaso.est.golpe'].en.toLowerCase())
+  })
+
+  test('un calendario de dos años va en filas, cada una con las letras de los días y su mes, sin salirse', async ({ page }) => {
+    const d = copia()
+    d.periodo = { desde: '2024-11-20', hasta: '2026-11-12', dias: 723 }
+    d.calendario = []
+    for (let k = 0; k < 723; k++) {
+      const f = new Date(Date.UTC(2024, 10, 20 + k)).toISOString().slice(0, 10)
+      d.calendario.push({ fecha: f, estado: k % 7 === 4 ? 'sin_revisar' : 'revisada', revisiones: 1 })
+    }
+    await abrir(page, { datos: d })
+    await expect(page.getByTestId('calendario')).toBeVisible()
+    const filas = page.getByTestId('calendario-fila')
+    expect(await filas.count()).toBeGreaterThan(1)
+    for (const fila of await filas.all()) {
+      // L, X y V en cada fila; un mes encima de alguna de sus tres primeras semanas (en la primera, si cabe antes del
+      // siguiente), el año en algún rótulo de la fila, y ningún rótulo montado sobre el siguiente.
+      expect(await fila.locator('.exp-cal-letras > span').evaluateAll((s) => s.map((x) => x.textContent).filter(Boolean))).toEqual(['L', 'X', 'V'])
+      const meses = await fila.locator('.exp-cal-mes').allTextContents()
+      expect(meses.slice(0, 3).some(Boolean), meses.join('|')).toBe(true)
+      expect(meses.join(' ')).toMatch(/\d{4}/)
+      const solapes = await fila.locator('.exp-cal-mes').evaluateAll((s) => {
+        const r = s.filter((x) => x.textContent).map((x) => {
+          const rango = document.createRange(); rango.selectNodeContents(x)
+          const c = rango.getBoundingClientRect()
+          return [c.left, c.right]
+        })
+        return r.slice(1).filter((x, i) => x[0] < r[i][1]).length
+      })
+      expect(solapes).toBe(0)
+    }
+    // Todos los días, una sola vez y en orden.
+    expect(await page.getByTestId('calendario').locator('[data-fecha]').evaluateAll((x) => x.map((e) => e.dataset.fecha))).toEqual(d.calendario.map((x) => x.fecha))
+    // Nada se sale de la hoja.
+    const [cal, hojaCaja] = [await page.getByTestId('calendario').boundingBox(), await hoja(page).boundingBox()]
+    expect(cal.x + cal.width).toBeLessThanOrEqual(hojaCaja.x + hojaCaja.width)
+    const anchoSemanas = await page.getByTestId('calendario').evaluate((c) => Math.max(...[...c.querySelectorAll('.exp-cal-semanas')].map((s) => s.scrollWidth - s.clientWidth)))
+    expect(anchoSemanas).toBeLessThanOrEqual(0)
+  })
+
+  test('al imprimir en A4, el primer golpe empieza en la hoja 1, debajo del calendario, sin partirse', async ({ page }) => {
+    // El ancho de la hoja A4 por dentro (210 − 2 × 14 mm a 96 ppp) y su alto útil (297 − 2 × 14 mm).
+    const mm = 96 / 25.4
+    await page.setViewportSize({ width: Math.floor(182 * mm), height: 1200 })
+    await abrir(page)
+    await expect(hoja(page)).toBeVisible()
+    await page.waitForLoadState('networkidle')
+    await page.emulateMedia({ media: 'print' })
+    const [arriba, abajo] = await page.getByTestId('golpe').first().evaluate((g) => {
+      const r = g.getBoundingClientRect()
+      const h = document.querySelector('[data-testid="expediente"]').getBoundingClientRect()
+      return [r.top - h.top, r.bottom - h.top]
+    })
+    expect(arriba).toBeGreaterThan(0)
+    expect(abajo, 'el primer golpe cabe entero en la primera hoja').toBeLessThanOrEqual(269 * mm)
   })
 
   test('el golpe que ya estaba sale en «Ya estaba al empezar», sin atribuir a nadie', async ({ page }) => {
@@ -225,8 +331,8 @@ test.describe('El expediente en el panel', () => {
     const ya = page.getByTestId('golpe-ya')
     await expect(ya).toHaveCount(YA.length)
     const g = YA[0]
-    const el = ya.filter({ has: page.getByRole('heading', { name: g.pieza }) })
-    await expect(el.getByRole('heading')).toHaveText(`${g.pieza} · en la primera foto de este lado, el ${largo(g.fecha)}`)
+    const el = ya.filter({ has: page.getByRole('heading', { name: nombrePieza(g) }) })
+    await expect(el.getByRole('heading')).toHaveText(`${nombrePieza(g)} · en la primera foto de este lado, el ${largo(g.fecha)}`)
     await expect(el.getByTestId('atribucion')).toContainText('Sin conductor atribuible')
     await expect(el.getByTestId('motivo')).toHaveText(MOTIVO.ya_estaba)
     await expect(el.getByTestId('caja-golpe')).toHaveCount(g.box_2d ? 1 : 0)
@@ -240,7 +346,7 @@ test.describe('El expediente en el panel', () => {
     const rep = GOLPES.find((g) => g.reparacion?.estado === 'reparado' && g.reparacion.reparado_at && g.reparacion.coste != null)
     expect(rep, 'el fichero del servidor trae un golpe reparado con su coste').toBeTruthy()
     await abrir(page)
-    const el = page.getByTestId(rep.ya_estaba ? 'golpe-ya' : 'golpe').filter({ has: page.getByRole('heading', { name: rep.pieza }) })
+    const el = page.getByTestId(rep.ya_estaba ? 'golpe-ya' : 'golpe').filter({ has: page.getByRole('heading', { name: nombrePieza(rep) }) })
     await expect(el.getByTestId('estado')).toHaveText(`EstadoReparado el ${largo(rep.reparacion.reparado_at)}`)
     const euros = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(rep.reparacion.coste)
     await expect(el.getByTestId('coste')).toHaveText(`Coste de la reparación${euros}`)
@@ -254,7 +360,7 @@ test.describe('El expediente en el panel', () => {
     d.golpes.find((x) => x.id === ATRIB.id).reparacion = { estado: 'reparado', orden_numero: 412, reparado_at: '2026-11-13T10:00:00+00:00', coste: 380 }
     d.golpes.find((x) => x.id === ya.id).reparacion = { estado: 'en_taller', orden_numero: 371, reparado_at: null, coste: null }
     await abrir(page, { datos: d })
-    const elYa = page.getByTestId('golpe-ya').filter({ has: page.getByRole('heading', { name: ya.pieza }) })
+    const elYa = page.getByTestId('golpe-ya').filter({ has: page.getByRole('heading', { name: nombrePieza(ya) }) })
     const g = golpeDe(page, ATRIB)
     await expect(g.getByTestId('estado')).toHaveText('EstadoReparado el 13 de noviembre de 2026')
     await expect(g.getByTestId('coste')).toHaveText(/Coste de la reparación380,00\s€/)
@@ -422,25 +528,85 @@ test.describe('El ejemplo público', () => {
     await expect(hoja(page).getByTestId('matricula')).toHaveText(/5678 KLM/)
     await expect(page.getByTestId('golpe')).toHaveCount(2)
     await expect(page.getByTestId('golpe-ya')).toHaveCount(1)
-    await expect(page.getByTestId('golpe').first().getByTestId('atribucion')).toHaveText('Entre las dos fotos la llevóLuis P. (1 día)')
-    await expect(page.getByTestId('golpe').nth(1).getByTestId('motivo')).toHaveText('Entre las dos fotos pasaron 4 días.')
+    // El golpe de la puerta (el del héroe de la portada): dos personas entre las dos fotos, sin nombre en los sellos.
+    const puerta = page.getByTestId('golpe').first()
+    await expect(puerta.getByRole('heading')).toHaveText('Puerta lateral corredera derecha · aparece el 12 de noviembre de 2026')
+    await expect(puerta.getByTestId('motivo')).toHaveText('Entre las dos fotos la llevó más de una persona (Ana L., Luis P.).')
+    await expect(puerta.getByTestId('sello-foto')).toHaveText(['11 NOV 2026 · 18:12', '12 NOV 2026 · 18:07'])
+    await expect(puerta).toContainText('Marta R., el 12 de noviembre de 2026')
+    // El del panel trasero: atribuible, con el nombre en los dos sellos.
+    const panel = page.getByTestId('golpe').nth(1)
+    await expect(panel.getByTestId('atribucion')).toHaveText('Entre las dos fotos la llevóIván R. (1 día)')
+    await expect(panel.getByTestId('sello-foto')).toHaveText(['13 NOV 2026 · 18:15 · Iván R.', '14 NOV 2026 · 14:40 · Iván R.'])
     await expect(page.getByTestId('golpe-ya').getByTestId('estado')).toHaveText('EstadoReparado el 4 de junio de 2026')
+    // Solo hay fotos de un lado: «Cómo entró» y «Cómo está hoy» lo dicen así, y lo nombran.
+    for (const [b, sub] of [['bloque-entro', 'La primera foto de este lado.'], ['bloque-esta', 'La última foto de este lado.']]) {
+      await expect(page.getByTestId(b)).toContainText(sub)
+      await expect(page.getByTestId(b).locator('figcaption')).toHaveText(['Lateral derecho'])
+    }
     // Las fotos de la demo cargan (ninguna rota).
     await page.waitForLoadState('networkidle')
     const rotas = await hoja(page).locator('img').evaluateAll((im) => im.filter((i) => !i.complete || i.naturalWidth === 0).length)
     expect(rotas).toBe(0)
-    // Medio año de días: fines de semana sin fotos y los dos días con golpe.
+    // Medio año de días: fines de semana sin fotos y los dos días con golpe nuevo.
     const golpes = await page.getByTestId('calendario').locator('[data-estado="golpe"]').evaluateAll((d) => d.map((x) => x.dataset.fecha))
-    expect(golpes).toEqual(['2026-10-27', '2026-11-10'])
+    expect(golpes).toEqual(['2026-11-12', '2026-11-14'])
+    // La cabecera y el pie de las páginas públicas: la vuelta a la portada y lo legal.
+    await expect(page.getByRole('link', { name: 'FDS' }).first()).toHaveAttribute('href', '/')
+    const pie = page.getByTestId('pie-ejemplo')
+    for (const [nombre, href] of [['Privacidad', '/privacidad'], ['Términos', '/terminos'], ['Aviso legal', '/aviso-legal'], ['Cookies', '/cookies']]) {
+      await expect(pie.getByRole('link', { name: nombre, exact: true })).toHaveAttribute('href', href)
+    }
     expect(await sinDesbordes(page)).toBe(true)
     await foto(page, 'ejemplo')
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('cuenta la misma furgoneta que el héroe de la portada, y lo que dice de quién la llevaba es lo que da la regla', () => {
+    const g = EXPEDIENTE_EJEMPLO.golpes.find((x) => x.pieza_clave === EJEMPLO_HEROE.piezaClave)
+    expect(g, 'el golpe del héroe está en el expediente').toBeTruthy()
+    const hhmm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    const isoDe = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    expect(EXPEDIENTE_EJEMPLO.vehiculo.matricula).toBe(EJEMPLO_HEROE.matricula)
+    expect(g.vista).toBe(EJEMPLO_HEROE.lado)
+    expect(g.pieza).toBe(DICT[`repaso.p.${g.pieza_clave}`].es)
+    expect([g.anterior.fecha, g.anterior.hora, g.anterior.conductor.nombre]).toEqual([isoDe(EJEMPLO_HEROE.antes.fecha), hhmm(EJEMPLO_HEROE.antes.fecha), EJEMPLO_HEROE.antes.quien])
+    expect([g.fecha, g.hora]).toEqual([isoDe(EJEMPLO_HEROE.hoy.fecha), hhmm(EJEMPLO_HEROE.hoy.fecha)])
+    expect(g.atribucion.atribuible).toBe(EJEMPLO_HEROE.atribuible)
+    expect(g.atribucion.motivo).toBe(EJEMPLO_HEROE.motivo)
+    expect(g.atribucion.conductores.map((p) => p.nombre)).toContain(EJEMPLO_HEROE.hoy.quien)
+    expect(g.confirmado_por).toBe(EJEMPLO_HEROE.marcadoPor)
+    // La regla del servidor (`_perito_atribucion`), golpe a golpe: atribuible solo con la anterior marcada «igual», un
+    // día o menos y una sola persona en las dos revisiones (incluidas las dos); la anterior la hizo esa persona.
+    for (const x of EXPEDIENTE_EJEMPLO.golpes.filter((y) => !y.ya_estaba)) {
+      const a = x.atribucion
+      const unaPersona = a.conductores.length === 1 && a.conductores[0].id === x.anterior.conductor.id
+      expect(a.atribuible, x.id).toBe(x.anterior.veredicto === 'igual' && a.dias <= 1 && unaPersona)
+      if (!a.atribuible && a.motivo === 'varios_conductores') expect(a.conductores.map((p) => p.id)).toContain(x.anterior.conductor.id)
+      for (const k of Object.keys(x)) expect(Object.keys(FIXTURE.golpes[0]).concat('pieza_clave')).toContain(k)
+    }
+  })
+
+  test('la hoja habla el idioma de la página (el de la portada), con las piezas traducidas, y lo sigue al cambiarlo abajo', async ({ page }) => {
+    // Quien viene de la portada en inglés: el idioma de las páginas públicas guardado, ninguno del panel.
+    await page.addInitScript(() => { if (!sessionStorage.getItem('ya')) { localStorage.setItem('fds_idioma', 'en'); sessionStorage.setItem('ya', '1') } })
+    await page.goto('/expediente-ejemplo', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByTestId('franja-ejemplo')).toContainText('Example with made-up data')
+    await expect(hoja(page).getByRole('heading', { level: 1 })).toHaveText('Vehicle record')
+    await expect(page.getByTestId('golpe').first().getByRole('heading')).toContainText(DICT['repaso.p.corredera_der'].en)
+    await expect(page.getByTestId('golpe-ya').getByRole('heading')).toContainText(DICT['repaso.p.paragolpes_tras'].en)
+    await expect(hoja(page)).not.toContainText(/Puerta lateral|Paragolpes|Panel lateral/)
+    // El selector de idioma del pie cambia también la hoja.
+    await page.getByTestId('pie-ejemplo').locator('select').selectOption('fr')
+    await expect(hoja(page).getByRole('heading', { level: 1 })).toHaveText(DICT['exp.titulo'].fr)
+    await expect(page.getByTestId('golpe').first().getByRole('heading')).toContainText(DICT['repaso.p.corredera_der'].fr)
   })
 
   test('al imprimir, sin la franja; y el PDF sale en A4', async ({ page, browserName }) => {
     await page.goto('/expediente-ejemplo', { waitUntil: 'networkidle' })
     await page.emulateMedia({ media: 'print' })
     await expect(page.getByTestId('franja-ejemplo')).toBeHidden()
+    await expect(page.getByTestId('pie-ejemplo')).toBeHidden()
     await expect(hoja(page)).toBeVisible()
     await foto(page, 'ejemplo-impresion')
     // El PDF de verdad, como lo guardaría el navegador (solo Chromium sabe hacerlo).
