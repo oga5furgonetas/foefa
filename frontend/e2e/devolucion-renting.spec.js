@@ -1,14 +1,25 @@
 /* global process */
 import { test, expect } from '@playwright/test'
+import { COMPANIAS, huellaRecorrido, pasosDe } from '../src/lib/guiasRenting.js'
 
 /* «¿QUÉ TE VAN A COBRAR AL DEVOLVERLO?» (/devolucion-renting, 14-11-2026). Lo que no puede fallar en una herramienta que
    se usa de pie junto al vehículo y que se manda por WhatsApp: el recorrido entero con una guía (cada respuesta), el
-   resultado con la página de cada cosa, «Otra compañía», volver atrás, el enlace que reconstruye el resultado (y el
-   que no cuadra con los datos), la página de una compañía con su tabla, la vista de impresión, 390 px sin desbordes y
-   que de la herramienta no sale ninguna petición a /api (la única es el contador anónimo de visitas de toda la web,
-   que manda la ruta sin el #). Fotos para mirarlas: FOTOS_DEVOLUCION=<carpeta>. */
+   resultado con sus tres etiquetas («dice que se factura» solo donde el documento lo dice, «no lo acepta», «no lo
+   dice») y la página de cada cosa, «Otra compañía» sin rangos ni «No cobra: Nada», volver atrás y cambiar cualquier
+   respuesta sin perder las demás, el enlace que reconstruye el resultado (y los que no cuadran), la página de cada
+   compañía con su tabla (también entre 640 y 900 px), la vista de impresión con la fecha y las direcciones escritas,
+   390 px sin desbordes y con las respuestas a la vista, el teclado, y que de la herramienta no sale ninguna petición
+   a /api (la única es el contador anónimo de visitas de toda la web, que manda la ruta sin el #). Fotos para mirarlas:
+   FOTOS_DEVOLUCION=<carpeta>. */
 
 const RUTA = '/devolucion-renting'
+
+/* El # de un resultado (o de un paso) con la huella de los datos de hoy. */
+function enlace(slug, vehiculo, r, p = 'fin', extra = '') {
+  const doc = COMPANIAS.find((c) => c.slug === slug).documentos[vehiculo]
+  return `${RUTA}#v=${vehiculo === 'turismo' ? 't' : 'f'}&c=${slug}&h=${huellaRecorrido(doc, vehiculo)}${r ? `&r=${r}` : ''}${extra}&p=${p}`
+}
+const nPasos = (slug, vehiculo) => pasosDe(COMPANIAS.find((c) => c.slug === slug).documentos[vehiculo], vehiculo).length
 
 /* Las peticiones a /api: se contestan (para no ensuciar la consola) y se apuntan. */
 async function preparar(page) {
@@ -36,24 +47,36 @@ async function sinDesbordes(page) {
   expect(total, 'la página se desplaza de lado').toBeLessThanOrEqual(ancho)
 }
 
+/* Contesta los pasos que quedan con una letra por paso (n, s, x). */
+async function contestar(page, letras) {
+  for (const l of letras) {
+    if (l === 'n') await page.getByTestId('dev-no').click()
+    else if (l === 'x') await page.getByTestId('dev-nose').click()
+    else { await page.getByTestId('dev-si').click(); await page.getByTestId('dev-seguir').click() }
+  }
+}
+
 test.describe('/devolucion-renting', () => {
-  test('la entrada: tipo de vehículo, compañías y nada guardado', async ({ page }) => {
+  test('la entrada: la frase verdadera, tipo de vehículo, compañías, la edad del documento y nada guardado', async ({ page }) => {
     const { api, fallos } = await preparar(page)
     await page.goto(RUTA)
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('¿Qué te van a cobrar al devolverlo?')
+    await expect(page.getByTestId('dev-entradilla')).toHaveText('Algunas compañías de renting publican qué consideran desgaste normal y qué no aceptan. Repásalo con la suya antes de que lo haga su perito.')
     await expect(page.getByText('Sin registro. No guardamos nada de tu vehículo.')).toBeVisible()
     await expect(page.getByTestId('dev-empezar')).toBeDisabled()
-    // Furgoneta por defecto: BMW (solo turismos) no está en la lista y se dice.
+    // Furgoneta por defecto: BMW (solo turismos) no está en la lista y se dice sin afirmar más de lo que sabemos.
     await expect(page.getByTestId('dev-cia-bmw-financial-services')).toHaveCount(0)
-    await expect(page.getByText('BMW Financial Services solo publica guía de turismos.')).toBeVisible()
+    await expect(page.getByTestId('dev-sin-este')).toHaveText('De BMW Financial Services solo hemos encontrado el documento de turismos.')
     await page.getByTestId('dev-tipo-turismo').click()
     await expect(page.getByTestId('dev-cia-bmw-financial-services')).toBeVisible()
     // Los alquileres, aparte.
     await expect(page.getByRole('group', { name: 'Si es un alquiler' }).getByText('Hertz')).toBeVisible()
     await expect(page.getByRole('group', { name: 'Si es un alquiler' }).getByText('Europcar')).toBeVisible()
     await page.getByTestId('dev-tipo-furgoneta').click()
+    // Ayvens: el documento es de LeasePlan y no trae fecha, y se dice al elegirla.
     await page.getByTestId('dev-cia-ayvens').click()
-    await expect(page.getByTestId('dev-empezar')).toHaveText('Empezar · 12 preguntas')
+    await expect(page.getByTestId('dev-cia-ayvens').getByTestId('dev-vigencia')).toHaveText('Documento de LeasePlan (hoy Ayvens), sin fecha: puede no ser el que esté en vigor. Pide a tu compañía el vigente.')
+    await expect(page.getByTestId('dev-empezar')).toHaveText(`Empezar · ${nPasos('ayvens', 'furgoneta')} preguntas`)
     const cookies = await page.context().cookies()
     expect(cookies).toEqual([])
     expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => /devol|guia|renting/i.test(k)))).toEqual([])
@@ -61,79 +84,118 @@ test.describe('/devolucion-renting', () => {
     expect(fallos).toEqual([])
   })
 
-  test('el recorrido entero con Ayvens (furgoneta), volver atrás, el resultado y el enlace compartido', async ({ page, browser }) => {
+  test('en un portátil de 1280 × 800, «Empezar» se ve sin bajar', async ({ page }, info) => {
+    test.skip(info.project.name !== 'escritorio', 'medida de escritorio')
+    await preparar(page)
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto(RUTA)
+    await page.getByTestId('dev-cia-arval').click()
+    const caja = await page.getByTestId('dev-empezar').boundingBox()
+    expect(caja.y + caja.height).toBeLessThanOrEqual(800)
+  })
+
+  test('el recorrido entero con Ayvens (furgoneta): las tres etiquetas, la página de cada cosa y el enlace compartido', async ({ page, browser }) => {
     const { api, fallos } = await preparar(page)
     await page.goto(RUTA)
     await page.getByTestId('dev-cia-ayvens').click()
     await page.getByTestId('dev-empezar').click()
+    const total = nPasos('ayvens', 'furgoneta')
 
-    // Paso 1: la pregunta, la regla con su página y sin ayuda para medir (10 cm no queda cerca de nada).
-    await expect(page.getByTestId('dev-cuenta')).toHaveText('1 de 12')
+    // Paso 1: la pregunta, la regla con las palabras de su guía y su página (de LeasePlan, hoy Ayvens), sin ayuda.
+    await expect(page.getByTestId('dev-cuenta')).toHaveText(`1 de ${total}`)
     await expect(page.getByTestId('dev-pregunta')).toContainText('paragolpes')
-    await expect(page.getByTestId('dev-regla')).toContainText('Hasta 10 cm, siempre que se quiten con un pulido mecánico.')
-    await expect(page.getByTestId('dev-regla')).toContainText('pág. 8')
+    const regla = page.getByTestId('dev-regla')
+    await expect(regla).toContainText('Su guía acepta')
+    await expect(regla).toContainText('Hasta 10 cm, siempre que se quiten con un pulido mecánico.')
+    await expect(regla).toContainText('Su guía dice que se factura')
+    await expect(regla).toContainText('LeasePlan (hoy Ayvens), pág. 8')
+    await expect(regla).not.toContainText(/No se cobra|Se cobra\b/)
+    await expect(page.getByTestId('dev-vigencia')).toContainText('Documento de LeasePlan (hoy Ayvens), sin fecha')
     await expect(page.getByTestId('dev-medir')).toHaveCount(0)
     await page.getByTestId('dev-no').click()
 
-    // Paso 2: «No lo sé todavía».
-    await expect(page.getByTestId('dev-cuenta')).toHaveText('2 de 12')
+    // Paso 2: las lunas también preguntan por la zona A, de cualquier tamaño (y se dice que la guía no la define).
+    await expect(page.getByTestId('dev-pregunta')).toContainText('del tamaño que sea, en la zona A del parabrisas')
+    await expect(page.getByTestId('dev-regla-junto')).toContainText('Impactos en la zona A del parabrisas')
+    await expect(page.getByTestId('dev-nota-paso')).toHaveText('La guía no dice qué es la zona A del parabrisas.')
     await page.getByTestId('dev-nose').click()
 
-    // Paso 3 y atrás: vuelve al 2 con su respuesta marcada; el «atrás» del navegador, igual.
-    await expect(page.getByTestId('dev-cuenta')).toHaveText('3 de 12')
-    await page.getByTestId('dev-atras').click()
-    await expect(page.getByTestId('dev-cuenta')).toHaveText('2 de 12')
-    await expect(page.getByTestId('dev-nose')).toHaveAttribute('aria-pressed', 'true')
-    await page.goBack()
-    await expect(page.getByTestId('dev-cuenta')).toHaveText('1 de 12')
-    await expect(page.getByTestId('dev-no')).toHaveAttribute('aria-pressed', 'true')
-    await page.goForward()
-    await expect(page.getByTestId('dev-cuenta')).toHaveText('2 de 12')
-    await page.getByTestId('dev-nose').click()
-
-    // Paso 3: arañazos en la chapa → «Sí, alguna» con nota.
+    // Paso 3: arañazos en la chapa → «Sí, alguna» con nota (y el aviso de que la nota viaja en el enlace).
     await page.getByTestId('dev-si').click()
+    await expect(page.getByTestId('dev-donde-aviso')).toHaveText('Lo que escribas aquí viaja en el enlace si lo compartes: no pongas matrículas ni nombres.')
     await page.getByTestId('dev-donde').fill('portón')
     await page.getByTestId('dev-seguir').click()
 
-    // Paso 4: abolladuras, con la moneda de 10 céntimos («casi 2 cm»).
-    await expect(page.getByTestId('dev-cuenta')).toHaveText('4 de 12')
+    // Paso 4: abolladuras, con la moneda de 10 céntimos («casi 2 cm», y lo que queda cerca, con una regla).
+    await expect(page.getByTestId('dev-cuenta')).toHaveText(`4 de ${total}`)
     await expect(page.getByTestId('dev-medir')).toContainText('Una moneda de 10 céntimos mide 19,75 mm: casi 2 cm.')
+    await expect(page.getByTestId('dev-medir')).toContainText('si es casi igual, mídelo con una regla')
     await page.getByTestId('dev-si').click()
     await page.getByTestId('dev-donde').fill('lateral derecho')
     await page.getByTestId('dev-seguir').click()
 
-    // «También mira» en la zona de carga (paso 9), y las demás.
-    for (let i = 5; i <= 12; i++) {
-      await expect(page.getByTestId('dev-cuenta')).toHaveText(`${i} de 12`)
+    // Paso 5 (pintura) y 6 (retrovisores, con la tarjeta: algo más de 5 cm, y hacia qué lado se equivoca quien se fíe).
+    await page.getByTestId('dev-no').click()
+    await expect(page.getByTestId('dev-pregunta')).toContainText('en los retrovisores o los accesorios de fuera')
+    await expect(page.getByTestId('dev-medir')).toContainText('El lado corto de una tarjeta bancaria mide 54 mm: algo más de 5 cm.')
+    await expect(page.getByTestId('dev-medir')).toContainText('si se queda un poco corto, también puede pasar')
+    // El dibujo de la furgoneta enseña el retrovisor marcado: nada lo tapa.
+    const tapado = await page.locator('[data-testid="dev-paso"] svg path[fill="var(--dv-marca)"]').evaluateAll((ps) => ps.map((el) => {
+      const b = el.getBoundingClientRect()
+      const encima = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)
+      return encima === el || encima?.getAttribute('fill') === 'var(--dv-marca)'
+    }))
+    expect(tapado.length).toBeGreaterThan(0)
+    expect(tapado.every(Boolean), 'el retrovisor marcado queda tapado').toBe(true)
+    await expect(page.locator('[data-testid="dev-paso"] svg[role="img"]')).toHaveAttribute('aria-label', 'Furgoneta vista desde arriba, con la zona marcada: Retrovisores')
+    await page.getByTestId('dev-no').click()
+
+    // «También mira» en la zona de carga, y las demás. Las llaves: «Sí».
+    for (let i = 7; i <= total; i++) {
+      await expect(page.getByTestId('dev-cuenta')).toHaveText(`${i} de ${total}`)
       if (i === 9) {
         await page.getByTestId('dev-tambien').locator('summary').click()
         await expect(page.getByTestId('dev-tambien')).toContainText('Suelo de carga')
+        await expect(page.getByTestId('dev-tambien')).not.toContainText(/No se cobra:|Se cobra:/)
       }
       if (i === 11) {
+        await expect(page.getByTestId('dev-pregunta')).toContainText('llaves')
         await page.getByTestId('dev-si').click()
         await page.getByTestId('dev-seguir').click()
       } else await page.getByTestId('dev-no').click()
     }
 
-    // El resultado: 3 cosas que su guía dice que se facturan, cada una con su página.
+    // El resultado: 3 fuera de lo que su guía da por bueno. Dos que su guía dice que se facturan (lo dice en su pág. 3,
+    // de los daños) y las llaves, que no acepta y no dice cómo cobra.
     const res = page.getByTestId('dev-resultado')
     await expect(res).toBeVisible()
     await expect(page.getByTestId('dev-cifra')).toHaveText('3')
+    await expect(page.getByTestId('dev-titular')).toHaveText('cosas fuera de lo que su guía da por bueno')
+    await expect(page.getByTestId('dev-factura').locator('h3')).toContainText('Lo que su guía dice que se factura')
     const items = page.getByTestId('dev-item-factura')
-    await expect(items).toHaveCount(3)
+    await expect(items).toHaveCount(2)
     await expect(items.nth(0)).toContainText('Arañazo en la chapa · portón')
     await expect(items.nth(0)).toContainText('pág. 7')
     await expect(items.nth(1)).toContainText('lateral derecho')
-    await expect(items.nth(2)).toContainText('Falta un juego de llaves')
-    await expect(items.nth(2)).toContainText('pág. 3')
+    await expect(page.getByTestId('dev-base-cobro')).toContainText('pág. 3')
+    await expect(page.getByTestId('dev-base-cobro')).toContainText('cobrando por reparación')
+    await expect(page.getByTestId('dev-fuera').locator('h3')).toContainText('Lo que su guía no acepta')
+    await expect(page.getByTestId('dev-item-fuera')).toContainText('Falta un juego de llaves')
+    await expect(page.getByTestId('dev-item-fuera')).toContainText('No dice cómo lo cobra.')
     await expect(page.getByTestId('dev-nose-lista')).toContainText('Revisarlo con luz natural, sin sombras, y en seco.')
-    await expect(page.getByTestId('dev-dentro')).toContainText('8')
+    // Un «No» no certifica la zona: se dice lo que se contestó y lo que tampoco acepta sin preguntarlo.
+    await expect(res).not.toContainText('Dentro de lo que su guía acepta')
+    await expect(page.getByTestId('dev-no-lista').locator('h3')).toContainText('Lo que has contestado que no')
+    const noParagolpes = page.getByTestId('dev-item-no').first()
+    await expect(noParagolpes).toContainText('Contestaste que no a: ¿Algún arañazo o rozadura en los paragolpes')
+    await expect(noParagolpes.getByTestId('dev-sin-preguntar')).toContainText('Sin preguntar, su guía tampoco acepta en esta zona:')
+    await expect(noParagolpes.getByTestId('dev-sin-preguntar')).toContainText('parachoques o rejilla rotos, agrietados o deformados')
     await expect(page.getByTestId('dev-aparte')).toContainText('Bacas, barras de techo y enganche de remolque')
+    await expect(res.getByTestId('dev-vigencia').first()).toContainText('Documento de LeasePlan (hoy Ayvens), sin fecha')
     await expect(page.getByTestId('dev-aviso')).toHaveText('Orientativo: decide el perito de tu compañía con la guía que esté en vigor.')
-    await expect(page.getByTestId('dev-fuente')).toContainText('Leída el 14 de noviembre de 2026')
+    await expect(page.getByTestId('dev-fuente')).toContainText('Leído el 14 de noviembre de 2026')
     await expect(page.getByTestId('dev-fuente').getByRole('link').first()).toHaveAttribute('href', /normativa_devolucion_vehiculos_comerciales\.pdf$/)
-    await expect(res).not.toContainText(/te lo cobrarán|no te lo pueden cobrar|te ahorras/i)
+    await expect(res).not.toContainText(/te lo cobrarán|no te lo pueden cobrar|te ahorras|Nada, salvo|: Nada/i)
 
     // «Mandárselo a alguien»: sin navigator.share, copia el enlace.
     await page.evaluate(() => { Object.defineProperty(navigator, 'share', { value: undefined, configurable: true }) })
@@ -163,7 +225,86 @@ test.describe('/devolucion-renting', () => {
     expect(fallos).toEqual([])
   })
 
-  test('«Otra compañía»: lo que piden las demás, tema a tema y con su nombre', async ({ page }) => {
+  test('volver atrás no borra las respuestas de después, y desde el resultado se cambia cualquiera', async ({ page }) => {
+    const { fallos } = await preparar(page)
+    await page.goto(`${RUTA}#v=f&c=hertz`)
+    await page.getByTestId('dev-empezar').click()
+    const total = nPasos('hertz', 'furgoneta')
+    await contestar(page, 'nxnxnxn')
+    await expect(page.getByTestId('dev-cuenta')).toHaveText(`8 de ${total}`)
+    // «Atrás» cuatro veces, hasta el paso 4: las respuestas de los pasos 5 a 7 siguen ahí.
+    for (let k = 0; k < 4; k++) await page.getByTestId('dev-atras').click()
+    await expect(page.getByTestId('dev-cuenta')).toHaveText(`4 de ${total}`)
+    expect(page.url()).toMatch(/r=nxnxnxn/)
+    // Se cambia el 4 a «Sí»: se va a la siguiente sin contestar (la 8), y las de en medio no se pierden.
+    await page.getByTestId('dev-si').click()
+    await page.getByTestId('dev-seguir').click()
+    await expect(page.getByTestId('dev-cuenta')).toHaveText(`8 de ${total}`)
+    expect(page.url()).toMatch(/r=nxnsnxn&/)
+    // Con el «atrás» del navegador, igual.
+    await page.goBack()
+    await expect(page.getByTestId('dev-cuenta')).toHaveText(`4 de ${total}`)
+    expect(page.url()).toMatch(/r=nxnsnxn&/)
+    await page.goForward()
+    await expect(page.getByTestId('dev-cuenta')).toHaveText(`8 de ${total}`)
+    await contestar(page, 'nnn')
+    await expect(page.getByTestId('dev-cifra')).toHaveText('1')
+
+    // Desde el resultado: cambiar el paso 2 («No lo sé») a «No», y se vuelve al resultado con todo lo demás.
+    const nose = page.getByTestId('dev-nose-lista').getByTestId('dev-cambiar').first()
+    await nose.click()
+    await expect(page.getByTestId('dev-cuenta')).toHaveText(`2 de ${total}`)
+    await expect(page.getByTestId('dev-nose')).toHaveAttribute('aria-pressed', 'true')
+    // «Atrás» desde ahí va al paso anterior, no al resultado.
+    await page.getByTestId('dev-atras').click()
+    await expect(page.getByTestId('dev-cuenta')).toHaveText(`1 de ${total}`)
+    await page.getByTestId('dev-no').click()
+    await expect(page.getByTestId('dev-resultado')).toBeVisible()
+    await page.getByTestId('dev-nose-lista').getByTestId('dev-cambiar').first().click()
+    await page.getByTestId('dev-no').click()
+    await expect(page.getByTestId('dev-resultado')).toBeVisible()
+    expect(page.url()).toMatch(/r=nnnsnxnnnn&/)
+    expect(fallos).toEqual([])
+  })
+
+  test('con el teclado, el Tab llega primero a «Atrás»', async ({ page }) => {
+    await preparar(page)
+    await page.goto(enlace('ayvens', 'furgoneta', 'n', 1))
+    await expect(page.getByTestId('dev-cuenta')).toBeVisible()
+    await page.keyboard.press('Tab')
+    await expect(page.getByTestId('dev-atras')).toBeFocused()
+  })
+
+  test('las tres etiquetas hablan como su documento: Athlon, BMW, Volkswagen y Europcar', async ({ page }) => {
+    await preparar(page)
+    // Athlon: su manual nunca dice que cobre el testigo, la tapicería ni la limpieza: «Su guía no lo acepta».
+    await page.goto(enlace('athlon', 'furgoneta', 'nnsnss'))
+    await expect(page.getByTestId('dev-factura')).toHaveCount(0)
+    await expect(page.getByTestId('dev-item-fuera')).toHaveCount(3)
+    await expect(page.getByTestId('dev-titular')).toHaveText('cosas que su guía no acepta')
+    await expect(page.getByTestId('dev-vigencia').first()).toHaveText('Documento sin fecha: puede no ser el que esté en vigor. Pide a tu compañía el vigente.')
+
+    // BMW: el testigo, con su condición entera y su página; un bollo, «no lo acepta», con lo que dice su pág. 16.
+    const n = nPasos('bmw-financial-services', 'turismo')
+    await page.goto(enlace('bmw-financial-services', 'turismo', `nnsn${'n'.repeat(n - 5)}s`))
+    await expect(page.getByTestId('dev-item-factura')).toContainText('Testigo de avería encendido')
+    await expect(page.getByTestId('dev-item-factura')).toContainText('Su pág. 15: se anota cualquier aviso de fallo, avería o falta de mantenimiento del cuadro. Si, además, está encendido alguno de los que el manual de usuario del coche da como avería, el coche no se puede devolver y se factura el Valor Final del contrato.')
+    await expect(page.getByTestId('dev-item-fuera')).toContainText('Su pág. 16 lo resume de otra forma')
+
+    // Volkswagen: la póliza de los 3 últimos meses va en el resultado.
+    await page.goto(enlace('volkswagen-financial-services', 'turismo', `s${'n'.repeat(nPasos('volkswagen-financial-services', 'turismo') - 1)}`))
+    await expect(page.getByTestId('dev-item-fuera')).toContainText('no serán necesarias en los últimos 3 meses del contrato')
+
+    // Europcar: alquiler, «su tabla», sin perito ni guía; un «No» lleva lo que su tabla no dice por debajo de 2 cm.
+    await page.goto(enlace('europcar', 'furgoneta', 'n'.repeat(nPasos('europcar', 'furgoneta'))))
+    await expect(page.getByTestId('dev-cifra')).toHaveText('0')
+    await expect(page.getByTestId('dev-titular')).toHaveText('cosas que su tabla dice que se facturan')
+    await expect(page.getByTestId('dev-item-no').first()).toContainText('Su tabla pone precio desde 2 cm y no dice qué pasa por debajo.')
+    await expect(page.getByTestId('dev-aviso')).toHaveText('Orientativo: decide quien revise el vehículo en Europcar, con la tabla que esté en vigor.')
+    await expect(page.getByTestId('dev-resultado')).not.toContainText(/perito|precio fijo/i)
+  })
+
+  test('«Otra compañía»: lo que piden las demás, tema a tema, sin rangos que mezclen ni «No cobra: Nada»', async ({ page }) => {
     const { api, fallos } = await preparar(page)
     await page.goto(RUTA)
     await page.getByTestId('dev-cia-otra').click()
@@ -173,15 +314,18 @@ test.describe('/devolucion-renting', () => {
     const abolladuras = page.getByTestId('dev-otra-tema').filter({ has: page.getByRole('heading', { name: 'Abolladuras' }) })
     await expect(abolladuras).toContainText('Ayvens')
     await expect(abolladuras).toContainText('Alphabet')
-    await expect(abolladuras.getByTestId('dev-rango')).toHaveText('Lo que aceptan sin cobrar va de 10 mm a 2 cm, según la guía.')
+    await expect(otra).not.toContainText(/va de .* a .*, según/)
+    await expect(otra).not.toContainText(/No cobra|Acepta: Nada|acepta: No lo dice/)
+    // Ni los alquileres ni Arval (no publica su guía de daños).
     await expect(otra).not.toContainText('Hertz')
+    await expect(page.getByTestId('dev-otra-fila').filter({ hasText: 'Arval' })).toHaveCount(0)
     await page.getByTestId('dev-atras').click()
     await expect(page.getByTestId('dev-empezar')).toHaveText('Ver lo que piden las demás')
     soloContador(api)
     expect(fallos).toEqual([])
   })
 
-  test('la página de una compañía: su tabla, la fuente y el botón para repasar', async ({ page }) => {
+  test('la página de una compañía: su tabla, la fuente, la edad y el botón para repasar (también BMW)', async ({ page }) => {
     const { api, fallos } = await preparar(page)
     await page.goto(`${RUTA}/ayvens`)
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Qué cobra Ayvens al devolver un vehículo de renting')
@@ -189,13 +333,38 @@ test.describe('/devolucion-renting', () => {
     const tabla = page.getByTestId('dev-tabla').first()
     await expect(tabla.getByRole('row', { name: /Abolladuras en la carrocería/ })).toContainText('pág. 7')
     await expect(page.getByTestId('dev-fuente').first()).toContainText('Sin fecha en el documento · código LPES.LCV.ES-17v1')
-    await expect(page.getByTestId('dev-repasar')).toHaveAttribute('href', `${RUTA}#c=ayvens`)
+    await expect(page.getByTestId('dev-vigencia').first()).toContainText('Documento de LeasePlan (hoy Ayvens)')
+    await expect(page.getByTestId('dev-repasar')).toHaveAttribute('href', `${RUTA}#v=f&c=ayvens`)
     await page.getByTestId('dev-repasar').click()
     await expect(page.getByTestId('dev-cia-ayvens').locator('input')).toBeChecked()
+
+    // BMW solo tiene turismos: su botón abre turismo, con sus preguntas.
+    await page.goto(`${RUTA}/bmw-financial-services`)
+    await page.getByTestId('dev-repasar').click()
+    await expect(page.getByTestId('dev-tipo-turismo')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('dev-empezar')).toHaveText(`Empezar · ${nPasos('bmw-financial-services', 'turismo')} preguntas`)
+    // Un enlace viejo, sin vehículo o con furgoneta, también.
+    await page.goto(`${RUTA}#c=bmw-financial-services`)
+    await expect(page.getByTestId('dev-cia-bmw-financial-services').locator('input')).toBeChecked()
+    await page.goto('about:blank')
+    await page.goto(`${RUTA}#v=f&c=bmw-financial-services`)
+    await expect(page.getByTestId('dev-empezar')).toBeEnabled()
+    await expect(page.getByTestId('dev-tipo-turismo')).toHaveAttribute('aria-pressed', 'true')
 
     await page.goto(`${RUTA}/arval`)
     await expect(page.getByTestId('dev-cia-aviso')).toContainText('Arval no publica su guía de daños')
     await expect(page.getByTestId('dev-precios')).toContainText('390,00 € sin IVA / 471,90 € con IVA')
+
+    // Hertz: el mínimo de 200 € es un bloqueo por el combustible, no un precio de daños.
+    await page.goto(`${RUTA}/hertz`)
+    await expect(page.getByTestId('dev-precios')).not.toContainText('mínimo 200 €')
+    await expect(page.getByTestId('dev-precio-aparte')).toContainText('no un cargo por daños')
+    await expect(page.getByTestId('dev-compania')).not.toContainText(/\b(la|su) guía\b|perito/i)
+
+    // Europcar: costes medios estimados, nunca «precio fijo».
+    await page.goto(`${RUTA}/europcar`)
+    await expect(page.getByTestId('dev-compania')).toContainText('costes medios de reparación estimados por la firma AUDATEX')
+    await expect(page.getByTestId('dev-compania')).not.toContainText(/precio fijo|perito|\b(la|su) guía\b/i)
 
     await page.goto(`${RUTA}/nadie`)
     await expect(page.getByTestId('dev-cia-no-esta')).toBeVisible()
@@ -203,24 +372,68 @@ test.describe('/devolucion-renting', () => {
     expect(fallos).toEqual([])
   })
 
-  test('la vista de impresión del resultado: sin botones ni cabecera', async ({ page }) => {
+  test('los enlaces que no cuadran lo dicen, arriba del todo', async ({ page }) => {
     await preparar(page)
-    await page.goto(`${RUTA}#v=t&c=hertz&r=nnsnnnnnnn&p=fin`)
+    const casos = [
+      [`${RUTA}#v=f&c=ayvens&r=nnnnnnnnnnnn&p=fin`, 'le falta la marca de la versión'],
+      [enlace('ayvens', 'furgoneta', '', 99), 'una pregunta que no existe'],
+      [`${RUTA}#v=x&c=ayvens`, 'El tipo de vehículo de este enlace no se entiende'],
+      [`${RUTA}#v=f&c=nadie&p=0`, 'una compañía que no tenemos'],
+    ]
+    for (const [u, texto] of casos) {
+      await page.goto('about:blank')
+      await page.goto(u)
+      await expect(page.getByTestId('dev-error')).toContainText(texto)
+      expect(await page.evaluate(() => window.scrollY)).toBe(0)
+    }
+  })
+
+  test('la vista de impresión del resultado: sin botones, con la fecha y las direcciones escritas', async ({ page }) => {
+    await preparar(page)
+    await page.goto(enlace('hertz', 'turismo', 'nnsnnnnnnn'))
     await expect(page.getByTestId('dev-cifra')).toHaveText('1')
     await page.emulateMedia({ media: 'print' })
     await expect(page.getByTestId('dev-imprimir')).toBeHidden()
     await expect(page.getByTestId('dev-mandar')).toBeHidden()
+    await expect(page.getByTestId('dev-cambiar').first()).toBeHidden()
     await expect(page.locator('nav').first()).toBeHidden()
     await expect(page.getByTestId('dev-aviso')).toBeVisible()
-    await expect(page.getByTestId('dev-fuente')).toBeVisible()
+    await expect(page.getByTestId('dev-impresion-cabecera')).toContainText(/Hecho el \d{1,2} de [a-z]+ de \d{4}/)
+    await expect(page.getByTestId('dev-fuente-url').first()).toBeVisible()
+    await expect(page.getByTestId('dev-fuente-url').first()).toContainText('https://images.hertz.com/pdfs/RT_FULL_ES_ES.pdf')
+    await expect(page.getByTestId('dev-impresion-pie')).toContainText('Este resultado, en línea: http')
   })
 
-  test('a 390 px no se desplaza de lado (entrada, paso, resultado, otra, compañía)', async ({ page }) => {
+  test('a 390 px: sin desbordes, y las respuestas a la vista sin bajar en cada paso', async ({ page }) => {
     await preparar(page)
-    await page.setViewportSize({ width: 390, height: 844 })
-    for (const u of [RUTA, `${RUTA}#v=f&c=ayvens&p=3`, `${RUTA}#v=f&c=alphabet&r=sssssssssss&p=fin`, `${RUTA}#v=f&c=otra&p=fin`, `${RUTA}/europcar`, `${RUTA}/ayvens`, `${RUTA}/bmw-financial-services`]) {
+    await page.setViewportSize({ width: 390, height: 664 })
+    for (const u of [RUTA, enlace('ayvens', 'furgoneta', 'nnn', 3), enlace('alphabet', 'furgoneta', 's'.repeat(nPasos('alphabet', 'furgoneta'))), `${RUTA}#v=f&c=otra&p=fin`, `${RUTA}/europcar`, `${RUTA}/ayvens`, `${RUTA}/bmw-financial-services`]) {
+      await page.goto('about:blank')
       await page.goto(u)
       await page.waitForLoadState('networkidle')
+      await sinDesbordes(page)
+    }
+    for (const [slug, v] of [['bmw-financial-services', 'turismo'], ['ayvens', 'turismo'], ['europcar', 'furgoneta']]) {
+      const n = nPasos(slug, v)
+      for (let i = 0; i < n; i++) {
+        await page.goto('about:blank')
+        await page.goto(enlace(slug, v, '', i))
+        for (const id of ['dev-no', 'dev-si', 'dev-nose']) {
+          const b = await page.getByTestId(id).boundingBox()
+          expect(b.y + b.height, `${slug} paso ${i + 1}: «${id}» queda por debajo de la pantalla`).toBeLessThanOrEqual(664)
+        }
+      }
+    }
+  })
+
+  test('entre 640 y 900 px las tablas de precios no se cortan', async ({ page }) => {
+    await preparar(page)
+    for (const ancho of [640, 700, 820, 900]) {
+      await page.setViewportSize({ width: ancho, height: 900 })
+      await page.goto(`${RUTA}/europcar`)
+      await page.locator('details summary').filter({ hasText: 'importes de su tabla' }).first().click()
+      const { tabla, raiz } = await page.evaluate(() => ({ tabla: document.querySelector('[data-testid="dev-precios"]').getBoundingClientRect().right, raiz: document.documentElement.clientWidth }))
+      expect(tabla, `a ${ancho} px la tabla de precios se sale`).toBeLessThanOrEqual(raiz)
       await sinDesbordes(page)
     }
   })
@@ -238,27 +451,33 @@ test.describe('/devolucion-renting', () => {
 test('fotos', async ({ page }, info) => {
   const dir = process.env.FOTOS_DEVOLUCION
   test.skip(!dir || info.project.name !== 'escritorio', 'solo con FOTOS_DEVOLUCION, una vez')
+  test.setTimeout(240_000)
   await preparar(page)
   const tomas = [
     ['entrada', RUTA + '#v=f&c=ayvens'],
-    ['paso-medida', RUTA + '#v=f&c=ayvens&r=nxs&n=2.port%C3%B3n&p=3'],
-    ['paso-sin-medida', RUTA + '#v=f&c=ayvens&r=nxsssnnn&p=8'],
-    ['resultado', RUTA + '#v=f&c=ayvens&r=nxssnnnnnnsn&n=2.port%C3%B3n~3.lateral%20derecho&p=fin'],
-    ['otra', RUTA + '#v=f&c=otra&p=fin'],
-    ['compania-renting', RUTA + '/ayvens'],
-    ['compania-arval', RUTA + '/arval'],
-    ['compania-alquiler', RUTA + '/europcar'],
-    ['paso-turismo', RUTA + '#v=t&c=bmw-financial-services&r=nn&p=2'],
+    ['paso-medida', enlace('ayvens', 'furgoneta', 'nxs', 3, '&n=2.port%C3%B3n')],
+    ['paso-retrovisor', enlace('ayvens', 'furgoneta', 'nxsnn', 5)],
+    ['paso-bmw', enlace('bmw-financial-services', 'turismo', 'nn', 2)],
+    ['resultado', enlace('ayvens', 'furgoneta', 'nxssnnnnnnsn', 'fin', '&n=2.port%C3%B3n~3.lateral%20derecho')],
+    ['resultado-bmw', enlace('bmw-financial-services', 'turismo', 'nnsnxnnnnns')],
+    ['resultado-athlon', enlace('athlon', 'furgoneta', 'snsnnn')],
+    ['paso-accesorios', enlace('arval', 'furgoneta', 'nnn', 3)],
+    ['otra', `${RUTA}#v=f&c=otra&p=fin`],
+    ['compania-ayvens', `${RUTA}/ayvens`],
+    ['compania-arval', `${RUTA}/arval`],
+    ['compania-europcar', `${RUTA}/europcar`],
   ]
   for (const ancho of [390, 1280]) {
-    await page.setViewportSize({ width: ancho, height: ancho === 390 ? 844 : 900 })
+    await page.setViewportSize({ width: ancho, height: ancho === 390 ? 844 : 800 })
     for (const [n, u] of tomas) {
       await page.goto('about:blank')
       await page.goto(u)
       await page.waitForLoadState('networkidle')
       await page.screenshot({ path: `${dir}/${n}-${ancho}.png`, fullPage: true })
+      if (n.startsWith('paso')) await page.screenshot({ path: `${dir}/${n}-${ancho}-pantalla.png` })
     }
-    await page.goto(tomas[3][1])
+    await page.goto('about:blank')
+    await page.goto(tomas.find(([n]) => n === 'resultado')[1])
     await page.waitForLoadState('networkidle')
     await page.emulateMedia({ media: 'print' })
     await page.screenshot({ path: `${dir}/resultado-impresion-${ancho}.png`, fullPage: true })

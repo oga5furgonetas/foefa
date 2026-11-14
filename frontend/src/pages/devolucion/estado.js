@@ -7,9 +7,10 @@
    v: t (turismo) o f (furgoneta) · c: la compañía (o «otra») · h: la huella del recorrido con el que se respondió
    (guiasRenting.huellaRecorrido) · r: una letra por paso (n: no, s: sí, x: no lo sé, -: sin responder) ·
    n: las notas de los «sí», «paso.texto» separadas por ~ · p: el paso que se ve, o «fin» (el resultado).
-   Si el enlace no cuadra con los datos (otra versión de la guía, una compañía que no está), `leerEstado` lo dice en
-   `error` y la pantalla ofrece empezar de nuevo. */
-import { COMPANIAS, pasosDe, huellaRecorrido } from '../../lib/guiasRenting'
+   Si el enlace no cuadra con los datos (otra versión de la guía, sin huella, una compañía o un vehículo que no está, un
+   paso que no existe), `leerEstado` lo dice en `error` y la pantalla ofrece empezar de nuevo. Sin paso (la entrada), la
+   compañía se abre con un vehículo que tenga: «#c=bmw-financial-services» abre turismo, que es el que tiene. */
+import { COMPANIAS, pasosDe, huellaRecorrido, vehiculoPara } from '../../lib/guiasRenting'
 
 export const RESPUESTAS = { n: 'no', s: 'si', x: 'nose' }
 const LETRA = { no: 'n', si: 's', nose: 'x' }
@@ -23,26 +24,30 @@ export function documentoDe(compania, vehiculo) {
 /* Del # a un estado. Nunca lanza: lo raro vuelve como `error`. */
 export function leerEstado(hash) {
   const q = new URLSearchParams(String(hash || '').replace(/^#/, ''))
-  const vehiculo = q.get('v') === 't' ? 'turismo' : q.get('v') === 'f' ? 'furgoneta' : null
+  const v = q.get('v')
+  const vehiculo = v === 't' ? 'turismo' : v === 'f' ? 'furgoneta' : null
   const compania = q.get('c') || null
   const estado = { vehiculo, compania, paso: null, fin: false, respuestas: [], notas: {}, error: null }
+  if (v != null && !vehiculo) return { ...estado, error: 'El tipo de vehículo de este enlace no se entiende.' }
   if (!compania) return estado
-  if (compania !== 'otra' && !COMPANIAS.some((c) => c.slug === compania)) {
+  const c = COMPANIAS.find((x) => x.slug === compania)
+  if (compania !== 'otra' && !c) {
     return { ...estado, compania: null, error: 'Este enlace nombra una compañía que no tenemos.' }
   }
   const p = q.get('p')
-  if (p == null) return estado
+  if (p == null) return c ? { ...estado, vehiculo: vehiculoPara(c, vehiculo) } : estado
   if (compania === 'otra') return { ...estado, fin: p === 'fin' || p === '0', paso: null }
   if (!vehiculo) return { ...estado, error: 'Al enlace le falta el tipo de vehículo.' }
   const doc = documentoDe(compania, vehiculo)
-  if (!doc) return { ...estado, error: 'Esa compañía no tiene guía para ese tipo de vehículo.' }
+  if (!doc) return { ...estado, error: 'Esa compañía no tiene documento para ese tipo de vehículo.' }
   const pasos = pasosDe(doc, vehiculo)
   const h = q.get('h')
+  const r = q.get('r') || ''
   if (h && h !== huellaRecorrido(doc, vehiculo)) {
     return { ...estado, error: 'Este enlace se hizo con otra versión de la guía y no podemos rehacer el resultado con seguridad.' }
   }
-  const r = (q.get('r') || '').slice(0, pasos.length)
-  if (/[^nsx-]/.test(r)) return { ...estado, error: 'Las respuestas del enlace no se entienden.' }
+  if (!h && (r || p === 'fin')) return { ...estado, error: 'A este enlace le falta la marca de la versión de la guía con la que se hizo, y no podemos rehacer el resultado con seguridad.' }
+  if (/[^nsx-]/.test(r) || r.length > pasos.length) return { ...estado, error: 'Las respuestas del enlace no se entienden.' }
   estado.respuestas = pasos.map((_, i) => RESPUESTAS[r[i]] || null)
   for (const trozo of (q.get('n') || '').split('~')) {
     const m = trozo.match(/^(\d+)\.(.*)$/s)
@@ -53,7 +58,8 @@ export function leerEstado(hash) {
     estado.fin = true
   } else {
     const n = Number(p)
-    estado.paso = Number.isInteger(n) && n >= 0 && n < pasos.length ? n : 0
+    if (!(/^\d+$/.test(p) && n < pasos.length)) return { ...estado, respuestas: [], notas: {}, error: 'Este enlace pide una pregunta que no existe.' }
+    estado.paso = n
   }
   return estado
 }
