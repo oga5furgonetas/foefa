@@ -608,7 +608,7 @@ const ENTRADA = [
   { nombre: 'el alta sin sector (/registro): el selector de empresas no sale; sale el alta de quien reparte', ruta: '/registro', ancla: 'Tu nombre', anclaWeb: '¿Qué vas a hacer con FDS?',
     web: [/¿Qué vas a hacer con FDS\?/, /DSP de Amazon/] },
   { nombre: 'el alta de una empresa con plan (/registro?sector=supermercado&plan=reparto): sale el alta de quien reparte', ruta: '/registro?sector=supermercado&plan=reparto&billing=annual', ancla: 'Tu nombre', anclaWeb: /Plan elegido/i,
-    web: [/Plan elegido/i, /días gratis/] },
+    web: [/Plan elegido/i, /días de prueba/] },
   { nombre: 'recuperar la contraseña (/reset-password)', ruta: '/reset-password', ancla: null, web: null },
 ]
 test.describe('iPhone · la entrada, el acceso y el alta', () => {
@@ -674,7 +674,7 @@ test.describe('iPhone · la entrada, el acceso y el alta', () => {
   })
 })
 /* DESDE_IOS (T4): solo dentro de la app del iPhone. En la web y en Android el cuerpo del alta es el de siempre: sin el campo nuevo. */
-const SESION_ALTA = { access_token: 'cabecera.eyJzdWIiOiJ1MSJ9.firma', token_type: 'bearer', id: 'u1', name: 'Ana', role: 'admin', account_type: 'dsp', slug: 'ana-x1y2' }
+const SESION_ALTA = { access_token: 'cabecera.eyJzdWIiOiJ1MSJ9.firma', token_type: 'bearer', id: 'u1', name: 'Ana', role: 'admin', account_type: 'dsp', slug: 'ana-x1y2', correo_bienvenida: true }
 test.describe('control · el alta de la web no manda desde_ios', () => {
   test('/registro: el cuerpo del alta es el de siempre', async ({ page }) => {
     await simularApi(page, 'vacio')
@@ -783,6 +783,8 @@ const HOLA = 'Hola, ANA'
 const PORTAL = [
   { nombre: 'el acceso (sin sesión)', ruta: '/conductor', sinSesion: true },
   { nombre: 'el acceso de la empresa (/conductor/oga5)', ruta: '/conductor/oga5', sinSesion: true },
+  // El acceso personal que el dueño manda por WhatsApp (14-11-2026): una pantalla con «Entrar», sin nada que vender.
+  { nombre: 'la entrada con el enlace personal (/c)', ruta: '/c#' + 'a'.repeat(64), ancla: 'Entrar en tu portal', sinSesion: true },
   { nombre: 'el inicio (Mi ruta, auditoría, turnos, extras, mercadillo…)', ruta: '/conductor', ancla: HOLA, web: [/Comparte y gana/, /Ropa del equipo/, /Desde 19,90 €/] },
   { nombre: 'Mi ruta (portal)', ruta: '/conductor?vista=ruta', ancla: SIGUIENTE },
   { nombre: 'Pedir días libres', ruta: '/conductor', ancla: HOLA, clic: 'Pedir días libres' },
@@ -820,7 +822,7 @@ test.describe('iPhone · el portal del conductor de empresa', () => {
     })
   }
 
-  test('la auditoría entera y su final (firma y «inspección enviada»), sin incentivos ni ofertas patrocinadas', async ({ page }) => {
+  test('la auditoría entera y su final (firma y «revisión enviada»), sin incentivos ni ofertas patrocinadas', async ({ page }) => {
     test.setTimeout(90000)
     const fallos = vigilar(page)
     const pedidos = []
@@ -833,8 +835,8 @@ test.describe('iPhone · el portal del conductor de empresa', () => {
     await page.route(/\/api\/driver-offers\/o1\/click/, (r) => { pedidos.push('click'); return r.fulfill({ json: {} }) })
     await page.route(/\/api\/driver-offers$/, (r) => { pedidos.push('oferta'); return r.fulfill({ json: { offers: [OFERTA] } }) })
     await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
-    await page.getByRole('button', { name: /Hacer la auditoría/ }).click()
-    await expect(page.getByText('Inspección diaria')).toBeVisible()
+    await page.getByRole('button', { name: /Hacer la revisión/ }).click()
+    await expect(page.getByText('Revisión diaria')).toBeVisible()
     await quieta(page, 500)
     await limpia(page, 'la auditoría, paso 1 (elegir furgoneta)')
     await page.getByRole('button', { name: /1234 ABC/ }).click()
@@ -847,22 +849,23 @@ test.describe('iPhone · el portal del conductor de empresa', () => {
     await page.getByRole('button', { name: 'Sí, la lleva' }).click()
     await page.getByRole('button', { name: /Revisar y enviar/ }).click()
     await limpia(page, 'la auditoría, paso 4 (resumen)')
-    await page.getByRole('button', { name: /Enviar inspección/ }).click()
-    await expect(page.getByText('Inspección completada')).toBeVisible()
+    await page.getByRole('button', { name: /Enviar revisión/ }).click()
+    // «Revisión», no «Inspección», también al acabar (tanda 6).
+    await expect(page.getByText('Revisión completada')).toBeVisible()
     await quieta(page, 700)
-    await limpia(page, 'la inspección completada (firma)')
+    await limpia(page, 'la revisión completada (firma)')
     await page.getByRole('checkbox').check({ force: true })
     await page.getByRole('button', { name: /Firmar electrónicamente/ }).click()
-    await expect(page.getByRole('button', { name: /Nueva inspección/ }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /Nueva revisión/ }).first()).toBeVisible()
     await quieta(page, 700)
-    const final = await limpia(page, 'la inspección firmada (final)')
+    const final = await limpia(page, 'la revisión firmada (final)')
     expect(final).not.toMatch(/neumáticos|FLOTA20|Ver oferta|🎁/)
     expect(pedidos, 'en el iPhone no se piden ni se cuentan las ofertas patrocinadas').toEqual([])
     expect(fallos).toEqual([])
   })
 })
 test.describe('control · el portal del conductor de la web sigue con «Comparte y gana», la ropa y las ofertas', () => {
-  test('el inicio, la cartera, la tienda, la auditoría con sus incentivos y el final con la oferta', async ({ page }) => {
+  test('el inicio, la cartera, la tienda, la auditoría y el final con la oferta', async ({ page }) => {
     test.setTimeout(90000)
     await portal(page, false)
     await page.route(/\/api\/auth\/me\/assigned-vehicle/, (r) => r.fulfill({ json: {} }))
@@ -876,8 +879,10 @@ test.describe('control · el portal del conductor de la web sigue con «Comparte
     await page.getByRole('button', { name: /Comparte y gana/ }).click()
     await expect(page.getByText(/Invita · comparte · gana/)).toBeVisible()
     await page.getByRole('button', { name: 'Volver' }).click()
-    await page.getByRole('button', { name: /Hacer la auditoría/ }).click()
-    await expect(page.getByText(/Próximamente: incentivos para conductores/)).toBeVisible()
+    await page.getByRole('button', { name: /Hacer la revisión/ }).click()
+    // «Próximamente: incentivos para conductores» ya no sale tampoco en la web (tanda 6): prometía algo que no existe.
+    await expect(page.getByText('Revisión diaria')).toBeVisible()
+    await expect(page.getByText(/incentivos para conductores|premiaremos/)).toHaveCount(0)
     await page.getByRole('button', { name: /1234 ABC/ }).click()
     const archivos = page.locator('input[type=file]')
     await expect(archivos).toHaveCount(6)
@@ -886,8 +891,8 @@ test.describe('control · el portal del conductor de la web sigue con «Comparte
     await page.getByRole('button', { name: /Continuar al checklist/ }).click()
     await page.getByRole('button', { name: 'Sí, la lleva' }).click()
     await page.getByRole('button', { name: /Revisar y enviar/ }).click()
-    await page.getByRole('button', { name: /Enviar inspección/ }).click()
-    await expect(page.getByText('Inspección completada')).toBeVisible()
+    await page.getByRole('button', { name: /Enviar revisión/ }).click()
+    await expect(page.getByText('Revisión completada')).toBeVisible()
     await page.getByRole('checkbox').check({ force: true })
     await page.getByRole('button', { name: /Firmar electrónicamente/ }).click()
     await expect(page.getByText('Descuento del 20 % en neumáticos')).toBeVisible()
@@ -903,6 +908,8 @@ const SOLO_WEB = [
   ['la calculadora (/calculadora-repartidor)', '/calculadora-repartidor'], ['la guía de Safari (/iphone)', '/iphone'],
   ['los avisos de empleo de pago (/empleo/prioridad)', '/empleo/prioridad'], ['el peritaje con precio (/peritaje-tecnico)', '/peritaje-tecnico'],
   ['la tienda pública (/t/abc)', '/t/abcdefghijklmnop'],
+  // 14-11-2026: la página de venta para empresas (precios, prueba de 14 días y la calculadora).
+  ['la página de empresas (/empresas)', '/empresas'],
 ]
 test.describe('iPhone · lo que solo existe en la web lleva a la app del repartidor', () => {
   test.use({ userAgent: UA_APP })
@@ -930,7 +937,8 @@ test.describe('iPhone · lo que solo existe en la web lleva a la app del reparti
 })
 test.describe('control · en la web esas páginas siguen donde estaban', () => {
   for (const [nombre, ruta, texto] of [['los planes y precios (/planes)', '/planes', /plan|precio/i], ['la invitación (/invita)', '/invita', /gana|invita/i],
-    ['la portada (/)', '/', /FDS/], ['el regalo (/regalo/ABCD-EFGH)', '/regalo/ABCD-EFGH', /regalo|FDS/i]]) {
+    ['la portada (/)', '/', /FDS/], ['el regalo (/regalo/ABCD-EFGH)', '/regalo/ABCD-EFGH', /regalo|FDS/i],
+    ['la página de empresas (/empresas)', '/empresas', /furgonetas|precio/i]]) {
     test(nombre, async ({ page }) => {
       await simularApi(page, 'vacio')
       await arrancar(page, { ios: false })
@@ -1059,6 +1067,33 @@ test.describe('iPhone · el panel de la empresa', () => {
       expect(fallos).toEqual([])
     })
   }
+  /* EL ARRANQUE DE UNA FLOTA (14-11-2026): sus cuatro pasos, dentro de la app, sin la prueba, el plan ni precios. */
+  test('el arranque (/panel/arranque): los cuatro pasos y la primera revisión', async ({ page }) => {
+    test.setTimeout(60000)
+    const fallos = vigilar(page)
+    await panel(page, true)
+    const base = { empresa: 'Transportes Pérez', centros: ['NORTE'], furgonetas: 1, conductores: 1, accesos: { sin_enlace: 1, sin_abrir: 0, abierto: 0, caducado: 0 }, revisiones: 0,
+      pasos: ['furgonetas', 'conductores', 'acceso', 'revision'].map((id) => ({ id, hecho: id !== 'acceso' && id !== 'revision' })), paso_actual: 3, revision: null }
+    let estado = base
+    await page.route(/\/api\/alta\/estado/, (r) => r.fulfill({ json: estado }))
+    await page.route(/\/api\/conductores\/accesos/, (r) => r.fulfill({ json: { empresa: 'Transportes Pérez', cuentas: {}, conductores: [
+      { driver_id: 'd1', nombre: 'Ana L.', center: 'NORTE', movil: '+34600111222', whatsapp: '34600111222', email: null, acceso: { estado: 'sin_enlace', creado_dia: null, abierto_dia: null, caduca_dia: null } }] } }))
+    await page.goto('/panel/arranque', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: 'Dales acceso' })).toBeVisible({ timeout: 15000 })
+    for (const n of [1, 2, 3]) {
+      await page.getByRole('button', { name: new RegExp(`^${n} · `) }).click()
+      await quieta(page, 500)
+      await limpia(page, `el arranque, paso ${n}`, { perfil: 'basico' })
+    }
+    estado = { ...base, paso_actual: null, revisiones: 1, pasos: base.pasos.map((p) => ({ ...p, hecho: true })),
+      revision: { id: 'r1', dia: '2026-11-14', hora: '09:31', recibida_at: '2026-11-14T08:31:07Z', furgoneta: { id: 'v1', matricula: '1234 ABC', modelo: 'Proace' },
+        conductor: { id: 'd1', nombre: 'Ana L.' }, fotos: [{ photo_index: 1, vista: 'frontal', url: '/demo/van-frontal.jpg' }], km: 1000, combustible_pct: 50 } }
+    await page.getByRole('button', { name: /^4 · / }).click()
+    await expect(page.getByRole('heading', { name: 'Ha llegado la primera revisión' })).toBeVisible({ timeout: 12000 })
+    await quieta(page, 500)
+    await limpia(page, 'el arranque, la primera revisión', { perfil: 'basico' })
+    expect(fallos).toEqual([])
+  })
   test('el acceso del panel', async ({ page }) => {
     await simularApi(page, 'vacio')
     await arrancar(page)
@@ -1262,7 +1297,8 @@ for (const [titulo, ios] of [['iPhone', true], ['control · web', false]]) {
       await page.route(/\/api\/ai\/asistente$/, (r) => { preguntas += 1; return r.fulfill({ status: 429, json: { detail: GEMINI_429 } }) })
       await page.goto('/panel', { waitUntil: 'domcontentloaded' })
       await expect(TITULO_DEL_PANEL(page)).toBeVisible({ timeout: 15000 })
-      await page.getByRole('button', { name: 'FDS IA' }).click()
+      // El asistente es el botón «Asistente» de la barra de arriba (ya no una burbuja flotante).
+      await page.getByRole('button', { name: 'Asistente', exact: true }).click()
       const pregunta = page.getByPlaceholder('Escribe tu pregunta…')
       await pregunta.fill('¿Qué ITV caducan este mes?')
       await pregunta.press('Enter')

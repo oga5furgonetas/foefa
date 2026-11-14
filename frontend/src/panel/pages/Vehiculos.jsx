@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useOutletContext, useSearchParams } from 'react-router-dom'
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom'
 import { useT, LANG_LOCALE } from '../../i18n'
 import { lista } from '../../lib/lista'
 import { verMatricula } from '../../lib/matricula'
@@ -11,6 +11,7 @@ import VidaVehiculo from '../components/VidaVehiculo'
 import { ultimaRueda } from '../../lib/rueda'
 import { useOrden } from '../../lib/orden'
 import { usePlan } from '../../lib/usePlan'
+import { gravedadDe } from '../../lib/analisis'
 import { sinPagos } from '../../lib/plataforma'
 import ThOrden from '../components/ThOrden'
 import QRCode from 'qrcode'
@@ -30,7 +31,6 @@ import {
   getOdometroSospechosas, sanearOdometro, getDatosQueFaltan, rellenarDatosLote, getCheckerEstados, corregirEstados, getCheckerCentros, corregirCentros,
   fijarBolsas,
 } from '../api'
-import { getAdmin } from '../auth'
 import { MARCA } from '../../marca'
 
 const NIVEL_TXT = { 10: 'Reserva', 25: '¼', 50: '½', 75: '¾', 100: 'Lleno' }
@@ -106,7 +106,7 @@ function itvBadge(itv) {
 }
 
 function lastInspDot(date) {
-  if (!date) return { cls: 'bg-dark-600', txt: 'Nunca inspeccionada' }
+  if (!date) return { cls: 'bg-dark-600', txt: 'Nunca revisada' }
   // Días de CALENDARIO, no bloques de 24 h: revisada ayer a las 22:00 salía «hoy» a las 8:00.
   const f = new Date(date)
   const d = Number.isNaN(f.getTime()) ? 0 : Math.max(0, diasAtras(isoLocal(f)))
@@ -225,8 +225,8 @@ function TallerModal({ vehicle, onConfirm, onCancel }) {
   const valid = form.description.trim().length >= 3
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onCancel}>
-      <div className="relative mx-4 w-full max-w-md rounded-2xl border border-dark-700 bg-dark-900 p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onCancel}>
+      <div className="relative mx-4 w-full max-w-md ventana rounded-2xl p-6" onClick={e => e.stopPropagation()}>
         <button onClick={onCancel} className="absolute right-4 top-4 rounded-lg p-1.5 text-dark-300 hover:bg-dark-800 hover:text-white transition"><X size={15} /></button>
 
         <div className="mb-5 flex items-center gap-3">
@@ -311,8 +311,8 @@ function MaintModal({ kind, currentKm, onSave, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative mx-4 w-full max-w-sm rounded-2xl border border-dark-700 bg-dark-900 p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="relative mx-4 w-full max-w-sm ventana rounded-2xl p-6" onClick={e => e.stopPropagation()}>
         <button onClick={onClose} className="absolute right-4 top-4 rounded-lg p-1.5 text-dark-300 hover:bg-dark-800 hover:text-white transition"><X size={15} /></button>
         <h2 className="mb-4 text-sm font-bold text-dark-50">Registrar: {meta.label}</h2>
         <div className="space-y-3">
@@ -373,6 +373,13 @@ function computeHealth({ vehicle, insps, incidents, maintenance, ledger, t }) {
   return { score, factors }
 }
 
+/* Para «Sin fotos» en las filas de revisión (V3). El parte de disputa viejo, que también las usaba, se cambió el
+   14-11-2026 por el expediente de la furgoneta (pages/Expediente.jsx). */
+const comoLista = (x) => (Array.isArray(x) ? x : [])
+const esFoto = (f) => typeof f === 'string' && f !== ''
+
+const TANDA_INSP = 50   // lo que da /inspections/vehicle/{id} por petición
+
 /* ── Vehicle detail panel ── */
 function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
   const { t, lang } = useT()
@@ -397,6 +404,18 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
   const [activeTab, setActiveTab] = useState('info') // 'info' | 'gemelo' | 'inspecciones' | 'docs'
   const [ledger, setLedger] = useState(null)
   const [ledgerLoading, setLedgerLoading] = useState(false)
+  /* EL HISTORIAL ENTERO (14-11-2026): solo llegaban las 50 últimas revisiones. Si la tanda vino llena, «Ver
+     revisiones más antiguas» pide las anteriores a la última que hay (cursor del servidor), y aparte se pide la
+     PRIMERA de la furgoneta: la foto de cómo llegó, que es la que hace falta al devolverla. */
+  const [hayMasInsps, setHayMasInsps] = useState(false)
+  const [cargandoMasInsps, setCargandoMasInsps] = useState(false)
+  const [primeraInsp, setPrimeraInsp] = useState(null)
+  const [verPrimera, setVerPrimera] = useState(false)
+  /* RONDA 3 (14-11-2026): el total de verdad (M2; null mientras no se sepa, y entonces «50+») y las filas
+     desplegadas con sus fotos (V3). */
+  const [totalInsps, setTotalInsps] = useState(null)
+  const [inspAbiertas, setInspAbiertas] = useState(() => new Set())
+  const vidActual = useRef(initVehicle?.id)
 
   const vinOrPlate = vehicle.vin || vehicle.license_plate || ''
   const st = STATUS_MAP[vehicle.status] || STATUS_MAP.baja
@@ -410,7 +429,24 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
     let cancelled = false
     setDriver(undefined); setInsps(null); setVehicleIncidents(null)
     getVehicleDriver(vehicle.id).then(r => { if (!cancelled) setDriver(r.data?.driver || null) }).catch(() => { if (!cancelled) setDriver(null) })
-    getVehicleInspections(vehicle.id).then(r => { if (!cancelled) setInsps(lista(r.data)) }).catch(() => { if (!cancelled) setInsps([]) })
+    vidActual.current = vehicle.id
+    setHayMasInsps(false); setPrimeraInsp(null); setVerPrimera(false)
+    setTotalInsps(null); setInspAbiertas(new Set())
+    getVehicleInspections(vehicle.id).then(r => {
+      if (cancelled) return
+      const l = lista(r.data)
+      setInsps(l)
+      if (l.length < TANDA_INSP) return
+      setHayMasInsps(true)
+      getVehicleInspections(vehicle.id, { primera: true })
+        .then(p => { if (!cancelled) setPrimeraInsp(lista(p.data)[0] || null) }).catch(() => {})
+      // Cuántas hay en total (`solo_total`). Un servidor viejo no lo entiende y devuelve la lista: se queda en «50+».
+      getVehicleInspections(vehicle.id, { solo_total: true })
+        .then(p => {
+          const n = p?.data && !Array.isArray(p.data) ? p.data.total : null
+          if (!cancelled && Number.isInteger(n) && n >= 0) setTotalInsps(n)
+        }).catch(() => {})
+    }).catch(() => { if (!cancelled) setInsps([]) })
     getIncidents({ vehicle_id: vehicle.id }).then(r => { if (!cancelled) setVehicleIncidents(Array.isArray(r.data) ? r.data : []) }).catch(() => { if (!cancelled) setVehicleIncidents([]) })
     getVehicleMaintenance(vehicle.id).then(r => { if (!cancelled) setMaintenance(r.data || null) }).catch(() => { if (!cancelled) setMaintenance(null) })
     // Lo que se le ha HECHO, no lo que le toca: la ficha guardaba solo el km
@@ -470,6 +506,44 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
     clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToast(null), 3000)
   }
+
+  // Las siguientes 50, sin perder las que hay. Un servidor viejo ignora el cursor y devuelve las mismas: no se
+  // repite ninguna (se quitan por id) y el botón se va, porque no ha llegado nada nuevo.
+  function cargarMasInsps() {
+    const ult = insps?.[insps.length - 1]
+    if (!ult || cargandoMasInsps) return
+    const vid = vehicle.id
+    setCargandoMasInsps(true)
+    getVehicleInspections(vid, { antes_de: ult.created_at || '', antes_de_id: ult.id || '' })
+      .then((r) => {
+        if (vidActual.current !== vid) return
+        const llegan = lista(r.data)
+        const ya = new Set((insps || []).map((i) => i.id))
+        const nuevas = llegan.filter((i) => !ya.has(i.id))
+        setInsps((prev) => {
+          const dentro = new Set((prev || []).map((i) => i.id))
+          return [...(prev || []), ...nuevas.filter((i) => !dentro.has(i.id))]
+        })
+        setHayMasInsps(llegan.length >= TANDA_INSP && nuevas.length > 0)
+      })
+      .catch(() => { if (vidActual.current === vid) showToast(t('vh.insp.mas.err'), false) })
+      .finally(() => { if (vidActual.current === vid) setCargandoMasInsps(false) })
+  }
+  // La primera revisión de la furgoneta, si no está ya en la lista. Con todo cargado, es la última de la lista.
+  const primeraFuera = primeraInsp && !(insps || []).some((i) => i.id === primeraInsp.id) ? primeraInsp : null
+  /* M2 (14-11-2026): con la tanda llena, el número cargado (50) no es el total. El del servidor si lo sabe; si no,
+     «50+». Con todo cargado, la lista. */
+  const numInsps = !insps ? null
+    : !hayMasInsps ? insps.length
+      : totalInsps != null ? Math.max(totalInsps, insps.length) : `${insps.length}+`
+  // M6 (14-11-2026): la gravedad con su nombre («Sin daños»), con las claves `sev.*` de Inspecciones y Revisión
+  // rápida; un valor que no tenga nombre sale tal cual, como antes.
+  const sevTxt = (s) => { const x = t(`sev.${s}`); return x && x !== `sev.${s}` ? x : s }
+  const alternarInsp = (id) => setInspAbiertas((prev) => {
+    const n = new Set(prev)
+    if (n.has(id)) n.delete(id); else n.add(id)
+    return n
+  })
 
   async function patch(fields) {
     setBusy(true)
@@ -534,77 +608,46 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
     finally { setBusy(false) }
   }
 
-  /* Parte de disputa 1-clic: documento formal imprimible (Ctrl+P → PDF) con
-     identidad del vehículo, cronología con marca de tiempo y evidencia
-     antes/después de cada daño nuevo. Para enviar al renting tal cual. */
-  function buildDisputeDoc(evs) {
-    const admin = getAdmin()
-    const esc = (s) => String(s ?? '').replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]))
-    const fmtAt = (at) => esc(fechaHoraLocal(at))
-    const rows = evs.map((e) => `<tr><td class="dt">${fmtAt(e.at)}</td><td>${esc(e.txt)}</td></tr>`).join('')
-
-    // Evidencia: hasta 3 inspecciones con daño nuevo, cada una con su "antes"
-    const withNew = (insps || []).filter((i) => (i.analysis?.new_damages || []).length > 0).slice(0, 3)
-    const evidence = withNew.map((i) => {
-      const idx = insps.indexOf(i)
-      const prev = insps[idx + 1] // la siguiente en la lista es la anterior en el tiempo
-      const cur = i.annotated_photos?.[0] || i.photos?.[0]
-      const before = prev?.photos?.[0]
-      if (!cur) return ''
-      return `<div class="ev">
-        <div class="ev-h">Daño nuevo detectado el ${fmtAt(i.created_at)}${i.driver_name ? ` · Conductor: ${esc(i.driver_name)}` : ''}</div>
-        <div class="ev-imgs">
-          ${before ? `<figure><img src="${esc(before)}"><figcaption>Estado anterior — ${fmtAt(prev.created_at)}${prev.driver_name ? ` (${esc(prev.driver_name)})` : ''}</figcaption></figure>` : ''}
-          <figure><img src="${esc(cur)}"><figcaption>Daño documentado — ${fmtAt(i.created_at)}</figcaption></figure>
-        </div>
-      </div>`
-    }).join('')
-
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Parte de disputa — ${esc(vehicle.license_plate)}</title>
-<style>
-  body { font: 13px/1.5 -apple-system, 'Segoe UI', sans-serif; color: #111; margin: 40px auto; max-width: 760px; }
-  h1 { font-size: 19px; margin: 0; letter-spacing: -0.01em; }
-  .sub { color: #666; font-size: 11px; margin-top: 2px; }
-  .plate { font-family: ui-monospace, monospace; font-size: 30px; font-weight: 800; letter-spacing: 3px; margin: 18px 0 2px; }
-  .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 18px; margin: 14px 0 4px; font-size: 12px; }
-  .meta b { display: block; color: #888; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1.5px solid #111; padding-bottom: 4px; margin: 26px 0 8px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  td { padding: 4.5px 8px 4.5px 0; border-bottom: 1px solid #e5e5e5; vertical-align: top; }
-  td.dt { white-space: nowrap; font-family: ui-monospace, monospace; font-size: 11px; color: #555; width: 118px; }
-  .ev { margin: 14px 0; page-break-inside: avoid; }
-  .ev-h { font-weight: 600; font-size: 12px; margin-bottom: 6px; }
-  .ev-imgs { display: flex; gap: 10px; }
-  figure { margin: 0; flex: 1; }
-  img { width: 100%; border: 1px solid #ddd; border-radius: 4px; }
-  figcaption { font-size: 10px; color: #666; margin-top: 3px; }
-  .foot { margin-top: 30px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 10px; color: #888; }
-  @media print { body { margin: 10mm; } }
-</style></head><body>
-  <h1>Parte de disputa — Historial del vehículo</h1>
-  <div class="sub">Generado por ${esc(MARCA.nombre)} · ${esc(new Date().toLocaleString('es-ES'))}${admin?.name ? ` · ${esc(admin.name)}` : ''}</div>
-  <div class="plate">${esc(vehicle.license_plate || '—')}</div>
-  <div class="sub">${esc([vehicle.brand, vehicle.model, vehicle.year].filter(Boolean).join(' '))}</div>
-  <div class="meta">
-    <div><b>VIN / Bastidor</b>${esc(vehicle.vin || '—')}</div>
-    <div><b>Proveedor renting</b>${esc(vehicle.provider || '—')}</div>
-    <div><b>Centro</b>${esc(vehicle.center || '—')}</div>
-    <div><b>Kilómetros</b>${vehicle.mileage != null ? esc(vehicle.mileage.toLocaleString('es')) + ' km' : '—'}</div>
-    <div><b>ITV</b>${esc(vehicle.itv_date || '—')}</div>
-    <div><b>Fin renting</b>${esc(vehicle.renting_end_date || '—')}</div>
-  </div>
-  <h2>Cronología registrada</h2>
-  <table>${rows}</table>
-  ${evidence ? `<h2>Evidencia fotográfica</h2>${evidence}` : ''}
-  <div class="foot">Documento generado automáticamente a partir de registros con marca de tiempo de ${esc(MARCA.nombre)}
-  (inspecciones fotográficas, incidencias y reparaciones). Las inspecciones individuales disponen además de
-  informe forense firmado descargable desde la plataforma.</div>
-  <script>window.onload = () => setTimeout(() => window.print(), 400)</script>
-</body></html>`
-    const w = window.open('', '_blank')
-    if (!w) return
-    w.document.write(html)
-    w.document.close()
+  /* La línea de vida del Historial (14-11-2026: en una función aparte, como cuando también la usaba el parte). */
+  function eventosHistorial(l) {
+    const evs = []
+    for (const i of l) {
+      const s = gravedadDe(i.analysis)
+      const nd = (i.analysis?.new_damages || []).length
+      const dot = s === 'grave' || s === 'critico' ? 'bg-red-400'
+        : s === 'moderado' ? 'bg-orange-400'
+        : s === 'leve' ? 'bg-amber-400'
+        : s === 'sin_danos' ? 'bg-emerald-400' : 'bg-dark-600'
+      evs.push({
+        at: i.created_at, dot, strong: nd > 0,
+        txt: `${t('vh.ev.insp')}${s ? ` · ${sevTxt(s)}` : ''}${nd ? ` · ${nd} ${t('vh.ev.new')}` : ''}${i.driver_name ? ` · ${i.driver_name}` : ''}`,
+      })
+    }
+    for (const inc of vehicleIncidents || []) {
+      if (inc.created_at) evs.push({ at: inc.created_at, dot: 'bg-amber-400', txt: `${t('vh.f.incident')}: ${(inc.title || inc.description || '').slice(0, 60)}` })
+      if (inc.resolved_at) evs.push({ at: inc.resolved_at, dot: 'bg-emerald-400', txt: `${t('vh.ev.inc.res')}: ${(inc.title || '').slice(0, 60)}` })
+    }
+    for (const e of (ledger?.repaired || [])) {
+      if (e.repaired_at) evs.push({ at: e.repaired_at, dot: 'bg-emerald-400', txt: `${t('vh.ev.repair')}: ${e.part || e.panel}` })
+    }
+    if (vehicle.body_repaired_at) evs.push({ at: vehicle.body_repaired_at, dot: 'bg-emerald-400', txt: `🔧 ${t('vh.ev.repair.all')}` })
+    // Mantenimientos hechos. La nota es lo que de verdad se hizo
+    // ("ruedas traseras"), que casi nunca es el título del cambio, y
+    // es justo lo que hace falta leer dentro de seis meses.
+    for (const m of (maintLog || [])) {
+      const et = MAINT_LABEL[m.tipo] || m.tipo
+      // Qué ejes: "Ruedas" a secas y "Ruedas delanteras" no dicen lo
+      // mismo, y es lo primero que se pregunta al mirar atrás.
+      const ejes = (m.posiciones || []).map((p) => EJE_LABEL[p] || p)
+      const cual = ejes.length && ejes.length < 2 ? ` ${ejes[0].toLowerCase()}` : ''
+      evs.push({
+        at: m.fecha, dot: 'bg-sky-400', strong: true, apunte: m.id,
+        txt: [`🔧 ${et}${cual}`, m.nota, m.km != null ? `${Number(m.km).toLocaleString('es')} km` : null, m.taller]
+          .filter(Boolean).join(' · '),
+      })
+    }
+    evs.sort((a, b) => String(b.at).localeCompare(String(a.at)))
+    return evs
   }
 
   function downloadCard() {
@@ -777,7 +820,7 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
               <StatChip icon={<Gauge size={12} />} val={vehicle.mileage != null ? `${vehicle.mileage.toLocaleString('es')} km` : '—'} label="Kilómetros" />
               <StatChip icon={<Package size={12} />} val={vehicle.bags_remaining ?? '—'} label="Bolsas"
                 titulo="Poner cuántas bolsas quedan" onClick={() => setBolsasOpen(true)} />
-              <StatChip icon={<Camera size={12} />} val={insps ? insps.length : '…'} label="Inspecciones" />
+              <StatChip icon={<Camera size={12} />} val={numInsps ?? '…'} label="Inspecciones" />
             </div>
             {vehicle.combustible?.pct != null && (
               <div className="mt-2 flex items-center gap-2 text-xs text-dark-400">
@@ -795,8 +838,8 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
             {[
               { id: 'info',         label: 'Info',          count: null },
               { id: 'gemelo',       label: 'Gemelo 3D',     count: null },
-              { id: 'inspecciones', label: 'Inspecciones',  count: insps?.length ?? null },
-              { id: 'expediente',  label: 'Expediente',    count: null },
+              { id: 'inspecciones', label: 'Inspecciones',  count: numInsps },
+              { id: 'expediente',  label: 'Cronología',    count: null },
               { id: 'historial',    label: t('vh.tab.history'), count: null },
               { id: 'docs',         label: 'Documentos',    count: docs?.length ?? null },
             ].map(tab => (
@@ -1259,7 +1302,7 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
                   <div className="mb-4 overflow-x-auto pb-2">
                     <div className="flex min-w-max items-end gap-1 px-1">
                       {[...insps].reverse().slice(-30).map((tl) => {
-                        const s = tl.analysis?.severity || 'sin_analisis'
+                        const s = gravedadDe(tl.analysis) || 'sin_analisis'
                         const hasNew = (tl.analysis?.new_damages || []).length > 0
                         const col = s === 'critico' || s === 'grave' ? 'bg-red-400'
                           : s === 'moderado' ? 'bg-orange-400'
@@ -1267,7 +1310,7 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
                           : s === 'sin_danos' ? 'bg-emerald-400' : 'bg-dark-600'
                         return (
                           <div key={tl.id} className="group relative flex flex-col items-center gap-1"
-                            title={`${(tl.created_at || '').slice(0, 10)} · ${s}${hasNew ? ' · DAÑO NUEVO' : ''}${tl.driver_name ? ' · ' + tl.driver_name : ''}`}>
+                            title={`${(tl.created_at || '').slice(0, 10)} · ${sevTxt(s)}${hasNew ? ' · DAÑO NUEVO' : ''}${tl.driver_name ? ' · ' + tl.driver_name : ''}`}>
                             {tl.photos?.[0] ? (
                               <img src={tl.photos[0]} alt="" loading="lazy"
                                 className={`h-9 w-9 rounded-md object-cover opacity-80 ring-2 transition group-hover:scale-125 group-hover:opacity-100 ${hasNew ? 'ring-red-500/70' : 'ring-transparent'}`} />
@@ -1281,7 +1324,7 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
                     </div>
                     <div className="mt-1 flex justify-between px-1 text-[9px] text-dark-500">
                       <span>{(insps[insps.length - 1]?.created_at || '').slice(0, 10)}</span>
-                      <span>hoy · {insps.length} inspecciones</span>
+                      <span>hoy · {numInsps} inspecciones</span>
                     </div>
                   </div>
                 )}
@@ -1294,8 +1337,13 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    {insps.map((insp) => {
-                      const sev = insp.analysis?.severity || ''
+                    {/* V3 (14-11-2026): cada revisión se despliega con sus fotos, como «La primera revisión»; las
+                        imágenes solo se piden al desplegarla. Antes la fila no se podía abrir aunque llevaba flecha. */}
+                    {insps.map((insp, n) => {
+                      const clave = insp.id ?? `n${n}`
+                      const abierta = inspAbiertas.has(clave)
+                      const fotosInsp = comoLista(insp.photos).filter(esFoto)
+                      const sev = gravedadDe(insp.analysis) || ''
                       const sevMap = {
                         grave:    'bg-red-500/10 text-red-300 ring-red-500/20',
                         critico:  'bg-red-500/10 text-red-300 ring-red-500/20',
@@ -1304,23 +1352,71 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
                       }
                       const sevCls = sevMap[sev] || 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/20'
                       return (
-                        <div key={insp.id} className="flex items-center gap-3 rounded-xl border border-dark-800/60 px-3 py-2.5 transition hover:bg-dark-800/40">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-medium text-dark-200">{fechaHoraLocal(insp.created_at)}</span>
-                              {sev && <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${sevCls}`}>{sev}</span>}
-                            </div>
-                            {insp.driver_name && (
-                              <div className="mt-0.5 flex items-center gap-1 text-[11px] text-dark-500">
-                                <User size={9} className="shrink-0" />
-                                <span className="truncate">{insp.driver_name}</span>
+                        <div key={clave} className="rounded-xl border border-dark-800/60">
+                          <button type="button" onClick={() => alternarInsp(clave)} aria-expanded={abierta}
+                            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-dark-800/40">
+                            <span className="block flex-1 min-w-0">
+                              <span className="flex items-center gap-2">
+                                <span className="text-xs font-medium text-dark-200">{fechaHoraLocal(insp.created_at)}</span>
+                                {sev && <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${sevCls}`}>{sevTxt(sev)}</span>}
+                              </span>
+                              {insp.driver_name && (
+                                <span className="mt-0.5 flex items-center gap-1 text-[11px] text-dark-500">
+                                  <User size={9} className="shrink-0" />
+                                  <span className="truncate">{insp.driver_name}</span>
+                                </span>
+                              )}
+                            </span>
+                            <ChevronRight size={12} className={`shrink-0 text-dark-500 transition-transform ${abierta ? 'rotate-90' : ''}`} />
+                          </button>
+                          {abierta && (
+                            fotosInsp.length ? (
+                              <div className="grid grid-cols-3 gap-1.5 px-3 pb-3 sm:grid-cols-4">
+                                {fotosInsp.map((f, k) => (
+                                  <a key={f + k} href={f} target="_blank" rel="noreferrer" className="block">
+                                    <img src={f} alt="" loading="lazy" className="aspect-square w-full rounded-lg border border-dark-700 object-cover" />
+                                  </a>
+                                ))}
                               </div>
-                            )}
-                          </div>
-                          <ChevronRight size={12} className="shrink-0 text-dark-700" />
+                            ) : <p className="px-3 pb-3 text-[11px] text-dark-500">{t('vh.insp.sinFotos')}</p>
+                          )}
                         </div>
                       )
                     })}
+                    {hayMasInsps && (
+                      <button type="button" onClick={cargarMasInsps} disabled={cargandoMasInsps}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-dark-700/60 py-2.5 text-[12px] font-semibold text-dark-300 transition hover:bg-dark-800/40 disabled:opacity-60">
+                        {cargandoMasInsps ? <Loader2 size={13} className="animate-spin" /> : <Clock size={13} />}
+                        {t('vh.insp.mas')}
+                      </button>
+                    )}
+                    {/* La foto de entrada, si no está ya en la lista (14-11-2026). */}
+                    {primeraFuera && (
+                      <div className="rounded-xl border border-brand-500/30 bg-brand-500/5">
+                        <button type="button" onClick={() => setVerPrimera((v) => !v)} aria-expanded={verPrimera}
+                          className="flex w-full items-center gap-3 px-3 py-2.5 text-left">
+                          <Camera size={13} className="shrink-0 text-brand-300" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-semibold text-brand-200">{t('vh.insp.primera')}</span>
+                            <span className="mt-0.5 block truncate text-[11px] text-dark-400">
+                              {fechaHoraLocal(primeraFuera.created_at)}{primeraFuera.driver_name ? ` · ${primeraFuera.driver_name}` : ''}
+                            </span>
+                          </span>
+                          <ChevronRight size={12} className={`shrink-0 text-dark-500 transition-transform ${verPrimera ? 'rotate-90' : ''}`} />
+                        </button>
+                        {verPrimera && (
+                          (primeraFuera.photos || []).filter(Boolean).length ? (
+                            <div className="grid grid-cols-3 gap-1.5 px-3 pb-3 sm:grid-cols-4">
+                              {(primeraFuera.photos || []).filter(Boolean).map((f, n) => (
+                                <a key={f + n} href={f} target="_blank" rel="noreferrer" className="block">
+                                  <img src={f} alt="" loading="lazy" className="aspect-square w-full rounded-lg border border-dark-700 object-cover" />
+                                </a>
+                              ))}
+                            </div>
+                          ) : <p className="px-3 pb-3 text-[11px] text-dark-500">{t('vh.insp.sinFotos')}</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1369,53 +1465,17 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
             {activeTab === 'expediente' && <Expediente vehicleId={vehicle?.id} />}
 
             {activeTab === 'historial' && (() => {
-              const evs = []
-              for (const i of insps || []) {
-                const s = i.analysis?.severity
-                const nd = (i.analysis?.new_damages || []).length
-                const dot = s === 'grave' || s === 'critico' ? 'bg-red-400'
-                  : s === 'moderado' ? 'bg-orange-400'
-                  : s === 'leve' ? 'bg-amber-400'
-                  : s === 'sin_danos' ? 'bg-emerald-400' : 'bg-dark-600'
-                evs.push({
-                  at: i.created_at, dot, strong: nd > 0,
-                  txt: `${t('vh.ev.insp')}${s ? ` · ${s}` : ''}${nd ? ` · ${nd} ${t('vh.ev.new')}` : ''}${i.driver_name ? ` · ${i.driver_name}` : ''}`,
-                })
-              }
-              for (const inc of vehicleIncidents || []) {
-                if (inc.created_at) evs.push({ at: inc.created_at, dot: 'bg-amber-400', txt: `${t('vh.f.incident')}: ${(inc.title || inc.description || '').slice(0, 60)}` })
-                if (inc.resolved_at) evs.push({ at: inc.resolved_at, dot: 'bg-emerald-400', txt: `${t('vh.ev.inc.res')}: ${(inc.title || '').slice(0, 60)}` })
-              }
-              for (const e of (ledger?.repaired || [])) {
-                if (e.repaired_at) evs.push({ at: e.repaired_at, dot: 'bg-emerald-400', txt: `${t('vh.ev.repair')}: ${e.part || e.panel}` })
-              }
-              if (vehicle.body_repaired_at) evs.push({ at: vehicle.body_repaired_at, dot: 'bg-emerald-400', txt: `🔧 ${t('vh.ev.repair.all')}` })
-              // Mantenimientos hechos. La nota es lo que de verdad se hizo
-              // ("ruedas traseras"), que casi nunca es el título del cambio, y
-              // es justo lo que hace falta leer dentro de seis meses.
-              for (const m of (maintLog || [])) {
-                const et = MAINT_LABEL[m.tipo] || m.tipo
-                // Qué ejes: "Ruedas" a secas y "Ruedas delanteras" no dicen lo
-                // mismo, y es lo primero que se pregunta al mirar atrás.
-                const ejes = (m.posiciones || []).map((p) => EJE_LABEL[p] || p)
-                const cual = ejes.length && ejes.length < 2 ? ` ${ejes[0].toLowerCase()}` : ''
-                evs.push({
-                  at: m.fecha, dot: 'bg-sky-400', strong: true, apunte: m.id,
-                  txt: [`🔧 ${et}${cual}`, m.nota, m.km != null ? `${Number(m.km).toLocaleString('es')} km` : null, m.taller]
-                    .filter(Boolean).join(' · '),
-                })
-              }
-              evs.sort((a, b) => String(b.at).localeCompare(String(a.at)))
+              const evs = eventosHistorial(insps || [])
               return (
                 <div className="px-5 py-4">
-                  {evs.length > 0 && (
-                    <button
-                      onClick={() => buildDisputeDoc(evs)}
-                      className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 py-2.5 text-[13px] font-semibold text-white shadow-lg shadow-brand-500/25 transition hover:brightness-110 active:scale-[0.99]"
-                    >
-                      <FileText size={14} /> {t('vh.dispute')}
-                    </button>
-                  )}
+                  {/* El expediente para imprimir (14-11-2026): sustituye al «Parte de disputa». Solo golpes
+                      confirmados por una persona, cada uno con su foto y la anterior del mismo lado. */}
+                  <Link
+                    to={`/panel/vehiculos/${encodeURIComponent(vehicle.id)}/expediente`}
+                    className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-dark-700 py-2.5 text-[13px] font-semibold text-dark-100 transition hover:border-dark-600 hover:text-dark-50"
+                  >
+                    <FileText size={14} /> {t('exp.entrar')}
+                  </Link>
                   {/* Cuánto tiempo estuvo abierto cada daño. La lista de abajo
                       dice QUÉ pasó y CUÁNDO; esto dice CUÁNTO DURÓ. Solo si el
                       ledger trae algo: sin daños no hay nada que dibujar. */}
@@ -1614,9 +1674,9 @@ function BolsasModal({ vehicle, onGuardar, onClose }) {
        dia compensa unas y no las otras, y `text-slate-100` sobre `bg-slate-800`
        da 1,01:1 —texto claro sobre fondo claro—. Lo canto `check-contraste`
        antes de desplegarlo. */
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xs rounded-2xl border border-dark-700 bg-dark-900 p-5 shadow-xl">
+        className="w-full max-w-xs ventana rounded-2xl p-5">
         <h3 className="text-sm font-bold text-dark-50">Bolsas de {vehicle.license_plate}</h3>
         <p className="mt-1 text-[12px] text-dark-400">
           Cuántas quedan ahora mismo en la furgoneta.
@@ -1697,9 +1757,9 @@ function AddVehicleModal({ centers, onSaved, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
       <div
-        className="relative w-full max-w-xl rounded-2xl border border-dark-700 bg-dark-900 shadow-2xl"
+        className="relative w-full max-w-xl ventana rounded-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -2947,10 +3007,9 @@ export default function Vehiculos() {
   return (
     <div>
       <header className="rise mb-8">
-        {center && center !== 'Todos' && (
-          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-brand-400/80">{center}</p>
-        )}
-        <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
+        {/* Sin el rótulo de la sede en mono espaciado encima (14-11-2026, tanda 6, como Conductores): la sede ya la dice
+            el selector de arriba. */}
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <h1 className="font-display text-[clamp(28px,3.4vw,42px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">
             {t('veh.title')}{vehicles && <span className="text-dark-500"> · {list.length}</span>}
           </h1>
@@ -2970,11 +3029,12 @@ export default function Vehiculos() {
                 <Download size={15} /> <span className="hidden sm:inline">Excel</span>
               </button>
             )}
+            {/* Cian liso con tinta encima, como «Añadir conductor» (tanda 6): sin degradado, sombra ni reflejo. */}
             <button
+              data-testid="anadir-vehiculo"
               onClick={() => setAddOpen(true)}
-              className="group relative flex items-center gap-1.5 overflow-hidden rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-lg shadow-brand-500/25 transition-all duration-300 [text-shadow:0_1px_1px_rgba(0,0,0,0.15)] hover:-translate-y-px hover:shadow-xl hover:shadow-brand-500/30 hover:brightness-110 active:translate-y-0 active:scale-[0.98]"
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-brand-400 px-4 py-2.5 text-[13.5px] font-semibold text-brand-tinta transition-colors hover:bg-brand-300 active:bg-brand-500"
             >
-              <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/20 to-transparent" />
               <Plus size={15} /> Añadir vehículo
             </button>
           </div>
@@ -2993,7 +3053,9 @@ export default function Vehiculos() {
           Separadas a propósito: una furgoneta devuelta no puede engordar los
           contadores ni salir en las listas de mantenimiento, pero tampoco se
           borra, porque a veces vuelve. */}
-      <div className="rise mb-5 flex gap-1 rounded-lg bg-dark-900 p-1 ring-1 ring-dark-700 w-fit">
+      {/* Las pestañas, como las de Conductores (tanda 6): la elegida en tinta con su raya debajo, no en una caja cian; en
+          el móvil se desplazan dentro de su fila en vez de sacar la página de lado. */}
+      <div data-testid="pestanas-vehiculos" className="rise mb-5 flex overflow-x-auto border-b border-dark-800">
         {[
           { id: 'activas', label: t('veh.tab.activas') },
           { id: 'baja', label: t('veh.tab.baja'), n: nBaja },
@@ -3011,8 +3073,9 @@ export default function Vehiculos() {
               onClick={() => { setVerDocs(x.id === 'docs'); setVerExpo(x.id === 'expo')
                 setVerDup(x.id === 'dup')
                 if (!['docs', 'expo', 'dup'].includes(x.id)) setVerBaja(x.id === 'baja') }}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                activa ? 'bg-brand-500/20 text-brand-300' : 'text-dark-400 hover:text-dark-200'}`}>
+              aria-pressed={activa}
+              className={`-mb-px flex min-h-[44px] shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:min-h-0 sm:px-4 ${
+                activa ? 'border-dark-50 text-dark-50' : 'border-transparent text-dark-500 hover:text-dark-300'}`}>
               {x.label}
               {x.n > 0 && <span className="rounded-full bg-dark-800 px-1.5 text-[10px] tabular-nums text-dark-400">{x.n}</span>}
             </button>
@@ -3057,7 +3120,7 @@ export default function Vehiculos() {
       )}
 
       {vehicles && !verBaja && !verDocs && (
-        <div className="rise mb-6 flex flex-wrap items-baseline gap-x-7 gap-y-2 border-y border-white/[0.05] py-3.5" style={{ animationDelay: '60ms' }}>
+        <div className="rise mb-6 flex flex-wrap items-baseline gap-x-7 gap-y-2 border-b border-white/[0.05] pb-3.5 pt-1" style={{ animationDelay: '60ms' }}>
           {[
             { val: kpis.total,   label: t('veh.all'),        color: 'text-dark-50' },
             { val: kpis.taller,  label: t('veh.workshop'),   color: 'text-amber-300' },
@@ -3112,22 +3175,25 @@ export default function Vehiculos() {
               sabes que columna estas mirando. */}
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-[13px]">
+              {/* En el móvil la tabla cabe en la pantalla (tanda 6): modelo, centro, km y estado no van en su columna
+                  sino en una segunda línea debajo de la matrícula; desde `sm`, la tabla de siempre. Las cabeceras, en
+                  letra normal, como las de Conductores. */}
+              <table data-testid="tabla-vehiculos" className="w-full text-[13px] sm:min-w-[720px]">
                 <thead className="sticky top-0 z-10 bg-dark-900">
                   <tr className="border-b border-dark-800">
                     <th className="w-6 px-2 py-2"></th>
-                    <ThOrden campo="license_plate" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-dark-500 text-left">Matrícula</ThOrden>
-                    <ThOrden campo="model" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-dark-500 text-left">Modelo</ThOrden>
-                    <ThOrden campo="center" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-dark-500 text-left">Centro</ThOrden>
-                    <ThOrden campo="mileage" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-dark-500 text-right">Km</ThOrden>
+                    <ThOrden campo="license_plate" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[11.5px] font-medium text-dark-500 text-left">Matrícula</ThOrden>
+                    <ThOrden campo="model" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[11.5px] font-medium text-dark-500 text-left max-sm:hidden">Modelo</ThOrden>
+                    <ThOrden campo="center" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[11.5px] font-medium text-dark-500 text-left max-sm:hidden">Centro</ThOrden>
+                    <ThOrden campo="mileage" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[11.5px] font-medium text-dark-500 text-right max-sm:hidden">Km</ThOrden>
                     {/* Sin orden a proposito: esta columna no sale de un campo de la
                         fila sino de la ultima inspeccion, que se busca aparte. Ordenar
                         por un campo que no existe deja la tabla igual y no da error:
                         pareceria que el boton esta roto. */}
-                    <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-dark-500">Revisión</th>
-                    <ThOrden campo="itv_date" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-dark-500 text-left">ITV</ThOrden>
-                    <ThOrden campo="status" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-dark-500 text-left">Estado</ThOrden>
-                    <th className="w-6 px-2 py-2"></th>
+                    <th className="px-2 py-2 text-left text-[11.5px] font-medium text-dark-500">Revisión</th>
+                    <ThOrden campo="itv_date" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[11.5px] font-medium text-dark-500 text-left">ITV</ThOrden>
+                    <ThOrden campo="status" orden={ordenTabla} pulsar={pulsarTabla} className="px-2 py-2 text-[11.5px] font-medium text-dark-500 text-left max-sm:hidden">Estado</ThOrden>
+                    <th className="w-6 px-2 py-2 max-sm:hidden"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3148,12 +3214,18 @@ export default function Vehiculos() {
                             <span className="ml-1.5 rounded bg-dark-800 px-1 py-px text-[9px] font-semibold tracking-normal text-dark-400"
                               title={ALTA_AYUDA[v.alta]}>{ALTA_CORTA[v.alta]}</span>
                           )}
+                          {/* Solo en el móvil: lo que en el ordenador va en sus columnas. */}
+                          <span data-testid="vehiculo-linea-movil" className="mt-0.5 block font-sans text-[12px] font-normal tracking-normal text-dark-400 sm:hidden">
+                            {[[v.brand, v.model].filter(Boolean).join(' '), center === 'Todos' ? v.center : '',
+                              v.mileage != null ? `${v.mileage.toLocaleString('es')}\u00a0km` : '',
+                              v.status !== 'active' ? t(st.labelKey) : ''].filter(Boolean).join(' · ')}
+                          </span>
                         </td>
-                        <td className="max-w-[190px] truncate px-2 py-1.5 text-dark-400">
+                        <td className="max-w-[190px] truncate px-2 py-1.5 text-dark-400 max-sm:hidden">
                           {[v.brand, v.model].filter(Boolean).join(' ') || '—'}
                         </td>
-                        <td className="px-2 py-1.5 text-dark-400">{v.center || '—'}</td>
-                        <td className="cifra px-2 py-1.5 text-right text-dark-300">
+                        <td className="px-2 py-1.5 text-dark-400 max-sm:hidden">{v.center || '—'}</td>
+                        <td className="cifra px-2 py-1.5 text-right text-dark-300 max-sm:hidden">
                           {v.mileage != null ? v.mileage.toLocaleString('es') : '—'}
                           <NivelDeposito c={v.combustible} compacto />
                         </td>
@@ -3162,12 +3234,12 @@ export default function Vehiculos() {
                           <span className="text-[12px] text-dark-400">{dot.txt}</span>
                         </td>
                         <td className="whitespace-nowrap px-2 py-1.5">{itvBadge(v.itv_date)}</td>
-                        <td className="whitespace-nowrap px-2 py-1.5">
+                        <td className="whitespace-nowrap px-2 py-1.5 max-sm:hidden">
                           {v.status !== 'active'
                             ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${st.badge}`}>{t(st.labelKey)}</span>
                             : <span className="text-[12px] text-dark-500">activa</span>}
                         </td>
-                        <td className="px-2 py-1.5">
+                        <td className="px-2 py-1.5 max-sm:hidden">
                           <ChevronRight size={14} className="text-dark-700 transition-transform group-hover:translate-x-0.5 group-hover:text-dark-400" />
                         </td>
                       </tr>

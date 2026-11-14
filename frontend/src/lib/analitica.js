@@ -52,6 +52,8 @@ const PATRONES = [
   [/^\/conductor\/(?!p\/)[^/]+$/, '/conductor/:slug'],
   [/^\/verify\/[^/]+$/, '/verify/:token'],
   [/^\/reset-password\/[^/]+$/, '/reset-password/:token'],
+  // El acceso personal del conductor va en `/c#<token>` (el fragmento no se mide); escrito como ruta, sin el token.
+  [/^\/c\/[^/]+$/, '/c/:token'],
 ]
 
 export function patronDe(ruta) {

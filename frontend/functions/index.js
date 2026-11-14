@@ -1,33 +1,53 @@
-/* La portada (/) con SUS etiquetas (21-10-2026).
+/* La portada (/) con SUS etiquetas (14-11-2026: la portada para empresas con furgonetas).
  *
- * Dani: «véndelo sobre todo como la app de reparto gratis». La portada ya lo hace al
- * montar React, pero lo que se ve al compartir el enlace (og:) y lo que lee Google
- * antes de que arranque salía del index.html común: «Flota — Gestión de flotas con IA».
- * Aquí se cambia solo para «/», como hace repartidores.js con su ruta, y se reutilizan
- * sus ventajas y preguntas para que las dos digan lo mismo.
+ * Desde el 14-11-2026 «/» es la página para empresas con furgonetas (src/pages/Empresas.jsx); la de la app de reparto
+ * sigue en /repartidores (functions/repartidores.js). La SPA pinta el texto al montar, pero lo que se ve al compartir
+ * el enlace (og:) y lo que lee Google antes de que arranque React sale de aquí. /empresas enseña la misma página y
+ * sirve estas mismas etiquetas con la canónica en «/» (functions/empresas.js).
  *
- * La cáscara HTML no se guarda en la caché del borde (no-cache, como dice _headers
- * para «/»): tras cada despliegue cambian los nombres de los .js y una copia vieja
- * pediría ficheros que ya no existen. */
-import { VENTAJAS, preguntas, esc } from './repartidores.js'
+ * Los mismos textos que la página, sin nada que la app no haga: el conductor hace las fotos, una PERSONA repasa el día
+ * y marca lo nuevo; la IA no se promete. Los precios salen de lib/precios.js (lo mismo que pinta la página) y la marca
+ * de src/marca.js; los dos cargan fuera del navegador (lo comprueba scripts/check-funciones-pages.mjs).
+ *
+ * La cáscara HTML no se guarda en la caché del borde (no-cache, como dice _headers para «/»): tras cada despliegue
+ * cambian los nombres de los .js y una copia vieja pediría ficheros que ya no existen. */
+import { esc } from './repartidores.js'
+import { PLANES_EMPRESA, DIAS_PRUEBA_EMPRESA } from '../src/lib/precios.js'
+import { MARCA } from '../src/marca.js'
 
-const TITULO = 'FDS · La app de reparto gratis: ruta ordenada, escáner y navegación'
-const DESCRIPCION = 'Escanea o haz una foto a la etiqueta: la ruta se ordena sola y te guía con voz hasta cada puerta. Gratis y sin tarjeta. Y para empresas, el panel de la flota con IA.'
+const desde = Math.min(...PLANES_EMPRESA.map((p) => Number(p.por_vehiculo)).filter((x) => x > 0))
+export const TITULO = `${MARCA.nombre} para empresas con furgonetas · El golpe, el día que aparece`
+// El alta de flota (sector «Otra flota») con el plan Esencial, el del «Desde 5 €»: la misma que los botones de la página
+// antes de tocar la calculadora (Empresas.jsx, ALTA_EMPRESA y PLAN_DE_ENTRADA).
+const ALTA = '/registro?sector=otra&plan=operacion'
+/* Lo que enseña Google bajo el título: 155 caracteres como mucho (más, y lo corta a media frase). Solo lo que hace el
+   producto y el precio, sin promesas. Lo mide portada.spec.js. */
+export const DESCRIPCION = `Cada conductor fotografía su furgoneta y tú ves la foto de hoy junto a la anterior del mismo lado. Desde ${desde} € por furgoneta al mes, ${DIAS_PRUEBA_EMPRESA} días de prueba.`
 
+export const PASOS = [
+  ['El conductor hace cuatro fotos', 'Frontal, trasera y los dos laterales, más los kilómetros. Desde su móvil, cuando lo diga tu empresa: cada conductor, una revisión por furgoneta y día.'],
+  ['Tú repasas el día en unos minutos', 'Cada foto de hoy aparece junto a la anterior del mismo lado. Si está igual, pasas a la siguiente. Si hay algo nuevo, lo marcas sobre la foto.'],
+  ['Cada golpe queda con su día', 'Y con quién la llevaba, solo cuando se sabe con seguridad. Cada furgoneta tiene su expediente: cómo entró, qué le ha pasado y cuándo, listo para imprimir.'],
+]
+
+/* Lo que lee Google y lo que se ve un instante antes de que monte React. Sin colores propios: hereda el fondo y la tinta
+   de arranque (public/fondo-arranque.js marca <html> con el papel, o con la noche si se eligió), así no queda una caja
+   clara sobre otro fondo. */
 function contenido() {
-  return `<main style="max-width:40rem;margin:0 auto;padding:24px 20px;color:#e6f2f3;font-family:system-ui,sans-serif">
-      <h1>La app de reparto gratis que ordena tu ruta sola.</h1>
-      <p>Escanea los paquetes o haz una foto a la etiqueta, sea de la empresa que sea. La app ordena las paradas, te lleva con voz hasta cada puerta y apunta lo que ganas.</p>
-      <p><a href="/registro?sector=autonomo&amp;plan=autonomo" style="color:#14e7d8">Crear mi cuenta gratis</a></p>
-      <ul>${VENTAJAS.map((v) => `<li>${esc(v)}</li>`).join('')}</ul>
-      <h2>¿Tienes una empresa de reparto o una flota?</h2>
-      <p>Tu gente reparte con la app y tú lo ves todo en el panel de la oficina: furgonetas, revisiones con IA, taller, vencimientos, cuadrante y equipo. <a href="/planes" style="color:#14e7d8">Ver precios</a></p>
-      ${preguntas().map(([q, a]) => `<h2>${esc(q)}</h2><p>${esc(a)}</p>`).join('')}
-      <p><a href="/repartidores" style="color:#14e7d8">App de reparto</a> · <a href="/guia-ruta-de-reparto" style="color:#14e7d8">Guía: cómo ordenar tu ruta de reparto</a></p>
+  return `<main style="max-width:40rem;margin:0 auto;padding:24px 16px;font-family:system-ui,sans-serif">
+      <p>Para empresas con furgonetas</p>
+      <h1>El golpe, el día que aparece. No el día que te lo cobran.</h1>
+      <p>Cada conductor fotografía su furgoneta desde el móvil. Tú ves la foto de hoy junto a la anterior del mismo lado y marcas lo que sea nuevo. Así puedes arreglarlo en tu taller antes de que lo vea el perito del renting.</p>
+      <p><a href="${esc(ALTA)}">Probar con mis furgonetas</a> · <a href="/expediente-ejemplo">Ver un expediente de ejemplo</a></p>
+      <p>Desde ${desde} € por furgoneta y mes. ${DIAS_PRUEBA_EMPRESA} días de prueba, sin tarjeta. <a href="/planes">Precios</a></p>
+      <h2>Así funciona</h2>
+      ${PASOS.map(([t, d]) => `<h3>${esc(t)}</h3><p>${esc(d)}</p>`).join('')}
+      <p><a href="/repartidores">¿Repartes tú? La app de ruta</a></p>
     </main>`
 }
 
-export async function onRequestGet(context) {
+/* La página con las etiquetas de la portada, para «/» y para /empresas: la canónica es siempre «/». */
+export async function servirPortada(context) {
   const { request, env } = context
   const url = new URL(request.url)
   const respuesta = await env.ASSETS.fetch(new URL('/index.html', url))
@@ -38,23 +58,23 @@ export async function onRequestGet(context) {
     .replace(/<meta\s+name="description"[^>]*>/i, '')
     .replace(/<meta\s+property="og:(title|description|image|image:alt|image:width|image:height|url)"[^>]*>/gi, '')
   const cabeza = [
-    `<title>${TITULO}</title>`,
-    `<meta name="description" content="${DESCRIPCION}" />`,
-    `<meta property="og:title" content="${TITULO}" />`,
-    `<meta property="og:description" content="${DESCRIPCION}" />`,
+    `<title>${esc(TITULO)}</title>`,
+    `<meta name="description" content="${esc(DESCRIPCION)}" />`,
+    `<meta property="og:title" content="${esc(TITULO)}" />`,
+    `<meta property="og:description" content="${esc(DESCRIPCION)}" />`,
     `<meta property="og:url" content="${base}/" />`,
-    `<meta property="og:image" content="${base}/og-repartidores.png?v=promo1231" />`,
+    // og.png es la tarjeta de esta portada (en papel, el mismo golpe del lateral derecho que el héroe).
+    `<meta property="og:image" content="${base}/og.png" />`,
     `<meta property="og:image:width" content="1200" />`,
     `<meta property="og:image:height" content="630" />`,
-    `<meta property="og:image:alt" content="${TITULO}" />`,
+    `<meta property="og:image:alt" content="${esc(TITULO)}" />`,
+    `<meta name="twitter:card" content="summary_large_image" />`,
     `<link rel="canonical" href="${base}/" />`,
     `<script type="application/ld+json">${JSON.stringify({
-      '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'FDS', applicationCategory: 'BusinessApplication',
-      operatingSystem: 'Android, iOS, Web', url: `${base}/`, description: DESCRIPCION,
-      offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' } })}</script>`,
-    `<script type="application/ld+json">${JSON.stringify({
-      '@context': 'https://schema.org', '@type': 'FAQPage', inLanguage: 'es',
-      mainEntity: preguntas().map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) })}</script>`,
+      '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: MARCA.nombre, applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web', url: `${base}/`, description: DESCRIPCION,
+      offers: { '@type': 'Offer', priceCurrency: 'EUR', price: String(desde),
+        priceSpecification: { '@type': 'UnitPriceSpecification', price: String(desde), priceCurrency: 'EUR', unitText: 'vehículo y mes' } } })}</script>`,
   ].join('\n    ')
   html = html.replace('</head>', `    ${cabeza}\n  </head>`)
   html = html.replace('<div id="root"></div>', `<div id="root">${contenido()}</div>`)
@@ -62,3 +82,5 @@ export async function onRequestGet(context) {
     headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' },
   })
 }
+
+export const onRequestGet = servirPortada

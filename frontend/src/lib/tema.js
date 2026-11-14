@@ -19,6 +19,26 @@ export function temaEfectivo(t = temaGuardado()) {
   return ['hibrido', 'dark', 'light'].includes(t) ? t : 'hibrido'
 }
 
+/** ¿Ha elegido la noche quien mira? (cuarta tanda, C5). La del panel o la app del conductor (`panel_theme`, también
+    «auto» con el móvil en oscuro) y, si no ha elegido ninguna ahí, la del pie de la web (`fds_tema_web`). Sin elegir
+    nada, papel. La usan la puerta del conductor (/c y /conductor), el arranque y el cargador de ruta (main.jsx); la
+    MISMA regla, escrita sin módulos, está en public/fondo-arranque.js (lo vigila acceso-diseno.spec.js). */
+export function nocheElegida() {
+  try {
+    if (temaEfectivo() === 'dark') return true
+    if (localStorage.getItem(ELEGIDO)) return false
+    return localStorage.getItem('fds_tema_web') === 'dark'
+  } catch { return false }
+}
+
+/** ¿Es la puerta del conductor? /c (el enlace personal) y /conductor sin sesión (su entrada con el correo). Con sesión,
+    /conductor es su portal, que va con el tema de la app. La misma regla que public/fondo-arranque.js. */
+export function esPuertaConductor(ruta = '') {
+  if (/^\/c(\/|$)/.test(ruta)) return true
+  if (!/^\/conductor(\/|$)/.test(ruta)) return false
+  try { return !localStorage.getItem('flota_driver') } catch { return true }
+}
+
 let escuchando = false
 export function aplicarTema(t = temaGuardado()) {
   try { document.documentElement.setAttribute('data-panel-theme', temaEfectivo(t)) } catch { /* sin documento */ }
@@ -84,6 +104,17 @@ export function vestirDeApp() {
       if (document.body) document.body.style.backgroundColor = ''
     } catch { /* sin documento */ }
   }
+}
+
+/* El conductor que entra con su correo pasa de la puerta (de papel desde el arranque, public/fondo-arranque.js) a su
+   portal sin recargar: el papel y el color de la barra del arranque se quitan, y el portal arranca como siempre. */
+export function quitarFondoDeArranque() {
+  try {
+    const html = document.documentElement.classList
+    if (!html.contains('arranque-papel') && !html.contains('arranque-noche')) return
+    html.remove('arranque-papel', 'arranque-noche')
+    pintarBarra(COLOR_WEB)
+  } catch { /* sin documento */ }
 }
 
 export const letraGrande = () => { try { return localStorage.getItem(LETRA) === 'grande' } catch { return false } }

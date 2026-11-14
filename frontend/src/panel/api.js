@@ -75,7 +75,10 @@ export const createVehicle = (body) => api.post('/vehicles', body)
 export const getLastInspections = (center) => api.get('/vehicles/last-inspections', { params: centerParam(center) })
 export const getSpareWheels = () => api.get('/vehicles/spare-wheel')
 export const getVehicleDriver = (id) => api.get(`/vehicles/${id}/driver`)
-export const getVehicleInspections = (id) => api.get(`/inspections/vehicle/${id}`)
+// `params` (14-11-2026), opcional: { antes_de, antes_de_id } para las siguientes 50, o { primera: true } para la
+// revisión más antigua (la foto de entrada). Sin él, las 50 últimas, como siempre.
+export const getVehicleInspections = (id, params) =>
+  (params ? api.get(`/inspections/vehicle/${id}`, { params }) : api.get(`/inspections/vehicle/${id}`))
 export const getVehicleDamageLedger = (id) => api.get(`/vehicles/${id}/damage-ledger`)
 export const repairVehicleLedger = (id, body) => api.post(`/vehicles/${id}/ledger/repair`, body)
 export const resolveVehicleModel = (brand, model, year, version) =>
@@ -114,6 +117,20 @@ export const reactivarConductor = (id, body = {}) => api.post(`/drivers/${id}/re
 // Quién tiene la app de Android, con qué versión y cuándo la abrió (11-11-2026, equipo-5):
 // {conductores: {id: {app, plataforma, visto}}, ultima}. Un servidor viejo contesta 404/405: la columna no sale.
 export const getDriversApp = (center) => api.get('/drivers/app', { params: centerParam(center) })
+/* EL ACCESO PERSONAL DEL CONDUCTOR Y EL ARRANQUE DE UNA FLOTA (14-11-2026, CONTRATO-ALTA §1 y §3).
+   El enlace (`/c#<token>`) lo crea el servidor y solo guarda su huella: el mismo enlace no se puede volver a pedir.
+   Crear otro deja sin valor el anterior; si ya se abrió, el servidor pide `renovar: true` (409 `ya_abierto`). */
+export const getAccesosConductores = (center) => api.get('/conductores/accesos', { params: centerParam(center) })
+export const crearAccesoConductor = (id, renovar = false) =>
+  api.post(`/conductores/${encodeURIComponent(id)}/acceso`, renovar ? { renovar: true } : {})
+export const quitarAccesoConductor = (id) => api.delete(`/conductores/${encodeURIComponent(id)}/acceso`)
+// Qué pasos del arranque están hechos, sacado de los datos (sin marcas guardadas), y la revisión más reciente.
+export const getAltaEstado = () => api.get('/alta/estado')
+// Las listas pegadas: con `guardar: false` dicen línea a línea qué pasará; con `true` dan de alta solo las nuevas.
+export const altaFurgonetas = (texto, center, guardar, confirmadas = []) => api.post('/alta/furgonetas', {
+  texto, center: center || null, guardar: !!guardar, ...(confirmadas.length ? { confirmadas } : {}),
+})
+export const altaConductores = (texto, center, guardar) => api.post('/alta/conductores', { texto, center: center || null, guardar: !!guardar })
 // Apoyo en ruta: quien le quita paradas a quien, con mapa por WhatsApp
 /* Empleo: ofertas, cuestionario y candidatos. La oferta va SIEMPRE atada a un
    centro y el candidato hereda el suyo, para que no se mezclen las naves. */

@@ -496,8 +496,8 @@ function Autoexamen({ datos, total, alRevisar, recargar }) {
                 ))}
               </div>
               <p className="mt-1.5 text-[11px] leading-snug text-dark-500">
-                En las rojas la IA ya no afirma un daño leve o moderado: lo manda a
-                revisar. Un daño grave se sigue avisando siempre.
+                En las rojas la IA se equivoca a menudo: un daño leve o moderado ahí no
+                lo da por bueno, te lo deja a ti. Uno grave se avisa siempre, para que lo mire una persona.
               </p>
             </div>
           )}
@@ -678,7 +678,7 @@ export default function RevisionRapida() {
         : item?.analysis?.new_damages || []
   // Un daño ya registrado en el ledger del vehículo NO se vuelve a validar.
   // _idx conserva el índice del array original: el backend valida por índice+scope.
-  const isKnownDamage = (d) => d?.is_new === false || (d?.description || '').includes('[ya registrado')
+  const isKnownDamage = (d) => d?.is_new === false || d?.origen === 'repaso' || (d?.description || '').includes('[ya registrado')
   const damages = allDamages.map((d, i) => ({ ...d, _idx: i })).filter((d) => !isKnownDamage(d))
   const knownCount = allDamages.length - damages.length
 

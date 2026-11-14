@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useT } from '../i18n'
 import { Sparkles, Send, Loader2, X, Check, Car, UserPlus, FileText, Paperclip, UserX, Wrench, AlertTriangle, Pencil, UserCog, Hammer } from 'lucide-react'
 import { getAiHistorial, enviarMensajeIA, ejecutarAccionIA, subirFichasTecnicasIA, confirmarFichasTecnicasIA } from './api'
 import { getAdmin } from './auth'
@@ -146,7 +148,18 @@ function Tarjeta({ t }) {
   )
 }
 
-export default function AsistenteBurbuja({ center, centers, setCenter, escondida = false, sobreEscribir = false }) {
+/* UN BOTÓN EN LA BARRA DE ARRIBA, NO UNA BURBUJA (14-11-2026, tanda 6, zona panel). Flotando, tapara lo que tapara
+   (las cifras del Inicio, los avatares y las acciones de las listas), siempre tapaba algo: abajo a la derecha, la
+   columna de acciones; a la izquierda, los avatares. Ahora es un botón de icono de 36 px con borde, junto a la ayuda,
+   en el ordenador y en el móvil, y abre la MISMA ventana (misma conversación, mismas funciones): anclada arriba a la
+   derecha en el ordenador y casi a pantalla entera en el móvil. Las reglas de siempre las pone PanelLayout: ni en el
+   Repaso, el arranque o el expediente (`fuera`), ni en las cuentas sin IA (no se monta); con la hoja del menú abierta
+   (`escondida`) o con una ventana del panel abierta (`.burbuja-asistente` en index.css), la del asistente no se ve.
+   La ventana va a `document.body` por un portal: la barra de arriba lleva `backdrop-blur`, que hace de caja para lo
+   `fixed` de dentro, y la ventana se quedaría encerrada en la barra. Ni cerrar ni esconder la desmonta: no se pierde
+   la conversación. */
+export default function AsistenteBurbuja({ center, centers, setCenter, fuera = false, escondida = false }) {
+  const { t } = useT()
   // Quien habla se ve de un vistazo: el logo cuando contesta la IA y la foto
   // de perfil cuando escribe la persona. Sin foto, sus iniciales.
   const yo = getAdmin()
@@ -165,6 +178,14 @@ export default function AsistenteBurbuja({ center, centers, setCenter, escondida
   const bottomRef = useRef(null)
   const fileInputRef = useRef(null)
   const sinCentro = !center || center === 'Todos'
+
+  // Escape la cierra, como las demás ventanas del panel.
+  useEffect(() => {
+    if (!abierto || fuera || escondida) return undefined
+    const h = (e) => { if (e.key === 'Escape') setAbierto(false) }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [abierto, fuera, escondida])
 
   useEffect(() => {
     if (!abierto || sinCentro || cargado) return
@@ -260,22 +281,21 @@ export default function AsistenteBurbuja({ center, centers, setCenter, escondida
     } finally { setConfirmandoLote(null) }
   }
 
-  return (
-    // En el móvil, por ENCIMA de la barra de abajo (52 px + la zona segura): antes tapaba «Menú» (Dani, 17-10-2026).
-    // `sobreEscribir` (el Chat, 11-11-2026): en el móvil tapaba el botón de enviar; allí va más arriba, por encima de la
-    // caja de escribir, y su ventana es igual de más baja para no salirse por arriba. En el ordenador, donde siempre.
-    <div className={`fixed ${sobreEscribir ? 'bottom-[calc(env(safe-area-inset-bottom,0px)_+_8.5rem)]' : 'bottom-[calc(env(safe-area-inset-bottom,0px)_+_4.25rem)]'} right-4 z-[95] flex-col items-end md:bottom-4 ${
-      escondida ? 'hidden' : 'flex'}`}>
-      {abierto && (
-        <div onPaste={pegarImagenes}
-          className={`mb-3 flex h-[32rem] ${sobreEscribir ? 'max-h-[calc(100dvh-13.25rem)] md:max-h-[calc(100dvh-9rem)]' : 'max-h-[calc(100dvh-9rem)]'} w-[23rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-dark-700 bg-dark-950 shadow-2xl`}>
-          <div className="flex items-center justify-between border-b border-dark-800 bg-dark-900/80 px-3.5 py-3">
+  const verVentana = abierto && !fuera && !escondida
+  const ventana = (
+    // `burbuja-asistente`: con una ventana del panel abierta (`.ventana`), index.css la esconde (M6, 14-11-2026).
+    // En el móvil, casi a pantalla entera: de debajo de la barra de arriba (56 px) hasta 8 px del borde de abajo, por
+    // encima de la barra de navegación. En el ordenador, arriba a la derecha, bajo el botón que la abre.
+    <div data-testid="ventana-asistente" role="dialog" aria-label={MARCA.ia} onPaste={pegarImagenes}
+      className={`burbuja-asistente fixed inset-x-2 top-[3.75rem] bottom-[calc(env(safe-area-inset-bottom,0px)_+_0.5rem)] z-[95] flex-col overflow-hidden rounded-xl border border-dark-700 bg-dark-950 md:inset-x-auto md:bottom-auto md:right-4 md:top-[4rem] md:h-[32rem] md:max-h-[calc(100dvh-5rem)] md:w-[23rem] ${
+        verVentana ? 'flex' : 'hidden'}`}>
+          <div className="flex items-center justify-between border-b border-dark-800 px-3.5 py-3">
             <div className="flex items-center gap-2">
-              <Sparkles size={16} className="text-brand-400" />
+              <Sparkles size={16} className="text-dark-300" />
               <div className="text-[13px] font-bold text-dark-100">{MARCA.ia}</div>
               {!sinCentro && <span className="cifra text-[11px] text-dark-500">· {center}</span>}
             </div>
-            <button onClick={() => setAbierto(false)} className="text-dark-500 hover:text-dark-200"><X size={16} /></button>
+            <button onClick={() => setAbierto(false)} aria-label="Cerrar" className="flex h-9 w-9 items-center justify-center rounded-lg text-dark-400 hover:text-dark-100"><X size={16} /></button>
           </div>
 
           {sinCentro ? (
@@ -383,15 +403,23 @@ export default function AsistenteBurbuja({ center, centers, setCenter, escondida
               </form>
             </>
           )}
-        </div>
-      )}
-
-      <button onClick={() => setAbierto((a) => !a)}
-        title={MARCA.ia}
-        className={`relative flex h-12 w-12 items-center justify-center rounded-full shadow-2xl transition ${
-          abierto ? 'bg-dark-800 text-dark-200' : 'bg-brand-500 text-dark-950 hover:bg-brand-400'}`}>
-        {abierto ? <X size={20} /> : <Sparkles size={20} />}
-      </button>
     </div>
+  )
+
+  if (fuera) return null
+  return (
+    <>
+      {/* 36 px con borde de 1 px, el icono en tinta, sin relleno ni sombra: como la puerta del menú, a su lado. Se toca
+          en 44 (el `before` invisible), como ella. `title`: el nombre del asistente al pasar el ratón. */}
+      <button type="button" data-testid="boton-asistente" onClick={() => setAbierto((a) => !a)}
+        aria-label={t('nav.asistente')} aria-expanded={verVentana} title={MARCA.ia}
+        className={`relative flex h-9 w-9 flex-none items-center justify-center rounded-lg border text-dark-100 transition-colors before:absolute before:-inset-[5px] hover:border-dark-500 ${
+          verVentana ? 'border-dark-400' : 'border-dark-700'}`}>
+        <Sparkles size={16} aria-hidden="true" />
+      </button>
+      {/* Solo montada mientras está abierta (como antes): cerrada no deja nada en la página. La conversación vive en
+          este componente, que sigue montado. */}
+      {abierto && typeof document !== 'undefined' ? createPortal(ventana, document.body) : null}
+    </>
   )
 }

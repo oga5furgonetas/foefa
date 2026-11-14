@@ -1,0 +1,244 @@
+/* EL EXPEDIENTE DEL VEHÍCULO (14-11-2026): la hoja, en pantalla y al imprimir. La hoja es SIEMPRE blanca, con tinta
+   encima, en cualquier tema del panel (es papel), así que aquí los colores van fijos, los de la identidad: tinta
+   #10181A, gris #545E66, líneas de tinta al 12 % y al 22 %, fallo #B42318, hecho #0A7346. Nada de degradados,
+   sombras de color ni rótulos en mayúsculas espaciadas. Las clases llevan todas `exp-` para no chocar con las
+   reglas del modo día del panel (index.css retoca `text-red-400`, `bg-white/…`, etc.). */
+
+.exp-hoja {
+  --e-tinta: #10181a; --e-gris: #545e66; --e-gris-2: #7e858c;
+  --e-linea: rgb(16 24 26 / 0.12); --e-linea-2: rgb(16 24 26 / 0.22);
+  --e-fallo: #b42318; --e-hecho: #0a7346; --e-vacio: #dadfdb;
+  box-sizing: border-box; width: 100%; max-width: 210mm; margin: 0 auto;
+  padding: 44px 52px 36px; background: #fff; color: var(--e-tinta);
+  border: 1px solid var(--e-linea); border-radius: 4px;
+  font-family: 'Archivo Variable', Archivo, system-ui, sans-serif; font-size: 13.5px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased; overflow-wrap: anywhere;
+}
+.exp-hoja *, .exp-hoja *::before, .exp-hoja *::after { box-sizing: border-box; }
+.exp-mono { font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace; font-variant-numeric: tabular-nums; }
+
+/* ── Cabecera ── */
+.exp-enc { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--e-gris); }
+.exp-enc b { color: var(--e-tinta); font-weight: 800; letter-spacing: -0.01em; }
+.exp-hoja h1 { margin: 26px 0 0; font-size: 30px; line-height: 1.1; font-weight: 800; letter-spacing: -0.03em; }
+.exp-empresa { margin: 6px 0 0; font-size: 15px; color: var(--e-gris); }
+.exp-matricula { margin-top: 18px; font-size: 34px; line-height: 1; }
+.exp-modelo { margin: 12px 0 0; font-size: 14.5px; color: #2b363a; }
+.exp-periodo { margin: 4px 0 0; font-size: 13px; color: var(--e-gris); }
+.exp-cifras { display: grid; grid-template-columns: repeat(4, 1fr); margin: 22px 0 0; border-top: 1.5px solid var(--e-tinta); }
+.exp-cifras > div { display: flex; flex-direction: column-reverse; justify-content: flex-end; padding: 12px 0 0; min-width: 0; }
+.exp-cifras > div + div { padding-left: 16px; border-left: 1px solid var(--e-linea); }
+.exp-cifras dd { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+.exp-cifras dt { margin-top: 6px; font-size: 12px; color: var(--e-gris); }
+
+/* ── Secciones ── */
+.exp-seccion { margin-top: 30px; }
+.exp-hoja h2 { margin: 0; padding-bottom: 6px; border-bottom: 1px solid var(--e-linea-2); font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
+.exp-hoja h2 .exp-cuenta { margin-left: 10px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 14px; font-weight: 500;
+  letter-spacing: 0; color: var(--e-gris); font-variant-numeric: tabular-nums; }
+.exp-sub, .exp-nota { margin: 8px 0 0; font-size: 13px; color: var(--e-gris); }
+.exp-nota { color: var(--e-tinta); }
+
+/* ── El calendario: un cuadradito por día, en columnas de semana ── */
+/* El lado de cada día (`--c`), el hueco (`--h`) y el redondeo (`--r`) los pone CalendarioDias.jsx, que los calcula con
+   el ancho de la hoja y el número de semanas (LADO_MAX, LETRAS): estas son solo las de partida. */
+.exp-cal-bloque { margin-top: 12px; }
+.exp-cal { --c: 16px; --h: 2px; --r: 2px; display: flex; flex-direction: column; gap: 10px; }
+.exp-cal-chico .exp-cal-letras { font-size: 8px; }
+.exp-cal-fila { display: flex; gap: 6px; }
+.exp-cal-letras { flex: none; width: 12px; display: flex; flex-direction: column; gap: var(--h); font-size: 9.5px; color: var(--e-gris); }
+.exp-cal-letras > span { height: var(--c); line-height: var(--c); }
+.exp-cal-letras > span:first-child { height: 14px; }
+/* Las semanas en columnas iguales (`--col`, CalendarioDias.jsx): sin tope, reparten el ancho entero y la fila llega al borde
+   de la hoja; con el tope (pocas semanas), cada una mide su día y su hueco. Las de dos filas caen una debajo de otra. */
+.exp-cal-semanas { flex: 1; display: grid; grid-template-columns: repeat(var(--n, 1), var(--col, minmax(0, 1fr))); min-width: 0; }
+.exp-cal-sem { display: flex; flex-direction: column; gap: var(--h); width: var(--c); }
+.exp-cal-mes { position: relative; height: 14px; font-size: 10px; line-height: 12px; color: var(--e-gris); white-space: nowrap; overflow: visible; }
+.exp-dia { display: block; width: var(--c); height: var(--c); border-radius: var(--r); background: var(--e-tinta); }
+.exp-dia-sin_revisar { background: var(--e-vacio); }
+.exp-dia-golpe { background: var(--e-fallo); }
+.exp-dia-fuera { background: transparent; }
+/* La leyenda, con los días de cada estado en cifras de la casa: debajo, en una línea; al lado de un calendario corto,
+   en lista con reglas, con la primera a la altura del primer día. */
+.exp-leyenda { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 12px 0 0; padding: 0; font-size: 12px; color: var(--e-gris); }
+.exp-leyenda li { display: flex; align-items: baseline; gap: 6px; }
+.exp-leyenda li::before { content: ''; flex: none; width: 10px; height: 10px; border-radius: 2px; align-self: center; background: var(--e-tinta); }
+.exp-leyenda .exp-ley-sin_revisar::before { background: var(--e-vacio); }
+.exp-leyenda .exp-ley-golpe::before { background: var(--e-fallo); }
+.exp-ley-n { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--e-tinta); }
+.exp-cal-bloque-lado { display: flex; align-items: flex-start; gap: 0 44px; }
+.exp-cal-bloque-lado .exp-cal { flex: none; }
+.exp-cal-bloque-lado .exp-leyenda { flex: 0 1 260px; flex-direction: column; flex-wrap: nowrap; gap: 0; margin: 14px 0 0;
+  border-top: 1px solid var(--e-linea); }
+.exp-cal-bloque-lado .exp-leyenda li { display: grid; grid-template-columns: 10px 1fr auto; column-gap: 10px; align-items: baseline;
+  padding: 7px 0; border-bottom: 1px solid var(--e-linea); }
+.exp-cal-bloque-lado .exp-ley-t { color: var(--e-tinta); }
+
+/* ── Cada golpe ── */
+.exp-golpe { margin-top: 18px; padding-top: 2px; }
+/* Cada golpe acaba en la regla de su última línea: entre uno y otro, aire (una regla más arriba del siguiente saldría
+   sola en lo alto de la hoja impresa cuando el golpe pasa a la siguiente). */
+.exp-golpe + .exp-golpe { margin-top: 34px; }
+.exp-golpe-t { margin: 0; font-size: 14.5px; font-weight: 400; line-height: 1.35; }
+.exp-golpe-t b { font-weight: 700; }
+.exp-desc { margin: 2px 0 0; font-size: 13px; color: var(--e-gris); }
+.exp-par { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; align-items: stretch; }
+.exp-golpe-ya .exp-par { gap: 18px; align-items: start; }
+.exp-golpe-ya .exp-lineas { margin-top: 0; }
+
+.exp-foto { position: relative; overflow: hidden; border-radius: 4px; background: #d9dcd7; min-width: 0; }
+.exp-foto img { display: block; width: 100%; height: auto; }
+.exp-foto-sin { display: flex; align-items: center; justify-content: center; min-height: 150px; height: 100%; padding: 36px 16px;
+  background: #f1f2ef; border: 1px dashed var(--e-linea-2); }
+.exp-foto-hueco { font-size: 12.5px; color: var(--e-gris); text-align: center; }
+.exp-caja { position: absolute; border: 2.5px solid var(--e-fallo); border-radius: 8px; box-shadow: 0 0 0 1.5px rgb(255 255 255 / 0.85); }
+.exp-etiqueta { position: absolute; left: 8px; top: 8px; padding: 3px 7px; border-radius: 4px; background: #fff; color: var(--e-tinta);
+  font-size: 11.5px; font-weight: 700; line-height: 1.2; }
+.exp-foto-sin .exp-etiqueta { border: 1px solid var(--e-linea); }
+.exp-foto .sello-foto { left: 8px; bottom: 8px; max-width: calc(100% - 16px); font-size: 10.5px; }
+
+.exp-lineas { margin-top: 8px; }
+.exp-linea { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--e-linea); font-size: 13px; }
+.exp-linea > span { color: var(--e-gris); flex: none; max-width: 45%; }
+.exp-linea > div { text-align: right; min-width: 0; }
+.exp-linea b { font-weight: 600; }
+.exp-motivo { display: block; margin-top: 2px; font-size: 12.5px; color: var(--e-gris); text-wrap: balance; }
+
+/* ── Cómo entró / cómo está hoy: una fila de dos columnas, cada lado en el mismo sitio de las dos ── */
+.exp-dos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 24px; margin-top: 30px; }
+.exp-dos > .exp-seccion { margin-top: 0; min-width: 0; }
+.exp-galeria { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 8px; margin-top: 10px; }
+.exp-galeria figure { margin: 0; min-width: 0; }
+.exp-galeria figcaption { margin-top: 4px; font-size: 12px; color: var(--e-gris); }
+.exp-galeria .sello-foto { left: 6px; bottom: 6px; max-width: calc(100% - 12px); font-size: 9.5px; }
+.exp-galeria .exp-etiqueta { left: 6px; top: 6px; max-width: calc(100% - 12px); padding: 2px 6px; font-size: 10.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Solo para los lectores de pantalla (el lado ya va escrito en la foto). */
+.exp-oculto { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ── Qué prueba y qué no ── */
+.exp-prueba-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 12px; }
+.exp-prueba h3 { margin: 0; font-size: 13px; font-weight: 700; }
+.exp-prueba p { margin: 4px 0 0; font-size: 13px; color: #2b363a; }
+.exp-prueba .exp-prueba-lee { margin-top: 14px; font-weight: 600; color: var(--e-tinta); }
+
+/* ── El anexo de lo que marca la IA sin confirmar: pequeño y en gris, para que se lea como lo que es ── */
+.exp-ia { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--e-linea-2); color: var(--e-gris); }
+.exp-ia h2 { font-size: 14px; font-weight: 700; color: var(--e-gris); border-bottom-color: var(--e-linea); }
+.exp-ia .exp-sub { font-size: 12.5px; }
+.exp-ia-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; align-items: start;
+  padding: 10px 0; border-bottom: 1px solid var(--e-linea); }
+.exp-ia-item:first-of-type { margin-top: 4px; }
+.exp-ia-texto { margin: 0; font-size: 12.5px; line-height: 1.4; }
+.exp-ia-texto b { font-weight: 600; color: #2b363a; }
+.exp-ia-fotos { display: flex; gap: 6px; justify-content: flex-end; }
+.exp-ia-fotos figure { margin: 0; width: 148px; min-width: 0; }
+/* El pie en una línea (tanda 6): «Antes, el 7 de noviembre» cabe en 148 px; uno más largo (otro año, alemán) se corta
+   con «…» y entero va en su `title`. */
+.exp-ia-fotos figcaption { margin-top: 3px; font-size: 11px; line-height: 1.3; color: var(--e-gris);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.exp-ia .exp-foto img { filter: grayscale(1); opacity: 0.85; }
+/* El hueco de una foto que no hay: del tamaño de una foto (4:3), sin estirarse a lo alto de la fila. */
+.exp-ia .exp-foto-sin { height: auto; min-height: 0; aspect-ratio: 4 / 3; padding: 8px; }
+.exp-ia .exp-foto-hueco { font-size: 11px; }
+.exp-caja-ia { border: 2px dashed var(--e-gris); border-radius: 6px; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.8); }
+.exp-ia-mas { margin: 10px 0 0; font-size: 12.5px; }
+
+.exp-pie-pantalla { margin-top: 32px; padding-top: 10px; border-top: 1px solid var(--e-linea); font-size: 11px; color: var(--e-gris); }
+
+/* ── Lo de fuera de la hoja: la barra del panel y la franja del ejemplo ── */
+.exp-fondo { padding: 0 0 48px; }
+.exp-barra { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; max-width: 210mm; margin: 0 auto 16px; }
+.exp-boton { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 52px; padding: 0 22px; border-radius: 12px;
+  border-width: 1.5px; border-style: solid; font-size: 16px; font-weight: 700; line-height: 1; white-space: nowrap; cursor: pointer; text-decoration: none; }
+.exp-boton-firma { border-color: transparent; background: #14e7d8; color: #10181a; }
+.exp-boton-firma:hover { background: #0fd6c8; }
+.exp-boton-firma:focus-visible, .exp-boton-linea:focus-visible { outline: 2px solid #0b6e69; outline-offset: 2px; }
+.exp-boton-linea { height: 44px; padding: 0 16px; font-size: 14px; border-radius: 10px; }
+/* «Imprimir» y, a su izquierda, la casilla del anexo de la IA (E1, tanda 5): letra pequeña y en el gris del panel. */
+.exp-imprimir { display: flex; align-items: center; gap: 12px 20px; margin-left: auto; }
+.exp-casilla { display: flex; align-items: flex-start; gap: 10px; max-width: 290px; font-size: 13px; line-height: 1.35; cursor: pointer; }
+.exp-casilla input { flex: none; width: 18px; height: 18px; margin: 1px 0 0; cursor: pointer; }
+.exp-casilla input:focus-visible { outline: 2px solid #0b6e69; outline-offset: 2px; }
+/* En pantalla, el anexo dice que no va en el papel (sin la casilla marcada). */
+.exp-ia .exp-ia-fuera { margin-top: 2px; }
+.exp-aviso { max-width: 210mm; margin: 0 auto 16px; }
+
+/* El ejemplo público: el papel de las páginas públicas (sus variables --ld-*, de día o de noche), la cabecera y el pie
+   de portadaComun.jsx y la franja del ejemplo; la hoja, blanca siempre. */
+.exp-publico { background: var(--ld-bg, #f5f6f3); color: var(--ld-text, #10181a); }
+.exp-publico-cuerpo { padding: 0 16px 64px; }
+.exp-franja { max-width: 210mm; margin: 0 auto; padding: 26px 0 22px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px; }
+.exp-franja b { display: block; font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+.exp-franja p { margin: 2px 0 0; font-size: 14px; color: var(--ld-muted, #545e66); max-width: 52ch; }
+
+/* ── El móvil: la hoja se ajusta al ancho, sin desbordes ── */
+@media (max-width: 640px) {
+  .exp-hoja { padding: 24px 18px 22px; font-size: 13px; }
+  .exp-hoja h1 { margin-top: 18px; font-size: 24px; }
+  .exp-matricula { font-size: 26px; }
+  .exp-cifras { grid-template-columns: 1fr 1fr; }
+  .exp-cifras > div:nth-child(3) { padding-left: 0; border-left: 0; }
+  .exp-cifras > div:nth-child(n + 3) { border-top: 1px solid var(--e-linea); margin-top: 12px; }
+  .exp-cifras dd { font-size: 26px; }
+  .exp-par, .exp-prueba-cols, .exp-dos { grid-template-columns: 1fr; }
+  .exp-dos { row-gap: 30px; }
+  .exp-golpe-ya .exp-par { gap: 6px; }
+  .exp-foto-sin { min-height: 90px; padding: 20px 12px; }
+  .exp-ia .exp-foto-sin { min-height: 0; padding: 8px; }
+  .exp-linea > span { max-width: 50%; }
+  .exp-ia-item { grid-template-columns: 1fr; }
+  .exp-ia-fotos { justify-content: flex-start; }
+  .exp-ia-fotos figure { width: calc(50% - 3px); }
+  .exp-boton { width: 100%; }
+  .exp-barra .exp-boton-linea { width: auto; }
+  .exp-imprimir { width: 100%; flex-direction: column-reverse; align-items: stretch; }
+  .exp-casilla { max-width: none; padding: 2px 2px 0; }
+}
+
+/* ── Al imprimir: A4, 14 mm, solo la hoja ──
+   El `@page` (tamaño, márgenes, pie y número de página) lo pone el <style> del componente, que solo existe mientras
+   la hoja está en pantalla: este CSS se queda cargado al salir y no debe cambiar cómo se imprimen las demás. Por lo
+   mismo, el fondo blanco va acotado a la página que tiene la hoja (`:has`). */
+@media print {
+  html:has(.exp-hoja), html:has(.exp-hoja) body, html:has(.exp-hoja) #root, html:has(.exp-hoja) main { background: #fff !important; }
+  .exp-no-imprimir { display: none !important; }
+  .exp-fondo, .exp-publico, .exp-publico-cuerpo { padding: 0 !important; min-height: 0 !important; background: #fff !important; }
+  /* El <main> del panel lleva su margen de pantalla: en papel el margen es el de la hoja (14 mm), nada más. */
+  main:has(> .exp-fondo) { padding: 0 !important; min-height: 0 !important; }
+  .exp-hoja { max-width: none; padding: 0; border: 0; border-radius: 0; font-size: 10pt; }
+  /* Más apretado que en pantalla, para que el primer golpe quepa ya en la hoja 1 debajo del calendario cuando el
+     periodo es corto (comprobado con page.pdf con 0, 1, 3 y 12 golpes y con el ejemplo público). */
+  .exp-hoja h1 { margin-top: 12px; font-size: 26px; }
+  .exp-matricula { margin-top: 12px; font-size: 28px; }
+  .exp-modelo { margin-top: 8px; }
+  .exp-cifras { margin-top: 14px; }
+  .exp-cifras > div { padding-top: 8px; }
+  .exp-cifras dd { font-size: 24px; }
+  .exp-seccion, .exp-dos { margin-top: 20px; }
+  .exp-golpe { margin-top: 12px; }
+  .exp-golpe + .exp-golpe { margin-top: 24px; }
+  .exp-lineas { margin-top: 4px; }
+  .exp-linea { padding: 4px 0; }
+  .exp-leyenda { margin-top: 6px; }
+  .exp-galeria { gap: 8px; margin-top: 8px; }
+  .exp-galeria figcaption { margin-top: 2px; font-size: 11px; }
+  /* «Qué prueba y qué no», un poco más apretado en papel, para que con un periodo corto entre en la hoja de «Cómo
+     entró / Cómo está hoy» y no se quede solo en una tercera (E2, tanda 5; mirado en el PDF real del ejemplo). */
+  .exp-seccion { margin-top: 14px; }
+  .exp-dos, .exp-prueba { margin-top: 12px; }
+  .exp-hoja h2 { padding-bottom: 3px; }
+  .exp-sub, .exp-nota { margin-top: 5px; }
+  .exp-par, .exp-golpe-ya .exp-par { margin-top: 6px; }
+  .exp-prueba-cols { margin-top: 6px; gap: 20px; }
+  .exp-prueba p { font-size: 9.5pt; line-height: 1.4; }
+  .exp-prueba .exp-prueba-lee { margin-top: 6px; }
+  .exp-pie-pantalla { display: none; }
+  /* Un título nunca se queda solo al pie de una hoja: va con lo primero que tiene debajo. */
+  .exp-hoja h2, .exp-golpe-t, .exp-seccion > .exp-sub { break-after: avoid; }
+  .exp-golpe, .exp-galeria figure, .exp-dos, .exp-cifras, .exp-prueba, .exp-seccion-cal, .exp-foto, .exp-ia-item { break-inside: avoid; }
+  /* El título del anexo y su nota van con el primer posible daño: nunca solos al pie de una hoja. */
+  .exp-ia > .exp-sub { break-after: avoid; }
+  .exp-ia { margin-top: 26px; }
+  .exp-hoja, .exp-hoja * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

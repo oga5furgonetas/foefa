@@ -43,6 +43,12 @@ PRIMEROS = {
     # Landing de los anuncios y su version china (04-10-2026): sin esto salian
     # como «/otra» y no se podia medir el embudo de los anuncios.
     "repartidores", "cn", "zh", "empezar", "ruta", "instalar",
+    # La pagina de venta para empresas (14-11-2026).
+    "empresas",
+    # El enlace personal del conductor, `/c#<token>` (14-11-2026): el token va en
+    # el fragmento y no llega aqui; se mide como `/c` (un cliente que lo mande en
+    # la ruta, `/c/<token>`, queda `/c/:x` o el patron `/c/:token`).
+    "c",
 }
 SEGMENTOS = ("visitante", "demo", "conductor", "cliente", "propio")
 _RANGO = {s: i for i, s in enumerate(SEGMENTOS)}
@@ -160,7 +166,8 @@ def evento_desde(cuerpo, user_agent, claims, ahora):
 
 # ── SALIDA: el informe ──────────────────────────────────────────────────────
 _WEB = {"planes", "registro", "contacto", "privacidad", "terminos", "cookies",
-        "aviso-legal", "security", "seguridad", "peritaje-tecnico", "verify", "app"}
+        "aviso-legal", "security", "seguridad", "peritaje-tecnico", "verify", "app",
+        "empresas"}
 
 
 def area_de(ruta):
@@ -185,7 +192,15 @@ def area_de(ruta):
 
 
 # Cada paso: (etiqueta, "v"/"a", valor). En vista, `*web` = cualquier pantalla
-# de la web publica. Los pasos NO son un camino obligado (ver cabecera).
+# de la web publica, y `valor` puede ser una TUPLA de rutas (cualquiera de
+# ellas). En accion, `valor` puede ser una TUPLA de nombres: el paso
+# lo toca quien hizo cualquiera de ellos. Los pasos NO son un camino obligado
+# (ver cabecera).
+#
+# `solo_desde_el_primero`: el embudo cuenta solo las sesiones que tocaron su
+# PRIMER paso. Sin esto, el de empresas se llenaba con cualquier alta de la web
+# (`registro_ok` sale tambien de la portada y de /repartidores) y diria que
+# /empresas trae cuentas que no ha traido.
 EMBUDOS = [
     {"clave": "alta", "titulo": "De la web a una cuenta", "pasos": [
         ("Entran a la web", "v", "*web"),
@@ -209,17 +224,42 @@ EMBUDOS = [
     {"clave": "cartel", "titulo": "Anuncio de la tienda en Empleo", "pasos": [
         ("Ven una oferta", "v", "/empleo/:slug/:oferta"),
         ("Pulsan el cartel de la ropa", "a", "tienda_cartel_clic")]},
+    # La pagina de venta para empresas (14-11-2026): los nombres `emp_*` los
+    # manda frontend/src/pages/Empresas.jsx. Desde el 14-11-2026 esa pagina es
+    # tambien la portada («/»; «/empresas» ensena lo mismo): el primer paso
+    # cuenta las dos. `emp_demo_boton` ya no existe; la demo se pide desde el
+    # cierre (`emp_demo_cierre`) o desde la calculadora (`emp_demo_calculadora`),
+    # y el expediente de ejemplo se abre con `emp_expediente_arriba`.
+    #
+    # `rutas_desde`: hasta el 14-11-2026 «/» era la portada de la app de reparto. Sus visitas de antes no son de
+    # la pagina de empresas: «/» cuenta en este embudo solo desde ese dia (dia de Madrid).
+    {"clave": "empresas", "titulo": "Empresas (portada y /empresas)", "solo_desde_el_primero": True,
+     "rutas_desde": {"/": "2026-11-14"}, "pasos": [
+        ("Ven la pagina de empresas", "v", ("/", "/empresas")),
+        ("Pulsan probar o piden la demo", "a",
+         ("emp_probar_menu", "emp_probar_arriba", "emp_probar_cierre",
+          "emp_demo_cierre", "emp_demo_calculadora", "emp_form_abrir")),
+        ("Envian la demo o crean la cuenta", "a", ("emp_form_ok", "registro_ok"))]},
 ]
 
 
-def _toca(e, paso):
+def _toca(e, paso, rutas_desde=None):
+    """¿Toca el evento ese paso? `rutas_desde` ({ruta: "AAAA-MM-DD"}): una vista de esa ruta solo cuenta desde ese
+    dia (de Madrid), para rutas que antes eran otra pagina."""
     _, kind, valor = paso
     if kind == "a":
-        return e["tipo"] == "accion" and e.get("nombre") == valor
+        if e["tipo"] != "accion":
+            return False
+        return e.get("nombre") in valor if isinstance(valor, tuple) else e.get("nombre") == valor
     if e["tipo"] != "vista":
         return False
     if valor == "*web":
         return area_de(e["ruta"]) == "web"
+    desde = (rutas_desde or {}).get(e["ruta"])
+    if desde and _utc(e["ts"]).astimezone(MADRID).date().isoformat() < desde:
+        return False
+    if isinstance(valor, tuple):
+        return e["ruta"] in valor
     return e["ruta"] == valor
 
 
@@ -347,7 +387,9 @@ def informe(eventos, ahora, seg="externo", dias=30):
                 p["salidas"] += 1
 
         for f in EMBUDOS:
-            toco = [any(_toca(e, paso) for e in evs) for paso in f["pasos"]]
+            toco = [any(_toca(e, paso, f.get("rutas_desde")) for e in evs) for paso in f["pasos"]]
+            if f.get("solo_desde_el_primero") and not toco[0]:
+                continue
             if any(toco):
                 en_embudo[f["clave"]] += 1
             for k, ok in enumerate(toco):

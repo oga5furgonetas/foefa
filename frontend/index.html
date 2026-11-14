@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#070a0e" />
+    <!-- Antes de que se pinte nada: el papel en las páginas públicas claras (la
+         portada, /planes, contacto, las legales…); el resto arranca en oscuro.
+         Va después del theme-color, que también cambia. -->
+    <script src="/fondo-arranque.js"></script>
 
     <!-- PWA: iOS -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -21,17 +25,20 @@
 
     <!-- SEO. Sin canonical ni og:url escritos: el dominio es el de cada
          despliegue, y una URL de otro dominio aquí le diría a Google que esta
-         página es otra. -->
-    <title>FDS — La app de reparto y el panel de tu flota</title>
-    <meta name="description" content="Escanea los paquetes, la ruta se ordena sola y te guía con voz hasta cada puerta. Y para tu flota: revisiones con foto e IA de daños, taller, vencimientos, cuadrante y equipo, en un solo panel." />
+         página es otra. El título y la descripción, NEUTROS de la marca: los
+         hereda cada pantalla que no pone el suyo (el portal del conductor, la
+         app de ruta, los accesos, las legales…). La portada pone el suyo al
+         montar y, en producción, functions/index.js lo sirve ya escrito. -->
+    <title>FDS</title>
+    <meta name="description" content="Revisiones con foto para empresas con furgonetas, y la app de ruta para quien reparte." />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="FDS" />
-    <meta property="og:title" content="FDS — La app de reparto y el panel de tu flota" />
-    <meta property="og:description" content="La ruta se ordena sola y te guía con voz. Para tu flota: revisiones con IA, taller, vencimientos y cuadrante." />
+    <meta property="og:title" content="FDS" />
+    <meta property="og:description" content="Revisiones con foto para empresas con furgonetas, y la app de ruta para quien reparte." />
     <meta property="og:image" content="/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="FDS — La app de reparto y el panel de tu flota" />
+    <meta property="og:image:alt" content="FDS" />
     <meta property="og:locale" content="es_ES" />
     <meta name="twitter:card" content="summary_large_image" />
   </head>

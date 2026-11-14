@@ -18,15 +18,18 @@ import MapeoColumnas, { textoAFichero, descargarPlantilla } from '../components/
    cosa y un asistente corto en cada una: subir → revisar → listo. Nada se
    guarda sin haberlo visto antes, y un fichero con varias naves se reparte
    para elegir cuáles entran. El estado de cada pestaña sale de los datos
-   reales (`/onboarding`), no de una marca guardada. */
+   reales (`/onboarding`), no de una marca guardada.
+   Los textos, en los seis idiomas del panel (14-11-2026). La pestaña «Turnos» solo sale si el menú enseña Turnos (la
+   misma regla, `ve`): llevaba a un módulo oculto y la guarda devolvía a otra pantalla sin decir nada. */
 
 const PESTANAS = [
-  { id: 'furgonetas', label: 'Furgonetas', icono: Truck, paso: 'vehiculos' },
-  { id: 'conductores', label: 'Conductores', icono: Users, paso: 'conductores' },
-  { id: 'turnos', label: 'Turnos', icono: CalendarDays, nave: 'turnos' },
+  { id: 'furgonetas', label: 'alta.imp.tab.furgonetas', icono: Truck, paso: 'vehiculos' },
+  { id: 'conductores', label: 'alta.imp.tab.conductores', icono: Users, paso: 'conductores' },
+  { id: 'turnos', label: 'alta.imp.tab.turnos', icono: CalendarDays, nave: 'turnos', ruta: '/panel/turnos' },
 ]
 
 function ImportarFlota({ center, alTerminar }) {
+  const { t } = useT()
   const [fichero, setFichero] = useState(null)
   const [vista, setVista] = useState(null)
   const [empresa, setEmpresa] = useState([])
@@ -56,7 +59,7 @@ function ImportarFlota({ center, alTerminar }) {
       setFichero(file); setVista(d); setColumnas(cols)
       if (d.falta_matricula) setVerColumnas(true)
     } catch (ex) {
-      setErr(ex?.response?.data?.detail || 'No se ha podido leer el fichero.')
+      setErr(ex?.response?.data?.detail || t('alta.imp.eLeer'))
     } finally { setBusy('') }
   }
 
@@ -73,12 +76,13 @@ function ImportarFlota({ center, alTerminar }) {
       setHecho(d); setVista(null); setFichero(null)
       alTerminar?.()
     } catch (ex) {
-      setErr(ex?.response?.data?.detail || 'No se ha podido importar.')
+      setErr(ex?.response?.data?.detail || t('alta.imp.eImportar'))
     } finally { setBusy('') }
   }
 
   const puede = vista && !vista.falta_matricula && resumen && resumen.sinDestino === 0
     && (resumen.existentes > 0 || (crear && resumen.nuevas > 0))
+  const n = (clave, x) => t(x === 1 ? `${clave}1` : clave).replace('{n}', x)
 
   return (
     <div className="space-y-4">
@@ -86,7 +90,7 @@ function ImportarFlota({ center, alTerminar }) {
         <Pasos actual={hecho ? 2 : vista ? 1 : 0} />
         {(vista || hecho) && (
           <button onClick={reiniciar} className="inline-flex items-center gap-1 text-[12px] text-dark-500 hover:text-dark-300">
-            <RotateCcw size={12} /> Otro fichero
+            <RotateCcw size={12} /> {t('alta.imp.otro')}
           </button>
         )}
       </div>
@@ -100,18 +104,19 @@ function ImportarFlota({ center, alTerminar }) {
       {!vista && !hecho && !pegando && (
         <>
           <SubirFichero onFile={(f) => leer(f)} ocupado={busy === 'leyendo'}
-            titulo="Arrastra el Excel de tus furgonetas"
-            pie="el tuyo, el de la gestoría o el del renting" />
+            titulo={t('alta.imp.f.arrastra')}
+            pie={t('alta.imp.f.pie')} />
           <div className="flex flex-wrap items-center justify-center gap-2 text-[12.5px]">
             <button onClick={() => setPegando(true)}
               className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-dark-300 ring-1 ring-dark-700 hover:text-dark-100">
-              <ClipboardPaste size={14} /> Pegar desde Excel
+              <ClipboardPaste size={14} /> {t('alta.imp.pegar')}
             </button>
+            {/* Las cabeceras de la plantilla se quedan en español: son las que el servidor reconoce. */}
             <button onClick={() => descargarPlantilla('plantilla-furgonetas.csv',
               ['Matrícula', 'Centro', 'Marca', 'Modelo', 'Kilómetros', 'Bastidor', 'Próxima ITV', 'Renting'],
               ['1234 ABC', center && center !== 'Todos' ? center : 'NORTE', 'Toyota', 'Proace', '25300', 'VF1ABCDEFGH123456', '15/03/2027', 'Arval'])}
               className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-dark-300 ring-1 ring-dark-700 hover:text-dark-100">
-              <Download size={14} /> Descargar plantilla
+              <Download size={14} /> {t('alta.imp.plantilla')}
             </button>
           </div>
         </>
@@ -120,14 +125,14 @@ function ImportarFlota({ center, alTerminar }) {
       {pegando && !vista && (
         <div className="space-y-2">
           <textarea value={pegado} onChange={(e) => setPegado(e.target.value)} rows={8} autoFocus
-            placeholder={'Copia las filas en Excel (con la cabecera) y pégalas aquí.\nMatrícula\tCentro\tMarca\n1234 ABC\tNORTE\tToyota'}
+            placeholder={`${t('alta.imp.pegarAyuda')}\nMatrícula\tCentro\tMarca\n1234 ABC\tNORTE\tToyota`}
             className="w-full rounded-lg border border-dark-700 bg-dark-950 p-3 font-mono text-[12.5px] text-dark-100 outline-none focus:border-brand-500/50" />
           <div className="flex justify-end gap-2">
-            <button onClick={() => { setPegando(false); setPegado('') }} className="px-3 py-1.5 text-[13px] text-dark-400 hover:text-dark-200">Cancelar</button>
+            <button onClick={() => { setPegando(false); setPegado('') }} className="px-3 py-1.5 text-[13px] text-dark-400 hover:text-dark-200">{t('alta.cancelar')}</button>
             <button onClick={() => leer(textoAFichero(pegado, 'pegado-desde-excel.csv'))}
               disabled={!pegado.trim() || busy === 'leyendo'}
               className="btn-primary inline-flex items-center gap-2 disabled:opacity-50">
-              {busy === 'leyendo' ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />} Revisar
+              {busy === 'leyendo' ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />} {t('alta.revisar')}
             </button>
           </div>
         </div>
@@ -137,7 +142,7 @@ function ImportarFlota({ center, alTerminar }) {
         <div role="status" className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-5">
           <p className="flex items-center gap-2 text-[15px] font-semibold text-emerald-200"><Check size={17} /> {hecho.message}</p>
           <Link to="/panel/vehiculos" className="mt-2 inline-flex items-center gap-1 text-[13px] font-semibold text-emerald-300 hover:text-emerald-200">
-            Ver mis furgonetas <ArrowRight size={13} />
+            {t('alta.imp.verFurgonetas')} <ArrowRight size={13} />
           </Link>
         </div>
       )}
@@ -145,7 +150,7 @@ function ImportarFlota({ center, alTerminar }) {
       {vista?.falta_matricula && (
         <div className="space-y-3">
           <p className="flex items-center gap-2 text-[13.5px] font-semibold text-amber-200">
-            <Columns3 size={15} /> ¿Qué columna es la matrícula?
+            <Columns3 size={15} /> {t('alta.imp.queColumna')}
           </p>
           <MapeoColumnas cabeceras={vista.cabeceras} campos={vista.campos}
             onCambio={cambiarColumna} ocupado={busy === 'leyendo'} />
@@ -155,10 +160,10 @@ function ImportarFlota({ center, alTerminar }) {
       {vista && !vista.falta_matricula && (
         <>
           <div className="grid grid-cols-3 gap-2 text-center">
-            {[[vista.matriculas, 'matrículas'], [vista.centros.length, vista.centros.length === 1 ? 'centro' : 'centros'],
-              [vista.repetidas + vista.sin_matricula, 'filas descartadas']].map(([n, l]) => (
+            {[[vista.matriculas, t('alta.imp.matriculas')], [vista.centros.length, t(vista.centros.length === 1 ? 'alta.imp.centro' : 'alta.imp.centros')],
+              [vista.repetidas + vista.sin_matricula, t('alta.imp.descartadas')]].map(([x, l]) => (
               <div key={l} className="rounded-lg bg-white/[0.03] py-2.5">
-                <div className="text-[20px] font-semibold tabular-nums text-dark-50">{n}</div>
+                <div className="text-[20px] font-semibold tabular-nums text-dark-50">{x}</div>
                 <div className="text-[11px] text-dark-500">{l}</div>
               </div>
             ))}
@@ -171,7 +176,9 @@ function ImportarFlota({ center, alTerminar }) {
             <button onClick={() => setVerColumnas((v) => !v)}
               className="inline-flex items-center gap-1.5 text-[12px] text-dark-500 hover:text-dark-300">
               <Columns3 size={13} />
-              {vista.columnas.length} columnas usadas{vista.ignoradas?.length ? ` · ${vista.ignoradas.length} sin usar` : ''} · {verColumnas ? 'ocultar' : 'revisar'}
+              {t('alta.imp.columnas').replace('{n}', vista.columnas.length)}
+              {vista.ignoradas?.length ? ` · ${t('alta.imp.sinUsar').replace('{n}', vista.ignoradas.length)}` : ''}
+              {' · '}{t(verColumnas ? 'alta.imp.ocultar' : 'alta.imp.revisarCol')}
             </button>
             {verColumnas && (
               <div className="mt-2">
@@ -185,16 +192,17 @@ function ImportarFlota({ center, alTerminar }) {
             <label className="flex cursor-pointer items-center gap-2 text-[13px] text-dark-200">
               <input type="checkbox" checked={crear} onChange={(e) => setCrear(e.target.checked)}
                 className="h-4 w-4 accent-brand-500" />
-              {resumen.nuevas === 1 ? 'Dar de alta la nueva' : `Dar de alta las ${resumen.nuevas} nuevas`}
+              {n('alta.imp.darAlta', resumen.nuevas)}
             </label>
             <div className="flex items-center gap-3">
               <span className="text-[12px] text-dark-500">
-                {resumen.existentes} ya las tienes{resumen.fuera > 0 && ` · ${resumen.fuera} fuera`}
+                {t('alta.imp.yaTienes').replace('{n}', resumen.existentes)}
+                {resumen.fuera > 0 && ` · ${t('alta.imp.fuera').replace('{n}', resumen.fuera)}`}
               </span>
               <button onClick={importar} disabled={!puede || !!busy}
                 className="btn-primary inline-flex items-center gap-2 disabled:opacity-50">
                 {busy === 'importando' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-                Importar
+                {t('alta.imp.importar')}
               </button>
             </div>
           </div>
@@ -205,6 +213,7 @@ function ImportarFlota({ center, alTerminar }) {
 }
 
 function Atajo({ titulo, detalle, to, cta, naves }) {
+  const { t } = useT()
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dark-800 p-5">
@@ -222,8 +231,8 @@ function Atajo({ titulo, detalle, to, cta, naves }) {
             <li key={n.centro} className="flex items-center justify-between rounded-lg bg-white/[0.03] px-3 py-2 text-[13px]">
               <span className="font-mono font-semibold text-dark-200">{n.centro}</span>
               {n.hecho
-                ? <span className="inline-flex items-center gap-1 text-emerald-300"><Check size={13} /> listo</span>
-                : <span className="inline-flex items-center gap-1 text-dark-500"><CircleDashed size={13} /> pendiente</span>}
+                ? <span className="inline-flex items-center gap-1 text-emerald-300"><Check size={13} /> {t('alta.imp.listo')}</span>
+                : <span className="inline-flex items-center gap-1 text-dark-500"><CircleDashed size={13} /> {t('alta.imp.pendiente')}</span>}
             </li>
           ))}
         </ul>
@@ -233,9 +242,11 @@ function Atajo({ titulo, detalle, to, cta, naves }) {
 }
 
 export default function Importaciones() {
-  const { center } = useOutletContext()
+  const { center, ve } = useOutletContext()
   const { t } = useT()
-  const [tab, setTab] = usePestana(PESTANAS, 'furgonetas')
+  // Solo las pestañas cuya pantalla abre para esta persona y esta empresa (la misma regla que el menú).
+  const pestanas = useMemo(() => PESTANAS.filter((p) => !p.ruta || typeof ve !== 'function' || ve(p.ruta)), [ve])
+  const [tab, setTab] = usePestana(pestanas, 'furgonetas')
   const [estado, setEstado] = useState(null)
 
   const cargarEstado = () => getOnboarding().then((r) => setEstado(r.data)).catch(() => {})
@@ -255,19 +266,19 @@ export default function Importaciones() {
     <div className="mx-auto max-w-4xl">
       <header className="rise mb-5">
         <h1 className="font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">{t('imp.title')}</h1>
-        <p className="mt-2 text-[13.5px] text-dark-400">Trae lo que ya tienes. Nada se guarda sin revisarlo antes.</p>
+        <p className="mt-2 text-[13.5px] text-dark-400">{t('alta.imp.sub')}</p>
       </header>
 
-      <Pestanas className="mb-4" etiqueta="Qué integrar" activa={tab} onElegir={setTab}
-        pestanas={PESTANAS.map((p) => ({ ...p,
-          marca: hecho(p) ? <Check size={13} className="text-emerald-400" aria-label="hecho" /> : null }))} />
+      <Pestanas className="mb-4" etiqueta={t('alta.imp.queIntegrar')} activa={tab} onElegir={setTab}
+        pestanas={pestanas.map((p) => ({ ...p, label: t(p.label),
+          marca: hecho(p) ? <Check size={13} className="text-emerald-400" aria-label={t('alta.hecho')} /> : null }))} />
 
       <section role="tabpanel" className="card p-5">
         {tab === 'furgonetas' && <ImportarFlota center={center} alTerminar={cargarEstado} />}
         {tab === 'conductores' && <ImportarConductores center={center} alTerminar={cargarEstado} />}
         {tab === 'turnos' && (
-          <Atajo titulo="Cuadrante mensual" detalle="Tu Excel de turnos (una fila por persona, una columna por día), una sede y un mes cada vez."
-            to="/panel/turnos" cta="Subir en Turnos" naves={navesDe('turnos')} />
+          <Atajo titulo={t('alta.imp.turnos.tit')} detalle={t('alta.imp.turnos.det')}
+            to="/panel/turnos" cta={t('alta.imp.turnos.cta')} naves={navesDe('turnos')} />
         )}
       </section>
     </div>

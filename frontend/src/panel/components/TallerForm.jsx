@@ -52,9 +52,9 @@ export default function TallerForm({ taller, proveedores = [], onCerrar, onGuard
     sel ? 'bg-brand-500/15 text-brand-200 ring-brand-500/40' : 'text-dark-400 ring-dark-700 hover:text-dark-200'}`
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={onCerrar}>
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={onCerrar}>
       <form onSubmit={guardar} onClick={(e) => e.stopPropagation()}
-        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-dark-700 bg-dark-900 p-5 sm:rounded-2xl">
+        className="max-h-[92vh] w-full max-w-lg overflow-y-auto ventana rounded-t-2xl p-5 sm:rounded-2xl">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-dark-50">{nuevo ? 'Añadir taller' : 'Editar taller'}</h2>

@@ -68,7 +68,8 @@ export default function PruebaReparto() {
   return (
     <div className="min-h-screen bg-dark-950 px-4 py-8 text-dark-100">
       <div className="mx-auto max-w-4xl">
-        <a href="/" className="text-[14px] font-bold text-dark-50">{MARCA.nombre}</a>
+        {/* A la página del repartidor: desde el 14-11-2026 «/» es la portada para empresas. */}
+        <a href="/repartidores" className="text-[14px] font-bold text-dark-50">{MARCA.nombre}</a>
         <h1 className="mt-6 font-display text-[clamp(26px,5vw,38px)] font-extrabold leading-tight text-dark-50">
           Prueba el reparto a domicilio
         </h1>

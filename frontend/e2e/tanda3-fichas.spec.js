@@ -259,7 +259,7 @@ test.describe('equipo-6 · importar dice quién estaba de baja', () => {
     const importar = page.getByRole('button', { name: 'Importar Excel' })
     if (await importar.first().isVisible()) await importar.first().click()
     else {
-      await page.getByRole('button', { name: 'Más' }).click()
+      await page.getByRole('button', { name: 'Más', exact: true }).click()   // exacto: también está «Más opciones»
       await page.getByRole('menuitem', { name: 'Importar Excel' }).click()
     }
     await page.locator('input[type="file"]').first().setInputFiles({ name: 'plantilla.csv', mimeType: 'text/csv', buffer: Buffer.from('Nombre\nJUAN REY\n') })

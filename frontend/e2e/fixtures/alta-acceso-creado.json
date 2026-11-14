@@ -1,0 +1,16 @@
+{
+  "driver_id": "0f8e2c1a-6b7d-4c3e-9a1f-2d4b6c8e0a12",
+  "nombre": "Ana L.",
+  "empresa": "Transportes Pérez",
+  "token": "9f2c4e6a8b0d1f3e5a7c9e1b3d5f7a9c2e4b6d8f0a1c3e5b7d9f1a3c5e7b9d0f",
+  "ruta": "/c#9f2c4e6a8b0d1f3e5a7c9e1b3d5f7a9c2e4b6d8f0a1c3e5b7d9f1a3c5e7b9d0f",
+  "whatsapp": "34612345678",
+  "renovado": false,
+  "acceso": {
+    "estado": "sin_abrir",
+    "creado_dia": "2026-11-14",
+    "abierto_dia": null,
+    "abierto_hora": null,
+    "caduca_dia": "2026-12-14"
+  }
+}

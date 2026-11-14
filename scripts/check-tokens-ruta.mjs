@@ -46,7 +46,6 @@ const DIBUJOS_DEL_MAPA = new Set([
 const EXCEPCIONES = {
   'pages/driver/MiRuta.jsx': [3, '«Navegar con» (ElegirNavegador): lo comparten Ajustes y el portal, que no se rediseñan; el resto de MiRuta está limpio'],
   'pages/driver/AjustesMovil.jsx': [9, 'Ajustes de la app: no se rediseñan, les llegó solo el tema'],
-  'pages/driver/DriverLogin.jsx': [21, 'la entrada del portal del conductor: no se rediseña'],
   'pages/driver/MiClave.jsx': [47, 'cuenta del portal (cambiar la contraseña): no se rediseña'],
   'pages/driver/MiCorreoPersonal.jsx': [9, 'cuenta del portal (correo personal de recuperación): no se rediseña'],
   'pages/driver/VerificarCorreoConductor.jsx': [4, 'cuenta del portal (verificar el correo): no se rediseña'],
@@ -54,7 +53,7 @@ const EXCEPCIONES = {
   'pages/driver/MisTurnos.jsx': [41, 'los turnos del portal: no se rediseñan'],
   'pages/driver/PedirDias.jsx': [101, 'pedir días libres, turnos del portal: no se rediseña'],
   'pages/driver/TrabajarMas.jsx': [45, 'turnos extra del portal: no se rediseñan'],
-  'pages/driver/InspectionFlow.jsx': [98, 'la auditoría de la furgoneta (fotos y km antes de salir): no se rediseña'],
+  'pages/driver/InspectionFlow.jsx': [96, 'la auditoría de la furgoneta (fotos y km antes de salir): no se rediseña'],
   'pages/driver/InspectionDone.jsx': [33, 'la auditoría de la furgoneta (resumen final): no se rediseña'],
   'pages/driver/Tienda.jsx': [113, 'la tienda de ropa es del dueño del producto (solo super-admin), no de la app de reparto'],
 }

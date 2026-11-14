@@ -194,7 +194,8 @@ def cuidado_predice(eventos: Iterable[Tuple[str, str, float]], dias: Dict[str, L
     for dia, c, w in eventos:
         (g1 if str(dia) < corte else g2)[c] += w
     if sum(g2.values()) < minimo_eventos:
-        return False, "solo %g golpes seguros en la segunda mitad (hacen falta %d para comprobarlo)" % (
+        # «con una sola persona al volante», como la pantalla (14-11-2026); decía «golpes seguros».
+        return False, "solo %g golpes con una sola persona al volante en la segunda mitad (hacen falta %d para comprobarlo)" % (
             sum(g2.values()), minimo_eventos)
     e1 = {c: sum(1 for x in ds if x < corte) for c, ds in dias.items()}
     e2 = {c: sum(1 for x in ds if x >= corte) for c, ds in dias.items()}

@@ -145,7 +145,8 @@ async function entrar(page, { mias = DATOS, status = 200, antes, vistas, url = '
     return json(mias, status)(route)
   })
   await page.goto(url, { waitUntil: 'domcontentloaded' })
-  if (ancla) await expect(page.getByRole('heading', { name: /Hola, ANA/ })).toBeVisible({ timeout: 15000 })
+  // El saludo va en el idioma del móvil («Hola, ANA», «Hello, ANA», «Hallo, ANA»…): se ancla en el nombre.
+  if (ancla) await expect(page.getByRole('heading', { name: /\bANA\b/ })).toBeVisible({ timeout: 15000 })
   return pedidas
 }
 // Cambia lo que contesta el servidor a partir de ahora.
@@ -721,7 +722,7 @@ test('F2: al salir y entrar otro conductor en el mismo móvil, la casilla no ens
   await page.route(/\/api\/auth\/driver-login/, json({ access_token: TOKEN_LUIS, name: 'LUIS GOMEZ', center: 'OGA5' }))
   await page.getByRole('button', { name: 'Salir', exact: true }).click()
   await page.locator('input[type="email"]').fill('luis@ejemplo.test')
-  await page.locator('input[type="email"]').press('Enter')
+  // Con contraseña: la entrada es un solo formulario (correo y contraseña); con la contraseña escrita, entra con ella.
   await page.locator('input[autocomplete="current-password"]').fill('clave-de-prueba')
   await page.locator('input[autocomplete="current-password"]').press('Enter')
   await expect(page.getByRole('heading', { name: /Hola, LUIS/ })).toBeVisible()

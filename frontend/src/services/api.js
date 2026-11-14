@@ -33,9 +33,63 @@ export function tokenActual() {
   return localStorage.getItem('flota_token') || ''
 }
 
+/* Lo que lleva dentro una sesión (el JWT), sin comprobar la firma: eso lo hace el servidor. null si no se lee. */
+export function datosDeSesion(token) {
+  try {
+    const p = String(token || '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(p), (c) => c.charCodeAt(0))))
+  } catch { return null }
+}
+
+/* «ESTE ACCESO YA NO VALE» (14-11-2026, tercera tanda, A3). Quien entró con el enlace personal (`via: "enlace"` en su
+   sesión) casi nunca tiene correo: si su sesión se corta (el dueño renovó o anuló el enlace) o caduca, no se le puede
+   mandar a «vuelve a entrar con tu correo». Esta marca, en el teléfono, le dice a la pantalla de entrada que le pida
+   el enlace a su empresa. Se quita en cuanto entra otra vez, con el enlace o con su correo. */
+export const ENLACE_CADUCADO = 'fds_dr_enlace_caducado'
+
+/** ¿La sesión del conductor nació de su enlace personal? (`via: "enlace"` o `lk` en el token). Con ella el servidor no
+    deja crear ni cambiar la contraseña, el correo de recuperación ni el teléfono que ya tiene (403
+    `enlace_sin_contrasena` / `enlace_sin_cambiar_telefono`): el portal no se los ofrece. */
+export function sesionDelEnlace() {
+  try {
+    const p = datosDeSesion(localStorage.getItem(DRIVER_TOKEN_KEY))
+    return !!(p && (p.via === 'enlace' || p.lk))
+  } catch { return false }
+}
+
+/* LA WEB RENUEVA SOLA LA SESIÓN DEL CONDUCTOR (A3), como la app de Android: con `POST /auth/renovar` y a partir del
+   quinto día (le quedan menos de 25 de los 30), una vez al día como mucho. Si falla (sin red, el enlace ya no vale, un
+   conductor sin cuenta), no se molesta a nadie: la sesión sigue como estaba y, si de verdad está cortada, lo dirá la
+   siguiente petición. Va con `fetch`, fuera de axios: un 401 de la renovación no puede echarle del portal. */
+const RENOVAR_CUANDO_QUEDAN_MS = 25 * 864e5
+const RENOVADO_EL = 'fds_dr_renovado_el'
+let renovando = false
+export function renovarSesionConductorSiToca() {
+  if (renovando || !enPortalConductor()) return
+  try {
+    const token = localStorage.getItem(DRIVER_TOKEN_KEY)
+    const p = datosDeSesion(token)
+    if (!p || p.role !== 'driver' || p.demo || p.imp || !p.exp) return
+    const queda = p.exp * 1000 - Date.now()
+    if (queda <= 0 || queda > RENOVAR_CUANDO_QUEDAN_MS) return
+    if (Date.now() - Number(localStorage.getItem(RENOVADO_EL) || 0) < 864e5) return
+    localStorage.setItem(RENOVADO_EL, String(Date.now()))
+    renovando = true
+    fetch(`${API_BASE}/auth/renovar`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        // Solo si sigue siendo la misma sesión (no ha salido ni ha entrado otro mientras tanto).
+        if (j?.access_token && localStorage.getItem(DRIVER_TOKEN_KEY) === token) localStorage.setItem(DRIVER_TOKEN_KEY, j.access_token)
+      })
+      .catch(() => { /* sin molestar */ })
+      .finally(() => { renovando = false })
+  } catch { renovando = false }
+}
+
 api.interceptors.request.use((config) => {
   const token = tokenActual()
   if (token) config.headers.Authorization = `Bearer ${token}`
+  renovarSesionConductorSiToca()
   return config
 })
 
@@ -119,6 +173,11 @@ api.interceptors.response.use(
       && !url.includes('/auth/driver-lookup')
       && !url.includes('/auth/driver-code/verify')
       && !url.includes('/auth/change-my-password')) {
+      // ¿Entró con su enlace personal? Entonces lo que hay que decirle es que pida el enlace otra vez (A3).
+      const sesion = datosDeSesion(localStorage.getItem(DRIVER_TOKEN_KEY) || localStorage.getItem('flota_token'))
+      if (sesion && (sesion.via === 'enlace' || sesion.lk)) {
+        try { localStorage.setItem(ENLACE_CADUCADO, '1') } catch { /* modo privado */ }
+      }
       localStorage.removeItem(DRIVER_TOKEN_KEY)
       localStorage.removeItem('flota_token')
       // Y TAMBIÉN su ficha. Sin esto el portal cree que sigue dentro —la ficha
@@ -127,8 +186,13 @@ api.interceptors.response.use(
       localStorage.removeItem('flota_driver')
       // Para que la pantalla de entrada pueda explicarle por qué está ahí.
       try { sessionStorage.setItem('driver_sesion_caducada', '1') } catch { /* modo privado */ }
-      const slug = (window.location.hash || '')
-      window.location.replace('/conductor' + slug)
+      /* SI YA ESTÁ AHÍ, SE RECARGA (14-11-2026, revisión enlace3, hallazgo 1). Quien entró con su enlace está en
+         `/conductor#<slug de su empresa>`, y `replace` a esa MISMA dirección, con el mismo «#», para el navegador es
+         solo un salto dentro de la página: no recarga, y el portal se quedaba en pantalla vacío, sin el aviso de
+         «Este acceso ya no vale». Sin sesión ya guardada, la recarga no vuelve a caer aquí (no hay bucle). */
+      const destino = '/conductor' + (window.location.hash || '')
+      if (window.location.pathname + window.location.search + window.location.hash === destino) window.location.reload()
+      else window.location.replace(destino)
     }
     return Promise.reject(error)
   }
@@ -163,6 +227,9 @@ export const getAssignedVehicle = () => api.get('/auth/me/assigned-vehicle')
 
 /* ── Vehículos / inspecciones ─────────────────────────────── */
 export const getPortalVehicles = () => api.get('/vehicles/portal')
+/* El expediente de una furgoneta para imprimir (14-11-2026, «Antes del perito»): solo golpes confirmados por una
+   persona. Lo pinta el panel en /panel/vehiculos/:id/expediente. */
+export const getExpedienteAntesDelPerito = (vehicleId) => api.get(`/vehicles/${encodeURIComponent(vehicleId)}/antes-del-perito`)
 /* Lo que le falta a su propia ficha, y como rellenarlo el mismo. */
 export const getMiFicha = () => api.get('/portal/mi-ficha')
 export const guardarMiTelefono = (telefono) => api.post('/portal/mi-telefono', { telefono })
@@ -232,6 +299,17 @@ export const uploadInspection = (formData) =>
 // Peritaje firmado: el conductor firma su propia inspección con texto-declaración.
 export const signInspection = (inspectionId, signatureText) =>
   api.post(`/inspections/${inspectionId}/sign`, { signature_text: signatureText })
+
+/* EL REPASO DEL DÍA (14-11-2026, panel/pages/Repaso.jsx). La oficina mira la foto de hoy junto a la anterior del mismo
+   lado y decide: igual, golpe o no se ve. `fecha` AAAA-MM-DD (sin ella, hoy en la zona de la empresa); `center` como
+   en el resto del panel ('Todos' = todos los visibles). Deshacer quita el veredicto de un lado y lo que arrastró. */
+export const getRepasoDia = (fecha, center) =>
+  api.get('/repaso/dia', { params: { ...(fecha ? { fecha } : {}), ...(center && center !== 'Todos' ? { center } : {}) } })
+/* Solo el número del menú (14-11-2026): {fecha, pendientes} de hoy, sin pedir el día entero cada 2 minutos. */
+export const getRepasoPendientes = (center) =>
+  api.get('/repaso/pendientes', { params: center && center !== 'Todos' ? { center } : {} })
+export const marcarRepaso = (inspectionId, cuerpo) => api.post(`/inspections/${inspectionId}/repaso`, cuerpo)
+export const deshacerRepaso = (inspectionId, photoIndex) => api.delete(`/inspections/${inspectionId}/repaso/${photoIndex}`)
 
 /* ── Ofertas patrocinadas del portal conductor (públicas) ── */
 /* Avisos de los portales problematicos de la ruta de hoy de este conductor.

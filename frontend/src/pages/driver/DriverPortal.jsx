@@ -1,17 +1,19 @@
 /* diseño compacto */
 import { useEffect, useState } from 'react'
 import { ClipboardCheck, CalendarDays, CalendarClock, CalendarPlus, LogOut, Lock, Mail, Ban, ShoppingBag, RefreshCw, Route, Gift, ArrowLeft, Store, ChevronRight, Check } from 'lucide-react'
-import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, mercEstado, getTrabajarMas, getAssignedVehicle, DRIVER_TOKEN_KEY } from '../../services/api'
-import { tx } from '../../lib/idioma'
+import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, mercEstado, getTrabajarMas, getAssignedVehicle, DRIVER_TOKEN_KEY, sesionDelEnlace } from '../../services/api'
+import { tx, locale, useIdioma } from '../../lib/idioma'
 import { lista } from '../../lib/lista'
 import { medirSeccion } from '../../lib/analitica'
 import { vigilarVersion } from '../../lib/versionApp'
+import { quitarFondoDeArranque } from '../../lib/tema'
 import DriverLogin from './DriverLogin'
 import InspectionFlow from './InspectionFlow'
 import InspectionDone from './InspectionDone'
 import MisTurnos from './MisTurnos'
 import MiClave from './MiClave'
 import MiCorreoPersonal from './MiCorreoPersonal'
+import { LineaEnlace } from './conEnlace'
 import PedirDias from './PedirDias'
 import TrabajarMas from './TrabajarMas'
 import Tienda from './Tienda'
@@ -27,7 +29,7 @@ import { sinPagos } from '../../lib/plataforma'
 // «lunes 20/10»: las fechas de la suspensión, cortas y en hora local.
 const fechaCorta = (f) => {
   const d = new Date(`${f}T12:00:00`)
-  return isNaN(d) ? f : d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'numeric' }).replace(',', '')
+  return isNaN(d) ? f : d.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'numeric' }).replace(',', '')
 }
 
 const DRIVER_KEY = 'flota_driver'
@@ -44,7 +46,7 @@ const DRIVER_KEY = 'flota_driver'
    hace todos los días antes de salir. Lo demás está debajo, a un toque.
    ──────────────────────────────────────────────────────────────────────────── */
 
-/* Las opciones grandes del inicio («Mi ruta», «Hacer la auditoría»), como filas de 64 (diseño compacto, 07-11-2026,
+/* Las opciones grandes del inicio («Mi ruta», «Hacer la revisión»), como filas de 64 (diseño compacto, 07-11-2026,
    §5.11): icono de 24, el título en «nombre» y una línea en «sec»; la principal, con relleno de marca; sin degradado
    ni sombra. Lo que avisa (respuestas sin leer, la insignia, «Pronto») va a la derecha, no encima del texto. Apagada
    (bloqueada o «Pronto»), en gris y sin bajar la opacidad: el texto se sigue leyendo al sol. */
@@ -65,7 +67,7 @@ function Opcion({ icono: Icono, titulo, sub, onClick, principal, bloqueado, pron
       {insignia && !off && !(aviso > 0) && <Etiqueta texto={insignia} tono="aviso" />}
       {/* «Pronto» en vez de esconderlo: si la opción no está, la gente pregunta si existe; si está y dice cuándo, no
           pregunta nadie. */}
-      {pronto && <span className="shrink-0 text-pie text-dark-400">Pronto</span>}
+      {pronto && <span className="shrink-0 text-pie text-dark-400">{tx('Pronto')}</span>}
       {/* Respuestas sin leer. El aviso al móvil puede no llegar nunca (avisos desactivados, iOS, el móvil apagado), así
           que la señal que de verdad se ve es esta, dentro de la app. */}
       {aviso > 0 && (
@@ -101,7 +103,7 @@ function Casilla({ icono: Icono, titulo, linea, detalle, onClick, pronto, aviso,
       <span className="mt-2 block">
         <span className={`line-clamp-3 break-words text-boton hyphens-auto ${pronto ? 'text-dark-400' : 'text-dark-50'}`}>{titulo}</span>
         {linea && <span className="line-clamp-3 break-words text-sec text-dark-400">{linea}</span>}
-        {pronto && <span className="block text-pie text-dark-400">Pronto</span>}
+        {pronto && <span className="block text-pie text-dark-400">{tx('Pronto')}</span>}
         {detalle && <span className="sr-only">. {detalle}</span>}
       </span>
     </button>
@@ -115,7 +117,7 @@ function PantallaCartera({ onBack }) {
     <div className="min-h-[100dvh] bg-dark-950 px-4 py-6"
       style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
       <div className="mx-auto max-w-md">
-        <Boton variante="texto" tono="marca" icono={ArrowLeft} texto="Volver" onClick={onBack} className="-ml-2 mb-4" />
+        <Boton variante="texto" tono="marca" icono={ArrowLeft} texto={tx('Volver')} onClick={onBack} className="-ml-2 mb-4" />
         <DriverReferralWallet />
       </div>
     </div>
@@ -123,6 +125,9 @@ function PantallaCartera({ onBack }) {
 }
 
 export default function DriverPortal() {
+  // Se repinta al llegar las traducciones (se piden al arrancar en otro idioma): sin esto, con el móvil en inglés el inicio
+  // podía quedarse con frases en español hasta el siguiente cambio de estado (tanda 6).
+  useIdioma()
   const [driver, setDriver] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem(DRIVER_KEY)) || null
@@ -145,7 +150,7 @@ export default function DriverPortal() {
   // null = apagada o todavía sin contestar. Con datos: {desde, n} para poder
   // poner el precio en la entrada del menú, que es lo que hace que se entre.
   const [tienda, setTienda] = useState(null)
-  /* LA FURGONETA DE HOY BAJO «HACER LA AUDITORÍA» (11-11-2026, tanda 2, E3 / portal_inicio-7). Decía siempre «Antes de
+  /* LA FURGONETA DE HOY BAJO «HACER LA REVISIÓN» (11-11-2026, tanda 2, E3 / portal_inicio-7). Decía siempre «Antes de
      salir a ruta»: ni qué furgoneta le toca ni si ya la había mandado. El servidor ya lo sabe (/auth/me/assigned-vehicle,
      con la asignación del día y `already_inspected`). null = sin asignación (o sin respuesta): el texto de siempre.
      Lo de «hoy no sales» y «suspendido» ya estaba y manda sobre esto. */
@@ -215,6 +220,8 @@ export default function DriverPortal() {
      por cambio de ruta solo se veia la de entrada, antes de que nadie entrara:
      todas las visitas salian «sin cuenta» y «se van aqui», y no habia forma de
      saber hasta donde llegan. */
+  // Dentro ya del portal, fuera el papel de la puerta (public/fondo-arranque.js): el portal va con el tema de la app.
+  useEffect(() => { if (driver) quitarFondoDeArranque() }, [driver])
   const seccion = !driver ? 'entrada' : (result ? 'hecho' : vista)
   useEffect(() => { medirSeccion('/conductor/p/' + seccion) }, [seccion])
 
@@ -254,7 +261,9 @@ export default function DriverPortal() {
       await guardarMiTelefono(tel)
       setTelOk(true); setFaltaTel(false)
     } catch (e) {
-      setErrTel(e?.response?.data?.detail || 'No se pudo guardar.')
+      // Con la sesión del enlace no se cambia el teléfono que ya hay (14-11-2026): si ya lo tiene, no hay nada que pedirle.
+      if (e?.response?.data?.codigo === 'enlace_sin_cambiar_telefono') { setFaltaTel(false); return }
+      setErrTel(e?.response?.data?.detail || tx('No se pudo guardar.'))
     } finally { setGuardandoTel(false) }
   }
 
@@ -362,10 +371,13 @@ export default function DriverPortal() {
       return !!JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).demo
     } catch { return false }
   })()
+  const conEnlace = sesionDelEnlace()
   const extrasProximos = lista(extra?.extras).filter((x) => !x.pasado).length
   const extraPendiente = lista(extra?.vacantes).some((v) => v.mi_estado === 'pendiente')
-  // «Sábado, 17 de octubre»: solo la primera en mayúscula (con `capitalize` salía «17 De Octubre»).
-  const hoy = (() => { const s = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }); return s.charAt(0).toUpperCase() + s.slice(1) })()
+  const diaVacante = lista(extra?.vacantes).find((v) => !v.mi_estado)?.dia
+  // «Sábado, 17 de octubre»: solo la primera en mayúscula (con `capitalize` salía «17 De Octubre»). En el idioma del
+  // móvil (tanda 6): con el teléfono en inglés salía «Sábado, 14 de noviembre» debajo de «Do the check».
+  const hoy = (() => { const s = new Date().toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }); return s.charAt(0).toUpperCase() + s.slice(1) })()
 
   return (
     <div className="min-h-[100dvh] bg-dark-950 px-4 py-6"
@@ -376,18 +388,18 @@ export default function DriverPortal() {
         <header className="mb-4 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <h1 className="truncate text-titulo text-dark-50">
-              Hola, {String(driver?.name || '').split(' ')[0] || 'buenas'}
+              {String(driver?.name || '').split(' ')[0] ? tx('Hola, {nombre}', { nombre: String(driver.name).split(' ')[0] }) : tx('Hola, buenas')}
             </h1>
             <p className="text-sec text-dark-400">{hoy}</p>
           </div>
-          <Boton variante="icono" icono={LogOut} tono="neutro" nombre="Salir" onClick={logout} />
+          <Boton variante="icono" icono={LogOut} tono="neutro" nombre={tx('Salir')} onClick={logout} />
         </header>
 
         {hayVersionNueva && (
           <button type="button" onClick={() => window.location.reload()}
             className="mb-3 flex min-h-12 w-full items-center gap-2 rounded-xl bg-ruta-marca-tinte px-3 py-2 text-left text-texto text-ruta-marca-tinte-texto">
             <RefreshCw size={18} className="shrink-0" aria-hidden="true" />
-            <span>Hay una versión nueva. Toca aquí para actualizar.</span>
+            <span>{tx('Hay una versión nueva. Toca aquí para actualizar.')}</span>
           </button>
         )}
 
@@ -399,38 +411,38 @@ export default function DriverPortal() {
             No bloquea nada: se puede seguir sin darlo. */}
         {faltaTel && !telOk && !esDemo && (
           <div className="mb-3 rounded-xl bg-dark-900 p-3">
-            <p className="text-nombre text-dark-50">¿Cuál es tu teléfono?</p>
+            <p className="text-nombre text-dark-50">{tx('¿Cuál es tu teléfono?')}</p>
             <p className="mt-1 text-sec text-dark-400">
-              Es para poder llamarte si te quedas tirado en ruta. Solo lo ve la oficina.
+              {tx('Es para poder llamarte si te quedas tirado en ruta. Solo lo ve la oficina.')}
             </p>
             <div className="mt-2 flex gap-2">
               <input
                 type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(e.target.value)}
-                placeholder="600 000 000" aria-label="Teléfono"
+                placeholder="600 000 000" aria-label={tx('Teléfono')}
                 className="campo min-w-0 flex-1" />
-              <Boton variante="normal" tono="marca" texto="Guardar" disabled={tel.trim().length < 9} cargando={guardandoTel} onClick={guardarTel} className="shrink-0" />
+              <Boton variante="normal" tono="marca" texto={tx('Guardar')} disabled={tel.trim().length < 9} cargando={guardandoTel} onClick={guardarTel} className="shrink-0" />
             </div>
             {errTel && <p className="mt-1 text-sec text-ruta-peligro-texto">{errTel}</p>}
           </div>
         )}
-        {telOk && <Aviso tono="ok" icono={Check} texto="Guardado, gracias." className="mb-3" />}
+        {telOk && <Aviso tono="ok" icono={Check} texto={tx('Guardado, gracias.')} className="mb-3" />}
 
         <div className="flex flex-col gap-2">
           {reparto !== null && (
             <Opcion
               icono={Route}
-              titulo="Mi ruta"
-              sub={reparto > 0 ? `${reparto} entrega${reparto > 1 ? 's' : ''} pendiente${reparto > 1 ? 's' : ''}` : 'Escanea los bultos al cargar'}
+              titulo={tx('Mi ruta')}
+              sub={reparto > 0 ? tx(reparto > 1 ? '{n} entregas pendientes' : '{n} entrega pendiente', { n: reparto }) : tx('Escanea los bultos al cargar')}
               principal
               onClick={() => setVista('ruta')}
             />
           )}
           <Opcion
             icono={ClipboardCheck}
-            titulo="Hacer la auditoría"
-            sub={portal?.motivo === 'suspendido' ? 'Hoy no trabajas' : noLeToca ? 'Hoy no sales a ruta'
+            titulo={tx('Hacer la revisión')}
+            sub={portal?.motivo === 'suspendido' ? tx('Hoy no trabajas') : noLeToca ? tx('Hoy no sales a ruta')
               : hoyFurgo?.enviada ? (hoyFurgo.matricula ? tx('Enviada hoy · {matricula}', { matricula: hoyFurgo.matricula }) : tx('Enviada hoy'))
-                : hoyFurgo?.matricula ? tx('Hoy: {matricula}', { matricula: hoyFurgo.matricula }) : 'Antes de salir a ruta'}
+                : hoyFurgo?.matricula ? tx('Hoy: {matricula}', { matricula: hoyFurgo.matricula }) : tx('Antes de salir a ruta')}
             /* Ya enviada hoy, en el tono de las demás y no en el de marca (11-11-2026, revisión de la tanda 2): turquesa y a
                todo lo ancho parecía que aún faltaba. Se puede seguir abriendo, por si hay que repetirla. */
             principal={!esDemo && !hoyFurgo?.enviada}
@@ -439,20 +451,19 @@ export default function DriverPortal() {
           />
           {esDemo && (
             <p className="px-1 text-sec text-dark-400">
-              En la prueba solo funciona el reparto. La auditoría (fotos del vehículo antes de salir) va en la cuenta real.
+              {tx('En la prueba solo funciona el reparto. La revisión (fotos del vehículo antes de salir) va en la cuenta real.')}
             </p>
           )}
 
           {/* Decirle POR QUÉ no puede. Un botón gris sin explicación acaba en
               una llamada a la oficina, que es lo que se quiere evitar. */}
           {susp && (
-            <Aviso tono="peligro" icono={Ban} texto={<>
-              {susp.desde === susp.hasta ? `El ${fechaCorta(susp.desde)} no trabajas` : `Del ${fechaCorta(susp.desde)} al ${fechaCorta(susp.hasta)} no trabajas`}:
-              estás suspendido. Lo verás en «Mis turnos». Si tienes dudas, habla con la oficina.
-            </>} />
+            <Aviso tono="peligro" icono={Ban} texto={susp.desde === susp.hasta
+              ? tx('El {fecha} no trabajas: estás suspendido. Lo verás en «Mis turnos». Si tienes dudas, habla con la oficina.', { fecha: fechaCorta(susp.desde) })
+              : tx('Del {desde} al {hasta} no trabajas: estás suspendido. Lo verás en «Mis turnos». Si tienes dudas, habla con la oficina.', { desde: fechaCorta(susp.desde), hasta: fechaCorta(susp.hasta) })} />
           )}
           {noLeToca && portal?.motivo !== 'suspendido' && (
-            <Aviso tono="aviso" icono={Ban} texto={'En el cuadrante de hoy no tienes furgoneta asignada, así que no puedes hacer la auditoría. Si crees que es un error, habla con tu coordinador antes de salir.'} />
+            <Aviso tono="aviso" icono={Ban} texto={tx('En el cuadrante de hoy no tienes furgoneta asignada, así que no puedes hacer la revisión. Si crees que es un error, habla con tu coordinador antes de salir.')} />
           )}
 
           {/* TRABAJAR MÁS, A LA VISTA (24-10-2026). Dani: «que le aparezca "hay 3 vacantes en varios días para
@@ -463,16 +474,16 @@ export default function DriverPortal() {
               className="w-full rounded-xl bg-ruta-ok/10 p-3 text-left active:opacity-80">
               <span className="flex items-center gap-2">
                 <CalendarPlus size={24} className="shrink-0 text-ruta-ok-texto" aria-hidden="true" />
-                <span className="min-w-0 flex-1 text-nombre text-dark-50">¿Quieres trabajar más?</span>
-                <Etiqueta tono="ok" texto={extra.plazas === 1 ? '1 vacante' : `${extra.plazas} vacantes`} />
+                <span className="min-w-0 flex-1 text-nombre text-dark-50">{tx('¿Quieres trabajar más?')}</span>
+                <Etiqueta tono="ok" texto={extra.plazas === 1 ? tx('1 vacante') : tx('{n} vacantes', { n: extra.plazas })} />
               </span>
               <span className="mt-2 block text-texto text-dark-50">
                 {extra.dias === 1
-                  ? `Nos falta gente el ${lista(extra.vacantes).find((v) => !v.mi_estado)?.dia || 'día que libras'}, y ese día libras.`
-                  : `Nos falta gente en ${extra.dias} días que libras.`} Solicítalo y la oficina te confirma.
+                  ? (diaVacante ? tx('Nos falta gente el {dia}, y ese día libras.', { dia: diaVacante }) : tx('Nos falta gente el día que libras.'))
+                  : tx('Nos falta gente en {n} días que libras.', { n: extra.dias })} {tx('Solicítalo y la oficina te confirma.')}
               </span>
               <span className="mt-2 inline-flex min-h-10 items-center gap-1 rounded-lg bg-ruta-ok px-3 text-boton text-white">
-                Ver y solicitar <ChevronRight size={16} aria-hidden="true" />
+                {tx('Ver y solicitar')} <ChevronRight size={16} aria-hidden="true" />
               </span>
             </button>
           )}
@@ -483,8 +494,8 @@ export default function DriverPortal() {
           {!esDemo && <div className="mt-1 grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(calc(100px*var(--letra,1)),1fr))]">
           <Casilla
             icono={CalendarDays}
-            titulo="Pedir días libres"
-            detalle={sinVer > 0 ? `${sinVer} respuesta${sinVer > 1 ? 's' : ''} sin leer` : 'Marca los días'}
+            titulo={tx('Pedir días libres')}
+            detalle={sinVer > 0 ? tx(sinVer > 1 ? '{n} respuestas sin leer' : '{n} respuesta sin leer', { n: sinVer }) : tx('Marca los días')}
             aviso={sinVer}
             onClick={() => setVista('dias')}
           />
@@ -492,8 +503,8 @@ export default function DriverPortal() {
               genera más preguntas que una que dice que llegará). */}
           <Casilla
             icono={CalendarClock}
-            titulo="Mis turnos"
-            detalle="Qué días trabajas"
+            titulo={tx('Mis turnos')}
+            detalle={tx('Qué días trabajas')}
             pronto={!tieneTurnos}
             onClick={() => setVista('turnos')}
           />
@@ -501,9 +512,9 @@ export default function DriverPortal() {
           {extra && !(extra.plazas > 0) && (tieneTurnos || lista(extra.extras).length > 0) && (
             <Casilla
               icono={CalendarPlus}
-              titulo="Trabajar más"
-              detalle={extraPendiente ? 'Solicitado: esperando'
-                : extrasProximos ? `${extrasProximos} día${extrasProximos > 1 ? 's' : ''} extra` : 'Sin vacantes ahora'}
+              titulo={tx('Trabajar más')}
+              detalle={extraPendiente ? tx('Solicitado: esperando')
+                : extrasProximos ? tx(extrasProximos > 1 ? '{n} días extra' : '{n} día extra', { n: extrasProximos }) : tx('Sin vacantes ahora')}
               onClick={() => setVista('extra')}
             />
           )}
@@ -514,16 +525,16 @@ export default function DriverPortal() {
           {/* Sin «Comparte y gana» en la app de iPhone (09-11-2026): allí no hay invitaciones, bonos ni cartera. */}
           {!sinPagos() && <Casilla
             icono={Gift}
-            titulo="Comparte y gana"
-            detalle={`${(refCentActual() / 100).toFixed(2).replace('.', ',').replace(',00', '')} € por compañero`}
+            titulo={tx('Comparte y gana')}
+            detalle={tx('{precio} € por compañero', { precio: (refCentActual() / 100).toFixed(2).replace('.', ',').replace(',00', '') })}
             tono="verde"
             onClick={() => setVista('cartera')}
           />}
           {merc && (
             <Casilla
               icono={Store}
-              titulo="Mercadillo"
-              detalle={merc.sin_leer > 0 ? `${merc.sin_leer} mensaje${merc.sin_leer > 1 ? 's' : ''}` : 'Vende lo que no uses'}
+              titulo={tx('Mercadillo')}
+              detalle={merc.sin_leer > 0 ? tx(merc.sin_leer > 1 ? '{n} mensajes' : '{n} mensaje', { n: merc.sin_leer }) : tx('Vende lo que no uses')}
               aviso={merc.sin_leer}
               onClick={() => setVista('mercadillo')}
             />
@@ -537,25 +548,30 @@ export default function DriverPortal() {
           {tienda && (
             <Casilla
               icono={ShoppingBag}
-              titulo="Ropa del equipo"
-              detalle={tienda.desde ? `Desde ${tienda.desde.toFixed(2).replace('.', ',')} €` : 'Con tu nombre'}
+              titulo={tx('Ropa del equipo')}
+              detalle={tienda.desde ? tx('Desde {precio} €', { precio: tienda.desde.toFixed(2).replace('.', ',') }) : tx('Con tu nombre')}
               tono="ambar"
               onClick={() => setVista('tienda')}
             />
           )}
+          {/* Con la sesión de su enlace (14-11-2026) el servidor no deja poner contraseña ni correo de recuperación
+              (403 `enlace_sin_contrasena`): en vez de dos casillas que acaban en un error, una línea tranquila debajo. */}
+          {!conEnlace && <>
           <Casilla
             icono={Lock}
-            titulo={tieneClave ? 'Cambiar mi contraseña' : 'Crear mi contraseña'}
-            detalle={tieneClave ? null : 'Entras con el correo'}
+            titulo={tieneClave ? tx('Cambiar mi contraseña') : tx('Crear mi contraseña')}
+            detalle={tieneClave ? null : tx('Entras con el correo')}
             onClick={() => setVista('clave')}
           />
           <Casilla
             icono={Mail}
-            titulo="Correo de recuperación"
-            detalle="Añade un correo personal para recibir códigos"
+            titulo={tx('Correo de recuperación')}
+            detalle={tx('Añade un correo personal para recibir códigos')}
             onClick={() => setVista('correo')}
           />
+          </>}
           </div>}
+          {!esDemo && conEnlace && <LineaEnlace className="mt-1 px-1" />}
         </div>
       </div>
     </div>

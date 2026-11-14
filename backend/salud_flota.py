@@ -268,8 +268,11 @@ def ficha(vehiculo: dict, danos: list, mecanica: list, averias: list, ultima: di
             urgencias.append("Avería crítica abierta")
     if reciente and ultima.get("circulation_safe") is False:
         puntos += IA_NO_CIRCULA_PUNTOS
-        motivos.append((IA_NO_CIRCULA_PUNTOS, "La IA marcó en la última inspección que no es seguro circular"))
-        urgencias.append("La IA dice que no es seguro circular")
+        # Textos (14-11-2026): decía «La IA dice que no es seguro circular». La IA se equivoca a menudo: lo que pide
+        # es que lo mire una persona. La regla (urgente por esto) no cambia.
+        motivos.append((IA_NO_CIRCULA_PUNTOS,
+                        "La IA marcó en la última revisión que puede no ser seguro circular (sin confirmar)"))
+        urgencias.append("La IA marca que puede no ser seguro circular: que lo mire una persona")
     puntos = round(puntos, 1)
     if urgencias or puntos >= UMBRAL_URGENTE:
         nivel = "urgente"

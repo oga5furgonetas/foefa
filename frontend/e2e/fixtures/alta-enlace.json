@@ -1,0 +1,12 @@
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ejemplo-de-sesion-de-conductor.firma",
+  "token_type": "bearer",
+  "role": "driver",
+  "name": "Ana L.",
+  "id": "0f8e2c1a-6b7d-4c3e-9a1f-2d4b6c8e0a12",
+  "center": "PRINCIPAL",
+  "configurar_cuenta": false,
+  "slug": "transportes-perez",
+  "empresa": "Transportes Pérez",
+  "email": null
+}

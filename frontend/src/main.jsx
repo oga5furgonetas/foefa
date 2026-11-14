@@ -21,7 +21,7 @@ import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/500.css'
 import '@fontsource/ibm-plex-mono/600.css'
 import { medirVista } from './lib/analitica'
-import { aplicarTema, aplicarLetra, pintarApp, RUTAS_APP, colorDeLaApp } from './lib/tema'
+import { aplicarTema, aplicarLetra, pintarApp, RUTAS_APP, colorDeLaApp, esPuertaConductor, nocheElegida } from './lib/tema'
 import { salirDeLaDemoDeReparto, inicioGuardado } from './panel/auth'
 
 /* Señal de vida para /arranque.js. Ese vigilante espera 10 s y, si esta marca
@@ -115,6 +115,10 @@ const _NOISE = [
   'WebAssembly.instantiate', 'WebAssembly.compile',
 ]
 const _reported = new Set()
+/* SIN EL «#» (14-11-2026, tercera tanda, A8). Detrás de «#» viajan cosas que no salen del teléfono: el enlace personal
+   del conductor (`/c#<token>`), el pase al móvil, el slug del portal, las respuestas de /devolucion-renting. El informe
+   de un error va al servidor y de allí a Telegram, así que se manda la dirección sin él, en toda la web. */
+const sinFragmento = (url) => String(url || '').split('#')[0]
 function reportError(message, stack) {
   try {
     const msg = String(message || '').slice(0, 500)
@@ -124,7 +128,7 @@ function reportError(message, stack) {
     fetch(`${API_BASE}/client-error`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: msg, stack: String(stack || '').slice(0, 800), url: window.location.href }),
+      body: JSON.stringify({ message: msg, stack: String(stack || '').slice(0, 800), url: sinFragmento(window.location.href) }),
     }).catch(() => {})
   } catch { /* reportar nunca debe romper la app */ }
 }
@@ -225,7 +229,7 @@ class ErrorBoundary extends React.Component {
           </button>
           <button
             onClick={() => {
-              const txt = `${MARCA.nombre} error\n${window.location.href}\n${new Date().toISOString()}\n\n${this.state.detail}`
+              const txt = `${MARCA.nombre} error\n${sinFragmento(window.location.href)}\n${new Date().toISOString()}\n\n${this.state.detail}`
               navigator.clipboard?.writeText(txt).catch(() => {})
             }}
             style={{ padding: '11px 18px', borderRadius: 10, border: '1px solid #333338', background: 'transparent', color: '#b0b0b8', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
@@ -243,8 +247,6 @@ setTimeout(() => { try { sessionStorage.removeItem('chunk_curacion') } catch { /
 
 /* Code-splitting: la landing carga al instante; el resto de rutas se descargan
    solo cuando se visitan (panel, portal conductor, legal…). */
-// La portada de empresas también va aparte (17-10-2026): quien llega a /repartidores o abre la app no la usa.
-const Landing = lazy(() => import('./pages/Landing'))
 const Login = lazy(() => import('./pages/Login'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Registro = lazy(() => import('./pages/Registro'))
@@ -273,15 +275,24 @@ const PaseMovil = lazy(() => import('./pages/PaseMovil'))
 const SeguimientoPedido = lazy(() => import('./pages/SeguimientoPedido'))
 const RegaloPagina = lazy(() => import('./pages/RegaloPagina'))
 const Planes = lazy(() => import('./pages/Planes'))
+/* LA PORTADA (14-11-2026): «/» es la página para empresas con furgonetas (antes, la de la app de reparto, que sigue en
+   /repartidores y se enlaza desde abajo); /empresas enseña la misma. Va aparte: quien abre la app no la descarga.
+   Habla de precios, así que solo en la web, como /planes. */
+const Empresas = lazy(() => import('./pages/Empresas'))
 const DriverPortal = lazy(() => import('./pages/driver/DriverPortal'))
 const VerificarCorreoConductor = lazy(() => import('./pages/driver/VerificarCorreoConductor'))
+// El acceso personal del conductor (/c#<token>) y el arranque de una flota (14-11-2026, CONTRATO-ALTA).
+const EntrarConEnlace = lazy(() => import('./pages/driver/EntrarConEnlace'))
+const PanelArranque = lazy(() => import('./panel/pages/Arranque'))
 const PanelLogin = lazy(() => import('./panel/PanelLogin'))
 const PanelLayout = lazy(() => import('./panel/PanelLayout'))
 const PanelDashboard = lazy(() => import('./panel/pages/Dashboard'))
 const PanelMiDia = lazy(() => import('./panel/pages/MiDia'))
 const PanelVehiculos = lazy(() => import('./panel/pages/Vehiculos'))
+const PanelExpediente = lazy(() => import('./panel/pages/Expediente'))
 const PanelVencimientos = lazy(() => import('./panel/pages/Vencimientos'))
 const PanelRevision = lazy(() => import('./panel/pages/RevisionRapida'))
+const PanelRepaso = lazy(() => import('./panel/pages/Repaso'))
 const PanelNegocio = lazy(() => import('./panel/pages/Negocio'))
 const PanelGastos = lazy(() => import('./panel/pages/Gastos'))
 const PanelAnalitica = lazy(() => import('./panel/pages/Analitica'))
@@ -334,6 +345,8 @@ const AvisoLegal = lazy(() => import('./legal/AvisoLegal'))
 const Contacto = lazy(() => import('./legal/Contacto'))
 const Seguridad = lazy(() => import('./legal/Seguridad'))
 const PeritajeTecnico = lazy(() => import('./pages/PeritajeTecnico'))
+const DevolucionRenting = lazy(() => import('./pages/DevolucionRenting'))
+const ExpedienteEjemplo = lazy(() => import('./pages/ExpedienteEjemplo'))
 const Verify = lazy(() => import('./pages/Verify'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
@@ -378,10 +391,24 @@ function SoloWeb({ children, a = '/ruta' }) {
 
 /* Mientras se descarga el trozo de una pantalla. En la app del repartidor, con su papel (o el oscuro) y el cian
    de la marca: el negro con un círculo naranja de antes era lo primero que se veía al abrir la app. */
+/* En las páginas públicas claras, public/fondo-arranque.js marca <html> con `arranque-papel` (o `arranque-noche`)
+   antes de pintar: mientras baja el trozo se sigue con ese papel, sin el destello oscuro. El panel y la app de reparto
+   no cambian (si se llega a ellos navegando desde una pública, la marca sigue en <html>: por eso se mira la ruta). */
+function papelDeArranque(ruta) {
+  if (/^\/panel(\/|$)/.test(ruta)) return null
+  // La puerta del conductor (/c, /conductor sin sesión), con la regla de su pantalla: papel salvo la noche elegida.
+  if (esPuertaConductor(ruta)) return nocheElegida() ? '#0b1012' : '#f5f6f3'
+  const html = document.documentElement.classList
+  if (html.contains('arranque-noche')) return '#0b1012'
+  if (html.contains('arranque-papel')) return '#f5f6f3'
+  return null
+}
+
 function RouteLoader() {
   const app = RUTAS_APP.test(window.location.pathname)
-  const fondo = app ? colorDeLaApp() : '#0a0b0f'
-  const claro = app && fondo !== '#060a14'
+  const papel = app ? null : papelDeArranque(window.location.pathname)
+  const fondo = app ? colorDeLaApp() : papel || '#0a0b0f'
+  const claro = (app && fondo !== '#060a14') || papel === '#f5f6f3'
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: fondo }}>
       <div style={{ width: 28, height: 28, border: `3px solid ${claro ? 'rgba(17,17,20,.1)' : 'rgba(255,255,255,.1)'}`, borderTopColor: '#0FC2BC', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
@@ -416,7 +443,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <CookieBanner />
           <Suspense fallback={<RouteLoader />}>
             <Routes>
-              <Route path="/" element={<SoloWeb><Landing /></SoloWeb>} />
+              <Route path="/" element={<SoloWeb><Empresas /></SoloWeb>} />
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/registro" element={<Registro />} />
@@ -433,6 +460,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/s/:token" element={<SeguimientoPedido />} />
               <Route path="/regalo/:codigo" element={<SoloWeb><RegaloPagina /></SoloWeb>} />
               <Route path="/planes" element={<SoloWeb><Planes /></SoloWeb>} />
+              <Route path="/empresas" element={<SoloWeb><Empresas /></SoloWeb>} />
               <Route path="/privacidad" element={<Privacidad />} />
               <Route path="/terminos" element={<Terminos />} />
               <Route path="/encargo" element={<Encargo />} />
@@ -442,6 +470,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/security" element={<Seguridad />} />
               <Route path="/seguridad" element={<Seguridad />} />
               <Route path="/peritaje-tecnico" element={<SoloWeb><PeritajeTecnico /></SoloWeb>} />
+              <Route path="/devolucion-renting" element={<SoloWeb><DevolucionRenting /></SoloWeb>} />
+              <Route path="/devolucion-renting/:compania" element={<SoloWeb><DevolucionRenting /></SoloWeb>} />
+              <Route path="/expediente-ejemplo" element={<SoloWeb><ExpedienteEjemplo /></SoloWeb>} />
               <Route path="/verify" element={<Verify />} />
               <Route path="/verify/:hash" element={<Verify />} />
               <Route path="/app" element={<AppRedirect />} />
@@ -456,10 +487,20 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/verificar-correo-conductor" element={<VerificarCorreoConductor />} />
               <Route path="/conductor" element={<DriverPortal />} />
               <Route path="/conductor/:slug" element={<DriverPortal />} />
+              {/* El token va detrás de «#» (no llega a ningún servidor). `/c/:token` solo por si alguien lo escribe así:
+                  la pantalla lo quita de la dirección al cargar y la analítica lo mide como patrón. */}
+              <Route path="/c" element={<EntrarConEnlace />} />
+              <Route path="/c/:token" element={<EntrarConEnlace />} />
 
               {/* Panel de administración nuevo (modelo v2). En construcción por módulos.
                   NO afecta a las rutas actuales ni al login en vivo. */}
               <Route path="/panel/login" element={<PanelLogin />} />
+              {/* El expediente de una furgoneta (14-11-2026): fuera de PanelLayout, cuyo guardián mira el último tramo
+                  («expediente», que no es un módulo). La pantalla hace ella misma la cuenta de «vehiculos». */}
+              <Route path="/panel/vehiculos/:id/expediente" element={<PanelExpediente />} />
+              {/* El arranque de una flota (14-11-2026): también fuera, por lo mismo («arranque» no es un módulo) y porque
+                  es una pantalla de un solo asunto, sin el menú. Abre para cualquier sesión del panel. */}
+              <Route path="/panel/arranque" element={<PanelArranque />} />
               <Route path="/panel" element={<PanelLayout />}>
                 {/* Operacional */}
                 <Route index element={<PanelDashboard />} />
@@ -481,6 +522,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <Route path="actividad" element={<PanelActividad />} />
                 {/* Furgonetas */}
                 <Route path="revision" element={<PanelRevision />} />
+                <Route path="repaso" element={<PanelRepaso />} />
                 <Route path="inspecciones" element={<PanelInspecciones />} />
                 <Route path="vehiculos" element={<PanelVehiculos />} />
                 <Route path="vencimientos" element={<PanelVencimientos />} />

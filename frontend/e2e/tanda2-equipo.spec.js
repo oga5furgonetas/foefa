@@ -9,7 +9,7 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
      falta. En el ordenador, la tabla y los botones de siempre.
    · E2 (equipo-7): filtros de un toque encima de la lista: «sin centro», «sin correo», «sin ID de reparto» (solo si
      la empresa usa la DNR o las horas) y «sin acceso» (solo si se sabe quién tiene cuenta), con cuántos.
-   · E3 (portal_inicio-7, la web): bajo «Hacer la auditoría», «Hoy: 1234 ABC» o «Enviada hoy»; «hoy no sales» y
+   · E3 (portal_inicio-7, la web): bajo «Hacer la revisión», «Hoy: 1234 ABC» o «Enviada hoy»; «hoy no sales» y
      «suspendido» siguen mandando. */
 
 function vigilar(page) {
@@ -61,7 +61,8 @@ const CORREO_LARGO = { id: 'a6', name: 'FRANCISCO JAVIER MORENO', center: 'SUR',
 // `antes`: rutas propias de una prueba que tienen que estar antes de abrir la pantalla (la previa se pide al montarla);
 // van después de las de aquí, así que mandan sobre ellas (la de una previa que falla a propósito, por ejemplo).
 // `idioma`: el del panel (entrarComoAdmin lo deja en español). `lista`: los conductores, si no son los de siempre.
-async function conductores(page, { modulos, cuentasFallan = false, mas = [], antes, idioma, lista = CONDUCTORES } = {}) {
+// `opciones`: abre «Más opciones» (las dos contraseñas van plegadas desde el 14-11-2026, ARREGLOS-5 N1).
+async function conductores(page, { modulos, cuentasFallan = false, mas = [], antes, idioma, lista = CONDUCTORES, opciones = false } = {}) {
   await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
   await page.addInitScript((l) => {
     localStorage.setItem('panel_center', 'Todos')
@@ -83,6 +84,7 @@ async function conductores(page, { modulos, cuentasFallan = false, mas = [], ant
   // respecto al <main> y no a la pantalla. Antes de medir nada, que acabe (como `abrir()` en tanda2-dia.spec.js).
   await page.locator('main.animate-fade-in').first()
     .evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {}))))
+  if (opciones) await page.getByTestId('mas-opciones').click()
 }
 
 test.describe('E1 · Conductores en el móvil', () => {
@@ -99,7 +101,7 @@ test.describe('E1 · Conductores en el móvil', () => {
     expect(await buscador.evaluate((el) => el.offsetWidth)).toBeGreaterThan(300)
     // Importar y Móviles no están a la vista: van en «Más».
     await expect(page.getByRole('button', { name: 'Importar Excel' })).toHaveCount(0)
-    const mas = page.getByRole('button', { name: 'Más' })
+    const mas = page.getByRole('button', { name: 'Más', exact: true })
     await expect(mas).toBeVisible()
     // Medidas sin la animación de entrada de la cabecera (escala un 0,5 % mientras entra): las de la maqueta.
     expect(await alto(mas)).toBeGreaterThanOrEqual(44)
@@ -142,7 +144,7 @@ test.describe('E1 · Conductores en el móvil', () => {
 
   test('el aviso de las claves no queda a una palabra por línea', async ({ page }) => {
     const fallos = vigilar(page)
-    await conductores(page)
+    await conductores(page, { opciones: true })
     const texto = page.getByText(/Contraseña temporal común: se aplica a/)
     await expect(texto).toBeVisible()
     // Con la previa de verdad (tercera revisión, M2) el aviso lleva también «· 1 sin correo», y aun así no se aplasta.
@@ -159,7 +161,7 @@ test.describe('E1 · Conductores en el móvil', () => {
   // Revisión de la tanda 2, T24: también los pasos de menos uso de los avisos de claves miden 44 en el móvil.
   test('cambiar la contraseña inicial y poner la temporal: todo lo que se toca mide 44', async ({ page }) => {
     const fallos = vigilar(page)
-    await conductores(page)
+    await conductores(page, { opciones: true })
     await page.getByRole('button', { name: 'Cambiarla' }).click()
     expect(await alto(page.getByRole('button', { name: 'Guardar' }))).toBeGreaterThanOrEqual(44)
     expect(await alto(page.getByRole('button', { name: 'Cancelar' }))).toBeGreaterThanOrEqual(44)
@@ -182,7 +184,7 @@ test.describe('E1 · Conductores en el móvil', () => {
     await conductores(page, { antes: () => page.route(/\/api\/auth\/driver-accounts\/generar\/previa/, (route) => {
       veces += 1
       return veces === 1 ? json({ detail: 'x' }, 500)(route) : json(PREVIA)(route)
-    }) })
+    }), opciones: true })
     await page.getByRole('button', { name: 'Establecer contraseña temporal común' }).click()
     const reintentar = page.getByRole('button', { name: 'Reintentar' })
     await expect(reintentar).toBeVisible()
@@ -195,7 +197,7 @@ test.describe('E1 · Conductores en el móvil', () => {
   // Segunda revisión de la tanda 2, U7: los avisos se pintan una sola vez; girar el móvil no los vacía.
   test('al girar el móvil, la clave a medio escribir y el resultado de aplicarla siguen ahí', async ({ page }) => {
     const fallos = vigilar(page)
-    await conductores(page, { antes: async () => {
+    await conductores(page, { opciones: true, antes: async () => {
       await page.route(/\/api\/auth\/driver-accounts\/generar(\?|$)/, json({ actualizadas: 2, sin_email: 1, cuentas_inactivas: 0,
         aviso: 'A 1 que ya tenía la suya se le ha respetado.' }))
     } })
@@ -228,8 +230,9 @@ test.describe('E1 · Conductores en el móvil', () => {
     await expect(primero()).toContainText('ANTONIO GARCÍA LÓPEZ')
     const selector = page.getByLabel('Ordenar por')
     expect(await alto(selector)).toBeGreaterThanOrEqual(44)
-    // Por las siete columnas de la tabla, como antes de las tarjetas (tercera revisión, M1).
-    expect(await selector.locator('option').allTextContents()).toEqual(SIETE)
+    // Por las columnas de la tabla, como antes de las tarjetas (tercera revisión, M1); las que no tiene ninguna ficha
+    // (aquí, alojamiento y nivel) no se pintan ni se ofrecen (14-11-2026, ARREGLOS-5 N1).
+    expect(await selector.locator('option').allTextContents()).toEqual(SIETE.filter((c) => !['Alojamiento', 'Nivel'].includes(c)))
     await selector.selectOption('center')
     // Por centro: primero la que no tiene (vacío), luego NORTE (Antonio, Nuria) y SUR (Miguel Ángel, María del Carmen).
     await expect(primero()).toContainText('ESTELA ALEN LAGE')
@@ -249,23 +252,26 @@ test.describe('E1 · Conductores en el móvil', () => {
     await conductores(page, { idioma: 'en' })
     const selector = page.getByLabel('Sort by')
     await expect(selector).toBeVisible()
+    // Sin alojamiento, contrato ni nivel en ninguna ficha, esas columnas no se pintan ni se ofrecen (14-11-2026, N1).
     expect(await selector.locator('option').allTextContents())
-      .toEqual(['Name', 'Site', 'Accommodation', 'Phone', 'Email', 'Contract', 'Level'])
+      .toEqual(['Name', 'Site', 'Phone', 'Email'])
     await expect(page.getByRole('button', { name: 'A to Z' })).toHaveAttribute('title', 'Reverse the order')
     await expect(page.getByRole('button', { name: 'Duplicates', exact: true })).toBeVisible()
   })
 
-  // Revisión de la tanda 2, T27: al abrir Conductores en el móvil se ve algún conductor sin bajar. Los avisos de
-  // contraseñas van debajo de la lista y las pestañas caben en una línea.
-  test('al abrir se ve la lista sin bajar; los avisos de claves, debajo', async ({ page }) => {
+  // Revisión de la tanda 2, T27: al abrir Conductores en el móvil se ve algún conductor sin bajar, y las pestañas caben
+  // en una línea. Desde el 14-11-2026 (ARREGLOS-5 N1) los avisos de contraseñas van plegados en «Más opciones», a un
+  // toque: montados (no se pierde lo escrito), pero sin ocupar sitio hasta que se abren.
+  test('al abrir se ve la lista sin bajar; los avisos de claves, plegados en «Más opciones»', async ({ page }) => {
     const fallos = vigilar(page)
     await conductores(page)
     const lista = page.getByRole('list', { name: 'Conductores' })
     const aviso = page.getByText(/Contraseña inicial de los conductores nuevos/)
     await expect(aviso).toBeAttached()
-    // El aviso, debajo de la lista en la pantalla (lo baja el CSS: en la página está una sola vez, segunda revisión U7).
-    expect(await lista.evaluate((ul, av) => av.getBoundingClientRect().top >= ul.getBoundingClientRect().bottom,
-      await aviso.elementHandle())).toBe(true)
+    await expect(aviso).toBeHidden()
+    const mas = page.getByTestId('mas-opciones')
+    await expect(mas).toHaveAttribute('aria-expanded', 'false')
+    expect(await alto(mas)).toBeGreaterThanOrEqual(44)
     // La primera tarjeta, entera dentro de la pantalla y por encima de la barra fija de abajo del panel.
     const caja = await lista.getByRole('listitem').first().evaluate((el) => {
       const barra = document.querySelector('nav.fixed.bottom-0')
@@ -274,7 +280,7 @@ test.describe('E1 · Conductores en el móvil', () => {
     expect(caja.abajo).toBeLessThanOrEqual(caja.limite)
     // Las tres pestañas en una sola línea y enteras dentro de la pantalla (en el móvil, «Ranking» y «Duplicadas»).
     const pestanas = [page.getByRole('button', { name: 'Conductores', exact: true }),
-      page.getByRole('button', { name: '🏆 Ranking', exact: true }), page.getByRole('button', { name: 'Duplicadas', exact: true })]
+      page.getByRole('button', { name: 'Ranking', exact: true }), page.getByRole('button', { name: 'Duplicadas', exact: true })]
     for (const p of pestanas) {
       expect(await alto(p)).toBeLessThanOrEqual(46)
       expect(await p.evaluate((el) => el.getBoundingClientRect().right <= el.parentElement.getBoundingClientRect().right + 0.5
@@ -282,6 +288,14 @@ test.describe('E1 · Conductores en el móvil', () => {
     }
     const ancho = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, ventana: window.innerWidth }))
     expect(ancho.doc).toBeLessThanOrEqual(ancho.ventana)
+    // A un toque: se abren encima de la lista, y se recuerda abierto en este navegador.
+    await mas.click()
+    await expect(aviso).toBeVisible()
+    await expect(mas).toHaveAttribute('aria-expanded', 'true')
+    expect(await lista.evaluate((ul, av) => av.getBoundingClientRect().bottom <= ul.getBoundingClientRect().top,
+      await aviso.elementHandle())).toBe(true)
+    await page.reload()
+    await expect(page.getByText(/Contraseña inicial de los conductores nuevos/)).toBeVisible()
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
@@ -314,8 +328,8 @@ test.describe('E1 · Conductores en el móvil', () => {
       await expect(page.getByTestId('dato-orden')).toHaveCount(5)
       const movil = await leerTarjetas(page)
       expect(movil.map((f) => [f.nombre, f.dato])).toEqual(esperado)
-      // La etiqueta, la misma que en la tabla y con su color, no un texto suelto.
-      if (valor === 'contrato') await expect(page.getByTestId('dato-orden').filter({ hasText: 'ETT' }).first()).toHaveClass(/bg-purple-500/)
+      // La etiqueta, la misma que en la tabla: desde la tanda 6 (14-11-2026), en texto gris y sin pastilla de color.
+      if (valor === 'contrato') await expect(page.getByTestId('dato-orden').filter({ hasText: 'ETT' }).first()).toHaveClass(/text-dark-300/)
       // Al revés, justo al revés (sin empates por nivel; por contrato, los grupos al revés).
       await page.getByRole('button', { name: 'De la A a la Z' }).click()
       await expect(page.getByRole('button', { name: 'De la Z a la A' })).toBeVisible()
@@ -357,7 +371,7 @@ test.describe('E1 · Conductores en el móvil', () => {
     expect(medida.doc).toBeLessThanOrEqual(medida.ventana)
     expect(medida.fuera).toBe(0)
     // Quien no tiene correo, «—».
-    await expect(tarjetas.filter({ hasText: 'CARLOS PEÑA SOTO' }).getByTestId('dato-orden')).toHaveText('· —')
+    await expect(tarjetas.filter({ hasText: 'CARLOS PEÑA SOTO' }).getByTestId('dato-orden')).toHaveText('—')
     // El botón de llamar sigue de 44 al lado del correo largo.
     const llamar = largo.getByRole('link', { name: /^Llamar/ })
     await expect(llamar).toBeVisible()
@@ -382,15 +396,15 @@ test.describe('E1 · Conductores en el ordenador, como antes', () => {
 
   test('la tabla y los botones de siempre, sin «Más»', async ({ page }) => {
     const fallos = vigilar(page)
-    await conductores(page)
+    await conductores(page, { opciones: true })
     await expect(page.locator('table')).toHaveCount(1)
     await expect(page.getByRole('columnheader', { name: /Teléfono/ })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Importar Excel' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Móviles personales' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Más' })).toBeHidden()
+    await expect(page.getByRole('button', { name: 'Más', exact: true })).toBeHidden()
     // El buscador, del ancho de antes (224 px).
     expect(await page.getByPlaceholder('Buscar conductor…').evaluate((el) => el.offsetWidth)).toBe(224)
-    // Los avisos de claves, encima de la tabla como siempre; el selector de orden del móvil no está (ordena la cabecera).
+    // Los avisos de claves (abiertos en «Más opciones»), encima de la tabla; el selector de orden del móvil no está.
     const aviso = page.getByText(/Contraseña inicial de los conductores nuevos/)
     await expect(aviso).toBeVisible()
     expect(await page.locator('table').evaluate((tb, av) => !!(tb.compareDocumentPosition(av) & Node.DOCUMENT_POSITION_PRECEDING),
@@ -400,7 +414,7 @@ test.describe('E1 · Conductores en el ordenador, como antes', () => {
       await aviso.elementHandle())).toBe(true)
     await expect(page.getByLabel('Ordenar por')).toHaveCount(0)
     // Las pestañas, con su nombre entero.
-    await expect(page.getByRole('button', { name: '🏆 Ranking conductores', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Ranking conductores', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Fichas duplicadas', exact: true })).toBeVisible()
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
@@ -474,11 +488,11 @@ async function portal(page, { asignada, vehiculosPortal } = {}) {
   await page.route(/\/api\/vehicles\/portal/, json(vehiculosPortal || { vehicles: [], puede_auditar: true, motivo: null }))
   await page.route(/\/api\/portal\/mi-ficha/, json({ falta_telefono: false, tiene_clave: true, configurar_cuenta: false }))
   await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('Hacer la auditoría', { exact: true })).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText('Hacer la revisión', { exact: true })).toBeVisible({ timeout: 15000 })
   return pedidas
 }
 const FURGO = { id: 'v4', license_plate: '3056 MBF' }
-const opcion = (page) => page.getByRole('button', { name: /Hacer la auditoría/ })
+const opcion = (page) => page.getByRole('button', { name: /Hacer la revisión/ })
 
 test.describe('E3 · la furgoneta de hoy en el portal del conductor', () => {
   test('con furgoneta asignada dice «Hoy: matrícula» y se puede abrir', async ({ page }) => {

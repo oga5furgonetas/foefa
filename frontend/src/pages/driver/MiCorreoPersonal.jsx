@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft, Check, Loader2, Mail } from 'lucide-react'
-import { api } from '../../services/api'
+import { api, sesionDelEnlace } from '../../services/api'
+import { PantallaEnlace } from './conEnlace'
 
 export default function MiCorreoPersonal({ onBack }) {
+  // Con la sesión de su enlace el servidor no deja poner un correo de recuperación (403 `enlace_sin_contrasena`).
+  if (sesionDelEnlace()) return <PantallaEnlace titulo="Correo de recuperación" onBack={onBack} />
+  return <FormularioCorreo onBack={onBack} />
+}
+
+function FormularioCorreo({ onBack }) {
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState(null)
   const [busy, setBusy] = useState(false)

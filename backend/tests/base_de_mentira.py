@@ -3,7 +3,7 @@
 servidor sin MongoDB: find/find_one/update (con upsert)/insert/delete/distinct
 y los operadores que usan (=, $in, $nin, $ne, $exists, rangos, $and, $or,
 $regex; $set, $unset, $setOnInsert, $addToSet, $push (con $each/$slice), $pull, $inc;
-replace_one). No es mongomock: si
+replace_one, find_one_and_update, find_one_and_delete). No es mongomock: si
 una prueba necesita más, se añade aquí y se dice."""
 import re
 from types import SimpleNamespace
@@ -72,6 +72,11 @@ class Cursor:
 
     def limit(self, n):
         self.docs = self.docs[:n] if n else self.docs
+        return self
+
+    def batch_size(self, n):
+        """Cuántos documentos trae Mongo en cada viaje (14-11-2026, la foto anterior de cada lado): aquí no cambia
+        lo que se lee, solo se acepta la llamada."""
         return self
 
     async def to_list(self, n=None):
@@ -181,9 +186,17 @@ class Col:
                 d.setdefault(k, []).append(v)
         for k, v in u.get("$inc", {}).items():
             _poner(d, k, (_leer(d, k) if _leer(d, k) is not _FALTA else 0) + v)
+        for k, v in u.get("$max", {}).items():
+            # Como Mongo: si no existe (o es None), se pone; si no, el mayor (14-11-2026, `rank_ia` del libro).
+            antes = _leer(d, k)
+            if antes is _FALTA or antes is None or v > antes:
+                _poner(d, k, v)
         for k, v in u.get("$pull", {}).items():
-            if isinstance(d.get(k), list):
-                d[k] = [x for x in d[k] if x != v]
+            # Con una condición ({"golpe_id": …}) quita los elementos que la cumplen, como Mongo (14-11-2026).
+            lista = _leer(d, k)
+            if isinstance(lista, list):
+                _poner(d, k, [x for x in lista if not (
+                    _casa(x, v) if isinstance(v, dict) and isinstance(x, dict) else x == v)])
 
     async def find_one(self, q=None, proyeccion=None, sort=None, **_):
         docs = [d for d in self.docs if _casa(d, q)]
@@ -250,6 +263,37 @@ class Col:
                 return SimpleNamespace(deleted_count=1)
         return SimpleNamespace(deleted_count=0)
 
+    async def find_one_and_update(self, q, u, projection=None, sort=None, upsert=False, return_document=False, **_):
+        """Como Mongo (14-11-2026, «reparar pieza» entrada a entrada): actualiza el PRIMER documento que casa, de una
+        vez, y devuelve cómo estaba ANTES (o después con `return_document` verdadero, `ReturnDocument.AFTER`), con la
+        proyección de exclusión aplicada; None si no casa ninguno (y sin `upsert`)."""
+        import copy as _copy
+        idx = [i for i, d in enumerate(self.docs) if _casa(d, q)]
+        for campo, sentido in reversed(sort or []):
+            idx.sort(key=lambda i: (self.docs[i].get(campo) is None, self.docs[i].get(campo) or ""),
+                     reverse=sentido < 0)
+        if not idx:
+            if not upsert:
+                return None
+            await self.update_one(q, u, upsert=True)
+            return _proyecta(_copy.deepcopy(self.docs[-1]), projection) if return_document else None
+        d = self.docs[idx[0]]
+        antes = _copy.deepcopy(d)
+        self._aplica(d, u)
+        return _proyecta(_copy.deepcopy(d) if return_document else antes, projection)
+
+    async def find_one_and_delete(self, q=None, projection=None, sort=None, **_):
+        """Como Mongo: borra el PRIMER documento que casa (en el orden de `sort` si lo hay) y lo devuelve tal como
+        estaba (con la proyección de exclusión aplicada), o None si no casa ninguno. Lo usa dar de baja a un conductor
+        (`_limpiar_correo_personal_conductor`)."""
+        idx = [i for i, d in enumerate(self.docs) if _casa(d, q)]
+        for campo, sentido in reversed(sort or []):
+            idx.sort(key=lambda i: (self.docs[i].get(campo) is None, self.docs[i].get(campo) or ""),
+                     reverse=sentido < 0)
+        if not idx:
+            return None
+        return _proyecta(self.docs.pop(idx[0]), projection)
+
     async def delete_many(self, q):
         antes = len(self.docs)
         self.docs = [d for d in self.docs if not _casa(d, q)]
@@ -269,6 +313,11 @@ class Col:
 
     async def count_documents(self, q=None, **_):
         return sum(1 for d in self.docs if _casa(d, q))
+
+    async def create_index(self, claves, **opciones):
+        """Apunta el índice pedido (no lo hace cumplir): las pruebas miran que se pida (14-11-2026)."""
+        self.__dict__.setdefault("indices", []).append((claves, opciones))
+        return opciones.get("name") or str(claves)
 
 
 class Db(dict):

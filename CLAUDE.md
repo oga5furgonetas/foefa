@@ -114,6 +114,7 @@ admin). Opcionales: `GEMINI_API_KEY`, R2 (`R2_*`), correo (`RESEND_API_KEY`,
 node scripts/check-existe.mjs && node scripts/check-huerfanos.mjs && node scripts/check-marca.mjs
 node scripts/check-i18n.mjs && node scripts/check-permisos.mjs && node scripts/check-modulos.mjs
 node scripts/check-promo.mjs
+node scripts/check-guias-renting.mjs     # /devolucion-renting: guías iguales a lo verificado, «se factura» solo donde lo dicen
 node scripts/check-tokens-ruta.mjs && node scripts/check-tokens-nativa.mjs     # el diseño compacto de reparto
 node scripts/check-textos-ruta.mjs && node scripts/nativa-idioma.mjs --comprobar   # sus traducciones, web y nativa
 cd frontend && npx eslint src && npx vite build

@@ -1,0 +1,597 @@
+{
+ "leido": true,
+ "motivo_no_leido": null,
+ "compania": "Ayvens (antes LeasePlan)",
+ "nombre_del_documento": "LeasePlan Fair Wear & Tear - Normativa para la devolución de Vehículos (Fair Wear & Tear Cars)",
+ "url_leida": "https://www.leaseplan.com/-/media/leaseplan-digital/es/publicpages/documents/normativa_devolucion_turismos.pdf",
+ "edicion": "No figura fecha de edición en el texto. Código en el pie de la pág. 12 del PDF: «LPES.CAR.ES-17v1» (parece 2017, versión 1). Los metadatos del PDF tienen fechas de marzo a mayo de 2017. Marca LeasePlan (anterior a Ayvens).",
+ "paginas": 13,
+ "aplica_a": "turismo",
+ "reglas": [
+  {
+   "zona": "carroceria",
+   "dano": "Desconchados y arañazos en carrocería",
+   "no_se_cobra": "Desconchados y arañazos de hasta 10 cm que se puedan eliminar con un pulido mecánico",
+   "se_cobra": "Marcas y arañazos de más de 10 cm, y cualquier marca o arañazo que no se pueda eliminar con pulido mecánico",
+   "medida": {
+    "que": "largo",
+    "limite": 10,
+    "unidad": "cm",
+    "sentido": "hasta"
+   },
+   "maximo": null,
+   "condicion": "Que se pueda eliminar mediante pulido mecánico",
+   "aplica_a": "turismo",
+   "pagina": 5,
+   "cita": "Todos los desconchados y arañazos de hasta 10 cm que se puedan eliminar"
+  },
+  {
+   "zona": "carroceria",
+   "dano": "Rozaduras y abrasiones en carrocería",
+   "no_se_cobra": "Rozaduras y abrasiones de hasta 2 cm que se puedan eliminar con un pulido mecánico",
+   "se_cobra": "Rozaduras y abrasiones de más de 2 cm, y las que no se puedan eliminar con pulido mecánico",
+   "medida": {
+    "que": "largo",
+    "limite": 2,
+    "unidad": "cm",
+    "sentido": "hasta"
+   },
+   "maximo": null,
+   "condicion": "Que se pueda eliminar mediante pulido mecánico",
+   "aplica_a": "turismo",
+   "pagina": 5,
+   "cita": "Rozaduras y abrasiones de hasta 2 cm que se puedan eliminar mediante un pulido mecánico"
+  },
+  {
+   "zona": "carroceria",
+   "dano": "Abolladuras en carrocería",
+   "no_se_cobra": "Abolladuras de hasta 2 cm, siempre que no haya más de dos por panel",
+   "se_cobra": "Abolladuras de más de 2 cm, o más de dos abolladuras por panel",
+   "medida": {
+    "que": "otro",
+    "limite": 2,
+    "unidad": "cm",
+    "sentido": "hasta"
+   },
+   "maximo": "2 por panel",
+   "condicion": "La guía dice solo «de hasta 2 cm» y no aclara si es diámetro, largo o la parte más ancha de la abolladura",
+   "aplica_a": "turismo",
+   "pagina": 5,
+   "cita": "Abolladuras de hasta 2 cm, siempre que no haya más de dos abolladuras por panel"
+  },
+  {
+   "zona": "pintura",
+   "dano": "Marcas de gravilla (picotazos) en un panel",
+   "no_se_cobra": "Zonas de marcas de gravilla que afecten a menos del 25 % del panel y sin corrosión",
+   "se_cobra": "Marcas de gravilla que cubran más del 25 % del panel",
+   "medida": {
+    "que": "superficie",
+    "limite": 25,
+    "unidad": "por_ciento",
+    "sentido": "menos_de"
+   },
+   "maximo": null,
+   "condicion": "Sin corrosión; el porcentaje es sobre la superficie del panel",
+   "aplica_a": "turismo",
+   "pagina": 5,
+   "cita": "afecten a menos del 25% del panel y en los que no haya aparecido corrosión"
+  },
+  {
+   "zona": "pintura",
+   "dano": "Retoques y reparaciones de pintura",
+   "no_se_cobra": "Marcas retocadas correctamente antes de que aparezca corrosión",
+   "se_cobra": "Reparaciones de pintura incorrectas con diferencia de color apreciable, y trabajos de reparación incorrectos",
+   "medida": null,
+   "maximo": null,
+   "condicion": "Retoque bien hecho y antes de la corrosión",
+   "aplica_a": "turismo",
+   "pagina": 5,
+   "cita": "Marcas que se hayan retocado correctamente antes de que se produzca corrosión"
+  },
+  {
+   "zona": "carroceria",
+   "dano": "Corrosión en cualquier daño",
+   "no_se_cobra": "Nada: no hay tolerancia si hay corrosión",
+   "se_cobra": "Abolladuras, rozaduras o arañazos con corrosión; presencia de corrosión en cualquier tipo de daño",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 5,
+   "cita": "Presencia de corrosión en cualquier tipo de daño"
+  },
+  {
+   "zona": "pintura",
+   "dano": "Decoloración y cambios de color de la pintura",
+   "no_se_cobra": "La guía no da tolerancia para la carrocería",
+   "se_cobra": "Decoloración de la pintura por impactos externos, y cambios respecto al color original no previstos en el contrato",
+   "medida": null,
+   "maximo": null,
+   "condicion": "El cambio de color se cobra si no está contemplado en el contrato",
+   "aplica_a": "turismo",
+   "pagina": 5,
+   "cita": "Decoloración de la pintura debido a impactos externos"
+  },
+  {
+   "zona": "paragolpes",
+   "dano": "Marcas y arañazos en rejilla y paragolpes pintados",
+   "no_se_cobra": "Marcas y arañazos de hasta 10 cm que se puedan eliminar con pulido mecánico",
+   "se_cobra": "Marcas y arañazos de más de 10 cm; en paragolpes pintados, cualquier marca, arañazo, rozadura o abrasión que no salga con pulido mecánico",
+   "medida": {
+    "que": "largo",
+    "limite": 10,
+    "unidad": "cm",
+    "sentido": "hasta"
+   },
+   "maximo": null,
+   "condicion": "Que se pueda eliminar mediante pulido mecánico",
+   "aplica_a": "turismo",
+   "pagina": 6,
+   "cita": "Marcas y arañazos de hasta 10 cm que se puedan eliminar mediante un pulido mecánico"
+  },
+  {
+   "zona": "paragolpes",
+   "dano": "Marcas y arañazos en paragolpes con relieve o sin pintar",
+   "no_se_cobra": "Arañazos y marcas de hasta 10 cm (aquí la guía no exige que salgan con pulido)",
+   "se_cobra": "Marcas y arañazos de más de 10 cm",
+   "medida": {
+    "que": "largo",
+    "limite": 10,
+    "unidad": "cm",
+    "sentido": "hasta"
+   },
+   "maximo": null,
+   "condicion": "Paragolpes con relieve (texturizado) o no pintado",
+   "aplica_a": "turismo",
+   "pagina": 6,
+   "cita": "parachoques con relieve o no pintados: resultan aceptables arañazos y marcas de hasta 10 cm"
+  },
+  {
+   "zona": "paragolpes",
+   "dano": "Rozaduras y abrasiones en rejilla y paragolpes pintados",
+   "no_se_cobra": "Rozaduras y abrasiones de hasta 2 cm que se puedan eliminar con pulido mecánico",
+   "se_cobra": "Rozaduras y abrasiones de más de 2 cm, o que no salgan con pulido mecánico",
+   "medida": {
+    "que": "largo",
+    "limite": 2,
+    "unidad": "cm",
+    "sentido": "hasta"
+   },
+   "maximo": null,
+   "condicion": "Que se pueda eliminar mediante pulido mecánico",
+   "aplica_a": "turismo",
+   "pagina": 6,
+   "cita": "Rozaduras y abrasiones de hasta 2 cm, que se puedan eliminar mediante un pulido mecánico"
+  },
+  {
+   "zona": "paragolpes",
+   "dano": "Rozaduras y abrasiones en paragolpes con relieve o sin pintar",
+   "no_se_cobra": "Rozaduras y abrasiones de hasta 2 cm",
+   "se_cobra": "Rozaduras y abrasiones de más de 2 cm",
+   "medida": {
+    "que": "largo",
+    "limite": 2,
+    "unidad": "cm",
+    "sentido": "hasta"
+   },
+   "maximo": null,
+   "condicion": "Paragolpes con relieve (texturizado) o no pintado",
+   "aplica_a": "turismo",
+   "pagina": 6,
+   "cita": "resultan aceptables rozaduras y abrasiones de hasta 2 cm"
+  },
+  {
+   "zona": "paragolpes",
+   "dano": "Abolladuras en rejilla y paragolpes",
+   "no_se_cobra": "Abolladuras de hasta 2 cm, con un máximo de 2 por paragolpes o rejilla",
+   "se_cobra": "Abolladuras de más de 2 cm, o más de dos por rejilla o paragolpes",
+   "medida": {
+    "que": "otro",
+    "limite": 2,
+    "unidad": "cm",
+    "sentido": "hasta"
+   },
+   "maximo": "2 por paragolpes o rejilla",
+   "condicion": "La guía dice solo «de hasta 2 cm» y no aclara si es diámetro, largo o la parte más ancha de la abolladura",
+   "aplica_a": "turismo",
+   "pagina": 6,
+   "cita": "Abolladuras de hasta 2 cm, con un máximo de 2 abolladuras por parachoques o rejilla"
+  },
+  {
+   "zona": "paragolpes",
+   "dano": "Roturas, grietas y deformaciones de rejilla y paragolpes",
+   "no_se_cobra": "Nada",
+   "se_cobra": "Rejillas y paragolpes rotos, agrietados o deformados",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 6,
+   "cita": "Rejillas y parachoques rotos, agrietados o deformados"
+  },
+  {
+   "zona": "paragolpes",
+   "dano": "Decoloración y daños químicos en rejilla y paragolpes",
+   "no_se_cobra": "Decoloración por impactos externos, por ejemplo la climatología",
+   "se_cobra": "Daños causados por el uso incorrecto de productos químicos",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 6,
+   "cita": "Decoloración debido a impactos externos, por ejemplo, a la climatología"
+  },
+  {
+   "zona": "llantas",
+   "dano": "Arañazos, rozaduras o abrasiones en llanta o tapacubos",
+   "no_se_cobra": "Como máximo un arañazo, rozadura o abrasión de hasta 10 cm, si la llanta o tapacubos no está deformado",
+   "se_cobra": "Arañazos, rozaduras o abrasiones de más de 10 cm; más de uno; llanta o tapacubos deformado",
+   "medida": {
+    "que": "largo",
+    "limite": 10,
+    "unidad": "cm",
+    "sentido": "hasta"
+   },
+   "maximo": "1 por llanta o tapacubos",
+   "condicion": "Que la llanta o tapacubos no esté deformado. «Más de uno» se cobra porque lo aceptable es «como máximo un»; la columna «No aceptable» no lo repite",
+   "aplica_a": "turismo",
+   "pagina": 7,
+   "cita": "En la llanta o tapacubos: como máximo un arañazo, rozadura o abrasión"
+  },
+  {
+   "zona": "llantas",
+   "dano": "Arañazos, rozaduras o abrasiones en el borde de la llanta o tapacubos",
+   "no_se_cobra": "Como máximo un arañazo, rozadura o abrasión de hasta 10 cm en el borde, si no está deformado",
+   "se_cobra": "Arañazos, rozaduras o abrasiones de más de 10 cm; más de uno; llanta o tapacubos deformado",
+   "medida": {
+    "que": "largo",
+    "limite": 10,
+    "unidad": "cm",
+    "sentido": "hasta"
+   },
+   "maximo": "1 por llanta o tapacubos",
+   "condicion": "Que la llanta o tapacubos no esté deformado. «Más de uno» se cobra porque lo aceptable es «como máximo un»; la columna «No aceptable» no lo repite",
+   "aplica_a": "turismo",
+   "pagina": 7,
+   "cita": "En el borde de la llanta o tapacubos: como máximo un arañazo, rozadura o abrasión"
+  },
+  {
+   "zona": "llantas",
+   "dano": "Roturas, deformación y corrosión de llanta o tapacubos",
+   "no_se_cobra": "Nada",
+   "se_cobra": "Tapacubos, llanta o aleación rotos o deformados; corrosión en tapacubos, llanta o aleación",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 7,
+   "cita": "Tapacubos, llanta o aleación rotos o deformados"
+  },
+  {
+   "zona": "llantas",
+   "dano": "Tapacubos desparejados o que faltan",
+   "no_se_cobra": "Devolver los tapacubos iguales",
+   "se_cobra": "Devolución sin los tapacubos iguales",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 7,
+   "cita": "Devoluciones sin los tapacubos iguales"
+  },
+  {
+   "zona": "neumaticos",
+   "dano": "Profundidad de la banda de rodadura",
+   "no_se_cobra": "Neumáticos con una banda de rodadura de 1,6 mm como mínimo, o que cumpla los requisitos legales locales",
+   "se_cobra": "La guía no lo escribe aparte en «No aceptable»; se deduce que por debajo de 1,6 mm (o del mínimo legal local) no es aceptable",
+   "medida": null,
+   "maximo": null,
+   "condicion": "Mínimo de 1,6 mm (no un máximo): se acepta de 1,6 mm hacia arriba. Se deja medida null porque «hasta»/«menos de» no expresan un mínimo",
+   "aplica_a": "turismo",
+   "pagina": 7,
+   "cita": "Neumáticos con una banda de rodadura mínima de 1,6 mm"
+  },
+  {
+   "zona": "neumaticos",
+   "dano": "Daños en neumáticos",
+   "no_se_cobra": "Nada (solo el desgaste de la banda dentro del mínimo)",
+   "se_cobra": "Neumáticos deformados por choque con bordillos u objetos; salientes, grietas o cortes; daños en flancos o banda de rodadura; neumáticos con objetos clavados",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 7,
+   "cita": "Salientes, grietas o cortes en los neumáticos"
+  },
+  {
+   "zona": "neumaticos",
+   "dano": "Kit de reparación de neumáticos o rueda de repuesto que faltan",
+   "no_se_cobra": "Kit (sellador y compresor de 12 V) completo y que funcione, o rueda de repuesto dentro del coche si se entregó con ella",
+   "se_cobra": "Devolución sin el kit de reparación, con partes del kit que faltan y/o sin la rueda de repuesto",
+   "medida": null,
+   "maximo": null,
+   "condicion": "La rueda de repuesto solo si el vehículo se entregó con ella",
+   "aplica_a": "turismo",
+   "pagina": 7,
+   "cita": "el kit de reparación de neumáticos o con ausencias de algunas partes del mismo"
+  },
+  {
+   "zona": "neumaticos",
+   "dano": "Neumáticos de invierno o de verano incluidos en el contrato",
+   "no_se_cobra": "Devolver el juego completo de 4 ruedas, con pernos y llantas",
+   "se_cobra": "La guía no dice el importe; remite al contrato local para el método de devolución",
+   "medida": null,
+   "maximo": null,
+   "condicion": "Solo si el contrato incluye neumáticos de invierno (o de verano si se devuelve en invierno)",
+   "aplica_a": "turismo",
+   "pagina": 4,
+   "cita": "deberá devolverse el juego completo de 4 ruedas, incluidos los pernos y las llantas"
+  },
+  {
+   "zona": "lunas",
+   "dano": "Impactos y grietas en el parabrisas",
+   "no_se_cobra": "Marcas o grietas de no más de 1 cm, contando el impacto y sus ramificaciones, fuera de la zona A del parabrisas",
+   "se_cobra": "Marcas o grietas de más de 1 cm en el parabrisas; en la zona A, también las grietas de menos de 1 cm",
+   "medida": {
+    "que": "largo",
+    "limite": 1,
+    "unidad": "cm",
+    "sentido": "hasta"
+   },
+   "maximo": null,
+   "condicion": "Que no esté en la «parte A» (o «zona A») del parabrisas; la guía no define esa zona. La medida cuenta el impacto y sus ramificaciones",
+   "aplica_a": "turismo",
+   "pagina": 8,
+   "cita": "no presenten una longitud superior a 1 cm tanto el impacto como sus ramificaciones"
+  },
+  {
+   "zona": "lunas",
+   "dano": "Cristales rotos",
+   "no_se_cobra": "Nada",
+   "se_cobra": "Cristales rotos, sea cual sea la edad o el kilometraje del vehículo",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 8,
+   "cita": "Cristales o luces rotos"
+  },
+  {
+   "zona": "lunas",
+   "dano": "Láminas solares, bandas tintadas y adhesivos en cristales",
+   "no_se_cobra": "Pequeños adhesivos en el cristal que exija la ley local",
+   "se_cobra": "Hay que quitar del parabrisas la protección solar o bandas tintadas no instaladas por un profesional, rotas o despegándose en las esquinas",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 8,
+   "cita": "Pequeños adhesivos en el cristal requeridos por la legislación local"
+  },
+  {
+   "zona": "faros_y_pilotos",
+   "dano": "Marcas de gravilla, grietas y roturas en faros, pilotos, antiniebla e intermitentes",
+   "no_se_cobra": "Marcas de gravilla en la superficie de luces, antinieblas o intermitentes que no rompan el cristal ni impidan su funcionamiento",
+   "se_cobra": "Luces rotas; grietas o marcas que impidan que la luz funcione bien; todas las bombillas deben funcionar",
+   "medida": null,
+   "maximo": null,
+   "condicion": "Sin rotura del cristal y funcionando",
+   "aplica_a": "turismo",
+   "pagina": 8,
+   "cita": "no provoquen la rotura del cristal y no impidan su funcionamiento"
+  },
+  {
+   "zona": "retrovisores",
+   "dano": "Rozaduras y arañazos en carcasa de retrovisor pintada",
+   "no_se_cobra": "Rozaduras y arañazos de hasta 5 cm que se puedan eliminar con pulido mecánico",
+   "se_cobra": "Rozaduras y arañazos de más de 5 cm, o arañazos que no salgan con pulido mecánico",
+   "medida": {
+    "que": "largo",
+    "limite": 5,
+    "unidad": "cm",
+    "sentido": "hasta"
+   },
+   "maximo": null,
+   "condicion": "Que se pueda eliminar mediante pulido mecánico",
+   "aplica_a": "turismo",
+   "pagina": 9,
+   "cita": "Carcasas de espejos pintadas: rozaduras y arañazos de hasta 5 cm"
+  },
+  {
+   "zona": "retrovisores",
+   "dano": "Rozaduras, arañazos y marcas en carcasa de retrovisor con relieve o sin pintar",
+   "no_se_cobra": "Rozaduras, arañazos y marcas de hasta 5 cm",
+   "se_cobra": "Rozaduras, arañazos y marcas de más de 5 cm",
+   "medida": {
+    "que": "largo",
+    "limite": 5,
+    "unidad": "cm",
+    "sentido": "hasta"
+   },
+   "maximo": null,
+   "condicion": "Carcasa con relieve o no pintada",
+   "aplica_a": "turismo",
+   "pagina": 9,
+   "cita": "con relieve o no pintadas: rozaduras, arañazos y marcas de hasta 5 cm"
+  },
+  {
+   "zona": "retrovisores",
+   "dano": "Retrovisor o carcasa deformados o rotos",
+   "no_se_cobra": "Nada",
+   "se_cobra": "Deformación o rotura del espejo y/o de la carcasa",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 9,
+   "cita": "Deformación o rotura del espejo y/o de la carcasa del espejo"
+  },
+  {
+   "zona": "otros",
+   "dano": "Bola o barra de remolque",
+   "no_se_cobra": "Devolver el vehículo con las barras de remolque intactas",
+   "se_cobra": "Daños causados al quitar la barra de remolque",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 9,
+   "cita": "Daños ocasionados debido a la extracción de la barra de remolque"
+  },
+  {
+   "zona": "otros",
+   "dano": "Faros o luces añadidos (accesorios)",
+   "no_se_cobra": "Faros o luces bien instalados, funcionando, sin daños, legales y, si la ley lo pide, reflejados en la documentación",
+   "se_cobra": "Faros que hayan dañado la estructura del vehículo al instalarlos o quitarlos",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 9,
+   "cita": "Faros que hayan dañado la estructura del vehículo durante su instalación o retirada"
+  },
+  {
+   "zona": "otros",
+   "dano": "Adhesivos publicitarios, rótulos y calcomanías",
+   "no_se_cobra": "Nada: deben quitarse todos, incluidos los restos de pegamento",
+   "se_cobra": "Todos los costes de quitarlos (carrocería o cristales), sea cual sea su tamaño o estado; remite al contrato local",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 4,
+   "cita": "deben eliminarse por completo antes de la venta del vehículo"
+  },
+  {
+   "zona": "interior",
+   "dano": "Suciedad y manchas en asientos, revestimientos, moquetas y alfombrillas",
+   "no_se_cobra": "Suciedad y manchas que salgan con una limpieza general",
+   "se_cobra": "Suciedad y manchas que no salgan con limpieza general y necesiten limpieza especializada",
+   "medida": null,
+   "maximo": null,
+   "condicion": "Que se elimine con limpieza general",
+   "aplica_a": "turismo",
+   "pagina": 10,
+   "cita": "que se puedan eliminar mediante una limpieza general"
+  },
+  {
+   "zona": "interior",
+   "dano": "Desgaste de asientos y cortes o rasgaduras en revestimientos, alfombras y alfombrillas",
+   "no_se_cobra": "Asientos con deformaciones y desgaste por el uso general",
+   "se_cobra": "Cortes, abrasiones, rasgaduras y deformaciones del material de los revestimientos interiores, alfombras y alfombrillas",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 10,
+   "cita": "Asientos con deformaciones y desgaste provocados por el uso general"
+  },
+  {
+   "zona": "interior",
+   "dano": "Decoloración de paneles interiores",
+   "no_se_cobra": "Decoloración de los paneles por el uso y desgaste diario",
+   "se_cobra": "La guía no da caso cobrable",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 10,
+   "cita": "Decoloración de los paneles debido al uso y desgaste cotidiano"
+  },
+  {
+   "zona": "interior",
+   "dano": "Soportes de teléfono y agujeros en la consola",
+   "no_se_cobra": "Soportes o carcasas de teléfono olvidados, si no han dañado el vehículo",
+   "se_cobra": "Agujeros en la consola por quitar equipos",
+   "medida": null,
+   "maximo": null,
+   "condicion": "Que no hayan producido daño",
+   "aplica_a": "turismo",
+   "pagina": 10,
+   "cita": "Orificios presentes en la consola debido a la extracción de equipos"
+  },
+  {
+   "zona": "interior",
+   "dano": "Volante dañado",
+   "no_se_cobra": "Nada",
+   "se_cobra": "Cortes, agujeros o piezas sueltas en el volante",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 10,
+   "cita": "Cortes, agujeros o elementos sueltos en el volante"
+  },
+  {
+   "zona": "interior",
+   "dano": "Elementos interiores que faltan",
+   "no_se_cobra": "Nada",
+   "se_cobra": "Asientos quitados o cualquier elemento del equipamiento interior que falte (bandejas, reposacabezas, cenicero, mechero, etc.)",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 10,
+   "cita": "faltantes de cualquier elemento perteneciente al equipamiento interior del vehículo"
+  },
+  {
+   "zona": "limpieza",
+   "dano": "Olores desagradables",
+   "no_se_cobra": "La guía no da tolerancia",
+   "se_cobra": "Olores desagradables que necesiten limpieza especializada para quitarse",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 10,
+   "cita": "Olores desagradables que requieran de limpieza especializada para ser eliminados"
+  },
+  {
+   "zona": "limpieza",
+   "dano": "Vehículo sucio el día de la entrega",
+   "no_se_cobra": "Vehículo limpio por dentro y por fuera",
+   "se_cobra": "Si está sucio, la entrega puede cancelarse y quizá haya que pagar una tarifa por reprogramar la recogida (sin importe en la guía)",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 4,
+   "cita": "es posible que tenga que abonar una tarifa por la reprogramación de la recogida"
+  },
+  {
+   "zona": "documentacion_y_llaves",
+   "dano": "Llaves, documentación y equipamiento que hay que devolver",
+   "no_se_cobra": "Devolver todo lo entregado con el coche: todos los juegos de llaves (principal y repuesto), documentación original (manual), libro de mantenimiento sellado, ITV válida si corresponde, seguro y recibo pagado, tarjetas de código de radio, SD/CD/DVD del navegador, equipos de audio extraíbles, equipos opcionales no fijos, equipo de emergencia (gato, llave de ruedas, triángulo, botiquín), rueda de repuesto y tornillo de seguridad, kit de reparación de neumáticos, tapacubos iguales",
+   "se_cobra": "Los elementos perdidos no son aceptables sea cual sea la edad o el kilometraje (la guía no da precios)",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "turismo",
+   "pagina": 3,
+   "cita": "Todos los juegos de llaves, incluidas la llave principal y las de repuesto"
+  }
+ ],
+ "precios_publicados": [],
+ "proceso": {
+  "quien_inspecciona": "Empresas independientes contratadas por LeasePlan: SGS Automotive y DEKRA Automotive Services; el proceso está revisado por TÜV Nord (pág. 2 del PDF)",
+  "informe_al_cliente": "Sí: se hace un informe de estado (daños no aceptables como desgaste normal, con método y coste de reparación) y un informe de tasación, que se entregan a los clientes de renting. La guía no dice que lleve fotos (págs. 2 y 3)",
+  "plazo_para_discutir": "La guía no lo dice",
+  "se_puede_reparar_antes": "La guía no lo dice de forma general. Acepta marcas retocadas correctamente antes de la corrosión y cobra las reparaciones de pintura mal hechas (con diferencia de color). Recomienda valorar una limpieza profesional antes de devolver. LeasePlan dice que cobrará por reparar en lugar de sustituir siempre que pueda",
+  "recomendaciones_antes_de_devolver": [
+   "Usar la guía entera para revisar el coche y apuntar los daños visibles antes de la entrega",
+   "Revisar el coche limpio por dentro y por fuera; si está sucio la entrega puede cancelarse",
+   "Revisarlo con luz natural, sin sombras de árboles",
+   "Revisarlo seco, no recién lavado ni con lluvia",
+   "Buscar abolladuras mirando el coche de perfil y desde varios ángulos",
+   "Revisar todos los paneles, luces, parabrisas, espejos, techo y bajos del paragolpes",
+   "Ser objetivo; pedir ayuda a un amigo o conocido",
+   "Quitar adhesivos publicitarios, rótulos y restos de pegamento",
+   "Valorar una limpieza completa por una empresa profesional",
+   "Devolver llaves, documentación, equipo de emergencia, rueda de repuesto o kit y tapacubos iguales",
+   "Borrar del navegador las direcciones guardadas, como la de casa",
+   "Retirar los objetos personales (revisar maletero, guantera, puertas, respaldos); no se devuelven después",
+   "Anotar los kilómetros reales, el día y la hora exacta de la entrega en el punto autorizado"
+  ]
+ },
+ "notas": "Verificado el 14-11-2026: PDF descargado de nuevo (13 páginas, 2,29 MB) y leído página a página con pdftotext.\nEl campo pagina es la página del PDF (1 a 13); cada una son 2 páginas impresas (pág. 5 del PDF = impresas 8-9).\nTodas las cifras del primer lector coinciden con el texto: 10 cm, 2 cm, 2 abolladuras por panel, 25 %, 10 cm en llanta, 1,6 mm, 1 cm, 5 cm.\nCAMBIO: abolladuras (carrocería y paragolpes): medida.que de «diametro» a «otro»; la guía solo dice «de hasta 2 cm».\nCAMBIO: neumáticos 1,6 mm: medida pasa a null. Es un MÍNIMO aceptable; con sentido «menos_de» la herramienta lo leería al revés (aceptable si hay menos de 1,6 mm). La cifra queda en no_se_cobra y condicion.\nCAMBIO: interior: «moquetas» corregido a «alfombras», que es lo que dice la guía.\nCAMBIO: parabrisas: la guía dice «parte A» en Aceptable y «zona A» en No aceptable; añadido a la condición.\nCAMBIO: llantas: aclarado en la condición que «más de uno» se deduce de «como máximo un».\nOjo: en carrocería, paragolpes y retrovisores la guía dice «de hasta X cm» sin la palabra longitud (solo la llanta dice «longitud»); se deja largo, que es lo natural en un arañazo o rozadura.\nNo se ha quitado ninguna regla: todas están en el documento, en la página indicada, y las citas coinciden.\nNo faltan reglas medibles: no hay más cifras en las tablas (págs. 5 a 10 del PDF).\nSin precios publicados; solo una tarifa de reprogramación de la recogida sin importe (pág. 4).\nLa guía avisa de que el desgaste normal depende en general de la edad y los km, pero ninguna cifra cambia con ellos.\nDocumento de turismos con marca LeasePlan; no hay zona de carga. Las fotos de ejemplo no se han revisado (solo texto).\nPDF de la verificación: C:\\Users\\dlvie\\AppData\\Local\\Temp\\claude\\34f2eefc27d3445b\\9022e766-4683-4c72-a196-f839ddac5172\\scratchpad\\crecer\\guias\\verif-ayvens-tur\\guia.pdf"
+}

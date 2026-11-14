@@ -1,0 +1,1311 @@
+{
+ "leido": true,
+ "motivo_no_leido": null,
+ "compania": "Europcar España (alquiler)",
+ "nombre_del_documento": "Tabla de valoración de daños válida desde 10 diciembre 2025 Europcar España / Damages Assesment Matrix",
+ "url_leida": "https://static.europcar.com/ctfassets/wmdwnw6l5vg5/1bB3O5WAkmeBkwmD2bNDRs/300a6df4ab55af600c230a9e38ee2a4f/Refresh_Matriz_LDAS_EC_SP_10_12_2025_Baliza_V16.pdf ; https://www.europcar.es/es-es/p/informacion-legal/politica-de-gestion-de-danos",
+ "edicion": "Válida desde el 10 de diciembre de 2025 (título de las páginas 1 y 15); archivo Refresh_Matriz_LDAS_EC_SP_10_12_2025_Baliza_V16",
+ "paginas": 28,
+ "aplica_a": "ambos",
+ "reglas": [
+  {
+   "zona": "carroceria",
+   "dano": "Arañazo en panel de chapa (puertas, aletas, laterales, capó, portón, techo, pilares)",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Tramos de la tabla: 2-5 cm, >5-15 cm y >15 cm (el más pequeño empieza en 2 cm). Precio fijo por pieza y tramo. Ej. turismo Intermediate, puerta delantera: 139,70 / 239,35 / 340,78 €; Medium Van: 159,03 / 279,90 / 400,88 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": "Precio según la longitud del arañazo, la pieza y el grupo del vehículo",
+   "aplica_a": "ambos",
+   "pagina": 4,
+   "cita": "Arañazo 2 - 5 cm | Scratch 2-5 cm"
+  },
+  {
+   "zona": "carroceria",
+   "dano": "Abolladura en panel de chapa",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Tramos de la tabla: 2-5 cm, >5-15 cm y >15 cm (el más pequeño empieza en 2 cm). Precio fijo por pieza y tramo. Ej. turismo Intermediate, puerta delantera: 250,13 / 381,33 / 514,31 €; Medium Van: 269,63 / 422,10 / 574,68 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": "Precio según el tamaño de la abolladura, la pieza y el grupo",
+   "aplica_a": "ambos",
+   "pagina": 4,
+   "cita": "Abolladura 2 - 5 cm | Dent 2-5 cm"
+  },
+  {
+   "zona": "carroceria",
+   "dano": "Rallón (rozadura) en panel",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Solo dos tramos: leve 2-5 cm y medio >5-15 cm; no hay fila de rallón de más de 15 cm. En toda la tabla el rallón vale lo mismo que el arañazo del mismo tramo (comprobado fila a fila). Ej. puerta delantera izquierda: turismo Intermediate 139,70 / 239,35 €; Medium Van 159,03 / 279,90 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": "No hay tramo de rallón >15 cm en la tabla; el capó no tiene filas de rallón",
+   "aplica_a": "ambos",
+   "pagina": 4,
+   "cita": "Rallón leve 2 - 5 c | Light Scuffed 2-5cm"
+  },
+  {
+   "zona": "carroceria",
+   "dano": "Pieza deformada, rota o perdida",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Se cobra el precio de la pieza (sustitución). Ej. aleta trasera turismo Intermediate 2002,19 €; lateral trasero Medium Van 2741,23 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 7,
+   "cita": "Deformado | Distorted"
+  },
+  {
+   "zona": "paragolpes",
+   "dano": "Arañazo en paragolpes (completo, zona izquierda, derecha o central)",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Tramos de la tabla: 2-5 cm, >5-15 cm y >15 cm (el más pequeño empieza en 2 cm). Ej. paragolpes delantero completo: turismo Intermediate 94,92 / 148,65 / 192,42 €; Medium Van 108,43 / 174,96 / 234,18 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 1,
+   "cita": "Paragolpes delantero completo | Front Bumper"
+  },
+  {
+   "zona": "paragolpes",
+   "dano": "Abolladura en paragolpes",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Tramos de la tabla: 2-5 cm, >5-15 cm y >15 cm (el más pequeño empieza en 2 cm). Ej. paragolpes delantero completo: turismo Intermediate 205,34 / 290,63 / 365,95 €; Medium Van 219,03 / 317,16 / 407,98 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 1,
+   "cita": "Abolladura 5 - 15 cm | Dent >5-15 cm"
+  },
+  {
+   "zona": "paragolpes",
+   "dano": "Rallón en paragolpes",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Leve 2-5 cm y medio >5-15 cm. Ej. paragolpes trasero zona central: turismo Intermediate 93,45 / 154,28 €; Medium Van 95,83 / 149,07 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 8,
+   "cita": "Rallón medio 5-15cm | Medium Scuffed >5-15cm"
+  },
+  {
+   "zona": "paragolpes",
+   "dano": "Paragolpes roto, deformado o perdido",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Precio de sustitución. Ej. delantero completo: turismo Intermediate 628,05 €; Medium Van 908,83 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 1,
+   "cita": "Roto | Broken"
+  },
+  {
+   "zona": "llantas",
+   "dano": "Rallón en llanta (aleación o chapa)",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Leve 2-5 cm y medio >5-15 cm. Ej. llanta delantera izquierda: turismo Intermediate 61,52 / 66,82 €; Medium Van 79,06 / 83,51 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": "Las llantas no tienen filas de arañazo ni abolladura: solo rallón, deformado, perdido y roto",
+   "aplica_a": "ambos",
+   "pagina": 14,
+   "cita": "Llanta Aleación rueda DI | Front L. Wheel Rim Alloy"
+  },
+  {
+   "zona": "llantas",
+   "dano": "Llanta deformada, rota o perdida",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Precio de la llanta. Ej. turismo Intermediate 187,56 €; Medium Van 135,52 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 14,
+   "cita": "Deformado | Distorted"
+  },
+  {
+   "zona": "llantas",
+   "dano": "Tapacubo deformado, roto o perdido",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Ej. turismo Intermediate 24,09 €; Medium Van 23,89 € (mismo precio deformado, perdido o roto). Las filas de rallón del tapacubo solo tienen precio en los grupos Mini/Economy y Compact de turismo; en el resto (y en todas las furgonetas) están vacías.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 14,
+   "cita": "TapacuboAleación rueda DI | Front L. Wheel Hub Alloy"
+  },
+  {
+   "zona": "neumaticos",
+   "dano": "Neumático cortado, roto o pinchado",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Mismo precio para cortado, roto y rueda pinchada. Ej. turismo Intermediate 109,80 €; Medium Van 119,34 €. Rueda de emergencia aparte (turismo Intermediate 96,02 €; Medium Van 120,45 €).",
+   "medida": null,
+   "maximo": null,
+   "condicion": "La tabla no da profundidad de dibujo ni otra medida",
+   "aplica_a": "ambos",
+   "pagina": 14,
+   "cita": "Rueda pinchada | Punctured (Tyres only)"
+  },
+  {
+   "zona": "lunas",
+   "dano": "Impacto (chinazo) en el parabrisas",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Chinazo de menos de 10 mm: precio fijo (turismo Intermediate 47,25 €; Medium Van 48,00 €). No dice nada del campo de visión ni de chinazos mayores (fuera de eso solo hay luna rota).",
+   "medida": {
+    "que": "diametro",
+    "limite": 10,
+    "unidad": "mm",
+    "sentido": "menos_de"
+   },
+   "maximo": null,
+   "condicion": "La medida describe el tramo que SE COBRA (chinazo de menos de 10 mm), NO un margen libre de cobro. Solo existe esta fila para el parabrisas (FR21); ni lunetas ni ventanillas tienen fila de chinazo.",
+   "aplica_a": "ambos",
+   "pagina": 2,
+   "cita": "Chinazo cristal<10mm | Glass Chip <10mm"
+  },
+  {
+   "zona": "lunas",
+   "dano": "Parabrisas, luneta o ventanilla rota",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Precio de sustitución. Parabrisas: turismo Intermediate 391,70 €, Medium Van 302,83 €. Luneta trasera turismo Intermediate 471,53 € (página 9); en furgonetas la luneta no tiene precio (celdas vacías, página 23).",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 3,
+   "cita": "Luna parabrisas | Windscreen"
+  },
+  {
+   "zona": "faros_y_pilotos",
+   "dano": "Faro, piloto, intermitente o antiniebla deformado, roto o perdido",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Precio por pieza. Ej. faro delantero izquierdo: turismo Intermediate 539,68 €; Medium Van 459,24 €. Piloto trasero izquierdo completo: 271,45 € / 192,60 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 2,
+   "cita": "Faro Delantero Izquierdo"
+  },
+  {
+   "zona": "retrovisores",
+   "dano": "Carcasa del retrovisor (arañazo, abolladura, rallón, rota)",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Un solo precio para cualquier daño y tamaño de la carcasa: turismo Intermediate 74,18 €; Medium Van 51,66 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 5,
+   "cita": "Carcasa espejo retrovisor izquierdo | Left Mirror Cap/Housing"
+  },
+  {
+   "zona": "retrovisores",
+   "dano": "Cristal del retrovisor o retrovisor completo",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Cristal: turismo Intermediate 69,02 €, Medium Van 54,98 €. Retrovisor completo roto o deformado: 265,85 € / 246,67 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 5,
+   "cita": "Retrovisor Izquierdo completo | Left Mirror Complete"
+  },
+  {
+   "zona": "interior",
+   "dano": "Tapicería de asientos y respaldos: cortada, quemada, sucia/manchada o perdida",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Mismo precio por pieza para cortado, quemadura y mancha. Ej. asiento delantero izquierdo: turismo Intermediate 326,08 €; Medium Van 335,20 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": "La tabla no da tamaño mínimo de quemadura o mancha",
+   "aplica_a": "ambos",
+   "pagina": 3,
+   "cita": "Quemadura | Burnt"
+  },
+  {
+   "zona": "interior",
+   "dano": "Moqueta, alfombrillas y guarnecido de techo (cortado, quemado, sucio)",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Ej. moqueta completa sucia o manchada: turismo Intermediate 672,83 €; Medium Van 970,37 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 3,
+   "cita": "Moqueta interior completa | Fitted Carpet Whole"
+  },
+  {
+   "zona": "interior",
+   "dano": "Plásticos y mandos: salpicadero, guantera, manillas, elevalunas, volante, radio, cinturones",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Solo roto o perdido, precio por pieza (ej. salpicadero roto: turismo Intermediate 1261,10 €; Medium Van 1027,02 €). Ninguna pieza interior tiene filas de arañazo, abolladura ni rallón.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 3,
+   "cita": "Salpicadero | Dashboard"
+  },
+  {
+   "zona": "zona_de_carga",
+   "dano": "Lateral trasero y trasero angular de la furgoneta",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Tramos de la tabla: 2-5 cm, >5-15 cm y >15 cm (el más pequeño empieza en 2 cm). Lateral trasero izquierdo Medium Van: arañazo 246,63 / 413,75 / 581,19 €; abolladura 357,23 / 555,95 / 754,99 €; roto o deformado 2741,23 €. Trasero angular (Vans): sin arañazo ni abolladura; rallón 81,48 / 161,56 € y roto, deformado o perdido 971,14 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": "El trasero angular está entre las páginas 21 (deformado) y 22 (perdido, rallón, roto)",
+   "aplica_a": "furgoneta",
+   "pagina": 21,
+   "cita": "Lateral Trasero Izquierdo"
+  },
+  {
+   "zona": "zona_de_carga",
+   "dano": "Puertas traseras / portón y puerta lateral corredera",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Portón (RE37, página 23), puerta trasera izquierda (LS02, página 19) y puerta trasera derecha (RS02, página 24): sin precio para ninguna furgoneta (celdas vacías). Puerta corredera izquierda (LS19) también vacía; la derecha (RS19) sí tiene precio en Small y Medium Van (Medium Van arañazo 184,68 / 327,85 / 471,38 €), no en Large Van. Cerradura portón 231,89 €; manilla portón 82,45 €; cerradura puerta trasera derecha 94,10 € (Medium Van).",
+   "medida": null,
+   "maximo": null,
+   "condicion": "Celdas vacías: la tabla no dice cómo se cobra ese daño en furgonetas",
+   "aplica_a": "furgoneta",
+   "pagina": 23,
+   "cita": "Portón Trasero | Hatchback"
+  },
+  {
+   "zona": "zona_de_carga",
+   "dano": "Alfombrilla del maletero o zona de carga sucia o perdida",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Medium Van 2575,10 € (Small 439,54 €, Large 6400,83 €). Turismo Intermediate 266,11 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": "Importes copiados tal cual de la tabla (páginas 4 y 18)",
+   "aplica_a": "ambos",
+   "pagina": 18,
+   "cita": "Alfombrilla maletero | Boot/Hatchback Carpet"
+  },
+  {
+   "zona": "documentacion_y_llaves",
+   "dano": "Guía del usuario perdida",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "10,00 € en todos los grupos. Las llaves NO aparecen en la tabla (solo la cerradura de la puerta delantera izquierda, LS52).",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 1,
+   "cita": "Guía del usuario | User Guidebook"
+  },
+  {
+   "zona": "limpieza",
+   "dano": "Limpieza exterior extra (sucio o manchado)",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "60,00 € en todos los grupos de turismo y furgoneta. No hay fila de limpieza interior.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 1,
+   "cita": "Limpieza Externa Extra | External Extra Washing"
+  },
+  {
+   "zona": "otros",
+   "dano": "Baliza V16 y gato perdidos o rotos",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Baliza V16: 50,00 € en todos los grupos. Gato: turismo Intermediate 106,01 €; Medium Van 106,37 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 1,
+   "cita": "Baliza Emergencia V16 | Emergency Beacon V16"
+  },
+  {
+   "zona": "mecanica",
+   "dano": "Repostaje con combustible equivocado",
+   "no_se_cobra": "La tabla no lo dice: es una lista de precios, no define desgaste normal ni un tamaño por debajo del cual no se cobre.",
+   "se_cobra": "Turismo Intermediate 92,32 €; Medium Van 90,00 €.",
+   "medida": null,
+   "maximo": null,
+   "condicion": null,
+   "aplica_a": "ambos",
+   "pagina": 4,
+   "cita": "Repostaje incorrecto | Incorrect Refuelling"
+  }
+ ],
+ "precios_publicados": [
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes delantero completo (FR05) · Abolladura > 15 cm",
+   "importe": "365,95 €",
+   "pagina": 1
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes delantero completo (FR05) · Abolladura 2-5 cm",
+   "importe": "205,34 €",
+   "pagina": 1
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes delantero completo (FR05) · Abolladura >5-15 cm",
+   "importe": "290,63 €",
+   "pagina": 1
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes delantero completo (FR05) · Arañazo > 15 cm",
+   "importe": "192,42 €",
+   "pagina": 1
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes delantero completo (FR05) · Arañazo 2-5 cm",
+   "importe": "94,92 €",
+   "pagina": 1
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes delantero completo (FR05) · Arañazo >5-15 cm",
+   "importe": "148,65 €",
+   "pagina": 1
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes delantero completo (FR05) · Rallón leve 2-5 cm",
+   "importe": "94,92 €",
+   "pagina": 1
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes delantero completo (FR05) · Rallón medio >5-15 cm",
+   "importe": "148,65 €",
+   "pagina": 1
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes delantero completo (FR05) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "628,05 €",
+   "pagina": 1
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes trasero (zona central) (RE05) · Abolladura > 15 cm",
+   "importe": "375,80 €",
+   "pagina": 8
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes trasero (zona central) (RE05) · Abolladura 2-5 cm",
+   "importe": "203,88 €",
+   "pagina": 8
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes trasero (zona central) (RE05) · Abolladura >5-15 cm",
+   "importe": "296,25 €",
+   "pagina": 8
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes trasero (zona central) (RE05) · Arañazo > 15 cm",
+   "importe": "202,27 €",
+   "pagina": 8
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes trasero (zona central) (RE05) · Arañazo 2-5 cm",
+   "importe": "93,45 €",
+   "pagina": 8
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes trasero (zona central) (RE05) · Arañazo >5-15 cm",
+   "importe": "154,28 €",
+   "pagina": 8
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes trasero (zona central) (RE05) · Rallón leve 2-5 cm",
+   "importe": "93,45 €",
+   "pagina": 8
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes trasero (zona central) (RE05) · Rallón medio >5-15 cm",
+   "importe": "154,28 €",
+   "pagina": 8
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Paragolpes trasero (zona central) (RE05) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "652,73 €",
+   "pagina": 8
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Puerta delantera izquierda (LS01) · Abolladura > 15 cm",
+   "importe": "514,31 €",
+   "pagina": 4
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Puerta delantera izquierda (LS01) · Abolladura 2-5 cm",
+   "importe": "250,13 €",
+   "pagina": 4
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Puerta delantera izquierda (LS01) · Abolladura >5-15 cm",
+   "importe": "381,33 €",
+   "pagina": 4
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Puerta delantera izquierda (LS01) · Arañazo > 15 cm",
+   "importe": "340,78 €",
+   "pagina": 4
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Puerta delantera izquierda (LS01) · Arañazo 2-5 cm",
+   "importe": "139,70 €",
+   "pagina": 4
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Puerta delantera izquierda (LS01) · Arañazo >5-15 cm",
+   "importe": "239,35 €",
+   "pagina": 4
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Puerta delantera izquierda (LS01) · Rallón leve 2-5 cm",
+   "importe": "139,70 €",
+   "pagina": 4
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Puerta delantera izquierda (LS01) · Rallón medio >5-15 cm",
+   "importe": "239,35 €",
+   "pagina": 4
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Puerta delantera izquierda (LS01) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "1311,07 €",
+   "pagina": 4
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta delantera izquierda (LS25) · Abolladura > 15 cm",
+   "importe": "401,62 €",
+   "pagina": 6
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta delantera izquierda (LS25) · Abolladura 2-5 cm",
+   "importe": "191,86 €",
+   "pagina": 6
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta delantera izquierda (LS25) · Abolladura >5-15 cm",
+   "importe": "296,44 €",
+   "pagina": 6
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta delantera izquierda (LS25) · Arañazo > 15 cm",
+   "importe": "228,09 €",
+   "pagina": 6
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta delantera izquierda (LS25) · Arañazo 2-5 cm",
+   "importe": "81,43 €",
+   "pagina": 6
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta delantera izquierda (LS25) · Arañazo >5-15 cm",
+   "importe": "154,46 €",
+   "pagina": 6
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta delantera izquierda (LS25) · Rallón leve 2-5 cm",
+   "importe": "81,43 €",
+   "pagina": 6
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta delantera izquierda (LS25) · Rallón medio >5-15 cm",
+   "importe": "154,46 €",
+   "pagina": 6
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta delantera izquierda (LS25) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "634,97 €",
+   "pagina": 6
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta trasera izquierda (LS33) · Abolladura > 15 cm",
+   "importe": "516,17 €",
+   "pagina": 7
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta trasera izquierda (LS33) · Abolladura 2-5 cm",
+   "importe": "250,67 €",
+   "pagina": 7
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta trasera izquierda (LS33) · Abolladura >5-15 cm",
+   "importe": "381,83 €",
+   "pagina": 7
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta trasera izquierda (LS33) · Arañazo > 15 cm",
+   "importe": "342,63 €",
+   "pagina": 7
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta trasera izquierda (LS33) · Arañazo 2-5 cm",
+   "importe": "140,24 €",
+   "pagina": 7
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta trasera izquierda (LS33) · Arañazo >5-15 cm",
+   "importe": "239,85 €",
+   "pagina": 7
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta trasera izquierda (LS33) · Rallón leve 2-5 cm",
+   "importe": "140,24 €",
+   "pagina": 7
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta trasera izquierda (LS33) · Rallón medio >5-15 cm",
+   "importe": "239,85 €",
+   "pagina": 7
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Aleta trasera izquierda (LS33) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "2002,19 €",
+   "pagina": 7
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Portón trasero (RE37) · Abolladura > 15 cm",
+   "importe": "397,22 €",
+   "pagina": 9
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Portón trasero (RE37) · Abolladura 2-5 cm",
+   "importe": "247,55 €",
+   "pagina": 9
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Portón trasero (RE37) · Abolladura >5-15 cm",
+   "importe": "322,09 €",
+   "pagina": 9
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Portón trasero (RE37) · Arañazo > 15 cm",
+   "importe": "223,69 €",
+   "pagina": 9
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Portón trasero (RE37) · Arañazo 2-5 cm",
+   "importe": "137,12 €",
+   "pagina": 9
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Portón trasero (RE37) · Arañazo >5-15 cm",
+   "importe": "180,12 €",
+   "pagina": 9
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Portón trasero (RE37) · Rallón leve 2-5 cm",
+   "importe": "137,12 €",
+   "pagina": 9
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Portón trasero (RE37) · Rallón medio >5-15 cm",
+   "importe": "180,12 €",
+   "pagina": 9
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Portón trasero (RE37) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "1343,44 €",
+   "pagina": 9
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Capó (FR31) · Abolladura > 15 cm",
+   "importe": "505,03 €",
+   "pagina": 3
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Capó (FR31) · Abolladura 2-5 cm",
+   "importe": "306,73 €",
+   "pagina": 3
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Capó (FR31) · Abolladura >5-15 cm",
+   "importe": "404,23 €",
+   "pagina": 3
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Capó (FR31) · Arañazo > 15 cm",
+   "importe": "331,50 €",
+   "pagina": 3
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Capó (FR31) · Arañazo 2-5 cm",
+   "importe": "196,30 €",
+   "pagina": 3
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Capó (FR31) · Arañazo >5-15 cm",
+   "importe": "262,25 €",
+   "pagina": 3
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Capó (FR31) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "1038,78 €",
+   "pagina": 3
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Llanta de aleación delantera izquierda (WH05) · Rallón leve 2-5 cm",
+   "importe": "61,52 €",
+   "pagina": 14
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Llanta de aleación delantera izquierda (WH05) · Rallón medio >5-15 cm",
+   "importe": "66,82 €",
+   "pagina": 14
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Llanta de aleación delantera izquierda (WH05) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "187,56 €",
+   "pagina": 14
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Llanta de chapa delantera izquierda (WH01) · Rallón leve 2-5 cm",
+   "importe": "61,52 €",
+   "pagina": 13
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Llanta de chapa delantera izquierda (WH01) · Rallón medio >5-15 cm",
+   "importe": "66,82 €",
+   "pagina": 13
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Llanta de chapa delantera izquierda (WH01) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "187,56 €",
+   "pagina": 13
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Tapacubo delantero izquierdo (WH09) · Roto",
+   "importe": "24,09 €",
+   "pagina": 14
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Retrovisor izquierdo completo (LS08) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "265,85 €",
+   "pagina": 5
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Carcasa retrovisor izquierdo (LS07) · Arañazo 2-5 cm",
+   "importe": "74,18 €",
+   "pagina": 5
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Carcasa retrovisor izquierdo (LS07) · Roto",
+   "importe": "74,18 €",
+   "pagina": 5
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Cristal retrovisor izquierdo (LS06) · Roto",
+   "importe": "69,02 €",
+   "pagina": 5
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Luna parabrisas (FR21) · Chinazo cristal<10mm",
+   "importe": "47,25 €",
+   "pagina": 2
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Luna parabrisas (FR21) · Roto",
+   "importe": "391,70 €",
+   "pagina": 3
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Luneta trasera térmica (RE21) · Roto",
+   "importe": "471,53 €",
+   "pagina": 9
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Faro delantero izquierdo (FR14) · Roto",
+   "importe": "539,68 €",
+   "pagina": 2
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Neumático delantero izquierdo (WH35) · Cortado",
+   "importe": "109,80 €",
+   "pagina": 14
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Neumático delantero izquierdo (WH35) · Rueda pinchada",
+   "importe": "109,80 €",
+   "pagina": 14
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Tapizado asiento delantero izquierdo (IN14) · Quemadura",
+   "importe": "326,08 €",
+   "pagina": 3
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Tapizado asiento delantero izquierdo (IN14) · Sucio / Manchado",
+   "importe": "326,08 €",
+   "pagina": 3
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Moqueta interior completa (IN29) · Sucio / Manchado",
+   "importe": "672,83 €",
+   "pagina": 3
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Limpieza externa extra (AC03) · Sucio / Manchado",
+   "importe": "60,00 €",
+   "pagina": 1
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Repostaje incorrecto (IN75) · Repostaje incorrecto",
+   "importe": "92,32 €",
+   "pagina": 4
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Baliza de emergencia V16 (AC05) · Perdido",
+   "importe": "50,00 €",
+   "pagina": 1
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Guía del usuario (AC06) · Perdido",
+   "importe": "10,00 €",
+   "pagina": 1
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Gato hidráulico (AC04) · Perdido",
+   "importe": "106,01 €",
+   "pagina": 1
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes delantero completo (FR05) · Abolladura > 15 cm",
+   "importe": "407,98 €",
+   "pagina": 15
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes delantero completo (FR05) · Abolladura 2-5 cm",
+   "importe": "219,03 €",
+   "pagina": 15
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes delantero completo (FR05) · Abolladura >5-15 cm",
+   "importe": "317,16 €",
+   "pagina": 15
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes delantero completo (FR05) · Arañazo > 15 cm",
+   "importe": "234,18 €",
+   "pagina": 15
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes delantero completo (FR05) · Arañazo 2-5 cm",
+   "importe": "108,43 €",
+   "pagina": 15
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes delantero completo (FR05) · Arañazo >5-15 cm",
+   "importe": "174,96 €",
+   "pagina": 15
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes delantero completo (FR05) · Rallón leve 2-5 cm",
+   "importe": "108,43 €",
+   "pagina": 15
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes delantero completo (FR05) · Rallón medio >5-15 cm",
+   "importe": "174,96 €",
+   "pagina": 15
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes delantero completo (FR05) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "908,83 €",
+   "pagina": 15
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes trasero (zona central) (RE05) · Abolladura > 15 cm",
+   "importe": "366,70 €",
+   "pagina": 22
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes trasero (zona central) (RE05) · Abolladura 2-5 cm",
+   "importe": "206,43 €",
+   "pagina": 22
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes trasero (zona central) (RE05) · Abolladura >5-15 cm",
+   "importe": "291,27 €",
+   "pagina": 22
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes trasero (zona central) (RE05) · Arañazo > 15 cm",
+   "importe": "192,90 €",
+   "pagina": 22
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes trasero (zona central) (RE05) · Arañazo 2-5 cm",
+   "importe": "95,83 €",
+   "pagina": 22
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes trasero (zona central) (RE05) · Arañazo >5-15 cm",
+   "importe": "149,07 €",
+   "pagina": 22
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes trasero (zona central) (RE05) · Rallón leve 2-5 cm",
+   "importe": "95,83 €",
+   "pagina": 22
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes trasero (zona central) (RE05) · Rallón medio >5-15 cm",
+   "importe": "149,07 €",
+   "pagina": 22
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Paragolpes trasero (zona central) (RE05) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "627,82 €",
+   "pagina": 22
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta delantera izquierda (LS01) · Abolladura > 15 cm",
+   "importe": "574,68 €",
+   "pagina": 18
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta delantera izquierda (LS01) · Abolladura 2-5 cm",
+   "importe": "269,63 €",
+   "pagina": 18
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta delantera izquierda (LS01) · Abolladura >5-15 cm",
+   "importe": "422,10 €",
+   "pagina": 18
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta delantera izquierda (LS01) · Arañazo > 15 cm",
+   "importe": "400,88 €",
+   "pagina": 18
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta delantera izquierda (LS01) · Arañazo 2-5 cm",
+   "importe": "159,03 €",
+   "pagina": 18
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta delantera izquierda (LS01) · Arañazo >5-15 cm",
+   "importe": "279,90 €",
+   "pagina": 18
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta delantera izquierda (LS01) · Rallón leve 2-5 cm",
+   "importe": "159,03 €",
+   "pagina": 18
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta delantera izquierda (LS01) · Rallón medio >5-15 cm",
+   "importe": "279,90 €",
+   "pagina": 19
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta delantera izquierda (LS01) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "1722,17 €",
+   "pagina": 19
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Aleta delantera izquierda (LS25) · Abolladura > 15 cm",
+   "importe": "465,63 €",
+   "pagina": 20
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Aleta delantera izquierda (LS25) · Abolladura 2-5 cm",
+   "importe": "216,12 €",
+   "pagina": 20
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Aleta delantera izquierda (LS25) · Abolladura >5-15 cm",
+   "importe": "341,06 €",
+   "pagina": 20
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Aleta delantera izquierda (LS25) · Arañazo > 15 cm",
+   "importe": "291,83 €",
+   "pagina": 20
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Aleta delantera izquierda (LS25) · Arañazo 2-5 cm",
+   "importe": "105,52 €",
+   "pagina": 20
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Aleta delantera izquierda (LS25) · Arañazo >5-15 cm",
+   "importe": "198,86 €",
+   "pagina": 20
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Aleta delantera izquierda (LS25) · Rallón leve 2-5 cm",
+   "importe": "105,52 €",
+   "pagina": 20
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Aleta delantera izquierda (LS25) · Rallón medio >5-15 cm",
+   "importe": "198,86 €",
+   "pagina": 20
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Aleta delantera izquierda (LS25) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "734,01 €",
+   "pagina": 20
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Lateral trasero izquierdo (zona de carga) (LS38) · Abolladura > 15 cm",
+   "importe": "754,99 €",
+   "pagina": 21
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Lateral trasero izquierdo (zona de carga) (LS38) · Abolladura 2-5 cm",
+   "importe": "357,23 €",
+   "pagina": 21
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Lateral trasero izquierdo (zona de carga) (LS38) · Abolladura >5-15 cm",
+   "importe": "555,95 €",
+   "pagina": 21
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Lateral trasero izquierdo (zona de carga) (LS38) · Arañazo > 15 cm",
+   "importe": "581,19 €",
+   "pagina": 21
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Lateral trasero izquierdo (zona de carga) (LS38) · Arañazo 2-5 cm",
+   "importe": "246,63 €",
+   "pagina": 21
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Lateral trasero izquierdo (zona de carga) (LS38) · Arañazo >5-15 cm",
+   "importe": "413,75 €",
+   "pagina": 21
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Lateral trasero izquierdo (zona de carga) (LS38) · Rallón leve 2-5 cm",
+   "importe": "246,63 €",
+   "pagina": 21
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Lateral trasero izquierdo (zona de carga) (LS38) · Rallón medio >5-15 cm",
+   "importe": "413,75 €",
+   "pagina": 21
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Lateral trasero izquierdo (zona de carga) (LS38) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "2741,23 €",
+   "pagina": 21
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta corredera derecha (RS19) · Abolladura > 15 cm",
+   "importe": "645,18 €",
+   "pagina": 25
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta corredera derecha (RS19) · Abolladura 2-5 cm",
+   "importe": "295,28 €",
+   "pagina": 25
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta corredera derecha (RS19) · Abolladura >5-15 cm",
+   "importe": "470,05 €",
+   "pagina": 25
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta corredera derecha (RS19) · Arañazo > 15 cm",
+   "importe": "471,38 €",
+   "pagina": 25
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta corredera derecha (RS19) · Arañazo 2-5 cm",
+   "importe": "184,68 €",
+   "pagina": 25
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta corredera derecha (RS19) · Arañazo >5-15 cm",
+   "importe": "327,85 €",
+   "pagina": 25
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta corredera derecha (RS19) · Rallón leve 2-5 cm",
+   "importe": "184,68 €",
+   "pagina": 25
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta corredera derecha (RS19) · Rallón medio >5-15 cm",
+   "importe": "327,85 €",
+   "pagina": 25
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta corredera derecha (RS19) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "1865,43 €",
+   "pagina": 25
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Trasero angular izquierdo (Vans) (LS39) · Rallón leve 2-5 cm",
+   "importe": "81,48 €",
+   "pagina": 22
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Trasero angular izquierdo (Vans) (LS39) · Rallón medio >5-15 cm",
+   "importe": "161,56 €",
+   "pagina": 22
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Trasero angular izquierdo (Vans) (LS39) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "971,14 €",
+   "pagina": 22
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Cerradura portón trasero (RE36) · Roto",
+   "importe": "231,89 €",
+   "pagina": 23
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Manilla portón trasero (RE38) · Roto",
+   "importe": "82,45 €",
+   "pagina": 23
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Cerradura puerta trasera derecha (RE42) · Roto",
+   "importe": "94,10 €",
+   "pagina": 24
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Capó (FR31) · Abolladura > 15 cm",
+   "importe": "378,46 €",
+   "pagina": 17
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Capó (FR31) · Abolladura 2-5 cm",
+   "importe": "246,98 €",
+   "pagina": 17
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Capó (FR31) · Abolladura >5-15 cm",
+   "importe": "312,71 €",
+   "pagina": 17
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Capó (FR31) · Arañazo > 15 cm",
+   "importe": "204,66 €",
+   "pagina": 17
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Capó (FR31) · Arañazo 2-5 cm",
+   "importe": "136,38 €",
+   "pagina": 17
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Capó (FR31) · Arañazo >5-15 cm",
+   "importe": "170,51 €",
+   "pagina": 17
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Capó (FR31) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "977,28 €",
+   "pagina": 17
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Llanta de aleación delantera izquierda (WH05) · Rallón leve 2-5 cm",
+   "importe": "79,06 €",
+   "pagina": 28
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Llanta de aleación delantera izquierda (WH05) · Rallón medio >5-15 cm",
+   "importe": "83,51 €",
+   "pagina": 28
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Llanta de aleación delantera izquierda (WH05) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "135,52 €",
+   "pagina": 28
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Llanta de chapa delantera izquierda (WH01) · Rallón leve 2-5 cm",
+   "importe": "79,06 €",
+   "pagina": 27
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Llanta de chapa delantera izquierda (WH01) · Rallón medio >5-15 cm",
+   "importe": "83,51 €",
+   "pagina": 27
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Llanta de chapa delantera izquierda (WH01) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "135,52 €",
+   "pagina": 27
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Tapacubo delantero izquierdo (WH09) · Roto",
+   "importe": "23,89 €",
+   "pagina": 28
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Retrovisor izquierdo completo (LS08) · Roto / Deformado (mismo importe en la tabla)",
+   "importe": "246,67 €",
+   "pagina": 19
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Carcasa retrovisor izquierdo (LS07) · Arañazo 2-5 cm",
+   "importe": "51,66 €",
+   "pagina": 19
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Carcasa retrovisor izquierdo (LS07) · Roto",
+   "importe": "51,66 €",
+   "pagina": 19
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Cristal retrovisor izquierdo (LS06) · Roto",
+   "importe": "54,98 €",
+   "pagina": 19
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Luna parabrisas (FR21) · Chinazo cristal<10mm",
+   "importe": "48,00 €",
+   "pagina": 17
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Luna parabrisas (FR21) · Roto",
+   "importe": "302,83 €",
+   "pagina": 17
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Faro delantero izquierdo (FR14) · Roto",
+   "importe": "459,24 €",
+   "pagina": 16
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Neumático delantero izquierdo (WH35) · Cortado",
+   "importe": "119,34 €",
+   "pagina": 28
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Neumático delantero izquierdo (WH35) · Rueda pinchada",
+   "importe": "119,34 €",
+   "pagina": 28
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Tapizado asiento delantero izquierdo (IN14) · Quemadura",
+   "importe": "335,20 €",
+   "pagina": 17
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Tapizado asiento delantero izquierdo (IN14) · Sucio / Manchado",
+   "importe": "335,20 €",
+   "pagina": 17
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Moqueta interior completa (IN29) · Sucio / Manchado",
+   "importe": "970,37 €",
+   "pagina": 18
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Alfombrilla maletero / zona de carga (Boot/Hatchback Carpet) (IN72) · Perdido",
+   "importe": "2575,10 €",
+   "pagina": 18
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Alfombrilla maletero / zona de carga (Boot/Hatchback Carpet) (IN72) · Sucio / Manchado",
+   "importe": "2575,10 €",
+   "pagina": 18
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Limpieza externa extra (AC03) · Sucio / Manchado",
+   "importe": "60,00 €",
+   "pagina": 15
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Repostaje incorrecto (IN75) · Repostaje incorrecto",
+   "importe": "90,00 €",
+   "pagina": 18
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Baliza de emergencia V16 (AC05) · Perdido",
+   "importe": "50,00 €",
+   "pagina": 15
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Guía del usuario (AC06) · Perdido",
+   "importe": "10,00 €",
+   "pagina": 15
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Gato hidráulico (AC04) · Perdido",
+   "importe": "106,37 €",
+   "pagina": 15
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Portón trasero (RE37) · todos los daños (arañazo, abolladura, rallón, roto)",
+   "importe": "sin precio (celdas vacías para Small, Medium y Large Van)",
+   "pagina": 23
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta trasera izquierda (LS02) · todos los daños",
+   "importe": "sin precio (celdas vacías para Small, Medium y Large Van)",
+   "pagina": 19
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta corredera izquierda (LS19) · todos los daños",
+   "importe": "sin precio (celdas vacías para Small, Medium y Large Van; la derecha RS19 sí tiene)",
+   "pagina": 19
+  },
+  {
+   "concepto": "Ambos · Llaves (pérdida, rotura o copia)",
+   "importe": "no figura en la tabla",
+   "pagina": 1
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Puerta trasera derecha (RS02) · todos los daños",
+   "importe": "sin precio (celdas vacías para Small, Medium y Large Van)",
+   "pagina": 24
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Luneta trasera térmica (RE21) · Roto / Deformado",
+   "importe": "sin precio (celdas vacías para Small, Medium y Large Van)",
+   "pagina": 23
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Trasero angular izquierdo (Vans) (LS39) · Deformado",
+   "importe": "971,14 €",
+   "pagina": 21
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Trasero angular izquierdo (Vans) (LS39) · Perdido",
+   "importe": "971,14 €",
+   "pagina": 22
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Rueda de emergencia (WH13) · Cortado / Roto / Perdido / Pinchada",
+   "importe": "96,02 €",
+   "pagina": 14
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Rueda de emergencia (WH13) · Cortado / Roto / Perdido / Pinchada",
+   "importe": "120,45 €",
+   "pagina": 28
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Piloto trasero izquierdo completo (RE14) · Roto / Deformado / Perdido",
+   "importe": "271,45 €",
+   "pagina": 9
+  },
+  {
+   "concepto": "Furgoneta Medium Van · Piloto trasero izquierdo completo (RE14) · Roto / Deformado / Perdido",
+   "importe": "192,60 €",
+   "pagina": 23
+  },
+  {
+   "concepto": "Turismo Intermediate/Standard · Moqueta interior completa (IN29) · Cortado / Quemadura / Perdido",
+   "importe": "692,78 €",
+   "pagina": 3
+  }
+ ],
+ "proceso": {
+  "quien_inspecciona": "Europcar en la devolución: un agente de Europcar o su representante, con el cliente delante si está; si devuelve fuera de horario o sin estar, la revisa Europcar sola (página de política de gestión de daños).",
+  "informe_al_cliente": "Si está presente y firma la declaración de devolución con los daños, recibe la factura después. Si no está, Europcar le envía el parte (si lo hay), la declaración de devolución con los daños, imágenes de los daños y la estimación de costes.",
+  "plazo_para_discutir": "14 días desde el envío de los documentos por correo electrónico o postal. La página lo pone en el caso de devolución fuera de horario o sin el cliente (o si no firma la declaración); si no responde ni justifica su oposición en ese plazo, Europcar puede facturar la estimación. Reclamaciones: atención al cliente de Europcar o el servicio europeo de conciliación ECRCS.",
+  "se_puede_reparar_antes": "Ni la tabla ni la página lo dicen.",
+  "recomendaciones_antes_de_devolver": []
+ },
+ "notas": "Es ALQUILER, no renting: no hay guía de desgaste normal; la tabla es una lista de precios medios de reparación (calculados por AUDATEX) para cualquier daño que esté en la lista. La página de la política dice que los daños menores se cobran con esta lista y los demás con presupuesto de taller o perito externo, más la inmovilización y un cargo administrativo cuyo importe no publica; la protección contratada puede reducir o eliminar lo que se paga. Grupos elegidos: turismo INTERMEDIATE / STANDARD (5.a de 8 columnas, páginas 1-14) y furgoneta MEDIUM VAN (2.a de 3 columnas, páginas 15-28). Importes en euros tal como figuran. Los importes se leyeron con la posición de cada número en la página y se cotejaron con las imágenes de las páginas 1, 3, 4, 6, 9, 14, 15, 17, 18, 19, 20, 22, 23 y 28 (todo coincide); el resto se leyó del texto asignando cada número a su columna por posición. Muchas celdas están vacías (p. ej. portón y puertas traseras de todas las furgonetas, puerta corredera izquierda, spoilers): la tabla no da precio y no hay que inventarlo. Las medidas van a null porque la tabla no da ningún margen sin cobro; el tramo más pequeño es 2-5 cm y la tabla no dice qué pasa por debajo de 2 cm. La única medida puesta (chinazo <10 mm) es el tramo que se cobra. No hay ninguna fila de llaves ni de limpieza interior. El documento no tiene notas al pie ni más fecha que la del título.\nVERIFICACIÓN (14-11-2026): PDF descargado de nuevo (28 páginas) y leído con pdfplumber por tablas; cotejado con imágenes de las páginas 1, 18 y 23. La página web también releída.\nLos 179 importes con código de pieza coinciden con la tabla, columna y página (0 errores).\nReglas de panel (arañazo, abolladura, rallón): página cambiada de 1 a 4 (la puerta del ejemplo está en la 4; la 1 solo tiene paragolpes, rejilla y accesorios).\nPieza deformada/rota: página cambiada de 1 a 7 (aleta trasera).\nRallón: comprobado en TODA la tabla que vale igual que el arañazo del mismo tramo.\nTrasero angular (LS39): también deformado y perdido a 971,14 €; está entre las páginas 21 y 22.\nZona de carga: añadida la puerta trasera derecha (RS02) sin precio; la corredera derecha no tiene precio en Large Van; añadida cerradura trasera derecha 94,10 €.\nLunas: la luneta de las furgonetas no tiene precio; el chinazo solo existe en el parabrisas.\nTapacubo: el rallón solo tiene precio en Mini/Economy y Compact.\nNeumáticos: añadido el precio de la rueda de emergencia (96,02 € / 120,45 €).\nPlazo de 14 días: matizado (la web lo pone en la devolución sin el cliente o sin firma).\nAñadidos 9 precios (RS02, luneta furgoneta, LS39, rueda de emergencia, piloto trasero, moqueta cortada/quemada).\nNo se ha quitado ninguna regla: todas están en el documento. No hay más reglas medibles: las únicas medidas son los tramos 2-5 / >5-15 / >15 cm y el chinazo <10 mm."
+}

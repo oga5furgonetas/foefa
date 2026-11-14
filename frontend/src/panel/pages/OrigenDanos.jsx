@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Loader2, ShieldAlert, Camera, ChevronRight, Info } from 'lucide-react'
 import { getAtribucionDanos } from '../api'
+import { useT } from '../../i18n'
 import { verMatricula } from '../../lib/matricula'
 import { fechaEs } from '../../lib/fecha'
 
@@ -46,39 +47,74 @@ const SEV = {
   moderado: 'text-amber-300', leve: 'text-dark-400',
 }
 
+/* La pareja «antes y después» solo existe con DOS fotos DISTINTAS. Si la
+   «limpia» y la «con el golpe» son la misma imagen (14-11-2026: pasaba en la
+   demo, que lleva las mismas fotos en todas las inspecciones), ponerlas lado a
+   lado no prueba nada: parece que el golpe ya estaba. Se trata igual que si
+   faltara una de las dos: sin pareja, sin «entre las dos fotos» y sin el nombre
+   en la cabecera; se enseña solo la del golpe, con su rótulo de siempre. */
+function hayPareja(d) {
+  return Boolean(d.foto_limpia && d.foto_golpe && d.foto_limpia !== d.foto_golpe)
+}
+
+function FotoGolpe({ d }) {
+  return (
+    <figure className="m-0">
+      {/* La foto ENTERA (14-11-2026): con `object-cover` la miniatura recortaba los lados y un golpe en la trasera o en
+          el morro quedaba fuera de la prueba. */}
+      <img src={d.foto_golpe} alt="" loading="lazy"
+        className="h-36 w-full rounded-lg border border-orange-500/40 bg-black/20 object-contain" />
+      <figcaption className="mt-1 text-[11px] text-orange-300">
+        Con el golpe el <span className="cifra">{fechaEs(d.aparecio)}</span>
+      </figcaption>
+    </figure>
+  )
+}
+
 function Prueba({ d }) {
   return (
     <div className="grid grid-cols-2 gap-2">
       <figure className="m-0">
         <img src={d.foto_limpia} alt="" loading="lazy"
-          className="h-36 w-full rounded-lg border border-dark-700 object-cover" />
+          className="h-36 w-full rounded-lg border border-dark-700 bg-black/20 object-contain" />
         <figcaption className="mt-1 text-[11px] text-dark-500">
-          Limpia el <span className="cifra text-dark-400">{d.foto_limpia_fecha}</span>
+          {/* Con el mismo formato que «Con el golpe el …» (14-11-2026, M7): salía en ISO, 2026-11-12. */}
+          Limpia el <span className="cifra text-dark-400">{fechaEs(d.foto_limpia_fecha)}</span>
         </figcaption>
       </figure>
-      <figure className="m-0">
-        <img src={d.foto_golpe} alt="" loading="lazy"
-          className="h-36 w-full rounded-lg border border-orange-500/40 object-cover" />
-        <figcaption className="mt-1 text-[11px] text-orange-300">
-          Con el golpe el <span className="cifra">{fechaEs(d.aparecio)}</span>
-        </figcaption>
-      </figure>
+      <FotoGolpe d={d} />
     </div>
   )
 }
 
+/* EL GRUPO CON QUE SE ABRE (14-11-2026, R1): siempre «Un solo conductor». Si ese no tenía ningún golpe y otro sí,
+   la pantalla abría en «No hay golpes en este grupo» con golpes en las otras pestañas. Ahora abre en el primero que
+   tenga, en el orden de los botones; si «Un solo conductor» tiene, o no hay ninguno, como siempre. */
+const GRUPOS = ['alta', 'media', 'baja']
+function grupoInicial(datos) {
+  const ds = Array.isArray(datos?.danos) ? datos.danos : []
+  if (!ds.length) return 'alta'
+  return GRUPOS.find((k) => ds.some((d) => d?.certeza === k)) || 'todos'
+}
+
 export default function OrigenDanos() {
   const { center } = useOutletContext()
+  const { t } = useT()
   const [datos, setDatos] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [filtro, setFiltro] = useState('alta')
   const [abierto, setAbierto] = useState(null)
+  const elegido = useRef(false)   // el usuario ya pulsó un grupo: no se le cambia
 
   useEffect(() => {
     setCargando(true)
     getAtribucionDanos(center, 200)
-      .then((r) => setDatos(r.data))
-      .catch(() => setDatos({ danos: [], resumen: {} }))
+      .then((r) => {
+        setDatos(r.data)
+        if (!elegido.current) setFiltro(grupoInicial(r.data))
+      })
+      // Con `error` (14-11-2026): un fallo del servidor no se confunde con «no hay golpes».
+      .catch(() => setDatos({ danos: [], resumen: {}, error: true }))
       .finally(() => setCargando(false))
   }, [center])
 
@@ -115,7 +151,7 @@ export default function OrigenDanos() {
           ['media', 'Varios posibles', r.media],
           ['baja', 'Sin acotar', r.baja],
           ['todos', 'Todos', datos?.total]].map(([k, txt, n]) => (
-          <button key={k} onClick={() => { setFiltro(k); setAbierto(null) }}
+          <button key={k} onClick={() => { elegido.current = true; setFiltro(k); setAbierto(null) }}
             className={`rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
               filtro === k ? 'bg-dark-700 text-dark-100' : 'bg-dark-800/60 text-dark-400 hover:text-dark-200'}`}>
             {txt} {n != null && <span className="cifra ml-1 text-dark-500">{n}</span>}
@@ -128,16 +164,20 @@ export default function OrigenDanos() {
           <Loader2 size={16} className="animate-spin" /> Buscando la última foto limpia de cada golpe…
         </div>
       ) : !lista.length ? (
+        /* CUENTA VACÍA (14-11-2026): una empresa nueva con Pro ya ve esta pantalla, y sin ningún golpe solo decía
+           «No hay golpes en este grupo», sin explicar qué hace falta para que salga algo. */
         <div className="card flex flex-col items-center gap-2 p-12 text-center text-dark-400">
           <ShieldAlert size={26} />
-          <p className="text-[13px]">No hay golpes en este grupo.</p>
+          <p className="max-w-[60ch] text-[13px]">
+            {datos?.error ? t('origen.error') : !datos?.total ? t('origen.vacio') : 'No hay golpes en este grupo.'}
+          </p>
         </div>
       ) : (
         <div className="space-y-1.5">
           {lista.map((d) => {
             const c = CERTEZA[d.certeza] || CERTEZA.baja
             const esta = abierto === d.ledger_id
-            const tieneFotos = d.foto_limpia && d.foto_golpe
+            const tieneFotos = hayPareja(d)
             return (
               <div key={d.ledger_id} className="card overflow-hidden">
                 <button onClick={() => setAbierto(esta ? null : d.ledger_id)}
@@ -151,8 +191,17 @@ export default function OrigenDanos() {
                       Apareció el <span className="cifra">{fechaEs(d.aparecio)}</span>
                       {d.ventana_dias != null && <> · ventana de <span className="cifra">{d.ventana_dias}</span> {d.ventana_dias === 1 ? 'día' : 'días'}</>}
                     </span>
+                    {/* Quién lo dice (S7, 14-11-2026): lo que solo marcó la IA no se lee como lo confirmado. En su
+                        propia línea, para que en el móvil no parta la fecha. Un servidor viejo no manda `confirmado`:
+                        entonces no se dice nada. */}
+                    {typeof d.confirmado === 'boolean' && (
+                      <span className={`mt-0.5 block text-[11.5px] ${d.confirmado ? 'text-dark-400' : 'text-dark-500'}`}>
+                        {d.confirmado ? t('origen.confirmado') : t('origen.soloIa')}
+                      </span>
+                    )}
                   </span>
-                  {d.certeza === 'alta' && d.conductores[0] && (
+                  {/* El nombre en la cabecera solo con la prueba delante: las dos fotos. */}
+                  {d.certeza === 'alta' && tieneFotos && d.conductores[0] && (
                     <span className="hidden max-w-[200px] truncate text-[12.5px] text-dark-200 md:block">
                       {d.conductores[0].nombre}
                     </span>
@@ -167,10 +216,15 @@ export default function OrigenDanos() {
                 {esta && (
                   <div className="border-t border-dark-800 px-3.5 py-3">
                     {tieneFotos ? <Prueba d={d} /> : (
-                      <p className="text-[12.5px] text-dark-500">
-                        No hay foto anterior de esta furgoneta sin el golpe, así que no se
-                        puede saber cuándo apareció.
-                      </p>
+                      <>
+                        {d.foto_golpe && (
+                          <div className="mb-2 grid grid-cols-2 gap-2"><FotoGolpe d={d} /></div>
+                        )}
+                        <p className="text-[12.5px] text-dark-500">
+                          No hay foto anterior de esta furgoneta sin el golpe, así que no se
+                          puede saber cuándo apareció.
+                        </p>
+                      </>
                     )}
                     <div className="mt-3 space-y-1.5 border-t border-dark-800 pt-3 text-[12.5px]">
                       {d.conductores.length > 0 ? (
@@ -182,7 +236,7 @@ export default function OrigenDanos() {
                               <span className="font-semibold text-dark-100">{x.nombre}</span>
                             </span>
                           ))}
-                          {' '}entre las dos fotos.
+                          {tieneFotos && ' entre las dos fotos'}.
                         </p>
                       ) : (
                         <p className="text-dark-500">No consta quién la llevaba en esos días.</p>

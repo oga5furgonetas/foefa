@@ -144,7 +144,7 @@ function Modal({ titulo, onCerrar, children, ancho = 'max-w-2xl' }) {
     <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/60 p-3 sm:p-6"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onCerrar() }}>
       <div role="dialog" aria-modal="true" aria-label={titulo}
-        className={`w-full ${ancho} rounded-xl border border-dark-700 bg-dark-900 p-4 shadow-2xl shadow-black/40 sm:p-5`}>
+        className={`w-full ${ancho} ventana rounded-xl p-4 sm:p-5`}>
         <div className="mb-3 flex items-center gap-2">
           <h2 className="text-base font-bold text-dark-50">{titulo}</h2>
           <button onClick={onCerrar} aria-label="Cerrar" className="ml-auto text-dark-500 hover:text-dark-200"><X size={18} /></button>

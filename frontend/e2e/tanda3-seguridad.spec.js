@@ -202,7 +202,7 @@ test.describe('S3 · el portal guarda el id de quien entra con contraseña', () 
     await page.route(/\/api\/auth\/driver-login/, json({ access_token: token, role: 'driver', id: 'd7', name: 'LUIS GOMEZ', center: 'OGA5' }))
     await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
     await page.locator('input[type="email"]').fill('luis@ejemplo.test')
-    await page.locator('input[type="email"]').press('Enter')
+    // Con contraseña: la entrada es un solo formulario (correo y contraseña); con la contraseña escrita, entra con ella.
     await page.locator('input[autocomplete="current-password"]').fill('clave-de-prueba')
     await page.locator('input[autocomplete="current-password"]').press('Enter')
     await expect(page.getByRole('heading', { name: /Hola, LUIS/ })).toBeVisible({ timeout: 15000 })

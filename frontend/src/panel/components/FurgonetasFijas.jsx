@@ -127,10 +127,10 @@ function Dialogo({ titulo, onClose, children, pie }) {
     return () => document.removeEventListener('keydown', k)
   }, [])
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center sm:p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label={titulo} onClick={(e) => e.stopPropagation()}
-        className="relative z-10 flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-dark-700 bg-dark-900 shadow-2xl shadow-black/50 focus:outline-none sm:rounded-2xl">
+        className="relative z-10 flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden ventana rounded-t-2xl focus:outline-none sm:rounded-2xl">
         <div className="flex items-center justify-between gap-3 border-b border-dark-800 px-5 py-4">
           <h3 className="font-display text-[17px] font-semibold text-dark-50">{titulo}</h3>
           <button type="button" onClick={onClose} aria-label={t('ff.dlg.cerrar')} className="rounded-md p-1 text-dark-500 hover:bg-white/[0.06] hover:text-dark-100"><X size={16} /></button>

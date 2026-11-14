@@ -18,6 +18,8 @@ import { yaEsApp } from '../lib/instalar'
    · 02-11-2026 (revisión del servidor): con ese mismo permiso nuestro servidor también avisa a Meta del alta (y de la
      primera entrada y la primera ruta), así que el aviso lo dice; lo elegido llega a la cuenta si hay sesión
      (lib/metaPixel.js, avisarCuenta), y «Cambiar mis cookies» lo vuelve a abrir para cambiar de opinión. */
+const esEnlaceConductor = (ruta) => /^\/c(\/|$)/.test(String(ruta || ''))
+
 export default function CookieBanner() {
   // En el idioma del móvil (o el elegido): lo ve quien llega de un anuncio en cualquier país.
   useIdioma()
@@ -28,6 +30,8 @@ export default function CookieBanner() {
     if (!conPixel) return
     /* EN EL PORTAL DEL TALLER, NO: no guarda nada y quien lo abre es un mecánico con un enlace de WhatsApp. */
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/taller/')) return
+    /* NI EN EL ENLACE DEL CONDUCTOR (`/c`, 14-11-2026, A8): llega por WhatsApp a una pantalla de un toque, sin píxeles. */
+    if (typeof window !== 'undefined' && esEnlaceConductor(window.location.pathname)) return
     // Ni en la app instalada (Play, APK o «añadir a inicio»): allí no hay píxeles (lib/metaPixel.js).
     if (yaEsApp()) return
     if (!consentimiento()) setShow(true)
@@ -63,7 +67,7 @@ export default function CookieBanner() {
     if (ro) ro.observe(caja.current)
     return () => { if (ro) ro.disconnect(); body.style.paddingBottom = '' }
   }, [show])
-  if (!show || !conPixel) return null
+  if (!show || !conPixel || esEnlaceConductor(pathname)) return null
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center bg-black/30 p-2 sm:p-3" role="dialog" aria-modal="true" aria-label="Cookies">
       <div ref={caja} className="w-full max-w-2xl rounded-2xl border border-dark-700 bg-dark-900 px-4 py-3 shadow-2xl">

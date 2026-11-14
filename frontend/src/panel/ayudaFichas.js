@@ -165,8 +165,18 @@ export const AYUDA = {
     ],
     ojo: 'Las que ya están en el taller no se mandan otra vez. La nota sale de las inspecciones: sin una reciente, «sin datos».',
   },
+  repaso: {
+    que: 'Enterarte del golpe el mismo día que aparece: la foto de hoy de cada lado junto a la anterior del mismo lado, y decides tú.',
+    pasos: [
+      'Ábrelo por la tarde, cuando han llegado las revisiones del día. El número del menú dice cuántas quedan.',
+      'Mira las dos fotos y contesta: «Está igual», «Hay un golpe nuevo» o «No se ve bien». Pasa sola al lado siguiente.',
+      'Si hay golpe, dibuja una caja sobre él en la foto de hoy, elige la pieza y la gravedad, y guárdalo.',
+      'Desde el ordenador va más rápido con el teclado: → está igual, G golpe, N no se ve, Z ampliar.',
+    ],
+    ojo: 'En el expediente de la furgoneta solo salen golpes confirmados por una persona, y estos son los de aquí. Mira «Ya apuntado» antes de marcar un golpe: si ya está, no lo apuntes dos veces. Si te equivocas, «Deshacer» lo quita todo mientras el golpe no esté en el taller ni reparado.',
+  },
   revision: {
-    que: 'Validar lo que la IA ve en las fotos, para que aprenda. Es lo único que la hace mejorar.',
+    que: 'Confirmar o descartar lo que la IA marca en las fotos. Se equivoca a menudo: decide una persona.',
     pasos: [
       'Pulsa "Revisar en 5 segundos" y contesta con uno de los cuatro botones.',
       '"Sí, pero no ahí" es para cuando el daño existe y el recuadro está mal puesto.',
@@ -178,7 +188,7 @@ export const AYUDA = {
     que: 'Las inspecciones con foto que hacen los conductores al coger y dejar la furgoneta.',
     pasos: [
       'Filtra por fecha o furgoneta.',
-      'Abre una para ver las fotos y lo que detectó la IA.',
+      'Abre una para ver sus fotos, su fecha y los daños marcados.',
     ],
   },
   incidencias: {
@@ -286,9 +296,9 @@ export const AYUDA = {
     ],
   },
   'ia-peritaje': {
-    que: 'Peritaje técnico de daños con IA, para valorar un golpe.',
+    que: 'Una valoración de un golpe que propone la IA con sus fotos. Puede equivocarse: la revisa una persona.',
     pasos: ['Sube las fotos del daño y la IA propone una valoración.'],
-    estado: 'Poco usada: 4 peritajes y el último hace tres meses.',
+    estado: 'Poco usada: 4 valoraciones y la última hace tres meses.',
   },
   tienda: {
     que: 'La ropa que le vendes a tu gente: qué falta para poder venderla, tus prendas y los pedidos.',
@@ -356,5 +366,5 @@ export const PRIMEROS_PASOS = [
   { clave: 'dashboard', cuando: 'Al llegar', texto: 'Mira qué está parado o necesita a alguien.' },
   { clave: 'asignacion', cuando: 'Antes de salir', texto: 'Comprueba que cada conductor tiene vehículo.' },
   { clave: 'checklist-operativo', cuando: 'Al cerrar el turno', texto: 'Marca lo hecho: el resumen del día sale de aquí.' },
-  { clave: 'revision', cuando: 'Diez minutos sueltos', texto: 'Valida daños: es lo único que hace mejorar a la IA.' },
+  { clave: 'revision', cuando: 'Diez minutos sueltos', texto: 'Confirma o descarta los daños marcados.' },
 ]

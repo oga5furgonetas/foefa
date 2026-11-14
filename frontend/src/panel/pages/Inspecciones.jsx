@@ -11,6 +11,7 @@ import {
 import GuidedEmpty from '../components/GuidedEmpty'
 import { getInspections, getInspection, getCoberturaInspecciones, getVehicles, getDrivers, getVehicleInspections, fetchAuthedBlob, getForensicStatus, signInspectionAdmin, recheckFraud, getSuggestedWorkshops, updateDamage } from '../api'
 import { MARCA } from '../../marca'
+import { gravedadDe, danosDe } from '../../lib/analisis'
 
 const SEV_CLS = {
   leve: 'bg-amber-500/20 text-amber-300', moderado: 'bg-orange-500/20 text-orange-300',
@@ -21,6 +22,11 @@ const SEV_DOT = { leve: 'bg-amber-400', moderado: 'bg-orange-400', grave: 'bg-re
 const FILTERS = ['Todas', 'grave', 'critico', 'moderado', 'leve', 'sin_danos']
 
 const eur = (n) => (n ? `${Number(n).toLocaleString('es')} €` : '—')
+
+/* Con golpes marcados a mano en el repaso sobre un análisis de la IA, las cuentas de la IA no se tocan y lo de la
+   persona va aparte (CONTRATO M9): la lista y la ficha enseñan lo que suma todo (lib/analisis.js). */
+const sevDe = gravedadDe
+const cuantosDanos = (a) => danosDe(a) ?? 0
 
 export default function Inspecciones() {
   const { center } = useOutletContext()
@@ -84,7 +90,7 @@ export default function Inspecciones() {
     return insps.filter((i) => {
       const v = vmap[i.vehicle_id] || {}
       if (center !== 'Todos' && !(v.center || '').toUpperCase().includes(center.toUpperCase())) return false
-      const s = i.analysis?.severity || 'sin_analisis'
+      const s = sevDe(i.analysis) || 'sin_analisis'
       if (sev !== 'Todas' && s !== sev) return false
       // Sin espacios en los dos lados: «5995lyf» encuentra «5995 LYF».
       if (q && !(v.plate || '').replace(/\s/g, '').toLowerCase().includes(q.replace(/\s/g, '').toLowerCase())) return false
@@ -94,7 +100,7 @@ export default function Inspecciones() {
 
   async function openForensicPdf(id) {
     try { const url = await fetchAuthedBlob(`/inspections/${id}/forensic-pdf`); window.open(url, '_blank') }
-    catch (e) { setErr(e?.response?.data?.detail || 'No se pudo generar el peritaje (debe estar firmado).') }
+    catch (e) { setErr(e?.response?.data?.detail || 'No se pudo generar el informe de la revisión (tiene que estar firmada).') }
   }
 
   if (err) return <p className="text-red-400">{err}</p>
@@ -200,7 +206,7 @@ export default function Inspecciones() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {list.map((i) => {
             const v = vmap[i.vehicle_id] || {}
-            const s = i.analysis?.severity || 'sin_analisis'
+            const s = sevDe(i.analysis) || 'sin_analisis'
             return (
               <button key={i.id} onClick={() => { setSel(i); getInspection(i.id).then((r) => setSel((s) => (s && s.id === i.id ? r.data : s))).catch(() => {}) }} className="card-hover overflow-hidden text-left">
                 <div className="relative h-36 bg-dark-800">
@@ -215,7 +221,7 @@ export default function Inspecciones() {
                 </div>
                 <div className="p-3">
                   <div className="flex items-center justify-between"><span className="font-bold">{v.plate || '—'}</span><span className="text-xs text-dark-500">{fmt(i.created_at)}</span></div>
-                  <div className="mt-1 flex items-center justify-between text-xs text-dark-400"><span>{i.analysis?.total_damages_count || 0} {t((i.analysis?.total_damages_count || 0) === 1 ? 'insp.damage1' : 'insp.damages')}</span><span>{eur(i.analysis?.total_estimated_cost)}</span></div>
+                  <div className="mt-1 flex items-center justify-between text-xs text-dark-400"><span>{cuantosDanos(i.analysis)} {t(cuantosDanos(i.analysis) === 1 ? 'insp.damage1' : 'insp.damages')}</span><span>{eur(i.analysis?.total_estimated_cost)}</span></div>
                 </div>
               </button>
             )
@@ -246,7 +252,7 @@ function Detail({ insp, plate, dmap, onClose, onPdf, fmt, fmtDay, sevLabel, onDa
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-dark-800 bg-dark-900/95 px-5 py-3 backdrop-blur">
           <div className="flex items-center gap-2">
             <span className="text-lg font-bold">{plate || t('insp.title')}</span>
-            <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${SEV_CLS[a.severity] || SEV_CLS.sin_analisis}`}>{sevLabel(a.severity) || a.severity || '—'}</span>
+            <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${SEV_CLS[sevDe(a)] || SEV_CLS.sin_analisis}`}>{sevLabel(sevDe(a)) || sevDe(a) || '—'}</span>
           </div>
           <button onClick={onClose} className="btn-ghost p-2"><X size={18} /></button>
         </div>
@@ -270,7 +276,7 @@ function Detail({ insp, plate, dmap, onClose, onPdf, fmt, fmtDay, sevLabel, onDa
 
           {/* resumen compacto (chips, no parrafo) */}
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            <span className="rounded-full bg-dark-800 px-2.5 py-1">{a.total_damages_count || 0} {t((a.total_damages_count || 0) === 1 ? 'insp.damage1' : 'insp.damages')}</span>
+            <span className="rounded-full bg-dark-800 px-2.5 py-1">{cuantosDanos(a)} {t(cuantosDanos(a) === 1 ? 'insp.damage1' : 'insp.damages')}</span>
             <span className="rounded-full bg-dark-800 px-2.5 py-1 font-semibold text-dark-200">{eur(a.total_estimated_cost)}</span>
             <span className="rounded-full bg-dark-800 px-2.5 py-1">{fmt(insp.created_at)}</span>
             {insp.driver_id && dmap[insp.driver_id] && <span className="flex items-center gap-1 rounded-full bg-dark-800 px-2.5 py-1"><User size={11} /> {dmap[insp.driver_id]}</span>}
@@ -336,7 +342,9 @@ function FraudBlock({ insp }) {
     )
   }
 
-  const level = score >= 85 ? 'high' : score >= 70 ? 'mid' : 'low'
+  // r3 (14-11-2026): con algún motivo y menos de 70 puntos (una matrícula distinta pesa 40, una foto repetida 50) salía
+  // en verde «Sin indicios de fraude» con el motivo debajo. Con cualquier motivo es, como poco, ámbar; sin motivos, igual.
+  const level = score >= 85 ? 'high' : (score >= 70 || reasons.length > 0) ? 'mid' : 'low'
   const cls = level === 'high' ? 'border-red-500/40 bg-red-500/10 text-red-200'
             : level === 'mid' ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
             : 'border-emerald-500/30 bg-emerald-500/5 text-emerald-200'
@@ -358,7 +366,7 @@ function FraudBlock({ insp }) {
           ))}
         </ul>
       ) : (
-        <p className="text-xs opacity-80">EXIF correcto · pHash único · matrícula coincide.</p>
+        <p className="text-xs opacity-80" data-testid="insp-fraude-limpio">{t('insp.fraud.clean')}</p>
       )}
       {err && <p className="mt-2 text-xs text-red-400">{err}</p>}
     </div>
@@ -396,7 +404,7 @@ function ForensicSignBlock({ inspId, onPdf, fmt }) {
         <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-300">
           <FileSignature size={16} /> {t('insp.sign.unsigned')}
         </div>
-        <p className="mb-3 text-xs text-dark-400">Para generar el peritaje técnico con cadena de custodia hash, esta inspección debe estar firmada. Si el conductor no firmó, puedes firmarla tú como administrador.</p>
+        <p className="mb-3 text-xs text-dark-400">Para generar el informe de la revisión, con su fecha, sus fotos y su código de comprobación, esta inspección tiene que estar firmada. Si el conductor no firmó, puedes firmarla tú como administrador.</p>
         {err && <p className="mb-2 text-xs text-red-400">{err}</p>}
         <button onClick={sign} disabled={signing} className="btn-primary flex items-center gap-2 disabled:opacity-50">
           {signing ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
@@ -560,7 +568,7 @@ function QuienTimeline({ vehicleId, dmap, currentId, fmtDay }) {
 
   return (
     <div className="mt-3">
-      <p className="mb-3 text-xs text-dark-500">Cada vez que apareció un <b className="text-dark-300">{t('insp.new.damage')}</b>, el responsable es el conductor que tenía la furgoneta ese día.</p>
+      <p className="mb-3 text-xs text-dark-500">Cada vez que apareció un <b className="text-dark-300">{t('insp.new.damage')}</b>, aquí sale quién llevaba la furgoneta ese día. Eso no dice quién dio el golpe.</p>
       <div className="space-y-3">
         {insps.map((i) => {
           const nuevos = i.analysis?.new_damages || []
@@ -586,7 +594,7 @@ function QuienTimeline({ vehicleId, dmap, currentId, fmtDay }) {
           )
         })}
       </div>
-      <p className="mt-3 text-[11px] text-dark-500">¿Un golpe no salió como "nuevo"? Márcalo en <b>Revisión rápida → "daño que la IA no vio"</b>: queda registrado y la IA aprende para detectarlo la próxima vez.</p>
+      <p className="mt-3 text-[11px] text-dark-500">¿Un golpe no salió como "nuevo"? Márcalo en <b>Revisión rápida → "daño que la IA no vio"</b>: queda apuntado con su foto y su fecha.</p>
     </div>
   )
 }

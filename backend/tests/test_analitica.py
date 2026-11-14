@@ -43,6 +43,14 @@ def test_lo_que_no_es_nuestro_se_guarda_como_otra():
     assert an.limpiar_ruta("/.env") == "/otra"
 
 
+def test_el_enlace_del_conductor_se_mide_como_c_y_nunca_con_su_token():
+    token = "9f86d081884c7d659a2f0b1c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e4f506"
+    assert an.limpiar_ruta("/c") == "/c"
+    assert an.limpiar_ruta("/c#" + token) == "/c"
+    assert an.limpiar_ruta("/c/:token") == "/c/:token"
+    assert an.limpiar_ruta("/c/" + token) == "/c/:x"
+
+
 def test_los_robots_y_lo_mal_formado_no_se_guardan():
     cuerpo = {"sid": "abcdef1234567890", "tipo": "vista", "ruta": "/"}
     assert an.evento_desde(cuerpo, "Mozilla/5.0 (compatible; Googlebot/2.1)", None, AHORA) is None
@@ -286,6 +294,145 @@ def test_el_evento_dice_si_viene_de_iphone_o_android():
     android = an.evento_desde(cuerpo, "Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome/129 Mobile", None, ahora)
     pc = an.evento_desde(cuerpo, "Mozilla/5.0 (Windows NT 10.0) Chrome/129", None, ahora)
     assert (ios["so"], android["so"], pc["so"]) == ("ios", "android", "otro")
+
+# ── la pagina de venta para empresas (/empresas, 14-11-2026) ─────────────────
+def test_empresas_es_una_pantalla_de_la_web_y_no_otra():
+    assert an.limpiar_ruta("/empresas") == "/empresas"
+    assert an.limpiar_ruta("/empresas?utm_source=correo#demo") == "/empresas"
+    assert an.area_de("/empresas") == "web"
+    cuerpo = {"sid": "abcdef1234567890", "tipo": "accion", "nombre": "emp_form_ok", "ruta": "/empresas"}
+    doc = an.evento_desde(cuerpo, "Mozilla/5.0 Chrome/120", None, AHORA)
+    assert doc["ruta"] == "/empresas" and doc["nombre"] == "emp_form_ok"
+    # Entra en el embudo general de la web como cualquier pagina publica.
+    r = an.informe([_ev("emp00000001", 100, "/empresas")], AHORA)
+    alta = next(e for e in r["embudos"] if e["clave"] == "alta")
+    assert alta["pasos"][0]["n"] == 1
+    assert r["areas"] == {"web": 1}
+
+
+def test_el_embudo_de_empresas_va_de_ver_la_pagina_a_pedir_demo_o_crear_cuenta():
+    evs = _ordenar([
+        # ve la pagina y se va
+        _ev("emp0000mira", 300, "/empresas"),
+        # pulsa «Probar gratis» arriba y crea la cuenta
+        _ev("emp000alta1", 300, "/empresas"),
+        _ev("emp000alta1", 299, "/empresas", tipo="accion", nombre="emp_probar_arriba"),
+        _ev("emp000alta1", 298, "/registro"),
+        _ev("emp000alta1", 290, "/registro", tipo="accion", nombre="registro_ok"),
+        # baja al formulario, lo rellena y le llega el recibido
+        _ev("emp000demo1", 300, "/empresas"),
+        _ev("emp000demo1", 299, "/empresas", tipo="accion", nombre="emp_demo_cierre"),
+        _ev("emp000demo1", 298, "/empresas", tipo="accion", nombre="emp_form_abrir"),
+        _ev("emp000demo1", 297, "/empresas", tipo="accion", nombre="emp_form_enviar"),
+        _ev("emp000demo1", 296, "/empresas", tipo="accion", nombre="emp_form_ok"),
+        # el formulario falla: pidio la demo pero no se envio
+        _ev("emp0000fall", 300, "/empresas"),
+        _ev("emp0000fall", 299, "/empresas", tipo="accion", nombre="emp_form_abrir"),
+        _ev("emp0000fall", 298, "/empresas", tipo="accion", nombre="emp_form_error"),
+    ])
+    f = next(e for e in an.informe(evs, AHORA)["embudos"] if e["clave"] == "empresas")
+    n = [p["n"] for p in f["pasos"]]
+    assert f["sesiones"] == 4
+    assert n == [4, 3, 2]
+    assert [p["pct"] for p in f["pasos"]] == [100.0, 75.0, 50.0]
+
+
+def test_el_embudo_de_empresas_no_se_llena_con_altas_de_otras_paginas():
+    """Un alta desde /repartidores (o desde /planes sin pasar por la pagina de
+    empresas) NO es de empresas: si el embudo contara a quien toca cualquier
+    paso, `registro_ok` lo inflaria."""
+    evs = _ordenar([
+        _ev("reparto0001", 200, "/repartidores"),
+        _ev("reparto0001", 190, "/repartidores", tipo="accion", nombre="registro_ok"),
+        _ev("planes00001", 200, "/planes"),
+        _ev("planes00001", 199, "/registro"),
+        _ev("planes00001", 190, "/registro", tipo="accion", nombre="registro_ok"),
+    ])
+    r = an.informe(evs, AHORA)
+    f = next(e for e in r["embudos"] if e["clave"] == "empresas")
+    assert f["sesiones"] == 0
+    assert [p["n"] for p in f["pasos"]] == [0, 0, 0]
+    # El embudo general sigue contando esas altas: el filtro es solo del de empresas.
+    alta = next(e for e in r["embudos"] if e["clave"] == "alta")
+    assert alta["pasos"][3]["n"] == 2
+
+
+PORTADA_NUEVA = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
+
+
+def _ev_dia(ahora, sid, minutos, ruta, **extra):
+    return {**_ev(sid, minutos, ruta, **extra), "ts": ahora - timedelta(minutes=minutos)}
+
+
+def test_la_portada_es_la_pagina_de_empresas_y_cuenta_en_su_embudo():
+    """Desde el 14-11-2026 la portada («/») es la pagina de empresas y «/empresas»
+    ensena lo mismo: el primer paso cuenta las dos, y una sesion que pasa por
+    las dos cuenta una vez."""
+    evs = _ordenar([
+        _ev_dia(PORTADA_NUEVA, "portada0001", 200, "/"),
+        _ev_dia(PORTADA_NUEVA, "portada0001", 199, "/", tipo="accion", nombre="emp_probar_menu"),
+        _ev_dia(PORTADA_NUEVA, "portada0001", 198, "/registro"),
+        _ev_dia(PORTADA_NUEVA, "portada0001", 190, "/registro", tipo="accion", nombre="registro_ok"),
+        _ev_dia(PORTADA_NUEVA, "portada0002", 200, "/"),
+        _ev_dia(PORTADA_NUEVA, "portada0002", 199, "/empresas"),
+        _ev_dia(PORTADA_NUEVA, "portada0002", 198, "/empresas", tipo="accion", nombre="emp_demo_calculadora"),
+        _ev_dia(PORTADA_NUEVA, "empresa0003", 200, "/empresas"),
+    ])
+    f = next(e for e in an.informe(evs, PORTADA_NUEVA)["embudos"] if e["clave"] == "empresas")
+    assert f["sesiones"] == 3
+    assert [p["n"] for p in f["pasos"]] == [3, 2, 1]
+
+
+def test_la_portada_de_antes_del_14_11_no_cuenta_como_pagina_de_empresas():
+    """Hasta el 14-11-2026 «/» era la portada de la app de reparto: sus visitas de
+    entonces no son de la pagina de empresas y no entran en su embudo (si no, los
+    dias de antes saldrian inflados). «/empresas» cuenta siempre. Falla con el
+    codigo de antes: contaba «/» de cualquier dia."""
+    ahora = datetime(2026, 11, 14, 12, 0, tzinfo=timezone.utc)
+    evs = _ordenar([
+        # 13-11 a las 23:30 de Madrid (22:30 UTC): todavia era la portada de reparto.
+        {**_ev("reparto0001", 0, "/"), "ts": datetime(2026, 11, 13, 22, 30, tzinfo=timezone.utc)},
+        {**_ev("reparto0001", 0, "/registro", tipo="accion", nombre="registro_ok"),
+         "ts": datetime(2026, 11, 13, 22, 40, tzinfo=timezone.utc)},
+        # 14-11 a las 00:10 de Madrid (23:10 UTC del 13): ya es la portada nueva.
+        {**_ev("portada0002", 0, "/"), "ts": datetime(2026, 11, 13, 23, 10, tzinfo=timezone.utc)},
+        {**_ev("empresa0003", 0, "/empresas"), "ts": datetime(2026, 11, 10, 9, 0, tzinfo=timezone.utc)},
+    ])
+    f = next(e for e in an.informe(evs, ahora)["embudos"] if e["clave"] == "empresas")
+    assert f["sesiones"] == 2
+    assert [p["n"] for p in f["pasos"]] == [2, 0, 0]
+
+
+def test_el_embudo_de_empresas_usa_los_eventos_que_existen():
+    """Los nombres del paso «probar o pedir la demo» salen de Empresas.jsx: uno
+    que la pagina ya no manda (emp_demo_boton) es un paso que nunca se toca."""
+    import pathlib
+    import re
+    paginas = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "pages"
+    # La cabecera de la portada vive desde el 14-11-2026 en portadaComun.jsx (la comparte /planes) y mide con
+    # `medir('…')`, que solo llama a medirAccion cuando se está en la portada.
+    fuente = "".join((paginas / n).read_text("utf-8") for n in ("Empresas.jsx", "portadaComun.jsx"))
+    existen = set(re.findall(r"medir(?:Accion)?\('(emp_[a-z0-9_]+)'\)", fuente))
+    f = next(x for x in an.EMBUDOS if x["clave"] == "empresas")
+    for paso in f["pasos"]:
+        if paso[1] == "a":
+            for nombre in paso[2]:
+                assert nombre in existen or not nombre.startswith("emp_"), nombre
+    assert "emp_demo_boton" not in f["pasos"][1][2]
+
+
+def test_un_paso_con_varios_nombres_cuenta_la_sesion_una_vez():
+    evs = _ordenar([
+        _ev("emp0000dos1", 100, "/empresas"),
+        _ev("emp0000dos1", 99, "/empresas", tipo="accion", nombre="emp_probar_arriba"),
+        _ev("emp0000dos1", 98, "/empresas", tipo="accion", nombre="emp_demo_cierre"),
+        _ev("emp0000dos1", 97, "/empresas", tipo="accion", nombre="emp_probar_cierre"),
+    ])
+    f = next(e for e in an.informe(evs, AHORA)["embudos"] if e["clave"] == "empresas")
+    assert [p["n"] for p in f["pasos"]] == [1, 1, 0]
+    # Y los nombres sueltos siguen saliendo en la tabla de acciones.
+    acc = {a["nombre"]: a["veces"] for a in an.informe(evs, AHORA)["acciones"]}
+    assert acc == {"emp_probar_arriba": 1, "emp_demo_cierre": 1, "emp_probar_cierre": 1}
 
 
 if __name__ == "__main__":

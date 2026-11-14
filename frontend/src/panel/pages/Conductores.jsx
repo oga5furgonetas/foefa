@@ -8,10 +8,10 @@ import ImportarMoviles from '../components/ImportarMoviles'
 import { useEscape } from '../../lib/useEscape'
 import { usePlan } from '../../lib/usePlan'
 import {
-  Loader2, Search, Plus, X, Pencil, UserCheck, FileSpreadsheet, Phone, Mail, IdCard, Car,
+  Loader2, Search, Plus, X, Pencil, FileSpreadsheet, Phone, Mail, IdCard, Car,
   MapPin, FileText, Building2, Save, Camera, Trophy, TrendingUp, TrendingDown, Minus, Flame,
   BarChart2, ChevronDown, ChevronUp, AlertCircle, Lock, LockOpen, Eye, EyeOff, ShieldCheck,
-  Share2, Smartphone, ArrowRightLeft, KeyRound, MoreHorizontal, UserMinus, RotateCcw,
+  Share2, Smartphone, ArrowRightLeft, KeyRound, MoreHorizontal, UserMinus, RotateCcw, Check,
 } from 'lucide-react'
 import {
   getDrivers, createDriver, updateDriver, deleteDriver, uploadDriverPhoto, programarTraslado, cancelarTraslado,
@@ -21,7 +21,10 @@ import {
   generarAccesosConductores, previaAccesosConductores, getContrasenaInicial, setContrasenaInicial,
   deleteDriverAccount,
   getDriversDuplicados, fusionarConductores, separarConductores, repasarFusiones,
+  getAccesosConductores,
 } from '../api'
+import { DialogoAcceso, textoEstado } from '../components/AccesoConductor'
+import { diaSello } from '../../lib/accesoConductor'
 import { MARCA } from '../../marca'
 import { DIAS_AVISO_CARNET, diasHastaCarnet, fechaCarnet, textoDiasCarnet } from '../../lib/carnet'
 
@@ -40,9 +43,20 @@ const sinCentro = (d) => !String(d?.center || '').trim()
    (la misma regla que enseña el campo en la ficha), y el acceso solo si se sabe quién tiene cuenta. */
 const FALTAS = [
   { id: 'centro', clave: 'drv.f.sinCentro', falta: (d) => sinCentro(d) },
-  { id: 'correo', clave: 'drv.f.sinCorreo', falta: (d) => !String(d?.email || '').trim() },
+  /* «Sin correo» solo le falta a quien entraría con contraseña (14-11-2026, ARREGLOS-5 N1): quien entra con su enlace
+     personal (abierto o mandado sin abrir) no lo necesita, y en una empresa que no usa contraseñas (nadie tiene cuenta)
+     el correo no le falta a nadie: el acceso es el enlace, y lo que falte lo dice «sin acceso». Con un servidor viejo,
+     sin datos del enlace, como siempre. */
+  { id: 'correo', clave: 'drv.f.sinCorreo', falta: (d, cuentas, _app, accesos) => {
+    if (String(d?.email || '').trim()) return false
+    if (!accesos) return true
+    if (['abierto', 'sin_abrir'].includes(accesos[d.id]?.acceso?.estado)) return false
+    return (cuentas || []).length > 0
+  } },
   { id: 'reparto', clave: 'drv.f.sinId', falta: (d) => !String(d?.transporter_id || '').trim(), soloReparto: true },
-  { id: 'acceso', clave: 'drv.f.sinAcceso', falta: (d, cuentas) => !cuentas.includes(d.id), soloCuentas: true },
+  /* Con acceso es quien tiene contraseña O ya ha abierto su enlace personal en su teléfono (tercera tanda, A11): el que
+     entra con el enlace no tiene cuenta con contraseña, y contarlo «sin acceso» mandaba a buscar a quien ya entra. */
+  { id: 'acceso', clave: 'drv.f.sinAcceso', falta: (d, cuentas, _app, accesos) => !cuentas.includes(d.id) && accesos?.[d.id]?.acceso?.estado !== 'abierto', soloCuentas: true },
   // Quién no tiene la app de Android (11-11-2026, tanda 3, equipo-5): solo si el servidor ha dicho quién la tiene.
   // No es «sin acceso» (eso es la cuenta con contraseña): se puede tener cuenta y usar solo la web.
   { id: 'app', clave: 'drv.f.sinApp', falta: (d, _cuentas, app) => !app?.conductores?.[d.id], soloApp: true },
@@ -79,18 +93,14 @@ const diaApp = (iso) => {
 function initials(n) {
   return (n || '?').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
-const PALETTE = [
-  'from-violet-500 to-indigo-600', 'from-blue-500 to-cyan-500',
-  'from-emerald-500 to-teal-600', 'from-amber-500 to-orange-500',
-  'from-rose-500 to-pink-600',    'from-sky-400 to-blue-600',
-]
-function avatarGrad(name) {
-  let h = 0; for (const c of name || '') h = (h * 31 + c.charCodeAt(0)) | 0
-  return PALETTE[Math.abs(h) % PALETTE.length]
-}
+// Los avatares sin foto, en gris liso con las iniciales en tinta (14-11-2026, M8): un degradado de color por persona
+// era color sin significado, y competía con los estados (abierto, sin abrir) que sí lo tienen.
+const AVATAR_LISO = 'bg-dark-800 text-dark-100'
 
-const NIVEL = { pleno: ['Pleno','bg-emerald-500/15 text-emerald-300'], L1: ['L1','bg-sky-500/15 text-sky-300'], L2: ['L2','bg-amber-500/15 text-amber-300'], L3: ['L3','bg-red-500/15 text-red-300'] }
-const CONTRATO = { empresa: ['Empresa','bg-brand-500/15 text-brand-300'], ett: ['ETT','bg-purple-500/15 text-purple-300'] }
+/* Contrato y nivel, en texto gris sin pastilla (14-11-2026, tanda 6): eran pastillas violeta, azul, roja y verde que no
+   avisaban de nada (un L3 no es un fallo, una ETT no es un aviso). El segundo valor es la clase del texto. */
+const NIVEL = { pleno: ['Pleno', 'text-dark-300'], L1: ['L1', 'text-dark-300'], L2: ['L2', 'text-dark-300'], L3: ['L3', 'text-dark-300'] }
+const CONTRATO = { empresa: ['Empresa', 'text-dark-300'], ett: ['ETT', 'text-dark-300'] }
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
 function Avatar({ driver, size = 10 }) {
@@ -98,7 +108,7 @@ function Avatar({ driver, size = 10 }) {
   const txt = size >= 16 ? 'text-2xl' : size >= 12 ? 'text-lg' : 'text-xs'
   return driver.photo_url
     ? <img src={driver.photo_url} alt="" className={`${sz} rounded-full object-cover`} />
-    : <div className={`${sz} shrink-0 flex items-center justify-center rounded-full bg-gradient-to-br ${avatarGrad(driver.name)} ${txt} font-bold text-white shadow-md`}>{initials(driver.name)}</div>
+    : <div className={`${sz} shrink-0 flex items-center justify-center rounded-full ${AVATAR_LISO} ${txt} font-bold`}>{initials(driver.name)}</div>
 }
 
 // ── Helpers scoring ───────────────────────────────────────────────────────────
@@ -120,7 +130,8 @@ function ScoreRing({ score, size = 80, stroke = 7 }) {
     : '#ef4444'
   return (
     <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1f2937" strokeWidth={stroke} />
+      {/* El fondo del anillo, en el gris de las reglas del tema (de día era casi negro sobre la tarjeta blanca). */}
+      <circle cx={size/2} cy={size/2} r={r} fill="none" style={{ stroke: 'rgb(var(--dk-800))' }} strokeWidth={stroke} />
       <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
         strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
         style={{ transition: 'stroke-dasharray .6s cubic-bezier(.4,0,.2,1)' }} />
@@ -160,31 +171,16 @@ function TrendIcon({ trend, size = 12 }) {
   return <Minus size={size} className="text-dark-500" />
 }
 
-function PillarBars({ s }) {
-  const bars = [
-    { label: '📋', v: s.compliance,  max: 30, color: '#38bdf8' },
-    { label: '⏰', v: s.punctuality, max: 15, color: '#a78bfa' },
-    { label: '📸', v: s.evidence,    max: 15, color: '#22d3ee' },
-    { label: '🔍', v: s.honesty,     max: 15, color: '#2dd4bf' },
-    { label: '🛡️', v: s.conservation,max: 25, color: '#34d399' },
-  ]
-  return (
-    <div className="flex gap-1 items-end h-10">
-      {bars.map(b => {
-        const pct = Math.round((b.v / b.max) * 100)
-        return (
-          <div key={b.label} className="flex flex-col items-center gap-0.5 flex-1">
-            <div className="w-full rounded-sm overflow-hidden bg-dark-800" style={{ height: 28 }}>
-              <div className="w-full rounded-sm transition-all duration-500"
-                style={{ height: `${pct}%`, background: b.color, marginTop: `${100-pct}%` }} />
-            </div>
-            <span className="text-[8px] leading-none">{b.label}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
+/* LOS CINCO PILARES (14-11-2026, tanda 6): cada uno con su nombre entero por t() y su barra en tinta sobre gris. Eran
+   cinco colores que no significaban nada y unas etiquetas de 8 px en español escrito a mano («Cump.», «Punt.»…). Ya no
+   van en el podio, donde no cabían legibles: salen en la fila desplegable de la clasificación. */
+const PILARES = [
+  { clave: 'drv.pilar.cumplimiento', campo: 'compliance', max: 30 },
+  { clave: 'drv.pilar.puntualidad', campo: 'punctuality', max: 15 },
+  { clave: 'drv.pilar.evidencias', campo: 'evidence', max: 15 },
+  { clave: 'drv.pilar.honestidad', campo: 'honesty', max: 15 },
+  { clave: 'drv.pilar.conservacion', campo: 'conservation', max: 25 },
+]
 
 function InspCount({ count }) {
   const { t } = useT()
@@ -194,33 +190,31 @@ function InspCount({ count }) {
 // ── Podio top-3 ───────────────────────────────────────────────────────────────
 function PodiumCard({ d, position, size = 90 }) {
   const HEIGHT = { 1: 'pt-0', 2: 'pt-8', 3: 'pt-16' }
-  const GLOW   = { 1: 'shadow-amber-500/20', 2: 'shadow-slate-400/10', 3: 'shadow-orange-700/10' }
-  const BORDER = { 1: 'border-amber-400/40', 2: 'border-slate-400/30', 3: 'border-orange-700/30' }
-  const MEDAL  = { 1: '🥇', 2: '🥈', 3: '🥉' }
-  const STREAK_COLOR = !d.clean_streak || d.clean_streak < 3 ? 'text-dark-500'
-    : d.clean_streak >= 10 ? 'text-amber-400' : 'text-orange-400'
+  /* Sin sombra ni borde dorado, plateado o de bronce (14-11-2026, tanda 6): una tarjeta con la regla de 1 px de la casa;
+     el puesto ya lo dice la cifra. La racha, en gris: es un dato, no un aviso. */
   return (
     <div className={`flex flex-col items-center ${HEIGHT[position]}`}>
-      <div className={`w-full rounded-2xl border ${BORDER[position]} bg-dark-900 p-4 shadow-xl ${GLOW[position]} flex flex-col items-center gap-2`}>
-        <span className="text-3xl">{MEDAL[position]}</span>
+      <div data-testid="podio" className="flex w-full flex-col items-center gap-2 rounded-xl border border-dark-800 bg-dark-900 p-3 sm:p-4">
+        {/* El puesto en cifra, no una medalla dibujada (14-11-2026, ARREGLOS-5 N1). */}
+        <span className="cifra text-2xl font-semibold text-dark-100">{position}</span>
         {/* Avatar initials */}
-        <div className={`h-12 w-12 shrink-0 flex items-center justify-center rounded-full bg-gradient-to-br ${avatarGrad(d.name)} text-sm font-bold text-white shadow-md`}>
+        <div className={`h-12 w-12 shrink-0 flex items-center justify-center rounded-full ${AVATAR_LISO} text-sm font-bold`}>
           {(d.name || '?').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0,2).toUpperCase()}
         </div>
         <ScoreDisplay score={d.total} size={size} />
-        <div className="text-center">
-          <div className="font-bold text-sm text-white leading-tight truncate max-w-[120px]">{d.name}</div>
+        <div className="w-full min-w-0 text-center">
+          {/* En tinta: con `text-white` el nombre no se veía de día (blanco sobre la tarjeta blanca). */}
+          <div className="max-w-full truncate text-sm font-bold leading-tight text-dark-50" title={d.name}>{d.name}</div>
           <InspCount count={d.inspections_count} />
         </div>
         <div className="flex items-center gap-2 text-[10px]">
           <TrendIcon trend={d.trend} size={11} />
           {d.clean_streak >= 3 && (
-            <span className={`flex items-center gap-0.5 font-bold ${STREAK_COLOR}`}>
+            <span className="cifra flex items-center gap-0.5 font-semibold text-dark-400">
               <Flame size={10} />{d.clean_streak}
             </span>
           )}
         </div>
-        {d.compliance != null && <PillarBars s={d} />}
       </div>
     </div>
   )
@@ -229,7 +223,8 @@ function PodiumCard({ d, position, size = 90 }) {
 // ── Lista completa ────────────────────────────────────────────────────────────
 function DriverRow({ s, rank, showCenter, expanded, onToggle }) {
   const { t } = useT()
-  const rankColor = rank === 1 ? 'text-amber-400' : rank === 2 ? 'text-slate-400' : rank === 3 ? 'text-orange-600' : 'text-dark-500'
+  // El puesto, en tinta los tres primeros y en gris los demás: sin oro, plata ni bronce (14-11-2026, tanda 6).
+  const rankColor = rank <= 3 ? 'text-dark-100' : 'text-dark-500'
   const barColor  = (s.total ?? 0) >= 85 ? 'bg-emerald-500' : (s.total ?? 0) >= 65 ? 'bg-brand-500' : (s.total ?? 0) >= 40 ? 'bg-amber-500' : 'bg-red-500'
   return (
     <>
@@ -260,7 +255,7 @@ function DriverRow({ s, rank, showCenter, expanded, onToggle }) {
         </td>
         <td className="py-3 px-2 text-center">
           {s.clean_streak >= 3 && (
-            <span className={`flex items-center justify-center gap-0.5 text-xs font-bold ${s.clean_streak >= 10 ? 'text-amber-400' : s.clean_streak >= 5 ? 'text-orange-400' : 'text-dark-500'}`}>
+            <span className="cifra flex items-center justify-center gap-0.5 text-xs font-semibold text-dark-400">
               <Flame size={11} />{s.clean_streak}
             </span>
           )}
@@ -273,29 +268,27 @@ function DriverRow({ s, rank, showCenter, expanded, onToggle }) {
         <tr className="border-b border-dark-800/50">
           <td colSpan={6} className="px-4 pb-4 pt-2 bg-dark-900/40">
             {/* Barras de pilares */}
-            <div className="grid grid-cols-5 gap-2 mb-3">
-              {[
-                { l: '📋 Cumpl.', v: s.compliance,  max: 30, c: 'bg-sky-500' },
-                { l: '⏰ Puntual.', v: s.punctuality,max: 15, c: 'bg-violet-500' },
-                { l: '📸 Evidencia', v: s.evidence, max: 15, c: 'bg-cyan-500' },
-                { l: '🔍 Honest.', v: s.honesty,    max: 15, c: 'bg-teal-500' },
-                { l: '🛡️ Conserv.', v: s.conservation,max: 25, c: 'bg-emerald-500' },
-              ].map(b => (
-                <div key={b.l}>
-                  <div className="flex justify-between text-[9px] text-dark-500 mb-0.5">
-                    <span>{b.l}</span><span className="tabular-nums">{b.v}/{b.max}</span>
+            {/* Los cinco pilares con su nombre entero y su barra en tinta sobre gris (14-11-2026, tanda 6). */}
+            <div data-testid="pilares" className="mb-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-5">
+              {PILARES.map((b) => {
+                const v = s[b.campo]
+                return (
+                  <div key={b.campo}>
+                    <div className="mb-0.5 flex justify-between gap-2 text-[11px] text-dark-400">
+                      <span className="truncate">{t(b.clave)}</span><span className="cifra text-dark-300">{v ?? '—'}/{b.max}</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-dark-800">
+                      <div className="h-full rounded-full bg-dark-100" style={{ width: `${Math.max(0, Math.min(100, ((v || 0) / b.max) * 100))}%` }} />
+                    </div>
                   </div>
-                  <div className="h-1.5 rounded-full bg-dark-800 overflow-hidden">
-                    <div className={`h-full rounded-full ${b.c}`} style={{ width: `${(b.v/b.max)*100}%` }} />
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
             <div className="flex flex-wrap gap-4 text-[11px] text-dark-500">
               <span>{s.inspections_count} {t('drv.insp.month')}</span>
               {s.days_assigned > 0 && <span>{s.days_assigned} {t('drv.days.assigned')}</span>}
               {s.damage_rate != null && <span>{t('drv.damage.rate')} <b className="text-dark-300">{s.damage_rate.toFixed(2)}</b>{t('drv.per.insp')}</span>}
-              {s.clean_streak > 0 && <span className="text-orange-400 font-semibold flex items-center gap-0.5"><Flame size={10} />{s.clean_streak} {t('drv.clean.streak')}</span>}
+              {s.clean_streak > 0 && <span className="flex items-center gap-0.5 font-semibold text-dark-300"><Flame size={10} />{s.clean_streak} {t('drv.clean.streak')}</span>}
             </div>
             {s.delta_events?.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
@@ -507,6 +500,8 @@ function ScoringView({ center }) {
   // El PODIO solo admite elegibles para el premio (≥35% de días asignados):
   // nadie gana el mes con 3 días buenos. La lista completa muestra a todos.
   const top3     = ranked.filter(s => s.prize_eligible !== false).slice(0, 3)
+  // En el móvil, el anillo más pequeño: con 100 px, las tres tarjetas no cabían en 390 y la tercera se cortaba.
+  const estrecho = useEstrecho()
 
   const stats = lb?.center_stats?.[activeCtr] || {}
 
@@ -579,15 +574,15 @@ function ScoringView({ center }) {
       {/* Header con mes y tabs de centro */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div className="flex items-center gap-2">
-          <Trophy size={18} className="text-amber-400" />
+          <Trophy size={18} className="text-dark-400" />
           <span className="font-bold text-base">{t('drv.ranking.title')}</span>
           {stats.avg_score != null && (
             <span className="text-xs text-dark-500 ml-2">{t('drv.ranking.avg')} <span className="text-dark-300 font-semibold">{stats.avg_score}</span></span>
           )}
           {data?.prize_min_days != null && (
-            <span className="ml-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-amber-400"
+            <span className="ml-2 text-[12px] text-dark-400"
               title="Para optar al premio: al menos el 35% de los días del mes con asignación en el cuadrante. Los daños marcados como falso positivo en Revisión Rápida no penalizan.">
-              🏆 Premio: mín. {data.prize_min_days} días asignados
+              Premio: mín. {data.prize_min_days} días asignados
             </span>
           )}
         </div>
@@ -625,14 +620,14 @@ function ScoringView({ center }) {
           {top3.length > 0 && (
             <div className="mb-8">
               <div className="grid gap-3"
-                style={{ gridTemplateColumns: top3.length === 3 ? '1fr 1fr 1fr' : top3.length === 2 ? '1fr 1fr' : '1fr' }}>
+                style={{ gridTemplateColumns: `repeat(${top3.length}, minmax(0, 1fr))` }}>
                 {/* Reordenar: plata-oro-bronce para efecto podio real */}
                 {(() => {
                   const ordered = top3.length === 3
                     ? [top3[1], top3[0], top3[2]]   // plata izquierda, oro centro, bronce derecha
                     : top3
                   return ordered.map(d => d && (
-                    <PodiumCard key={d.driver_id} d={d} position={d.position} size={top3.length >= 2 ? 100 : 120} />
+                    <PodiumCard key={d.driver_id} d={d} position={d.position} size={estrecho ? (top3.length >= 2 ? 72 : 100) : (top3.length >= 2 ? 100 : 120)} />
                   ))
                 })()}
               </div>
@@ -643,12 +638,14 @@ function ScoringView({ center }) {
           <div className="rounded-xl border border-dark-800 overflow-hidden">
             <div className="bg-dark-900/60 px-4 py-2.5 border-b border-dark-800 flex items-center gap-2">
               <BarChart2 size={13} className="text-dark-500" />
-              <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">{t('drv.ranking.full')}</span>
+              <span className="text-[13px] font-semibold text-dark-200">{t('drv.ranking.full')}</span>
               <span className="ml-auto text-xs text-dark-500">{ranked.length} clasificados</span>
             </div>
-            <table className="w-full">
+            {/* En el móvil la clasificación se desplaza dentro de su caja: se cortaba la columna «Racha». */}
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[340px]">
               <thead>
-                <tr className="border-b border-dark-800 text-[10px] text-dark-500 uppercase tracking-wider">
+                <tr className="border-b border-dark-800 text-[11.5px] font-medium text-dark-500">
                   <th className="py-2 pl-4 text-left w-8">#</th>
                   <th className="py-2 pl-2 text-left">{t('drv.col.driver')}</th>
                   <th className="py-2 px-3 text-left">{t('drv.col.score')}</th>
@@ -665,6 +662,7 @@ function ScoringView({ center }) {
                 ))}
               </tbody>
             </table>
+            </div>
             {unranked.length > 0 && (
               <div className="border-t border-dark-800 px-4 py-2 text-[11px] text-dark-500 flex items-center gap-1.5">
                 <AlertCircle size={11} /> {unranked.length} {t('drv.col.no.data')}
@@ -966,7 +964,7 @@ function ContrasenaInicial() {
         <span className="min-w-[min(15rem,calc(100%_-_2rem))] flex-1 text-dark-300">
           Contraseña inicial de los conductores nuevos:{' '}
           {estado.definida
-            ? <span className="text-lime-300">definida{desde ? ` desde el ${desde}` : ''}{estado.por ? ` por ${estado.por}` : ''}</span>
+            ? <span data-testid="inicial-definida" className="text-dark-100">definida{desde ? ` desde el ${desde}` : ''}{estado.por ? ` por ${estado.por}` : ''}</span>
             : <span className="text-amber-300">sin definir</span>}
           <span className="ml-1.5 cursor-help text-dark-500"
             title="Cada conductor que des de alta con correo (uno a uno o importando) entra la primera vez con esta contraseña y la app le obliga a elegir la suya. Aquí nunca se enseña: el servidor solo guarda el hash.">(?)</span>
@@ -998,7 +996,7 @@ function ContrasenaInicial() {
         </div>
       )}
       {error && <p className="mt-1.5 text-[12px] text-red-300">{error}</p>}
-      {aviso && <p className="mt-1.5 text-[12px] text-lime-300">{aviso}</p>}
+      {aviso && <p className="mt-1.5 text-[12px] text-emerald-300">{aviso}</p>}
     </div>
   )
 }
@@ -1020,11 +1018,55 @@ function bajaTexto(d) {
   return `de baja desde ${String(f.getDate()).padStart(2, '0')}/${String(f.getMonth() + 1).padStart(2, '0')}/${f.getFullYear()}`
 }
 
-function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deBaja = false, appInfo = null, onAbrir }) {
+/* «MANDAR SU ACCESO», POR FILA (14-11-2026, CONTRATO-ALTA §1). El estado de su enlace personal en corto; al tocarlo, la
+   ventana con «Mandar por WhatsApp», «Copiar enlace» o «Mandar uno nuevo» (components/AccesoConductor). Sin datos del
+   servidor (uno viejo sin la ruta) no sale.
+   QUIÉN HA ENTRADO, DE UN VISTAZO (tercera tanda, A11): con sesenta conductores el color tiene que separar a los que ya
+   entran de los que faltan. Verde con su marca: ha abierto su enlace. Neutro: entra con su contraseña, o el enlace está
+   mandado y sin abrir. Con el color de acción, solo lo que pide hacer algo: mandarle el acceso a quien no tiene ninguno.
+   Caducado, en ámbar: hay que mandarlo otra vez. */
+const CHIP_ACCESO = {
+  sin_enlace: 'alta.acc.mandar', sin_abrir: 'alta.acc.chip.sinAbrir', abierto: 'alta.acc.chip.abierto', caducado: 'alta.acc.chip.caducado',
+}
+function BotonAcceso({ fila, onAcceso, conClave = false, movil = false }) {
+  const { t, lang } = useT()
+  if (!fila || !onAcceso) return null
+  const e = fila.acceso?.estado || 'sin_enlace'
+  const clave = e === 'sin_enlace' && conClave ? 'alta.acc.chip.conClave' : (CHIP_ACCESO[e] || CHIP_ACCESO.sin_enlace)
+  /* El día con el sello de la casa («Abierto el 14 NOV»), como la ventana (14-11-2026). El texto, en la letra de la
+     casa; solo el día, en mono (tanda 6: la mono es para fechas, matrículas y cifras). */
+  const [antes, despues] = t(clave).includes('{dia}') ? t(clave).split('{dia}') : [t(clave), null]
+  const texto = despues === null ? antes
+    : <>{antes}<span className="font-mono">{diaSello(fila.acceso?.abierto_dia, lang)}</span>{despues}</>
+  /* ACCIÓN Y ESTADO NO SE PARECEN (14-11-2026, ARREGLOS-5 N1): «Mandar su acceso» es lo único que pide hacer algo y va
+     como enlace subrayado en tinta, como en la espera del arranque; lo demás es estado y va con su color
+     (abierto, hecho; caducado, aviso; sin abrir o con contraseña, gris). Sin pastillas: los dos se tocan igual y abren
+     la misma ventana. */
+  const accion = e === 'sin_enlace' && !conClave
+  const tono = e === 'abierto' ? 'text-[12.5px] text-emerald-300'
+    : e === 'caducado' ? 'text-[12.5px] text-amber-300'
+      : accion ? 'text-[12.5px] font-semibold text-dark-100 underline decoration-dark-500 underline-offset-4 hover:decoration-dark-100'
+        : 'text-[12.5px] text-dark-400'
+  return (
+    <button type="button" data-testid="boton-acceso" data-estado={e === 'sin_enlace' && conClave ? 'con_clave' : e}
+      title={textoEstado(t, fila.acceso, lang, { sello: true })}
+      onClick={(ev) => { ev.stopPropagation(); onAcceso(fila) }}
+      className={`inline-flex items-center gap-1 whitespace-nowrap ${accion ? '' : 'underline-offset-4 hover:underline'} ${tono} ${movil ? 'my-auto mr-1.5 min-h-[44px] px-1' : 'min-h-[28px]'}`}>
+      {e === 'abierto' && <Check size={12} aria-hidden="true" />}
+      {e === 'sin_enlace' && conClave && <Lock size={11} aria-hidden="true" />}
+      {texto}
+    </button>
+  )
+}
+
+function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deBaja = false, appInfo = null, onAbrir, acceso = null, accesos = null, onAcceso = null }) {
   const { t } = useT()
   // De una baja no se dice lo que le falta: no se va a completar (11-11-2026, equipo-6).
   const faltan = deBaja ? [] : faltasQueCuentan({ conIdReparto, cuentasOk, appOk: !!appInfo })
-    .filter((f) => f.id !== 'centro' && f.falta(d, accounts, appInfo))
+    .filter((f) => f.id !== 'centro' && f.falta(d, accounts, appInfo, accesos))
+    /* «Sin acceso» no se repite (14-11-2026, ARREGLOS-5 N1): si la tarjeta lleva la etiqueta de su enlace («Mandar su
+       acceso», «Sin abrir», «Caducado»), ya dice en qué está. El filtro de arriba sigue contándolos. */
+    .filter((f) => !(f.id === 'acceso' && acceso && onAcceso))
   const tel = String(d.phone || '').replace(/[^\d+]/g, '')
   return (
     <li className={`flex items-stretch border-b border-dark-800/50 last:border-0 ${deBaja ? 'opacity-70' : ''}`}>
@@ -1034,11 +1076,15 @@ function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deB
           {/* En dos líneas si hace falta, no cortado con «…» (11-11-2026, revisión de la tanda 2): a 390 px caben unas
               28 letras y un nombre compuesto con dos apellidos («MARÍA DEL CARMEN FERNÁNDEZ RODRÍGUEZ») se perdía. */}
           <span className="line-clamp-2 break-words text-[13.5px] font-semibold text-dark-100">{String(d.name || '').replace(/\s+/g, ' ').trim()}</span>
-          <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[12px] text-dark-400">
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12px] text-dark-400">
             {sinCentro(d)
               ? <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-amber-300">sin centro</span>
               : <span>{d.center}</span>}
-            {tel && <span className="cifra text-dark-400">· {verTelefono(d.phone)}</span>}
+            {/* Sin «·» delante (14-11-2026, ARREGLOS-5 N1): al partirse la línea a 390 px se quedaba suelto al principio
+                de la segunda. Los datos se separan con el hueco. */}
+            {/* El teléfono, siempre en su línea (tanda 6): saltaba de la 2.ª a la 3.ª según lo largo del estado de al
+                lado, y las filas tenían alturas distintas sin motivo. */}
+            {tel && <span data-testid="tarjeta-telefono" className="cifra basis-full text-dark-400">{verTelefono(d.phone)}</span>}
             {datoOrden && <DatoDeOrden d={d} col={datoOrden} nombre={t(COLUMNA_ORDEN[datoOrden])} />}
             {d.traslado?.centro && (
               <span className="whitespace-nowrap rounded-full bg-sky-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-sky-300">
@@ -1046,7 +1092,8 @@ function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deB
               </span>
             )}
             {faltan.map((f) => (
-              <span key={f.id} className="whitespace-nowrap rounded-full bg-dark-800 px-2 py-0.5 text-[10.5px] font-semibold text-amber-300">{t(f.clave)}</span>
+              // Lo que falta, en texto de aviso, sin pastilla (14-11-2026, ARREGLOS-5 N1).
+              <span key={f.id} className="whitespace-nowrap text-[11.5px] font-semibold text-amber-300">{t(f.clave)}</span>
             ))}
             {/* La app sin actualizar, también en el móvil (11-11-2026, equipo-5): «sin app» va entre las faltas. */}
             {appInfo && versionMenor(appInfo.conductores?.[d.id]?.app, appInfo.ultima) && (
@@ -1061,10 +1108,11 @@ function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deB
           </span>
         </span>
       </button>
+      {!deBaja && <BotonAcceso fila={acceso} onAcceso={onAcceso} conClave={accounts.includes(d.id)} movil />}
       {/* El número se lee en la tarjeta; el botón redondo llama. Así el nombre tiene casi todo el ancho. */}
       {tel ? (
         <a href={`tel:${tel}`} aria-label={`${t('drv.llamar')} ${verTelefono(d.phone)}`} title={t('drv.llamar')}
-          className="my-auto mr-2 flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-300 active:bg-brand-500/30">
+          className="my-auto mr-2 flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-dark-700 text-dark-200 active:bg-dark-800">
           <Phone size={17} />
         </a>
       ) : (
@@ -1083,6 +1131,17 @@ const COLUMNA_ORDEN = { name: 'drv.o.nombre', center: 'drv.o.centro', alojamient
   email: 'drv.o.correo', contrato: 'drv.o.contrato', nivel: 'drv.o.nivel' }
 const NO_SALE_EN_TARJETA = ['alojamiento', 'email', 'contrato', 'nivel']
 
+/* LAS COLUMNAS SIN NADA NO SE PINTAN (14-11-2026, ARREGLOS-5 N1). Una empresa nueva no tiene alojamiento, correo,
+   contrato ni nivel en ninguna ficha: cuatro columnas de «—» la hacían parecer una hoja de cálculo a medio rellenar.
+   Se cuentan sobre TODAS las fichas de la lista (activas o bajas), no sobre lo que deja el buscador o un filtro, para
+   que las columnas no aparezcan y desaparezcan al escribir. En cuanto una ficha tiene el dato, la columna vuelve (y
+   también su orden en el móvil): la flota que los usa los sigue viendo todos. */
+const tieneDato = (d, col) => !!String(d?.[col] ?? '').trim()
+const columnasConDato = (fichas) => new Set(NO_SALE_EN_TARJETA.filter((c) => (fichas || []).some((d) => tieneDato(d, c))))
+
+// Lo vacío, siempre el mismo guion y en la letra de la casa (en una celda de cifras, la mono lo dibujaba más corto).
+const VACIO = <span className="font-sans text-dark-500">—</span>
+
 /* El dato por el que se ordena, con el mismo texto que la celda de la tabla: la etiqueta de contrato o de nivel, el
    correo o el alojamiento tal cual, y «—» si la ficha no lo tiene. Discreto, como el teléfono. El correo puede partirse
    detrás de la «@» y, si aun así no cabe, por donde haga falta; el alojamiento, en dos líneas como mucho (entero en el
@@ -1091,14 +1150,14 @@ function DatoDeOrden({ d, col, nombre }) {
   if (col === 'contrato' || col === 'nivel') {
     const [l, c] = (col === 'nivel' ? NIVEL : CONTRATO)[d[col]] || []
     return c
-      ? <span data-testid="dato-orden" title={nombre} className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${c}`}>{l}</span>
-      : <span data-testid="dato-orden" title={nombre} className="text-dark-500">· —</span>
+      ? <span data-testid="dato-orden" title={nombre} className={`whitespace-nowrap ${c}`}>{l}</span>
+      : <span data-testid="dato-orden" title={nombre} className="text-dark-500">—</span>
   }
   const v = d[col] || ''
-  if (!v) return <span data-testid="dato-orden" title={nombre} className="text-dark-500">· —</span>
+  if (!v) return <span data-testid="dato-orden" title={nombre} className="text-dark-500">—</span>
   if (col === 'email') {
-    // Se parte detrás de la «@» y de cada «.», no en mitad de una palabra; el «·» de delante va pegado (espacio duro)
-    // para no quedarse solo en una línea.
+    // Se parte detrás de la «@» y de cada «.», no en mitad de una palabra. Sin «·» delante (14-11-2026): los datos de
+    // la tarjeta se separan con el hueco.
     const trozos = v.replace(/[@.]/g, (c) => `${c}\n`).split('\n')
     return (
       <span data-testid="dato-orden" title={`${nombre}: ${v}`} className="min-w-0 max-w-full text-dark-500 [overflow-wrap:anywhere]">
@@ -1107,7 +1166,7 @@ function DatoDeOrden({ d, col, nombre }) {
     )
   }
   return (
-    <span data-testid="dato-orden" title={`${nombre}: ${v}`} className="line-clamp-2 min-w-0 max-w-full text-dark-500 [overflow-wrap:anywhere]">· {v}</span>
+    <span data-testid="dato-orden" title={`${nombre}: ${v}`} className="line-clamp-2 min-w-0 max-w-full text-dark-500 [overflow-wrap:anywhere]">{v}</span>
   )
 }
 
@@ -1126,10 +1185,14 @@ function useEstrecho() {
   return si
 }
 
-function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = false, deBaja = false, appInfo = null, onAbrir }) {
+function TablaConductores({ list, columnas = null, accounts, cuentasOk = false, conIdReparto = false, deBaja = false, appInfo = null, onAbrir, accesos = null, onAcceso = null, junto = null }) {
   const { t } = useT()
   const estrecho = useEstrecho()
-  const [orden, setOrden] = useState({ col: 'name', asc: true })
+  const hay = useMemo(() => columnas || columnasConDato(list), [columnas, list])
+  const [ordenElegido, setOrden] = useState({ col: 'name', asc: true })
+  // Si la columna por la que se ordenaba deja de pintarse (nadie tiene ya ese dato), se vuelve al nombre.
+  const orden = useMemo(() => (NO_SALE_EN_TARJETA.includes(ordenElegido.col) && !hay.has(ordenElegido.col)
+    ? { col: 'name', asc: true } : ordenElegido), [ordenElegido, hay])
   const datoOrden = NO_SALE_EN_TARJETA.includes(orden.col) ? orden.col : null
 
   const filas = useMemo(() => {
@@ -1144,8 +1207,10 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
     return ms
   }, [list, orden])
 
+  /* Las cabeceras, todas iguales: letra normal, sin mayúsculas espaciadas (14-11-2026, ARREGLOS-5 N1; «Acceso» salía
+     en mayúsculas y las demás no, porque un botón no hereda el `uppercase`). */
   const Cab = ({ col, children, alinea = 'text-left' }) => (
-    <th className={`px-2 py-2 ${alinea} text-[10px] font-medium uppercase tracking-wider text-dark-500`}>
+    <th className={`px-2 py-2 ${alinea} text-[11.5px] font-medium text-dark-500`}>
       <button
         onClick={() => setOrden((o) => ({ col, asc: o.col === col ? !o.asc : true }))}
         className={`inline-flex items-center gap-1 hover:text-dark-300 ${orden.col === col ? 'text-dark-300' : ''}`}>
@@ -1167,37 +1232,44 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
         <label htmlFor="orden-conductores">{t('drv.ordenarPor')}</label>
         <select id="orden-conductores" value={orden.col} onChange={(e) => setOrden({ col: e.target.value, asc: true })}
           className="min-h-[44px] min-w-0 flex-1 rounded-lg border border-dark-700 bg-dark-950 px-2 text-[13px] text-dark-100">
-          {Object.entries(COLUMNA_ORDEN).map(([col, clave]) => <option key={col} value={col}>{t(clave)}</option>)}
+          {Object.entries(COLUMNA_ORDEN).filter(([col]) => !NO_SALE_EN_TARJETA.includes(col) || hay.has(col))
+            .map(([col, clave]) => <option key={col} value={col}>{t(clave)}</option>)}
         </select>
         <button type="button" onClick={() => setOrden((o) => ({ ...o, asc: !o.asc }))}
           aria-label={orden.asc ? t('drv.ordenAZ') : t('drv.ordenZA')} title={t('drv.ordenVuelta')}
           className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-lg border border-dark-700 text-dark-300">
           {orden.asc ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
+        {/* «Más opciones», aquí en el móvil (tanda 6): solo, bajo los filtros, se comía una línea entera de aire. */}
+        {junto}
       </div>
       <ul aria-label="Conductores">
         {filas.map((d) => (
           <TarjetaConductor key={d.id} d={d} accounts={accounts} cuentasOk={cuentasOk} conIdReparto={conIdReparto}
-            datoOrden={datoOrden} deBaja={deBaja} appInfo={appInfo} onAbrir={onAbrir} />
+            datoOrden={datoOrden} deBaja={deBaja} appInfo={appInfo} onAbrir={onAbrir}
+            acceso={accesos?.[d.id] || null} accesos={accesos} onAcceso={onAcceso} />
         ))}
       </ul>
       </>
       ) : (
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-[13px]">
+        {/* Con solo nombre, centro, teléfono y acceso (y la app, si la hay), la tabla no se estira a todo el ancho: se
+            quedaban unos 400 px vacíos entre el nombre y el centro y el estado se iba lejos (tanda 6). Con más
+            columnas, como siempre. */}
+        <table data-testid="tabla-conductores" className={`${hay.size === 0 ? 'w-auto min-w-[640px]' : 'w-full min-w-[760px]'} text-[13px]`}>
           <thead className="sticky top-0 z-10 bg-dark-900">
             <tr className="border-b border-dark-800">
               <th className="w-8 px-2 py-2"></th>
               <Cab col="name">Nombre</Cab>
               <Cab col="center">Centro</Cab>
-              <Cab col="alojamiento">Alojamiento</Cab>
+              {hay.has('alojamiento') && <Cab col="alojamiento">Alojamiento</Cab>}
               <Cab col="phone">Teléfono</Cab>
-              <Cab col="email">Correo</Cab>
-              <Cab col="contrato">Contrato</Cab>
-              <Cab col="nivel">Nivel</Cab>
+              {hay.has('email') && <Cab col="email">Correo</Cab>}
+              {hay.has('contrato') && <Cab col="contrato">Contrato</Cab>}
+              {hay.has('nivel') && <Cab col="nivel">Nivel</Cab>}
               {/* «Acceso» y no «PIN» (10-11-2026): no hay ningún PIN; dice si tiene cuenta con contraseña. */}
-              <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-dark-500">Acceso</th>
-              {appInfo && <th className="px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-dark-500">App</th>}
+              <th className="px-2 py-2 text-left text-[11.5px] font-medium text-dark-500">Acceso</th>
+              {appInfo && <th className="px-2 py-2 text-left text-[11.5px] font-medium text-dark-500">App</th>}
             </tr>
           </thead>
           <tbody>
@@ -1224,22 +1296,27 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
                       </span>
                     )}
                   </td>
-                  <td className="max-w-[150px] truncate px-2 py-1 text-dark-500">{d.alojamiento || '—'}</td>
+                  {hay.has('alojamiento') && <td className="max-w-[150px] truncate px-2 py-1 text-dark-500">{d.alojamiento || VACIO}</td>}
                   <td className="cifra px-2 py-1 text-dark-400">
-                    {d.phone ? verTelefono(d.phone) : '—'}
+                    {d.phone ? verTelefono(d.phone) : VACIO}
                   </td>
-                  <td className="max-w-[210px] truncate px-2 py-1 text-dark-500">{d.email || '—'}</td>
+                  {hay.has('email') && <td className="max-w-[210px] truncate px-2 py-1 text-dark-500">{d.email || VACIO}</td>}
+                  {hay.has('contrato') && (
+                    <td className="whitespace-nowrap px-2 py-1">
+                      {cc ? <span className={cc}>{cl}</span> : VACIO}
+                    </td>
+                  )}
+                  {hay.has('nivel') && (
+                    <td className="whitespace-nowrap px-2 py-1">
+                      {nc ? <span className={nc}>{nl}</span> : VACIO}
+                    </td>
+                  )}
                   <td className="whitespace-nowrap px-2 py-1">
-                    {cc ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cc}`}>{cl}</span>
-                        : <span className="text-dark-500">—</span>}
-                  </td>
-                  <td className="whitespace-nowrap px-2 py-1">
-                    {nc ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${nc}`}>{nl}</span>
-                        : <span className="text-dark-500">—</span>}
-                  </td>
-                  <td className="px-2 py-1 text-center">
-                    {hasAcc ? <Lock size={11} className="inline text-lime-400" title="Tiene acceso al portal" />
-                            : <span className="text-dark-700">—</span>}
+                    {/* El candado: tiene contraseña. El botón: su enlace personal (14-11-2026). */}
+                    {/* Sin datos del enlace (servidor viejo), el candado de siempre; con ellos, lo dice la etiqueta. */}
+                    {!accesos?.[d.id] && (hasAcc ? <Lock size={11} className="mr-1.5 inline text-dark-400" title="Tiene acceso al portal" />
+                      : VACIO)}
+                    {!deBaja && <BotonAcceso fila={accesos?.[d.id]} onAcceso={onAcceso} conClave={hasAcc} />}
                   </td>
                   {appInfo && <td className="whitespace-nowrap px-2 py-1"><CeldaApp info={appInfo.conductores?.[d.id]} ultima={appInfo.ultima} /></td>}
                 </tr>
@@ -1302,7 +1379,18 @@ export default function Conductores() {
   const [aviso, setAviso] = useState('')
   // QUIÉN TIENE LA APP (11-11-2026, equipo-5): null = no se sabe (servidor viejo o error): ni columna ni filtro.
   const [appInfo, setAppInfo] = useState(null)
+  // EL ENLACE PERSONAL DE CADA UNO (14-11-2026): {driver_id: fila de /conductores/accesos}; null = el servidor no lo da.
+  const [accesos, setAccesos] = useState(null)
+  const [empresaAcceso, setEmpresaAcceso] = useState('')
+  const [dialogoAcceso, setDialogoAcceso] = useState(null)
   async function load() {
+    getAccesosConductores(center)
+      .then((r) => {
+        const filas = Array.isArray(r.data?.conductores) ? r.data.conductores.filter((x) => x && x.driver_id) : null
+        setAccesos(filas ? Object.fromEntries(filas.map((x) => [x.driver_id, x])) : null)
+        setEmpresaAcceso(r.data?.empresa || '')
+      })
+      .catch(() => setAccesos(null))
     getDriversBajas(center)
       .then((r) => setBajas(Array.isArray(r.data) ? r.data.filter((x) => x && x.id) : null))
       .catch(() => setBajas(null))
@@ -1341,10 +1429,34 @@ export default function Conductores() {
 
   // Los filtros de un toque, contados sobre lo que deja el buscador: el número es lo que se ve al pulsarlo.
   const faltas = useMemo(() => (enBajas ? [] : faltasQueCuentan({ conIdReparto, cuentasOk, appOk: !!appInfo }))
-    .map((f) => ({ ...f, n: list.filter((d) => f.falta(d, accounts, appInfo)).length })),
-  [list, accounts, conIdReparto, cuentasOk, enBajas, appInfo])
+    .map((f) => ({ ...f, n: list.filter((d) => f.falta(d, accounts, appInfo, accesos)).length })),
+  [list, accounts, conIdReparto, cuentasOk, enBajas, appInfo, accesos])
   const filtroVivo = faltas.find((f) => f.id === filtro) || null
-  const vistos = filtroVivo ? list.filter((d) => filtroVivo.falta(d, accounts, appInfo)) : list
+  const vistos = filtroVivo ? list.filter((d) => filtroVivo.falta(d, accounts, appInfo, accesos)) : list
+  // Qué columnas tienen algo, sobre todas las fichas de la lista que se mira (ni el buscador ni el filtro las cambian).
+  const columnas = useMemo(() => columnasConDato(enBajas ? bajas : drivers), [enBajas, bajas, drivers])
+  /* LAS CONTRASEÑAS, EN «MÁS OPCIONES» (14-11-2026, ARREGLOS-5 N1). La inicial de los nuevos y la temporal común son
+     ajustes de vez en cuando y, en una empresa que entra con enlace, ni se usan: eran dos franjas encima de la lista
+     todos los días. Van plegadas, a un toque, al final de la fila de los filtros. Se recuerda abierto en este navegador (quien las usa
+     no tiene que volver a abrirlas), y van siempre montadas: plegar no pierde una clave a medio escribir ni el
+     resultado de aplicar la temporal. */
+  const [verOpciones, setVerOpciones] = useState(() => { try { return localStorage.getItem('conductores_opciones') === '1' } catch { return false } })
+  const cambiarOpciones = () => setVerOpciones((v) => {
+    try { localStorage.setItem('conductores_opciones', v ? '0' : '1') } catch { /* sin almacén */ }
+    return !v
+  })
+  const vacia = Array.isArray(drivers) && drivers.length === 0
+  /* «Más opciones»: en el ordenador, a la derecha de los filtros; en el móvil, en la fila de «Ordenar por» (tanda 6),
+     donde no se come una línea propia. Uno solo en la página: la misma prueba lo encuentra en los dos anchos. */
+  const estrecho = useEstrecho()
+  const botonOpciones = (
+    <button type="button" data-testid="mas-opciones" onClick={cambiarOpciones}
+      aria-expanded={verOpciones} aria-controls="opciones-conductores" title={t('drv.masOpcionesAyuda')}
+      className={`flex min-h-[44px] shrink-0 items-center gap-1 px-1 text-[12.5px] font-medium text-dark-400 hover:text-dark-100 sm:min-h-0 sm:py-1 ${estrecho ? '' : 'ml-auto'}`}>
+      {t('drv.masOpciones')}
+      <ChevronDown size={14} aria-hidden="true" className={`transition-transform ${verOpciones ? 'rotate-180' : ''}`} />
+    </button>
+  )
   const conChipBajas = enBajas || (Array.isArray(bajas) && bajas.length > 0)
   /* El chip «Bajas (N)»: con los filtros y también cuando no hay ningún activo o la búsqueda no casa con nadie (segunda
      revisión, F12): una nave que se ha quedado sin activos tiene que poder llegar a sus bajas para reactivarlas. */
@@ -1457,7 +1569,8 @@ Cancelar: no hacer nada.`)) {
   const TABS = [
     { id: 'directorio', label: t('drv.title') },
     // `corto`: lo que dice en el móvil, para que las tres quepan en una línea (11-11-2026, revisión de la tanda 2).
-    { id: 'ranking',    label: `🏆 ${t('sc.ranking')}`, corto: `🏆 ${t('drv.tabRanking')}` },
+    // Sin el trofeo delante (14-11-2026, ARREGLOS-5 N1): la casa no usa emojis.
+    { id: 'ranking',    label: t('sc.ranking'), corto: t('drv.tabRanking') },
     // Pestaña y no entrada de menú: es mantenimiento que se hace de vez en
     // cuando, no una tarea del día.
     { id: 'fichas',     label: 'Fichas duplicadas', corto: t('drv.tabDuplicadas') },
@@ -1469,10 +1582,8 @@ Cancelar: no hacer nada.`)) {
       {/* Con el menú «Más» abierto, la cabecera por encima de lo que viene debajo (la animación de entrada la hace
           su propia capa y, sin esto, las pestañas tapaban el menú). */}
       <header className={`rise mb-6 ${verMas ? 'relative z-30' : ''}`}>
-        {center && center !== 'Todos' && (
-          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-brand-400/80">{center}</p>
-        )}
-        <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
+        {/* Sin el rótulo del centro en mono espaciado encima (14-11-2026, M8): la sede ya la dice el selector de arriba. */}
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <h1 className="font-display text-[clamp(28px,3.4vw,42px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">
             {t('drv.title')}{drivers && <span className="text-dark-500"> · {(drivers || []).length}</span>}
           </h1>
@@ -1490,10 +1601,13 @@ Cancelar: no hacer nada.`)) {
               </div>
               {/* Importar va ANTES de «añadir»: quien llega el primer día no
                   quiere teclear cincuenta fichas, quiere subir su Excel. */}
-              <button onClick={() => setVerImportar((v) => !v)}
-                className="hidden items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 py-2.5 text-[13.5px] font-semibold text-dark-300 hover:border-dark-600 hover:text-dark-100 sm:flex">
-                <FileSpreadsheet size={15} /> {t('drv.importar')}
-              </button>
+              {/* Con la lista vacía, una sola forma de importar: «Importar la lista», abajo (tanda 6). */}
+              {!vacia && (
+                <button onClick={() => setVerImportar((v) => !v)}
+                  className="hidden items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 py-2.5 text-[13.5px] font-semibold text-dark-300 hover:border-dark-600 hover:text-dark-100 sm:flex">
+                  <FileSpreadsheet size={15} /> {t('drv.importar')}
+                </button>
+              )}
               <button onClick={() => setVerMoviles((v) => !v)}
                 title="Pon los móviles personales desde la agenda de tu teléfono: los WhatsApp personales van a ese número."
                 className="hidden items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 py-2.5 text-[13.5px] font-semibold text-dark-300 hover:border-dark-600 hover:text-dark-100 sm:flex">
@@ -1509,10 +1623,12 @@ Cancelar: no hacer nada.`)) {
                   <>
                     <button aria-label="Cerrar" tabIndex={-1} onClick={() => setVerMas(false)} className="fixed inset-0 z-30 cursor-default" />
                     <div role="menu" className="absolute left-0 top-full z-40 mt-1.5 w-60 overflow-hidden rounded-xl border border-dark-700 bg-dark-900 py-1 shadow-xl">
-                      <button role="menuitem" onClick={() => { setVerMas(false); setVerImportar((v) => !v) }}
-                        className="flex min-h-[44px] w-full items-center gap-2 px-3.5 text-left text-[13.5px] font-semibold text-dark-200 active:bg-dark-800">
-                        <FileSpreadsheet size={15} /> {t('drv.importar')}
-                      </button>
+                      {!vacia && (
+                        <button role="menuitem" onClick={() => { setVerMas(false); setVerImportar((v) => !v) }}
+                          className="flex min-h-[44px] w-full items-center gap-2 px-3.5 text-left text-[13.5px] font-semibold text-dark-200 active:bg-dark-800">
+                          <FileSpreadsheet size={15} /> {t('drv.importar')}
+                        </button>
+                      )}
                       <button role="menuitem" onClick={() => { setVerMas(false); setVerMoviles((v) => !v) }}
                         className="flex min-h-[44px] w-full items-center gap-2 px-3.5 text-left text-[13.5px] font-semibold text-dark-200 active:bg-dark-800">
                         <Smartphone size={15} /> {t('drv.moviles')}
@@ -1521,11 +1637,14 @@ Cancelar: no hacer nada.`)) {
                   </>
                 )}
               </div>
+              {/* Con la lista vacía, la acción de la pantalla es «Importar la lista» (abajo, en cian): aquí, con borde,
+                  para que no haya dos principales (14-11-2026, ARREGLOS-5 N2). Con conductores, cian como siempre. */}
               <button
                 onClick={() => setModal({ driver: null })}
-                className="group relative flex min-h-[44px] flex-1 items-center justify-center gap-1.5 overflow-hidden rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-lg shadow-brand-500/25 transition-all duration-300 [text-shadow:0_1px_1px_rgba(0,0,0,0.15)] hover:-translate-y-px hover:shadow-xl hover:shadow-brand-500/30 hover:brightness-110 active:translate-y-0 active:scale-[0.98] sm:min-h-0 sm:flex-none"
+                className={`flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-[13.5px] font-semibold transition-colors sm:min-h-0 sm:flex-none ${vacia
+                  ? 'border border-dark-700 text-dark-200 hover:border-dark-600 hover:text-dark-100'
+                  : 'bg-brand-400 text-brand-tinta hover:bg-brand-300 active:bg-brand-500'}`}
               >
-                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/20 to-transparent" />
                 <Plus size={15} /> {t('drv.add')}
               </button>
             </div>
@@ -1547,13 +1666,13 @@ Cancelar: no hacer nada.`)) {
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Tabs: la elegida en tinta, no en cian (14-11-2026, ARREGLOS-5 N3: un solo cian por pantalla). */}
       <div className="flex gap-0 border-b border-dark-800 mb-6">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`min-h-[44px] px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px sm:min-h-0 sm:px-4 ${
               tab === t.id
-                ? 'border-brand-400 text-brand-300'
+                ? 'border-dark-50 text-dark-50'
                 : 'border-transparent text-dark-500 hover:text-dark-300'
             }`}>
             {t.corto ? <><span className="sm:hidden">{t.corto}</span><span className="hidden sm:inline">{t.label}</span></> : t.label}
@@ -1566,43 +1685,37 @@ Cancelar: no hacer nada.`)) {
         !drivers
           ? <div className="flex items-center gap-2 py-16 text-dark-400"><Loader2 size={18} className="animate-spin" /> {t('ui.loading')}</div>
           : list.length === 0 && q && drivers.length > 0 && !enBajas
-            ? <div className="rounded-2xl border border-dashed border-dark-700 py-12 text-center">
-                <p className="font-medium text-dark-300">Nadie coincide con «{q}»</p>
+            ? <div className="pt-2">
+                <p className="font-medium text-dark-200">Nadie coincide con «{q}»</p>
                 <p className="mt-1 text-sm text-dark-500">Se busca por nombre, correo, sede, nº de empleado y teléfono.</p>
-                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                  <button onClick={() => setQ('')} className="btn-ghost px-3 py-1.5 text-sm">Borrar búsqueda</button>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  {/* Un enlace subrayado, como «Añadir uno a uno» (tanda 6): el `btn-ghost` quedaba sangrado 12 px. */}
+                  <button onClick={() => setQ('')}
+                    className="inline-flex min-h-[44px] items-center text-[14px] font-semibold text-dark-100 underline decoration-dark-500 underline-offset-4 hover:decoration-dark-100">
+                    Borrar búsqueda
+                  </button>
                   {chipBajas}
                 </div>
               </div>
           : list.length === 0 && !enBajas
-            ? <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-dark-700 px-6 py-20 text-center">
-                <UserCheck size={44} className="mb-4 text-dark-500" />
-                <p className="text-base font-semibold text-dark-100">{t('drv.empty')}{center !== 'Todos' ? ` en ${center}` : ''}</p>
-                <p className="mt-1.5 max-w-md text-sm leading-relaxed text-dark-400">
-                  Trae tu lista de Excel: se reconoce cada columna, eliges la sede y
-                  cada conductor recibe su acceso al portal para hacer las auditorías desde el móvil.
-                </p>
-                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                  <button onClick={() => setVerImportar(true)} className="btn-primary flex items-center gap-1.5 px-4 py-2 text-sm">
-                    <FileSpreadsheet size={14} /> {t('drv.importar')}
+            /* CONDUCTORES VACÍO (14-11-2026, ARREGLOS-5 N2): texto a la izquierda bajo la regla de las pestañas, sin caja de puntos ni
+               icono; UNA acción, «Importar la lista», en cian, y «Añadir uno a uno» como enlace. */
+            ? <div data-testid="conductores-vacio" className="pt-2">
+                <h2 className="font-display text-[20px] font-bold tracking-[-0.02em] text-dark-50">{t('drv.empty')}{center !== 'Todos' ? ` en ${center}` : ''}</h2>
+                <p className="mt-2 max-w-[34rem] text-[14px] leading-relaxed text-dark-400">{t('alta.drv.vacio')}</p>
+                <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3">
+                  <button onClick={() => setVerImportar(true)}
+                    className="flex h-[52px] items-center rounded-xl bg-brand-400 px-6 text-[15px] font-semibold text-brand-tinta transition-colors hover:bg-brand-300 active:bg-brand-500">
+                    {t('drv.importarLista')}
                   </button>
-                  <button onClick={() => setModal({ driver: null })} className="btn-ghost flex items-center gap-1.5 px-4 py-2 text-sm">
-                    <Plus size={14} /> {t('drv.add')}
+                  <button onClick={() => setModal({ driver: null })}
+                    className="inline-flex min-h-[44px] items-center text-[14px] font-semibold text-dark-100 underline decoration-dark-500 underline-offset-4 hover:decoration-dark-100">
+                    {t('drv.unoAUno')}
                   </button>
                   {chipBajas}
                 </div>
               </div>
             : <div className="flex flex-col">
-                {/* EN EL MÓVIL, LOS AVISOS DE CONTRASEÑAS DEBAJO DE LA LISTA (11-11-2026, revisión de la tanda 2): son
-                    ajustes de vez en cuando y, encima, ocupaban media pantalla: al abrir Conductores no se veía ningún
-                    conductor sin bajar. En el ordenador siguen arriba, como siempre.
-                    Se pintan UNA vez y los baja el CSS (`order-last`), no dos copias según el ancho (11-11-2026, segunda
-                    revisión): al girar el móvil se desmontaba una y se montaba la otra vacía, y se perdía el resultado de
-                    aplicar la temporal o la clave a medio escribir. */}
-                <div className="order-last mt-3 sm:order-none sm:mt-0">
-                  <ContrasenaInicial />
-                  <AvisoAccesos list={list} center={center} onHecho={load} />
-                </div>
                 {centers.length > 1 && list.some(sinCentro) && (
                   <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[12.5px] text-amber-200">
                     <AlertCircle size={13} className="shrink-0" />
@@ -1618,9 +1731,12 @@ Cancelar: no hacer nada.`)) {
                     <button onClick={() => setAviso('')} aria-label="Cerrar" className="shrink-0 text-emerald-300/70 hover:text-emerald-200"><X size={14} /></button>
                   </div>
                 )}
-                {/* Solo los que tienen a alguien (o el que está puesto, para poder quitarlo). «Bajas», al final. */}
-                {(faltas.some((f) => f.n > 0 || f.id === filtro) || conChipBajas) && (
-                  <div role="group" aria-label={t('drv.filtros')} className="mb-3 flex flex-wrap items-center gap-2">
+                {/* Solo los que tienen a alguien (o el que está puesto, para poder quitarlo). «Bajas», al final; y, a la
+                    derecha, «Más opciones» (las contraseñas), siempre. */}
+                {(!estrecho || faltas.some((f) => f.n > 0 || f.id === filtro) || conChipBajas) && (
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  {(faltas.some((f) => f.n > 0 || f.id === filtro) || conChipBajas) && (
+                  <div role="group" aria-label={t('drv.filtros')} className="flex flex-wrap items-center gap-2">
                     {faltas.filter((f) => f.n > 0 || f.id === filtro).map((f) => (
                       <button key={f.id} aria-pressed={filtro === f.id}
                         title={f.id === 'app' ? t('drv.f.sinAppAyuda') : undefined}
@@ -1639,7 +1755,15 @@ Cancelar: no hacer nada.`)) {
                     )}
                     {chipBajas}
                   </div>
+                  )}
+                  {!estrecho && botonOpciones}
+                </div>
                 )}
+                {/* Las dos contraseñas, montadas siempre (ver `verOpciones`): plegadas, no se ven ni ocupan sitio. */}
+                <div id="opciones-conductores" data-testid="opciones-conductores" hidden={!verOpciones}>
+                  <ContrasenaInicial />
+                  <AvisoAccesos list={list} center={center} onHecho={load} />
+                </div>
                 {filtro === 'app' && filtroVivo && (
                   <p data-testid="ayuda-sin-app" className="mb-3 text-[12.5px] text-dark-400">{t('drv.f.sinAppAyuda')}</p>
                 )}
@@ -1649,9 +1773,10 @@ Cancelar: no hacer nada.`)) {
                     Pulsa otra vez «Bajas» para volver a las activas.
                   </p>
                 )}
-                <TablaConductores list={vistos} accounts={enBajas ? [] : accounts} cuentasOk={cuentasOk && !enBajas}
+                <TablaConductores list={vistos} columnas={columnas} accounts={enBajas ? [] : accounts} cuentasOk={cuentasOk && !enBajas}
                   conIdReparto={conIdReparto && !enBajas} deBaja={enBajas} appInfo={enBajas ? null : appInfo}
-                  onAbrir={(d) => setModal({ driver: d, deBaja: enBajas })} />
+                  onAbrir={(d) => setModal({ driver: d, deBaja: enBajas })}
+                  accesos={enBajas ? null : accesos} onAcceso={setDialogoAcceso} junto={estrecho ? botonOpciones : null} />
               </div>
       )}
 
@@ -1659,6 +1784,15 @@ Cancelar: no hacer nada.`)) {
       {tab === 'ranking' && <ScoringView center={center} />}
 
       {tab === 'fichas' && <SaludFichas onCambio={load} />}
+
+      {dialogoAcceso && (
+        <DialogoAcceso c={dialogoAcceso} empresa={empresaAcceso} onCerrar={() => setDialogoAcceso(null)}
+          onCambio={(acceso) => {
+            const fila = { ...dialogoAcceso, acceso }
+            setDialogoAcceso(fila)
+            setAccesos((m) => ({ ...(m || {}), [fila.driver_id]: fila }))
+          }} />
+      )}
 
       {/* Modal */}
       {modal && (
@@ -1819,13 +1953,13 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, deBaja =
   const [cl, cc] = CONTRATO[driver?.contrato] || []
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={onClose}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
       {/* Panel — mitad de pantalla */}
       <div
-        className="relative z-10 flex w-full max-w-2xl flex-col rounded-2xl border border-dark-700 bg-dark-900 shadow-2xl shadow-black/50 overflow-hidden"
+        className="relative z-10 flex w-full max-w-2xl flex-col ventana rounded-2xl overflow-hidden"
         style={{ maxHeight: '85vh' }}
         onClick={e => e.stopPropagation()}
       >
@@ -1844,7 +1978,7 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, deBaja =
                 <div className="h-10 w-10 overflow-hidden rounded-full">
                   {previewUrl
                     ? <img src={previewUrl} alt="" className="h-full w-full object-cover" />
-                    : <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${avatarGrad(driver.name)} text-sm font-bold text-white`}>{initials(driver.name)}</div>}
+                    : <div className={`flex h-full w-full items-center justify-center ${AVATAR_LISO} text-sm font-bold`}>{initials(driver.name)}</div>}
                 </div>
                 <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
                   {photoBusy ? <Loader2 size={14} className="animate-spin text-white" /> : <Camera size={14} className="text-white" />}
@@ -1907,8 +2041,8 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, deBaja =
               {/* Tags */}
               {(cc || nc) && (
                 <div className="flex flex-wrap gap-2 mb-6">
-                  {cc && <span className={`rounded-full px-3 py-1 text-xs font-semibold ${cc}`}>{cl}</span>}
-                  {nc && <span className={`rounded-full px-3 py-1 text-xs font-semibold ${nc}`}>{nl}</span>}
+                  {cc && <span className={`rounded-full border border-dark-700 px-3 py-1 text-xs font-semibold ${cc}`}>{cl}</span>}
+                  {nc && <span className={`rounded-full border border-dark-700 px-3 py-1 text-xs font-semibold ${nc}`}>{nl}</span>}
                 </div>
               )}
 
@@ -2178,7 +2312,7 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, deBaja =
               type="submit"
               form="driver-form"
               disabled={busy}
-              className="flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-semibold text-brand-tinta shadow-lg shadow-brand-500/25 hover:bg-brand-600 disabled:opacity-50 transition-colors"
+              className="btn-primary flex items-center gap-2 px-5"
             >
               {busy ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
               {busy ? t('ui.saving') : t('ui.save')}

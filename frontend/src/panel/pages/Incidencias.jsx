@@ -55,8 +55,8 @@ function IncModal({ inc, vehicles, onSave, onClose }) {
   }, [onClose])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative mx-4 w-full max-w-lg rounded-2xl border border-dark-700 bg-dark-900 p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="relative mx-4 w-full max-w-lg ventana rounded-2xl p-6" onClick={e => e.stopPropagation()}>
         <button onClick={onClose} className="absolute right-4 top-4 rounded-lg p-1.5 text-dark-300 hover:bg-dark-800 hover:text-white transition"><X size={15} /></button>
 
         <h2 className="mb-5 text-base font-bold text-dark-50">{isNew ? t('inc.new') : t('inc.edit')}</h2>
@@ -126,8 +126,8 @@ function IncModal({ inc, vehicles, onSave, onClose }) {
 function DelModal({ onConfirm, onClose }) {
   const { t } = useT()
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="mx-4 w-full max-w-sm rounded-2xl border border-dark-700 bg-dark-900 p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="mx-4 w-full max-w-sm ventana rounded-2xl p-6" onClick={e => e.stopPropagation()}>
         <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/15">
           <Trash2 size={20} className="text-red-400" />
         </div>

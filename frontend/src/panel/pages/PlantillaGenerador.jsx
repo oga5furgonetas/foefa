@@ -13,6 +13,7 @@ import ElegirNave from '../components/ElegirNave'
 import { API_BASE as API } from '../../lib/apiBase'
 import { useT, LANG_LOCALE } from '../../i18n'
 import { lista } from '../../lib/lista'
+import { usePlan } from '../../lib/usePlan'
 
 /* La plantilla del día: la hoja de salida (ruta, conductor, móvil, vehículo y
    horas) que la oficina monta cada mañana. Viene de FlotaDSP, donde dos
@@ -216,6 +217,8 @@ function diaHojaIso(fecha) {
 /* ── Componente principal ── */
 export default function PlantillaGenerador() {
   const { center } = useOutletContext()
+  const { billing } = usePlan()
+  const conIA = billing?.ia !== false
   const { t } = useT()
 
   const [rutasList, setRutasList] = useState([])
@@ -828,6 +831,9 @@ export default function PlantillaGenerador() {
             </div>
           )}
 
+          {/* Leer lo subido o pegado (POST /tools/plantilla-extraer) lo hace la IA: una cuenta sin ella
+              (`ia: false` en /org/billing, CONTRATO R10) empieza desde la asignación o en blanco. */}
+          {conIA && (<>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
               <MultiDropZone
@@ -871,18 +877,19 @@ export default function PlantillaGenerador() {
               <span>{hayRutas ? (hayVeh ? t('pg.infoCompleto') : t('pg.infoSoloRutas')) : t('pg.infoSolo')}</span>
             </div>
           )}
+          </>)}
 
           {err && <ErrBanner msg={err} />}
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
             {noCenter && <p className="text-xs text-amber-400">{t('pg.avisoCentro')}</p>}
-            <div className="ml-auto">
+            {conIA && <div className="ml-auto">
               <button onClick={extraer} disabled={(!hayVeh && !hayRutas) || loading} className="btn-primary flex items-center gap-2 disabled:opacity-40">
                 {loading
                   ? <><Loader2 size={16} className="animate-spin" /> {t('pg.analizando')}</>
                   : <><FileSpreadsheet size={16} /> {hayRutas && hayVeh ? t('pg.extraerCompleto') : t('pg.extraerPlat')}</>}
               </button>
-            </div>
+            </div>}
           </div>
         </>
       )}

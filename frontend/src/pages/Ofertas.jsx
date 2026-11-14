@@ -6,6 +6,7 @@ import {
 import { API_BASE } from '../lib/apiBase'
 import RopaCartel from './RopaCartel'
 import { MARCA } from '../marca'
+import { useTitulo } from '../lib/titulo'
 
 /* LAS OFERTAS ABIERTAS — la página a la que llega quien busca trabajo.
    ══════════════════════════════════════════════════════════════════════════
@@ -28,6 +29,7 @@ export default function Ofertas() {
   const [err, setErr] = useState('')
   const [ciudad, setCiudad] = useState('')
   const [jornada, setJornada] = useState('')
+  useTitulo('Ofertas de empleo')
 
   useEffect(() => {
     axios.get(`${API_BASE}/empleo/publicas`)
