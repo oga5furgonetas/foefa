@@ -40,7 +40,9 @@ async def _coinciden(center=None, user=MARTA):
     c = dia["cuentas"]
     # `avisar` (R7, tercera tanda) va aparte: lo prueba test_tanda3_servidor_flota.py.
     assert isinstance(pen.pop("avisar"), bool)
-    assert pen == {"fecha": DIA, "pendientes": c["sin_repasar"] + c["a_medias"]}, (pen, c)
+    assert pen == {"fecha": DIA, "pendientes": c["sin_repasar"] + c["a_medias"],
+                   "revisiones": c["revisiones"] - c["sin_lados"], "repasadas": c["repasadas"],
+                   "golpes": c["golpes"]}, (pen, c)
     return pen["pendientes"]
 
 

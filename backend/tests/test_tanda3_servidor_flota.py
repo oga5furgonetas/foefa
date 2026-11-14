@@ -206,7 +206,7 @@ def menu(t, monkeypatch):
 async def test_avisar_no_persigue_a_quien_usa_revision_rapida(menu):
     menu["inspections"].docs.append(revision("r14", V, "drv-ana", marca(14)))
     r = await server.repaso_pendientes(center=None, user=MARTA)
-    assert r == {"fecha": "2026-11-14", "pendientes": 1, "avisar": False}
+    assert r == {"fecha": "2026-11-14", "pendientes": 1, "avisar": False, "revisiones": 1, "repasadas": 0, "golpes": 0}
     # En cuanto alguien da un veredicto, sí, y para siempre (aunque se deshaga).
     await marcar("r14", 1, "igual")
     assert (await server.repaso_pendientes(center=None, user=MARTA))["avisar"] is True

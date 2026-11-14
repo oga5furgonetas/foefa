@@ -17307,12 +17307,22 @@ async def repaso_pendientes(center: Optional[str] = None, user: dict = Depends(r
     await _repaso_pantalla(user, "repaso")
     hoy = _dia_negocio()
     q, _qv = await _repaso_consulta_dia(user, hoy, (center or "").strip())
-    pendientes = 0
+    pendientes = revisiones = repasadas = golpes = 0
     # Los mismos campos que /repaso/dia (lo que necesita `_repaso_estado`), sin buscar las anteriores.
     async for r in db.inspections.find(q, _REPASO_CAMPOS):
-        if _repaso_estado(r)[0] in ("sin_repasar", "a_medias"):
+        estado, c = _repaso_estado(r)
+        if estado == "sin_lados":
+            continue
+        revisiones += 1
+        golpes += c["golpes"]
+        if estado == "repasada":
+            repasadas += 1
+        else:
             pendientes += 1
-    return {"fecha": hoy, "pendientes": pendientes, "avisar": await _repaso_avisar(user)}
+    # `revisiones` (las de hoy que se pueden repasar), `repasadas` y `golpes` (14-11-2026): con ellas el Inicio dice
+    # «31 de 48 · 2 golpes nuevos» sin pedir el día entero. Las mismas cuentas que /repaso/dia.
+    return {"fecha": hoy, "pendientes": pendientes, "avisar": await _repaso_avisar(user),
+            "revisiones": revisiones, "repasadas": repasadas, "golpes": golpes}
 
 
 # Empresas en las que alguien ya ha dado un veredicto en el Repaso (por base): una vez que sí, siempre sí.
