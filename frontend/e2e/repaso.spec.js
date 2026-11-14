@@ -166,6 +166,58 @@ test('Repaso · el fichero de ejemplo del servidor se pinta tal cual', async ({ 
   expect(fallos).toEqual([])
 })
 
+/* El fichero del servidor TAL CUAL, sin armar nada encima: los veredictos ya dados (con marcas sin microsegundos), el
+   golpe con su caja, «Ya apuntado» con ledger_id null (y una entrada de Revisión rápida sin golpe_id ni vista), la
+   furgoneta sin revisión con su asignada, y el lado de la otra furgoneta que no tiene foto anterior. */
+test('Repaso · el fichero del servidor: lo ya decidido, el golpe, «Ya apuntado» y el lado sin foto anterior', async ({ page }) => {
+  const fallos = vigilar(page)
+  const srv = await abrir(page, copia(FIXTURE))
+  const [r0, r1] = FIXTURE.revisiones
+  const hora = (iso) => new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+  // Cada pestaña lleva el veredicto que dio el servidor.
+  for (const l of r0.lados) await expect(tab(page, l.photo_index)).toHaveAttribute('data-veredicto', l.veredicto || '')
+  await expect(page.getByTestId('foto-hoy').getByTestId('sello-foto')).toContainText(r0.hora)
+  // «Ya apuntado»: una fila por entrada, aunque ninguna tenga ledger_id.
+  expect(r0.ya_apuntado.every((a) => a.ledger_id === null)).toBe(true)
+  await expect(page.getByTestId('ya-apuntado').locator('li')).toHaveCount(r0.ya_apuntado.length)
+  for (const a of r0.ya_apuntado) await expect(page.getByTestId('ya-apuntado')).toContainText(a.pieza)
+  // El golpe ya marcado: su pieza, quién y a qué hora, y su caja sobre la foto de hoy.
+  const conGolpe = r0.lados.find((l) => l.golpe)
+  await tab(page, conGolpe.photo_index).click()
+  const decidido = page.getByTestId('decidido')
+  await expect(decidido).toContainText(conGolpe.golpe.pieza)
+  await expect(decidido).toContainText(`Golpe apuntado por ${conGolpe.veredicto_por} a las ${hora(conGolpe.veredicto_at)}.`)
+  await expect(page.getByTestId('foto-hoy-caja')).toBeVisible()
+  // El que no se ve bien, igual.
+  const noSeVe = r0.lados.find((l) => l.veredicto === 'no_se_ve')
+  if (noSeVe) {
+    await tab(page, noSeVe.photo_index).click()
+    await expect(decidido).toContainText(`Marcado «no se ve bien» por ${noSeVe.veredicto_por} a las ${hora(noSeVe.veredicto_at)}.`)
+  }
+  // La furgoneta sin revisión, con a quién estaba asignada.
+  for (const v of FIXTURE.sin_revision) {
+    if (v.asignada_a?.nombre) await expect(page.getByTestId('sin-revision')).toContainText(`asignada a ${v.asignada_a.nombre}`)
+  }
+  // Se termina la primera (sus lados sin decidir) y pasa a la segunda furgoneta.
+  const pendientes = r0.lados.filter((l) => !l.veredicto)
+  await tab(page, pendientes[0].photo_index).click()
+  for (let i = 0; i < pendientes.length; i++) {
+    await botonIgual(page).click()
+    await expect.poll(() => srv.posts.length).toBe(i + 1)
+  }
+  expect(srv.posts.map((p) => `${p.id}:${p.body.photo_index}:${p.body.veredicto}`))
+    .toEqual(pendientes.map((l) => `${r0.id}:${l.photo_index}:igual`))
+  await expect(page.getByTestId('mesa').getByTestId('matricula').first()).toContainText(r1.vehiculo.matricula)
+  // El lado de la segunda sin foto anterior: punto de partida, sin «Antes».
+  const sinAnt = r1.lados.find((l) => !l.anterior)
+  expect(sinAnt, 'el fichero del servidor trae un lado sin foto anterior').toBeTruthy()
+  await tab(page, sinAnt.photo_index).click()
+  await expect(page.getByTestId('sin-anterior')).toHaveText('No hay foto anterior de este lado. Esta queda como punto de partida.')
+  await expect(page.getByTestId('foto-antes')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Tiene un golpe' })).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
 test('Repaso · el recorrido entero con el ratón, hasta «Repaso terminado»', async ({ page, baseURL }) => {
   const fallos = vigilar(page)
   const srv = await abrir(page, dia(baseURL))

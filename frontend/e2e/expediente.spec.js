@@ -18,6 +18,34 @@ const FOTOS = process.env.FOTOS_EXPEDIENTE || ''
 const RUTA = '/panel/vehiculos/veh-5678/expediente'
 const copia = () => JSON.parse(JSON.stringify(FIXTURE))
 
+/* Cada caso se arma desde el fichero del servidor, no desde un nombre, una pieza o una hora concretos: si el servidor
+   cambia el ejemplo, las pruebas siguen mirando lo mismo. Lo que se espera se calcula con las mismas reglas que la
+   pantalla: el día y la hora del servidor tal cual (sin pasar por la zona de quien mira). */
+const GOLPES = FIXTURE.golpes
+const NUEVOS = GOLPES.filter((g) => !g.ya_estaba)
+const YA = GOLPES.filter((g) => g.ya_estaba)
+const ATRIB = NUEVOS.find((g) => g.atribucion?.atribuible)
+const NO_ATRIB = NUEVOS.filter((g) => !g.atribucion?.atribuible)
+const VISTAS = ['frontal', 'trasera', 'lateral_izq', 'lateral_der']
+const NOMBRE_VISTA = { frontal: 'Frontal', trasera: 'Trasera', lateral_izq: 'Lateral izquierdo', lateral_der: 'Lateral derecho' }
+const GRAVEDAD = { leve: 'Leve', moderado: 'Moderado', grave: 'Grave', critico: 'Crítico' }
+const ESTADO = { abierto: 'Pendiente de reparar' }
+const MOTIVO = {
+  anterior_sin_repasar: 'Nadie marcó la foto anterior de este lado como «igual».',
+  sin_foto_anterior: 'No hay una foto anterior de este lado con la que compararla.',
+  ya_estaba: 'Ya estaba en la primera foto de este lado.',
+  sin_conductor: 'Las revisiones entre las dos fotos no tienen conductor apuntado.',
+}
+const dia = (f) => { const [y, m, d] = f.slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d) }
+const largo = (f) => new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }).format(dia(f))
+const sello = (x) => {
+  const d = dia(x.fecha)
+  const mes = new Intl.DateTimeFormat('es', { month: 'short' }).format(d).replace(/\./g, '').toUpperCase().slice(0, 4)
+  return `${String(d.getDate()).padStart(2, '0')} ${mes} ${d.getFullYear()} · ${x.hora}`
+}
+const dias = (n) => (n === 1 ? '1 día' : `${n} días`)
+const golpeDe = (page, g) => page.getByTestId('golpe').filter({ has: page.getByRole('heading', { name: g.pieza }) })
+
 function vigilar(page) {
   const fallos = []
   page.on('pageerror', (e) => fallos.push(e.message))
@@ -69,13 +97,18 @@ test.describe('El expediente en el panel', () => {
     await expect(hoja(page)).toBeVisible()
     await expect(hoja(page).getByRole('heading', { level: 1 })).toHaveText('Expediente del vehículo')
     await expect(page.getByTestId('empresa')).toHaveText('Transportes Ruiz, S. L.')
-    await expect(hoja(page).getByTestId('matricula')).toHaveText(/5678 KLM/)
-    await expect(hoja(page)).toContainText('Ford Transit Custom · renting hasta el 31 de marzo de 2027 · 48.210 km el 12 de noviembre de 2026')
-    await expect(page.getByTestId('periodo')).toHaveText('Desde la primera revisión, el 10 de noviembre de 2026, hasta la última, el 12 de noviembre de 2026.')
+    const v = FIXTURE.vehiculo
+    await expect(hoja(page).getByTestId('matricula')).toHaveText(new RegExp(v.matricula))
+    await expect(hoja(page)).toContainText(
+      `${v.modelo} · renting hasta el ${largo(v.fin_renting)} · ${new Intl.NumberFormat('es-ES').format(v.km)} km el ${largo(v.km_fecha)}`)
+    await expect(page.getByTestId('periodo')).toHaveText(
+      `Desde la primera revisión, el ${largo(FIXTURE.periodo.desde)}, hasta la última, el ${largo(FIXTURE.periodo.hasta)}.`)
+    // generado_at es UTC y se pinta en la hora de quien mira: el día fijo, la hora la que toque.
     await expect(page.getByTestId('generado')).toHaveText(/^Generado el 14 NOV 2026 · \d\d:00$/)
     const cifras = page.getByTestId('cifras')
-    for (const [n, txt] of [['3', 'revisiones'], ['2', 'conductores distintos'], ['2', 'golpes confirmados'], ['0', 'ya reparados']]) {
-      await expect(cifras.locator('div', { hasText: txt })).toContainText(n)
+    const c = FIXTURE.cuentas
+    for (const [n, txt] of [[c.revisiones, 'revisiones'], [c.conductores, 'conductores distintos'], [c.golpes, 'golpes confirmados'], [c.reparados, 'ya reparados']]) {
+      await expect(cifras.locator('div', { hasText: txt })).toHaveText(`${txt}${n}`)
     }
     // El orden del documento.
     const orden = await hoja(page).locator('section').evaluateAll((s) => s.map((x) => x.dataset.testid))
@@ -83,15 +116,16 @@ test.describe('El expediente en el panel', () => {
     // Un cuadradito por día, con el estado del servidor, y su leyenda.
     const dias = page.getByTestId('calendario').locator('[data-fecha]')
     expect(await dias.evaluateAll((d) => d.map((x) => `${x.dataset.fecha}:${x.dataset.estado}`)))
-      .toEqual(['2026-11-10:revisada', '2026-11-11:revisada', '2026-11-12:golpe'])
+      .toEqual(FIXTURE.calendario.map((x) => `${x.fecha}:${x.estado}`))
     await expect(page.getByTestId('bloque-calendario')).toContainText('Con revisión')
     await expect(page.getByTestId('bloque-calendario')).toContainText('Sin fotos')
     await expect(page.getByTestId('bloque-calendario')).toContainText('Aparece un golpe')
     // Cómo entró y cómo está: una foto por lado, con su nombre y su sello.
-    for (const [b, f] of [['bloque-entro', '10 NOV 2026 · 08:01'], ['bloque-esta', '12 NOV 2026 · 07:58']]) {
+    for (const [b, fotos] of [['bloque-entro', FIXTURE.como_entro.fotos], ['bloque-esta', FIXTURE.como_esta.fotos]]) {
       const bloque = page.getByTestId(b)
-      await expect(bloque.locator('figcaption')).toHaveText(['Frontal', 'Trasera', 'Lateral izquierdo', 'Lateral derecho'])
-      await expect(bloque.getByTestId('sello-foto').first()).toHaveText(f)
+      const orden = [...fotos].sort((x, y) => VISTAS.indexOf(x.vista) - VISTAS.indexOf(y.vista))
+      await expect(bloque.locator('figcaption')).toHaveText(orden.map((f) => NOMBRE_VISTA[f.vista]))
+      await expect(bloque.getByTestId('sello-foto')).toHaveText(orden.map(sello))
     }
     // Qué prueba y qué no, con ese sentido exacto.
     const prueba = page.getByTestId('bloque-prueba')
@@ -109,23 +143,30 @@ test.describe('El expediente en el panel', () => {
   })
 
   test('el golpe atribuible: sus dos fotos con su sello, la caja y quién la llevó entre las dos', async ({ page }) => {
+    expect(ATRIB, 'el fichero del servidor trae un golpe atribuible').toBeTruthy()
     await abrir(page)
-    const g = page.getByTestId('golpe')
+    // Arriba solo los que aparecen en el periodo; los que ya estaban van aparte.
+    await expect(page.getByTestId('golpe')).toHaveCount(NUEVOS.length)
+    const g = golpeDe(page, ATRIB)
     await expect(g).toHaveCount(1)
-    await expect(g.getByRole('heading')).toHaveText('Puerta lateral corredera izquierda · aparece el 12 de noviembre de 2026')
-    await expect(g).toContainText('Bollo con pintura saltada')
-    await expect(g.getByTestId('sello-foto')).toHaveText(['11 NOV 2026 · 08:03 · Ana L.', '12 NOV 2026 · 07:58 · Ana L.'])
+    await expect(g.getByRole('heading')).toHaveText(`${ATRIB.pieza} · aparece el ${largo(ATRIB.fecha)}`)
+    await expect(g).toContainText(ATRIB.descripcion)
+    const quien = ATRIB.atribucion.conductor.nombre
+    await expect(g.getByTestId('sello-foto')).toHaveText([
+      `${sello(ATRIB.anterior)} · ${ATRIB.anterior.conductor.nombre}`, `${sello(ATRIB)} · ${quien}`])
     await expect(g.locator('img')).toHaveCount(2)
     await expect(g.getByTestId('caja-golpe')).toHaveCount(1)
-    // La caja en su sitio: [410, 220, 640, 470] en tanto por mil de la foto.
+    // La caja en su sitio: box_2d = [ymin, xmin, ymax, xmax] en tanto por mil de la foto.
+    const [y0, x0, y1, x1] = ATRIB.box_2d
     const caja = await g.getByTestId('caja-golpe').evaluate((c) => c.getAttribute('style'))
-    expect(caja).toContain('top: 41%'); expect(caja).toContain('left: 22%')
-    expect(caja).toContain('height: 23%'); expect(caja).toContain('width: 25%')
-    await expect(g.getByTestId('atribucion')).toHaveText('Entre las dos fotos la llevóAna L. (1 día)')
-    await expect(g).toContainText('Moderado')
-    await expect(g).toContainText('Marta R., el 12 de noviembre de 2026')
-    await expect(g.getByTestId('estado')).toContainText('Pendiente de reparar')
-    await expect(g.getByTestId('coste')).toHaveCount(0)
+    expect(caja).toContain(`top: ${y0 / 10}%`); expect(caja).toContain(`left: ${x0 / 10}%`)
+    expect(caja).toContain(`height: ${(y1 - y0) / 10}%`); expect(caja).toContain(`width: ${(x1 - x0) / 10}%`)
+    await expect(g.getByTestId('atribucion')).toHaveText(`Entre las dos fotos la llevó${quien} (${dias(ATRIB.atribucion.dias)})`)
+    await expect(g).toContainText(GRAVEDAD[ATRIB.gravedad])
+    // confirmado_at puede venir sin microsegundos: se lee igual.
+    await expect(g).toContainText(`${ATRIB.confirmado_por}, el ${largo(ATRIB.confirmado_at)}`)
+    await expect(g.getByTestId('estado')).toHaveText(`Estado${ESTADO[ATRIB.reparacion.estado]}`)
+    await expect(g.getByTestId('coste')).toHaveCount(ATRIB.reparacion.coste == null ? 0 : 1)
     // Nunca «quién dio el golpe».
     await expect(hoja(page)).not.toContainText(/culpable|responsable|dio el golpe/i)
   })
@@ -141,18 +182,20 @@ test.describe('El expediente en el panel', () => {
   for (const [motivo, extra, texto] of MOTIVOS) {
     test(`sin conductor atribuible por «${motivo}»: lo dice y da el motivo en llano`, async ({ page }) => {
       const fallos = vigilar(page)
+      // El golpe atribuible del fichero, cambiado solo en su atribución.
       const d = copia()
-      const g = d.golpes[1]
+      const g = d.golpes.find((x) => x.id === ATRIB.id)
       g.atribucion = { atribuible: false, motivo, conductor: null, conductores: [], ...extra }
       if (motivo === 'sin_foto_anterior') { g.anterior = null; g.vista = null }
       await abrir(page, { datos: d })
-      const el = page.getByTestId('golpe')
+      const el = golpeDe(page, g)
+      await expect(el).toHaveCount(1)
       await expect(el.getByTestId('atribucion')).toContainText('Sin conductor atribuible')
       await expect(el.getByTestId('motivo')).toHaveText(texto)
-      await expect(el).not.toContainText('la llevó Ana')
-      await expect(el).not.toContainText('Entre las dos fotos la llevó' + 'Ana')
+      // La línea entera: la etiqueta de «sin atribuir», no la de «la llevó <nombre>».
+      await expect(el.getByTestId('atribucion')).toHaveText(`Quién la llevabaSin conductor atribuible${texto}`)
       // Sin atribuir, el sello de la foto del golpe no lleva nombre.
-      await expect(el.getByTestId('sello-foto').last()).toHaveText('12 NOV 2026 · 07:58')
+      await expect(el.getByTestId('sello-foto').last()).toHaveText(sello(g))
       if (motivo === 'sin_foto_anterior') {
         await expect(el).toContainText('No hay foto anterior de este lado')
         await expect(el.locator('img')).toHaveCount(1)
@@ -162,27 +205,61 @@ test.describe('El expediente en el panel', () => {
     })
   }
 
+  test('los golpes del fichero que no se atribuyen: «Sin conductor atribuible», su motivo y ningún nombre en la foto del golpe', async ({ page }) => {
+    expect(NO_ATRIB.length, 'el fichero del servidor trae un golpe nuevo sin atribuir').toBeGreaterThan(0)
+    await abrir(page)
+    for (const g of NO_ATRIB) {
+      const el = golpeDe(page, g)
+      await expect(el).toHaveCount(1)
+      await expect(el.getByTestId('atribucion')).toContainText('Sin conductor atribuible')
+      await expect(el.getByTestId('motivo')).toHaveText(MOTIVO[g.atribucion.motivo])
+      await expect(el.getByTestId('atribucion')).toHaveText(`Quién la llevabaSin conductor atribuible${MOTIVO[g.atribucion.motivo]}`)
+      await expect(el.getByTestId('sello-foto').last()).toHaveText(sello(g))
+      await expect(el.getByTestId('estado')).toHaveText(`Estado${ESTADO[g.reparacion.estado]}`)
+    }
+  })
+
   test('el golpe que ya estaba sale en «Ya estaba al empezar», sin atribuir a nadie', async ({ page }) => {
+    expect(YA.length, 'el fichero del servidor trae un golpe que ya estaba').toBeGreaterThan(0)
     await abrir(page)
     const ya = page.getByTestId('golpe-ya')
-    await expect(ya).toHaveCount(1)
-    await expect(ya.getByRole('heading')).toHaveText('Paragolpes trasero · en la primera foto de este lado, el 10 de noviembre de 2026')
-    await expect(ya.getByTestId('atribucion')).toContainText('Sin conductor atribuible')
-    await expect(ya.getByTestId('motivo')).toHaveText('Ya estaba en la primera foto de este lado.')
-    await expect(ya.getByTestId('caja-golpe')).toHaveCount(1)
+    await expect(ya).toHaveCount(YA.length)
+    const g = YA[0]
+    const el = ya.filter({ has: page.getByRole('heading', { name: g.pieza }) })
+    await expect(el.getByRole('heading')).toHaveText(`${g.pieza} · en la primera foto de este lado, el ${largo(g.fecha)}`)
+    await expect(el.getByTestId('atribucion')).toContainText('Sin conductor atribuible')
+    await expect(el.getByTestId('motivo')).toHaveText(MOTIVO.ya_estaba)
+    await expect(el.getByTestId('caja-golpe')).toHaveCount(g.box_2d ? 1 : 0)
+    await expect(el.getByTestId('sello-foto')).toHaveText(sello(g))
     // No sale dos veces: arriba solo el que aparece en el periodo, y una línea que lo explica.
     await expect(page.getByTestId('bloque-golpes')).toContainText('Los que ya estaban en la primera foto de su lado van aparte')
     await expect(page.getByTestId('bloque-golpes').getByTestId('golpe-ya')).toHaveCount(0)
   })
 
-  test('el estado de cada golpe: en el taller con su orden, reparado con su fecha y su coste', async ({ page }) => {
+  test('el estado de cada golpe tal como viene en el fichero: reparado con su fecha y su coste', async ({ page }) => {
+    const rep = GOLPES.find((g) => g.reparacion?.estado === 'reparado' && g.reparacion.reparado_at && g.reparacion.coste != null)
+    expect(rep, 'el fichero del servidor trae un golpe reparado con su coste').toBeTruthy()
+    await abrir(page)
+    const el = page.getByTestId(rep.ya_estaba ? 'golpe-ya' : 'golpe').filter({ has: page.getByRole('heading', { name: rep.pieza }) })
+    await expect(el.getByTestId('estado')).toHaveText(`EstadoReparado el ${largo(rep.reparacion.reparado_at)}`)
+    const euros = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(rep.reparacion.coste)
+    await expect(el.getByTestId('coste')).toHaveText(`Coste de la reparación${euros}`)
+    // Las cifras de arriba cuentan los reparados del servidor.
+    await expect(page.getByTestId('cifras').locator('div', { hasText: 'ya reparados' })).toHaveText(`ya reparados${FIXTURE.cuentas.reparados}`)
+  })
+
+  test('el estado de cada golpe, cambiando una copia: el atribuible reparado, el que ya estaba en el taller con su orden', async ({ page }) => {
+    const ya = YA[0]
     const d = copia()
-    d.golpes[1].reparacion = { estado: 'reparado', orden_numero: 412, reparado_at: '2026-11-13T10:00:00+00:00', coste: 380 }
-    d.golpes[0].reparacion = { estado: 'en_taller', orden_numero: 371, reparado_at: null, coste: null }
+    d.golpes.find((x) => x.id === ATRIB.id).reparacion = { estado: 'reparado', orden_numero: 412, reparado_at: '2026-11-13T10:00:00+00:00', coste: 380 }
+    d.golpes.find((x) => x.id === ya.id).reparacion = { estado: 'en_taller', orden_numero: 371, reparado_at: null, coste: null }
     await abrir(page, { datos: d })
-    await expect(page.getByTestId('golpe').getByTestId('estado')).toHaveText('EstadoReparado el 13 de noviembre de 2026')
-    await expect(page.getByTestId('golpe').getByTestId('coste')).toHaveText(/Coste de la reparación380,00\s€/)
-    await expect(page.getByTestId('golpe-ya').getByTestId('estado')).toHaveText('EstadoEn el taller (orden 371)')
+    const elYa = page.getByTestId('golpe-ya').filter({ has: page.getByRole('heading', { name: ya.pieza }) })
+    const g = golpeDe(page, ATRIB)
+    await expect(g.getByTestId('estado')).toHaveText('EstadoReparado el 13 de noviembre de 2026')
+    await expect(g.getByTestId('coste')).toHaveText(/Coste de la reparación380,00\s€/)
+    await expect(elYa.getByTestId('estado')).toHaveText('EstadoEn el taller (orden 371)')
+    await expect(elYa.getByTestId('coste')).toHaveCount(0)
   })
 
   test('sin golpes confirmados: lo dice en una línea, sigue enseñando cómo entró y cómo está, y avisa del Repaso fuera de la hoja', async ({ page }) => {

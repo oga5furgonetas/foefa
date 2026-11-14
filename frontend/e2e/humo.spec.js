@@ -1,6 +1,6 @@
 /* global Buffer */
 import { test, expect } from '@playwright/test'
-import { simularApi, entrarComoAdmin } from './api-simulada.js'
+import { simularApi, entrarComoAdmin, EJEMPLO_REPASO, EJEMPLO_EXPEDIENTE } from './api-simulada.js'
 
 /* PRUEBAS DE HUMO — recorren TODA la aplicación.
 
@@ -13,7 +13,8 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
 
 const PANEL = [
   ['', 'Dashboard'], ['mi-dia', 'Mi día'], ['chat', 'Chat'], ['centro-ia', 'Centro de IA'],
-  ['vehiculos', 'Vehículos'], ['estado-flota', 'Estado de la flota'], ['inspecciones', 'Inspecciones'],
+  ['vehiculos', 'Vehículos'], ['repaso', 'Repaso'], [`vehiculos/${EJEMPLO_EXPEDIENTE.vehiculo.id}/expediente`, 'Expediente del vehículo'],
+  ['estado-flota', 'Estado de la flota'], ['inspecciones', 'Inspecciones'],
   ['revision', 'Revisión rápida'], ['origen-danos', 'Origen de daños'],
   ['vencimientos', 'Vencimientos'], ['aparcamiento', 'Aparcamiento'],
   ['incidencias', 'Incidencias'], ['ordenes', 'Órdenes de taller'],
@@ -36,7 +37,7 @@ const PANEL = [
 const PUBLICAS = [
   ['/', 'Portada (empresas)'], ['/login', 'Login'], ['/planes', 'Planes'], ['/empresas', 'Empresas'], ['/invita?ref=ABCDE1', 'Landing de invitación'],
   ['/registro', 'Registro'], ['/contacto', 'Contacto'], ['/iphone', 'Guía de iPhone'],
-  ['/security', 'Seguridad'], ['/peritaje-tecnico', 'Peritaje'],
+  ['/security', 'Seguridad'], ['/peritaje-tecnico', 'Peritaje'], ['/expediente-ejemplo', 'Ejemplo de expediente'],
   ['/verify', 'Comprobar un informe'], ['/privacidad', 'Privacidad'],
   ['/terminos', 'Términos'], ['/encargo', 'Encargo del tratamiento'], ['/cookies', 'Cookies'],
   ['/aviso-legal', 'Aviso legal'], ['/conductor', 'Portal del conductor'],
@@ -109,6 +110,32 @@ test.describe('Panel de administración', () => {
       expect(fallos, `${nombre}: ${fallos.join(' | ')}`).toHaveLength(0)
     })
   }
+})
+
+/* «Antes del perito» (14-11-2026) con datos: el repaso y el expediente con los ficheros de ejemplo que escribe el
+   servidor (api-simulada.js los sirve con «lleno»). Arriba, con «vacio», se ven sin nada. */
+test.describe('Antes del perito, con los ejemplos del servidor', () => {
+  test('Repaso con el día de ejemplo carga sin errores y enseña la primera furgoneta', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'lleno')
+    await page.goto('/panel/repaso', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByTestId('mesa').getByTestId('matricula').first()).toContainText(EJEMPLO_REPASO.revisiones[0].vehiculo.matricula)
+    await expect(page.getByTestId('foto-hoy')).toBeVisible()
+    expect(await page.getByText(/Algo ha fallado|Error inesperado/i).count()).toBe(0)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('Expediente del vehículo con el ejemplo carga sin errores y enseña la hoja', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'lleno')
+    await page.goto(`/panel/vehiculos/${EJEMPLO_EXPEDIENTE.vehiculo.id}/expediente`, { waitUntil: 'domcontentloaded' })
+    await expect(page.getByTestId('expediente')).toBeVisible()
+    await expect(page.getByTestId('expediente').getByTestId('matricula')).toContainText(EJEMPLO_EXPEDIENTE.vehiculo.matricula)
+    expect(await page.getByText(/Algo ha fallado|Error inesperado/i).count()).toBe(0)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
 })
 
 test.describe('Páginas públicas', () => {

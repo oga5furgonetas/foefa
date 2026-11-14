@@ -89,6 +89,8 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
   const [odoManual, setOdoManual] = useState('')
   // El lector esta caido (cuota/servicio): no es culpa de la foto del conductor.
   const [odoServicioCaido, setOdoServicioCaido] = useState(false)
+  // La cuenta no tiene lectura automática (`sin_lector`, 14-11-2026): los km se escriben a mano, y eso no es un fallo.
+  const [odoSinLector, setOdoSinLector] = useState(false)
   const [checklist, setChecklist] = useState({})
   const [checklistPhotos, setChecklistPhotos] = useState({})
   // Rueda de repuesto: 'si' | 'no' | 'no_se'. No es un estado del checklist
@@ -160,7 +162,9 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
       }
       setPhotoErrors((errs) => { const next = { ...errs }; delete next[slotId]; return next })
       setPhotos((p) => ({ ...p, [slotId]: blob }))
-      toast.success(r.data?.checked ? '✅ Foto revisada' : '📷 Foto capturada')
+      // «Revisada» solo si alguien la ha mirado de verdad (`checked`); si no, solo se dice que está hecha, sin el verde.
+      if (r.data?.checked) toast.success('✅ Foto revisada')
+      else toast.info('📷 Foto capturada')
     } catch {
       setPhotos((p) => ({ ...p, [slotId]: blob }))
     }
@@ -172,7 +176,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
     e.target.value = ''
     if (!file) return
     const blob = await compressImage(file, 1280, 0.8)
-    setOdoBusy(true); setOdoError(''); setOdoKm(null); setOdoManual(''); setOdoServicioCaido(false)
+    setOdoBusy(true); setOdoError(''); setOdoKm(null); setOdoManual(''); setOdoServicioCaido(false); setOdoSinLector(false)
     try {
       const r = await readOdometer(vehicleId, blob)
       const d = r.data || {}
@@ -186,9 +190,15 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
         // haya un número válido no se puede enviar la auditoría.
         setOdoPhoto(blob); setOdoBloqueado(true)
         setOdoServicioCaido(!!d.servicio_caido)
-        setOdoError(d.motivo || 'No se pudo leer el cuentakilómetros.')
-        toast.error(d.servicio_caido ? '⚠️ Lector no disponible — pon los km a mano'
-                                     : '❌ Los km no se han podido leer')
+        if (d.sin_lector) {
+          // Sin lectura automática en esta cuenta: se piden los km, sin aviso de fallo.
+          setOdoSinLector(true)
+          setOdoError(t('dr.odo.escribeKm'))
+        } else {
+          setOdoError(d.motivo || 'No se pudo leer el cuentakilómetros.')
+          toast.error(d.servicio_caido ? '⚠️ Lector no disponible — pon los km a mano'
+                                       : '❌ Los km no se han podido leer')
+        }
       }
     } catch {
       // Un fallo de red NO puede colar una auditoría sin km.
@@ -514,6 +524,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                   disabled={odoBusy}
                   className={`relative flex h-28 w-full flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl border-2 border-dashed transition-all ${
                     odoKmFinal > 0 ? 'border-emerald-500/50 bg-emerald-500/5' :
+                    odoSinLector  ? 'border-dark-700' :
                     odoError      ? 'border-amber-500/50 bg-amber-500/5' :
                                     'border-brand-500/30 bg-brand-500/5 hover:border-brand-500/60'
                   }`}
@@ -527,13 +538,16 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                     <>
                       <img src={getBlobUrl(odoPhoto)} className="absolute inset-0 h-full w-full object-cover" alt={t('dr.odo.alt')} />
                       <div className="absolute inset-0 bg-black/40" />
-                      <div className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full ${odoKmFinal > 0 ? 'bg-emerald-500' : 'bg-amber-500'}`}>
-                        {odoKmFinal > 0 ? <Check size={13} className="text-white" />
-                                        : <span className="text-[13px] font-black text-white">!</span>}
-                      </div>
+                      {(odoKmFinal > 0 || !odoSinLector) && (
+                        <div className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full ${odoKmFinal > 0 ? 'bg-emerald-500' : 'bg-amber-500'}`}>
+                          {odoKmFinal > 0 ? <Check size={13} className="text-white" />
+                                          : <span className="text-[13px] font-black text-white">!</span>}
+                        </div>
+                      )}
                       <div className={`absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-dark-900/90 px-4 py-1 text-xs font-black ring-1 ${
-                        odoKmFinal > 0 ? 'text-emerald-300 ring-emerald-500/30' : 'text-amber-300 ring-amber-500/30'}`}>
-                        {odoKmFinal > 0 ? `${odoKmFinal.toLocaleString()} km` : t('dr.kmSinLeer')}
+                        odoKmFinal > 0 ? 'text-emerald-300 ring-emerald-500/30'
+                          : odoSinLector ? 'text-dark-100 ring-dark-700' : 'text-amber-300 ring-amber-500/30'}`}>
+                        {odoKmFinal > 0 ? `${odoKmFinal.toLocaleString()} km` : odoSinLector ? t('dr.odo.kmAMano') : t('dr.kmSinLeer')}
                       </div>
                     </>
                   ) : (
@@ -545,8 +559,9 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                   )}
                 </button>
                 {odoError && (
-                  <div className="mt-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
-                    <p className="text-[11px] font-semibold leading-snug text-amber-200">{odoError}</p>
+                  <div className={`mt-1.5 rounded-xl border px-3 py-2 ${odoSinLector ? 'border-dark-700 bg-dark-900/60' : 'border-amber-500/30 bg-amber-500/10'}`}
+                    data-testid="odo-aviso">
+                    <p className={`text-[11px] font-semibold leading-snug ${odoSinLector ? 'text-dark-100' : 'text-amber-200'}`}>{odoError}</p>
                     {!odoServicioCaido && (
                       <button onClick={() => odoRef.current?.click()}
                         className="mt-2 w-full rounded-lg bg-amber-500/20 py-2 text-[11px] font-bold text-amber-200 ring-1 ring-amber-500/40 active:scale-[0.98]">
@@ -557,11 +572,13 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                     {/* A mano SOLO cuando la foto no ha servido: con el tope del servidor si contestó, y si no, lo que
                         marque el cuadro (el servidor lo juzga al subir). */}
                     {odoBloqueado && (
-                      <div className="mt-3 border-t border-amber-500/20 pt-2.5">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-amber-400/80">
-                          O escribe los km a mano
-                        </p>
-                        <p className="mt-0.5 text-[10px] leading-snug text-amber-300/70">
+                      <div className={odoSinLector ? 'mt-2' : 'mt-3 border-t border-amber-500/20 pt-2.5'}>
+                        {!odoSinLector && (
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-400/80">
+                            O escribe los km a mano
+                          </p>
+                        )}
+                        <p className={`mt-0.5 text-[10px] leading-snug ${odoSinLector ? 'text-dark-400' : 'text-amber-300/70'}`}>
                           {odoLimites ? (<>
                             Esta furgoneta tenía <b>{odoLimites.actual.toLocaleString()} km</b>.
                             {' '}Solo se admite entre {odoLimites.min.toLocaleString()} y{' '}
@@ -574,7 +591,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                           onChange={(e) => setOdoManual(e.target.value.replace(/\D/g, '').slice(0, 7))}
                           placeholder={odoLimites ? `${odoLimites.actual.toLocaleString()}` : 'km del cuadro'}
                           className={`mt-2 w-full rounded-lg border-2 bg-dark-900/60 px-3 py-2.5 text-center text-lg font-black tabular-nums text-dark-50 outline-none ${
-                            odoManual === '' ? 'border-amber-500/30'
+                            odoManual === '' ? (odoSinLector ? 'border-dark-700' : 'border-amber-500/30')
                               : odoManualValido ? 'border-emerald-500/60' : 'border-red-500/60'
                           }`}
                         />

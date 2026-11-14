@@ -8,7 +8,65 @@
      · "lleno"   — flota con datos, para que se pinten tablas y tarjetas
 */
 
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
 const HOY = new Date().toISOString().slice(0, 10)
+
+/* «Antes del perito» (14-11-2026): el repaso del día y el expediente responden con los ficheros de ejemplo que
+   escribe el servidor con sus rutas de verdad (backend/tests/test_perito_fixtures.py). Se leen del disco en cada
+   prueba, no se copian aquí: si el servidor cambia la forma, el humo la ve. */
+const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures')
+const ejemplo = (nombre) => JSON.parse(fs.readFileSync(path.join(FIXTURES, nombre), 'utf8'))
+const REPASO_DIA = ejemplo('repaso-dia.json')
+const EXPEDIENTE = ejemplo('expediente.json')
+export const EJEMPLO_REPASO = REPASO_DIA
+export const EJEMPLO_EXPEDIENTE = EXPEDIENTE
+
+/* El repaso de una empresa recién dada de alta: la misma forma, sin nada. Con «vacio» el menú no lleva número. */
+function repasoVacio() {
+  return {
+    ...REPASO_DIA, fecha: HOY, es_hoy: true, center: null, revisiones: [], sin_revision: [],
+    cuentas: Object.fromEntries(Object.keys(REPASO_DIA.cuentas).map((k) => [k, 0])),
+  }
+}
+
+/* POST /inspections/{id}/repaso y DELETE /inspections/{id}/repaso/{n} (CONTRATO §B), sin memoria: contestan con la
+   forma del servidor sobre la revisión del ejemplo, o con su 404. */
+function repasoEscritura(metodo, ruta, cuerpo) {
+  const m = ruta.match(/\/inspections\/([^/]+)\/repaso(?:\/([^/]+))?$/)
+  if (!m || !['POST', 'DELETE'].includes(metodo) || (metodo === 'POST') === Boolean(m[2])) return null
+  const rev = REPASO_DIA.revisiones.find((r) => r.id === decodeURIComponent(m[1]))
+  if (!rev) return { status: 404, body: { detail: 'Revisión no encontrada' } }
+  const k = metodo === 'POST' ? Number(cuerpo?.photo_index) : Number(m[2])
+  const lado = rev.lados.find((l) => l.photo_index === k)
+  if (!lado) return { status: metodo === 'POST' ? 400 : 404, body: { detail: metodo === 'POST' ? 'Esa foto no es de la carrocería' : 'Ese lado no tiene veredicto' } }
+  const cuentas = (conVeredicto, golpes) => ({ lados: rev.lados.length, con_veredicto: conVeredicto, golpes })
+  const estado = (n) => (n === 0 ? 'sin_repasar' : n === rev.lados.length ? 'repasada' : 'a_medias')
+  const decididos = rev.lados.filter((l) => l.veredicto && l.photo_index !== k).length
+  const golpesOtros = rev.lados.filter((l) => l.golpe && l.photo_index !== k).length
+  if (metodo === 'DELETE') {
+    return { status: 200, body: {
+      ok: true, inspection_id: rev.id, photo_index: k, libro: lado.golpe ? { accion: 'borrado' } : null,
+      estado: estado(decididos), cuentas_revision: cuentas(decididos, golpesOtros),
+    } }
+  }
+  const v = cuerpo?.veredicto
+  const golpe = v !== 'golpe' ? null : {
+    golpe_id: `golpe-simulado-${rev.id}-${k}`, pieza: cuerpo.part,
+    // El servidor lo saca con _canon_panel; aquí basta la primera palabra de la pieza.
+    panel: String(cuerpo.part || '').split(' ')[0].toLowerCase() || null,
+    gravedad: cuerpo.severity, descripcion: cuerpo.description || null, box_2d: cuerpo.box_2d,
+    ya_estaba: !lado.anterior && Boolean(lado.vista), libro: { accion: 'nuevo', ledger_id: null },
+  }
+  return { status: 200, body: {
+    ok: true, inspection_id: rev.id,
+    lado: { ...lado, veredicto: v, veredicto_por: 'Admin Test', veredicto_at: new Date().toISOString(), golpe },
+    libro: golpe ? { accion: 'nuevo', ledger_id: null, pieza: golpe.pieza, panel: golpe.panel, desde: REPASO_DIA.fecha, golpe_id: golpe.golpe_id } : null,
+    estado: estado(decididos + 1), cuentas_revision: cuentas(decididos + 1, golpesOtros + (golpe ? 1 : 0)),
+  } }
+}
 
 const VEHICULO = {
   id: 'v1', license_plate: '1234 ABC', brand: 'Toyota', model: 'Proace',
@@ -42,6 +100,9 @@ const dentroDe = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 
 function respuesta(ruta, escenario) {
   const lleno = escenario === 'lleno'
   const t = {
+    // Van las primeras: '/inspections' y '/vehicles' (más abajo) también casarían con ellas.
+    '/repaso/dia': lleno ? REPASO_DIA : repasoVacio(),
+    '/antes-del-perito': EXPEDIENTE,
     '/admin/cobros': {
       mes: '2026-08',
       resumen: { facturado: 732.05, cobrado: 387.2, pendiente: 344.85, en_prueba: 0 },
@@ -171,7 +232,15 @@ function respuesta(ruta, escenario) {
 
 export async function simularApi(page, escenario = 'vacio') {
   await page.route('**/api/**', async (route) => {
-    const url = new URL(route.request().url())
+    const req = route.request()
+    const url = new URL(req.url())
+    let cuerpo = null
+    try { cuerpo = req.postDataJSON() } catch { /* sin cuerpo */ }
+    const escritura = repasoEscritura(req.method(), url.pathname, cuerpo)
+    if (escritura) {
+      await route.fulfill({ status: escritura.status, contentType: 'application/json', body: JSON.stringify(escritura.body) })
+      return
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
