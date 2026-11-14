@@ -341,6 +341,8 @@ test('el formulario: sin exclamaciones y sin recortar a escondidas (cada campo, 
    portada. (En producción, la portada lo trae ya escrito de functions/index.js.) */
 test('títulos de pestaña: ninguna pantalla hereda el de la portada', async ({ page }) => {
   await simularApi(page, 'vacio')
+  // /empleo con la forma de /empleo/publicas (la respuesta genérica de la API simulada la tumbaba: «Algo ha ido mal»).
+  await page.route(/\/api\/empleo\/publicas/, (r) => r.fulfill({ json: { ofertas: [], ciudades: [], jornadas: [] } }))
   const PORTADA = /para empresas con furgonetas/
   for (const ruta of ['/conductor', '/ruta', '/login', '/panel/login', '/empleo', '/repartidores', '/iphone']) {
     await page.goto(ruta, { waitUntil: 'domcontentloaded' })
@@ -350,7 +352,9 @@ test('títulos de pestaña: ninguna pantalla hereda el de la portada', async ({ 
   }
   for (const [ruta, titulo] of [['/privacidad', 'Política de Privacidad · FDS'], ['/contacto', 'Contacto · FDS'], ['/terminos', /· FDS$/],
     ['/cookies', /· FDS$/], ['/aviso-legal', /· FDS$/], ['/security', /· FDS$/], ['/planes', 'Planes y precios · FDS'],
-    ['/peritaje-tecnico', 'Qué le enseñas al perito · FDS']]) {
+    ['/peritaje-tecnico', 'Qué le enseñas al perito · FDS'],
+    // Las dos que se llamaban solo «FDS» (tanda 5, U2).
+    ['/empleo', 'Ofertas de empleo · FDS'], ['/repartidores', 'La app de ruta · FDS']]) {
     await page.goto(ruta, { waitUntil: 'domcontentloaded' })
     await expect(page, ruta).toHaveTitle(titulo)
   }
@@ -599,7 +603,8 @@ test('tanda 4 · la banda de la herramienta de devolución: su título, las comp
   const banda = page.getByTestId('emp-banda-devolucion')
   await expect(banda.getByRole('heading', { level: 2 })).toHaveText('¿Qué te van a cobrar al devolverlo?')
   // Las compañías, escritas: las mismas y en el mismo orden que lib/guiasRenting.js.
-  await expect(page.getByTestId('emp-companias')).toHaveText(COMPANIAS.map((c) => c.nombre).join(' · '))
+  // Una por elemento de lista (tanda 5): el «·» va delante, como adorno de CSS, y no forma parte del texto.
+  await expect(page.getByTestId('emp-companias').locator('li')).toHaveText(COMPANIAS.map((c) => c.nombre))
   const boton = page.getByTestId('emp-devolucion')
   await expect(boton).toHaveText('Repasar mi furgoneta')
   await expect(boton).toHaveAttribute('href', '/devolucion-renting')
@@ -651,8 +656,19 @@ test('tanda 4 · a 1280 px los títulos de columna caben en dos líneas como muc
     await conIdioma(page, l)
     await page.goto('/', { waitUntil: 'domcontentloaded' })
     await page.evaluate(() => document.fonts.ready)
-    for (const h of await page.locator('section h2.ld-titular').all()) {
-      const lineas = await h.evaluate((e) => Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)))
+    /* Las líneas DE VERDAD (tanda 5, U8): un `Range` sobre el texto da un rectángulo por trozo de línea. La altura del
+       `h2` no vale: cuando es hijo directo de la rejilla, se estira a lo alto de su columna. */
+    const titulos = page.locator('section h2.ld-titular')
+    await expect.poll(() => titulos.count()).toBeGreaterThan(4)
+    for (const h of await titulos.all()) {
+      const lineas = await h.evaluate((e) => {
+        const r = document.createRange()
+        r.selectNodeContents(e)
+        const alto = parseFloat(getComputedStyle(e).lineHeight)
+        const tops = [...r.getClientRects()].filter((x) => x.width > 0).map((x) => x.top).sort((a, b) => a - b)
+        return tops.filter((t, i) => i === 0 || t - tops[i - 1] > alto / 2).length
+      })
+      expect(lineas, `${l}: «${await h.innerText()}»`).toBeGreaterThan(0)
       expect(lineas, `${l}: «${await h.innerText()}»`).toBeLessThanOrEqual(2)
     }
   }
@@ -666,5 +682,90 @@ test('tanda 4 · en el móvil, los dos botones del héroe y del cierre van a tod
     const [a, b] = await Promise.all(ids.map((id) => page.getByTestId(id).boundingBox()))
     expect(Math.round(a.width)).toBe(358)
     expect(Math.round(b.width)).toBe(358)
+  }
+  // En el móvil, el cierre sigue en su orden: el título, los botones y los cuatro pasos.
+  const [boton, paso] = await Promise.all([page.getByTestId('emp-probar-cierre').boundingBox(), page.getByTestId('emp-arranque-paso').first().boundingBox()])
+  expect(boton.y).toBeLessThan(paso.y)
+})
+
+/* ── TANDA 5 (14-11-2026, U5 y U6): el paso 01 sin un ajuste de hora que no existe, la banda de la herramienta y el cierre. ── */
+test('tanda 5 · en portugués, «revisão / revisões» como en el resto (la ITV sigue siendo «inspeção periódica»)', async ({ page }) => {
+  await conIdioma(page, 'pt')
+  await simularApi(page, 'vacio')
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('emp-nave')).toContainText('revisões com foto por semana')
+  await expect(page.getByTestId('emp-arranque')).toContainText('Vês chegar a primeira revisão')
+  await expect(page.getByTestId('emp-paso').first()).toContainText('uma revisão por carrinha')
+  const todo = (await page.locator('body').textContent()).replace(/inspeção periódica/g, '')
+  expect(todo).not.toMatch(/inspe[çc]/i)
+})
+
+test('tanda 5 · el paso 01 no promete una hora: «cuando lo diga tu empresa»', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const paso = page.getByTestId('emp-paso').first()
+  await expect(paso).toContainText('Desde su móvil, cuando lo diga tu empresa')
+  await expect(page.locator('body')).not.toContainText('a la hora que decida')
+})
+
+for (const ancho of [390, 1280]) {
+  test(`tanda 5 · a ${ancho} px ningún «·» de las compañías cuelga al final de una línea ni abre la siguiente`, async ({ page }) => {
+    await page.setViewportSize({ width: ancho, height: 900 })
+    await simularApi(page, 'vacio')
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await page.evaluate(() => document.fonts.ready)
+    const r = await page.getByTestId('emp-companias').evaluate((ul) => {
+      const caja = ul.parentElement.getBoundingClientRect()
+      const lis = [...ul.children].map((li) => {
+        const b = li.getBoundingClientRect()
+        const punto = parseFloat(getComputedStyle(li, '::before').width)
+        return { top: Math.round(b.top), izq: b.left, texto: b.left + punto, der: b.right }
+      })
+      return { caja: { izq: caja.left, der: caja.right }, lis, recorta: getComputedStyle(ul.parentElement).overflowX }
+    })
+    expect(r.recorta).toBe('hidden')
+    expect(new Set(r.lis.map((x) => x.top)).size, 'en más de una línea, para que la prueba diga algo').toBeGreaterThan(1)
+    r.lis.forEach((li, i) => {
+      const primeraDeSuLinea = i === 0 || li.top !== r.lis[i - 1].top
+      // La primera de cada línea: su «·» queda fuera de la caja (no se ve) y su nombre empieza en el borde.
+      if (primeraDeSuLinea) {
+        expect(li.izq).toBeLessThan(r.caja.izq - 1)
+        expect(Math.abs(li.texto - r.caja.izq)).toBeLessThan(1)
+      } else expect(li.izq).toBeGreaterThanOrEqual(r.caja.izq)
+      expect(li.der).toBeLessThanOrEqual(r.caja.der + 0.5)
+    })
+  })
+}
+
+test('tanda 5 · de noche, las ruedas del dibujo no son bloques claros (de día, en tinta, como antes)', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  const ruedas = async () => page.getByTestId('emp-devolucion-dibujo').locator('svg path[fill="var(--dv-rueda)"]').evaluateAll((ps) => ps.map((p) => getComputedStyle(p).fill))
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('emp-devolucion-dibujo').locator('svg path[fill="var(--dv-rueda)"]')).toHaveCount(4)
+  const dia = await ruedas()
+  expect(dia.length).toBe(4)
+  expect(new Set(dia)).toEqual(new Set(['rgb(16, 24, 26)']))
+  await page.evaluate(() => localStorage.setItem('fds_tema_web', 'dark'))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('portada-empresas')).toHaveAttribute('data-theme', 'dark')
+  const noche = await ruedas()
+  expect(new Set(noche)).toEqual(new Set(['rgb(44, 54, 59)']))     // el hueco de noche, no la tinta (#E9EDEF)
+})
+
+test('tanda 5 · en el ordenador, los dos botones del cierre van en una fila, debajo de los cuatro pasos', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await simularApi(page, 'vacio')
+  for (const l of ['es', 'de']) {
+    await conIdioma(page, l)
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await page.evaluate(() => document.fonts.ready)
+    await expect(page.getByTestId('emp-arranque-paso')).toHaveCount(4)
+    await page.getByTestId('emp-arranque').scrollIntoViewIfNeeded()
+    const [a, b, ultimo] = await Promise.all([page.getByTestId('emp-probar-cierre').boundingBox(), page.getByTestId('emp-ensenar-cierre').boundingBox(),
+      page.getByTestId('emp-arranque-paso').last().boundingBox()])
+    expect(Math.abs(a.y - b.y), l).toBeLessThan(1)
+    expect(a.x + a.width, l).toBeLessThan(b.x)
+    expect(a.y, l).toBeGreaterThan(ultimo.y + ultimo.height)
+    expect(Math.abs(a.x - ultimo.x), `${l}: alineados con los pasos`).toBeLessThan(40)
   }
 })

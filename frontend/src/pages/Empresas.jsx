@@ -562,7 +562,7 @@ export default function Empresas() {
   }
 
   const PASOS = [
-    ['01', tx('El conductor hace cuatro fotos'), tx('Frontal, trasera y los dos laterales, más los kilómetros. Desde su móvil, a la hora que decida tu empresa: cada conductor, una revisión por furgoneta y día.'), <RecorteFotos key="r1" lang={lang} />],
+    ['01', tx('El conductor hace cuatro fotos'), tx('Frontal, trasera y los dos laterales, más los kilómetros. Desde su móvil, cuando lo diga tu empresa: cada conductor, una revisión por furgoneta y día.'), <RecorteFotos key="r1" lang={lang} />],
     ['02', tx('Tú repasas el día en unos minutos'), tx('Cada foto de hoy aparece junto a la anterior del mismo lado. Si está igual, pasas a la siguiente. Si hay algo nuevo, lo marcas sobre la foto.'), <RecorteRepaso key="r2" />],
     ['03', tx('Cada golpe queda con su día'), tx('Y con quién la llevaba, solo cuando se sabe con seguridad. Cada furgoneta tiene su expediente: cómo entró, qué le ha pasado y cuándo, listo para imprimir.'), <RecorteExpediente key="r3" />],
   ]
@@ -637,11 +637,16 @@ export default function Empresas() {
             <p className="mt-4 max-w-[540px] text-[1.0625rem] leading-relaxed text-[color:var(--ld-text2)]">
               {tx('Elige tu compañía de renting y da una vuelta a la furgoneta con su propia guía de devolución. Sale lo que no da por bueno, con su página.')}
             </p>
-            <p className="mt-6 max-w-[560px] font-mono text-[0.875rem] leading-[1.7] text-[color:var(--ld-muted)]" data-testid="emp-companias">
-              {COMPANIAS_DEVOLUCION.map((c, i) => (
-                <span key={c}>{i > 0 && <span aria-hidden="true"> · </span>}<span className="whitespace-nowrap">{c}</span></span>
-              ))}
-            </p>
+            {/* Cada compañía, entera en su línea, con el «·» DELANTE (tanda 5, U6): detrás se quedaba colgado al final de
+                la línea («Alphabet ·»). La lista entra 2ch por la izquierda en una caja que recorta, así el «·» de la
+                primera de cada línea cae fuera y no se ve: ni cuelga al final ni abre la línea siguiente. */}
+            <div className="mt-6 max-w-[560px] overflow-hidden">
+              <ul className="-ml-[2ch] flex flex-wrap font-mono text-[0.875rem] leading-[1.7] text-[color:var(--ld-muted)]" data-testid="emp-companias">
+                {COMPANIAS_DEVOLUCION.map((c) => (
+                  <li key={c} className="whitespace-nowrap before:inline-block before:w-[2ch] before:text-center before:content-['·']">{c}</li>
+                ))}
+              </ul>
+            </div>
             <div className="mt-8">
               <a href="/devolucion-renting" onClick={() => medirAccion('emp_devolucion')} data-testid="emp-devolucion" className={`${BTN_SECUNDARIO} w-full sm:w-auto`}>
                 {tx('Repasar mi furgoneta')}
@@ -661,8 +666,9 @@ export default function Empresas() {
       </section>
 
       {/* ── De dónde sale: las cifras de la casa ── */}
+      {/* Desde 1280 px, la columna del título a 500 (tanda 5, U8): en 440, en alemán («Es entstand nicht im Büro…») caía en tres líneas. */}
       <section className="bg-[color:var(--ld-banda)] text-[color:var(--ld-banda-texto)]" data-testid="emp-nave">
-        <div className={`${ANCHO} grid items-end gap-10 py-14 sm:py-[76px] lg:grid-cols-[440px_minmax(0,1fr)] lg:gap-16`}>
+        <div className={`${ANCHO} grid items-end gap-10 py-14 sm:py-[76px] lg:grid-cols-[440px_minmax(0,1fr)] lg:gap-16 xl:grid-cols-[500px_minmax(0,1fr)]`}>
           <div>
             <h2 className="ld-titular text-[1.875rem] leading-[1.06] [text-wrap:balance] sm:text-[2.5rem]">{tx('No salió de una oficina. Salió de una nave.')}</h2>
             <p className="mt-4 max-w-[430px] text-[1.0625rem] leading-relaxed text-[color:var(--ld-banda-suave)]">
@@ -727,17 +733,21 @@ export default function Empresas() {
       {/* ── Cierre: cómo se empieza, tal como es el arranque del panel (/panel/arranque, Arranque.jsx): cuatro pasos y
           se puede dejar a medias. Cada conductor entra con SU enlace personal (CONTRATO-ALTA §1), sin correo ni contraseña. ── */}
       <section className={ANCHO} data-testid="emp-arranque">
-        <div className={`grid gap-10 border-t border-[color:var(--ld-border)] py-14 sm:py-[72px] ${COLUMNAS}`}>
-          <div>
-            <H2>{tx('Empieza con tus furgonetas esta semana.')}</H2>
-            <p className="mt-3 max-w-[460px] text-[1.0312rem] leading-relaxed text-[color:var(--ld-muted)]">{tx('Son cuatro pasos y puedes dejarlos a medias.')}</p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <a href={alta} onClick={() => medirAccion('emp_probar_cierre')} className={`${BTN_PRIMARIO} w-full sm:w-auto`} data-testid="emp-probar-cierre">{tx('Probar con mis furgonetas')}</a>
-              {/* Con la demo ya pedida, no se vuelve a ofrecer. */}
-              {!demoPedida && <a href="#demo" onClick={() => medirAccion('emp_demo_cierre')} className={`${BTN_SECUNDARIO} w-full sm:w-auto`} data-testid="emp-ensenar-cierre">{tx('Que me la enseñen en 15 minutos')}</a>}
-            </div>
+        {/* El cierre en el ordenador (tanda 5, U6 y U8): en la columna del título (5/12) ni los dos botones cabían en una
+            fila (salían apilados, de dos anchos) ni el título en dos líneas. Ahora el título va a todo el ancho; debajo, la
+            frase a la izquierda y, a la derecha, los cuatro pasos y los dos botones en una fila: se lee el título, los pasos
+            y la acción. En el móvil, como antes: el título, la frase, los botones y los pasos. */}
+        <div className={`grid gap-x-10 gap-y-8 border-t border-[color:var(--ld-border)] py-14 sm:py-[72px] lg:gap-y-10 ${COLUMNAS}`}>
+          <div className="lg:contents">
+            <H2 className="lg:col-span-2 lg:row-start-1">{tx('Empieza con tus furgonetas esta semana.')}</H2>
+            <p className="mt-3 max-w-[460px] text-[1.0312rem] leading-relaxed text-[color:var(--ld-muted)] lg:col-start-1 lg:row-start-2 lg:mt-0 lg:pt-5">{tx('Son cuatro pasos y puedes dejarlos a medias.')}</p>
           </div>
-          <ol className="border-b border-[color:var(--ld-border)]">
+          <div className="flex flex-wrap gap-3 lg:col-start-2 lg:row-start-3" data-testid="emp-cierre-botones">
+            <a href={alta} onClick={() => medirAccion('emp_probar_cierre')} className={`${BTN_PRIMARIO} w-full sm:w-auto`} data-testid="emp-probar-cierre">{tx('Probar con mis furgonetas')}</a>
+            {/* Con la demo ya pedida, no se vuelve a ofrecer. */}
+            {!demoPedida && <a href="#demo" onClick={() => medirAccion('emp_demo_cierre')} className={`${BTN_SECUNDARIO} w-full sm:w-auto`} data-testid="emp-ensenar-cierre">{tx('Que me la enseñen en 15 minutos')}</a>}
+          </div>
+          <ol className="border-b border-[color:var(--ld-border)] lg:col-start-2 lg:row-start-2">
             {ARRANQUE.map(([t, d], i) => (
               <li key={t} className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-3 border-t border-[color:var(--ld-border)] py-5" data-testid="emp-arranque-paso">
                 <span className="pt-[3px] font-mono text-[0.875rem] font-medium tabular-nums text-[color:var(--ld-muted)]">{String(i + 1).padStart(2, '0')}</span>

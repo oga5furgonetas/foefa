@@ -18,7 +18,7 @@ export function PantallaEnlace({ titulo, onBack }) {
       style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
       <div className="mx-auto max-w-md">
         {onBack && <Boton variante="texto" tono="marca" icono={ArrowLeft} texto={tx('Volver')} onClick={onBack} className="-ml-2 mb-4" />}
-        <h1 className="text-titulo text-dark-50">{titulo}</h1>
+        <h1 className="text-titulo text-dark-50">{tx(titulo)}</h1>
         <LineaEnlace className="mt-2" />
       </div>
     </div>

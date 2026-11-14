@@ -9,7 +9,7 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
      falta. En el ordenador, la tabla y los botones de siempre.
    · E2 (equipo-7): filtros de un toque encima de la lista: «sin centro», «sin correo», «sin ID de reparto» (solo si
      la empresa usa la DNR o las horas) y «sin acceso» (solo si se sabe quién tiene cuenta), con cuántos.
-   · E3 (portal_inicio-7, la web): bajo «Hacer la auditoría», «Hoy: 1234 ABC» o «Enviada hoy»; «hoy no sales» y
+   · E3 (portal_inicio-7, la web): bajo «Hacer la revisión», «Hoy: 1234 ABC» o «Enviada hoy»; «hoy no sales» y
      «suspendido» siguen mandando. */
 
 function vigilar(page) {
@@ -474,11 +474,11 @@ async function portal(page, { asignada, vehiculosPortal } = {}) {
   await page.route(/\/api\/vehicles\/portal/, json(vehiculosPortal || { vehicles: [], puede_auditar: true, motivo: null }))
   await page.route(/\/api\/portal\/mi-ficha/, json({ falta_telefono: false, tiene_clave: true, configurar_cuenta: false }))
   await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('Hacer la auditoría', { exact: true })).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText('Hacer la revisión', { exact: true })).toBeVisible({ timeout: 15000 })
   return pedidas
 }
 const FURGO = { id: 'v4', license_plate: '3056 MBF' }
-const opcion = (page) => page.getByRole('button', { name: /Hacer la auditoría/ })
+const opcion = (page) => page.getByRole('button', { name: /Hacer la revisión/ })
 
 test.describe('E3 · la furgoneta de hoy en el portal del conductor', () => {
   test('con furgoneta asignada dice «Hoy: matrícula» y se puede abrir', async ({ page }) => {

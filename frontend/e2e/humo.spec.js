@@ -4127,7 +4127,7 @@ test.describe('Portal del conductor · casillas', () => {
     await page.getByRole('button', { name: /Comparte y gana/ }).click()
     await expect(page.getByRole('region', { name: 'Invita a probar Flota' })).toBeVisible()
     await page.getByRole('button', { name: 'Volver' }).click()
-    await expect(page.getByRole('button', { name: /Hacer la auditoría/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Hacer la revisión/ })).toBeVisible()
     expect(fallos).toEqual([])
   })
 
@@ -4297,7 +4297,7 @@ test.describe('Mercadillo de repartidores', () => {
     await page.getByRole('button', { name: /Mercadillo/ }).click()
     await expect(page.getByRole('button', { name: /iPhone 18 Pro/ })).toBeVisible()
     await page.getByRole('button', { name: 'Volver' }).first().click()
-    await expect(page.getByRole('button', { name: /Hacer la auditoría/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Hacer la revisión/ })).toBeVisible()
     await page.unroute(/\/api\/mercadillo\/estado/)
     await page.route(/\/api\/mercadillo\/estado/, (x) => x.fulfill({ json: { visible: false } }))
     await page.reload({ waitUntil: 'domcontentloaded' })

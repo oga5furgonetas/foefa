@@ -46,7 +46,7 @@ const DRIVER_KEY = 'flota_driver'
    hace todos los días antes de salir. Lo demás está debajo, a un toque.
    ──────────────────────────────────────────────────────────────────────────── */
 
-/* Las opciones grandes del inicio («Mi ruta», «Hacer la auditoría»), como filas de 64 (diseño compacto, 07-11-2026,
+/* Las opciones grandes del inicio («Mi ruta», «Hacer la revisión»), como filas de 64 (diseño compacto, 07-11-2026,
    §5.11): icono de 24, el título en «nombre» y una línea en «sec»; la principal, con relleno de marca; sin degradado
    ni sombra. Lo que avisa (respuestas sin leer, la insignia, «Pronto») va a la derecha, no encima del texto. Apagada
    (bloqueada o «Pronto»), en gris y sin bajar la opacidad: el texto se sigue leyendo al sol. */
@@ -147,7 +147,7 @@ export default function DriverPortal() {
   // null = apagada o todavía sin contestar. Con datos: {desde, n} para poder
   // poner el precio en la entrada del menú, que es lo que hace que se entre.
   const [tienda, setTienda] = useState(null)
-  /* LA FURGONETA DE HOY BAJO «HACER LA AUDITORÍA» (11-11-2026, tanda 2, E3 / portal_inicio-7). Decía siempre «Antes de
+  /* LA FURGONETA DE HOY BAJO «HACER LA REVISIÓN» (11-11-2026, tanda 2, E3 / portal_inicio-7). Decía siempre «Antes de
      salir a ruta»: ni qué furgoneta le toca ni si ya la había mandado. El servidor ya lo sabe (/auth/me/assigned-vehicle,
      con la asignación del día y `already_inspected`). null = sin asignación (o sin respuesta): el texto de siempre.
      Lo de «hoy no sales» y «suspendido» ya estaba y manda sobre esto. */
@@ -434,7 +434,7 @@ export default function DriverPortal() {
           )}
           <Opcion
             icono={ClipboardCheck}
-            titulo="Hacer la auditoría"
+            titulo={tx('Hacer la revisión')}
             sub={portal?.motivo === 'suspendido' ? 'Hoy no trabajas' : noLeToca ? 'Hoy no sales a ruta'
               : hoyFurgo?.enviada ? (hoyFurgo.matricula ? tx('Enviada hoy · {matricula}', { matricula: hoyFurgo.matricula }) : tx('Enviada hoy'))
                 : hoyFurgo?.matricula ? tx('Hoy: {matricula}', { matricula: hoyFurgo.matricula }) : 'Antes de salir a ruta'}
@@ -446,7 +446,7 @@ export default function DriverPortal() {
           />
           {esDemo && (
             <p className="px-1 text-sec text-dark-400">
-              En la prueba solo funciona el reparto. La auditoría (fotos del vehículo antes de salir) va en la cuenta real.
+              En la prueba solo funciona el reparto. La revisión (fotos del vehículo antes de salir) va en la cuenta real.
             </p>
           )}
 
@@ -459,7 +459,7 @@ export default function DriverPortal() {
             </>} />
           )}
           {noLeToca && portal?.motivo !== 'suspendido' && (
-            <Aviso tono="aviso" icono={Ban} texto={'En el cuadrante de hoy no tienes furgoneta asignada, así que no puedes hacer la auditoría. Si crees que es un error, habla con tu coordinador antes de salir.'} />
+            <Aviso tono="aviso" icono={Ban} texto={'En el cuadrante de hoy no tienes furgoneta asignada, así que no puedes hacer la revisión. Si crees que es un error, habla con tu coordinador antes de salir.'} />
           )}
 
           {/* TRABAJAR MÁS, A LA VISTA (24-10-2026). Dani: «que le aparezca "hay 3 vacantes en varios días para

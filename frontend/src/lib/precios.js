@@ -45,7 +45,7 @@ export const PLANES_EMPRESA = [
     incluye: [
       'Todo lo de Pro',
       'WhatsApp con conductores y talleres (2.000 mensajes al mes)',
-      'API de solo lectura para sacar flota y taller a vuestros sistemas',
+      'API de solo lectura para sacar flota y taller a tus sistemas',
       'Implantación y formación por sede incluidas',
       'Soporte prioritario con persona asignada',
     ],
@@ -61,12 +61,12 @@ export const PLAN_REPARTO = {
   clave: 'reparto', nombre: 'Reparto', para: 'Súper y distribución: por repartidor, furgonetas incluidas',
   por_repartidor: 12, minimo_repartidores: 3, color: '#22c55e', sectores: ['supermercado', 'distribucion'],
   incluye: [
-    'Pedidos sin límite: a mano, pegados de vuestro programa o escaneando la caja',
+    'Pedidos sin límite: a mano, pegados de tu programa o escaneando la caja',
     'Zonas por repartidor y ruta ordenada por tiempo, con franjas y hora estimada',
     'Navegación con voz, prueba de entrega con foto y cobro a la entrega',
     'Enlace de seguimiento para el cliente',
     'La oficina ve el progreso y dónde va cada repartidor en jornada',
-    'Vuestras furgonetas incluidas: fichas, ITV y seguro, revisión con fotos y repaso del día, taller',
+    'Tus furgonetas incluidas: fichas, ITV y seguro, revisión con fotos y repaso del día, taller',
     'Tiendas o almacenes y usuarios sin límite',
   ],
   no_incluye: ['Origen de daños de toda la flota, cuadrante y asignación (eso es Pro, por vehículo)'],
@@ -161,23 +161,23 @@ export const COMPLEMENTOS = [
   { clave: 'reparto', nombre: 'App de reparto', precio: '6 € por conductor que la use en el mes',
     que: 'Para los planes de flota (Esencial, Pro y Empresa): escanear o foto a la etiqueta, ruta ordenada por tiempo, navegación, prueba de entrega, seguimiento para el cliente y cobro. Súper y distribución la llevan incluida en el plan Reparto.' },
   { clave: 'whatsapp', nombre: 'WhatsApp', precio: '150 € de alta + mensajes a precio de Meta + 20 %',
-    que: 'Avisos y conversaciones con conductores y talleres desde vuestro número. Incluido en Empresa.' },
+    que: 'Avisos y conversaciones con conductores y talleres desde tu número. Incluido en Empresa.' },
   { clave: 'colaboradores', nombre: 'Vehículos de colaboradores', precio: '3 € por vehículo y mes',
-    que: 'Furgonetas de subcontratas: inspección, documentos y vencimientos. Se marcan en la ficha.' },
+    que: 'Furgonetas de subcontratas: revisión, documentos y vencimientos. Se marcan en la ficha.' },
   { clave: 'campana', nombre: 'Vehículos de campaña', precio: '0,30 € por día de alta',
     que: 'Furgonetas de refuerzo en Black Friday o Navidad, solo los días que estén. Se cobran a mes vencido.' },
   { clave: 'implantacion', nombre: 'Implantación asistida', precio: '490 € hasta 50 vehículos · 990 € hasta 200',
     que: 'Cargamos flota y conductores, configuramos sedes y permisos y formamos al equipo. Gratis con contrato anual de 100 vehículos o más.' },
   { clave: 'formacion', nombre: 'Formación presencial', precio: '300 € por jornada + desplazamiento',
-    que: 'En vuestras sedes.' },
+    que: 'En tus sedes.' },
 ]
 
 /* Las reglas que siempre se preguntan (docs/PRECIOS.md §6). */
 export const REGLAS = [
   ['¿Qué vehículo cuenta?', 'Los que tienes de alta el día que se hace la factura del mes. Los que están en el taller cuentan; los dados de baja, no.'],
-  ['¿Pago por usuario o por conductor?', 'No. Usuarios de oficina y conductores ilimitados en todos los planes: se paga por vehículo. Solo el reparto va por repartidor: como complemento (6 €) en los planes de flota, o como plan Reparto (12 €, furgonetas incluidas) si sois un súper o un distribuidor.'],
+  ['¿Pago por usuario o por conductor?', 'No. Usuarios de oficina y conductores ilimitados en todos los planes: se paga por vehículo. Solo el reparto va por repartidor: como complemento (6 €) en los planes de flota, o como plan Reparto (12 €, furgonetas incluidas) si eres un súper o un distribuidor.'],
   ['¿Y si la flota crece o baja a mitad de mes?', 'Ese mes no se toca: la factura siguiente ya sale con los vehículos que tengas. Nunca se cobra a toro pasado.'],
   ['¿Furgonetas de subcontratas o de campaña?', 'Se marcan en la ficha de cada una: las de colaboradores a 3 € al mes y las de campaña a 0,30 € por día que estén, fuera del plan.'],
   ['¿Tengo permanencia?', 'Mensual: no, cancelas cuando quieras. Anual: un año, pagando 10 meses.'],
-  ['¿Mis datos?', 'Son tuyos. Si os vais, os los devolvemos o los borramos, lo que elijáis: lo dice el contrato de encargo del tratamiento, que va incluido.'],
+  ['¿Mis datos?', 'Son tuyos. Si te vas, te los devolvemos o los borramos, lo que elijas: lo dice el contrato de encargo del tratamiento, que va incluido.'],
 ]

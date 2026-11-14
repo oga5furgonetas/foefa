@@ -438,7 +438,7 @@ test('con el slug en la dirección, dentro del portal: el dueño renueva el enla
   await expect(page.getByRole('heading', { name: /Hola, Ana/ })).toBeVisible({ timeout: 15_000 })
   // Ahora la empresa le manda uno nuevo: la sesión de este teléfono deja de valer.
   await cortarSesion(page)
-  await page.getByRole('button', { name: /Hacer la auditoría/ }).click()
+  await page.getByRole('button', { name: /Hacer la revisión/ }).click()
   await expect(page.getByRole('heading', { name: DICT['alta.dr.enlaceTitulo'].es })).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText(/No hay vehículos disponibles/)).toHaveCount(0)
   expect(page.url()).toMatch(new RegExp(`/conductor#${SLUG}$`))
@@ -564,3 +564,22 @@ for (const lang of ['en', 'fr', 'de', 'it', 'pt']) {
     await expect(page.getByRole('button', { name: DICT['alta.dr.entrar'][lang], exact: true })).toBeVisible()
   })
 }
+
+/* TANDA 5 (14-11-2026, U7): el conductor lee lo mismo que el dueño: «Correo» (no «Email») y, dentro, «Hacer la revisión»
+   (no «auditoría»), también la cabecera de la revisión. */
+test('tanda 5 · «Correo» en la entrada y «Hacer la revisión» en el portal, sin «Email» ni «auditoría»', async ({ page }) => {
+  await prepararCorreo(page)
+  await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByLabel('Correo', { exact: true })).toBeVisible()
+  expect(await page.locator('body').innerText()).not.toMatch(/E-?mail/i)
+  await page.locator('#dr-correo').fill('luis@ejemplo.test')
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+  await page.locator('#driver-code').fill('123456')
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+  const portal = page.getByRole('button', { name: /Hacer la revisión/ })
+  await expect(portal).toBeVisible({ timeout: 15_000 })
+  expect(await page.locator('body').innerText()).not.toMatch(/auditor/i)
+  await portal.click()
+  await expect(page.getByText('Revisión diaria', { exact: true })).toBeVisible()
+  expect(await page.locator('body').innerText()).not.toMatch(/auditor|inspecci/i)
+})
