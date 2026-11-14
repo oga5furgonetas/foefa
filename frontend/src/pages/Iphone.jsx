@@ -47,7 +47,8 @@ export default function Iphone() {
   return (
     <div className="min-h-screen bg-dark-950 px-5 py-8 text-dark-100">
       <div className="mx-auto w-full max-w-md">
-        <a href="/" className="flex items-center gap-2.5 text-dark-50">
+        {/* El logo lleva a la página del repartidor: desde el 14-11-2026 «/» es la portada para empresas. */}
+        <a href="/repartidores" className="flex items-center gap-2.5 text-dark-50">
           <img src="/favicon.svg" alt="" width="34" height="34" className="rounded-xl" />
           <b className="text-[17px]">{MARCA.app}</b>
         </a>

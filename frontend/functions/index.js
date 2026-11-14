@@ -17,26 +17,30 @@ import { MARCA } from '../src/marca.js'
 
 const desde = Math.min(...PLANES_EMPRESA.map((p) => Number(p.por_vehiculo)).filter((x) => x > 0))
 export const TITULO = `${MARCA.nombre} para empresas con furgonetas · El golpe, el día que aparece`
-// El alta de flota (sector «Otra flota», plan Pro), la misma que los botones de la página (Empresas.jsx, ALTA_EMPRESA).
-const ALTA = '/registro?sector=otra&plan=completo'
+// El alta de flota (sector «Otra flota») con el plan Esencial, el del «Desde 5 €»: la misma que los botones de la página
+// antes de tocar la calculadora (Empresas.jsx, ALTA_EMPRESA y PLAN_DE_ENTRADA).
+const ALTA = '/registro?sector=otra&plan=operacion'
 export const DESCRIPCION = `Cada conductor fotografía su furgoneta desde el móvil. Tú ves la foto de hoy junto a la anterior del mismo lado y marcas lo que sea nuevo, para arreglarlo antes de que lo vea el perito del renting. Desde ${desde} € por furgoneta y mes, ${DIAS_PRUEBA_EMPRESA} días de prueba sin tarjeta.`
 
 export const PASOS = [
-  ['El conductor hace cuatro fotos', 'Frontal, trasera y los dos laterales, más los kilómetros. Desde su móvil, a la hora que decida tu empresa: una revisión por furgoneta y día.'],
+  ['El conductor hace cuatro fotos', 'Frontal, trasera y los dos laterales, más los kilómetros. Desde su móvil, a la hora que decida tu empresa: cada conductor, una revisión por furgoneta y día.'],
   ['Tú repasas el día en unos minutos', 'Cada foto de hoy aparece junto a la anterior del mismo lado. Si está igual, pasas a la siguiente. Si hay algo nuevo, lo marcas sobre la foto.'],
-  ['Cada golpe queda con su día', 'Y con su conductor, solo cuando entre las dos fotos la llevó una sola persona. Cada furgoneta tiene su expediente: cómo entró, qué le ha pasado y cuándo, listo para imprimir el día que te pasan un cargo.'],
+  ['Cada golpe queda con su día', 'Y con quién la llevaba, solo cuando se sabe con seguridad. Cada furgoneta tiene su expediente: cómo entró, qué le ha pasado y cuándo, listo para imprimir.'],
 ]
 
+/* Lo que lee Google y lo que se ve un instante antes de que monte React. Sin colores propios: hereda el fondo y la tinta
+   de arranque (public/fondo-arranque.js marca <html> con el papel, o con la noche si se eligió), así no queda una caja
+   clara sobre otro fondo. */
 function contenido() {
-  return `<main style="max-width:40rem;margin:0 auto;padding:24px 16px;color:#10181a;background:#f5f6f3;font-family:system-ui,sans-serif">
+  return `<main style="max-width:40rem;margin:0 auto;padding:24px 16px;font-family:system-ui,sans-serif">
       <p>Para empresas con furgonetas</p>
       <h1>El golpe, el día que aparece. No el día que te lo cobran.</h1>
       <p>Cada conductor fotografía su furgoneta desde el móvil. Tú ves la foto de hoy junto a la anterior del mismo lado y marcas lo que sea nuevo. Así puedes arreglarlo en tu taller antes de que lo vea el perito del renting.</p>
-      <p><a href="${esc(ALTA)}" style="color:#0b6e69">Probar con mis furgonetas</a> · <a href="/expediente-ejemplo" style="color:#0b6e69">Ver un expediente de ejemplo</a></p>
-      <p>Desde ${desde} € por furgoneta y mes. ${DIAS_PRUEBA_EMPRESA} días de prueba, sin tarjeta. <a href="/planes" style="color:#0b6e69">Precios</a></p>
+      <p><a href="${esc(ALTA)}">Probar con mis furgonetas</a> · <a href="/expediente-ejemplo">Ver un expediente de ejemplo</a></p>
+      <p>Desde ${desde} € por furgoneta y mes. ${DIAS_PRUEBA_EMPRESA} días de prueba, sin tarjeta. <a href="/planes">Precios</a></p>
       <h2>Así funciona</h2>
       ${PASOS.map(([t, d]) => `<h3>${esc(t)}</h3><p>${esc(d)}</p>`).join('')}
-      <p><a href="/repartidores" style="color:#0b6e69">¿Repartes tú? La app de ruta</a></p>
+      <p><a href="/repartidores">¿Repartes tú? La app de ruta</a></p>
     </main>`
 }
 

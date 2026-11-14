@@ -41,9 +41,9 @@ export default function Contacto() {
   return (
     <LegalLayout title="Contacto">
       {done ? (
-        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-6 text-center">
-          <CheckCircle2 size={32} className="mx-auto mb-2 text-emerald-400" />
-          <p className="font-semibold text-emerald-200">¡Mensaje enviado!</p>
+        <div role="status" className="rounded-[20px] border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-surface)] p-6 text-center">
+          <CheckCircle2 size={32} className="mx-auto mb-2 text-[color:var(--ld-ok)]" />
+          <p className="font-semibold text-[color:var(--ld-text)]">Mensaje enviado.</p>
           <p className="mt-1 text-sm text-dark-300">Te responderemos a {form.email} en menos de 24 horas hábiles.</p>
         </div>
       ) : (
@@ -63,7 +63,7 @@ export default function Contacto() {
             <div><label className="label">Email *</label><input type="email" required className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
             <div><label className="label">Asunto</label><input className="input" placeholder="Demo / Soporte / Comercial…" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} /></div>
             <div><label className="label">Mensaje</label><textarea rows={5} className="input" value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></div>
-            {err && <p className="text-sm text-red-400">{err}</p>}
+            {err && <p role="alert" className="text-sm font-semibold text-[color:var(--ld-warn)]">{err}</p>}
             <button disabled={busy} className="btn-primary flex items-center gap-2 disabled:opacity-50">
               {busy ? <Loader2 className="animate-spin" size={15} /> : <Send size={15} />} Enviar mensaje
             </button>

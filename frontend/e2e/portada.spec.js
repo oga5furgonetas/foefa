@@ -11,7 +11,8 @@ import { simularApi } from './api-simulada.js'
    llevan los botones; que /empresas enseña lo mismo; que /repartidores sigue ahí; y que en un móvil de 390 px nada se
    sale por el lado. Con FOTOS_PORTADA=<carpeta> guarda además las fotos de la portada y de cada página pública. */
 
-const ALTA = '/registro?sector=otra&plan=completo'
+// Sin tocar la calculadora, el alta del plan Esencial (el del «Desde 5 €») con sus 20 furgonetas.
+const ALTA = '/registro?sector=otra&plan=operacion'
 
 function vigilarErrores(page) {
   const fallos = []
@@ -90,7 +91,7 @@ for (const ruta of ['/', '/empresas']) {
       await simularApi(page, 'vacio')
       await page.goto(ruta, { waitUntil: 'domcontentloaded' })
       for (const id of ['emp-probar-menu', 'emp-probar', 'emp-probar-cierre']) {
-        await expect(page.getByTestId(id)).toHaveText('Probar con mis furgonetas')
+        await expect(page.getByTestId(id)).toHaveText(page.viewportSize().width < 640 && id === 'emp-probar-menu' ? 'Probar' : 'Probar con mis furgonetas', { useInnerText: true })
         await expect(page.getByTestId(id)).toHaveAttribute('href', `${ALTA}&flota=20`)
       }
       await expect(page.getByTestId('emp-expediente')).toHaveText('Ver un expediente de ejemplo')
@@ -167,6 +168,256 @@ test('día por defecto; la noche se elige y se recuerda', async ({ page }) => {
   expect(await raiz.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgb(11, 16, 18)')
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('portada-empresas')).toHaveAttribute('data-theme', 'dark')
+})
+
+/* ── ARREGLOS-1 (14-11-2026): lo que encontraron los revisores de las páginas públicas. Cada prueba falla con el código
+   de antes y pasa con el de ahora. ── */
+
+const IDIOMAS_WEB = ['es', 'en', 'pt', 'fr', 'it', 'de']
+const conIdioma = (page, l) => page.addInitScript((x) => { try { localStorage.setItem('fds_idioma', x) } catch { /* nada */ } }, l)
+
+test('[bloquea] el botón de la cabecera cabe entero en el móvil, en los seis idiomas (320, 360 y 390 px)', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  for (const l of IDIOMAS_WEB) {
+    for (const ancho of [320, 360, 390]) {
+      await page.setViewportSize({ width: ancho, height: 800 })
+      await conIdioma(page, l)
+      await page.goto('/', { waitUntil: 'domcontentloaded' })
+      const boton = page.getByTestId('emp-probar-menu')
+      await expect(boton).toBeVisible()
+      await page.evaluate(() => document.fonts.ready)          // se mide con la letra de verdad, no con la de respaldo
+      const caja = await boton.boundingBox()
+      expect(caja.x + caja.width, `${l} a ${ancho}: el botón se sale`).toBeLessThanOrEqual(ancho - 8)
+      // Y el texto no está cortado dentro del botón.
+      expect(await boton.evaluate((b) => b.scrollWidth <= b.clientWidth + 1), `${l} a ${ancho}: texto cortado`).toBe(true)
+      // La marca y «Entrar» siguen a la vista, sin pisarse con él.
+      const entrar = await page.getByRole('link', { name: /^(Entrar|Log in|Se connecter|Accedi|Anmelden)$/ }).first().boundingBox()
+      expect(entrar.x + entrar.width, `${l} a ${ancho}: «Entrar» pisa el botón`).toBeLessThanOrEqual(caja.x)
+    }
+  }
+})
+
+test('en el móvil, arriba del todo, una línea a la vista lleva a la app de ruta (/repartidores)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await simularApi(page, 'vacio')
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const enlace = page.getByTestId('emp-repartidores-arriba')
+  await expect(enlace).toBeVisible()
+  await expect(enlace).toHaveAttribute('href', '/repartidores')
+  await expect(enlace).toHaveText(/¿Repartes tú\?\s*La app de ruta/)
+  expect((await enlace.boundingBox()).y).toBeLessThan(10)
+  // En el ordenador ya va en la cabecera: la línea de arriba no se repite.
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await expect(enlace).toBeHidden()
+})
+
+test('el paso 3, la pregunta del conductor y la cuenta del cargo dicen solo lo que es verdad', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const paso3 = page.getByTestId('emp-paso').nth(2)
+  await expect(paso3).toContainText('Cada golpe queda con su día')
+  await expect(paso3).toContainText('Y con quién la llevaba, solo cuando se sabe con seguridad. Cada furgoneta tiene su expediente: cómo entró, qué le ha pasado y cuándo, listo para imprimir.')
+  await expect(page.getByTestId('emp-paso').nth(0)).toContainText('cada conductor, una revisión por furgoneta y día')
+  // La pregunta no planta la idea de «quién dio el golpe» y la respuesta no habla de culpa.
+  await expect(page.getByText('¿Dice quién llevaba la furgoneta?')).toBeVisible()
+  await page.getByText('¿Dice quién llevaba la furgoneta?').click()
+  const respuesta = page.locator('details[open] p')
+  await expect(respuesta).toContainText('Solo cuando se sabe con seguridad: si entre las dos fotos la llevó una sola persona, en un día o menos, y la foto anterior de ese lado se repasó y estaba igual.')
+  await expect(respuesta).not.toContainText(/culpa/i)
+  await expect(page.locator('body')).not.toContainText(/qué conductor dio el golpe/i)
+  // La cuenta del cargo: solo la equivalencia, sin dar por hecho que se evita (Esencial, 20 furgonetas = 100 €).
+  await page.getByLabel('¿De cuánto fue el último cargo por daños que te pasaron?').fill('550')
+  await expect(page.getByTestId('emp-meses')).toHaveText('Un cargo así equivale a 5 meses de FDS para tu flota.')
+  await expect(page.locator('body')).not.toContainText(/Con evitar/)
+})
+
+test('los dos botones de plan de la calculadora, del mismo ancho y en la misma fila (1280 y 390)', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  for (const ancho of [1280, 390]) {
+    await page.setViewportSize({ width: ancho, height: 900 })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    const [a, b] = await Promise.all([page.getByRole('button', { name: /^Plan Esencial/ }).boundingBox(), page.getByRole('button', { name: /^Plan Pro/ }).boundingBox()])
+    expect(Math.abs(a.width - b.width), `a ${ancho}`).toBeLessThan(1)
+    expect(Math.abs(a.y - b.y), `a ${ancho}`).toBeLessThan(1)
+    expect(Math.abs(a.height - b.height), `a ${ancho}`).toBeLessThan(1)
+  }
+})
+
+test('las cuatro miniaturas del paso 1: la del lado derecho es la foto; las demás, dibujadas; y ningún rótulo cortado', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  for (const ancho of [1280, 360]) {
+    await page.setViewportSize({ width: ancho, height: 900 })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    const recorte = page.getByTestId('emp-recorte-fotos')
+    await expect(recorte.locator('p')).toHaveText(['Frontal', 'Izquierdo', 'Derecho', 'Trasera'])
+    await expect(recorte.locator('img')).toHaveCount(1)
+    await expect(recorte.locator('img')).toHaveAttribute('src', '/demo/van-lateral.jpg')
+    await expect(recorte.locator('svg[data-vista]')).toHaveCount(3)
+    // Ni la foto de otra furgoneta (la frontal de la demo) ni el lateral girado o acercado.
+    await expect(page.locator('img[src="/demo/van-frontal.jpg"]')).toHaveCount(0)
+    for (const p of await recorte.locator('p').all()) {
+      expect(await p.evaluate((e) => e.scrollWidth <= e.clientWidth + 1 && getComputedStyle(e).textOverflow !== 'ellipsis'), `a ${ancho}`).toBe(true)
+    }
+  }
+})
+
+test('de noche, el cuadrado del logo se ve y el cerco del golpe va en el rojo de noche', async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('fds_tema_web', 'dark') } catch { /* nada */ } })
+  await simularApi(page, 'vacio')
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const cuadrado = page.getByTestId('emp-cabecera').locator('svg rect').first()
+  const [relleno, borde] = await cuadrado.evaluate((r) => [getComputedStyle(r).fill, getComputedStyle(r).stroke])
+  expect(relleno).not.toBe('rgb(16, 24, 26)')                  // la tinta de día sobre el papel de noche no se veía
+  expect(borde).not.toBe('rgba(0, 0, 0, 0)')
+  expect(await page.getByTestId('emp-cerco').evaluate((e) => getComputedStyle(e).borderTopColor)).toBe('rgb(255, 138, 128)')
+})
+
+test('la raya del pie no es más ancha que las demás reglas de la página', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await simularApi(page, 'vacio')
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const pie = await page.locator('footer p').filter({ hasText: '©' }).boundingBox()
+  const regla = await page.locator('#como > div').boundingBox()
+  expect(Math.abs(pie.width - regla.width)).toBeLessThan(1)
+  expect(Math.abs(pie.x - regla.x)).toBeLessThan(1)
+})
+
+test('las letras crecen con el tamaño de letra del navegador (rem, no px)', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const parrafo = page.locator('header p').nth(1)
+  const antes = await parrafo.evaluate((e) => parseFloat(getComputedStyle(e).fontSize))
+  await page.evaluate(() => { document.documentElement.style.fontSize = '32px' })
+  const despues = await parrafo.evaluate((e) => parseFloat(getComputedStyle(e).fontSize))
+  expect(despues).toBeCloseTo(antes * 2, 0)
+  expect(await page.getByRole('heading', { level: 1 }).evaluate((e) => parseFloat(getComputedStyle(e).fontSize))).toBeGreaterThan(80)
+})
+
+test('el formulario: sin exclamaciones y sin recortar a escondidas (cada campo, con su tope)', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  let cuerpo = null
+  await page.route('**/api/auth/lead', (r) => { cuerpo = r.request().postDataJSON(); return r.fulfill({ json: { ok: true, mensaje: '¡Recibido! Te respondemos en menos de 24 horas hábiles.' } }) })
+  await page.goto('/#demo', { waitUntil: 'domcontentloaded' })
+  await page.getByLabel('Tu nombre').fill('Marta Gil')
+  await page.getByLabel('Tu empresa', { exact: true }).fill('E'.repeat(300))
+  await page.getByLabel('Correo').fill('marta@ejemplo.com')
+  await page.getByLabel('¿Cuántas furgonetas?').selectOption('100+')
+  await page.getByLabel('Teléfono (opcional)').fill('6'.repeat(60))
+  const mensaje = page.getByLabel('Mensaje (opcional)')
+  await mensaje.fill('m'.repeat(3000))
+  // El campo no deja pasar del tope y avisa de lo que queda al acercarse.
+  expect((await mensaje.inputValue()).length).toBe(800)
+  await expect(page.getByTestId('emp-quedan')).toHaveText('Quedan 0 caracteres.')
+  await mensaje.fill('m'.repeat(799))
+  await expect(page.getByTestId('emp-quedan')).toHaveText('Queda 1 carácter.')
+  await mensaje.fill('m'.repeat(600))
+  await expect(page.getByTestId('emp-quedan')).toHaveCount(0)
+  await mensaje.fill('m'.repeat(800))
+  expect((await page.getByLabel('Tu empresa', { exact: true }).inputValue()).length).toBe(120)
+  await page.getByRole('button', { name: 'Pedir la demostración' }).click()
+  await expect(page.getByTestId('emp-recibido')).toHaveText('Recibido. Te respondemos en menos de 24 horas hábiles.')
+  // Lo que se ve es exactamente lo que llega: el mensaje entero, sin cortar.
+  expect(cuerpo.plan.endsWith(`mensaje: ${'m'.repeat(800)}`)).toBe(true)
+  expect(cuerpo.plan.length).toBeLessThanOrEqual(1000)
+  expect(cuerpo.company).toBe('E'.repeat(120))
+  await expect(page.locator('body')).not.toContainText('¡')
+})
+
+/* El título de la pestaña: index.html es neutro («FDS») y cada página pública pone el suyo; nadie hereda el de la
+   portada. (En producción, la portada lo trae ya escrito de functions/index.js.) */
+test('títulos de pestaña: ninguna pantalla hereda el de la portada', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  const PORTADA = /para empresas con furgonetas/
+  for (const ruta of ['/conductor', '/ruta', '/login', '/panel/login', '/empleo', '/repartidores', '/iphone']) {
+    await page.goto(ruta, { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(400)
+    await expect(page, ruta).not.toHaveTitle(PORTADA)
+    await expect(page, ruta).toHaveTitle(/FDS/)
+  }
+  for (const [ruta, titulo] of [['/privacidad', 'Política de Privacidad · FDS'], ['/contacto', 'Contacto · FDS'], ['/terminos', /· FDS$/],
+    ['/cookies', /· FDS$/], ['/aviso-legal', /· FDS$/], ['/security', /· FDS$/], ['/planes', 'Planes y precios · FDS'],
+    ['/peritaje-tecnico', 'Qué le enseñas al perito · FDS']]) {
+    await page.goto(ruta, { waitUntil: 'domcontentloaded' })
+    await expect(page, ruta).toHaveTitle(titulo)
+  }
+  // Y al volver de la portada a otra pantalla sin título propio, el neutro, no el de la portada.
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveTitle(PORTADA)
+  await page.goto('/login', { waitUntil: 'domcontentloaded' })
+  await expect(page).not.toHaveTitle(PORTADA)
+})
+
+/* El fondo de arranque: antes de que pinte React, el papel en las páginas públicas claras (sin fogonazo oscuro), y el
+   oscuro de siempre en el panel y la app de reparto. Se mira con el JavaScript de la app bloqueado. */
+test('el fondo antes de que arranque React: papel en las públicas, oscuro en el panel y la ruta', async ({ page }) => {
+  await page.route(/\/assets\/.*\.js$|\/src\/main\.jsx/, (r) => r.abort())
+  for (const [ruta, fondo] of [['/', 'rgb(245, 246, 243)'], ['/empresas', 'rgb(245, 246, 243)'], ['/planes', 'rgb(245, 246, 243)'],
+    ['/contacto', 'rgb(245, 246, 243)'], ['/privacidad', 'rgb(245, 246, 243)'], ['/devolucion-renting/ald', 'rgb(245, 246, 243)'],
+    ['/panel/login', 'rgb(6, 10, 20)'], ['/ruta', 'rgb(6, 10, 20)'], ['/conductor', 'rgb(6, 10, 20)']]) {
+    await page.goto(ruta, { waitUntil: 'load' })
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), ruta).toBe(fondo)
+    const barra = await page.locator('meta[name="theme-color"]').getAttribute('content')
+    expect(barra, ruta).toBe(fondo === 'rgb(6, 10, 20)' ? '#070a0e' : '#f5f6f3')
+  }
+  // Quien eligió la noche en el pie arranca en el papel de noche, no en el claro.
+  await page.addInitScript(() => { try { localStorage.setItem('fds_tema_web', 'dark') } catch { /* nada */ } })
+  await page.goto('/', { waitUntil: 'load' })
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(11, 16, 18)')
+})
+
+/* Contacto y las legales: la paleta de las páginas públicas (papel, sin la tarjeta clara con halo del tema del panel). */
+for (const ruta of ['/contacto', '/privacidad', '/cookies']) {
+  test(`${ruta}: papel y tinta, sin halo ni tarjeta clara encima, de día y de noche`, async ({ page }) => {
+    await simularApi(page, 'vacio')
+    for (const [tema, fondo, tinta] of [['light', 'rgb(245, 246, 243)', 'rgb(16, 24, 26)'], ['dark', 'rgb(11, 16, 18)', 'rgb(233, 237, 239)']]) {
+      await page.addInitScript((t) => { try { localStorage.setItem('fds_tema_web', t) } catch { /* nada */ } }, tema)
+      await page.goto(ruta, { waitUntil: 'domcontentloaded' })
+      const raiz = page.getByTestId('legal')
+      await expect(raiz).toHaveAttribute('data-theme', tema)
+      expect(await raiz.evaluate((e) => getComputedStyle(e).backgroundColor), tema).toBe(fondo)
+      const zona = page.getByRole('main')
+      const [fondoZona, imagen] = await zona.evaluate((e) => [getComputedStyle(e).backgroundColor, getComputedStyle(e).backgroundImage])
+      expect(fondoZona, `${tema}: la zona del texto lleva fondo propio`).toBe('rgba(0, 0, 0, 0)')
+      expect(imagen, `${tema}: halo`).toBe('none')
+      expect(await page.getByRole('heading', { level: 1 }).evaluate((e) => getComputedStyle(e).color), tema).toBe(tinta)
+      // El texto se lee sobre su fondo (lo que antes era la rampa del panel de noche).
+      expect(await zona.locator('p').first().evaluate((e) => getComputedStyle(e).color), tema).not.toBe(fondo)
+    }
+  })
+}
+
+test('/planes en otro idioma: sus textos traducidos, el selector de idioma de la portada y una línea para lo del servidor', async ({ page }) => {
+  await conIdioma(page, 'de')
+  await simularApi(page, 'vacio')
+  await page.goto('/planes', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Bezahlt wird pro Fahrzeug. Nutzer und Fahrer ohne Begrenzung.')
+  await expect(page).toHaveTitle('Tarife und Preise · FDS')
+  await expect(page.getByTestId('planes-en-espanol')).toBeVisible()
+  // Fuera de lo que llega del servidor (marcado lang="es"), ni una frase de la página en español.
+  const texto = await page.evaluate(() => {
+    const c = document.body.cloneNode(true)
+    c.querySelectorAll('[lang="es"], #ld-idioma, script, style').forEach((n) => n.remove())
+    return c.innerText
+  })
+  for (const es of ['Se paga por vehículo', 'Mensual', 'Recomendado', 'por vehículo y mes', 'Empezar la prueba', 'Complementos', 'Cómo se cuenta', '¿Repartes tú solo?', 'Precios sin IVA', 'Oferta fundador', 'gratis']) {
+    expect(texto, es).not.toContain(es)
+  }
+  // El mismo selector de idioma que la portada (el del pie), que cambia la página al momento.
+  await page.locator('#ld-idioma').selectOption('es')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Se paga por vehículo. Usuarios y conductores, sin límite.')
+  await expect(page.getByTestId('planes-en-espanol')).toHaveCount(0)
+  // Ya no se contradice: nada de «2 meses gratis» al lado de «pagas 10 meses».
+  const cabeza = await page.locator('h1 + p').innerText()
+  expect(cabeza).toContain('anual pagando 10 meses')
+  expect(cabeza).not.toMatch(/gratis/i)
+})
+
+test('las páginas del repartidor llevan su logo a /repartidores, no a la portada de empresas', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  await page.goto('/iphone', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('link', { name: 'FDS' }).first()).toHaveAttribute('href', '/repartidores')
+  await page.goto('/prueba-reparto', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('link', { name: 'FDS', exact: true }).first()).toHaveAttribute('href', '/repartidores')
 })
 
 /* ── Las fotos (solo con FOTOS_PORTADA=<carpeta>) ── */

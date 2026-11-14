@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#070a0e" />
+    <!-- Antes de que se pinte nada: el papel en las páginas públicas claras (la
+         portada, /planes, contacto, las legales…); el resto arranca en oscuro.
+         Va después del theme-color, que también cambia. -->
+    <script src="/fondo-arranque.js"></script>
 
     <!-- PWA: iOS -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -21,17 +25,20 @@
 
     <!-- SEO. Sin canonical ni og:url escritos: el dominio es el de cada
          despliegue, y una URL de otro dominio aquí le diría a Google que esta
-         página es otra. -->
-    <title>FDS para empresas con furgonetas · El golpe, el día que aparece</title>
-    <meta name="description" content="Cada conductor fotografía su furgoneta desde el móvil. Tú ves la foto de hoy junto a la anterior del mismo lado y marcas lo que sea nuevo, para arreglarlo antes de que lo vea el perito del renting. Y para quien reparte, la app de ruta." />
+         página es otra. El título y la descripción, NEUTROS de la marca: los
+         hereda cada pantalla que no pone el suyo (el portal del conductor, la
+         app de ruta, los accesos, las legales…). La portada pone el suyo al
+         montar y, en producción, functions/index.js lo sirve ya escrito. -->
+    <title>FDS</title>
+    <meta name="description" content="Revisiones con foto para empresas con furgonetas, y la app de ruta para quien reparte." />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="FDS" />
-    <meta property="og:title" content="FDS para empresas con furgonetas · El golpe, el día que aparece" />
-    <meta property="og:description" content="Cada conductor fotografía su furgoneta. Tú ves la foto de hoy junto a la anterior del mismo lado y marcas lo que sea nuevo." />
+    <meta property="og:title" content="FDS" />
+    <meta property="og:description" content="Revisiones con foto para empresas con furgonetas, y la app de ruta para quien reparte." />
     <meta property="og:image" content="/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="FDS para empresas con furgonetas · El golpe, el día que aparece" />
+    <meta property="og:image:alt" content="FDS" />
     <meta property="og:locale" content="es_ES" />
     <meta name="twitter:card" content="summary_large_image" />
   </head>

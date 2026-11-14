@@ -12,9 +12,10 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
    su propia ruta. Ronda 2 (14-11-2026): el alta, el foco, la calculadora por encima del tope, las etiquetas de la
    rejilla, la captura real, la cabecera fija y el inglés con mayúsculas y con el formulario enviado. */
 
-const RECIBIDO = '¡Recibido! Te respondemos en menos de 24 horas hábiles.'
-// El alta a la que llevan los tres «Probar con mis furgonetas»: la de flota (sector «Otra flota», plan Pro).
-const ALTA = '/registro?sector=otra&plan=completo'
+const RECIBIDO = 'Recibido. Te respondemos en menos de 24 horas hábiles.'
+// El alta a la que llevan los tres «Probar con mis furgonetas»: la de flota (sector «Otra flota»), con el plan de la
+// calculadora (sin tocarla, el Esencial: `operacion`).
+const ALTA = '/registro?sector=otra'
 
 /* La API simulada y, encima, lo que estas pruebas miran: los eventos de analítica y el formulario. */
 async function preparar(page, { lead } = {}) {
@@ -110,33 +111,32 @@ test.describe('/empresas', () => {
     }
   })
 
-  test('los tres «Probar con mis furgonetas» llevan al alta de FLOTA, con las furgonetas de la calculadora', async ({ page }) => {
+  test('los tres «Probar con mis furgonetas» llevan al alta de FLOTA con el plan y las furgonetas de la calculadora', async ({ page }) => {
     const { acciones } = await preparar(page)
     await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
     const botones = [page.getByTestId('emp-probar-menu'), page.getByTestId('emp-probar'), page.getByTestId('emp-probar-cierre')]
-    // La calculadora empieza en 20 furgonetas: el alta se las lleva.
-    for (const b of botones) await expect(b).toHaveAttribute('href', `${ALTA}&flota=20`)
+    // Sin tocar la calculadora: el Esencial (el del «Desde 5 €») con sus 20 furgonetas, lo mismo que ella enseña.
+    await expect(page.getByRole('button', { name: /^Plan Esencial/ })).toHaveAttribute('aria-pressed', 'true')
+    for (const b of botones) await expect(b).toHaveAttribute('href', `${ALTA}&plan=operacion&flota=20`)
     const furgonetas = page.getByLabel('¿Cuántas furgonetas tienes?')
     await furgonetas.fill('35')
-    for (const b of botones) await expect(b).toHaveAttribute('href', `${ALTA}&flota=35`)
-    // Sin un número válido (vacío o por encima del tope), sin `flota`.
+    for (const b of botones) await expect(b).toHaveAttribute('href', `${ALTA}&plan=operacion&flota=35`)
+    // El plan que se ve es el que se contrata: con Pro elegido, el alta es de Pro.
+    await page.getByRole('button', { name: /^Plan Pro/ }).click()
+    for (const b of botones) await expect(b).toHaveAttribute('href', `${ALTA}&plan=completo&flota=35`)
+    // Sin un número válido (vacío o por encima del tope), sin `flota`, pero con el plan.
     for (const v of ['', '0', '9000']) {
       await furgonetas.fill(v)
-      for (const b of botones) await expect(b).toHaveAttribute('href', ALTA)
+      for (const b of botones) await expect(b).toHaveAttribute('href', `${ALTA}&plan=completo`)
     }
-    await furgonetas.fill('35')
+    await page.getByRole('button', { name: /^Plan Esencial/ }).click()
+    await furgonetas.fill('12')
+    await expect(page.getByTestId('emp-precio')).toHaveAttribute('data-precio', '60')
     const boton = page.getByTestId('emp-probar')
     await expect(boton).toHaveText('Probar con mis furgonetas')
     await boton.click()
-    await expect(page).toHaveURL(/\/registro\?sector=otra&plan=completo&flota=35$/)
+    await expect(page).toHaveURL(/\/registro\?sector=otra&plan=operacion&flota=12$/)
     await expect.poll(acciones).toContain('emp_probar_arriba')
-    // Sale el formulario de la cuenta de empresa con el plan Pro ya elegido: ni el selector de sector ni el de plan.
-    await expect(page.getByText('Plan elegido')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Crear cuenta con plan Pro' })).toBeVisible()
-    await expect(page.getByText('315€/mes')).toBeVisible()          // 35 furgonetas × 9 € (Pro, sin descuento)
-    await expect(page.getByText('14 días gratis · sin tarjeta · cancela cuando quieras')).toBeVisible()
-    await expect(page.getByText(/¿Qué vas a hacer con/)).toHaveCount(0)
-    await expect(page.getByText('Mensajería y paquetería')).toHaveCount(0)
   })
 
   test('«Que me la enseñen en 15 minutos» baja al formulario', async ({ page }) => {
@@ -295,7 +295,7 @@ test.describe('/empresas', () => {
     // Con el cargo: los meses que paga (Pro, 25 furgonetas = 225 €; 1.500 € = 6 meses).
     await furgonetas.fill('25')
     await page.getByLabel('¿De cuánto fue el último cargo por daños que te pasaron?').fill('1500')
-    await expect(page.getByTestId('emp-meses')).toHaveText('Con evitar un cargo así, tienes pagados 6 meses.')
+    await expect(page.getByTestId('emp-meses')).toHaveText('Un cargo así equivale a 6 meses de FDS para tu flota.')
     await expect(page.getByTestId('emp-resultado')).toContainText('al mes con el plan Pro.')
     // Sin el segundo dato, solo el precio.
     await page.getByLabel('¿De cuánto fue el último cargo por daños que te pasaron?').fill('')
@@ -308,6 +308,8 @@ test.describe('/empresas', () => {
     await page.goto('/empresas', { waitUntil: 'domcontentloaded' })
     const furgonetas = page.getByLabel('¿Cuántas furgonetas tienes?')
     const cargo = page.getByLabel('¿De cuánto fue el último cargo por daños que te pasaron?')
+    // Las cuentas de abajo son de Pro (la calculadora empieza en Esencial, el del «Desde 5 €»).
+    await page.getByRole('button', { name: /^Plan Pro/ }).click()
     // Por encima de 5.000: ningún precio, «a medida» y el enlace a la demostración.
     await furgonetas.fill('100000')
     await expect(page.getByTestId('emp-a-medida')).toContainText('Para más de 5.000 vehículos, el plan Empresa es a medida.')
@@ -324,9 +326,9 @@ test.describe('/empresas', () => {
     // Meses con separador y, por encima de 120, «más de 10 años».
     await furgonetas.fill('20')                                     // Pro, 20 furgonetas = 180 €
     await cargo.fill('20000')
-    await expect(page.getByTestId('emp-meses')).toHaveText('Con evitar un cargo así, tienes pagados 111 meses.')
+    await expect(page.getByTestId('emp-meses')).toHaveText('Un cargo así equivale a 111 meses de FDS para tu flota.')
     await cargo.fill('99999999')
-    await expect(page.getByTestId('emp-meses')).toHaveText('Con evitar un cargo así, tienes pagados más de 10 años.')
+    await expect(page.getByTestId('emp-meses')).toHaveText('Un cargo así equivale a más de 10 años de FDS para tu flota.')
   })
 
   /* Palabras que solo dice el español: en minúscula, cualquiera con acento o eñe; con mayúscula, las que pasarían sin
@@ -378,7 +380,7 @@ test.describe('/empresas', () => {
     await rellenar(page, { flota: 'How many vans?' })
     await page.getByRole('button', { name: 'Book the demo' }).click()
     const recibido = page.getByTestId('emp-recibido')
-    await expect(recibido).toHaveText('Got it! We’ll reply within one working day.')
+    await expect(recibido).toHaveText('Got it. We’ll reply within one working day.')
     await expect(recibido).toBeFocused()
     expect(leads).toHaveLength(1)
     expect(leads[0].plan).toContain('idioma: en')
@@ -440,7 +442,7 @@ test.describe('/empresas', () => {
     await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true }))
     await page.getByLabel('How much was your last damage bill?').fill('1500')
     const texto = await textoSinIdioma(page)
-    for (const frase of ['Not checked today', 'Pay yearly: 12 months for the price of 10.', 'Avoid just one bill like that and it covers',
+    for (const frase of ['Not checked today', 'Pay yearly: 12 months for the price of 10.', 'A bill like that equals',
       'the Enterprise plan, priced to suit', '/vehicle', 'Your company', 'Example with made-up data', 'Only Luis P. drove it between the two photos.']) {
       expect(texto, frase).toContain(frase)
     }
@@ -459,7 +461,7 @@ test.describe('/empresas', () => {
 test.describe('/peritaje-tecnico', () => {
   const PROHIBIDAS = ['Sin discusión', 'quién golpeó', 'al salir y al volver', '90 segundos', 'Imposible falsificar', 'inmutable', 'certificad',
     'Acceso anticipado', 'no manipulable', 'Confidence scoring', 'más de un día antes', 'Al acabar puede firmarla', 'la declaración que aceptó',
-    'IA', 'detecta', 'Revisión rápida', 'hecha a las', 'verificad', 'gratis']
+    'IA', 'detecta', 'Revisión rápida', 'hecha a las', 'verificad', 'gratis', 'quién dio el golpe']
 
   for (const [nombre, ancho, alto] of [['ordenador', 1280, 900], ['móvil', 390, 844]]) {
     test(`dice solo lo que hace el servidor y se lee en ${nombre}`, async ({ page }) => {
@@ -470,12 +472,12 @@ test.describe('/peritaje-tecnico', () => {
       await expect(page.getByRole('heading', { level: 1 })).toHaveText('Qué le enseñas al perito del renting')
       const texto = await page.locator('body').innerText()
       for (const p of PROHIBIDAS) expect(texto, `no puede decir «${p}»`).not.toContain(p)
-      for (const p of ['No dice quién dio el golpe.', 'Cada conductor hace una revisión por furgoneta y día.', 'No es una firma electrónica avanzada',
+      for (const p of ['No le pone nombre a un golpe por suposición.', 'Cada conductor hace una revisión por furgoneta y día.', 'No es una firma electrónica avanzada',
         'Con el plan Pro, la oficina puede firmar una revisión desde el panel.', 'con la fecha y la hora en que llegó al servidor',
         'queda sin conductor atribuible y se dice por qué', 'El expediente solo lleva los golpes que ha marcado o confirmado una persona.']) {
         expect(texto, `tiene que decir «${p}»`).toContain(p)
       }
-      await expect(page.getByRole('link', { name: 'Probar con mis furgonetas' })).toHaveAttribute('href', '/registro?sector=otra&plan=completo')
+      await expect(page.getByRole('link', { name: 'Probar con mis furgonetas' })).toHaveAttribute('href', '/registro?sector=otra&plan=operacion')
       await expect(page.getByRole('link', { name: 'Ver un expediente de ejemplo' })).toHaveAttribute('href', '/expediente-ejemplo')
       await expect(page.getByRole('link', { name: /Hacer la cuenta/ })).toHaveAttribute('href', '/#precio')
       await page.waitForTimeout(300)
