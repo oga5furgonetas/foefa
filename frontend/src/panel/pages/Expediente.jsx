@@ -30,6 +30,7 @@ export default function Expediente() {
   const { billing, modulos } = usePlan()
   const [estado, setEstado] = useState({ cargando: true, datos: null, error: '' })
   const [intento, setIntento] = useState(0)
+  const [iaEnPapel, setIaEnPapel] = useState(false)
   const dentro = isAuthed()
   const sinModulo = Array.isArray(modulos) && !modulos.includes('vehiculos')
   const puede = dentro && canSee('vehiculos') && !sinModulo
@@ -72,6 +73,7 @@ export default function Expediente() {
 
   const volver = `/panel/vehiculos${id ? `?open=${encodeURIComponent(id)}` : ''}`
   const sinGolpes = estado.datos && !(Array.isArray(estado.datos.golpes) && estado.datos.golpes.some((g) => g && !g.ya_estaba))
+  const hayPosiblesIA = Array.isArray(estado.datos?.posibles_ia) && estado.datos.posibles_ia.some((p) => p && typeof p === 'object')
 
   return (
     <main className="min-h-screen bg-dark-950 px-4 pt-4 text-dark-100 md:px-6 md:pt-6">
@@ -81,9 +83,20 @@ export default function Expediente() {
             <ArrowLeft size={16} aria-hidden="true" /> {t('exp.volver')}
           </Link>
           {estado.datos && (
-            <button type="button" className="exp-boton exp-boton-firma" onClick={() => window.print()}>
-              <Printer size={18} aria-hidden="true" /> {t('exp.imprimir')}
-            </button>
+            <div className="exp-imprimir">
+              {/* E1 (tanda 5): el anexo de la IA es para el dueño, no para el perito. En papel no sale salvo que se
+                  marque aquí; desmarcada al entrar y sin recordarse entre visitas. Solo si hay anexo. */}
+              {hayPosiblesIA && (
+                <label className="exp-casilla text-dark-300">
+                  <input type="checkbox" checked={iaEnPapel} onChange={(e) => setIaEnPapel(e.target.checked)}
+                    className="accent-dark-50" data-testid="imprimir-ia" />
+                  <span>{t('exp.ia.casilla')}</span>
+                </label>
+              )}
+              <button type="button" className="exp-boton exp-boton-firma" onClick={() => window.print()}>
+                <Printer size={18} aria-hidden="true" /> {t('exp.imprimir')}
+              </button>
+            </div>
           )}
         </div>
 
@@ -111,7 +124,7 @@ export default function Expediente() {
                 <Link to="/panel/repaso" className="font-semibold text-dark-50 underline underline-offset-2">{t('exp.aviso.ir')}</Link>
               </p>
             )}
-            <DocumentoExpediente datos={estado.datos} empresa={billing?.org_name || ''} />
+            <DocumentoExpediente datos={estado.datos} empresa={billing?.org_name || ''} iaEnPapel={iaEnPapel} />
           </>
         )}
       </div>
