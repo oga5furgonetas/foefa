@@ -160,7 +160,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
       }
       setPhotoErrors((errs) => { const next = { ...errs }; delete next[slotId]; return next })
       setPhotos((p) => ({ ...p, [slotId]: blob }))
-      toast.success(r.data?.checked ? '✅ Foto verificada' : '📷 Foto capturada')
+      toast.success(r.data?.checked ? '✅ Foto revisada' : '📷 Foto capturada')
     } catch {
       setPhotos((p) => ({ ...p, [slotId]: blob }))
     }

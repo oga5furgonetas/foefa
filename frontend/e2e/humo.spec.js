@@ -37,7 +37,7 @@ const PUBLICAS = [
   ['/', 'Landing'], ['/login', 'Login'], ['/planes', 'Planes'], ['/empresas', 'Empresas'], ['/invita?ref=ABCDE1', 'Landing de invitación'],
   ['/registro', 'Registro'], ['/contacto', 'Contacto'], ['/iphone', 'Guía de iPhone'],
   ['/security', 'Seguridad'], ['/peritaje-tecnico', 'Peritaje'],
-  ['/verify', 'Verificador'], ['/privacidad', 'Privacidad'],
+  ['/verify', 'Comprobar un informe'], ['/privacidad', 'Privacidad'],
   ['/terminos', 'Términos'], ['/encargo', 'Encargo del tratamiento'], ['/cookies', 'Cookies'],
   ['/aviso-legal', 'Aviso legal'], ['/conductor', 'Portal del conductor'],
   // El alta CON plan y flota elegidos: es lo que ve el cliente justo despues
@@ -133,7 +133,7 @@ test.describe('Páginas públicas', () => {
 })
 
 /* FURGONETAS FIJAS (pestaña de la Plantilla del día): la tabla de conductores
-   con su principal, la nota de responsabilidad y la fila de aparcamiento. */
+   con su principal, la nota de confianza y la fila de aparcamiento. */
 test.describe('Furgonetas fijas', () => {
   const AFINIDAD = {
     center: 'NORTE',
