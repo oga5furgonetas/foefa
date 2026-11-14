@@ -7847,7 +7847,12 @@ async def _seed_demo_data():
     await ddb.drivers.insert_many(drivers)
 
     # Inspecciones de los últimos 10 días con algunos daños (para dashboard/€/scoring)
-    parts = ["puerta lateral derecha", "paragolpes trasero", "aleta delantera izquierda", "portón trasero"]
+    # La aleta es la TRASERA DERECHA desde el 14-11-2026 (antes, la delantera
+    # izquierda, que solo salía en la frontal, donde la furgoneta va lejos: no
+    # tenía foto con el golpe y «Origen de daños» ponía la misma imagen como
+    # limpia y como golpeada). La trasera derecha es la chapa de encima de la
+    # rueda trasera de la lateral, grande en la foto: lleva su golpe dibujado.
+    parts = ["puerta lateral derecha", "paragolpes trasero", "aleta trasera derecha", "portón trasero"]
     # CON FOTOS (14-11-2026). La demo salía con `photos: []`: quien llegaba
     # desde la página de venta («cada conductor revisa su furgoneta con fotos;
     # si aparece un golpe, sabes qué día fue y quién la llevaba») abría
@@ -7862,24 +7867,48 @@ async def _seed_demo_data():
     fotos_demo = [f"{_PORTAL_BASE_FRONT}/demo/van-lateral.jpg", f"{_PORTAL_BASE_FRONT}/demo/van-frontal.jpg"]
     # Dónde cae cada golpe: foto (1-based, como `photo_index` de la IA), zona y
     # `box_2d` [ymin, xmin, ymax, xmax] en 0-1000, medidos sobre las fotos para
-    # que la caja quede encima de la pieza (la puerta corredera, el paragolpes y
-    # el canto de las puertas traseras en la lateral; la aleta del lado del
-    # conductor, junto al faro, en la frontal). Área ≥ 0,5 % para que el PDF
-    # también la dibuje (`_is_box_valid`). La zona es la del vocabulario de la
-    # IA (frontal|trasera|lateral_izquierdo|lateral_derecho|techo|otra): la
-    # aleta es chapa del lateral izquierdo aunque se vea en la frontal, y
-    # `salud_flota.zona()` hace caso a la pista antes que al nombre (14-11-2026).
+    # que la caja quede encima de la pieza (todas en la lateral: la puerta
+    # corredera, el paragolpes, el canto de las puertas traseras y la aleta de
+    # encima de la rueda trasera). Área ≥ 0,5 % para que el PDF también la
+    # dibuje (`_is_box_valid`). La zona es la del vocabulario de la IA
+    # (frontal|trasera|lateral_izquierdo|lateral_derecho|techo|otra):
+    # `salud_flota.zona()` hace caso a la pista antes que al nombre, y la aleta
+    # trasera es chapa del lateral derecho aunque diga «trasera» (14-11-2026).
     sitio_golpe = {
         "puerta lateral derecha": (1, "lateral_derecho", [590, 500, 700, 600]),
         "paragolpes trasero": (1, "trasera", [690, 233, 785, 290]),
-        "aleta delantera izquierda": (2, "lateral_izquierdo", [485, 505, 578, 562]),
+        "aleta trasera derecha": (1, "lateral_derecho", [615, 308, 708, 425]),
         "portón trasero": (1, "trasera", [380, 238, 640, 275]),
+    }
+    # LA FOTO CON EL GOLPE (14-11-2026). Con las mismas dos fotos en todas las
+    # inspecciones, «Origen de daños» ponía como «limpia» y «con el golpe» la
+    # misma imagen: no había antes y después, y la caja marcaba chapa limpia.
+    # `scripts/demo-fotos-golpes.py` dibuja el golpe dentro de la caja de cada
+    # pieza de `sitio_golpe` sobre la lateral; aquí, cada combinación de golpes
+    # que ya tiene la furgoneta, con su imagen (exactamente las que salen con
+    # esta siembra: la 2462 JKL lleva la puerta y, después, la aleta).
+    lateral_con = {
+        frozenset(): "van-lateral.jpg",
+        frozenset({"puerta lateral derecha"}): "van-lateral-golpe-puerta.jpg",
+        frozenset({"puerta lateral derecha", "aleta trasera derecha"}): "van-lateral-golpe-puerta-aleta.jpg",
+        frozenset({"paragolpes trasero"}): "van-lateral-golpe-paragolpes.jpg",
+        frozenset({"paragolpes trasero", "portón trasero"}): "van-lateral-golpe-paragolpes-porton.jpg",
     }
     insps = []
     for day in range(10):
         for j in range(5):
             di = (day + j) % len(drivers)
             vi = (day * 3 + j) % len(vehicles)
+            # UN GOLPE QUE SE PUEDA ACOTAR (14-11-2026). Con el reparto de arriba
+            # ningún golpe salía en «Un solo conductor», que es lo que abre
+            # «Origen de daños» y lo que vende la página: el único golpe no leve
+            # con revisión anterior (el portón) tenía tres días de hueco. Esta
+            # revisión (Carlos Ruiz, víspera de la puerta grave de la 2462 JKL,
+            # que también hizo él) pasa de la 3924 RST a la 2462 JKL: ahora es su
+            # foto limpia, a un día y con una sola persona entre las dos. Mismos
+            # totales: solo cambia de furgoneta una revisión sin golpes.
+            if (day, j) == (8, 0):
+                vi = 2
             has_dmg = (day * 5 + j) % 9 == 0
             pieza = parts[(day + j) % len(parts)]
             nd = ([{
@@ -7910,6 +7939,19 @@ async def _seed_demo_data():
                     "image_quality_warnings": [], "critical_damages": [],
                 },
             })
+    # Las fotos, por furgoneta y de la más vieja a la más nueva: limpia hasta la
+    # revisión que ve un golpe, y desde ella la lateral con ese golpe (se
+    # acumulan). El orden sale del bucle (día hacia atrás, j hacia delante), no
+    # de `created_at`, para que no dependa de la hora a la que se siembra.
+    vistos: dict = {}
+    for ins in sorted(insps, key=lambda x: (-int(x["id"].split("-")[1][1:]), int(x["id"].split("-")[2]))):
+        ya = vistos.setdefault(ins["vehicle_id"], set())
+        ya.update(d["part"] for d in ins["analysis"]["new_damages"])
+        lat = frozenset(p for p in ya if sitio_golpe[p][0] == 1)
+        # Una combinación sin imagen (no la hay con esta siembra) se queda con la
+        # más grande que sí tenga: nunca una foto con un golpe que no ha pasado.
+        mejor = max((k for k in lateral_con if k <= lat), key=len)
+        ins["photos"] = [f"{_PORTAL_BASE_FRONT}/demo/{lateral_con[mejor]}", fotos_demo[1]]
     await ddb.inspections.insert_many(insps)
 
     # Cuadrante de hoy + incidencias abiertas

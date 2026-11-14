@@ -96,13 +96,13 @@ async def test_cada_golpe_se_puede_pintar_en_su_sitio(demo):
             assert server._is_box_valid(caja), f"caja demasiado pequeña para el PDF: {caja}"
             assert d.get("confidence", 0) >= server._FORENSIC_CONFIDENCE_MIN
             assert d.get("part") and d.get("severity") and d.get("confirmed") is True
-            # La pieza cuadra con la foto: la aleta, en la frontal; lo demás, en la lateral.
+            # La pieza cuadra con la foto: todas en la lateral (desde el 14-11-2026, con el golpe
+            # dibujado: «van-lateral-golpe-…»; la aleta es la trasera derecha, que se ve en ella).
             foto = Path(urlparse(i["photos"][pi - 1]).path).name
-            esperada = "van-frontal.jpg" if d["part"] == "aleta delantera izquierda" else "van-lateral.jpg"
-            assert foto == esperada, (d["part"], foto)
+            assert foto.startswith("van-lateral"), (d["part"], foto)
             # Y la caja cae sobre la furgoneta, no en el cielo: dentro de la mitad
             # de abajo de la lateral (la furgoneta va de y≈320 a y≈860 en 0-1000).
-            if foto == "van-lateral.jpg":
+            if foto.startswith("van-lateral"):
                 assert 300 <= y0 and y1 <= 880 and 220 <= x0 and x1 <= 950, (d["part"], caja)
             with Image.open(_fichero_de(i["photos"][pi - 1])) as im:
                 assert im.size[0] > 0 and im.size[1] > 0
@@ -134,16 +134,21 @@ async def test_es_determinista(demo):
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_la_aleta_lleva_la_zona_del_vocabulario_de_la_ia(demo):
-    # La aleta se ve en la frontal (foto 2), pero es chapa del lateral izquierdo:
-    # la pista de zona usa el vocabulario de la IA y `salud_flota.zona` le hace caso.
+    # La aleta de la demo es la TRASERA DERECHA (14-11-2026; antes, la delantera izquierda
+    # en la frontal, sin foto con el golpe): se ve en la lateral (foto 1) y, aunque diga
+    # «trasera», es chapa del lateral derecho. La pista usa el vocabulario de la IA y
+    # `salud_flota.zona` le hace caso antes que al nombre.
     import salud_flota as sf
     insps = await _sembrar(demo)
-    aletas = [d for i in insps for d in i["analysis"]["damages"] if d["part"] == "aleta delantera izquierda"]
+    todas = {d["part"] for i in insps for d in i["analysis"]["damages"]}
+    assert "aleta delantera izquierda" not in todas
+    aletas = [d for i in insps for d in i["analysis"]["damages"] if d["part"] == "aleta trasera derecha"]
     assert aletas, "la demo ya no siembra la aleta"
     for d in aletas:
-        assert d["photo_index"] == 2
-        assert d["location_hint"] == "lateral_izquierdo"
-        assert sf.zona(d["part"], "", d["location_hint"]) == "lat_izq"
+        assert d["photo_index"] == 1
+        assert d["location_hint"] == "lateral_derecho"
+        assert d["box_2d"] == CAJA["aleta trasera derecha"]
+        assert sf.zona(d["part"], "", d["location_hint"]) == "lat_der"
     vocab = {"frontal", "trasera", "lateral_izquierdo", "lateral_derecho", "techo", "otra"}
     assert all(d["location_hint"] in vocab for i in insps for d in i["analysis"]["damages"])
 
@@ -170,7 +175,9 @@ async def test_al_regenerar_origen_de_danos_sale_lleno_sin_abrir_ninguna_ficha(d
     await server._demo_regenerar()
     r = await _origen_de_la_demo()
     assert r["total"] == 5, r          # 6 golpes sembrados en 5 paneles de furgoneta distintos
-    assert r["resumen"] == {"alta": 0, "media": 1, "baja": 4}, r["resumen"]
+    # Antes del 14-11-2026: {"alta": 0, "media": 1, "baja": 4}. Lo que sale ahora, uno a
+    # uno, en test_origen_de_danos_de_la_demo_tiene_antes_y_despues.
+    assert r["resumen"] == {"alta": 1, "media": 1, "baja": 3}, r["resumen"]
     fechas = _fechas_de(ddb)
     # (La base de mentira no pone `_id`: se casa cada fila con su apunte por furgoneta y panel.)
     apuntes = {(e["vehicle_id"], e["panel"]): e for e in ddb.vehicle_damage_ledger.docs}
@@ -251,6 +258,155 @@ async def test_la_regeneracion_no_toca_otra_base(demo):
     await otra.inspection_ai_results.insert_one({"inspection_id": "real", "photo_index": 0})
     await server._demo_regenerar()
     assert len(otra.vehicle_damage_ledger.docs) == 1 and len(otra.inspection_ai_results.docs) == 1
+
+
+# ── El antes y el después (14-11-2026, ronda 3: V4 y R1) ─────────────────────
+# Con las MISMAS dos fotos en todas las inspecciones, «Origen de daños» de la
+# demo ponía como «limpia» y «con el golpe» la misma imagen (decía «No hay foto
+# anterior» aunque la hubiera) y ningún golpe salía en «Un solo conductor», que
+# es el grupo con el que abre la pantalla y lo que vende la página.
+
+# Qué golpes lleva dibujados cada foto (scripts/demo-fotos-golpes.py, VARIANTES).
+GOLPES_EN = {
+    "van-lateral.jpg": set(),
+    "van-lateral-golpe-puerta.jpg": {"puerta lateral derecha"},
+    "van-lateral-golpe-puerta-aleta.jpg": {"puerta lateral derecha", "aleta trasera derecha"},
+    "van-lateral-golpe-paragolpes.jpg": {"paragolpes trasero"},
+    "van-lateral-golpe-paragolpes-porton.jpg": {"paragolpes trasero", "portón trasero"},
+    "van-frontal.jpg": set(),
+}
+CAJA = {  # las de `sitio_golpe`, [ymin, xmin, ymax, xmax] en 0-1000
+    "puerta lateral derecha": [590, 500, 700, 600],
+    "paragolpes trasero": [690, 233, 785, 290],
+    "portón trasero": [380, 238, 640, 275],
+    "aleta trasera derecha": [615, 308, 708, 425],
+}
+
+
+def _nombre(url):
+    return Path(urlparse(url).path).name if url else None
+
+
+def test_cada_variante_es_la_lateral_con_su_golpe_y_nada_mas():
+    import numpy as np
+    from PIL import Image
+    demo = PUBLICO / "demo"
+    with Image.open(demo / "van-lateral.jpg") as im:
+        base = np.asarray(im.convert("RGB"), dtype=np.float32)
+    H, W = base.shape[:2]
+    # Ni falta ni sobra ninguna: las variantes en disco son las que conoce la siembra.
+    assert {f.name for f in demo.glob("van-lateral-golpe-*.jpg")} == {n for n, g in GOLPES_EN.items() if g}
+    for nombre, golpes in GOLPES_EN.items():
+        if not golpes:
+            continue
+        f = demo / nombre
+        assert f.is_file(), nombre
+        assert f.stat().st_size < 200_000, (nombre, f.stat().st_size)
+        with Image.open(f) as im:
+            assert im.size == (W, H), (nombre, im.size)
+            otra = np.asarray(im.convert("RGB"), dtype=np.float32)
+        dif = np.abs(otra - base).mean(axis=2)
+        fuera = np.ones((H, W), bool)
+        for g in golpes:
+            y0, x0, y1, x1 = CAJA[g]
+            ys, xs = slice(y0 * H // 1000, y1 * H // 1000), slice(x0 * W // 1000, x1 * W // 1000)
+            fuera[ys, xs] = False
+            # Dentro de la caja el golpe se nota (de media, más de 6 niveles de 255)...
+            assert dif[ys, xs].mean() > 6, (nombre, g, dif[ys, xs].mean())
+        # ... y fuera solo queda lo que mueve volver a guardar el JPEG.
+        assert dif[fuera].mean() < 2.5, (nombre, dif[fuera].mean())
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_foto_lleva_los_golpes_que_ya_tiene_la_furgoneta(demo):
+    insps = await _sembrar(demo)
+    porv: dict = {}
+    for i in insps:
+        dia, j = (int(x) for x in i["id"][len("demo-i"):].split("-"))
+        porv.setdefault(i["vehicle_id"], []).append(((-dia, j), i))
+    con_golpe = 0
+    for lista in porv.values():
+        ya = set()
+        for _, i in sorted(lista, key=lambda x: x[0]):
+            ya |= {d["part"] for d in i["analysis"]["new_damages"]}
+            lateral, frontal = (_nombre(u) for u in i["photos"])
+            assert frontal == "van-frontal.jpg", i["id"]
+            # La lateral enseña exactamente los golpes de la lateral que ya han salido.
+            assert GOLPES_EN[lateral] == ya, (i["id"], lateral, ya)
+            con_golpe += bool(GOLPES_EN[lateral])
+    # Hay fotos con golpe: no se quedó todo en la limpia.
+    assert con_golpe >= 6
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_origen_de_danos_de_la_demo_tiene_antes_y_despues(demo):
+    await server._demo_regenerar()
+    r = await _origen_de_la_demo()
+    filas = {(d["matricula"], d["part"]): d for d in r["danos"]}
+    # Cada golpe con foto limpia: dos URL DISTINTAS, TODAS (14-11-2026: la aleta
+    # delantera, en la frontal, iba con la misma imagen a los dos lados y el panel
+    # decía «No hay foto anterior»). Y la pareja solo cambia dentro de la caja de
+    # ese golpe: los golpes que ya tenía se ven igual en las dos fotos.
+    import numpy as np
+    from PIL import Image
+    con_pareja = 0
+    for d in r["danos"]:
+        assert d["foto_golpe"] and _fichero_de(d["foto_golpe"]).is_file(), d
+        if not d["foto_limpia"]:
+            continue
+        con_pareja += 1
+        assert _fichero_de(d["foto_limpia"]).is_file(), d
+        assert d["foto_limpia"] != d["foto_golpe"], d
+        # La limpia no lleva este golpe; la del golpe, sí.
+        assert d["part"] not in GOLPES_EN[_nombre(d["foto_limpia"])], d
+        assert d["part"] in GOLPES_EN[_nombre(d["foto_golpe"])], d
+        a, b = (np.asarray(Image.open(_fichero_de(u)).convert("RGB"), dtype=np.float32)
+                for u in (d["foto_limpia"], d["foto_golpe"]))
+        H, W = a.shape[:2]
+        dif = np.abs(a - b).mean(axis=2)
+        y0, x0, y1, x1 = CAJA[d["part"]]
+        fuera = np.ones((H, W), bool)
+        fuera[y0 * H // 1000:y1 * H // 1000, x0 * W // 1000:x1 * W // 1000] = False
+        assert dif[~fuera].mean() > 6, (d["part"], dif[~fuera].mean())
+        assert dif[fuera].mean() < 2.5, (d["part"], dif[fuera].mean())
+    assert con_pareja == 4, r["danos"]
+    # Lo que sale en cada grupo.
+    alta = [d for d in r["danos"] if d["certeza"] == "alta"]
+    assert len(alta) == 1, r["danos"]
+    a = alta[0]
+    assert (a["matricula"], a["part"], a["severity"]) == ("2462 JKL", "puerta lateral derecha", "grave")
+    assert [c["nombre"] for c in a["conductores"]] == ["Carlos Ruiz"]
+    assert a["ventana_dias"] == 1
+    assert (_nombre(a["foto_limpia"]), _nombre(a["foto_golpe"])) == ("van-lateral.jpg", "van-lateral-golpe-puerta.jpg")
+    media = filas[("6117 JKL", "portón trasero")]
+    assert media["certeza"] == "media" and len(media["conductores"]) == 2
+    assert (_nombre(media["foto_limpia"]), _nombre(media["foto_golpe"])) == (
+        "van-lateral-golpe-paragolpes.jpg", "van-lateral-golpe-paragolpes-porton.jpg")
+    assert filas[("1000 BCD", "puerta lateral derecha")]["certeza"] == "baja"           # leve
+    aleta = filas[("2462 JKL", "aleta trasera derecha")]
+    assert aleta["certeza"] == "baja"                                                     # leve
+    assert (_nombre(aleta["foto_limpia"]), _nombre(aleta["foto_golpe"])) == (
+        "van-lateral-golpe-puerta.jpg", "van-lateral-golpe-puerta-aleta.jpg")
+    assert filas[("6117 JKL", "paragolpes trasero")]["foto_limpia"] is None             # su primera revisión
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("hora", ["00:10", "06:30", "12:00", "18:20", "23:55"])
+async def test_el_golpe_de_un_solo_conductor_no_depende_de_la_hora(demo, monkeypatch, hora):
+    # Las revisiones de «hoy» se siembran restando minutos a la hora del reloj: a
+    # medianoche caen en la víspera. Lo que se ve al abrir no puede depender de eso.
+    from datetime import datetime as _dt, timezone as _tz
+    h, m = (int(x) for x in hora.split(":"))
+    fijo = _dt(2026, 11, 14, h, m, tzinfo=_tz.utc)
+
+    class Reloj(_dt):
+        @classmethod
+        def now(cls, tz=None):
+            return fijo if tz is None or tz is _tz.utc else fijo.astimezone(tz)
+    monkeypatch.setattr(server, "datetime", Reloj)
+    await server._demo_regenerar()
+    r = await _origen_de_la_demo()
+    assert r["resumen"] == {"alta": 1, "media": 1, "baja": 3}, (hora, r["resumen"])
 
 
 def _jpeg():
