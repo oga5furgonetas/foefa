@@ -112,12 +112,7 @@ export default function PanelLogin() {
 
   return (
     <div className="atmosphere relative flex min-h-screen items-center justify-center overflow-hidden px-5 text-dark-50">
-      {/* ── Luz que respira: la escena está viva antes de mostrar nada ── */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="drift absolute -left-40 -top-40 h-[560px] w-[560px] rounded-full bg-brand-500/[0.07] blur-[120px]" />
-        <div className="drift absolute -bottom-52 right-[-10%] h-[620px] w-[620px] rounded-full bg-[rgba(120,120,140,0.06)] blur-[130px]" style={{ animationDelay: '-8s' }} />
-      </div>
-
+      {/* Sin luces de fondo (14-11-2026): no decían nada y eran lo primero que se veía. */}
       <div className="relative grid w-full max-w-5xl items-center gap-16 lg:grid-cols-[1.05fr_0.95fr]">
 
         {/* ── Columna editorial: ahora con el logo de la marca ── */}
@@ -130,22 +125,16 @@ export default function PanelLogin() {
           />
 
           <h1 className="rise mt-10 font-display text-[clamp(38px,4.4vw,60px)] font-semibold leading-[1.02] tracking-[-0.035em] text-dark-50" style={{ animationDelay: '120ms' }}>
-            Tu flota,<br />
-            <span className="text-dark-400">bajo control absoluto.</span>
+            Cada furgoneta,<br />
+            <span className="text-dark-400">con su historia.</span>
           </h1>
 
           <p className="rise mt-6 max-w-md text-[16px] leading-relaxed text-dark-400" style={{ animationDelay: '200ms' }}>
-            Inspecciones con IA, vencimientos, rutas en vivo y el estado real de cada furgoneta.
-            Todo en un solo instrumento.
+            Las revisiones con foto de cada día, los golpes con su fecha, el taller y los vencimientos
+            de tu flota, en un mismo sitio.
           </p>
 
-          <div className="rise mt-12 flex items-center gap-2.5 text-[12px] text-dark-500" style={{ animationDelay: '280ms' }}>
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            </span>
-            <span className="font-mono uppercase tracking-[0.18em]">{MARCA.lema}</span>
-          </div>
+          <p className="rise mt-12 text-[13px] text-dark-500" style={{ animationDelay: '280ms' }}>{MARCA.lema}</p>
         </div>
 
         {/* ── Formulario: panel flotante de vidrio ── */}
@@ -161,7 +150,7 @@ export default function PanelLogin() {
             {!forgot ? (
               <div>
                 <h2 className="font-display text-[22px] font-semibold tracking-tight text-dark-50">Bienvenido de nuevo</h2>
-                <p className="mt-1.5 text-[13.5px] text-dark-500">Accede a tu centro de operaciones.</p>
+                <p className="mt-1.5 text-[13.5px] text-dark-500">Entra con tu usuario y tu contraseña.</p>
 
                 <div className="mt-7 space-y-5">
                   <Field label="Usuario" value={user} onChange={setUser} onEnter={submit} autoFocus />
