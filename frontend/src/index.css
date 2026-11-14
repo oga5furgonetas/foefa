@@ -592,16 +592,14 @@ body:has(.ventana) .burbuja-asistente { display: none; }
     from { opacity: 0; transform: translateY(6px) scale(0.998); }
     to   { opacity: 1; transform: none; }
   }
-  /* Solo el fundido, sin `transform` (tanda 6): para el <main> del panel («animate-fade-in solo-opacidad»: la misma
-     entrada, sin moverse). Mientras dura una animación con transform, el <main> hace de contenedor de lo
-     `position: fixed` de dentro (la fila de botones del Repaso en el móvil) y eso se pintaba al fondo del contenido
-     durante 0,3 s: se veía aparecer tarde. */
+  /* El <main> del panel NO anima su entrada («animate-fade-in solo-opacidad»: la clase se queda, sin animación).
+     Mientras dura una animación con `transform`, el <main> hace de contenedor de lo `position: fixed` de dentro (la
+     fila de botones del Repaso en el móvil se pintaba al fondo del contenido durante 0,3 s); y con una de solo
+     opacidad sigue siendo un contexto de apilamiento: la ventana «El acceso de…», que se monta dentro, quedaba DEBAJO
+     de la barra de abajo del móvil ese rato (lo cazó la batería entera, 14-11-2026). Sin animación, lo de dentro
+     está en su sitio y por encima desde el primer pintado. */
   .animate-fade-in.solo-opacidad {
-    animation-name: ffade-opacidad;
-  }
-  @keyframes ffade-opacidad {
-    from { opacity: 0; }
-    to   { opacity: 1; }
+    animation: none;
   }
 
   /* Aparición de modales/popovers: pop con rebote sutil (sin fill-mode: ver arriba) */
