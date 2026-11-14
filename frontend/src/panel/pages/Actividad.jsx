@@ -3,6 +3,7 @@ import { useOutletContext } from 'react-router-dom'
 import { useT } from '../../i18n'
 import { lista } from '../../lib/lista'
 import { verMatricula } from '../../lib/matricula'
+import { gravedadDe } from '../../lib/analisis'
 import { Loader2, Camera } from 'lucide-react'
 import { getInspections, getVehicles } from '../api'
 import GuidedEmpty from '../components/GuidedEmpty'
@@ -63,7 +64,7 @@ export default function Actividad() {
       {list.length > 0 && <div className="card divide-y divide-dark-800">
         {list.map((i) => {
           const v = vmap[i.vehicle_id] || {}
-          const sev = i.analysis?.severity || 'sin_analisis'
+          const sev = gravedadDe(i.analysis) || 'sin_analisis'
           return (
             <div key={i.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
               <Camera size={15} className="shrink-0 text-dark-500" />

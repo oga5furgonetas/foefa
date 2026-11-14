@@ -11,6 +11,7 @@ import VidaVehiculo from '../components/VidaVehiculo'
 import { ultimaRueda } from '../../lib/rueda'
 import { useOrden } from '../../lib/orden'
 import { usePlan } from '../../lib/usePlan'
+import { gravedadDe } from '../../lib/analisis'
 import { sinPagos } from '../../lib/plataforma'
 import ThOrden from '../components/ThOrden'
 import QRCode from 'qrcode'
@@ -611,7 +612,7 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
   function eventosHistorial(l) {
     const evs = []
     for (const i of l) {
-      const s = i.analysis?.severity
+      const s = gravedadDe(i.analysis)
       const nd = (i.analysis?.new_damages || []).length
       const dot = s === 'grave' || s === 'critico' ? 'bg-red-400'
         : s === 'moderado' ? 'bg-orange-400'
@@ -1301,7 +1302,7 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
                   <div className="mb-4 overflow-x-auto pb-2">
                     <div className="flex min-w-max items-end gap-1 px-1">
                       {[...insps].reverse().slice(-30).map((tl) => {
-                        const s = tl.analysis?.severity || 'sin_analisis'
+                        const s = gravedadDe(tl.analysis) || 'sin_analisis'
                         const hasNew = (tl.analysis?.new_damages || []).length > 0
                         const col = s === 'critico' || s === 'grave' ? 'bg-red-400'
                           : s === 'moderado' ? 'bg-orange-400'
@@ -1342,7 +1343,7 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
                       const clave = insp.id ?? `n${n}`
                       const abierta = inspAbiertas.has(clave)
                       const fotosInsp = comoLista(insp.photos).filter(esFoto)
-                      const sev = insp.analysis?.severity || ''
+                      const sev = gravedadDe(insp.analysis) || ''
                       const sevMap = {
                         grave:    'bg-red-500/10 text-red-300 ring-red-500/20',
                         critico:  'bg-red-500/10 text-red-300 ring-red-500/20',

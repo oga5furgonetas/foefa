@@ -158,4 +158,7 @@ export const EXPEDIENTE_EJEMPLO = {
     },
   ],
   calendario,
+  // Lo que marca la IA sin confirmar (CONTRATO R8): el ejemplo público NO lleva ese anexo; solo lo confirmado.
+  posibles_ia: [],
+  posibles_ia_mas: 0,
 }

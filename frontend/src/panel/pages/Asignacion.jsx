@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { getDailyAssignment, putDailyAssignment, getVehicles, getDrivers, getInspections } from '../api'
 import { hoyLocal, isoLocal } from '../../lib/fecha'
+import { gravedadDe } from '../../lib/analisis'
 import ElegirNave from '../components/ElegirNave'
 
 /* ── Date helpers ── */
@@ -162,9 +163,9 @@ function initials(name) {
 function SeverityBadge({ insp }) {
   const { t } = useT()
   if (!insp) return <span className="text-xs text-dark-500">{t('asgn.no.photos')}</span>
-  // Las inspecciones reales traen la severidad dentro de analysis; el fallback
-  // del slot (backend) la trae a nivel raíz como severity.
-  const sev = insp.analysis?.severity || insp.damage_level || insp.severity || insp.damage_severity || ''
+  // Las inspecciones reales traen la severidad dentro de analysis (con el repaso si lo hay: lib/analisis.js); el
+  // fallback del slot (backend) la trae a nivel raíz como severity.
+  const sev = gravedadDe(insp.analysis) || insp.damage_level || insp.severity || insp.damage_severity || ''
   const cls =
     /CRIT/i.test(sev) ? 'bg-red-500/25 text-red-300' :
     /GRAV/i.test(sev) ? 'bg-orange-500/25 text-orange-300' :

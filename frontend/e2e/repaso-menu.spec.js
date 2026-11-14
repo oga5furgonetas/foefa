@@ -11,7 +11,7 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
 const DOS_MINUTOS = 121_000
 const SIN_REPASO = ['dashboard', 'vehiculos', 'inspecciones', 'conductores']
 
-async function montar(page, { modulos = null, permisos } = {}) {
+async function montar(page, { modulos = null, permisos, pendientes = { fecha: '2026-11-14', pendientes: 3 }, enBilling = {} } = {}) {
   const pedidas = { pendientes: 0, dia: 0 }
   const llegado = { billing: 0, me: 0 }
   let soltarBilling
@@ -22,7 +22,7 @@ async function montar(page, { modulos = null, permisos } = {}) {
   // Los módulos de la empresa llegan cuando la prueba lo dice.
   await page.route(/\/api\/org\/billing(\?|$)/, async (r) => {
     await billing
-    await r.fulfill({ json: { plan: 'esencial', status: 'active', modulos } })
+    await r.fulfill({ json: { plan: 'esencial', status: 'active', modulos, ...enBilling } })
     llegado.billing++
   })
   // Los permisos de verdad: sin `permissions`, el servidor no restringe nada; con lista, solo lo que haya en ella.
@@ -32,7 +32,7 @@ async function montar(page, { modulos = null, permisos } = {}) {
   })
   await page.route(/\/api\/repaso\/(pendientes|dia)(\?|$)/, (r) => {
     pedidas[new URL(r.request().url()).pathname.endsWith('/dia') ? 'dia' : 'pendientes']++
-    return r.fulfill({ json: { fecha: '2026-11-14', pendientes: 3 } })
+    return r.fulfill({ json: pendientes })
   })
   await page.goto('/panel', { waitUntil: 'domcontentloaded' })
   return { pedidas, llegado, soltarBilling }
@@ -87,3 +87,42 @@ test('Menú · al salir del panel deja de preguntar', async ({ page }) => {
   for (let i = 0; i < 3; i++) await page.clock.runFor(DOS_MINUTOS)
   expect(pedidas.pendientes).toBe(1)
 })
+
+/* R7 y R10 (tercera tanda): `avisar: false` en /repaso/pendientes (una empresa con la IA que nunca ha usado el Repaso)
+   quita el número; `avisar: true` o un servidor viejo que no lo manda, como siempre. Y `ia: false` en /org/billing no
+   monta la burbuja del asistente. */
+for (const [avisar, ve] of [[false, false], [true, true], [undefined, true]]) {
+  test(`Menú · con «avisar: ${avisar}» el número ${ve ? 'se pinta' : 'no se pinta'}`, async ({ page, isMobile }) => {
+    test.skip(isMobile, 'el número va en el menú lateral del escritorio')
+    const { pedidas, soltarBilling } = await montar(page, {
+      modulos: [...SIN_REPASO, 'repaso'],
+      pendientes: { fecha: '2026-11-14', pendientes: 3, ...(avisar === undefined ? {} : { avisar }) },
+    })
+    soltarBilling()
+    await expect.poll(() => pedidas.pendientes).toBe(1)
+    await expect(enlaceRepaso(page)).toBeVisible()
+    if (ve) await expect(enlaceRepaso(page).locator('span')).toHaveText('3')
+    else {
+      // La siguiente pregunta (dos minutos después) tampoco lo pinta: no es un número que tarde en llegar.
+      await page.clock.runFor(DOS_MINUTOS)
+      await expect.poll(() => pedidas.pendientes).toBe(2)
+      await expect(enlaceRepaso(page).locator('span')).toHaveCount(0)
+    }
+  })
+}
+
+for (const [ia, ve] of [[false, false], [true, true], [undefined, true]]) {
+  test(`Asistente · con «ia: ${ia}» en /org/billing la burbuja ${ve ? 'está' : 'no está'}`, async ({ page }) => {
+    const { llegado, soltarBilling } = await montar(page, { enBilling: ia === undefined ? {} : { ia } })
+    // Mientras no se sabe, no se enseña (para no enseñarla y quitarla).
+    await page.clock.runFor(1500)
+    await expect(page.getByTitle(/IA$/)).toHaveCount(0)
+    soltarBilling()
+    await expect.poll(() => llegado.billing).toBeGreaterThan(0)
+    if (ve) await expect(page.getByTitle(/IA$/).last()).toBeVisible()
+    else {
+      await page.clock.runFor(1500)
+      await expect(page.getByTitle(/IA$/)).toHaveCount(0)
+    }
+  })
+}

@@ -4,7 +4,7 @@ import Matricula from '../../../components/Matricula'
 import { selloDeFecha } from '../../../lib/sello'
 import CalendarioDias from './CalendarioDias'
 import FotoConCaja from './FotoConCaja'
-import { momento, fechaLarga, numero, euros, comoLista } from './formato'
+import { momento, fechaLarga, fechaCorta, numero, euros, comoLista } from './formato'
 import './expediente.css'
 
 /* EL EXPEDIENTE DEL VEHÍCULO (14-11-2026, «Antes del perito»): el documento que el dueño de una flota imprime, o
@@ -19,7 +19,10 @@ import './expediente.css'
      llano. Nunca quién dio el golpe;
    - las fechas son las de llegada al servidor, en la zona de la empresa, tal como vienen (formato.js);
    - al imprimir: A4, márgenes de 14 mm, un golpe nunca partido entre dos hojas, y en el pie de cada hoja la frase de
-     las fechas y el número de página (expediente.css y el <style> de abajo, con los textos en su idioma). */
+     las fechas y el número de página (expediente.css y el <style> de abajo, con los textos en su idioma);
+   - lo ÚNICO de la IA es el anexo del final (`posibles_ia`, CONTRATO R8), y solo si trae algo: lo que marcó y nadie ha
+     confirmado ni descartado, en pequeño y en gris, sin conductor, sin gravedad, sin coste y fuera de toda cifra y del
+     calendario. Se dice que no está confirmado. El ejemplo público no lo lleva. */
 
 const VISTAS = ['frontal', 'trasera', 'lateral_izq', 'lateral_der']
 
@@ -50,6 +53,8 @@ export default function DocumentoExpediente({ datos, empresa }) {
   const fotosEntro = comoLista(datos?.como_entro?.fotos).filter((f) => f && VISTAS.includes(f.vista))
   const fotosEsta = comoLista(datos?.como_esta?.fotos).filter((f) => f && VISTAS.includes(f.vista))
   const hayRevisiones = Boolean(periodo.desde && periodo.hasta)
+  const posiblesIA = comoLista(datos?.posibles_ia).filter((p) => p && typeof p === 'object')
+  const posiblesMas = typeof datos?.posibles_ia_mas === 'number' && datos.posibles_ia_mas > 0 ? datos.posibles_ia_mas : 0
 
   const largo = (x) => fechaLarga(x, locale)
   const vista = (k) => (VISTAS.includes(k) ? t(`exp.vista.${k}`) : '')
@@ -281,6 +286,36 @@ export default function DocumentoExpediente({ datos, empresa }) {
         </div>
         <p className="exp-prueba-lee">{t('exp.prueba.lee')}</p>
       </section>
+
+      {posiblesIA.length > 0 && (
+        <section className="exp-seccion exp-ia" data-testid="bloque-posibles-ia">
+          <h2>{t('exp.ia.t')}</h2>
+          <p className="exp-sub">{t('exp.ia.nota')}</p>
+          {posiblesIA.map((p, i) => (
+            <div className="exp-ia-item" key={`${p.inspeccion_id || ''}-${i}`} data-testid="posible-ia">
+              <p className="exp-ia-texto">
+                <b>{(typeof p.pieza === 'string' && p.pieza.trim()) || t('exp.g.sinPieza')}</b>
+                {largo(p.fecha) && <span> · {t('exp.ia.cuando').replace('{f}', largo(p.fecha))}</span>}
+              </p>
+              <div className="exp-ia-fotos">
+                {p.anterior?.foto_url && (
+                  <figure>
+                    <FotoConCaja src={p.anterior.foto_url} alt={`${vista(p.vista)} · ${largo(p.anterior.fecha)}`}
+                      rota={t('exp.fotoRota')} idioma={lang} />
+                    <figcaption>{fechaCorta(p.anterior.fecha, locale) ? t('exp.ia.antes').replace('{f}', fechaCorta(p.anterior.fecha, locale)) : t('exp.g.fotoAntes')}</figcaption>
+                  </figure>
+                )}
+                <figure>
+                  <FotoConCaja src={p.foto_url || null} alt={`${vista(p.vista)} · ${largo(p.fecha)}`} caja={p.box_2d} tono="ia"
+                    rota={p.foto_url ? t('exp.fotoRota') : t('exp.ia.sinFoto')} idioma={lang} />
+                  {p.foto_url && <figcaption>{t('exp.ia.marca')}</figcaption>}
+                </figure>
+              </div>
+            </div>
+          ))}
+          {posiblesMas > 0 && <p className="exp-ia-mas" data-testid="posibles-ia-mas">{t('exp.ia.mas').replace('{n}', numero(posiblesMas, locale))}</p>}
+        </section>
+      )}
 
       <footer className="exp-pie-pantalla">{pie}</footer>
     </article>

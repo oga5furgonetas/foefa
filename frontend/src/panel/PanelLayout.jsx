@@ -536,11 +536,13 @@ export default function PanelLayout() {
     const mirar = () => {
       if (!vivo || !isAuthed() || document.hidden) return
       // Solo el número (/repaso/pendientes = sin_repasar + a_medias de hoy), no el día entero. La propia pantalla
-      // lo pone al día al decidir cada lado. Si falla, se deja el último número bueno.
+      // lo pone al día al decidir cada lado. Si falla, se deja el último número bueno. Con `avisar: false` (una
+      // empresa con la IA que nunca ha usado el Repaso, CONTRATO R7) no se pinta: el número no persigue a quien
+      // trabaja con Revisión rápida. Un servidor que no lo mande, como siempre.
       getRepasoPendientes(center)
         .then((r) => {
           const n = r.data?.pendientes
-          if (vivo && typeof n === 'number') setRepasoPend(n)
+          if (vivo && typeof n === 'number') setRepasoPend(r.data?.avisar === false ? 0 : n)
         })
         .catch(() => {})
     }
@@ -1062,7 +1064,9 @@ export default function PanelLayout() {
           encima y tapaba el número rojo de Días libres (foto del 10-11-2026). `setCenter`: para elegir el centro
           ahí mismo con «Todos». En el Chat, en el móvil, tapaba el botón de enviar (foto del 11-11-2026): allí va más
           arriba, por encima de la caja de escribir (sigue a mano, como siempre). */}
-      {curKey !== 'centro-ia' && <AsistenteBurbuja center={center} centers={centers} setCenter={setCenter}
+      {/* Una cuenta sin la IA (`ia: false` en /org/billing, CONTRATO R10) no tiene asistente: ni se monta. Se espera a
+          saberlo, para no enseñarla un instante y quitarla. */}
+      {curKey !== 'centro-ia' && !!billing && billing.ia !== false && <AsistenteBurbuja center={center} centers={centers} setCenter={setCenter}
         escondida={menuOpen} sobreEscribir={curKey === 'chat'} />}
     </div>
   )
