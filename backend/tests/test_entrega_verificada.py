@@ -15,6 +15,14 @@ FOTO = "data:image/jpeg;base64," + "A" * 2000
 PETICION = SimpleNamespace(headers={}, client=SimpleNamespace(host="1.1.1.1"))
 
 
+async def _ia_de_pago_encendida(monkeypatch):
+    """14-11-2026: la foto lleva datos del cliente y solo va a la IA de pago con «Leer el ticket con IA» encendido
+    (test_ia_entrega_permitida.py). Estas pruebas miran el veredicto, así que la encienden."""
+    monkeypatch.setenv("REPARTO_IA_PERMITIDA", "1")
+    monkeypatch.delenv("REPARTO_IA_CLAVE", raising=False)
+    assert (await server.reparto_ajustes_put({"ia_tickets": True}, OFICINA))["ia_tickets"] is True
+
+
 def test_el_numero_de_portal_de_una_direccion():
     assert reparto.numero_portal("Rúa Nova 3, 2º") == "3"
     assert reparto.numero_portal("Calle Real, 5, 2º B") == "5"
@@ -54,6 +62,7 @@ def test_el_veredicto_de_lo_que_dijo_la_ia():
 @pytest.mark.asyncio(loop_scope="session")
 async def test_la_ia_mira_la_foto_y_la_app_avisa_antes_de_irse(base, monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "de-mentira")
+    await _ia_de_pago_encendida(monkeypatch)
     vistas = []
     respuestas = [{"paquete_visible": True, "numero_visible": "7", "personas": False, "lugar": "puerta"},
                   {"paquete_visible": True, "numero_visible": "5", "personas": False, "lugar": "buzon"}]
@@ -96,12 +105,14 @@ async def test_la_ia_mira_la_foto_y_la_app_avisa_antes_de_irse(base, monkeypatch
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_sin_ia_o_con_la_ia_caida_la_entrega_se_guarda_igual(base, monkeypatch):
+    await _ia_de_pago_encendida(monkeypatch)
     p = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, ANA)
-    # Sin GEMINI_API_KEY: ni se intenta.
+    # Sin GEMINI_API_KEY: ni se intenta. Desde el 14-11-2026 la foto nueva deja el veredicto vacío (None), como cuando
+    # la IA no contesta, para que no se quede el de una foto anterior.
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("USE_VERTEX_AI", raising=False)
     r = await server.reparto_estado(p["id"], {"estado": "entregado", "foto": FOTO}, ANA)
-    assert "entrega_ia" not in r and "entrega_ia" not in base.db["reparto_pedidos"].docs[0]
+    assert r["entrega_ia"] is None and base.db["reparto_pedidos"].docs[0]["entrega_ia"] is None
     # Con la IA caída: la entrega queda guardada con su foto y sin veredicto (nada «pendiente» que la app espere).
     monkeypatch.setenv("GEMINI_API_KEY", "de-mentira")
 
@@ -117,6 +128,7 @@ async def test_sin_ia_o_con_la_ia_caida_la_entrega_se_guarda_igual(base, monkeyp
 async def test_si_la_ia_tarda_el_veredicto_llega_en_segundo_plano(base, monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "de-mentira")
     monkeypatch.setattr(server, "_REP_IA_ESPERA", 0.05)
+    await _ia_de_pago_encendida(monkeypatch)
 
     async def lenta(foto, direccion, cliente):
         await asyncio.sleep(0.25)

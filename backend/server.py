@@ -58640,12 +58640,20 @@ def _rep_hora_hecho(valor) -> str:
 # (el paquete, el número que se lee, un rótulo, personas) y la app avisa ANTES de que el repartidor se vaya si no cuadra;
 # nunca bloquea. El cliente ve «entrega verificada» en su enlace solo con el veredicto bueno. La petición espera hasta
 # _REP_IA_ESPERA segundos; si Gemini tarda más, el veredicto llega en segundo plano y la app lo ve al refrescar.
-# Sin GEMINI_API_KEY no pasa nada (como la IA de daños). Cuesta ≈0,001 € por foto.
+# Sin GEMINI_API_KEY no pasa nada (como la IA de daños). Cuesta ≈0,001 € por foto. Desde el 14-11-2026, solo con la IA
+# con datos de clientes permitida y encendida, como los tickets (_rep_ia_entrega_activa).
 _REP_IA_ESPERA = 8.0
 
 
-def _rep_ia_entrega_activa() -> bool:
-    return bool(os.environ.get("GEMINI_API_KEY")) or os.environ.get("USE_VERTEX_AI", "").lower() in ("1", "true", "yes")
+async def _rep_ia_entrega_activa(user: dict) -> bool:
+    """SOLO CON LA IA DE PAGO (14-11-2026). La foto de entrega lleva la dirección y el nombre del cliente, y antes iba a
+    la IA con la clave general (que puede ser del nivel gratuito, donde Google usa lo que se le manda). Ahora, la misma
+    regla que la lectura de tickets (_rep_ia_activa: _rep_ia_permitida() y el interruptor «Leer el ticket con IA» de la
+    empresa) y luego que haya con qué llamar: REPARTO_IA_CLAVE, o la clave general confirmada de pago."""
+    if not await _rep_ia_activa(await _rep_ajustes(), user):
+        return False
+    return (bool(os.environ.get("REPARTO_IA_CLAVE", "").strip()) or bool(os.environ.get("GEMINI_API_KEY"))
+            or os.environ.get("USE_VERTEX_AI", "").lower() in ("1", "true", "yes"))
 
 
 async def _rep_ia_entrega_llamada(foto: str, direccion: str, cliente: str) -> dict:
@@ -58665,7 +58673,8 @@ async def _rep_ia_entrega_llamada(foto: str, direccion: str, cliente: str) -> di
         '"coincide" (true si lo que se ve encaja con la dirección y el cliente, false si no, null si no hay con qué comparar). '
         "No inventes: lo que no se lea, null.")
     contents = [prompt, genai_types.Part.from_bytes(data=datos, mime_type="image/jpeg")]
-    return await _gemini_json_call(_gemini_client_plantilla(), _modelo_ia(), contents)
+    # Con el cliente de pago (14-11-2026), nunca con el general: ver _rep_ia_entrega_activa.
+    return await _gemini_json_call(_rep_cliente_ia(), _modelo_ia(), contents)
 
 
 async def _rep_ia_entrega(pid: str, direccion: str, cliente: str, foto: str) -> Optional[dict]:
@@ -58757,8 +58766,12 @@ async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(
             cambios.update({"puerta_lat": None, "puerta_lng": None, "puerta_precision": None})
     # LA ENTREGA VERIFICADA (01-11-2026): con foto nueva, la IA la mira. Se deja «pendiente» ANTES de lanzarla (si
     # acaba en segundo plano, su veredicto pisa el pendiente y no al revés) y se espera un poco por la respuesta.
-    elif foto and _rep_ia_entrega_activa():
+    elif foto and await _rep_ia_entrega_activa(user):
         cambios["entrega_ia"] = {"nivel": "pendiente", "aviso": None}
+    elif foto:
+        # Foto nueva sin IA permitida (14-11-2026): como cuando la IA no contesta, sin veredicto. Que no se quede el de
+        # una foto anterior (si la empresa apagó la IA después) como si fuera de esta.
+        cambios["entrega_ia"] = None
     await db.reparto_pedidos.update_one({"id": pid}, {"$set": cambios})
     if (cambios.get("entrega_ia") or {}).get("nivel") == "pendiente":
         tarea = asyncio.create_task(_rep_ia_entrega(pid, p.get("direccion") or "", p.get("cliente") or "", foto))

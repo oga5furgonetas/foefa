@@ -77,7 +77,7 @@ const SECTORES = [
   { key: 'mensajeria', icon: Send, color: '#f472b6', name: 'Mensajería y paquetería',
     sub: 'Escaneo de bultos, rutas por tiempo con franjas y hora estimada, seguimiento para el cliente, cobro a la entrega, y turnos y cuadrante del equipo.' },
   { key: 'supermercado', icon: ShoppingCart, color: '#22c55e', name: 'Supermercado o tienda con reparto a domicilio',
-    sub: 'El ticket de caja a la ruta: el repartidor escanea, ve la dirección y qué lleva, la ruta se ordena sola y el cliente recibe la hora por WhatsApp.' },
+    sub: 'El ticket de caja a la ruta: el repartidor escanea, ve la dirección y qué lleva, la ruta se ordena sola y al cliente le mandas la hora por WhatsApp con un toque.' },
   { key: 'distribucion', icon: Warehouse, color: '#0ea5e9', name: 'Distribución a negocios',
     sub: 'Reparto a talleres, bares u obras: escaneo de bultos por la mañana, zonas por repartidor, ruta ordenada y la oficina viendo por dónde va cada uno.' },
   { key: 'otra', icon: Truck, color: '#a855f7', name: 'Otra flota',
