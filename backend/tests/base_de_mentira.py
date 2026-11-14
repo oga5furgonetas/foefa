@@ -74,6 +74,11 @@ class Cursor:
         self.docs = self.docs[:n] if n else self.docs
         return self
 
+    def batch_size(self, n):
+        """Cuántos documentos trae Mongo en cada viaje (14-11-2026, la foto anterior de cada lado): aquí no cambia
+        lo que se lee, solo se acepta la llamada."""
+        return self
+
     async def to_list(self, n=None):
         return list(self.docs if n is None else self.docs[:n])
 
@@ -182,8 +187,11 @@ class Col:
         for k, v in u.get("$inc", {}).items():
             _poner(d, k, (_leer(d, k) if _leer(d, k) is not _FALTA else 0) + v)
         for k, v in u.get("$pull", {}).items():
-            if isinstance(d.get(k), list):
-                d[k] = [x for x in d[k] if x != v]
+            # Con una condición ({"golpe_id": …}) quita los elementos que la cumplen, como Mongo (14-11-2026).
+            lista = _leer(d, k)
+            if isinstance(lista, list):
+                _poner(d, k, [x for x in lista if not (
+                    _casa(x, v) if isinstance(v, dict) and isinstance(x, dict) else x == v)])
 
     async def find_one(self, q=None, proyeccion=None, sort=None, **_):
         docs = [d for d in self.docs if _casa(d, q)]

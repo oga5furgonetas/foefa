@@ -16,20 +16,20 @@ export const PLANES_EMPRESA = [
       'Vehículos, documentos y vencimientos (ITV, seguro, renting)',
       'Revisión diaria con fotos de cada lado desde el móvil del conductor',
       'Repaso del día: cada foto junto a la anterior del mismo lado, y quien repasa apunta cada golpe',
-      'Expediente de cada furgoneta con los golpes confirmados, su foto y su fecha',
+      'Expediente de cada furgoneta con los golpes confirmados, su foto, su fecha y, cuando es seguro, quién la llevaba',
       'Incidencias, talleres y órdenes de reparación con su coste',
       'Conductores y su portal en el móvil',
       'Chat interno, importar de Excel y avisos por correo',
       'Usuarios y conductores ilimitados',
     ],
-    no_incluye: ['Quién llevaba la furgoneta cuando apareció cada golpe', 'Qué furgoneta lleva cada uno', 'Cuadrante, turnos y días libres', 'Informe firmado de la revisión en PDF', 'Varias delegaciones'],
+    no_incluye: ['Origen de daños de toda la flota', 'Qué furgoneta lleva cada uno', 'Cuadrante, turnos y días libres', 'Informe firmado de la revisión en PDF', 'Varias delegaciones'],
   },
   {
     clave: 'completo', nombre: 'Pro', para: 'Varias delegaciones y la operación diaria',
     por_vehiculo: 9, minimo_vehiculos: 20, recomendado: true, color: '#fb923c',
     incluye: [
       'Todo lo de Esencial, con delegaciones ilimitadas y un jefe por delegación',
-      'Quién llevaba la furgoneta cuando apareció cada golpe',
+      'Origen de daños: todos los golpes de la flota en una lista, con quién llevaba cada furgoneta cuando es seguro',
       'Revisión rápida, solo en las cuentas con la IA activa: compara cada foto con la anterior del mismo lado y marca lo que parece nuevo. Se equivoca a menudo, así que cada marca la confirma una persona',
       'Qué furgoneta lleva cada uno: asignación y furgonetas fijas',
       'Cuadrante con motor, turnos y días libres desde el móvil',
@@ -57,7 +57,7 @@ export const PLANES_EMPRESA = [
 /* REPARTO (06-10-2026): el súper o el distribuidor compra el reparto por REPARTIDOR, no la flota por
    furgoneta: tiene 2–4 furgonetas por tienda y con Esencial (mínimo 10) pagaba furgonetas que no
    existen. 12 € por repartidor activo al mes (el que tuvo pedidos), mínimo 3, furgonetas incluidas.
-   Si quieren lo de Pro (quién llevaba la furgoneta en cada golpe, cuadrante), ese es Pro por vehículo + la app a 6 €. */
+   Si quieren lo de Pro (Origen de daños de toda la flota, cuadrante), ese es Pro por vehículo + la app a 6 €. */
 export const PLAN_REPARTO = {
   clave: 'reparto', nombre: 'Reparto', para: 'Súper y distribución: por repartidor, furgonetas incluidas',
   por_repartidor: 12, minimo_repartidores: 3, color: '#22c55e', sectores: ['supermercado', 'distribucion'],
@@ -70,7 +70,7 @@ export const PLAN_REPARTO = {
     'Vuestras furgonetas incluidas: fichas, ITV y seguro, revisión con fotos y repaso del día, taller',
     'Tiendas o almacenes y usuarios sin límite',
   ],
-  no_incluye: ['Quién llevaba la furgoneta en cada golpe, cuadrante y asignación (eso es Pro, por vehículo)'],
+  no_incluye: ['Origen de daños de toda la flota, cuadrante y asignación (eso es Pro, por vehículo)'],
 }
 
 /* Los días de prueba de una cuenta de empresa, sin tarjeta (server.py: `PLAN_TARIFAS[…]["dias_prueba"] or 14` en el

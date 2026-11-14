@@ -185,7 +185,9 @@ async def test_reencolar_fallidas_y_la_atencion_no_cuentan_sin_ia(base):
          "reviewed": True}
         for s in ("ok", "sin_ia", "plan_disabled", "gemini_failed", "error")]
     r = await server.reanalyze_all_failed(_=ADMIN_VIEJA)
-    assert sorted(r["inspection_ids"]) == ["i-error", "i-gemini_failed", "i-plan_disabled"]
+    # «plan_disabled» tampoco se reencola (14-11-2026): su plan no lleva la IA, y así reencolar y /stats/attention
+    # cuentan lo mismo.
+    assert sorted(r["inspection_ids"]) == ["i-error", "i-gemini_failed"]
     a = await server.stats_attention(_=ADMIN_VIEJA)
     assert a["failed_analyses"] == 2
 

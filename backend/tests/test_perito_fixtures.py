@@ -4,8 +4,10 @@
 Siembra una flota inventada en la base de mentira, la recorre con las rutas DE VERDAD (marcar lados, deshacer nada,
 reparar desde la ficha, confirmar en «Revisión rápida") y guarda lo que devuelven:
 
-  frontend/e2e/fixtures/repaso-dia.json  <- GET /api/repaso/dia?fecha=2026-11-12
-  frontend/e2e/fixtures/expediente.json  <- GET /api/vehicles/veh-5678/antes-del-perito
+  frontend/e2e/fixtures/repaso-dia.json         <- GET /api/repaso/dia?fecha=2026-11-12
+  frontend/e2e/fixtures/expediente.json         <- GET /api/vehicles/veh-5678/antes-del-perito
+  frontend/e2e/fixtures/repaso-respuestas.json  <- POST /api/inspections/{id}/repaso (libro nuevo y ya apuntado)
+                                                   y DELETE /api/inspections/{id}/repaso/{n}
 
 Las pantallas de repaso y de expediente usan ESOS ficheros como respuesta simulada: si el servidor cambia la forma
 de la respuesta, esta prueba falla hasta que se regeneran, y entonces fallan las de pantalla que no la sigan. Así la
@@ -62,7 +64,8 @@ def a_las(iso):
 
 
 def revision(rid, vid, did, creada, fotos, analisis=None):
-    """`fotos`: [(vista, url)]. Las de carrocería con rol «angle», el cuentakilómetros aparte."""
+    """`fotos`: [(vista, url)]. Las de carrocería con rol «angle», el cuentakilómetros aparte. Una vista None es una
+    foto de carrocería de la que no se sabe el lado."""
     return {"id": rid, "vehicle_id": vid, "driver_id": did, "created_at": creada,
             "photos": [u for _v, u in fotos], "photo_vistas": [v for v, _u in fotos],
             "photo_roles": ["odometer" if v == "odometro" else "angle" for v, _u in fotos],
@@ -93,22 +96,46 @@ def sembrar():
          "center": "OGA5", "status": "active", "mileage": 61200},
         {"id": "veh-9012", "license_plate": "9012 JMN", "brand": "Renault", "model": "Master",
          "center": "OGA5", "status": "active"},
+        {"id": "veh-2345", "license_plate": "2345 FGH", "brand": "Peugeot", "model": "Expert",
+         "center": "OGA5", "status": "active"},
+        {"id": "veh-7890", "license_plate": "7890 LMN", "brand": "Fiat", "model": "Ducato",
+         "center": "OGA5", "status": "active"},
     ])
     t["drivers"] = Col([
         {"id": "drv-ana", "name": "Ana L.", "email": "ana@ejemplo.test", "center": "OGA5"},
         {"id": "drv-luis", "name": "Luis P.", "email": "luis@ejemplo.test", "center": "OGA5"},
         {"id": "drv-rosa", "name": "Rosa M.", "email": "rosa@ejemplo.test", "center": "OGA5"},
+        # «drv-baja»: una ficha que ya no existe (su nombre sale null).
     ])
+    lado_sin_vista = cuatro()[:4] + [(None, LIMPIA), ("odometro", LIMPIA)]
     t["inspections"] = Col([
-        revision("rev-5678-1110", "veh-5678", "drv-luis", "2026-11-10T07:01:00.000000+00:00",
+        # La 5678, desde que entró (20-10) hasta el 12-11: un periodo largo, con días sin fotos.
+        revision("rev-5678-1020", "veh-5678", "drv-luis", "2026-10-20T07:00:00.000000+00:00",
                  cuatro(lateral_der=GOLPE)),
+        revision("rev-5678-1021", "veh-5678", "drv-rosa", "2026-10-21T07:05:00.000000+00:00", cuatro()),
+        # Hechas desde el panel, sin conductor.
+        revision("rev-5678-1027", "veh-5678", None, "2026-10-27T07:10:00.000000+00:00", cuatro()),
+        revision("rev-5678-1028", "veh-5678", None, "2026-10-28T07:10:00.000000+00:00", cuatro()),
+        revision("rev-5678-1103", "veh-5678", "drv-ana", "2026-11-03T07:00:00.000000+00:00", cuatro()),
+        # El 04-11 la llevaron dos personas: por la mañana Ana, por la tarde Luis.
+        revision("rev-5678-1104a", "veh-5678", "drv-ana", "2026-11-04T06:30:00.000000+00:00", cuatro()),
+        revision("rev-5678-1104b", "veh-5678", "drv-luis", "2026-11-04T14:30:00.000000+00:00", cuatro()),
+        # Una foto más de carrocería, sin lado conocido.
+        revision("rev-5678-1105", "veh-5678", "drv-ana", "2026-11-05T07:00:00.000000+00:00", lado_sin_vista),
+        revision("rev-5678-1110", "veh-5678", "drv-luis", "2026-11-10T07:01:00.000000+00:00", cuatro()),
         revision("rev-5678-1111", "veh-5678", "drv-ana", "2026-11-11T07:03:12.000000+00:00", cuatro(),
                  {"severity": "leve", "total_damages_count": 1, "damages": [dict(RETROVISOR)],
                   "new_damages": [dict(RETROVISOR)]}),
         revision("rev-3456-1111", "veh-3456", "drv-luis", "2026-11-11T07:20:00.000000+00:00",
                  cuatro(sin=("lateral_der",))),
+        revision("rev-2345-1111", "veh-2345", "drv-luis", "2026-11-11T08:00:00.000000+00:00", cuatro()),
         revision("rev-5678-1112", "veh-5678", "drv-ana", "2026-11-12T06:58:31.402000+00:00", cuatro(GOLPE)),
         revision("rev-3456-1112", "veh-3456", "drv-luis", "2026-11-12T07:20:05.000000+00:00", cuatro()),
+        revision("rev-2345-1112", "veh-2345", "drv-luis", "2026-11-12T07:45:00.000000+00:00", cuatro()),
+        # Subida sin roles ni vistas (no se sabe qué foto es cada lado) y con una ficha de conductor que ya no existe.
+        {"id": "rev-7890-1112", "vehicle_id": "veh-7890", "driver_id": "drv-baja",
+         "created_at": "2026-11-12T08:05:00.000000+00:00", "photos": [LIMPIA, LIMPIA],
+         "analysis_status": "ok", "analysis_error": None, "analysis": None, "notes": ""},
     ])
     t["daily_assignments"] = Col([{"date": "2026-11-12", "center": "OGA5", "slots": [
         {"vehicle_id": "veh-5678", "driver_id": "drv-ana"}, {"vehicle_id": "veh-3456", "driver_id": "drv-luis"},
@@ -123,8 +150,14 @@ async def marcar(rid, pi, veredicto, cuando, **golpe):
     return await server.repaso_marcar_lado(rid, {"photo_index": pi, "veredicto": veredicto, **golpe}, user=MARTA)
 
 
+async def lados_igual(rid, lados, cuando):
+    for k, pi in enumerate(lados):
+        await marcar(rid, pi, "igual", cuando.replace(":00+", f":{10 + k:02d}+"))
+
+
 async def recorrer(monkeypatch):
-    """La semana de la 5678 y de la 3456 tal como la viviría la oficina, con las rutas de verdad."""
+    """Las semanas de la 5678 (y el 12-11 del resto) tal como las viviría la oficina, con las rutas de verdad.
+    Cada golpe del expediente es un caso distinto de «quién la llevaba» y de reparación."""
     t = sembrar()
     monkeypatch.setattr(server, "db", t)
     monkeypatch.setattr(server, "datetime", Reloj)
@@ -134,39 +167,88 @@ async def recorrer(monkeypatch):
         return None
     monkeypatch.setattr(server, "_ia_reentrenar_si_toca", nada)
 
-    # 10-11: la primera revisión de la 5678. La puerta derecha ya venía con un bollo: primera foto de ese lado,
-    # así que «ya estaba» y no se le atribuye a nadie.
-    for pi, cuando in ((1, "2026-11-10T09:15:00+00:00"), (2, "2026-11-10T09:15:20+00:00"),
-                       (3, "2026-11-10T09:15:41+00:00")):
-        await marcar("rev-5678-1110", pi, "igual", cuando)
-    await marcar("rev-5678-1110", 4, "golpe", "2026-11-10T09:16:30+00:00", part="Puerta lateral derecha",
+    async def sin_empresa(_org_id):
+        return None
+    monkeypatch.setattr(server, "get_org", sin_empresa)
+    respuestas = {}
+
+    # 20-10, la primera revisión: la puerta derecha ya venía con un bollo. Primera foto de ese lado, así que «ya
+    # estaba» y no se le atribuye a nadie. Se marcó escribiendo la pieza (sin clave, como un cliente de antes).
+    await lados_igual("rev-5678-1020", (1, 2, 3), "2026-10-20T09:15:00+00:00")
+    await marcar("rev-5678-1020", 4, "golpe", "2026-10-20T09:16:30+00:00", part="Puerta lateral derecha",
                  severity="leve", box_2d=[410, 220, 640, 470], description="Bollo pequeño, sin pintura saltada")
-    # 11-11: la arreglan en el taller propio (desde la ficha de la inspección, la ruta de siempre). Por eso el golpe
-    # del 12 en la otra puerta entra en el libro como nuevo (el libro es uno por pieza abierta).
-    a_las("2026-11-11T16:30:00+00:00")
-    await server.update_damage("rev-5678-1110", 0, {"repair_status": "done", "actual_cost": 180}, _=MARTA)
-    # 11-11: el repaso del día, y en «Revisión rápida» alguien confirma el retrovisor que marcó la IA.
-    for pi, cuando in ((1, "2026-11-11T09:40:00+00:00"), (2, "2026-11-11T09:40:15+00:00"),
-                       (3, "2026-11-11T09:40:31+00:00")):
-        await marcar("rev-5678-1111", pi, "igual", cuando)
+    # 22-10: la arreglan en el taller propio, desde la ficha de la inspección (la ruta de siempre), con su coste.
+    a_las("2026-10-22T16:30:00+00:00")
+    await server.update_damage("rev-5678-1020", 0, {"repair_status": "done", "actual_cost": 180}, _=MARTA)
+    # 27 y 28-10, sin conductor: el paragolpes aparece el 28 y la foto del 27 se marcó igual. Va al taller.
+    await marcar("rev-5678-1027", 1, "igual", "2026-10-27T09:00:00+00:00")
+    await lados_igual("rev-5678-1028", (2, 3, 4), "2026-10-28T09:00:00+00:00")
+    await marcar("rev-5678-1028", 1, "golpe", "2026-10-28T09:05:00+00:00", pieza_clave="paragolpes_del",
+                 severity="grave", box_2d=[620, 120, 900, 880], description="Paragolpes partido por la esquina")
+    a_las("2026-10-29T08:00:00+00:00")
+    await server.update_damage("rev-5678-1028", 0, {"workshop_id": "taller-ejemplo"}, _=MARTA)
+    # 03-11: la puerta trasera derecha, seis días después de la última foto de ese lado («varios días»).
+    await marcar("rev-5678-1103", 2, "golpe", "2026-11-03T09:00:00+00:00", pieza_clave="puerta_tras_der",
+                 severity="critico", box_2d=[200, 480, 760, 980], description="Puerta hundida, no cierra")
+    # 04-11: dos personas la llevaron entre la foto de la mañana y la de la tarde («varios conductores»).
+    await marcar("rev-5678-1104a", 3, "igual", "2026-11-04T09:00:00+00:00")
+    await marcar("rev-5678-1104b", 3, "golpe", "2026-11-04T16:00:00+00:00", pieza_clave="aleta_del_izq",
+                 severity="leve", box_2d=[380, 60, 560, 260], description="Roce en la aleta")
+    # 05-11: un golpe en la foto que no se sabe de qué lado es (sin foto anterior), en una pieza que no está en
+    # la lista («otra»).
+    await marcar("rev-5678-1105", 5, "golpe", "2026-11-05T09:00:00+00:00", pieza_clave="otra",
+                 part="Estribo trasero", severity="leve", box_2d=[700, 300, 860, 700])
+    # 10 y 11-11: el repaso del día (el lateral derecho del 10 se queda sin repasar) y, en «Revisión rápida»,
+    # alguien confirma el retrovisor que marcó la IA el 11.
+    await lados_igual("rev-5678-1110", (1, 2, 3), "2026-11-10T09:15:00+00:00")
+    await lados_igual("rev-5678-1111", (1, 2, 3), "2026-11-11T09:40:00+00:00")
     a_las("2026-11-11T10:05:00+00:00")
     await server.damage_feedback("rev-5678-1111", {"verdict": "correct", "damage_index": 0, "scope": "new"},
                                  user=MARTA)
-    # 12-11: golpe nuevo en la puerta corredera; la trasera no se ve; el lateral derecho, sin repasar todavía.
-    await marcar("rev-5678-1112", 1, "igual", "2026-11-12T08:40:02+00:00")
-    await marcar("rev-5678-1112", 3, "golpe", "2026-11-12T08:41:10+00:00", part="Puerta lateral corredera izquierda",
-                 severity="moderado", box_2d=[410, 220, 640, 470], description="Bollo con pintura saltada")
+    await lados_igual("rev-2345-1111", (1, 2, 3, 4), "2026-11-11T10:20:00+00:00")
+    # 12-11: golpe nuevo en la corredera, atribuible (Ana, un día, la foto de ayer marcada igual). En el libro ya
+    # había una puerta abierta (la trasera derecha): queda enlazado a esa entrada. La trasera no se ve; el lateral
+    # derecho, sin repasar todavía.
+    await marcar("rev-5678-1112", 1, "igual", "2026-11-12T08:40:00+00:00")
+    respuestas["marcar_ya_apuntado"] = await marcar(
+        "rev-5678-1112", 3, "golpe", "2026-11-12T08:41:10+00:00", pieza_clave="corredera_izq", severity="moderado",
+        box_2d=[410, 220, 640, 470], description="Bollo con pintura saltada")
     await marcar("rev-5678-1112", 2, "no_se_ve", "2026-11-12T08:41:40+00:00")
+    # La 2345: alguien marca un golpe por error, lo deshace y la deja repasada.
+    respuestas["marcar_nuevo"] = await marcar(
+        "rev-2345-1112", 1, "golpe", "2026-11-12T08:50:00+00:00", pieza_clave="faro_izq", severity="leve",
+        box_2d=[300, 100, 420, 260])
+    a_las("2026-11-12T08:50:30+00:00")
+    respuestas["deshacer"] = await server.repaso_deshacer_lado("rev-2345-1112", "1", user=MARTA)
+    await lados_igual("rev-2345-1112", (1, 2, 3, 4), "2026-11-12T08:51:00+00:00")
 
     a_las(GENERADO)
     dia = await server.repaso_del_dia(fecha="2026-11-12", center=None, user=MARTA)
     exp = await server.expediente_antes_del_perito("veh-5678", user=MARTA)
     exp["generado_at"] = GENERADO
-    return dia, exp
+    return dia, exp, respuestas
 
 
 def _claves(obj, esperadas, donde):
     assert set(obj) == set(esperadas), f"{donde}: sobran {set(obj) - set(esperadas)}, faltan {set(esperadas) - set(obj)}"
+
+
+def _forma_golpe_del_lado(g):
+    _claves(g, ["golpe_id", "pieza", "pieza_clave", "panel", "gravedad", "descripcion", "box_2d", "ya_estaba",
+                "libro"], "golpe")
+
+
+def _forma_de_las_respuestas(resp):
+    """§B: lo que contestan marcar (con el libro nuevo o ya apuntado) y deshacer."""
+    for nombre in ("marcar_ya_apuntado", "marcar_nuevo"):
+        r = resp[nombre]
+        _claves(r, ["ok", "inspection_id", "lado", "libro", "estado", "cuentas_revision"], nombre)
+        _forma_golpe_del_lado(r["lado"]["golpe"])
+        _claves(r["libro"], ["accion", "ledger_id", "pieza", "pieza_clave", "panel", "desde", "golpe_id"],
+                nombre + ".libro")
+        _claves(r["cuentas_revision"], ["lados", "con_veredicto", "golpes"], nombre + ".cuentas_revision")
+    _claves(resp["deshacer"], ["ok", "inspection_id", "photo_index", "libro", "estado", "cuentas_revision"],
+            "deshacer")
 
 
 def _forma_del_contrato(dia, exp):
@@ -184,11 +266,11 @@ def _forma_del_contrato(dia, exp):
                 _claves(lado["anterior"], ["inspection_id", "photo_index", "foto_url", "recibida_at", "fecha",
                                            "hora", "conductor", "veredicto"], "anterior")
             if lado["golpe"]:
-                _claves(lado["golpe"], ["golpe_id", "pieza", "panel", "gravedad", "descripcion", "box_2d",
-                                        "ya_estaba", "libro"], "golpe")
+                _forma_golpe_del_lado(lado["golpe"])
         for a in r["ya_apuntado"]:
-            _claves(a, ["ledger_id", "golpe_id", "pieza", "panel", "gravedad", "desde", "inspection_id", "vista",
-                        "origen", "en_taller", "de_esta_revision", "foto_url", "box_2d"], "ya_apuntado")
+            _claves(a, ["ledger_id", "golpe_id", "pieza", "pieza_clave", "panel", "gravedad", "desde",
+                        "inspection_id", "vista", "origen", "en_taller", "de_esta_revision", "foto_url", "box_2d"],
+                    "ya_apuntado")
     for s in dia["sin_revision"]:
         _claves(s, ["id", "matricula", "modelo", "centro", "asignada_a"], "sin_revision")
 
@@ -200,7 +282,8 @@ def _forma_del_contrato(dia, exp):
     for f in exp["como_entro"]["fotos"] + exp["como_esta"]["fotos"]:
         _claves(f, ["vista", "photo_index", "foto_url", "inspection_id", "fecha", "recibida_at", "hora"], "foto")
     for g in exp["golpes"]:
-        _claves(g, ["id", "origen", "pieza", "panel", "gravedad", "descripcion", "fecha", "recibida_at", "hora",
+        _claves(g, ["id", "origen", "pieza", "pieza_clave", "panel", "gravedad", "descripcion", "fecha", "recibida_at",
+                    "hora",
                     "inspection_id", "vista", "photo_index", "foto_url", "box_2d", "confirmado_por",
                     "confirmado_at", "ya_estaba", "anterior", "reparacion", "atribucion"], "golpe")
         _claves(g["reparacion"], ["estado", "orden_numero", "reparado_at", "coste"], "reparacion")
@@ -211,17 +294,26 @@ def _forma_del_contrato(dia, exp):
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_los_ejemplos_de_las_pantallas_salen_de_las_rutas_de_verdad(monkeypatch):
-    dia, exp = await recorrer(monkeypatch)
+    dia, exp, resp = await recorrer(monkeypatch)
     _forma_del_contrato(dia, exp)
+    _forma_de_las_respuestas(resp)
 
     # Lo que tiene que haber en los ejemplos (si no, no sirven para probar las pantallas).
     assert dia["fecha"] == "2026-11-12" and dia["es_hoy"] is False
-    assert dia["cuentas"] == {"revisiones": 2, "repasadas": 0, "a_medias": 1, "sin_repasar": 1, "sin_lados": 0,
-                              "con_golpe": 1, "golpes": 1, "furgonetas_activas": 3, "sin_revision": 1}
-    r5678, r3456 = dia["revisiones"]
+    assert dia["cuentas"] == {"revisiones": 4, "repasadas": 1, "a_medias": 1, "sin_repasar": 1, "sin_lados": 1,
+                              "con_golpe": 1, "golpes": 1, "furgonetas_activas": 5, "sin_revision": 1}
+    por_matricula = {r["vehiculo"]["matricula"]: r for r in dia["revisiones"]}
+    r5678, r3456 = por_matricula["5678 KLM"], por_matricula["3456 HJK"]
     assert [l["veredicto"] for l in r5678["lados"]] == ["igual", "no_se_ve", "golpe", None]
     assert r3456["lados"][3]["anterior"] is None                     # un lado sin foto anterior
+    assert por_matricula["2345 FGH"]["estado"] == "repasada"
+    assert por_matricula["7890 LMN"]["estado"] == "sin_lados"
+    assert por_matricula["7890 LMN"]["conductor"] == {"id": "drv-baja", "nombre": None}
     assert {a["origen"] for a in r5678["ya_apuntado"]} == {"repaso", "revision_rapida"}
+    # Dos golpes de personas en la misma pieza gruesa («puerta»): una sola entrada del libro, dos filas.
+    puertas = [a for a in r5678["ya_apuntado"] if a["panel"] == "puerta"]
+    assert len(puertas) == 2 and len({a["golpe_id"] for a in puertas}) == 2
+    assert any(a["en_taller"] for a in r5678["ya_apuntado"])
     # La miniatura de lo ya apuntado (14-11-2026): la del repaso trae su foto y su caja; la de Revisión rápida, null.
     for a in r5678["ya_apuntado"]:
         if a["origen"] == "repaso":
@@ -229,13 +321,27 @@ async def test_los_ejemplos_de_las_pantallas_salen_de_las_rutas_de_verdad(monkey
         else:
             assert a["foto_url"] is None and a["box_2d"] is None
     assert dia["sin_revision"][0]["asignada_a"] == {"id": "drv-rosa", "nombre": "Rosa M."}
-    golpes = {g["pieza"]: g for g in exp["golpes"]}
-    assert golpes["Puerta lateral derecha"]["ya_estaba"] is True
-    assert golpes["Puerta lateral derecha"]["reparacion"]["estado"] == "reparado"
-    assert golpes["Retrovisor derecho"]["atribucion"]["motivo"] == "anterior_sin_repasar"
-    assert golpes["Puerta lateral corredera izquierda"]["atribucion"]["conductor"] == {"id": "drv-ana",
-                                                                                      "nombre": "Ana L."}
-    assert [c["estado"] for c in exp["calendario"]] == ["revisada", "golpe", "golpe"]
+
+    # El expediente: un golpe por cada caso de «quién la llevaba» y de reparación.
+    golpes = exp["golpes"]
+    assert {g["atribucion"]["motivo"] for g in golpes} == {
+        None, "ya_estaba", "sin_foto_anterior", "anterior_sin_repasar", "varios_dias", "varios_conductores",
+        "sin_conductor"}
+    assert {g["reparacion"]["estado"] for g in golpes} == {"reparado", "en_taller", "abierto"}
+    assert {g["gravedad"] for g in golpes} >= {"leve", "moderado", "grave", "critico"}
+    assert {g["pieza_clave"] for g in golpes} >= {None, "otra", "corredera_izq"}
+    reparado = next(g for g in golpes if g["reparacion"]["estado"] == "reparado")
+    assert reparado["ya_estaba"] is True and reparado["reparacion"]["coste"] == 180.0
+    atribuible = next(g for g in golpes if g["atribucion"]["atribuible"])
+    assert atribuible["atribucion"]["conductor"] == {"id": "drv-ana", "nombre": "Ana L."}
+    assert exp["cuentas"]["reparados"] == 1 and exp["cuentas"]["golpes"] == 7
+    assert exp["periodo"] == {"desde": "2026-10-20", "hasta": "2026-11-12", "dias": 24}
+    assert {c["estado"] for c in exp["calendario"]} == {"revisada", "sin_revisar", "golpe"}
+    # Las respuestas de marcar y deshacer.
+    assert resp["marcar_ya_apuntado"]["libro"]["accion"] == "ya_apuntado"
+    assert resp["marcar_ya_apuntado"]["libro"]["pieza_clave"] == "puerta_tras_der"
+    assert resp["marcar_nuevo"]["libro"]["accion"] == "nuevo"
+    assert resp["deshacer"]["libro"] == {"accion": "borrado"}
     todas = [l["foto_url"] for r in dia["revisiones"] for l in r["lados"]] + [g["foto_url"] for g in exp["golpes"]]
     assert set(todas) <= {LIMPIA, GOLPE}
     for foto in (LIMPIA, GOLPE):
@@ -243,7 +349,7 @@ async def test_los_ejemplos_de_las_pantallas_salen_de_las_rutas_de_verdad(monkey
 
     actualizar = os.environ.get("ACTUALIZAR_FIXTURES") == "1"
     distintos = []
-    for nombre, datos in (("repaso-dia.json", dia), ("expediente.json", exp)):
+    for nombre, datos in (("repaso-dia.json", dia), ("expediente.json", exp), ("repaso-respuestas.json", resp)):
         texto = json.dumps(datos, ensure_ascii=False, indent=2) + "\n"
         ruta = FIXTURES / nombre
         guardado = ruta.read_text(encoding="utf-8") if ruta.is_file() else None

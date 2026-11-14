@@ -63,6 +63,10 @@ def t(monkeypatch):
     base = mundo_base()
     monkeypatch.setattr(server, "db", base)
     monkeypatch.setattr(server, "_dia_negocio", lambda: HOY)
+
+    async def _sin_empresa(_org_id):
+        return None                      # sin ficha de empresa: lo ve todo (las pruebas de los módulos van aparte)
+    monkeypatch.setattr(server, "get_org", _sin_empresa)
     return base
 
 
@@ -252,20 +256,22 @@ async def test_el_golpe_queda_en_la_revision_y_en_el_libro_con_la_fecha_de_esa_r
     await marcar("r11", 3, "igual")
     r = await marcar("r12", 3, "golpe", **PUERTA)
     gid = r["lado"]["golpe"]["golpe_id"]
-    assert r["lado"]["golpe"] == {"golpe_id": gid, "pieza": PUERTA["part"], "panel": "puerta",
+    assert r["lado"]["golpe"] == {"golpe_id": gid, "pieza": PUERTA["part"], "pieza_clave": None, "panel": "puerta",
                                   "gravedad": "moderado", "descripcion": "Bollo con pintura saltada",
                                   "box_2d": [410, 220, 640, 470], "ya_estaba": False,
                                   "libro": {"accion": "nuevo", "ledger_id": None}}
-    assert r["libro"] == {"accion": "nuevo", "ledger_id": None, "pieza": PUERTA["part"], "panel": "puerta",
-                          "desde": "2026-11-12", "golpe_id": gid}
+    assert r["libro"] == {"accion": "nuevo", "ledger_id": None, "pieza": PUERTA["part"], "pieza_clave": None,
+                          "panel": "puerta", "desde": "2026-11-12", "golpe_id": gid}
     # En la ficha de la inspección: al final de `damages`, confirmado por una persona; la IA no se mueve.
     an = insp(t, "r12")["analysis"]
     assert an["damages"][0]["part"] == "Paragolpes delantero"
-    assert an["damages"][1] == {"part": PUERTA["part"], "severity": "moderado",
+    assert an["damages"][1] == {"part": PUERTA["part"], "pieza_clave": None, "severity": "moderado",
                                 "description": "Bollo con pintura saltada", "photo_index": 3,
                                 "box_2d": [410, 220, 640, 470], "is_new": True, "confirmed": True,
                                 "origen": "repaso", "golpe_id": gid}
-    assert an["severity"] == "moderado" and an["total_damages_count"] == 2
+    # Las cuentas de la IA no se tocan (las usa la autorrevisión); lo de la persona va aparte.
+    assert an["severity"] == "leve" and an["total_damages_count"] == 1
+    assert an["severidad_con_repaso"] == "moderado" and an["total_con_repaso"] == 2
     assert an["new_damages"] == []                             # la cola de la IA no lo ve
     # El modelo de la respuesta de GET /inspections/{id} no se come los campos nuevos.
     visto = server.Inspection.model_validate(insp(t, "r12")).model_dump()
@@ -344,12 +350,14 @@ async def test_dos_golpes_en_el_mismo_panel_no_se_juntan_en_silencio(t):
     primero = await marcar("r12", 3, "golpe", **PUERTA)
     # Al día siguiente, otro golpe en otra puerta (el libro dice «puerta» para las cuatro).
     r = await marcar("r13", 4, "golpe", part="Puerta delantera derecha", severity="leve", box_2d=[300, 600, 500, 800])
-    assert r["libro"] == {"accion": "ya_apuntado", "ledger_id": None, "pieza": PUERTA["part"], "panel": "puerta",
-                          "desde": "2026-11-12", "golpe_id": primero["lado"]["golpe"]["golpe_id"]}
+    assert r["libro"] == {"accion": "ya_apuntado", "ledger_id": None, "pieza": PUERTA["part"], "pieza_clave": None,
+                          "panel": "puerta", "desde": "2026-11-12", "golpe_id": primero["lado"]["golpe"]["golpe_id"]}
     assert r["lado"]["golpe"]["libro"] == {"accion": "ya_apuntado", "ledger_id": None}
-    # El libro no se toca (sigue el primero) y el segundo queda en su revisión, con su foto y su caja.
+    # La entrada sigue siendo la del primero, con el segundo ENLAZADO; el segundo queda en su revisión, con su
+    # foto y su caja.
     (e,) = t["vehicle_damage_ledger"].docs
     assert e["golpe_id"] == primero["lado"]["golpe"]["golpe_id"] and e["severity"] == "moderado"
+    assert e["golpe_ids"] == [primero["lado"]["golpe"]["golpe_id"], r["lado"]["golpe"]["golpe_id"]]
     assert insp(t, "r13")["analysis"]["damages"][0]["part"] == "Puerta delantera derecha"
     # Deshacer el segundo no toca el libro; deshacer el primero, sí.
     assert (await deshacer("r13", 4))["libro"] == {"accion": "sin_cambios"}
@@ -384,12 +392,16 @@ async def test_un_golpe_ya_confirmado_por_revision_rapida_es_ya_apuntado(t):
     t["vehicle_damage_ledger"].docs.append(dict(humana))
     r = await marcar("r12", 3, "golpe", **PUERTA)
     assert r["libro"] == {"accion": "ya_apuntado", "ledger_id": None, "pieza": "Puerta trasera derecha",
-                          "panel": "puerta", "desde": "2026-11-03", "golpe_id": None}
-    assert t["vehicle_damage_ledger"].docs == [humana]
+                          "pieza_clave": None, "panel": "puerta", "desde": "2026-11-03", "golpe_id": None}
+    # Lo que confirmó «Revisión rápida» no cambia; el golpe solo queda enlazado.
+    assert t["vehicle_damage_ledger"].docs == [{**humana, "golpe_ids": [r["lado"]["golpe"]["golpe_id"]]}]
     dia = await server.repaso_del_dia(fecha="2026-11-12", center=None, user=MARTA)
-    (ap,) = dia["revisiones"][0]["ya_apuntado"]
+    este, ap = dia["revisiones"][0]["ya_apuntado"]                  # los más recientes primero
     assert ap["origen"] == "revision_rapida" and ap["en_taller"] is True and ap["de_esta_revision"] is False
     assert ap["golpe_id"] is None and ap["vista"] is None
+    # Y el golpe enlazado sale como lo que es: el de esta revisión, con su pieza y su foto.
+    assert este["golpe_id"] == r["lado"]["golpe"]["golpe_id"] and este["pieza"] == PUERTA["part"]
+    assert este["de_esta_revision"] is True and este["en_taller"] is False and este["vista"] == "lateral_izq"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -512,17 +524,19 @@ async def test_un_analisis_que_llega_tarde_no_borra_el_golpe_de_la_persona():
                 "damages": [{"part": "Faro", "severity": "leve"}, {"part": "Capó", "severity": "leve"}]}
     junto = server._analisis_con_repaso(de_la_ia, actual)
     assert [d["part"] for d in junto["damages"]] == ["Faro", "Capó", "Puerta"]
-    assert junto["severity"] == "grave" and junto["total_damages_count"] == 3
-    assert junto["severidad_ia"] == "leve" and junto["danos_ia"] == 2
+    # Las cuentas de la IA, las suyas; las de la persona, aparte.
+    assert junto["severity"] == "leve" and junto["total_damages_count"] == 2
+    assert junto["severidad_con_repaso"] == "grave" and junto["total_con_repaso"] == 3
     # Si la IA falla (no devuelve análisis), queda el de la persona.
-    assert server._analisis_con_repaso(None, actual)["damages"] == [manual]
+    solo = server._analisis_con_repaso(None, actual)
+    assert solo["damages"] == [manual] and solo["origen"] == "repaso" and solo["severity"] == "grave"
     # Sin golpes a mano, lo de la IA tal cual (las empresas de siempre no notan nada).
     assert server._analisis_con_repaso(de_la_ia, None) is de_la_ia
     assert server._analisis_con_repaso(de_la_ia, {"damages": [{"part": "x"}]}) is de_la_ia
-    # Los dos sitios que reescriben el análisis entero lo usan.
+    # Los dos sitios que reescriben el análisis entero lo hacen sin pisar lo que se marque mientras tanto.
     import inspect
     for fn in (server.upload_inspection_photos, server.reanalyze_inspection):
-        assert "_analisis_con_repaso(" in inspect.getsource(fn)
+        assert "_escribir_analisis_ia(" in inspect.getsource(fn)
 
 
 def test_el_modulo_repaso_esta_en_todos_los_planes_de_empresa():

@@ -678,7 +678,7 @@ export default function RevisionRapida() {
         : item?.analysis?.new_damages || []
   // Un daño ya registrado en el ledger del vehículo NO se vuelve a validar.
   // _idx conserva el índice del array original: el backend valida por índice+scope.
-  const isKnownDamage = (d) => d?.is_new === false || (d?.description || '').includes('[ya registrado')
+  const isKnownDamage = (d) => d?.is_new === false || d?.origen === 'repaso' || (d?.description || '').includes('[ya registrado')
   const damages = allDamages.map((d, i) => ({ ...d, _idx: i })).filter((d) => !isKnownDamage(d))
   const knownCount = allDamages.length - damages.length
 

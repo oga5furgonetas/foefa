@@ -349,23 +349,50 @@ def test_el_embudo_de_empresas_no_se_llena_con_altas_de_otras_paginas():
     assert alta["pasos"][3]["n"] == 2
 
 
+PORTADA_NUEVA = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
+
+
+def _ev_dia(ahora, sid, minutos, ruta, **extra):
+    return {**_ev(sid, minutos, ruta, **extra), "ts": ahora - timedelta(minutes=minutos)}
+
+
 def test_la_portada_es_la_pagina_de_empresas_y_cuenta_en_su_embudo():
     """Desde el 14-11-2026 la portada («/») es la pagina de empresas y «/empresas»
     ensena lo mismo: el primer paso cuenta las dos, y una sesion que pasa por
     las dos cuenta una vez."""
     evs = _ordenar([
-        _ev("portada0001", 200, "/"),
-        _ev("portada0001", 199, "/", tipo="accion", nombre="emp_probar_menu"),
-        _ev("portada0001", 198, "/registro"),
-        _ev("portada0001", 190, "/registro", tipo="accion", nombre="registro_ok"),
-        _ev("portada0002", 200, "/"),
-        _ev("portada0002", 199, "/empresas"),
-        _ev("portada0002", 198, "/empresas", tipo="accion", nombre="emp_demo_calculadora"),
-        _ev("empresa0003", 200, "/empresas"),
+        _ev_dia(PORTADA_NUEVA, "portada0001", 200, "/"),
+        _ev_dia(PORTADA_NUEVA, "portada0001", 199, "/", tipo="accion", nombre="emp_probar_menu"),
+        _ev_dia(PORTADA_NUEVA, "portada0001", 198, "/registro"),
+        _ev_dia(PORTADA_NUEVA, "portada0001", 190, "/registro", tipo="accion", nombre="registro_ok"),
+        _ev_dia(PORTADA_NUEVA, "portada0002", 200, "/"),
+        _ev_dia(PORTADA_NUEVA, "portada0002", 199, "/empresas"),
+        _ev_dia(PORTADA_NUEVA, "portada0002", 198, "/empresas", tipo="accion", nombre="emp_demo_calculadora"),
+        _ev_dia(PORTADA_NUEVA, "empresa0003", 200, "/empresas"),
     ])
-    f = next(e for e in an.informe(evs, AHORA)["embudos"] if e["clave"] == "empresas")
+    f = next(e for e in an.informe(evs, PORTADA_NUEVA)["embudos"] if e["clave"] == "empresas")
     assert f["sesiones"] == 3
     assert [p["n"] for p in f["pasos"]] == [3, 2, 1]
+
+
+def test_la_portada_de_antes_del_14_11_no_cuenta_como_pagina_de_empresas():
+    """Hasta el 14-11-2026 «/» era la portada de la app de reparto: sus visitas de
+    entonces no son de la pagina de empresas y no entran en su embudo (si no, los
+    dias de antes saldrian inflados). «/empresas» cuenta siempre. Falla con el
+    codigo de antes: contaba «/» de cualquier dia."""
+    ahora = datetime(2026, 11, 14, 12, 0, tzinfo=timezone.utc)
+    evs = _ordenar([
+        # 13-11 a las 23:30 de Madrid (22:30 UTC): todavia era la portada de reparto.
+        {**_ev("reparto0001", 0, "/"), "ts": datetime(2026, 11, 13, 22, 30, tzinfo=timezone.utc)},
+        {**_ev("reparto0001", 0, "/registro", tipo="accion", nombre="registro_ok"),
+         "ts": datetime(2026, 11, 13, 22, 40, tzinfo=timezone.utc)},
+        # 14-11 a las 00:10 de Madrid (23:10 UTC del 13): ya es la portada nueva.
+        {**_ev("portada0002", 0, "/"), "ts": datetime(2026, 11, 13, 23, 10, tzinfo=timezone.utc)},
+        {**_ev("empresa0003", 0, "/empresas"), "ts": datetime(2026, 11, 10, 9, 0, tzinfo=timezone.utc)},
+    ])
+    f = next(e for e in an.informe(evs, ahora)["embudos"] if e["clave"] == "empresas")
+    assert f["sesiones"] == 2
+    assert [p["n"] for p in f["pasos"]] == [2, 0, 0]
 
 
 def test_el_embudo_de_empresas_usa_los_eventos_que_existen():

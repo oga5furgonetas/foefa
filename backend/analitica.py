@@ -226,7 +226,11 @@ EMBUDOS = [
     # cuenta las dos. `emp_demo_boton` ya no existe; la demo se pide desde el
     # cierre (`emp_demo_cierre`) o desde la calculadora (`emp_demo_calculadora`),
     # y el expediente de ejemplo se abre con `emp_expediente_arriba`.
-    {"clave": "empresas", "titulo": "Empresas (portada y /empresas)", "solo_desde_el_primero": True, "pasos": [
+    #
+    # `rutas_desde`: hasta el 14-11-2026 «/» era la portada de la app de reparto. Sus visitas de antes no son de
+    # la pagina de empresas: «/» cuenta en este embudo solo desde ese dia (dia de Madrid).
+    {"clave": "empresas", "titulo": "Empresas (portada y /empresas)", "solo_desde_el_primero": True,
+     "rutas_desde": {"/": "2026-11-14"}, "pasos": [
         ("Ven la pagina de empresas", "v", ("/", "/empresas")),
         ("Pulsan probar o piden la demo", "a",
          ("emp_probar_menu", "emp_probar_arriba", "emp_probar_cierre",
@@ -235,7 +239,9 @@ EMBUDOS = [
 ]
 
 
-def _toca(e, paso):
+def _toca(e, paso, rutas_desde=None):
+    """¿Toca el evento ese paso? `rutas_desde` ({ruta: "AAAA-MM-DD"}): una vista de esa ruta solo cuenta desde ese
+    dia (de Madrid), para rutas que antes eran otra pagina."""
     _, kind, valor = paso
     if kind == "a":
         if e["tipo"] != "accion":
@@ -245,6 +251,9 @@ def _toca(e, paso):
         return False
     if valor == "*web":
         return area_de(e["ruta"]) == "web"
+    desde = (rutas_desde or {}).get(e["ruta"])
+    if desde and _utc(e["ts"]).astimezone(MADRID).date().isoformat() < desde:
+        return False
     if isinstance(valor, tuple):
         return e["ruta"] in valor
     return e["ruta"] == valor
@@ -374,7 +383,7 @@ def informe(eventos, ahora, seg="externo", dias=30):
                 p["salidas"] += 1
 
         for f in EMBUDOS:
-            toco = [any(_toca(e, paso) for e in evs) for paso in f["pasos"]]
+            toco = [any(_toca(e, paso, f.get("rutas_desde")) for e in evs) for paso in f["pasos"]]
             if f.get("solo_desde_el_primero") and not toco[0]:
                 continue
             if any(toco):
