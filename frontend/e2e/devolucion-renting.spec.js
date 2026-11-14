@@ -21,7 +21,12 @@ function enlace(slug, vehiculo, r, p = 'fin', extra = '') {
 }
 const nPasos = (slug, vehiculo) => pasosDe(COMPANIAS.find((c) => c.slug === slug).documentos[vehiculo], vehiculo).length
 /* El texto de los bloques del resultado con etiqueta (no el del proceso, que es el del documento tal cual). */
-const bloques = (page) => page.locator('[data-testid="dev-factura"], [data-testid="dev-fuera"], [data-testid="dev-no-lista"], [data-testid="dev-aparte"]').allInnerTexts()
+// «Lo que has contestado que no» va plegado en pantalla: se abre antes de leerlo.
+const bloques = async (page) => {
+  const plegar = page.getByTestId('dev-no-lista-plegar')
+  if (await plegar.count() && (await plegar.getAttribute('aria-expanded')) === 'false') await plegar.click()
+  return page.locator('[data-testid="dev-factura"], [data-testid="dev-fuera"], [data-testid="dev-no-lista"], [data-testid="dev-aparte"]').allInnerTexts()
+}
 /* Las respuestas de un recorrido, paso a paso, según cada paso («s», «n» o «x»). */
 const respuestas = (slug, vehiculo, f) => pasosDe(COMPANIAS.find((c) => c.slug === slug).documentos[vehiculo], vehiculo).map(f).join('')
 
@@ -318,6 +323,8 @@ test.describe('/devolucion-renting', () => {
     const condicion = 'En caso contrario, los daños exteriores serán facturados al cliente'
     // Todo «Sí»: cada frase dice a qué alcanza; la pág. 9 (el habitáculo) solo para el interior.
     await page.goto(enlace('alphabet', 'furgoneta', 's'.repeat(nPasos('alphabet', 'furgoneta'))))
+    // Todo cae en el bloque de la cifra: el desglose no la repite.
+    await expect(page.getByTestId('dev-desglose')).toHaveCount(0)
     const bases = page.getByTestId('dev-base-cobro')
     await expect(bases.filter({ hasText: 'pág. 9' })).toHaveCount(1)
     await expect(bases.filter({ hasText: 'pág. 9' })).toContainText(/^Interior: lo dice en su pág\. 9/)
@@ -444,6 +451,30 @@ test.describe('/devolucion-renting', () => {
     await expect(page.getByTestId('dev-fuente').first()).toContainText('Sin fecha en el documento · código LPES.LCV.ES-17v1')
     await expect(page.getByTestId('dev-vigencia').first()).toContainText('Documento de LeasePlan (hoy Ayvens)')
     await expect(page.getByTestId('dev-repasar')).toHaveAttribute('href', `${RUTA}#v=f&c=ayvens`)
+    // El índice: las zonas de cada documento, y cada una lleva a su sitio de la tabla.
+    const indice = page.getByTestId('dev-indice')
+    await expect(indice).toContainText('Furgonetas')
+    await expect(indice).toContainText('Turismos')
+    for (const a of await indice.locator('a').evaluateAll((as) => as.map((x) => x.getAttribute('href')))) {
+      expect(await page.locator(a).count(), `el índice lleva a ${a}, que no está`).toBe(1)
+    }
+    // En pantalla ancha, arriba a la derecha, el dibujo del vehículo: marca la zona por la que se pasa en el índice.
+    if (page.viewportSize().width >= 1024) {
+      const dibujo = page.getByTestId('dev-cia-dibujo').locator('svg')
+      await expect(dibujo).toHaveAttribute('data-zona', '')
+      await indice.getByTestId('dev-indice-zona').filter({ hasText: 'Retrovisores' }).first().hover()
+      await expect(dibujo).toHaveAttribute('data-zona', 'retrovisores')
+    }
+    // Lo que no acepta, en tinta con la regla roja a la izquierda (no un muro rojo).
+    const celda = await page.getByTestId('dev-no-acepta').first().evaluate((el) => {
+      const raiz = getComputedStyle(document.querySelector('.ld-root'))
+      const color = (v) => { const p = document.createElement('span'); p.style.color = raiz.getPropertyValue(v); document.body.appendChild(p); const c = getComputedStyle(p).color; p.remove(); return c }
+      const e = getComputedStyle(el)
+      return { texto: e.color, tinta: color('--ld-text'), regla: e.borderLeftColor, rojo: color('--ld-warn'), ancho: e.borderLeftWidth }
+    })
+    expect(celda.texto).toBe(celda.tinta)
+    expect(celda.regla).toBe(celda.rojo)
+    expect(celda.ancho).toBe('2px')
     await page.getByTestId('dev-repasar').click()
     await expect(page.getByTestId('dev-cia-ayvens').locator('input')).toBeChecked()
 
@@ -511,6 +542,55 @@ test.describe('/devolucion-renting', () => {
     await expect(page.getByTestId('dev-fuente-url').first()).toBeVisible()
     await expect(page.getByTestId('dev-fuente-url').first()).toContainText('https://images.hertz.com/pdfs/RT_FULL_ES_ES.pdf')
     await expect(page.getByTestId('dev-impresion-pie')).toContainText('Este resultado, en línea: http')
+    // Lo plegado en pantalla va desplegado en papel, sin el «+».
+    await expect(page.getByTestId('dev-item-no').first()).toBeVisible()
+    await expect(page.getByTestId('dev-no-lista-resumen')).toBeHidden()
+    await expect(page.getByTestId('dev-imprimir-arriba')).toBeHidden()
+    // Y la hoja impresa de verdad sale (page.pdf, con la vista de impresión).
+    expect((await page.pdf({ format: 'A4' })).length).toBeGreaterThan(10_000)
+  })
+
+  test('el resultado se lee arriba: la cifra, el desglose que lleva a cada bloque, los botones, y lo largo plegado', async ({ page }, info) => {
+    const { fallos } = await preparar(page)
+    const url = enlace('ayvens', 'furgoneta', 'nxssnnnnnnsn', 'fin', '&n=2.port%C3%B3n~3.lateral%20derecho')
+    await page.goto(url)
+    // «Guardar o imprimir» y «Mandárselo a alguien», también justo debajo de la cifra: a la vista sin bajar.
+    const alto = page.viewportSize().height
+    for (const id of ['dev-imprimir-arriba', 'dev-mandar-arriba']) {
+      const b = await page.getByTestId(id).boundingBox()
+      expect(b.y + b.height, `«${id}» queda por debajo de la pantalla`).toBeLessThanOrEqual(alto)
+      expect(b.y).toBeLessThan((await page.getByTestId('dev-factura').boundingBox()).y)
+    }
+    // El desglose: una fila por bloque, con su cuenta.
+    await expect(page.getByTestId('dev-desglose-fila')).toHaveText(['2que su guía dice que se facturan', '1que no acepta', '1sin saber todavía', '8que has contestado que no'])
+    // Lo que has contestado que no, plegado, con las zonas dichas; se abre con su botón o desde el desglose.
+    const plegar = page.getByTestId('dev-no-lista-plegar')
+    await expect(plegar).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.getByTestId('dev-item-no').first()).toBeHidden()
+    await expect(page.getByTestId('dev-no-lista-resumen')).toHaveText('8 preguntas: Paragolpes, pintura, retrovisores, llantas, neumáticos, zona de carga, interior y limpieza. Ábrelo para ver cada una.')
+    await page.getByTestId('dev-desglose-fila').filter({ hasText: 'que has contestado que no' }).click()
+    await expect(plegar).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByTestId('dev-item-no')).toHaveCount(8)
+    await expect(page.getByTestId('dev-item-no').first()).toBeInViewport()
+    // El desglose no toca el # (es el estado del recorrido).
+    expect(page.url()).toMatch(/&p=fin$/)
+    await plegar.click()
+    await expect(page.getByTestId('dev-item-no').first()).toBeHidden()
+    // «Cambiar», gris y sin subrayar hasta pasar por encima.
+    const cambiar = page.getByTestId('dev-factura').getByTestId('dev-cambiar').first()
+    const linea = () => cambiar.evaluate((el) => getComputedStyle(el).textDecorationLine)
+    expect(await linea()).toBe('none')
+    if (info.project.name === 'escritorio') {
+      await cambiar.hover()
+      expect(await linea()).toBe('underline')
+    }
+    // «Mandárselo» de arriba avisa arriba.
+    await page.evaluate(() => { Object.defineProperty(navigator, 'share', { value: undefined, configurable: true }) })
+    await page.getByTestId('dev-mandar-arriba').click()
+    await expect(page.getByTestId('dev-copiado-arriba')).toContainText(/Enlace copiado|Copia este enlace/)
+    await expect(page.getByTestId('dev-copiado')).toHaveText('')
+    await sinDesbordes(page)
+    expect(fallos).toEqual([])
   })
 
   test('a 390 px: sin desbordes, y las respuestas a la vista sin bajar en cada paso', async ({ page }) => {
@@ -556,13 +636,17 @@ test.describe('/devolucion-renting', () => {
   })
 })
 
-/* Las fotos para mirarlas (no comprueban nada): FOTOS_DEVOLUCION=<carpeta>. */
+/* Las fotos para mirarlas (no comprueban nada): FOTOS_DEVOLUCION=<carpeta>; con FOTOS_NOCHE=1, de noche; con
+   FOTOS_SOLO=resultado,compania-ayvens…, solo esas. Además, la hoja impresa del resultado en PDF (resultado.pdf). */
 test('fotos', async ({ page }, info) => {
   const dir = process.env.FOTOS_DEVOLUCION
   test.skip(!dir || info.project.name !== 'escritorio', 'solo con FOTOS_DEVOLUCION, una vez')
-  test.setTimeout(240_000)
+  test.setTimeout(400_000)
   await preparar(page)
-  const tomas = [
+  const noche = process.env.FOTOS_NOCHE === '1'
+  const solo = (process.env.FOTOS_SOLO || '').split(',').filter(Boolean)
+  if (noche) await page.addInitScript(() => { try { localStorage.setItem('fds_tema_web', 'dark') } catch { /* nada */ } })
+  const todas = [
     ['entrada', RUTA + '#v=f&c=ayvens'],
     ['paso-medida', enlace('ayvens', 'furgoneta', 'nxs', 3, '&n=2.port%C3%B3n')],
     ['paso-retrovisor', enlace('ayvens', 'furgoneta', 'nxsnn', 5)],
@@ -575,7 +659,10 @@ test('fotos', async ({ page }, info) => {
     ['compania-ayvens', `${RUTA}/ayvens`],
     ['compania-arval', `${RUTA}/arval`],
     ['compania-europcar', `${RUTA}/europcar`],
+    ['resultado-alphabet', enlace('alphabet', 'furgoneta', 's'.repeat(nPasos('alphabet', 'furgoneta')))],
+    ['compania-bmw', `${RUTA}/bmw-financial-services`],
   ]
+  const tomas = solo.length ? todas.filter(([n]) => solo.includes(n) || n === 'resultado') : todas
   for (const ancho of [390, 1280]) {
     await page.setViewportSize({ width: ancho, height: ancho === 390 ? 844 : 800 })
     for (const [n, u] of tomas) {
@@ -584,12 +671,18 @@ test('fotos', async ({ page }, info) => {
       await page.waitForLoadState('networkidle')
       await page.screenshot({ path: `${dir}/${n}-${ancho}.png`, fullPage: true })
       if (n.startsWith('paso')) await page.screenshot({ path: `${dir}/${n}-${ancho}-pantalla.png` })
+      if (n === 'compania-ayvens' && ancho === 1280) {
+        await page.getByTestId('dev-indice-zona').filter({ hasText: 'Zona de carga' }).first().hover()
+        await page.screenshot({ path: `${dir}/${n}-${ancho}-indice.png` })
+      }
     }
     await page.goto('about:blank')
     await page.goto(tomas.find(([n]) => n === 'resultado')[1])
     await page.waitForLoadState('networkidle')
     await page.emulateMedia({ media: 'print' })
     await page.screenshot({ path: `${dir}/resultado-impresion-${ancho}.png`, fullPage: true })
+    // Como sale al «Guardar como PDF» del navegador (sin gráficos de fondo, lo que viene marcado).
+    if (ancho === 1280 && !noche) await page.pdf({ path: `${dir}/resultado.pdf`, format: 'A4' })
     await page.emulateMedia({ media: 'screen' })
   }
 })
