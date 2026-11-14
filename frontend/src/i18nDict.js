@@ -1490,6 +1490,13 @@ export const DICT = {
   'hoy.muro.mas':      { es: '+{n} salidas más en Asignación', en: '+{n} more in Assignments', fr: '+{n} de plus dans Affectations', de: '+{n} weitere in Zuweisung', it: '+{n} in più in Assegnazione', pt: '+{n} mais em Atribuição' },
   'hoy.revisada':      { es: 'revisada', en: 'inspected', fr: 'inspectée', de: 'geprüft', it: 'ispezionata', pt: 'inspecionada' },
   'hoy.pendiente':     { es: 'sin revisar', en: 'not inspected', fr: 'non inspectée', de: 'ungeprüft', it: 'non ispezionata', pt: 'por inspecionar' },
+  // El Repaso en el Inicio, en una línea con su acción (14-11-2026, ARREGLOS-5 I4). El título es 'repaso.titulo.hoy'.
+  'inicio.repaso.pend': { es: '{n} por repasar', en: '{n} to check', fr: '{n} à contrôler', de: '{n} zu kontrollieren', it: '{n} da controllare', pt: '{n} por rever' },
+  'inicio.repaso.hecho': { es: 'todo repasado', en: 'all checked', fr: 'tout est contrôlé', de: 'alles kontrolliert', it: 'tutto controllato', pt: 'tudo revisto' },
+  'inicio.repaso.nada': { es: 'aún no ha llegado ninguna revisión', en: 'no checks have arrived yet', fr: "aucun contrôle n'est encore arrivé", de: 'noch keine Kontrolle eingegangen', it: 'non è ancora arrivato nessun controllo', pt: 'ainda não chegou nenhuma revisão' },
+  'inicio.repaso.boton': { es: 'Repasar', en: 'Check now', fr: 'Contrôler', de: 'Kontrollieren', it: 'Controlla', pt: 'Rever' },
+  'inicio.repaso.abrir': { es: 'Abrir el repaso', en: 'Open the check', fr: 'Ouvrir le contrôle', de: 'Kontrolle öffnen', it: 'Apri il controllo', pt: 'Abrir a revisão' },
+  'inicio.atajos': { es: 'Atajos', en: 'Shortcuts', fr: 'Raccourcis', de: 'Schnellzugriffe', it: 'Scorciatoie', pt: 'Atalhos' },
   'ops.sinrevisar.1': { es: 'salida de hoy sin revisar', en: 'departure today not inspected', fr: 'départ du jour non inspecté', de: 'heutiger Einsatz ungeprüft', it: 'uscita di oggi non ispezionata', pt: 'saída de hoje por inspecionar' },
   'ops.sinrevisar':    { es: 'salidas de hoy sin revisar', en: "of today's departures not inspected", fr: 'départs du jour non inspectés', de: 'heutige Einsätze ungeprüft', it: 'uscite di oggi non ispezionate', pt: 'saídas de hoje por inspecionar' },
   'ops.why.sinrevisar': { es: "Sin fotos de salida, de un golpe que aparezca a la vuelta no se sabe cuándo apareció ni quién llevaba la furgoneta.", en: "Without departure photos, for damage found on return you can't tell when it appeared or who had the van.", fr: "Sans photos au départ, pour un dégât constaté au retour, on ne sait ni quand il est apparu ni qui avait la camionnette.", de: "Ohne Abfahrtsfotos weiß man bei einem Schaden, der bei der Rückkehr auffällt, weder wann er entstand noch wer das Fahrzeug hatte.", it: "Senza foto alla partenza, di un danno trovato al rientro non si sa quando è comparso né chi aveva il furgone.", pt: "Sem fotos à saída, de um dano encontrado no regresso não se sabe quando apareceu nem quem levava a carrinha." },
@@ -2130,6 +2137,8 @@ export const DICT = {
   'alta.inicio.titulo': { es: "Sigue con el arranque · paso {n} de 4", en: "Continue the setup · step {n} of 4", fr: "Reprends le démarrage · étape {n} sur 4", de: "Weiter mit dem Start · Schritt {n} von 4", it: "Continua l’avvio · passo {n} di 4", pt: "Continua o arranque · passo {n} de 4" },
   'alta.inicio.ahora': { es: "Ahora toca: {paso}.", en: "Next up: {paso}.", fr: "Prochaine étape : {paso}.", de: "Als Nächstes: {paso}.", it: "Ora tocca a: {paso}.", pt: "Agora: {paso}." },
   'alta.inicio.seguir': { es: "Seguir", en: "Continue", fr: "Continuer", de: "Weiter", it: "Continua", pt: "Seguir" },
+  'alta.inicio.ahoraCorto': { es: "Ahora", en: "Now", fr: "Maintenant", de: "Jetzt", it: "Ora", pt: "Agora" },
+  'alta.inicio.calma': { es: "Cuando llegue la primera revisión, aquí verás tu día.", en: "When the first check arrives, you'll see your day here.", fr: "Quand le premier contrôle arrivera, tu verras ta journée ici.", de: "Sobald die erste Kontrolle eingeht, siehst du hier deinen Tag.", it: "Quando arriverà il primo controllo, qui vedrai la tua giornata.", pt: "Quando chegar a primeira revisão, vais ver aqui o teu dia." },
 
   'alta.acc.sinEnlace': { es: "Sin mandar", en: "Not sent", fr: "Pas envoyé", de: "Nicht gesendet", it: "Non inviato", pt: "Por enviar" },
   'alta.acc.sinAbrir': { es: "Enlace creado, sin abrir", en: "Link created, not opened", fr: "Lien créé, pas encore ouvert", de: "Link erstellt, noch nicht geöffnet", it: "Link creato, non ancora aperto", pt: "Link criado, por abrir" },

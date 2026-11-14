@@ -195,8 +195,8 @@ test('I5 · con salidas en el cuadrante, la cifra grande es «salidas revisadas 
   await page.goto('/panel', { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('hoy-salidas-revisadas')).toHaveText('1 de 2 salidas del cuadrante con su revisión de hoy', { timeout: 30000 })
   // 1 de 2 = 50 %, no los 3 de 10 de toda la flota (30 %).
-  const cifra = page.getByTestId('hoy-salidas-revisadas').locator('xpath=..').locator('span.font-display').first()
-  await expect(cifra).toHaveText('50')
+  // La cifra va en Plex Mono desde el 14-11-2026 (ARREGLOS-5 I3): se busca por su marca, no por su letra.
+  await expect(page.getByTestId('hoy-cifra')).toHaveText('50')
   await expect(page.getByText('3 de 10 vehículos con su revisión de hoy (sin contar el taller)')).toBeVisible()
   await expect(page.locator('header').filter({ hasText: 'salidas revisadas hoy' }).first()).toContainText('1 de 2 salidas revisadas hoy')
   expect(fallos).toEqual([])
@@ -615,5 +615,111 @@ test.describe('I11 · detalles de las fotos', () => {
     await expect(burbuja).toBeHidden()
     await page.keyboard.press('Escape')
     await expect(burbuja).toBeVisible()
+  })
+})
+
+/* ── ARREGLOS-5 (14-11-2026): el Inicio, como una página de la casa ─────────────────────────────────────────────────
+   I1 la fecha en la letra de la casa · I2 los atajos en una lista con reglas (los mismos, en el mismo orden) · I3 los
+   golpes llevan a algún sitio · I4 el Repaso de hoy en una línea con su acción · I5 con el arranque a medias, solo el
+   arranque · I6 las salidas con la pieza de la matrícula y el estado en texto. Tres clases de empresa: la recién dada
+   de alta, la nueva ya en marcha (Esencial, sin IA) y la flota completa de siempre. */
+const ESENCIAL = ['dashboard', 'mi-dia', 'vehiculos', 'repaso', 'inspecciones', 'incidencias', 'talleres', 'ordenes',
+  'vencimientos', 'importaciones', 'conductores', 'chat', 'configuracion']
+
+async function inicioDe(page, { modulos, avisar, pendientes = 2, ia } = {}) {
+  await entrarComoAdmin(page)
+  await simularApi(page, 'lleno')
+  await page.route(/\/api\/org\/billing(\?|$)/, json({ plan: modulos ? 'esencial' : 'pro', status: 'active',
+    ...(modulos ? { modulos } : {}), ...(ia === undefined ? {} : { ia }) }))
+  await page.route(/\/api\/repaso\/pendientes(\?|$)/, json({ fecha: '2026-11-14', pendientes, ...(avisar === undefined ? {} : { avisar }) }))
+  await page.goto('/panel', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('inicio-atajos')).toBeVisible({ timeout: 30000 })
+}
+
+test.describe('ARREGLOS-5 · el Inicio', () => {
+  test('I1 · la fecha va en la letra de la casa, sin mono ni interletra', async ({ page }) => {
+    await inicioDe(page, {})
+    const fecha = page.getByTestId('inicio-fecha')
+    await expect(fecha).toContainText('NORTE')
+    expect(await fecha.evaluate((e) => getComputedStyle(e).fontFamily)).not.toMatch(/mono/i)
+    expect(await fecha.evaluate((e) => getComputedStyle(e).letterSpacing)).toMatch(/^(normal|0px|-)/)
+    expect(await fecha.evaluate((e) => getComputedStyle(e).textTransform)).toBe('none')
+  })
+
+  test('I2 · la flota completa: los mismos atajos en el mismo orden, en una lista sin iconos ni insignias', async ({ page }) => {
+    const fallos = vigilar(page)
+    await inicioDe(page, { avisar: false })
+    const atajos = page.getByTestId('inicio-atajos')
+    await expect(atajos.locator('li > button > span:first-child > span:first-child')).toHaveText([
+      'Vehículos', 'Estado de la flota', 'Revisión rápida', 'Asignación diaria', 'Inspecciones', 'Vencimientos',
+      'Órdenes de taller', 'Incidencias', 'Talleres', 'Conductores', 'Checklist turno'])
+    // El nombre accesible de siempre (nombre y dato) y la cifra de lo pendiente, en mono.
+    const asignacion = page.getByRole('button', { name: /^Asignación diaria\./ })
+    await expect(asignacion).toContainText('1 salida de hoy sin revisar')
+    expect(await asignacion.locator('b').evaluate((e) => getComputedStyle(e).fontFamily)).toMatch(/mono/i)
+    expect(await atajos.locator('svg.lucide-truck, .rounded-full').count()).toBe(0)
+    // Sin el Repaso en el Inicio para quien trabaja con Revisión rápida (avisar: false).
+    await expect(page.getByTestId('inicio-repaso')).toHaveCount(0)
+    expect(fallos).toEqual([])
+  })
+
+  test('I4 · la empresa nueva (Esencial, sin IA): el Repaso de hoy arriba, con el único botón cian', async ({ page }) => {
+    await inicioDe(page, { modulos: ESENCIAL, avisar: true, pendientes: 2, ia: false })
+    const linea = page.getByTestId('inicio-repaso')
+    await expect(linea).toContainText('Repaso de hoy')
+    await expect(linea).toContainText('2 por repasar')
+    const boton = linea.getByRole('link', { name: /^Repasar/ })
+    await expect(boton).toHaveAttribute('href', '/panel/repaso')
+    await expect(boton).toHaveClass(/btn-primary/)
+    await expect(page.locator('main .btn-primary')).toHaveCount(1)
+    // Encima de «El día de hoy» y de los atajos.
+    const y = async (l) => (await l.boundingBox()).y
+    expect(await y(linea)).toBeLessThan(await y(page.getByTestId('inicio-atajos')))
+    expect(await y(linea)).toBeLessThan(await y(page.getByTestId('inicio-hoy')))
+    // Sin cuadrante ni checklist en su plan, no se nombran.
+    await expect(page.getByText(/del cuadrante|Checklist de/)).toHaveCount(0)
+  })
+
+  test('I4 · con todo repasado, la línea lo dice y el botón va con borde', async ({ page }) => {
+    await inicioDe(page, { modulos: ESENCIAL, avisar: true, pendientes: 0, ia: false })
+    const linea = page.getByTestId('inicio-repaso')
+    await expect(linea).toContainText('todo repasado')
+    await expect(linea.getByRole('link', { name: /^Abrir el repaso/ })).toHaveClass(/btn-secondary/)
+    await expect(page.locator('main .btn-primary')).toHaveCount(0)
+  })
+
+  test('I3 · «golpes nuevos» lleva al Repaso si la empresa lo usa', async ({ page }) => {
+    await inicioDe(page, { modulos: ESENCIAL, avisar: true, ia: false })
+    await page.getByTestId('hoy-golpes').click()
+    await expect(page).toHaveURL(/\/panel\/repaso/)
+  })
+
+  test('I3 · y a Revisión rápida si no lo usa', async ({ page }) => {
+    await inicioDe(page, { avisar: false })
+    await page.getByTestId('hoy-golpes').click()
+    await expect(page).toHaveURL(/\/panel\/revision/)
+  })
+
+  test('I6 · las salidas llevan la pieza de la matrícula y el estado en texto, sin pastillas', async ({ page }) => {
+    await inicioDe(page, { avisar: false })
+    const fila = page.getByRole('button', { name: /1234 ABC/ })
+    await expect(fila.getByTestId('matricula')).toBeVisible()
+    await expect(fila).toContainText('Moderado')
+    expect(await fila.getByText('Moderado').evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgba(0, 0, 0, 0)')
+  })
+
+  test('I5 · con el arranque a medias, el Inicio es solo el arranque', async ({ page }) => {
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/alta\/estado/, json({ empresa: 'Transportes Pérez', furgonetas: 0, conductores: 0, revisiones: 0,
+      pasos: [{ id: 'furgonetas', hecho: false }, { id: 'conductores', hecho: false }, { id: 'acceso', hecho: false }, { id: 'revision', hecho: false }],
+      paso_actual: 1, revision: null }))
+    await page.goto('/panel', { waitUntil: 'domcontentloaded' })
+    const entrada = page.getByTestId('inicio-arranque')
+    await expect(entrada).toContainText('Sigue con el arranque · paso 1 de 4', { timeout: 30000 })
+    await expect(entrada).toContainText('Cuando llegue la primera revisión, aquí verás tu día.')
+    await expect(entrada.locator('li[aria-current="step"]')).toContainText('Tus furgonetas')
+    await expect(page.getByTestId('inicio-atajos')).toHaveCount(0)
+    await expect(page.getByText('Todavía no hay flota')).toHaveCount(0)
   })
 })
