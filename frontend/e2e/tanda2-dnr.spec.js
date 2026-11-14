@@ -721,7 +721,8 @@ test('F2: al salir y entrar otro conductor en el mismo móvil, la casilla no ens
   await page.route(/\/api\/auth\/driver-login/, json({ access_token: TOKEN_LUIS, name: 'LUIS GOMEZ', center: 'OGA5' }))
   await page.getByRole('button', { name: 'Salir', exact: true }).click()
   await page.locator('input[type="email"]').fill('luis@ejemplo.test')
-  await page.locator('input[type="email"]').press('Enter')
+  // Con contraseña: desde el 14-11-2026 lo principal es «Recibir un código» y la contraseña va en el segundo botón.
+  await page.getByRole('button', { name: 'Entrar con contraseña' }).click()
   await page.locator('input[autocomplete="current-password"]').fill('clave-de-prueba')
   await page.locator('input[autocomplete="current-password"]').press('Enter')
   await expect(page.getByRole('heading', { name: /Hola, LUIS/ })).toBeVisible()

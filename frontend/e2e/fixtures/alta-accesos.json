@@ -1,0 +1,53 @@
+{
+  "empresa": "Transportes Pérez",
+  "conductores": [
+    {
+      "driver_id": "0f8e2c1a-6b7d-4c3e-9a1f-2d4b6c8e0a12",
+      "nombre": "Ana L.",
+      "center": "PRINCIPAL",
+      "movil": "+34612345678",
+      "whatsapp": "34612345678",
+      "email": null,
+      "acceso": {
+        "estado": "abierto",
+        "creado_dia": "2026-11-14",
+        "abierto_dia": "2026-11-14",
+        "caduca_dia": null
+      }
+    },
+    {
+      "driver_id": "7c1d5e9b-3a2f-4d6c-8b1e-5f0a9c2d4e61",
+      "nombre": "Luis P.",
+      "center": "PRINCIPAL",
+      "movil": null,
+      "whatsapp": null,
+      "email": "luis@ejemplo.es",
+      "acceso": {
+        "estado": "sin_abrir",
+        "creado_dia": "2026-11-14",
+        "abierto_dia": null,
+        "caduca_dia": "2026-12-14"
+      }
+    },
+    {
+      "driver_id": "2a9b4c6d-8e1f-4a3b-9c5d-7e0f1a2b3c4d",
+      "nombre": "Rosa M.",
+      "center": "PRINCIPAL",
+      "movil": "+34655443322",
+      "whatsapp": "34655443322",
+      "email": null,
+      "acceso": {
+        "estado": "sin_enlace",
+        "creado_dia": null,
+        "abierto_dia": null,
+        "caduca_dia": null
+      }
+    }
+  ],
+  "cuentas": {
+    "sin_enlace": 1,
+    "sin_abrir": 1,
+    "abierto": 1,
+    "caducado": 0
+  }
+}

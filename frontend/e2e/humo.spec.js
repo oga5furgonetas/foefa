@@ -12,7 +12,7 @@ import { simularApi, entrarComoAdmin, EJEMPLO_REPASO, EJEMPLO_EXPEDIENTE } from 
    pantallas (divisiones por cero, listas indefinidas, `.map` de un undefined). */
 
 const PANEL = [
-  ['', 'Dashboard'], ['mi-dia', 'Mi día'], ['chat', 'Chat'], ['centro-ia', 'Centro de IA'],
+  ['', 'Inicio'], ['mi-dia', 'Mi día'], ['chat', 'Chat'], ['centro-ia', 'Centro de IA'],
   ['vehiculos', 'Vehículos'], ['repaso', 'Repaso'], [`vehiculos/${EJEMPLO_EXPEDIENTE.vehiculo.id}/expediente`, 'Expediente del vehículo'],
   ['estado-flota', 'Estado de la flota'], ['inspecciones', 'Inspecciones'],
   ['revision', 'Revisión rápida'], ['origen-danos', 'Origen de daños'],

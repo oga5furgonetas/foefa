@@ -947,6 +947,9 @@ class TokenResponse(BaseModel):
     # El alta de quien reparte solo devuelve el event_id del «CompleteRegistration» que el servidor mandó a Meta
     # (02-11-2026): la web se lo pasa al píxel como eventID y Meta no cuenta el alta dos veces.
     meta_event_id: Optional[str] = None
+    # El alta de una empresa (14-11-2026): true solo si el correo de bienvenida salió de verdad (Resend contestó 2xx, o
+    # se lanzó la bienvenida del ciclo); la pantalla final solo dice «te hemos enviado un correo» con true.
+    correo_bienvenida: Optional[bool] = None
 
 
 # =========================
@@ -974,7 +977,8 @@ def create_token(user_id: str, role: str, name: str,
                  demo: bool = False, allowed_centers: Optional[list] = None,
                  suplantado: bool = False, region: Optional[list] = None,
                  horas: Optional[int] = None, app_destino: Optional[str] = None,
-                 entrada: Optional[float] = None) -> str:
+                 entrada: Optional[float] = None, enlace: Optional[str] = None,
+                 via: Optional[str] = None) -> str:
     # El conductor entra en su portal una vez cada muchos dias: pedir dias libres
     # o mirar sus turnos no es algo diario. Con las 72 h del panel, el token le
     # caducaba entre visita y visita y la pantalla le soltaba
@@ -1025,6 +1029,13 @@ def create_token(user_id: str, role: str, name: str,
         # Cuándo se ENTRÓ de verdad, con contraseña o con código (02-11-2026): renovar la sesión lo copia, no lo
         # rejuvenece. Sirve para cambiar la contraseña sin la actual nada más entrar (_recien_entrado).
         payload["at"] = int(entrada)
+    if enlace:
+        # La sesión que nace del enlace personal del conductor (14-11-2026): el id del enlace, para que renovarlo,
+        # quitarlo o dar de baja al conductor la corte (get_current_user, _acceso_sesion_viva). Nunca el token.
+        payload["lk"] = enlace
+    if via:
+        # Cómo entró: «codigo» (correo) o «enlace». Con cualquiera de los dos no se le obliga a elegir contraseña.
+        payload["via"] = via
     return jwt.encode(payload, SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
@@ -1153,6 +1164,12 @@ async def get_current_user(
     # AÍSLA: fija la BD de la organización del token para TODA esta petición.
     # Tokens antiguos sin db_name → BD por defecto (tu data) = sin cambios.
     set_current_org_db(payload.get("db_name"))
+    # La sesión del enlace personal (14-11-2026) vale mientras su enlace siga vivo: renovarlo, quitarlo o dar de baja al
+    # conductor la corta (en 60 s como mucho; al momento en el proceso que hace el cambio). Las de código y contraseña,
+    # sin `lk`, siguen como siempre.
+    if payload.get("role") == "driver" and payload.get("lk"):
+        if not await _acceso_sesion_viva(payload):
+            raise HTTPException(status_code=401, detail=_ACCESO_SESION_CORTADA)
     # Un conductor que entro con una ficha de baja (el login elegia la que
     # fuera) sigue con ese token 30 dias: se le lleva a su ficha activa, en vez
     # de obligarle a salir y entrar sin que nadie sepa por que.
@@ -2009,6 +2026,12 @@ async def create_indexes():
         await _idx(global_db.taller_enlaces, "token", unique=True)
         await _idx(global_db.taller_enlaces, [("orden_id", 1), ("revocado", 1)])
         await _idx(global_db.taller_enlaces, [("workshop_id", 1), ("db_name", 1)])
+        # El enlace personal del conductor (14-11-2026): solo el hash del token, único; un enlace por conductor y empresa
+        # (crearlo y renovarlo reemplazan el documento), y su id, que viaja en la sesión (`lk`).
+        await _idx(global_db.accesos_conductor, "token_hash", unique=True, name="acceso_conductor_token_unico")
+        await _idx(global_db.accesos_conductor, "id", unique=True, name="acceso_conductor_id_unico")
+        await _idx(global_db.accesos_conductor, [("org_id", 1), ("driver_id", 1)], unique=True,
+                   name="acceso_conductor_uno_por_conductor")
         # Registro de escrituras (quien hizo que): 30 dias y fuera.
         await _idx(global_db.audit_requests, "at", expireAfterSeconds=30 * 24 * 3600)
         await _idx(global_db.audit_requests, [("path", 1), ("at", -1)])
@@ -5246,61 +5269,29 @@ async def register_dsp(data: RegisterRequest, request: Request):
     # Enviar email de bienvenida con Resend (no bloqueante)
     recipient = org.get("email")
     resend_key = os.environ.get("RESEND_API_KEY", "")
+    correo_bienvenida = False
     if recipient and resend_key and ciclo_correos.es_candidata(org):
         # Quien reparte solo: la bienvenida del ciclo (los pasos de la primera
         # ruta, en su idioma). En segundo plano: el alta no espera al correo.
         asyncio.create_task(_ciclo_enviar(org_id, "bienvenida"))
+        correo_bienvenida = True
     elif recipient and resend_key and not org.get("alta_ios"):
-        # (Desde la app del iPhone no sale éste, que habla de la «prueba gratuita» y del plan: ver `alta_ios` más arriba.)
-        plan_label = {"basico": "Básico", "pro": "Pro", "flota": "Flota", "operacion": "Operación",
-                      "completo": "Completo", "autonomo": "Repartidor"}.get(org.get("plan") or "", "Pro")
+        # (Desde la app del iPhone no sale éste, que habla de la prueba y del plan: ver `alta_ios` más arriba.)
+        asunto, html, texto = _correo_bienvenida_empresa(org_name, username, org.get("plan"), dias_prueba,
+                                                          bool(org.get("prueba_con_tarjeta")))
         try:
             import httpx as _httpx
-            await _httpx.AsyncClient().post(
+            resp = await _httpx.AsyncClient().post(
                 "https://api.resend.com/emails",
                 headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
-                json={
-                    "from": os.environ.get("EMAIL_FROM", _EMAIL_FROM_DEFECTO),
-                    "to": [recipient],
-                    "subject": f"¡Bienvenido a {MARCA}! Tu prueba gratuita de {dias_prueba} días ya está activa",
-                    "html": f"""
-<div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;background:#0b0d10;color:#eef1f6;border-radius:16px;overflow:hidden">
-  <div style="background:linear-gradient(135deg,#0ea5e9,#0369a1);padding:32px 28px;text-align:center">
-    <div style="font-size:32px;margin-bottom:8px">⚡</div>
-    <h1 style="margin:0;font-size:24px;font-weight:900;color:#fff">¡Bienvenido a {MARCA}!</h1>
-    <p style="margin:8px 0 0;color:rgba(255,255,255,.8);font-size:14px">Tu prueba gratuita de {dias_prueba} días ya está activa</p>
-  </div>
-  <div style="padding:28px">
-    <p style="margin:0 0 16px;color:#cbd3e0;font-size:15px">Hola <b>{org_name}</b>,</p>
-    <p style="margin:0 0 20px;color:#8b94a3;font-size:14px;line-height:1.6">
-      Tu cuenta con el plan <b style="color:#0ea5e9">{plan_label}</b> está lista. Tienes {dias_prueba} días completos para probarlo sin límites{"" if org.get("prueba_con_tarjeta") else " y sin introducir ninguna tarjeta"}.
-    </p>
-    <div style="background:#13161b;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:16px 20px;margin-bottom:24px">
-      <div style="font-size:12px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Tu acceso</div>
-      <div style="font-size:14px;color:#cbd3e0;margin-bottom:6px">🔐 Usuario: <b style="color:#eef1f6">{username}</b></div>
-      <div style="font-size:14px;color:#cbd3e0">📦 Plan: <b style="color:#0ea5e9">{plan_label}</b> · Prueba gratuita {dias_prueba} días</div>
-    </div>
-    <a href="{_PORTAL_BASE_FRONT}/panel" style="display:block;text-align:center;background:linear-gradient(135deg,#0ea5e9,#0369a1);color:#fff;text-decoration:none;padding:14px 24px;border-radius:10px;font-weight:800;font-size:15px;margin-bottom:24px">
-      Entrar al panel →
-    </a>
-    <p style="margin:0;color:#64748b;font-size:12px;text-align:center;line-height:1.6">
-      Si tienes alguna pregunta, escríbenos a <a href="mailto:{CORREO_CONTACTO}" style="color:#0ea5e9">{CORREO_CONTACTO}</a><br>
-      {"Al finalizar la prueba, se cobra el plan elegido salvo cancelación." if org.get("prueba_con_tarjeta")
-       else ((f"Es gratis y sin límite hasta el {_fecha_larga(REP_GRATIS_HASTA)}. Después sigues gratis con hasta "
-              f"{REP_GRATIS_PARADAS_DIA} paradas al día; sin tarjeta no se cobra nada."
-              if _rep_promo_activa() else
-              f"Al acabar la prueba sigues gratis con hasta {REP_GRATIS_PARADAS_DIA} paradas al día; sin tarjeta no se cobra nada.")
-             if plan_elegido == "autonomo" else "Al acabar la prueba eliges tú si seguir: sin tarjeta no se cobra nada.")}
-    </p>
-    <p style="margin:12px 0 0;color:#475569;font-size:11px;text-align:center;line-height:1.5">
-      🇬🇧 Welcome to {MARCA}! Your {dias_prueba}-day free trial is active{"" if org.get("prueba_con_tarjeta") else " — no card required"}.
-      Log in at {_DOMINIO_FRONT}/panel with the username above. Questions? {CORREO_CONTACTO}
-    </p>
-  </div>
-</div>""",
-                },
+                json={"from": os.environ.get("EMAIL_FROM", _EMAIL_FROM_DEFECTO), "to": [recipient],
+                      "subject": asunto, "html": html, "text": texto},
                 timeout=8.0,
             )
+            correo_bienvenida = 200 <= int(getattr(resp, "status_code", 0) or 0) < 300
+            if not correo_bienvenida:
+                logger.warning("Correo de bienvenida rechazado por Resend (org %s): %s", org_id,
+                               getattr(resp, "status_code", "?"))
         except Exception as _ee:
             logger.warning(f"Email de bienvenida no enviado a {recipient}: {_ee}")
     token = create_token(user_id, "admin", org_name,
@@ -5309,7 +5300,61 @@ async def register_dsp(data: RegisterRequest, request: Request):
                          horas=SESION_APP_HORAS if _org_de_autonomo(org) else None)
     return TokenResponse(access_token=token, role="admin", name=org_name, id=user_id,
                          account_type="dsp", hidden_modules=org_hidden_modules(org), slug=slug,
-                         centers=org.get("centers"), meta_event_id=meta_event_id)
+                         centers=org.get("centers"), meta_event_id=meta_event_id,
+                         correo_bienvenida=correo_bienvenida)
+
+
+# El plan como se llama en la web (14-11-2026): el correo decía «Completo» y la web «Pro». Sin plan, no se nombra.
+_PLAN_EN_EL_CORREO = {"operacion": "Esencial", "basico": "Esencial", "completo": "Pro", "pro": "Pro", "flota": "Pro",
+                      "holding": "Empresa", "reparto": "Reparto", "autonomo": "Repartidor"}
+
+
+def _correo_bienvenida_empresa(org_name: str, username: str, plan: Optional[str], dias_prueba: int,
+                               con_tarjeta: bool = False) -> tuple:
+    """(asunto, html, texto) de la bienvenida del alta de una empresa (14-11-2026).
+
+    Solo en español, sin el párrafo en inglés, sin «sin límites», sin emojis ni degradados: tinta sobre papel y el
+    botón cian de la marca. Dice lo que pasa de verdad: el plan como se llama en la web, los días de prueba, que no
+    hace falta tarjeta, con qué usuario se entra y el primer paso (las matrículas, los conductores y su acceso por
+    WhatsApp). Lo que viene de quien se da de alta (empresa y usuario) va escapado."""
+    plan_nombre = _PLAN_EN_EL_CORREO.get(str(plan or "").strip().lower())
+    if plan == "autonomo":
+        # Quien reparte solo y cae aquí (sin el ciclo de correos) se queda con su frase de siempre.
+        cierre = ("Al acabar la prueba se cobra el plan elegido salvo que lo canceles." if con_tarjeta else
+                  (f"Es gratis y sin límite hasta el {_fecha_larga(REP_GRATIS_HASTA)}. Después sigues gratis con "
+                   f"hasta {REP_GRATIS_PARADAS_DIA} paradas al día; sin tarjeta no se cobra nada."
+                   if _rep_promo_activa() else
+                   f"Al acabar la prueba sigues gratis con hasta {REP_GRATIS_PARADAS_DIA} paradas al día; sin tarjeta "
+                   f"no se cobra nada."))
+    else:
+        cierre = "No hace falta tarjeta: al acabar la prueba eliges tú si seguir."
+    if plan_nombre:
+        cuenta = f"Tu cuenta está creada con el plan {plan_nombre} y {dias_prueba} días de prueba. {cierre}"
+    else:
+        cuenta = f"Tu cuenta está creada con {dias_prueba} días de prueba. {cierre}"
+    empezar = ("Para empezar: pega las matrículas de tus furgonetas, apunta a tus conductores con su móvil y mándales "
+               "su acceso por WhatsApp. Con un toque entran desde el móvil y hacen la revisión con fotos.")
+    panel = f"{_PORTAL_BASE_FRONT}/panel"
+    dudas = f"¿Dudas? Escríbenos a {CORREO_CONTACTO}." if CORREO_CONTACTO else ""
+    e = html_escape
+    p = 'style="margin:0 0 16px;font-size:15px;line-height:1.55;color:#10181A"'
+    html = (
+        '<div style="background:#F5F6F3;padding:24px 12px">'
+        '<div style="font-family:Archivo,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;background:#FFFFFF;'
+        'border:1px solid rgba(16,24,26,.12);border-radius:12px;padding:28px 24px;color:#10181A">'
+        f'<p {p}>Hola, {e(org_name)}:</p>'
+        f'<p {p}>{e(cuenta)}</p>'
+        f'<p {p}>Entras al panel con el usuario <b>{e(username)}</b>.</p>'
+        f'<p style="margin:0 0 20px"><a href="{e(panel)}" style="display:inline-block;background:#14E7D8;color:#10181A;'
+        'text-decoration:none;font-weight:700;font-size:15px;padding:15px 24px;border-radius:12px">Entrar al panel</a></p>'
+        f'<p {p}>{e(empezar)}</p>'
+        + (f'<p style="margin:20px 0 0;padding-top:16px;border-top:1px solid rgba(16,24,26,.12);font-size:13px;'
+           f'line-height:1.5;color:#545E66">¿Dudas? Escríbenos a <a href="mailto:{e(CORREO_CONTACTO)}" '
+           f'style="color:#0B6E69">{e(CORREO_CONTACTO)}</a>.</p>' if CORREO_CONTACTO else "")
+        + '</div></div>')
+    texto = "\n\n".join(x for x in (f"Hola, {org_name}:", cuenta, f"Entras al panel con el usuario {username}.",
+                                    f"Entrar al panel: {panel}", empezar, dudas) if x)
+    return f"Tu cuenta de {MARCA} está lista", html, texto
 
 
 def _org_billing(org):
@@ -7567,6 +7612,18 @@ async def renovar_sesion(user: dict = Depends(get_current_user), request: Reques
     su cuenta (una persona) y, desde el 29-10-2026, la del conductor de empresa; se vuelve a leer el usuario, así
     que una cuenta desactivada no se renueva."""
     _exigir_app_al_dia(request)
+    if user.get("role") == "driver" and user.get("lk") and not user.get("demo") and not user.get("imp"):
+        # La sesión del enlace personal (14-11-2026): la ficha puede no tener correo ni cuenta, así que no se exige
+        # `driver_accounts`; se exige que su enlace siga vivo (sin caché) y la ficha de alta. Copia `lk`, `via` y `at`.
+        vivo = await _acceso_vivo(await global_db.accesos_conductor.find_one({"id": str(user.get("lk"))}, {"_id": 0}))
+        if not vivo or vivo[0].get("id") != user.get("org_id") or vivo[2].get("id") != user.get("sub"):
+            raise HTTPException(401, _ACCESO_SESION_CORTADA)
+        org, _tdb, d = vivo
+        token = create_token(d["id"], "driver", d.get("name") or "", org_id=org.get("id"),
+                             db_name=_tenant_db_name(org), account_type=org.get("account_type"),
+                             entrada=user.get("at"), enlace=str(user.get("lk")), via=user.get("via") or "enlace")
+        return TokenResponse(access_token=token, role="driver", name=d.get("name") or "", id=d["id"],
+                             center=d.get("center"), configurar_cuenta=False)
     if user.get("role") == "driver" and not user.get("demo") and not user.get("imp"):
         # El conductor de empresa (29-10-2026): la misma sesión que le dio app-login, mientras su cuenta y su
         # ficha sigan activas (se vuelven a leer, como con el autónomo). Antes solo se renovaba la del autónomo y
@@ -8509,10 +8566,12 @@ async def driver_code_verify(data: dict, request: Request):
         raise HTTPException(status_code=401, detail="El código no es válido o ha caducado. Solicita uno nuevo.")
     token = create_token(driver["id"], "driver", driver.get("name", ""),
                          org_id=(org or {}).get("id"), db_name=_tenant_db_name(org),
-                         account_type=(org or {}).get("account_type"), entrada=time.time())
+                         account_type=(org or {}).get("account_type"), entrada=time.time(), via="codigo")
+    # Quien entra con el código ya ha demostrado que es él (14-11-2026): no se le obliga a elegir contraseña (antes,
+    # dos veces seguidas nada más entrar). Puede ponerse una cuando quiera desde su cuenta.
     return {"access_token": token, "token_type": "bearer", "role": "driver",
             "name": driver.get("name", ""), "id": driver["id"], "center": driver.get("center"),
-            "configurar_cuenta": await _configurar_cuenta_de(tdb, driver["id"], (account or {}).get("email") or email)}
+            "configurar_cuenta": False}
 
 
 @auth_router.post("/driver-token")
@@ -11517,7 +11576,10 @@ async def portal_mi_ficha(user: dict = Depends(require_any_auth)):
             # Si tiene que elegirla ya, con la regla del login y del cambio (_temporal_vigente_de). Sin ninguna cuenta,
             # null: lo decide el login (con el código, que la cree) y no se obliga a quien ya estaba dentro; y la oficina
             # que entra como él o la demo, que no pueden cambiarla (403), nunca.
-            "configurar_cuenta": (_temporal_vigente_de(cuentas) and not (user.get("imp") or user.get("demo"))) if cuentas else None}
+            # Quien entró con el código por correo o con su enlace personal (14-11-2026, `via`), nunca: ya ha demostrado
+            # quién es y la contraseña la elige cuando quiera.
+            "configurar_cuenta": False if user.get("via") in ("codigo", "enlace") else
+            ((_temporal_vigente_de(cuentas) and not (user.get("imp") or user.get("demo"))) if cuentas else None)}
 
 
 def _telefono_limpio(valor) -> str:
@@ -13330,6 +13392,635 @@ async def _repuntar_conductor(absorber: list, conservar: str, nombre: str) -> di
     return movidos
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# EL ACCESO PERSONAL DEL CONDUCTOR (14-11-2026)
+# ══════════════════════════════════════════════════════════════════════════════
+# El dueño de una flota le manda a cada conductor, desde SU WhatsApp, un enlace (`/c#<token>`) que le deja dentro de su
+# portal con un toque: sin correo, sin contraseña y sin nada que instalar. El servidor no manda nada. Las reglas:
+#   · el token son 256 bits aleatorios (`token_hex(32)`); en la base solo su SHA-256 (`global_db.accesos_conductor`);
+#   · se ata al primer teléfono que lo canjea: el navegador manda un secreto suyo (lo crea él: si lo diese el servidor y
+#     la respuesta se perdiese por mala cobertura, el enlace quedaría atado a un secreto que el teléfono no tiene) y se
+#     guarda su SHA-256. Desde entonces solo vale con ese secreto: otro teléfono, 409, sin decir de quién es;
+#   · renovarlo lo reemplaza (el viejo deja de existir), quitarlo lo borra, y dar de baja al conductor también; si
+#     nunca se abre, caduca a los 30 días;
+#   · el 401 es el mismo, byte a byte, para «no existe», «caducado», «renovado», «de baja», «sin acceso» y «empresa no
+#     activa»; hay límite de fallos por IP y por enlace, como en las demás entradas;
+#   · la sesión es la del conductor de siempre (rol driver, su empresa, 30 días) más `lk`, que `get_current_user` mira
+#     en cada petición: no abre el panel ni enseña nada que el conductor no vea hoy;
+#   · el token no pasa por ningún registro: va detrás de «#» en el enlace (no sale del móvil) y en el CUERPO del canje.
+_ACCESO_DIAS_SIN_ABRIR = 30
+_ACCESO_TTL = 60.0
+_ACCESO_CACHE: dict = {}          # lk -> (expira_ts, vivo, org_id, driver_id)
+_ACCESO_ESPERA_FALLO = 0.5        # segundos que espera cada canje fallido (las pruebas lo ponen a 0)
+_ACCESO_NO_VALE = "Este enlace ya no vale. Pide uno nuevo a tu empresa."
+_ACCESO_OTRO_TELEFONO = "Este enlace ya se abrió en otro teléfono. Pide uno nuevo a tu empresa."
+_ACCESO_SIN_TELEFONO = "Falta el identificador de este teléfono. Vuelve a abrir el enlace."
+_ACCESO_SESION_CORTADA = "Tu acceso ha cambiado: abre el último enlace que te ha mandado tu empresa."
+_ACCESO_TOKEN_RE = re.compile(r"[0-9a-f]{64}")
+_ACCESO_DISPOSITIVO_RE = re.compile(r"[A-Za-z0-9_-]{43,128}")
+_NO_STORE = {"Cache-Control": "no-store"}
+_ACCESO_SIN_ENLACE = {"estado": "sin_enlace", "creado_dia": None, "abierto_dia": None, "caduca_dia": None}
+_ACCESO_ESTADOS = ("sin_enlace", "sin_abrir", "abierto", "caducado")
+
+
+def _sha256_hex(texto: str) -> str:
+    return hashlib.sha256(texto.encode()).hexdigest()
+
+
+def _ficha_de_alta(f) -> bool:
+    """Una ficha que puede entrar: existe, no está de baja, ni fusionada en otra, ni borrada."""
+    return isinstance(f, dict) and bool(f.get("id")) and f.get("active") is not False \
+        and not f.get("merged_into") and f.get("status") not in ("deleted", "fusionada")
+
+
+def _duena_sin_ficha() -> dict:
+    """La cuenta dueña cuando no tiene documento en `organizations` (la base por defecto), como en el login."""
+    return {"id": OWNER_ORG_ID, "name": MARCA, "slug": "", "account_type": "owner", "db_name": _DEFAULT_DB_NAME}
+
+
+async def _org_del_acceso(org_id) -> Optional[dict]:
+    if not org_id:
+        return None
+    org = await get_org(org_id)
+    if org:
+        return org
+    return _duena_sin_ficha() if org_id == OWNER_ORG_ID else None
+
+
+async def _acceso_empresa(user: dict) -> dict:
+    """La empresa de quien está en el panel, y que sea la de la base de su sesión (si no, nada que hacer aquí)."""
+    org = await _org_de_admin(user)
+    if not org and not user.get("org_id"):
+        org = _duena_sin_ficha()
+    if not org or _tenant_db_name(org) != _current_db_name.get():
+        raise HTTPException(403, "Tu sesión no corresponde a ninguna empresa: entra otra vez.")
+    return org
+
+
+async def _acceso_vivo(doc) -> Optional[tuple]:
+    """(empresa, base, ficha) si este enlace vale; si no, None. La usan el canje, la sesión y su renovación.
+
+    Vale si y solo si: el documento existe; la empresa existe y está activa o en prueba (la dueña, siempre); la ficha
+    existe en la base de la empresa y está de alta; la oficina no le ha quitado el acceso (`driver_accounts` con
+    `active: False`, como en el código por correo); y, si nunca se abrió, no ha caducado."""
+    if not isinstance(doc, dict) or not doc.get("id") or not doc.get("driver_id"):
+        return None
+    if doc.get("abierto_at") is None:
+        caduca = _fecha_utc(doc.get("caduca_at"))
+        if not caduca or caduca <= datetime.now(timezone.utc):
+            return None
+    org = await _org_del_acceso(doc.get("org_id"))
+    if not org or (org.get("account_type") != "owner" and org.get("status") not in ("active", "trial")):
+        return None
+    tdb = client[_tenant_db_name(org)]
+    ficha = await tdb.drivers.find_one(
+        {"id": str(doc["driver_id"])},
+        {"_id": 0, "id": 1, "name": 1, "center": 1, "email": 1, "active": 1, "status": 1, "merged_into": 1})
+    if not _ficha_de_alta(ficha):
+        return None
+    if await tdb.driver_accounts.find_one({"driver_id": ficha["id"], "active": False}, {"_id": 0, "driver_id": 1}):
+        return None
+    return org, tdb, ficha
+
+
+async def _acceso_sesion_viva(payload: dict) -> bool:
+    """¿Sigue vivo el enlace de esta sesión, y es el de esta empresa y este conductor? Caché de 60 s por proceso."""
+    lk = str(payload.get("lk") or "")
+    ahora = time.time()
+    hit = _ACCESO_CACHE.get(lk)
+    if not hit or hit[0] <= ahora:
+        doc = await global_db.accesos_conductor.find_one({"id": lk}, {"_id": 0})
+        vivo = await _acceso_vivo(doc)
+        hit = (ahora + _ACCESO_TTL, bool(vivo), (doc or {}).get("org_id"), (doc or {}).get("driver_id"))
+        if len(_ACCESO_CACHE) > 2000:
+            _ACCESO_CACHE.clear()
+        _ACCESO_CACHE[lk] = hit
+    return bool(hit[1]) and hit[2] == payload.get("org_id") and hit[3] == payload.get("sub")
+
+
+def _alta_local(marca) -> tuple:
+    """(día AAAA-MM-DD, hora HH:MM) en la zona de la empresa de una marca guardada en UTC; (None, None) sin marca."""
+    d = _fecha_utc(marca) if marca else None
+    if not d:
+        return None, None
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(_region_actual.get()[1])
+    except Exception:                                            # noqa: BLE001
+        tz = timezone.utc
+    loc = d.astimezone(tz)
+    return loc.strftime("%Y-%m-%d"), loc.strftime("%H:%M")
+
+
+def _acceso_estado(doc) -> dict:
+    """El estado de un enlace para el panel (nunca el token ni sus hashes)."""
+    if not doc:
+        return dict(_ACCESO_SIN_ENLACE)
+    abierto = doc.get("abierto_at")
+    if abierto:
+        estado = "abierto"
+    else:
+        caduca = _fecha_utc(doc.get("caduca_at"))
+        estado = "sin_abrir" if caduca and caduca > datetime.now(timezone.utc) else "caducado"
+    return {"estado": estado, "creado_dia": _alta_local(doc.get("creado_at"))[0],
+            "abierto_dia": _alta_local(abierto)[0],
+            "caduca_dia": None if abierto else _alta_local(doc.get("caduca_at"))[0]}
+
+
+def _acceso_movil(ficha: dict) -> tuple:
+    """(móvil tal como está guardado, el mismo para wa.me: cifras sin «+») de una ficha; None si no tiene."""
+    movil = str(ficha.get("movil_personal") or ficha.get("phone") or "").strip() or None
+    return movil, (whatsapp.normaliza_telefono(movil) or None) if movil else None
+
+
+def _sin_centro_visible(user: dict, centro: str) -> bool:
+    """Con centros asignados, una ficha sin centro o de un centro que no ve no es suya (en la dueña, todas lo son)."""
+    restringido = any(p for p in (user.get("allowed_centers") or [])) \
+        and not (user.get("sa") or user.get("account_type") == "owner")
+    centro = str(centro or "").strip()
+    return bool(restringido) and (not centro or not _user_can_see_center(user, centro))
+
+
+async def _acceso_ficha_admin(user: dict, driver_id: str) -> dict:
+    """La ficha de la base de la sesión (la de otra empresa no está: 404) y visible para quien la pide (403)."""
+    ficha = await db.drivers.find_one(
+        {"id": str(driver_id or "")},
+        {"_id": 0, "id": 1, "name": 1, "center": 1, "active": 1, "status": 1, "merged_into": 1,
+         "movil_personal": 1, "phone": 1, "email": 1})
+    if not ficha:
+        raise HTTPException(404, "Conductor no encontrado")
+    if _sin_centro_visible(user, ficha.get("center")):
+        raise HTTPException(403, "No tienes acceso a ese centro")
+    return ficha
+
+
+async def _acceso_borrar(org_id: str, driver_id: str) -> None:
+    """Borra el enlace de este conductor y su sesión deja de valer (al momento en este proceso)."""
+    clave = {"org_id": org_id, "driver_id": driver_id}
+    previos = await global_db.accesos_conductor.find(clave, {"_id": 0, "id": 1}).to_list(None)
+    await global_db.accesos_conductor.delete_many(clave)
+    for p in previos:
+        _ACCESO_CACHE.pop(p.get("id"), None)
+
+
+async def _acceso_fuera_por_baja(user: dict, driver_id: str) -> None:
+    """Dar de baja a un conductor borra su enlace: reactivarlo después NO lo revive (hay que mandarle otro). Si fallara,
+    la baja sigue: con la ficha de baja el enlace y su sesión ya no valen (_acceso_vivo)."""
+    try:
+        org = await _org_de_admin(user) or (None if user.get("org_id") else _duena_sin_ficha())
+        if org:
+            await _acceso_borrar(org["id"], driver_id)
+    except Exception:                                            # noqa: BLE001
+        logger.exception("No se pudo borrar el enlace personal del conductor dado de baja")
+
+
+async def _accesos_de(user: dict, org: dict, center: Optional[str]) -> tuple:
+    """([fila por conductor de alta que ve el usuario, con el estado de su enlace], cuentas por estado)."""
+    q = {"active": {"$ne": False}, **_filtro_centro(user, center)}
+    fichas = [f for f in await db.drivers.find(
+        q, {"_id": 0, "id": 1, "name": 1, "center": 1, "active": 1, "status": 1, "merged_into": 1,
+            "movil_personal": 1, "phone": 1, "email": 1}).to_list(None)
+        if _ficha_de_alta(f) and not _sin_centro_visible(user, f.get("center"))]
+    ids = [f["id"] for f in fichas]
+    docs = {}
+    if ids:
+        async for d in global_db.accesos_conductor.find(
+                {"org_id": org["id"], "driver_id": {"$in": ids}},
+                {"_id": 0, "driver_id": 1, "creado_at": 1, "caduca_at": 1, "abierto_at": 1}):
+            docs[d.get("driver_id")] = d
+    filas, cuentas = [], {e: 0 for e in _ACCESO_ESTADOS}
+    for f in sorted(fichas, key=lambda f: (str(f.get("name") or "").casefold(), f["id"])):
+        movil, wa = _acceso_movil(f)
+        acceso = _acceso_estado(docs.get(f["id"]))
+        cuentas[acceso["estado"]] += 1
+        filas.append({"driver_id": f["id"], "nombre": f.get("name") or "", "center": f.get("center") or None,
+                      "movil": movil, "whatsapp": wa, "email": str(f.get("email") or "").strip() or None,
+                      "acceso": acceso})
+    return filas, cuentas
+
+
+@api_router.post("/conductores/{driver_id}/acceso")
+async def crear_acceso_conductor(driver_id: str, data: dict = Body(default={}), user: dict = Depends(require_admin)):
+    """Crea (o renueva) el enlace personal de un conductor y lo devuelve UNA vez: solo se guarda su hash, así que no se
+    puede volver a enseñar. Sin abrir, se crea otro sin preguntar; ya abierto, hace falta `renovar: true`."""
+    if user.get("imp"):
+        raise HTTPException(403, _SOLO_EL_CLIENTE)
+    renovar = _dict_cuerpo(data).get("renovar") is True
+    org = await _acceso_empresa(user)
+    ficha = await _acceso_ficha_admin(user, driver_id)
+    nombre = ficha.get("name") or "Este conductor"
+    if not _ficha_de_alta(ficha):
+        raise HTTPException(409, {"codigo": "de_baja",
+                                  "mensaje": "%s está de baja. Reactívala antes de mandarle su acceso." % nombre})
+    if await db.driver_accounts.find_one({"driver_id": ficha["id"], "active": False}, {"_id": 0, "driver_id": 1}):
+        raise HTTPException(409, {"codigo": "acceso_quitado",
+                                  "mensaje": "A %s le quitaron el acceso al portal. Vuelve a dárselo en su ficha y "
+                                             "después mándale el enlace." % nombre})
+    ya_abierto = {"codigo": "ya_abierto",
+                  "mensaje": "%s ya entra con su enlace desde su teléfono. Si lo renuevas, el anterior deja de valer "
+                             "y tendrá que abrir el nuevo." % nombre}
+    clave = {"org_id": org["id"], "driver_id": ficha["id"]}
+    previo = await global_db.accesos_conductor.find_one(clave, {"_id": 0, "id": 1, "abierto_at": 1})
+    if previo and previo.get("abierto_at") and not renovar:
+        raise HTTPException(409, ya_abierto)
+    token = secrets.token_hex(32)
+    ahora = datetime.now(timezone.utc)
+    nuevo = {"id": uuid.uuid4().hex, "token_hash": _sha256_hex(token), **clave,
+             "creado_at": ahora.isoformat(), "creado_por": user.get("name") or "", "creado_por_id": user.get("sub") or "",
+             "caduca_at": (ahora + timedelta(days=_ACCESO_DIAS_SIN_ABRIR)).isoformat(),
+             "abierto_at": None, "dispositivo_hash": None, "ultimo_uso_at": None}
+    # Sin `renovar`, solo se reemplaza uno SIN abrir: si se abrió entre medias, el upsert choca con el índice único
+    # (empresa, conductor) y se contesta como si ya estuviera abierto, en vez de cortarle el acceso sin preguntar.
+    filtro = dict(clave) if renovar else {**clave, "abierto_at": None}
+    try:
+        await global_db.accesos_conductor.replace_one(filtro, dict(nuevo), upsert=True)
+    except DuplicateKeyError:
+        actual = await global_db.accesos_conductor.find_one(clave, {"_id": 0, "id": 1, "abierto_at": 1})
+        if actual and actual.get("abierto_at") and not renovar:
+            raise HTTPException(409, ya_abierto)
+        await global_db.accesos_conductor.replace_one(clave, dict(nuevo), upsert=True)
+    if previo:
+        _ACCESO_CACHE.pop(previo.get("id"), None)
+    await _audit(user, "acceso_conductor", {"driver_id": ficha["id"], "renovado": bool(previo)})
+    _movil, wa = _acceso_movil(ficha)
+    return JSONResponse({"driver_id": ficha["id"], "nombre": ficha.get("name") or "", "empresa": org.get("name") or MARCA,
+                         "token": token, "ruta": "/c#" + token, "whatsapp": wa, "renovado": bool(previo),
+                         "acceso": _acceso_estado(nuevo)}, headers=_NO_STORE)
+
+
+@api_router.get("/conductores/accesos")
+async def accesos_conductores(center: Optional[str] = None, user: dict = Depends(require_admin)):
+    """Cada conductor de alta que ve el usuario, con el estado de su enlace. Nunca tokens ni hashes."""
+    org = await _acceso_empresa(user)
+    filas, cuentas = await _accesos_de(user, org, center)
+    return {"empresa": org.get("name") or MARCA, "conductores": filas, "cuentas": cuentas}
+
+
+@api_router.delete("/conductores/{driver_id}/acceso")
+async def quitar_acceso_conductor(driver_id: str, user: dict = Depends(require_admin)):
+    """Quita el enlace de un conductor: deja de valer, y la sesión abierta con él también. Se puede repetir."""
+    org = await _acceso_empresa(user)
+    ficha = await _acceso_ficha_admin(user, driver_id)
+    await _acceso_borrar(org["id"], ficha["id"])
+    await _audit(user, "acceso_conductor_quitado", {"driver_id": ficha["id"]})
+    return {"ok": True, "acceso": dict(_ACCESO_SIN_ENLACE)}
+
+
+def _acceso_limite(clave: str) -> None:
+    """El 429 de siempre (_rl_check), con la respuesta sin guardar en ninguna caché."""
+    try:
+        _rl_check(clave)
+    except HTTPException as e:
+        raise HTTPException(e.status_code, e.detail, headers=_NO_STORE) from None
+
+
+async def _acceso_no_vale(rl_ip: str, ip: str):
+    """El 401 del canje: el mismo para todo lo que no vale, con su fallo apuntado (sin el token) y su espera."""
+    await _rl_fail(rl_ip, "enlace de conductor (IP %s)" % ip, "un conductor")
+    await asyncio.sleep(_ACCESO_ESPERA_FALLO)
+    raise HTTPException(401, _ACCESO_NO_VALE, headers=_NO_STORE)
+
+
+@auth_router.post("/enlace")
+async def entrar_con_enlace(request: Request):
+    """Entrar en el portal con el enlace personal. Público. El cuerpo se lee a mano: un 422 de FastAPI devolvería lo
+    recibido (el token) dentro del error."""
+    try:
+        data = _dict_cuerpo(await request.json())
+    except Exception:                                            # noqa: BLE001
+        data = {}
+    dispositivo = data.get("dispositivo") if isinstance(data.get("dispositivo"), str) else ""
+    if not _ACCESO_DISPOSITIVO_RE.fullmatch(dispositivo):
+        raise HTTPException(400, _ACCESO_SIN_TELEFONO, headers=_NO_STORE)
+    ip = _rl_key_ip(request)
+    rl_ip = "ip:%s" % ip
+    _acceso_limite(rl_ip)
+    token = data.get("token") if isinstance(data.get("token"), str) else ""
+    if not _ACCESO_TOKEN_RE.fullmatch(token):
+        await _acceso_no_vale(rl_ip, ip)
+    h = _sha256_hex(token)
+    rl_enl = "enl:" + h[:32]
+    _acceso_limite(rl_enl)
+    doc = await global_db.accesos_conductor.find_one({"token_hash": h}, {"_id": 0})
+    vivo = await _acceso_vivo(doc)
+    if not vivo:
+        await _acceso_no_vale(rl_ip, ip)
+    org, _tdb, ficha = vivo
+    huella = _sha256_hex(dispositivo)
+    ahora = datetime.now(timezone.utc).isoformat()
+    if doc.get("dispositivo_hash") is None:
+        # El primer teléfono que lo canjea se lo queda. Condicionado a que siga sin teléfono: si dos lo tocan a la vez,
+        # solo uno escribe; el otro vuelve a leerlo y, si no es él, «otro teléfono».
+        r = await global_db.accesos_conductor.update_one(
+            {"id": doc["id"], "dispositivo_hash": None},
+            {"$set": {"dispositivo_hash": huella, "abierto_at": ahora, "ultimo_uso_at": ahora}})
+        if r.modified_count:
+            doc["dispositivo_hash"] = huella
+        else:
+            doc = await global_db.accesos_conductor.find_one({"id": doc["id"]}, {"_id": 0})
+            if not doc or doc.get("dispositivo_hash") is None:
+                await _acceso_no_vale(rl_ip, ip)
+    if not secrets.compare_digest(str(doc.get("dispositivo_hash")), huella):
+        contexto = "enlace de conductor abierto en otro teléfono (IP %s)" % ip
+        await _rl_fail(rl_ip, contexto, "un conductor")
+        await _rl_fail(rl_enl, contexto, "un conductor")
+        raise HTTPException(409, _ACCESO_OTRO_TELEFONO, headers=_NO_STORE)
+    await global_db.accesos_conductor.update_one({"id": doc["id"]}, {"$set": {"ultimo_uso_at": ahora}})
+    _rl_ok(rl_ip)
+    _rl_ok(rl_enl)
+    # La MISMA sesión que la del código por correo (driver_code_verify), más el enlace del que nace.
+    sesion = create_token(ficha["id"], "driver", ficha.get("name") or "", org_id=org.get("id"),
+                          db_name=_tenant_db_name(org), account_type=org.get("account_type"), entrada=time.time(),
+                          enlace=doc["id"], via="enlace")
+    logger.info("Entrada con el enlace personal: conductor %s (org %s)", ficha["id"], org.get("id"))
+    return JSONResponse({"access_token": sesion, "token_type": "bearer", "role": "driver",
+                         "name": ficha.get("name") or "", "id": ficha["id"], "center": ficha.get("center"),
+                         "configurar_cuenta": False, "slug": org.get("slug") or "",
+                         "empresa": org.get("name") or MARCA,
+                         "email": str(ficha.get("email") or "").strip() or None}, headers=_NO_STORE)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# EL ARRANQUE DEL DUEÑO (14-11-2026): `/panel/arranque`
+# ══════════════════════════════════════════════════════════════════════════════
+# Cuatro pasos (furgonetas, conductores, su acceso, la primera revisión). No se guarda ninguna marca: el paso en que va
+# sale de los datos. Las listas pegadas dicen línea a línea qué pasa ANTES de guardar, con las mismas piezas que las
+# importaciones (`_veh_clave`, `_veh_matricula`, `create_driver`), así que las reglas son las mismas.
+_ALTA_MAX_LINEAS = 300
+_ALTA_MAX_TEXTO = 20000
+_ALTA_DEMASIADAS = "Son demasiadas líneas: pega como mucho 300 de una vez."
+_ALTA_OTRO_CENTRO = "Es de un centro que no tienes asignado."
+_ALTA_TROZO_MOVIL = re.compile(r"[0-9+()\-. ]+")
+_ALTA_MOVIL_AL_FINAL = re.compile(r"^(.*?)\s+([+(]?[0-9][0-9 +()\-.]*)$")
+
+
+def _alta_lineas(data: dict, vacio: str) -> list:
+    """Las líneas no vacías del cuadro, recortadas. 400 si no hay ninguna o son demasiadas."""
+    crudo = data.get("texto")
+    texto = crudo if isinstance(crudo, str) else ""
+    if len(texto) > _ALTA_MAX_TEXTO:
+        raise HTTPException(400, _ALTA_DEMASIADAS)
+    lineas = [x.strip() for x in texto.splitlines() if x.strip()]
+    if not lineas:
+        raise HTTPException(400, vacio)
+    if len(lineas) > _ALTA_MAX_LINEAS:
+        raise HTTPException(400, _ALTA_DEMASIADAS)
+    return lineas
+
+
+async def _alta_centro(user: dict, center, varias: str) -> Optional[str]:
+    """La sede de lo que se da de alta: la elegida (de la empresa y visible), o la única que ve; sin ninguna en la
+    empresa, ninguna. Con varias y sin elegir, 400: sin sede, el portal no le enseña al conductor ninguna furgoneta."""
+    naves = [str(n).strip().upper() for n in await _centros_de_la_empresa() if str(n).strip()]
+    elegido = center.strip().upper() if isinstance(center, str) else ""
+    if elegido:
+        if elegido not in naves:
+            raise HTTPException(400, "Ese centro no es de tu empresa.")
+        if not _user_can_see_center(user, elegido):
+            raise HTTPException(403, "No tienes acceso a ese centro")
+        return elegido
+    if not naves:
+        return None
+    visibles = sorted(_naves_que_ve(user, naves))
+    if len(visibles) == 1:
+        return visibles[0]
+    if not visibles:
+        raise HTTPException(403, "No tienes acceso a ese centro")
+    raise HTTPException(400, varias)
+
+
+def _alta_kilometros(notes) -> Optional[int]:
+    try:
+        n = json.loads(notes) if isinstance(notes, str) and notes.strip() else notes
+    except (TypeError, ValueError):
+        return None
+    km = n.get("odometer_km") if isinstance(n, dict) else None
+    if isinstance(km, str) and km.strip().isdigit():
+        km = int(km.strip())
+    return int(km) if isinstance(km, (int, float)) and not isinstance(km, bool) and km > 0 else None
+
+
+@api_router.get("/alta/estado")
+async def alta_estado(user: dict = Depends(require_admin)):
+    """En qué paso del arranque va la empresa, sacado de sus datos, y la revisión más reciente (la que acaba de
+    llegar mientras se espera). Con centros asignados, solo lo de sus centros. Nada de la IA."""
+    org = await _acceso_empresa(user)
+    filtro_c = _filtro_centro(user)
+    furgonetas = await db.vehicles.count_documents({"status": {"$nin": ["deleted", "baja"]}, **filtro_c})
+    filas, accesos = await _accesos_de(user, org, None)
+    q_rev = {"deleted": {"$ne": True}}
+    if filtro_c:
+        q_rev["vehicle_id"] = {"$in": [v["id"] async for v in db.vehicles.find(filtro_c, {"_id": 0, "id": 1})
+                                       if v.get("id")]}
+    revisiones = await db.inspections.count_documents(q_rev)
+    hechos = {"furgonetas": furgonetas > 0, "conductores": len(filas) > 0,
+              # Quien ya entra por correo no necesita enlace: con una revisión, el acceso está dado.
+              "acceso": accesos["abierto"] > 0 or revisiones > 0, "revision": revisiones > 0}
+    pasos = [{"id": k, "hecho": hechos[k]} for k in ("furgonetas", "conductores", "acceso", "revision")]
+    paso_actual = next((i for i, p in enumerate(pasos, start=1) if not p["hecho"]), None)
+    revision = None
+    if revisiones:
+        ultimas = await db.inspections.find(
+            q_rev, {"_id": 0, "id": 1, "vehicle_id": 1, "driver_id": 1, "created_at": 1, "photos": 1,
+                    "photo_roles": 1, "photo_vistas": 1, "notes": 1, "combustible": 1}
+        ).sort("created_at", -1).limit(1).to_list(1)
+        if ultimas:
+            insp = ultimas[0]
+            veh = await db.vehicles.find_one({"id": insp.get("vehicle_id")},
+                                             {"_id": 0, "id": 1, "license_plate": 1, "model": 1}) or {}
+            conductor = None
+            if insp.get("driver_id"):
+                d = await db.drivers.find_one({"id": insp["driver_id"]}, {"_id": 0, "id": 1, "name": 1}) or {}
+                conductor = {"id": insp["driver_id"], "nombre": d.get("name") or ""}
+            fotos = []
+            for pi, vista in _repaso_lados(insp):
+                url = _repaso_foto(insp, pi)
+                if url:
+                    fotos.append({"photo_index": pi, "vista": vista, "url": url})
+            dia, hora = _alta_local(insp.get("created_at"))
+            comb = insp.get("combustible") if isinstance(insp.get("combustible"), dict) else {}
+            pct = comb.get("pct")
+            revision = {
+                "id": insp.get("id"), "dia": dia, "hora": hora, "recibida_at": _repaso_iso(insp.get("created_at")),
+                "furgoneta": {"id": insp.get("vehicle_id"), "matricula": veh.get("license_plate") or None,
+                              "modelo": veh.get("model") or None},
+                "conductor": conductor, "fotos": fotos, "km": _alta_kilometros(insp.get("notes")),
+                "combustible_pct": pct if isinstance(pct, int) and not isinstance(pct, bool) else None}
+    return {"empresa": org.get("name") or MARCA,
+            "centros": sorted(_naves_que_ve(user, await _centros_de_la_empresa())),
+            "furgonetas": furgonetas, "conductores": len(filas), "accesos": accesos, "revisiones": revisiones,
+            "pasos": pasos, "paso_actual": paso_actual, "revision": revision}
+
+
+def _alta_parece_matricula(clave: str) -> bool:
+    return 4 <= len(clave) <= 10 and any(c.isdigit() for c in clave) and any(c.isalpha() for c in clave)
+
+
+@api_router.post("/alta/furgonetas")
+async def alta_furgonetas(data: dict = Body(default={}), user: dict = Depends(require_admin)):
+    """Matrículas pegadas, una por línea: qué pasa con cada una y, con `guardar`, el alta de las nuevas."""
+    data = _dict_cuerpo(data)
+    lineas = _alta_lineas(data, "Pega o escribe al menos una matrícula.")
+    centro = await _alta_centro(user, data.get("center"), "Elige la sede de estas furgonetas: tienes varias.")
+    guardar = data.get("guardar") is True
+    _conocidos, flota = await _veh_contexto()
+    vistas, salida = set(), []
+    for n, texto in enumerate(lineas, start=1):
+        clave = _veh_clave(texto)
+        fila = {"n": n, "texto": texto, "matricula": None, "estado": "error", "motivo": None}
+        if not _alta_parece_matricula(clave):
+            fila["motivo"] = "No parece una matrícula."
+        else:
+            fila["matricula"] = _veh_matricula(texto)
+            if clave in vistas:
+                fila["motivo"] = "Repetida en la lista."
+            elif clave in flota:
+                if _user_can_see_center(user, flota[clave].get("center") or ""):
+                    fila.update(estado="ya_estaba", motivo="Ya la tienes dada de alta.")
+                else:
+                    fila["motivo"] = _ALTA_OTRO_CENTRO
+            else:
+                fila["estado"] = "nueva"
+            vistas.add(clave)
+        salida.append(fila)
+    creadas = []
+    if guardar:
+        ahora = datetime.now(timezone.utc).isoformat()
+        for fila in salida:
+            if fila["estado"] != "nueva":
+                continue
+            nueva = {"id": str(uuid.uuid4()), "license_plate": fila["matricula"], "status": "active",
+                     "created_at": ahora, "updated_at": ahora, "origen": "alta"}
+            if centro:
+                nueva["center"] = centro
+            try:
+                await db.vehicles.insert_one(dict(nueva))
+                creadas.append({"id": nueva["id"], "matricula": nueva["license_plate"]})
+            except DuplicateKeyError:
+                # Otra alta a la vez con la misma: ya está, que es lo que se quería.
+                fila.update(estado="ya_estaba", motivo="Ya la tienes dada de alta.")
+    return {"lineas": salida, "nuevas": sum(f["estado"] == "nueva" for f in salida),
+            "ya_estaban": sum(f["estado"] == "ya_estaba" for f in salida),
+            "errores": sum(f["estado"] == "error" for f in salida),
+            "center": centro, "guardado": guardar, "creadas": creadas}
+
+
+def _alta_partir_persona(linea: str) -> list:
+    """Los trozos de una línea «Nombre, móvil, correo». Separan el tabulador, «;» y «,»; sin ninguno, un correo suelto
+    y un móvil al final de la línea también valen («Ana López 612345678»)."""
+    if re.search(r"[\t;,]", linea):
+        return [t.strip() for t in re.split(r"[\t;,]", linea) if t.strip()]
+    palabras = linea.split()
+    correos = [w for w in palabras if _EMAIL_RE.fullmatch(w)]
+    resto = " ".join(w for w in palabras if not _EMAIL_RE.fullmatch(w))
+    m = _ALTA_MOVIL_AL_FINAL.match(resto)
+    if m and sum(c.isdigit() for c in m.group(2)) >= 3:
+        return [m.group(1).strip(), m.group(2).strip()] + correos
+    return ([resto] if resto else []) + correos
+
+
+def _alta_persona(linea: str) -> dict:
+    """{nombre, movil (+E.164 o None), email, motivo (el error de la línea o None)} de una línea."""
+    nombre, moviles, correos = [], [], []
+    for t in _alta_partir_persona(linea):
+        if _EMAIL_RE.fullmatch(t):
+            correos.append(t.lower())
+        elif _ALTA_TROZO_MOVIL.fullmatch(t) and any(c.isdigit() for c in t):
+            moviles.append(t)
+        else:
+            nombre.append(t)
+    persona = {"nombre": re.sub(r"\s+", " ", " ".join(nombre)).strip() or None, "movil": None,
+               "email": correos[0] if correos else None, "motivo": None}
+    if sum(c.isalpha() for c in (persona["nombre"] or "")) < 3:
+        persona["motivo"] = "Falta el nombre."
+    elif moviles:
+        crudo = re.sub(r"\s+", " ", moviles[0]).strip()
+        e164 = whatsapp.normaliza_telefono(crudo) if sum(c.isdigit() for c in crudo) >= 9 else ""
+        if e164:
+            persona["movil"] = "+" + e164
+        else:
+            persona["motivo"] = "El móvil «%s» no parece un número." % crudo
+    return persona
+
+
+def _alta_mensaje(detalle) -> str:
+    if isinstance(detalle, dict):
+        return str(detalle.get("mensaje") or detalle.get("detail") or "No se ha podido dar de alta.")
+    return str(detalle or "No se ha podido dar de alta.")
+
+
+@api_router.post("/alta/conductores")
+async def alta_conductores(data: dict = Body(default={}), user: dict = Depends(require_admin)):
+    """Conductores pegados, uno por línea («Nombre, móvil» y, si se quiere, el correo): qué pasa con cada uno y, con
+    `guardar`, el alta de los nuevos con las MISMAS reglas que el alta a mano (`create_driver`)."""
+    data = _dict_cuerpo(data)
+    lineas = _alta_lineas(data, "Pega o escribe al menos un conductor.")
+    centro = await _alta_centro(user, data.get("center"), "Elige la sede de estos conductores: tienes varias.")
+    guardar = data.get("guardar") is True
+    por_movil, por_correo, por_nombre = {}, {}, {}
+    async for f in db.drivers.find({"active": {"$ne": False}},
+                                   {"_id": 0, "id": 1, "name": 1, "center": 1, "active": 1, "status": 1,
+                                    "merged_into": 1, "movil_personal": 1, "phone": 1, "email": 1}):
+        if not _ficha_de_alta(f):
+            continue
+        for tel in (f.get("movil_personal"), f.get("phone")):
+            e164 = whatsapp.normaliza_telefono(tel) if tel else ""
+            if e164:
+                por_movil.setdefault(e164, f)
+        if str(f.get("email") or "").strip():
+            por_correo.setdefault(str(f["email"]).strip().lower(), f)
+        if f.get("name"):
+            por_nombre.setdefault(_imp_norm(f["name"]), f)
+    vistos_movil, vistos_correo, vistos_nombre = set(), set(), set()
+    salida = []
+    for n, texto in enumerate(lineas, start=1):
+        p = _alta_persona(texto)
+        fila = {"n": n, "texto": texto, "nombre": p["nombre"], "movil": p["movil"], "email": p["email"],
+                "estado": "error", "motivo": p["motivo"], "aviso": None}
+        salida.append(fila)
+        if p["motivo"]:
+            continue
+        movil = (p["movil"] or "").lstrip("+")
+        nombre_n = _imp_norm(p["nombre"])
+        repetida = (movil and movil in vistos_movil) or (p["email"] and p["email"] in vistos_correo) \
+            or (not movil and not p["email"] and nombre_n in vistos_nombre)
+        if movil:
+            vistos_movil.add(movil)
+        if p["email"]:
+            vistos_correo.add(p["email"])
+        vistos_nombre.add(nombre_n)
+        if repetida:
+            fila["motivo"] = "Repetida en la lista."
+            continue
+        ya = (por_movil.get(movil) if movil else None) or (por_correo.get(p["email"]) if p["email"] else None) \
+            or (por_nombre.get(nombre_n) if not movil and not p["email"] else None)
+        if ya:
+            if _sin_centro_visible(user, ya.get("center")):
+                fila["motivo"] = _ALTA_OTRO_CENTRO
+            else:
+                fila.update(estado="ya_estaba", motivo="Ya está dado de alta como «%s»." % (ya.get("name") or ""))
+            continue
+        fila.update(estado="nuevo", aviso=None if movil else "Sin móvil: tendrás que copiarle el enlace.")
+    creados = []
+    if guardar:
+        for fila in salida:
+            if fila["estado"] != "nuevo":
+                continue
+            try:
+                d = await create_driver(DriverCreate(name=fila["nombre"], movil_personal=fila["movil"],
+                                                     email=fila["email"], center=centro),
+                                        nueva=False, admin=user, otra_persona=False)
+                creados.append({"id": d.id, "nombre": d.name})
+            except HTTPException as e:
+                if e.status_code not in (400, 409):
+                    raise
+                fila.update(estado="error", motivo=_alta_mensaje(e.detail), aviso=None)
+    return {"lineas": salida, "nuevos": sum(f["estado"] == "nuevo" for f in salida),
+            "ya_estaban": sum(f["estado"] == "ya_estaba" for f in salida),
+            "errores": sum(f["estado"] == "error" for f in salida),
+            "center": centro, "guardado": guardar, "creados": creados}
+
+
 @api_router.post("/drivers/fusiones/repasar")
 async def drivers_fusiones_repasar(_=Depends(require_admin)):
     """Repunta lo que siga colgando de una ficha ya absorbida.
@@ -14026,6 +14717,9 @@ async def update_driver(driver_id: str, data: dict, user=Depends(require_admin))
                                       quien, "ficha")
     if data.get("active") is False:
         await _limpiar_correo_personal_conductor(driver_id, user.get("org_id"))
+    if poner_baja:
+        # Dar de baja con el PATCH (o el PUT, que es el mismo) borra su enlace personal, como «Dar de baja» (14-11-2026).
+        await _acceso_fuera_por_baja(user, driver_id)
     if reactiva:
         # Como POST /reactivar, con quién y cuándo se dio la baja que se borra (F4/F13).
         await _audit(user, "driver_reactivar", {"driver_id": driver_id, "baja_en": estado.get("baja_en"),
@@ -30434,6 +31128,8 @@ async def delete_driver(driver_id: str, user=Depends(require_admin)):
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Conductor no encontrado")
     await _limpiar_correo_personal_conductor(driver_id, user.get("org_id"))
+    # Su enlace personal deja de valer, y reactivarle después no lo revive (14-11-2026).
+    await _acceso_fuera_por_baja(user, driver_id)
     await _audit(user, "driver_delete", {"driver_id": driver_id})
     return {"success": True}
 

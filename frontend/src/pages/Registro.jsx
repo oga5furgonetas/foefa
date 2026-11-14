@@ -14,6 +14,7 @@ import { useT, LANGS } from '../i18n'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, locale } from '../lib/idioma'
 import { Check, Package, ShoppingCart, Warehouse, Truck, User, Send } from 'lucide-react'
 import { MARCA, dominio } from '../marca'
+import { BTN_PRIMARIO, BTN_SECUNDARIO, LogoMarca } from './portadaComun'
 import { sugerenciaCorreo } from '../lib/correo'
 import { PLANES_EMPRESA, PLAN_REPARTO, MESES_ANUAL, PARADAS_GRATIS, promoGratis, fechaPromo, precioMes as precioMesPlan, eur,
   refPromoActiva, fechaRefPromo, eurosRef, BONO_CENT } from '../lib/precios'
@@ -313,6 +314,8 @@ export default function Registro() {
   // propone uno para que nadie se atasque en «la URL debe tener 3 letras».
   const [sufijo] = useState(() => `empresa-${Math.random().toString(36).slice(2, 6)}`)
   const [done, setDone] = useState(false)
+  // Solo si el servidor dice que el correo de bienvenida ha salido de verdad (CONTRATO-ALTA §4.1).
+  const [correoEnviado, setCorreoEnviado] = useState(false)
 
   const reparte = ['supermercado', 'distribucion', 'autonomo', 'mensajeria'].includes(sector)
   if (!sector) {
@@ -361,7 +364,7 @@ export default function Registro() {
     const m = trozo.match(/^\[(.+)\]$/)
     if (!m) return trozo
     const href = hrefs.shift()
-    return <a key={i} href={href} target="_blank" rel="noreferrer" style={{ color: '#0ea5e9' }}>{m[1]}</a>
+    return <a key={i} href={href} target="_blank" rel="noreferrer" style={{ color: soloYo ? '#0ea5e9' : 'var(--ld-accent)' }}>{m[1]}</a>
   })
 
   async function submit() {
@@ -408,11 +411,71 @@ export default function Registro() {
       medirAccion('registro_ok')
       evento('CompleteRegistration', { content_name: sector || 'alta', status: true }, j.meta_event_id)   // el id del servidor: un alta, una conversión
       if (soloYo) marcarRecienAlta()   // la app de ruta le pide instalarla antes de nada
+      setCorreoEnviado(j.correo_bienvenida === true)
       setDone(true)
     } catch { setErr(tt('Sin conexión con el servidor. Revisa tu red e inténtalo de nuevo.')); setBusy(false) }
   }
 
-  // Pantalla de confirmación
+  /* LA PANTALLA FINAL DE UNA EMPRESA (14-11-2026, CONTRATO-ALTA §4.2), con la identidad nueva. Antes decía «¡Cuenta
+     creada!» con un 📧, «verificar tu email después» (no hay nada que verificar) y «Hemos enviado un email…» aunque no
+     se enviara; y llevaba a Importaciones. Ahora: lo que es verdad y el arranque, que son cuatro pasos. Quien reparte
+     solo (y las empresas que reparten, que van a su reparto) sigue con la suya. */
+  if (done && !soloYo) {
+    const pasos = ['alta.p1.titulo', 'alta.p2.titulo', 'alta.p3.titulo', 'alta.p4.titulo']
+    return (
+      <div role="main" className="ld-root min-h-screen font-sans text-[17px] antialiased" data-theme="light" data-testid="alta-cuenta-creada">
+        <div className="mx-auto w-full max-w-[520px] px-4 pb-16 pt-6">
+          <span className="inline-flex items-center gap-2.5">
+            <LogoMarca size={28} />
+            <span className="text-[18px] font-extrabold tracking-[-0.01em]">{MARCA.nombre}</span>
+          </span>
+          <h1 className="mt-12 text-[34px] font-extrabold leading-[1.08] tracking-[-0.03em]">{t('alta.reg.creada')}</h1>
+          <p className="mt-2 text-[15px] text-[color:var(--ld-muted)]">
+            {t('alta.reg.plan').replace('{plan}', planInfo.name).replace('{n}', diasPrueba)}
+          </p>
+          {correoEnviado && (
+            <p className="mt-4 text-[16px] leading-relaxed text-[color:var(--ld-text2)]" data-testid="alta-correo-enviado">
+              {t('alta.reg.correo')} <b className="font-semibold text-[color:var(--ld-text)]">{email.trim().toLowerCase()}</b>.
+            </p>
+          )}
+          {reparte ? (
+            <div className="mt-10">
+              <button type="button" className={`${BTN_PRIMARIO} w-full`} onClick={() => { window.location.href = '/panel/reparto' }}>
+                {t('alta.reg.reparto')}
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="mt-6 text-[17px] leading-relaxed text-[color:var(--ld-text2)]">{t('alta.reg.pasos')}</p>
+              <ol className="mt-4 border-t border-[color:var(--ld-border)]">
+                {pasos.map((k, i) => (
+                  <li key={k} className="flex items-baseline gap-4 border-b border-[color:var(--ld-border)] py-3">
+                    <span className="w-5 font-mono text-[14px] tabular-nums text-[color:var(--ld-muted)]">{i + 1}</span>
+                    <span className="text-[17px] font-semibold">{t(k)}</span>
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <button type="button" className={`${BTN_PRIMARIO} sm:flex-1`} onClick={() => { window.location.href = '/panel/arranque' }}>
+                  {t('alta.reg.empezar')}
+                </button>
+                <button type="button" className={`${BTN_SECUNDARIO} sm:flex-1`} onClick={() => { window.location.href = '/panel' }}>
+                  {t('alta.reg.irPanel')}
+                </button>
+              </div>
+            </>
+          )}
+          {reparte && (
+            <button type="button" className={`mt-3 ${BTN_SECUNDARIO} w-full`} onClick={() => { window.location.href = '/panel' }}>
+              {t('alta.reg.irPanel')}
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Pantalla de confirmación de quien reparte solo
   if (done) {
     return (
       <div style={wrap}>
@@ -429,53 +492,47 @@ export default function Registro() {
               ? tt('Plan {plan} · gratis hasta {p} paradas al día', { plan: tt(planInfo.name), p: PARADAS_GRATIS })
               : tt('Plan {plan} · {n} días gratis', { plan: tt(planInfo.name), n: diasPrueba })}
           </div>}
-          {/* Desde la app de iPhone (09-11-2026) el servidor no manda correo de bienvenida (`desde_ios`, register_dsp): no se dice que sí. */}
-          {!enIOS && <p style={{ color: '#8b94a3', fontSize: 14, lineHeight: 1.6, margin: '0 0 8px' }}>
+          {/* Desde la app de iPhone (09-11-2026) el servidor no manda correo de bienvenida (`desde_ios`, register_dsp): no se dice que sí.
+              Y en la web, solo si el servidor dice que ha salido (`correo_bienvenida`, 14-11-2026): sin el servicio de correo no sale. */}
+          {!enIOS && correoEnviado && <p style={{ color: '#8b94a3', fontSize: 14, lineHeight: 1.6, margin: '0 0 8px' }}>
             {tt('Hemos enviado un email de bienvenida a')} <b style={{ color: '#0ea5e9' }}>{email}</b>.
           </p>}
-          <p style={{ color: '#64748b', fontSize: 12, marginBottom: 22 }}>
-            {soloYo ? tt('Ya puedes escanear tus primeros paquetes.') : 'Puedes acceder ahora y verificar tu email después.'}
-          </p>
-          {/* El primer paso de verdad es traer lo que ya tiene: se le lleva
-              directo, y el panel queda a un clic. */}
-          {reparte ? (
-            <button style={{ ...btn, marginTop: 0 }} onClick={() => { window.location.href = soloYo ? '/ruta' : '/panel/reparto' }}>
-              {soloYo ? tt('Empezar mi ruta →') : 'Preparar el reparto →'}
-            </button>
-          ) : (
-            <button style={{ ...btn, marginTop: 0 }} onClick={() => { window.location.href = '/panel/importaciones' }}>
-              Traer mis vehículos y conductores →
-            </button>
-          )}
-          {!soloYo && <button onClick={() => { window.location.href = '/panel' }}
-            style={{ marginTop: 10, background: 'none', border: 'none', color: '#8b94a3', fontSize: 13, cursor: 'pointer' }}>
-            Ir al panel
-          </button>}
+          <p style={{ color: '#64748b', fontSize: 12, marginBottom: 22 }}>{tt('Ya puedes escanear tus primeros paquetes.')}</p>
+          <button style={{ ...btn, marginTop: 0 }} onClick={() => { window.location.href = '/ruta' }}>
+            {tt('Empezar mi ruta →')}
+          </button>
         </div>
       </div>
     )
   }
 
+  // Una empresa, en papel; quien reparte solo, con el aspecto de su app (los dos juegos, al final del fichero).
+  const S = soloYo ? OSCURO : PAPEL
   return (
-    <div style={wrap}>
-      <div style={{ ...card, maxWidth: 440 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-          <a href={soloYo ? '/empezar' : '/'} style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#eef1f6', textDecoration: 'none' }}>
-            <img src="/favicon.svg" alt="" width="34" height="34" style={{ borderRadius: 10 }} />
-            <b style={{ fontSize: 17 }}>{soloYo ? MARCA.app : MARCA.nombre}</b>
+    <div style={S.wrap} className={soloYo ? undefined : 'ld-root font-sans antialiased'} data-theme={soloYo ? undefined : 'light'}>
+      <div style={soloYo ? { ...S.card, maxWidth: 440 } : S.card}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: soloYo ? 18 : 28 }}>
+          <a href={soloYo ? '/empezar' : '/'} style={{ display: 'flex', alignItems: 'center', gap: 10, color: S.texto, textDecoration: 'none' }}>
+            {soloYo
+              ? <img src="/favicon.svg" alt="" width="34" height="34" style={{ borderRadius: 10 }} />
+              : <LogoMarca size={28} />}
+            <b style={{ fontSize: soloYo ? 17 : 18, fontWeight: soloYo ? 700 : 800 }}>{soloYo ? MARCA.app : MARCA.nombre}</b>
           </a>
           <div style={{ marginLeft: 'auto' }}>
             {soloYo ? (
-              <select value={idiomaApp} onChange={(e) => cambiarIdioma(e.target.value)} style={sel} aria-label="Idioma / Language">
+              <select value={idiomaApp} onChange={(e) => cambiarIdioma(e.target.value)} style={S.sel} aria-label="Idioma / Language">
                 {Object.entries(IDIOMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             ) : (
-              <select value={lang} onChange={(e) => setLang(e.target.value)} style={sel}>
+              <select value={lang} onChange={(e) => setLang(e.target.value)} style={S.sel} aria-label="Idioma / Language">
                 {Object.entries(LANGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             )}
           </div>
         </div>
+        {!soloYo && (
+          <h1 style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1, margin: '0 0 18px' }}>{t('alta.reg.titulo')}</h1>
+        )}
         {/* QUIEN REPARTE SOLO VE PRIMERO QUE ES GRATIS (10-10-2026). Medido: desde la app,
             «Repartir yo mismo» → este formulario → se iban sin enviarlo; lo primero que leían
             era «Repartidor 9,99 €/mes» y lo de gratis estaba en la letra pequeña. */}
@@ -497,30 +554,31 @@ export default function Registro() {
             )}
           </div>
         ) : (
-        <div style={{ background: `${planInfo.color}10`, border: `1px solid ${planInfo.color}35`, borderRadius: 14, padding: '14px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: planInfo.color, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 3 }}>{tt('Plan elegido')}</div>
-            <div style={{ fontWeight: 900, fontSize: 16, color: '#eef1f6' }}>{tt(planInfo.name)}</div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+        /* El plan elegido, en una línea con su regla: el nombre, lo que cuesta y la prueba. Sin cajas tintadas. */
+        <div style={{ borderTop: '1px solid var(--ld-border)', borderBottom: '1px solid var(--ld-border)', padding: '12px 0', marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 17 }}>{tt('Plan elegido')}: {tt(planInfo.name)}</div>
+            <div style={{ fontSize: 14, color: S.gris, marginTop: 2 }}>
               {precioFijo
                 ? tt('{precio} €/mes, todo incluido · {n} días gratis', { precio: displayPrice.toFixed(2).replace('.', ','), n: diasPrueba })
                 : billingMode === 'annual'
                   ? `${displayPrice}€/mes · ${precioMes(planInfo, nUnid) * MESES_ANUAL}€/año · ahorras ${yearSave}€`
                   : `${displayPrice}€/mes${planInfo.porRepartidor ? ` · con ${Math.max(nUnid, planInfo.minimo)} repartidores activos` : ''}`
               }
+              {` · ${t('alta.reg.prueba').replace('{n}', diasPrueba)}`}
             </div>
           </div>
           {!planInfo.soloSector && <button
             onClick={() => setSelectedPlan('')}
-            style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)', color: '#8b94a3', fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 8, cursor: 'pointer' }}
+            style={{ background: 'transparent', border: `1.5px solid ${S.borde}`, color: S.texto, fontSize: 14, fontWeight: 700, padding: '0 14px', height: 40, borderRadius: 10, cursor: 'pointer', flexShrink: 0 }}
           >
             Cambiar
           </button>}
         </div>
         )}
 
-        {!enIOS && <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', borderRadius: 99, padding: '3px 12px', fontSize: 11, fontWeight: 700, color: '#34d399', marginBottom: 16 }}>
-          ✓ {soloYo ? tt('Gratis · sin tarjeta · hoy 0 €') : `${diasPrueba} días gratis · sin tarjeta · cancela cuando quieras`}
+        {!enIOS && soloYo && <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', borderRadius: 99, padding: '3px 12px', fontSize: 11, fontWeight: 700, color: '#34d399', marginBottom: 16 }}>
+          ✓ {tt('Gratis · sin tarjeta · hoy 0 €')}
         </div>}
 
         {soloYo && invitacion && (
@@ -528,45 +586,46 @@ export default function Registro() {
             🎁 {tt('Te ha invitado un compañero: {n} días gratis', { n: invitacion.dias })}
           </div>
         )}
-        <label style={lbl}>{soloYo ? tt('Tu nombre') : t('reg.company')}</label>
-        <input style={inp} value={org} onChange={(e) => onOrg(e.target.value)} placeholder={soloYo ? 'Pepe' : 'Transportes Pérez SL'} />
+        <label style={S.lbl}>{soloYo ? tt('Tu nombre') : t('reg.company')}</label>
+        <input style={S.inp} value={org} onChange={(e) => onOrg(e.target.value)} placeholder={soloYo ? 'Pepe' : 'Transportes Pérez SL'} />
 
         {!soloYo && <>
-        <label style={lbl}>{t('reg.url')}</label>
-        <div style={{ display: 'flex', alignItems: 'center', border: '1px solid rgba(255,255,255,.12)', borderRadius: 10, background: '#0e1116', overflow: 'hidden' }}>
-          <span style={{ padding: '11px 2px 11px 12px', color: '#8b94a3', fontSize: 13, whiteSpace: 'nowrap' }}>{dominio()}/</span>
-          <input style={{ ...inp, border: 'none', paddingLeft: 2 }} value={slug}
-            onChange={(e) => { setTouched(true); setSlug(slugify(e.target.value)) }} placeholder="transportes-perez" />
+        {/* La dirección de verdad: el portal donde también pueden entrar los conductores con su correo. */}
+        <label style={S.lbl}>{t('reg.url')}</label>
+        <div style={{ display: 'flex', alignItems: 'center', border: `1.5px solid ${S.borde}`, borderRadius: 12, background: S.fondoCampo, overflow: 'hidden' }}>
+          <span style={{ padding: '12px 0 12px 14px', color: S.gris, fontSize: 14, whiteSpace: 'nowrap', fontFamily: 'IBM Plex Mono, ui-monospace, monospace' }} data-testid="reg-url-prefijo">{dominio()}/conductor#</span>
+          <input style={{ ...S.inp, border: 'none', paddingLeft: 1, minWidth: 0, fontFamily: 'IBM Plex Mono, ui-monospace, monospace', fontSize: 15 }} value={slug}
+            onChange={(e) => { setTouched(true); setSlug(slugify(e.target.value)) }} placeholder="transportes-perez" aria-label={t('reg.url')} />
         </div>
-        <div style={hint}>{t('reg.urlhint')}</div>
+        <div style={S.hint}>{t('reg.urlhint')}</div>
         </>}
 
         {/* Con varias naves se escriben todas: el plan de una sola se queda
             con la primera. Sin esto la segunda nave no se podía dar de alta. */}
         {sector !== 'autonomo' && <>
-        <label style={lbl}>{selectedPlan === 'operacion' ? t('reg.center') : 'Tus sedes'}</label>
-        <input style={inp} value={center} onChange={(e) => setCenter(e.target.value)}
+        <label style={S.lbl}>{selectedPlan === 'operacion' ? t('reg.center') : 'Tus sedes'}</label>
+        <input style={S.inp} value={center} onChange={(e) => setCenter(e.target.value)}
           placeholder={reparte ? 'Tienda centro' : selectedPlan === 'operacion' ? 'Norte' : 'Norte, Sur, Este'} />
-        {selectedPlan !== 'operacion' && <div style={hint}>Sepáralos con comas. Podrás añadir más después.</div>}
+        {selectedPlan !== 'operacion' && <div style={S.hint}>Sepáralos con comas. Podrás añadir más después.</div>}
         </>}
 
-        <label style={lbl}>{soloYo ? tt('Tu correo') : 'Email de contacto'}</label>
-        <input style={inp} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={soloYo ? 'tu@correo.com' : 'admin@tuempresa.com'} autoComplete="email" />
+        <label style={S.lbl}>{soloYo ? tt('Tu correo') : 'Email de contacto'}</label>
+        <input style={S.inp} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={soloYo ? 'tu@correo.com' : 'admin@tuempresa.com'} autoComplete="email" />
         {sugerenciaCorreo(email) && (
           <button type="button" onClick={() => setEmail(sugerenciaCorreo(email))}
-            style={{ ...hint, display: 'block', color: '#fbbf24', fontSize: 13, fontWeight: 600, textDecoration: 'underline', background: 'none', border: 0, padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+            style={{ ...S.hint, display: 'block', color: S.aviso, fontSize: 13, fontWeight: 600, textDecoration: 'underline', background: 'none', border: 0, padding: 0, cursor: 'pointer', textAlign: 'left' }}>
             {tt('¿Querías decir {correo}?', { correo: sugerenciaCorreo(email) })}
           </button>
         )}
 
         {!soloYo && <>
-        <label style={lbl}>{t('login.user')}</label>
-        <input style={inp} value={user} onChange={(e) => setUser(e.target.value)} autoComplete="username" />
+        <label style={S.lbl}>{t('login.user')}</label>
+        <input style={S.inp} value={user} onChange={(e) => setUser(e.target.value)} autoComplete="username" />
         </>}
-        {soloYo && <div style={hint}>{tt('Entrarás con tu correo y esta contraseña.')}</div>}
+        {soloYo && <div style={S.hint}>{tt('Entrarás con tu correo y esta contraseña.')}</div>}
 
-        <label style={lbl}>{soloYo ? tt('Contraseña') : t('login.pass')}</label>
-        <input style={inp} type={soloYo && verPass ? 'text' : 'password'} value={pass} onChange={(e) => setPass(e.target.value)}
+        <label style={S.lbl}>{soloYo ? tt('Contraseña') : t('login.pass')}</label>
+        <input style={S.inp} type={soloYo && verPass ? 'text' : 'password'} value={pass} onChange={(e) => setPass(e.target.value)}
           onKeyDown={(e) => soloYo && e.key === 'Enter' && submit()} autoComplete="new-password" />
         {soloYo && (
           <button type="button" onClick={() => setVerPass((v) => !v)}
@@ -576,9 +635,9 @@ export default function Registro() {
         )}
 
         {!soloYo && <>
-        <label style={lbl}>{tt('Repetir contraseña')}</label>
+        <label style={S.lbl}>{tt('Repetir contraseña')}</label>
         <input
-          style={{ ...inp, borderColor: pass2 && pass !== pass2 ? 'rgba(248,113,113,.6)' : 'rgba(255,255,255,.12)' }}
+          style={{ ...S.inp, borderColor: pass2 && pass !== pass2 ? S.fallo : S.borde }}
           type="password" value={pass2}
           onChange={(e) => setPass2(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
@@ -586,12 +645,12 @@ export default function Registro() {
           placeholder={tt('Repite la contraseña')}
         />
         {pass2 && pass !== pass2 && (
-          <div style={{ color: '#f87171', fontSize: 12, marginTop: 4 }}>{tt('Las contraseñas no coinciden')}</div>
+          <div style={{ color: S.fallo, fontSize: 13, marginTop: 4, fontWeight: 600 }}>{tt('Las contraseñas no coinciden')}</div>
         )}
         </>}
 
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 16, fontSize: 12, color: '#8b94a3', lineHeight: 1.5, cursor: 'pointer' }}>
-          <input type="checkbox" checked={accept} onChange={(e) => setAccept(e.target.checked)} style={{ marginTop: 2 }} />
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: soloYo ? 16 : 20, fontSize: soloYo ? 12 : 13.5, color: S.gris, lineHeight: 1.5, cursor: 'pointer' }}>
+          <input type="checkbox" checked={accept} onChange={(e) => setAccept(e.target.checked)} style={{ marginTop: soloYo ? 2 : 3 }} />
           <span>
             {conEnlaces(tt('Acepto los [Términos], el [Acuerdo de Encargo del Tratamiento] y la [Política de Privacidad].'), ['/terminos', '/encargo', '/privacidad'])}
             {' '}{enIOS ? null : soloYo && promoGratis()
@@ -607,7 +666,7 @@ export default function Registro() {
         </label>
 
         <button
-          style={{ ...btn, opacity: busy ? .6 : 1, cursor: busy ? 'wait' : 'pointer' }}
+          style={{ ...S.btn, opacity: busy ? .6 : 1, cursor: busy ? 'wait' : 'pointer' }}
           disabled={busy}
           onClick={submit}
         >
@@ -615,13 +674,15 @@ export default function Registro() {
         </button>
 
         {err && (
-          <div style={{ color: '#f87171', fontSize: 13, marginTop: 12, padding: '8px 10px', borderRadius: 8, background: 'rgba(248,113,113,.08)', border: '1px solid rgba(248,113,113,.25)', textAlign: 'center' }}>
+          <div role="alert" style={soloYo
+            ? { color: '#f87171', fontSize: 13, marginTop: 12, padding: '8px 10px', borderRadius: 8, background: 'rgba(248,113,113,.08)', border: '1px solid rgba(248,113,113,.25)', textAlign: 'center' }
+            : { color: S.fallo, fontSize: 15, fontWeight: 600, marginTop: 14 }}>
             {err}
           </div>
         )}
 
-        <div style={{ textAlign: 'center', marginTop: 16, color: '#8b94a3', fontSize: 13 }}>
-          {soloYo ? tt('¿Ya tienes cuenta?') : t('reg.have')} <a href="/panel/login" style={{ color: '#0ea5e9', textDecoration: 'none', fontWeight: 600 }}>{soloYo ? tt('Entrar') : t('login.btn')}</a>
+        <div style={{ textAlign: 'center', marginTop: 16, color: S.gris, fontSize: soloYo ? 13 : 15 }}>
+          {soloYo ? tt('¿Ya tienes cuenta?') : t('reg.have')} <a href="/panel/login" style={{ color: S.enlace, textDecoration: 'none', fontWeight: 600 }}>{soloYo ? tt('Entrar') : t('login.btn')}</a>
         </div>
       </div>
     </div>
@@ -637,3 +698,24 @@ const inp = { width: '100%', padding: '13px 14px', borderRadius: 14, border: '1p
 const hint = { fontSize: 11, color: '#8b94a3', marginTop: 5 }
 const btn = { width: '100%', marginTop: 20, padding: 15, border: 'none', borderRadius: 16, background: 'linear-gradient(135deg,#2ee8dc,#0ea5b7)', color: '#04121a', fontSize: 16.5, fontWeight: 800, cursor: 'pointer', boxShadow: '0 12px 30px -10px rgba(20,231,216,.6)' }
 const sel = { background: '#0f1318', color: '#e7ebf2', border: '1px solid rgba(255,255,255,.12)', borderRadius: 10, padding: '7px 10px', fontSize: 13, fontWeight: 600 }
+
+/* DOS ASPECTOS PARA EL MISMO FORMULARIO (14-11-2026). Quien reparte solo sigue con el de su app (oscuro, el cian de la
+   marca). Una empresa, con la identidad nueva de la portada de la que viene: tinta sobre papel, el cian solo en el
+   botón de crear la cuenta, sin degradados ni brillos. Los colores del papel salen de las variables `--ld-*`
+   (index.css, `.ld-root`). Lo que hace el formulario es el mismo en los dos. */
+const OSCURO = {
+  wrap, card, lbl, inp, hint, btn, sel,
+  texto: '#eef1f6', gris: '#8b94a3', suave: '#64748b', enlace: '#0ea5e9', aviso: '#fbbf24', fallo: '#f87171',
+  borde: 'rgba(255,255,255,.12)', fondoCampo: '#0e1116',
+}
+const PAPEL = {
+  wrap: { minHeight: '100vh', background: 'var(--ld-bg)', color: 'var(--ld-text)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 16px 40px' },
+  card: { width: '100%', maxWidth: 480 },
+  lbl: { display: 'block', fontSize: 15, color: 'var(--ld-text)', margin: '18px 0 6px', fontWeight: 600 },
+  inp: { width: '100%', padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--ld-border-strong)', background: 'var(--ld-surface)', color: 'var(--ld-text)', fontSize: 16, boxSizing: 'border-box', outline: 'none' },
+  hint: { fontSize: 13.5, color: 'var(--ld-muted)', marginTop: 6, lineHeight: 1.45 },
+  btn: { width: '100%', marginTop: 24, height: 52, padding: '0 22px', border: 'none', borderRadius: 12, background: 'var(--ld-firma)', color: 'var(--ld-tinta-firma)', fontSize: 16, fontWeight: 700, cursor: 'pointer' },
+  sel: { background: 'var(--ld-surface)', color: 'var(--ld-text)', border: '1px solid var(--ld-border-strong)', borderRadius: 10, padding: '8px 10px', fontSize: 14, fontWeight: 600, minHeight: 40 },
+  texto: 'var(--ld-text)', gris: 'var(--ld-muted)', suave: 'var(--ld-muted)', enlace: 'var(--ld-accent)', aviso: 'var(--ld-mid)', fallo: 'var(--ld-warn)',
+  borde: 'var(--ld-border-strong)', fondoCampo: 'var(--ld-surface)',
+}

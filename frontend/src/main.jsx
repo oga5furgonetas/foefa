@@ -277,6 +277,9 @@ const Planes = lazy(() => import('./pages/Planes'))
 const Empresas = lazy(() => import('./pages/Empresas'))
 const DriverPortal = lazy(() => import('./pages/driver/DriverPortal'))
 const VerificarCorreoConductor = lazy(() => import('./pages/driver/VerificarCorreoConductor'))
+// El acceso personal del conductor (/c#<token>) y el arranque de una flota (14-11-2026, CONTRATO-ALTA).
+const EntrarConEnlace = lazy(() => import('./pages/driver/EntrarConEnlace'))
+const PanelArranque = lazy(() => import('./panel/pages/Arranque'))
 const PanelLogin = lazy(() => import('./panel/PanelLogin'))
 const PanelLayout = lazy(() => import('./panel/PanelLayout'))
 const PanelDashboard = lazy(() => import('./panel/pages/Dashboard'))
@@ -466,6 +469,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/verificar-correo-conductor" element={<VerificarCorreoConductor />} />
               <Route path="/conductor" element={<DriverPortal />} />
               <Route path="/conductor/:slug" element={<DriverPortal />} />
+              {/* El token va detrás de «#» (no llega a ningún servidor). `/c/:token` solo por si alguien lo escribe así:
+                  la pantalla lo quita de la dirección al cargar y la analítica lo mide como patrón. */}
+              <Route path="/c" element={<EntrarConEnlace />} />
+              <Route path="/c/:token" element={<EntrarConEnlace />} />
 
               {/* Panel de administración nuevo (modelo v2). En construcción por módulos.
                   NO afecta a las rutas actuales ni al login en vivo. */}
@@ -473,6 +480,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               {/* El expediente de una furgoneta (14-11-2026): fuera de PanelLayout, cuyo guardián mira el último tramo
                   («expediente», que no es un módulo). La pantalla hace ella misma la cuenta de «vehiculos». */}
               <Route path="/panel/vehiculos/:id/expediente" element={<PanelExpediente />} />
+              {/* El arranque de una flota (14-11-2026): también fuera, por lo mismo («arranque» no es un módulo) y porque
+                  es una pantalla de un solo asunto, sin el menú. Abre para cualquier sesión del panel. */}
+              <Route path="/panel/arranque" element={<PanelArranque />} />
               <Route path="/panel" element={<PanelLayout />}>
                 {/* Operacional */}
                 <Route index element={<PanelDashboard />} />

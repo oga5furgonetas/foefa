@@ -21,7 +21,10 @@ import {
   generarAccesosConductores, previaAccesosConductores, getContrasenaInicial, setContrasenaInicial,
   deleteDriverAccount,
   getDriversDuplicados, fusionarConductores, separarConductores, repasarFusiones,
+  getAccesosConductores,
 } from '../api'
+import { DialogoAcceso, textoEstado } from '../components/AccesoConductor'
+import { diaCorto } from '../../lib/accesoConductor'
 import { MARCA } from '../../marca'
 import { DIAS_AVISO_CARNET, diasHastaCarnet, fechaCarnet, textoDiasCarnet } from '../../lib/carnet'
 
@@ -1020,7 +1023,29 @@ function bajaTexto(d) {
   return `de baja desde ${String(f.getDate()).padStart(2, '0')}/${String(f.getMonth() + 1).padStart(2, '0')}/${f.getFullYear()}`
 }
 
-function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deBaja = false, appInfo = null, onAbrir }) {
+/* «MANDAR SU ACCESO», POR FILA (14-11-2026, CONTRATO-ALTA §1). El estado de su enlace personal en corto; al tocarlo, la
+   ventana con «Mandar por WhatsApp», «Copiar enlace» o «Renovar» (components/AccesoConductor). Sin datos del servidor
+   (uno viejo sin la ruta) no sale. */
+const CHIP_ACCESO = {
+  sin_enlace: 'alta.acc.mandar', sin_abrir: 'alta.acc.chip.sinAbrir', abierto: 'alta.acc.chip.abierto', caducado: 'alta.acc.chip.caducado',
+}
+function BotonAcceso({ fila, onAcceso, movil = false }) {
+  const { t } = useT()
+  if (!fila || !onAcceso) return null
+  const e = fila.acceso?.estado || 'sin_enlace'
+  const texto = t(CHIP_ACCESO[e] || CHIP_ACCESO.sin_enlace).replace('{dia}', diaCorto(fila.acceso?.abierto_dia))
+  const tono = e === 'abierto' ? 'border-emerald-500/30 text-emerald-300'
+    : e === 'sin_enlace' || e === 'caducado' ? 'border-brand-500/40 text-brand-300' : 'border-dark-700 text-dark-300'
+  return (
+    <button type="button" data-testid="boton-acceso" title={textoEstado(t, fila.acceso)}
+      onClick={(ev) => { ev.stopPropagation(); onAcceso(fila) }}
+      className={`whitespace-nowrap rounded-full border px-2.5 text-[11.5px] font-semibold hover:bg-white/[0.04] ${tono} ${movil ? 'my-auto mr-1.5 min-h-[36px]' : 'py-1'}`}>
+      {texto}
+    </button>
+  )
+}
+
+function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deBaja = false, appInfo = null, onAbrir, acceso = null, onAcceso = null }) {
   const { t } = useT()
   // De una baja no se dice lo que le falta: no se va a completar (11-11-2026, equipo-6).
   const faltan = deBaja ? [] : faltasQueCuentan({ conIdReparto, cuentasOk, appOk: !!appInfo })
@@ -1061,6 +1086,7 @@ function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deB
           </span>
         </span>
       </button>
+      {!deBaja && <BotonAcceso fila={acceso} onAcceso={onAcceso} movil />}
       {/* El número se lee en la tarjeta; el botón redondo llama. Así el nombre tiene casi todo el ancho. */}
       {tel ? (
         <a href={`tel:${tel}`} aria-label={`${t('drv.llamar')} ${verTelefono(d.phone)}`} title={t('drv.llamar')}
@@ -1126,7 +1152,7 @@ function useEstrecho() {
   return si
 }
 
-function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = false, deBaja = false, appInfo = null, onAbrir }) {
+function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = false, deBaja = false, appInfo = null, onAbrir, accesos = null, onAcceso = null }) {
   const { t } = useT()
   const estrecho = useEstrecho()
   const [orden, setOrden] = useState({ col: 'name', asc: true })
@@ -1178,7 +1204,8 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
       <ul aria-label="Conductores">
         {filas.map((d) => (
           <TarjetaConductor key={d.id} d={d} accounts={accounts} cuentasOk={cuentasOk} conIdReparto={conIdReparto}
-            datoOrden={datoOrden} deBaja={deBaja} appInfo={appInfo} onAbrir={onAbrir} />
+            datoOrden={datoOrden} deBaja={deBaja} appInfo={appInfo} onAbrir={onAbrir}
+            acceso={accesos?.[d.id] || null} onAcceso={onAcceso} />
         ))}
       </ul>
       </>
@@ -1237,9 +1264,11 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
                     {nc ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${nc}`}>{nl}</span>
                         : <span className="text-dark-500">—</span>}
                   </td>
-                  <td className="px-2 py-1 text-center">
-                    {hasAcc ? <Lock size={11} className="inline text-lime-400" title="Tiene acceso al portal" />
-                            : <span className="text-dark-700">—</span>}
+                  <td className="whitespace-nowrap px-2 py-1 text-center">
+                    {/* El candado: tiene contraseña. El botón: su enlace personal (14-11-2026). */}
+                    {hasAcc ? <Lock size={11} className="mr-1.5 inline text-lime-400" title="Tiene acceso al portal" />
+                            : !accesos?.[d.id] && <span className="text-dark-700">—</span>}
+                    {!deBaja && <BotonAcceso fila={accesos?.[d.id]} onAcceso={onAcceso} />}
                   </td>
                   {appInfo && <td className="whitespace-nowrap px-2 py-1"><CeldaApp info={appInfo.conductores?.[d.id]} ultima={appInfo.ultima} /></td>}
                 </tr>
@@ -1302,7 +1331,18 @@ export default function Conductores() {
   const [aviso, setAviso] = useState('')
   // QUIÉN TIENE LA APP (11-11-2026, equipo-5): null = no se sabe (servidor viejo o error): ni columna ni filtro.
   const [appInfo, setAppInfo] = useState(null)
+  // EL ENLACE PERSONAL DE CADA UNO (14-11-2026): {driver_id: fila de /conductores/accesos}; null = el servidor no lo da.
+  const [accesos, setAccesos] = useState(null)
+  const [empresaAcceso, setEmpresaAcceso] = useState('')
+  const [dialogoAcceso, setDialogoAcceso] = useState(null)
   async function load() {
+    getAccesosConductores(center)
+      .then((r) => {
+        const filas = Array.isArray(r.data?.conductores) ? r.data.conductores.filter((x) => x && x.driver_id) : null
+        setAccesos(filas ? Object.fromEntries(filas.map((x) => [x.driver_id, x])) : null)
+        setEmpresaAcceso(r.data?.empresa || '')
+      })
+      .catch(() => setAccesos(null))
     getDriversBajas(center)
       .then((r) => setBajas(Array.isArray(r.data) ? r.data.filter((x) => x && x.id) : null))
       .catch(() => setBajas(null))
@@ -1578,10 +1618,7 @@ Cancelar: no hacer nada.`)) {
             ? <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-dark-700 px-6 py-20 text-center">
                 <UserCheck size={44} className="mb-4 text-dark-500" />
                 <p className="text-base font-semibold text-dark-100">{t('drv.empty')}{center !== 'Todos' ? ` en ${center}` : ''}</p>
-                <p className="mt-1.5 max-w-md text-sm leading-relaxed text-dark-400">
-                  Trae tu lista de Excel: se reconoce cada columna, eliges la sede y
-                  cada conductor recibe su acceso al portal para hacer las auditorías desde el móvil.
-                </p>
+                <p className="mt-1.5 max-w-md text-sm leading-relaxed text-dark-400">{t('alta.drv.vacio')}</p>
                 <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
                   <button onClick={() => setVerImportar(true)} className="btn-primary flex items-center gap-1.5 px-4 py-2 text-sm">
                     <FileSpreadsheet size={14} /> {t('drv.importar')}
@@ -1651,7 +1688,8 @@ Cancelar: no hacer nada.`)) {
                 )}
                 <TablaConductores list={vistos} accounts={enBajas ? [] : accounts} cuentasOk={cuentasOk && !enBajas}
                   conIdReparto={conIdReparto && !enBajas} deBaja={enBajas} appInfo={enBajas ? null : appInfo}
-                  onAbrir={(d) => setModal({ driver: d, deBaja: enBajas })} />
+                  onAbrir={(d) => setModal({ driver: d, deBaja: enBajas })}
+                  accesos={enBajas ? null : accesos} onAcceso={setDialogoAcceso} />
               </div>
       )}
 
@@ -1659,6 +1697,15 @@ Cancelar: no hacer nada.`)) {
       {tab === 'ranking' && <ScoringView center={center} />}
 
       {tab === 'fichas' && <SaludFichas onCambio={load} />}
+
+      {dialogoAcceso && (
+        <DialogoAcceso c={dialogoAcceso} empresa={empresaAcceso} onCerrar={() => setDialogoAcceso(null)}
+          onCambio={(acceso) => {
+            const fila = { ...dialogoAcceso, acceso }
+            setDialogoAcceso(fila)
+            setAccesos((m) => ({ ...(m || {}), [fila.driver_id]: fila }))
+          }} />
+      )}
 
       {/* Modal */}
       {modal && (

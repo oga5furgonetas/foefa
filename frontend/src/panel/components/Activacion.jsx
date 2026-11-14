@@ -1,58 +1,18 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Check, ArrowRight, Upload, Users, Camera, X } from 'lucide-react'
+import { Check, ArrowRight, X } from 'lucide-react'
 import { getOnboarding } from '../api'
 import { useT } from '../../i18n'
 
-/* ── Guía de activación ────────────────────────────────────────────────────
-   Reemplaza al típico asistente modal: ese bloquea, se cierra sin leer y
-   esconde el producto. Esto vive DENTRO del panel, se puede ignorar y
-   desaparece solo cuando los tres pasos están hechos.
+/* ── Guía de activación, POR SEDE ──────────────────────────────────────────
+   Vive DENTRO del panel, se puede ignorar y desaparece sola cuando todo está
+   hecho. El estado sale de datos REALES del servidor (cuántas furgonetas,
+   conductores y revisiones hay), nunca de una marca guardada.
 
-   Regla clave: el estado sale de datos REALES del servidor (cuántas
-   furgonetas, conductores y auditorías hay), nunca de una marca guardada.
-   Un flag "ya lo hizo" mentiría en cuanto el DSP borrara su flota. */
-
-function Paso({ icon: Icon, n, titulo, hint, hecho, resumen, cta, to, cta2, to2, bloqueado, bloqueadoMsg }) {
-  return (
-    <li className={`relative flex gap-3.5 rounded-xl border p-3.5 transition ${
-      hecho ? 'border-emerald-500/20 bg-emerald-500/[0.04]'
-            : bloqueado ? 'border-white/[0.05] bg-white/[0.01] opacity-60'
-                        : 'border-white/[0.07] bg-white/[0.02]'}`}>
-      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-        hecho ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/[0.05] text-dark-400'}`}>
-        {hecho ? <Check size={15} /> : <Icon size={15} />}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className={`text-[13.5px] font-semibold ${hecho ? 'text-emerald-200' : 'text-dark-100'}`}>
-          <span className="mr-1.5 font-mono text-[11px] text-dark-500">{n}</span>{titulo}
-        </p>
-        {hecho ? (
-          <p className="mt-0.5 text-[12px] text-emerald-300/80">{resumen}</p>
-        ) : (
-          <>
-            <p className="mt-0.5 text-[12px] leading-relaxed text-dark-400">{hint}</p>
-            {bloqueado ? (
-              <p className="mt-2 text-[11.5px] font-medium text-dark-500">{bloqueadoMsg}</p>
-            ) : (
-              <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                <Link to={to}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 px-3 py-1.5 text-[12px] font-semibold text-white transition hover:brightness-110">
-                  {cta} <ArrowRight size={12} />
-                </Link>
-                {cta2 && (
-                  <Link to={to2} className="text-[12px] font-medium text-dark-400 transition hover:text-dark-200">
-                    {cta2}
-                  </Link>
-                )}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </li>
-  )
-}
+   Desde el 14-11-2026 los tres pasos de la empresa (furgonetas, conductores,
+   primera revisión) los lleva el arranque (/panel/arranque, con su entrada
+   en el inicio: EntradaArranque). Aquí queda solo lo de cada sede, que es lo
+   que usan las empresas con varias naves, y sale cuando esos tres ya están. */
 
 /* ── Cada sede, por separado ───────────────────────────────────────────────
    La guia daba la empresa por lista con una furgoneta, un conductor y una
@@ -127,35 +87,28 @@ export default function Activacion() {
   // Silencio absoluto si aún no sabemos, si ya está todo hecho o si lo ocultó.
   if (!data || data.completo || oculto) return null
 
-  const paso = (id) => data.pasos.find((x) => x.id === id) || { hecho: false, n: 0 }
-  const v = paso('vehiculos'), c = paso('conductores'), i = paso('inspeccion')
   const naves = Array.isArray(data.naves) ? data.naves : []
   const navesListas = naves.filter((n) => n.completa).length
-  // Con los tres pasos de la empresa hechos, lo que queda abierto son las naves:
-  // la cabecera y la barra pasan a contar naves, no a repetir un 3/3.
-  const soloNaves = data.hechos === data.total && naves.length > 0
-  const pct = soloNaves
-    ? Math.round((navesListas / naves.length) * 100)
-    : Math.round((data.hechos / data.total) * 100)
+  // Mientras falte alguno de los pasos de la empresa, lo lleva el arranque: aquí, solo las naves.
+  if (data.hechos !== data.total || naves.length === 0) return null
+  const pct = Math.round((navesListas / naves.length) * 100)
   // Primero las que tienen algo pendiente: es lo que hay que mirar.
   const navesOrden = [...naves].sort((a, b) => Number(a.completa) - Number(b.completa)
     || String(a.centro).localeCompare(String(b.centro), 'es', { sensitivity: 'base' }))
-  // "1 furgoneta", no "1 furgonetas": el singular importa en los 6 idiomas.
-  const cuenta = (n, clave) => `${n} ${t(n === 1 ? `${clave}1` : clave)}`
 
   return (
-    <section className="rise mb-6 rounded-2xl border border-brand-500/20 bg-brand-500/[0.03] p-4 sm:p-5">
+    <section className="rise mb-6 rounded-2xl border border-dark-700 bg-dark-900/40 p-4 sm:p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="font-display text-[17px] font-semibold tracking-[-0.02em] text-dark-50">{t(soloNaves ? 'ob.naves.tit' : 'ob.titulo')}</h2>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-dark-400">{t(soloNaves ? 'ob.naves.sub' : 'ob.sub')}</p>
+          <h2 className="font-display text-[17px] font-semibold tracking-[-0.02em] text-dark-50">{t('ob.naves.tit')}</h2>
+          <p className="mt-1 text-[12.5px] leading-relaxed text-dark-400">{t('ob.naves.sub')}</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <p className="font-display text-[15px] font-semibold tabular-nums text-brand-300">
-              {soloNaves ? `${navesListas}/${naves.length}` : `${data.hechos}/${data.total}`}
+            <p className="font-display text-[15px] font-semibold tabular-nums text-dark-100">
+              {`${navesListas}/${naves.length}`}
             </p>
-            <p className="text-[10.5px] text-dark-500">{t(soloNaves ? 'ob.naves.progreso' : 'ob.progreso')}</p>
+            <p className="text-[10.5px] text-dark-500">{t('ob.naves.progreso')}</p>
           </div>
           <button onClick={() => { sessionStorage.setItem('ob_oculto', '1'); setOculto(true) }}
             title={t('ob.ocultar')} aria-label={t('ob.ocultar')}
@@ -166,42 +119,13 @@ export default function Activacion() {
       </div>
 
       <div className="mb-4 h-1 overflow-hidden rounded-full bg-white/[0.06]">
-        <div className="h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-500 transition-[width] duration-700"
+        <div className="h-full rounded-full bg-dark-200 transition-[width] duration-700"
           style={{ width: `${pct}%` }} />
       </div>
 
-      {!soloNaves && (
-      <ol className="grid gap-2 lg:grid-cols-3">
-        <Paso icon={Upload} n="1" hecho={v.hecho}
-          titulo={t('ob.v.tit')} hint={t('ob.v.hint')}
-          resumen={cuenta(v.n, 'ob.v.ok')}
-          cta={t('ob.v.cta')} to="/panel/importaciones?t=furgonetas"
-          cta2={t('ob.v.cta2')} to2="/panel/vehiculos" />
-        <Paso icon={Users} n="2" hecho={c.hecho}
-          titulo={t('ob.c.tit')} hint={t('ob.c.hint')}
-          resumen={cuenta(c.n, 'ob.c.ok')}
-          // Al asistente de importar, que lee el Excel y deja elegir la nave;
-          // el alta a mano sigue a un clic.
-          cta={t('ob.c.cta')} to="/panel/importaciones?t=conductores"
-          cta2={t('ob.c.cta2')} to2="/panel/conductores" />
-        <Paso icon={Camera} n="3" hecho={i.hecho}
-          titulo={t('ob.i.tit')} hint={t('ob.i.hint')}
-          resumen={cuenta(i.n, 'ob.i.ok')}
-          cta={t('ob.i.cta')} to="/panel/inspecciones"
-          // Sin furgonetas ni conductores no se puede auditar: en vez de
-          // dejar que lo intente y choque, se explica el porqué.
-          bloqueado={!v.hecho || !c.hecho} bloqueadoMsg={t('ob.bloqueado')} />
-      </ol>
-      )}
-
-      {naves.length > 0 && (
-        <div className={soloNaves ? '' : 'mt-4'}>
-          {!soloNaves && <h3 className="mb-2 text-[13px] font-semibold text-dark-100">{t('ob.naves.tit')}</h3>}
-          <ul className="grid gap-2">
-            {navesOrden.map((n) => <Nave key={n.centro} nave={n} t={t} basicosArriba={!soloNaves} />)}
-          </ul>
-        </div>
-      )}
+      <ul className="grid gap-2">
+        {navesOrden.map((n) => <Nave key={n.centro} nave={n} t={t} basicosArriba={false} />)}
+      </ul>
     </section>
   )
 }
