@@ -15,6 +15,9 @@ const CLAVE_VISTA = {
 export const nombreLado = (t, lado) => (CLAVE_VISTA[lado?.vista]
   ? t(CLAVE_VISTA[lado.vista])
   : t('repaso.vista.foto').replace('{n}', String(lado?.photo_index ?? '')))
+// El nombre corto, para las pestañas del móvil: los laterales sin «Lateral» («Izquierdo», «Derecho»).
+const CORTA_VISTA = { lateral_izq: 'repaso.vista.corta.lateral_izq', lateral_der: 'repaso.vista.corta.lateral_der' }
+export const nombreLadoCorto = (t, lado) => (CORTA_VISTA[lado?.vista] ? t(CORTA_VISTA[lado.vista]) : nombreLado(t, lado))
 
 /* LAS PIEZAS QUE SE SUGIEREN SEGÚN EL LADO. La pieza viaja por su CLAVE (`pieza_clave`, CONTRATO «Correcciones tras
    la revisión», R1): el servidor tiene esta misma lista y una prueba suya comprueba que coincide con la de aquí. El
@@ -160,6 +163,21 @@ export function fechaLarga(fecha, locale = 'es-ES', conDiaSemana = true) {
     return new Intl.DateTimeFormat(locale, {
       ...(conDiaSemana ? { weekday: 'long' } : {}), day: 'numeric', month: 'long', timeZone: 'UTC',
     }).format(x)
+  } catch {
+    return fecha
+  }
+}
+
+/* El día en corto para el botón del día, en el idioma del panel y sin puntos ni comas: «jue 12 nov», «Thu 12 Nov»,
+   «Do 12 Nov». El orden de las piezas es siempre día de la semana, número y mes: así el botón no cambia de forma. */
+export function diaCorto(fecha, locale = 'es-ES') {
+  const [a, m, d] = String(fecha || '').split('-').map(Number)
+  if (!a || !m || !d) return ''
+  const x = new Date(Date.UTC(a, m - 1, d))
+  try {
+    // Cada pieza por separado: juntas, algún idioma (pt-PT) pone el mes en número.
+    const f = (o) => new Intl.DateTimeFormat(locale, { ...o, timeZone: 'UTC' }).format(x).replace(/[.,]/g, '').trim()
+    return `${f({ weekday: 'short' })} ${d} ${f({ month: 'short' })}`
   } catch {
     return fecha
   }

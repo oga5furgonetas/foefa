@@ -17,9 +17,11 @@ export default function FormGolpe({ t, titulo, vista, valor, onCambio, onGuardar
   const sugeridas = PIEZAS_DEL_LADO[vista] || PIEZAS_DEL_LADO.otra
   const falta = faltaEnGolpe(valor, { sinFoto })
 
-  const chip = (elegida) => `h-8 rounded-lg border px-2.5 text-[13px] font-medium transition-colors ${elegida
+  /* Las piezas, en rejilla regular (2 columnas en el móvil, 3 en el ordenador), todas del mismo alto y con el nombre
+     entero: un nombre largo baja a dos líneas dentro de su casilla en vez de descolocar la fila. */
+  const chip = (elegida) => `flex min-h-[48px] items-center rounded-lg border px-3 py-1.5 text-left text-[13.5px] font-medium leading-tight transition-colors ${elegida
     ? 'border-dark-50 bg-dark-50 text-dark-950'
-    : 'border-dark-700 text-dark-200 hover:border-ruta-borde'}`
+    : 'border-dark-700 text-dark-100 hover:border-ruta-borde hover:bg-dark-800'}`
 
   return (
     <form
@@ -34,7 +36,7 @@ export default function FormGolpe({ t, titulo, vista, valor, onCambio, onGuardar
 
       <fieldset className="mt-4">
         <legend className="text-sm font-semibold text-dark-50">{t('repaso.golpe.pieza')}</legend>
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3" data-testid="piezas">
           {sugeridas.map((k, i) => (
             <button key={k} ref={i === 0 ? primera : undefined} type="button" aria-pressed={valor.piezaClave === k}
               onClick={() => onCambio({ piezaClave: k, pieza: '' })} className={chip(valor.piezaClave === k)}>
@@ -83,16 +85,20 @@ export default function FormGolpe({ t, titulo, vista, valor, onCambio, onGuardar
         className="mt-2 h-11 w-full rounded-lg border border-ruta-borde bg-dark-900 px-3 text-[15px] text-dark-50 placeholder:text-dark-400 focus:border-ruta-enfasis focus:outline-none"
       />
 
-      <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
-        {falta && <span className="text-sm text-dark-400 sm:mr-auto" data-testid="golpe-falta">{t(falta)}</span>}
-        <button type="button" onClick={onCancelar}
-          className="h-[52px] rounded-xl border border-ruta-borde px-5 text-[15px] font-semibold text-dark-50 hover:bg-dark-800">
-          {t('repaso.golpe.cancelar')}
-        </button>
-        <button type="submit" disabled={!!falta || ocupado}
-          className="flex h-[52px] items-center justify-center gap-2 rounded-xl bg-brand-400 px-6 text-[15px] font-bold text-brand-tinta disabled:cursor-not-allowed disabled:opacity-45">
+      {/* Lo que falta va junto al botón que espera por ello. Sin completar, «Guardar» se lee como «todavía no»: tinta
+          apagada sobre el hueco, nunca un cian lavado; guardando, sigue en cian con la rueda (no ha dejado de valer). */}
+      <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+        {falta && <span className="text-sm text-dark-300 sm:order-1 sm:mr-auto" data-testid="golpe-falta">{t(falta)}</span>}
+        <button type="submit" disabled={!!falta || ocupado} data-testid="golpe-guardar" aria-busy={ocupado || undefined}
+          className={`flex h-[52px] items-center justify-center gap-2 rounded-xl px-6 text-[15px] font-bold disabled:cursor-not-allowed sm:order-3 ${falta
+            ? 'bg-dark-800 text-dark-400'
+            : 'bg-brand-400 text-brand-tinta'}`}>
           {ocupado && <Loader2 size={16} className="animate-spin" />}
           {t('repaso.golpe.guardar')}
+        </button>
+        <button type="button" onClick={onCancelar}
+          className="h-[52px] rounded-xl border border-ruta-borde px-5 text-[15px] font-semibold text-dark-50 hover:bg-dark-800 sm:order-2">
+          {t('repaso.golpe.cancelar')}
         </button>
       </div>
     </form>
