@@ -6,10 +6,11 @@ import {
   Settings, Shield, LogOut, Zap, Inbox, ChevronRight, ChevronDown, AlertTriangle, BookUser,
   Search, Sun, Moon, Contrast, MapPin, Mail, UserCircle2, Languages, ShieldAlert, Menu,
   CircleHelp, Briefcase, Store, UserCheck, ImagePlus, Loader2, Bell, BellOff, MessageCircle,
-  MessagesSquare, Euro, FileSpreadsheet, PackageX, Clock, Route, HeartPulse, Sparkles,
+  MessagesSquare, Euro, FileSpreadsheet, PackageX, Clock, Route, HeartPulse, Sparkles, Columns2,
 } from 'lucide-react'
 import { aislarSesion, haySesionPrevia, volverASesionPrevia, getAdmin, isAuthed, isSuperAdmin, isCenterManager, logout, canSee, decodeToken, getVisibleCenters, SIEMPRE_VISIBLES, guardarAccesoFresco, esPlataforma, actualizarMiFoto } from './auth'
 import { getMe, contarPeticionesPendientes, contarCandidatosNuevos, contarConversacionesSinLeer, subirFotoAdmin } from './api'
+import { getRepasoDia } from '../services/api'
 import { pushSupported, isPushEnabled, enablePush, disablePush } from '../lib/push'
 import TrialBanner from './TrialBanner'
 import CommandPalette from './CommandPalette'
@@ -58,7 +59,11 @@ const AVISOS = {
   '/panel/chat': ({ chatSinLeer }) => chatSinLeer,
   // WhatsApp: mensajes de conductores y talleres que nadie ha abierto.
   '/panel/conversaciones': ({ wsSinLeer }) => wsSinLeer,
+  // Las revisiones de hoy que nadie ha repasado todavía (14-11-2026). Las de días anteriores no cuentan.
+  '/panel/repaso': ({ repasoPend }) => repasoPend,
 }
+// Lo que dice el número al pasar por encima, si no son peticiones.
+const AVISO_TITULO = { '/panel/repaso': 'repaso.menu.aviso' }
 
 /* SEIS GRUPOS, POR LO QUE LA PERSONA VA A HACER, NO POR DEPARTAMENTO.
    «Flota» es mirar los vehículos; «Taller» es arreglarlos —la incidencia y la
@@ -78,6 +83,7 @@ const NAV_DEF = [
   ]},
   { g: 'nav.g.fleet', gIcon: Truck, iconCls: 'text-emerald-400', iconBg: 'bg-emerald-500/10', items: [
     { to: '/panel/vehiculos', labelKey: 'nav.vehicles', icon: Truck },
+    { to: '/panel/repaso', labelKey: 'nav.repaso', icon: Columns2 },
     { to: '/panel/estado-flota', labelKey: 'nav.estadoFlota', icon: HeartPulse },
     { to: '/panel/inspecciones', labelKey: 'nav.inspections', icon: ClipboardList },
     { to: '/panel/revision', labelKey: 'nav.revision', icon: CheckCircle2 },
@@ -482,6 +488,7 @@ export default function PanelLayout() {
   const [candidatosNuevos, setCandidatosNuevos] = useState(0)
   const [chatSinLeer, setChatSinLeer] = useState(0)
   const [wsSinLeer, setWsSinLeer] = useState(0)
+  const [repasoPend, setRepasoPend] = useState(0)
   useEffect(() => {
     if (!isAuthed()) return
     let vivo = true
@@ -503,6 +510,15 @@ export default function PanelLayout() {
           .then((r) => { if (vivo) setWsSinLeer(r.data?.no_leidas || 0) })
           .catch(() => {})
       }
+      // El repaso de hoy (14-11-2026): solo quien puede abrirlo. La propia pantalla lo pone al día al decidir cada lado.
+      if (canSee('repaso') && moduloOk('repaso')) {
+        getRepasoDia(null, center)
+          .then((r) => {
+            const c = r.data?.cuentas
+            if (vivo && c && typeof c === 'object') setRepasoPend((Number(c.sin_repasar) || 0) + (Number(c.a_medias) || 0))
+          })
+          .catch(() => {})
+      }
     }
     mirar()
     const id = setInterval(mirar, 120000)
@@ -512,7 +528,7 @@ export default function PanelLayout() {
       clearInterval(id)
       document.removeEventListener('visibilitychange', mirar)
     }
-  }, [center])
+  }, [center]) // eslint-disable-line react-hooks/exhaustive-deps -- `moduloOk` se lee en cada latido; no es motivo para volver a empezar
 
   /* Permisos frescos al abrir el panel.
 
@@ -605,7 +621,8 @@ export default function PanelLayout() {
       ...it, label: it.labelKey === 'nav.drivers' && vz ? vz.conductores : t(it.labelKey),
       // El aviso se cuelga aqui, del sitio donde ya se traduce el menu, para
       // que cualquier entrada futura solo tenga que anadir su clave a AVISOS.
-      aviso: AVISOS[it.to] ? AVISOS[it.to]({ peticionesPend, candidatosNuevos, chatSinLeer, wsSinLeer }) : 0,
+      aviso: AVISOS[it.to] ? AVISOS[it.to]({ peticionesPend, candidatosNuevos, chatSinLeer, wsSinLeer, repasoPend }) : 0,
+      avisoTitulo: AVISO_TITULO[it.to] ? t(AVISO_TITULO[it.to]) : '',
     })) }))
     .filter((g) => g.items.length > 0)
   const flatItems = groups.flatMap((g) => g.items)
@@ -771,7 +788,8 @@ export default function PanelLayout() {
                             de la WCAG, y a 11 px eso se lee mal de verdad. */}
                         {it.aviso > 0 && (
                           <span className="ml-auto min-w-[20px] rounded-full bg-red-600 px-1.5 py-0.5 text-center text-[11px] font-bold leading-none text-white"
-                            title={`${it.aviso} ${it.aviso === 1 ? 'petición sin contestar' : 'peticiones sin contestar'}`}>
+                            title={it.avisoTitulo ? it.avisoTitulo.replace('{n}', it.aviso)
+                              : `${it.aviso} ${it.aviso === 1 ? 'petición sin contestar' : 'peticiones sin contestar'}`}>
                             {it.aviso > 99 ? '99+' : it.aviso}
                           </span>
                         )}
@@ -956,7 +974,7 @@ export default function PanelLayout() {
         <main key={loc.pathname} className={`animate-fade-in flex-1 overflow-y-auto p-4 md:p-5 ${
           curKey === 'chat' || curKey === 'centro-ia' ? 'pb-24 md:pb-5' : 'pb-36 md:pb-20'}`}>
           {/* `ve`: la regla del menú, para que el Inicio solo enseñe casillas de pantallas que este usuario puede abrir. */}
-          <Outlet context={{ center, centers, admin, setCenter, ve: (to) => itemVisible({ to }) }} />
+          <Outlet context={{ center, centers, admin, setCenter, ve: (to) => itemVisible({ to }), setAvisoRepaso: setRepasoPend }} />
         </main>
       </div>
 

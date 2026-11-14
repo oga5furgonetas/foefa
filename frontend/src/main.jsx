@@ -285,6 +285,7 @@ const PanelVehiculos = lazy(() => import('./panel/pages/Vehiculos'))
 const PanelExpediente = lazy(() => import('./panel/pages/Expediente'))
 const PanelVencimientos = lazy(() => import('./panel/pages/Vencimientos'))
 const PanelRevision = lazy(() => import('./panel/pages/RevisionRapida'))
+const PanelRepaso = lazy(() => import('./panel/pages/Repaso'))
 const PanelNegocio = lazy(() => import('./panel/pages/Negocio'))
 const PanelGastos = lazy(() => import('./panel/pages/Gastos'))
 const PanelAnalitica = lazy(() => import('./panel/pages/Analitica'))
@@ -490,6 +491,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <Route path="actividad" element={<PanelActividad />} />
                 {/* Furgonetas */}
                 <Route path="revision" element={<PanelRevision />} />
+                <Route path="repaso" element={<PanelRepaso />} />
                 <Route path="inspecciones" element={<PanelInspecciones />} />
                 <Route path="vehiculos" element={<PanelVehiculos />} />
                 <Route path="vencimientos" element={<PanelVencimientos />} />

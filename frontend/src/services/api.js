@@ -236,6 +236,14 @@ export const uploadInspection = (formData) =>
 export const signInspection = (inspectionId, signatureText) =>
   api.post(`/inspections/${inspectionId}/sign`, { signature_text: signatureText })
 
+/* EL REPASO DEL DÍA (14-11-2026, panel/pages/Repaso.jsx). La oficina mira la foto de hoy junto a la anterior del mismo
+   lado y decide: igual, golpe o no se ve. `fecha` AAAA-MM-DD (sin ella, hoy en la zona de la empresa); `center` como
+   en el resto del panel ('Todos' = todos los visibles). Deshacer quita el veredicto de un lado y lo que arrastró. */
+export const getRepasoDia = (fecha, center) =>
+  api.get('/repaso/dia', { params: { ...(fecha ? { fecha } : {}), ...(center && center !== 'Todos' ? { center } : {}) } })
+export const marcarRepaso = (inspectionId, cuerpo) => api.post(`/inspections/${inspectionId}/repaso`, cuerpo)
+export const deshacerRepaso = (inspectionId, photoIndex) => api.delete(`/inspections/${inspectionId}/repaso/${photoIndex}`)
+
 /* ── Ofertas patrocinadas del portal conductor (públicas) ── */
 /* Avisos de los portales problematicos de la ruta de hoy de este conductor.
    Cierra el bucle de la Libreta de portales: lo que alguien aprendio fallando
