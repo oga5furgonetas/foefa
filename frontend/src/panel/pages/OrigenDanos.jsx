@@ -47,6 +47,28 @@ const SEV = {
   moderado: 'text-amber-300', leve: 'text-dark-400',
 }
 
+/* La pareja «antes y después» solo existe con DOS fotos DISTINTAS. Si la
+   «limpia» y la «con el golpe» son la misma imagen (14-11-2026: pasaba en la
+   demo, que lleva las mismas fotos en todas las inspecciones), ponerlas lado a
+   lado no prueba nada: parece que el golpe ya estaba. Se trata igual que si
+   faltara una de las dos: sin pareja, sin «entre las dos fotos» y sin el nombre
+   en la cabecera; se enseña solo la del golpe, con su rótulo de siempre. */
+function hayPareja(d) {
+  return Boolean(d.foto_limpia && d.foto_golpe && d.foto_limpia !== d.foto_golpe)
+}
+
+function FotoGolpe({ d }) {
+  return (
+    <figure className="m-0">
+      <img src={d.foto_golpe} alt="" loading="lazy"
+        className="h-36 w-full rounded-lg border border-orange-500/40 object-cover" />
+      <figcaption className="mt-1 text-[11px] text-orange-300">
+        Con el golpe el <span className="cifra">{fechaEs(d.aparecio)}</span>
+      </figcaption>
+    </figure>
+  )
+}
+
 function Prueba({ d }) {
   return (
     <div className="grid grid-cols-2 gap-2">
@@ -57,13 +79,7 @@ function Prueba({ d }) {
           Limpia el <span className="cifra text-dark-400">{d.foto_limpia_fecha}</span>
         </figcaption>
       </figure>
-      <figure className="m-0">
-        <img src={d.foto_golpe} alt="" loading="lazy"
-          className="h-36 w-full rounded-lg border border-orange-500/40 object-cover" />
-        <figcaption className="mt-1 text-[11px] text-orange-300">
-          Con el golpe el <span className="cifra">{fechaEs(d.aparecio)}</span>
-        </figcaption>
-      </figure>
+      <FotoGolpe d={d} />
     </div>
   )
 }
@@ -144,7 +160,7 @@ export default function OrigenDanos() {
           {lista.map((d) => {
             const c = CERTEZA[d.certeza] || CERTEZA.baja
             const esta = abierto === d.ledger_id
-            const tieneFotos = d.foto_limpia && d.foto_golpe
+            const tieneFotos = hayPareja(d)
             return (
               <div key={d.ledger_id} className="card overflow-hidden">
                 <button onClick={() => setAbierto(esta ? null : d.ledger_id)}
@@ -159,7 +175,8 @@ export default function OrigenDanos() {
                       {d.ventana_dias != null && <> · ventana de <span className="cifra">{d.ventana_dias}</span> {d.ventana_dias === 1 ? 'día' : 'días'}</>}
                     </span>
                   </span>
-                  {d.certeza === 'alta' && d.conductores[0] && (
+                  {/* El nombre en la cabecera solo con la prueba delante: las dos fotos. */}
+                  {d.certeza === 'alta' && tieneFotos && d.conductores[0] && (
                     <span className="hidden max-w-[200px] truncate text-[12.5px] text-dark-200 md:block">
                       {d.conductores[0].nombre}
                     </span>
@@ -174,10 +191,15 @@ export default function OrigenDanos() {
                 {esta && (
                   <div className="border-t border-dark-800 px-3.5 py-3">
                     {tieneFotos ? <Prueba d={d} /> : (
-                      <p className="text-[12.5px] text-dark-500">
-                        No hay foto anterior de esta furgoneta sin el golpe, así que no se
-                        puede saber cuándo apareció.
-                      </p>
+                      <>
+                        {d.foto_golpe && (
+                          <div className="mb-2 grid grid-cols-2 gap-2"><FotoGolpe d={d} /></div>
+                        )}
+                        <p className="text-[12.5px] text-dark-500">
+                          No hay foto anterior de esta furgoneta sin el golpe, así que no se
+                          puede saber cuándo apareció.
+                        </p>
+                      </>
                     )}
                     <div className="mt-3 space-y-1.5 border-t border-dark-800 pt-3 text-[12.5px]">
                       {d.conductores.length > 0 ? (
@@ -189,7 +211,7 @@ export default function OrigenDanos() {
                               <span className="font-semibold text-dark-100">{x.nombre}</span>
                             </span>
                           ))}
-                          {' '}entre las dos fotos.
+                          {tieneFotos && ' entre las dos fotos'}.
                         </p>
                       ) : (
                         <p className="text-dark-500">No consta quién la llevaba en esos días.</p>
