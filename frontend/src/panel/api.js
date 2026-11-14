@@ -127,7 +127,9 @@ export const quitarAccesoConductor = (id) => api.delete(`/conductores/${encodeUR
 // Qué pasos del arranque están hechos, sacado de los datos (sin marcas guardadas), y la revisión más reciente.
 export const getAltaEstado = () => api.get('/alta/estado')
 // Las listas pegadas: con `guardar: false` dicen línea a línea qué pasará; con `true` dan de alta solo las nuevas.
-export const altaFurgonetas = (texto, center, guardar) => api.post('/alta/furgonetas', { texto, center: center || null, guardar: !!guardar })
+export const altaFurgonetas = (texto, center, guardar, confirmadas = []) => api.post('/alta/furgonetas', {
+  texto, center: center || null, guardar: !!guardar, ...(confirmadas.length ? { confirmadas } : {}),
+})
 export const altaConductores = (texto, center, guardar) => api.post('/alta/conductores', { texto, center: center || null, guardar: !!guardar })
 // Apoyo en ruta: quien le quita paradas a quien, con mapa por WhatsApp
 /* Empleo: ofertas, cuestionario y candidatos. La oferta va SIEMPRE atada a un

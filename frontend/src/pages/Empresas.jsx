@@ -645,7 +645,7 @@ export default function Empresas() {
           {/* La herramienta pública de devolución (/devolucion-renting): lo que SU guía de renting dice que se factura. */}
           <a href="/devolucion-renting" onClick={() => medirAccion('emp_devolucion')} data-testid="emp-devolucion"
             className="group flex min-h-[64px] items-center justify-between gap-3 border-b border-[color:var(--ld-border)] py-5 text-[1rem] leading-snug">
-            <span><b className="block font-semibold text-[color:var(--ld-text)]">{tx('¿Qué te van a cobrar al devolverla?')}</b>
+            <span><b className="block font-semibold text-[color:var(--ld-text)]">{tx('¿Qué te van a cobrar al devolverlo?')}</b>
               <span className="mt-0.5 block font-semibold text-[color:var(--ld-accent)] underline-offset-4 group-hover:underline">{tx('Míralo con la guía de tu compañía')}</span></span>
             <ArrowRight size={17} aria-hidden="true" className="shrink-0 text-[color:var(--ld-text)] transition-transform group-hover:translate-x-0.5" />
           </a>

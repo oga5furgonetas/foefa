@@ -145,7 +145,7 @@ test('el selector de plan: «pagas 10 meses», nada de «2 meses gratis», preci
   await expect(esencial).toContainText('60 €')
   await expect(esencial).not.toContainText(/\d€/)            // «60€» pegado, nunca
   // Lo que lleva cada plan, las mismas frases que /planes.
-  await expect(planes.locator('[data-plan="completo"]')).toContainText('Todo lo de Esencial, con delegaciones ilimitadas y un jefe por delegación')
+  await expect(planes.locator('[data-plan="completo"]')).toContainText('Todo lo de Esencial, con sedes ilimitadas y un jefe por sede')
   // El recomendado lleva la acción principal (el cian de la firma); el otro, la secundaria con borde.
   const bg = (sel) => planes.locator(sel).getByRole('button').evaluate((e) => getComputedStyle(e).backgroundColor)
   expect(await bg('[data-plan="completo"]')).toBe('rgb(20, 231, 216)')

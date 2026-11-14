@@ -160,3 +160,18 @@ def test_alta_estado_cuenta_los_enlaces_igual_que_la_lista(mundo):
     e = _estado(mundo)
     assert e["accesos"] == lista["cuentas"] == {"sin_enlace": 1, "sin_abrir": 1, "abierto": 1, "caducado": 0}
     assert e["conductores"] == len(lista["conductores"])
+
+
+# ── Los permisos del arranque (al integrar, 14-11-2026) ──────────────────────────────────────────────────────────
+
+def test_sin_la_pantalla_no_se_da_de_alta_desde_el_arranque(mundo):
+    mundo.g["admin_users"].docs.append({"id": "adm-taller", "username": "taller", "name": "Mecánico", "role": "admin",
+                                        "org_id": "orga", "permissions": ["talleres"]})
+    taller = _sesion_admin("adm-taller", "orga", permissions=["talleres"])
+    r = _furgonetas(mundo, "1234 ABC", admin=taller, guardar=True)
+    assert r.status_code == 403 and r.json()["codigo"] == "sin_permiso_vehiculos", r.text
+    r = _conductores(mundo, "Ana López, 612 345 678", admin=taller, guardar=True)
+    assert r.status_code == 403 and r.json()["codigo"] == "sin_permiso", r.text
+    assert mundo.a["vehicles"].docs == []
+    # Quien no tiene permisos definidos (el dueño) sigue pudiendo, como siempre.
+    assert _furgonetas(mundo, "1234 ABC", guardar=True).status_code == 200

@@ -8,7 +8,7 @@
 
 export const PLANES_EMPRESA = [
   {
-    clave: 'operacion', nombre: 'Esencial', para: 'Una delegación',
+    clave: 'operacion', nombre: 'Esencial', para: 'Una sede',
     por_vehiculo: 5, minimo_vehiculos: 10, color: '#64748b',
     /* Los textos de cada plan, LETRA A LETRA los de /billing/planes (server.py, 14-11-2026: sin prometer la IA). Lo
        comprueba backend/tests/test_verdad2_textos.py. */
@@ -22,13 +22,13 @@ export const PLANES_EMPRESA = [
       'Chat interno, importar de Excel y avisos por correo',
       'Usuarios y conductores ilimitados',
     ],
-    no_incluye: ['Origen de daños de toda la flota', 'Qué furgoneta lleva cada uno', 'Cuadrante, turnos y días libres', 'Informe firmado de la revisión en PDF', 'Varias delegaciones'],
+    no_incluye: ['Origen de daños de toda la flota', 'Qué furgoneta lleva cada uno', 'Cuadrante, turnos y días libres', 'Informe firmado de la revisión en PDF', 'Varias sedes'],
   },
   {
-    clave: 'completo', nombre: 'Pro', para: 'Varias delegaciones y la operación diaria',
+    clave: 'completo', nombre: 'Pro', para: 'Varias sedes y la operación diaria',
     por_vehiculo: 9, minimo_vehiculos: 20, recomendado: true, color: '#fb923c',
     incluye: [
-      'Todo lo de Esencial, con delegaciones ilimitadas y un jefe por delegación',
+      'Todo lo de Esencial, con sedes ilimitadas y un jefe por sede',
       'Origen de daños: todos los golpes de la flota en una lista, con quién llevaba cada furgoneta cuando es seguro',
       'Qué furgoneta lleva cada uno: asignación y furgonetas fijas',
       'Cuadrante con motor, turnos y días libres desde el móvil',
@@ -46,7 +46,7 @@ export const PLANES_EMPRESA = [
       'Todo lo de Pro',
       'WhatsApp con conductores y talleres (2.000 mensajes al mes)',
       'API de solo lectura para sacar flota y taller a vuestros sistemas',
-      'Implantación y formación por delegación incluidas',
+      'Implantación y formación por sede incluidas',
       'Soporte prioritario con persona asignada',
     ],
     no_incluye: [],
@@ -167,9 +167,9 @@ export const COMPLEMENTOS = [
   { clave: 'campana', nombre: 'Vehículos de campaña', precio: '0,30 € por día de alta',
     que: 'Furgonetas de refuerzo en Black Friday o Navidad, solo los días que estén. Se cobran a mes vencido.' },
   { clave: 'implantacion', nombre: 'Implantación asistida', precio: '490 € hasta 50 vehículos · 990 € hasta 200',
-    que: 'Cargamos flota y conductores, configuramos delegaciones y permisos y formamos al equipo. Gratis con contrato anual de 100 vehículos o más.' },
+    que: 'Cargamos flota y conductores, configuramos sedes y permisos y formamos al equipo. Gratis con contrato anual de 100 vehículos o más.' },
   { clave: 'formacion', nombre: 'Formación presencial', precio: '300 € por jornada + desplazamiento',
-    que: 'En vuestras delegaciones.' },
+    que: 'En vuestras sedes.' },
 ]
 
 /* Las reglas que siempre se preguntan (docs/PRECIOS.md §6). */

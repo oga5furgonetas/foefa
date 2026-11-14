@@ -82,7 +82,7 @@ test('/planes en español: sigue diciendo lo mismo que el servidor, sin la líne
   await page.addInitScript(() => { try { localStorage.setItem('fds_idioma', 'es') } catch { /* nada */ } })
   await simularApi(page, 'vacio')
   await page.goto('/planes', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('Todo lo de Esencial, con delegaciones ilimitadas y un jefe por delegación')).toBeVisible()
+  await expect(page.getByText('Todo lo de Esencial, con sedes ilimitadas y un jefe por sede')).toBeVisible()
   await expect(page.getByText('Informe firmado de la revisión en PDF, con sus fotos, su fecha y su código de comprobación, sin límite')).toBeVisible()
   const texto = await textoVisible(page)
   expect(texto).not.toMatch(/\bIA\b|Revisión rápida|están en español/)

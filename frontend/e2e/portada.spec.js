@@ -401,14 +401,14 @@ test('/planes en otro idioma: la página ENTERA traducida (también lo de cada p
     return c.innerText
   })
   for (const es of ['Se paga por vehículo', 'Mensual', 'Recomendado', 'por vehículo y mes', 'Empezar la prueba', 'Complementos', 'Cómo se cuenta', '¿Repartes tú solo?', 'Precios sin IVA', 'Oferta fundador', 'gratis',
-    'Una delegación', 'Todo lo de Esencial', '¿Qué vehículo cuenta?', 'Vehículos de colaboradores', '¿Tengo permanencia?']) {
+    'Una sede', 'Todo lo de Esencial', '¿Qué vehículo cuenta?', 'Vehículos de colaboradores', '¿Tengo permanencia?']) {
     expect(texto, es).not.toContain(es)
   }
   await expect(page.getByText('Alles aus Basis, mit unbegrenzt vielen Standorten und einer Leitung pro Standort')).toBeVisible()
   // El mismo selector de idioma que la portada (el del pie), que cambia la página al momento.
   await page.locator('#ld-idioma').selectOption('es')
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Se paga por vehículo. Usuarios y conductores, sin límite.')
-  await expect(page.getByText('Todo lo de Esencial, con delegaciones ilimitadas y un jefe por delegación')).toBeVisible()
+  await expect(page.getByText('Todo lo de Esencial, con sedes ilimitadas y un jefe por sede')).toBeVisible()
   // Ya no se contradice: nada de «2 meses gratis» al lado de «pagas 10 meses».
   const cabeza = await page.locator('h1 + p').innerText()
   expect(cabeza).toContain('anual pagando 10 meses')

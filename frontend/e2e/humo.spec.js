@@ -1830,7 +1830,7 @@ test('Portada · es la de empresas, enlaza la app de reparto y cambia de idioma'
 
 test('Planes · el repartidor sale aparte con su precio fijo aunque el servidor no lo mande', async ({ page }) => {
   await page.route(/\/api\/billing\/planes/, (r) => r.fulfill({ json: { planes: [
-    { clave: 'operacion', nombre: 'Esencial', para: 'Una delegación', por_vehiculo: 5, minimo_vehiculos: 10 }] } }))
+    { clave: 'operacion', nombre: 'Esencial', para: 'Una sede', por_vehiculo: 5, minimo_vehiculos: 10 }] } }))
   await page.goto('/planes', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('¿Repartes tú solo?')).toBeVisible()
   await expect(page.getByText(/9,99 € al mes/)).toBeVisible()

@@ -5,7 +5,6 @@ import { useT, LANG_LOCALE } from '../../i18n'
 import { useTitulo } from '../../lib/titulo'
 import { isAuthed } from '../auth'
 import { getAltaEstado, altaFurgonetas, altaConductores, getAccesosConductores } from '../api'
-import { api } from '../../services/api'
 import AccesoConductor from '../components/AccesoConductor'
 import Matricula from '../../components/Matricula'
 import SelloFoto from '../../components/SelloFoto'
@@ -58,11 +57,8 @@ const avisoDe = (t, l) => textoConCodigo(t, l.aviso_codigo, l.aviso || '')
    y no entra salvo que se confirme (A11). Las confirmadas vuelven `nueva` con `confirmada: true`. */
 const esRara = (l) => l.estado === 'dudosa' || (l.estado !== 'nueva' && l.codigo === 'matricula_dudosa')
 
-/* Guardar con las confirmadas: el cuerpo de siempre más `confirmadas` (los textos tal como se pegaron). Va aquí y no en
-   panel/api.js porque solo lo usa este paso; sin confirmadas, la llamada de siempre. */
-const guardarFurgonetas = (texto, sede, guardar, confirmadas) => (confirmadas.length
-  ? api.post('/alta/furgonetas', { texto, center: sede || null, guardar: !!guardar, confirmadas })
-  : altaFurgonetas(texto, sede, guardar))
+/* Guardar con las confirmadas: el cuerpo de siempre más `confirmadas` (los textos tal como se pegaron). */
+const guardarFurgonetas = (texto, sede, guardar, confirmadas) => altaFurgonetas(texto, sede, guardar, confirmadas)
 
 /* La sede, solo si la empresa tiene varias: sin ella el servidor no sabría dónde darlas de alta. */
 function Sede({ centros, valor, onCambio, etiqueta }) {

@@ -5,33 +5,42 @@
       "texto": "1234 ABC",
       "matricula": "1234 ABC",
       "estado": "nueva",
-      "motivo": null
+      "motivo": null,
+      "codigo": null,
+      "confirmada": false
     },
     {
       "n": 2,
       "texto": "5678-klm",
       "matricula": "5678 KLM",
       "estado": "ya_estaba",
-      "motivo": "Ya la tienes dada de alta."
+      "motivo": "Ya la tienes dada de alta.",
+      "codigo": "matricula_ya_estaba",
+      "confirmada": false
     },
     {
       "n": 3,
       "texto": "1234abc",
       "matricula": "1234 ABC",
       "estado": "error",
-      "motivo": "Repetida en la lista."
+      "motivo": "Repetida en la lista.",
+      "codigo": "matricula_repetida",
+      "confirmada": false
     },
     {
       "n": 4,
       "texto": "furgo de Juan",
       "matricula": null,
       "estado": "error",
-      "motivo": "No parece una matrícula."
+      "motivo": "No parece una matrícula.",
+      "codigo": "matricula_rara",
+      "confirmada": false
     }
   ],
   "nuevas": 1,
   "ya_estaban": 1,
   "errores": 2,
+  "dudosas": 0,
   "center": "PRINCIPAL",
   "guardado": false,
   "creadas": []

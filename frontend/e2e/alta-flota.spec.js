@@ -23,6 +23,8 @@ const ACCESOS = fx('alta-accesos.json')
 const CREADO = fx('alta-acceso-creado.json')
 const FURGONETAS = fx('alta-furgonetas.json')
 const CONDUCTORES = fx('alta-conductores.json')
+/* La pantalla dice cada porqué por su código, sin el punto final con que lo escribe el servidor. */
+const sinPunto = (s) => String(s).replace(/\.$/, '')
 const FOTOS_DIR = process.env.FOTOS_ALTA || ''
 
 /* «2026-11-14» → «14 nov»: el día como lo dice ahora todo el arranque, igual que el sello de las fotos (A11). */
@@ -191,10 +193,10 @@ test('el alta de una flota, de la web a «ha llegado la primera revisión»', as
   for (const l of FURGONETAS.lineas) {
     const fila = lineas.nth(l.n - 1)
     await expect(fila).toHaveAttribute('data-estado', l.estado)
-    if (l.motivo) await expect(fila).toContainText(l.motivo)
+    if (l.motivo) await expect(fila).toContainText(sinPunto(l.motivo))
   }
-  await expect(page.getByText('Repetida en la lista.')).toBeVisible()
-  await expect(page.getByText('No parece una matrícula.')).toBeVisible()
+  await expect(page.getByText('Repetida en la lista')).toBeVisible()
+  await expect(page.getByText('No parece una matrícula')).toBeVisible()
   expect(s.pedidas.at(-1)).toEqual({ ruta: 'furgonetas', texto: pegadas, center: null, guardar: false })
   await foto(page, `03-furgonetas-revisadas-${info.project.name}`)
   const nuevas = FURGONETAS.nuevas
@@ -212,8 +214,8 @@ test('el alta de una flota, de la web a «ha llegado la primera revisión»', as
   await page.getByRole('button', { name: 'Revisar', exact: true }).click()
   await expect.poll(() => s.pedidas.at(-1)).toEqual({ ruta: 'conductores', texto: 'Marta S.\t677 123 456\nPablo R.', center: null, guardar: false })
   for (const l of CONDUCTORES.lineas) {
-    if (l.motivo) await expect(page.getByText(l.motivo)).toBeVisible()
-    if (l.aviso) await expect(page.getByText(l.aviso)).toBeVisible()
+    if (l.motivo) await expect(page.getByText(sinPunto(l.motivo))).toBeVisible()
+    if (l.aviso) await expect(page.getByText(sinPunto(l.aviso))).toBeVisible()
   }
   await foto(page, `04-conductores-revisados-${info.project.name}`)
   const nuevos = CONDUCTORES.nuevos

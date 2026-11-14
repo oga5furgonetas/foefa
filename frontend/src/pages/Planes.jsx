@@ -88,7 +88,7 @@ function FounderOffer() {
             {tx('El plan Pro a {precio} por vehículo, congelado 24 meses', { precio: euros(6) })}
           </h2>
           <p style={{ margin: 0, color: V('muted'), fontSize: rem(15), lineHeight: 1.6, maxWidth: 520 }}>
-            {tx('Todo Pro ({precio}/vehículo): delegaciones ilimitadas, qué furgoneta lleva cada uno, cuadrante y turnos, plantilla y exportación.', { precio: euros(9) })}{' '}
+            {tx('Todo Pro ({precio}/vehículo): sedes ilimitadas, qué furgoneta lleva cada uno, cuadrante y turnos, plantilla y exportación.', { precio: euros(9) })}{' '}
             {tx('Solo para las 10 primeras empresas, sin subidas durante dos años. Se suma al pago anual.')}{' '}
             {tx('Reservar no cuesta nada ni te compromete: te llamamos y lo activamos juntos.')}
           </p>

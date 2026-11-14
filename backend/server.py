@@ -5841,11 +5841,11 @@ def _catalogo_por_defecto():
              "dias_prueba": PLAN_TARIFAS["autonomo"]["dias_prueba"],
              "paradas_gratis": REP_GRATIS_PARADAS_DIA, "recomendado": False,
              "gratis_hasta": REP_GRATIS_HASTA if _rep_promo_activa() else None},
-            {"clave": "operacion", "nombre": "Esencial", "para": "Una delegación",
+            {"clave": "operacion", "nombre": "Esencial", "para": "Una sede",
              "por_vehiculo": PLAN_TARIFAS["operacion"]["por_vehiculo"],
              "minimo_vehiculos": PLAN_TARIFAS["operacion"]["minimo_vehiculos"],
              "recomendado": False},
-            {"clave": "completo", "nombre": "Pro", "para": "Varias delegaciones y la operación diaria",
+            {"clave": "completo", "nombre": "Pro", "para": "Varias sedes y la operación diaria",
              "por_vehiculo": PLAN_TARIFAS["completo"]["por_vehiculo"],
              "minimo_vehiculos": PLAN_TARIFAS["completo"]["minimo_vehiculos"],
              "recomendado": True},
@@ -6159,11 +6159,11 @@ async def billing_planes(pais: str = ""):
             ],
             "no_incluye": ["Origen de daños de toda la flota", "Qué furgoneta lleva cada uno",
                            "Cuadrante, turnos y días libres", "Informe firmado de la revisión en PDF",
-                           "Varias delegaciones"],
+                           "Varias sedes"],
         },
         "completo": {
             "incluye": [
-                "Todo lo de Esencial, con delegaciones ilimitadas y un jefe por delegación",
+                "Todo lo de Esencial, con sedes ilimitadas y un jefe por sede",
                 "Origen de daños: todos los golpes de la flota en una lista, con quién llevaba cada furgoneta cuando "
                 "es seguro",
                 # Fuera «Revisión rápida, solo en las cuentas con la IA activa…» (14-11-2026, tercera tanda): quien
@@ -6184,7 +6184,7 @@ async def billing_planes(pais: str = ""):
             "incluye": ["Todo lo de Pro",
                         "WhatsApp con conductores y talleres (2.000 mensajes al mes)",
                         "API de solo lectura para sacar flota y taller a vuestros sistemas",
-                        "Implantación y formación por delegación incluidas",
+                        "Implantación y formación por sede incluidas",
                         "Soporte prioritario con persona asignada"],
             "no_incluye": [],
         },
@@ -6250,10 +6250,10 @@ COMPLEMENTOS = [
     {"clave": "campana", "nombre": "Vehículos de campaña", "precio": "0,30 € por día de alta",
      "que": "Furgonetas de refuerzo en Black Friday o Navidad, solo los días que estén. Se cobran a mes vencido."},
     {"clave": "implantacion", "nombre": "Implantación asistida", "precio": "490 € hasta 50 vehículos · 990 € hasta 200",
-     "que": "Cargamos flota y conductores, configuramos delegaciones y permisos y formamos al equipo. "
+     "que": "Cargamos flota y conductores, configuramos sedes y permisos y formamos al equipo. "
             "Gratis con contrato anual de 100 vehículos o más."},
     {"clave": "formacion", "nombre": "Formación presencial", "precio": "300 € por jornada + desplazamiento",
-     "que": "En vuestras delegaciones."},
+     "que": "En vuestras sedes."},
 ]
 
 # Cómo entra cada furgoneta en la factura (06-10-2026). Hasta hoy /planes vendía
@@ -13682,6 +13682,16 @@ async def _acceso_conductores(user: dict) -> dict:
     return await _acceso_empresa(user)
 
 
+async def _acceso_vehiculos(user: dict) -> dict:
+    """La empresa (como _acceso_empresa) para dar de alta furgonetas desde el arranque: exige poder ver la pantalla
+    de Vehículos, con la misma regla que `_acceso_conductores` (14-11-2026): un usuario con permisos solo de taller
+    no puede crear furgonetas por la puerta del arranque."""
+    perms = user.get("permissions")
+    if not user.get("sa") and perms is not None and "vehiculos" not in perms:
+        raise _Fallo(403, "sin_permiso_vehiculos", "No tienes acceso a la pantalla de Vehículos.")
+    return await _acceso_empresa(user)
+
+
 async def _acceso_vivo(doc) -> Optional[tuple]:
     """(empresa, base, ficha) si este enlace vale; si no, None. La usan el canje, la sesión y su renovación.
 
@@ -14225,7 +14235,7 @@ async def alta_furgonetas(data: dict = Body(default={}), user: dict = Depends(re
     """Matrículas pegadas, una por línea: qué pasa con cada una y, con `guardar`, el alta de las nuevas. Lo dudoso
     («Furgo 1») sale aparte y solo entra si viene en `confirmadas` (la lista de lo que el dueño confirmó)."""
     data = _dict_cuerpo(data)
-    await _acceso_empresa(user)
+    await _acceso_vehiculos(user)
     lineas = _alta_lineas(data, "Pega o escribe al menos una matrícula.", "sin_matriculas")
     centro = await _alta_centro(user, data.get("center"), "Elige la sede de estas furgonetas: tienes varias.")
     guardar = data.get("guardar") is True
@@ -14350,7 +14360,7 @@ async def alta_conductores(data: dict = Body(default={}), user: dict = Depends(r
     """Conductores pegados, uno por línea («Nombre, móvil» y, si se quiere, el correo): qué pasa con cada uno y, con
     `guardar`, el alta de los nuevos con las MISMAS reglas que el alta a mano (`create_driver`)."""
     data = _dict_cuerpo(data)
-    org = await _acceso_empresa(user)
+    org = await _acceso_conductores(user)
     pais = _pais_de(org)
     lineas = _alta_lineas(data, "Pega o escribe al menos un conductor.", "sin_conductores")
     centro = await _alta_centro(user, data.get("center"), "Elige la sede de estos conductores: tienes varias.")

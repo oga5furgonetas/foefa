@@ -8,7 +8,10 @@
       "email": null,
       "estado": "nuevo",
       "motivo": null,
-      "aviso": null
+      "aviso": null,
+      "codigo": null,
+      "aviso_codigo": null,
+      "dato": null
     },
     {
       "n": 2,
@@ -17,8 +20,11 @@
       "movil": "+34698765432",
       "email": "luis@ejemplo.es",
       "estado": "ya_estaba",
-      "motivo": "Ya está dado de alta como «Luis P.».",
-      "aviso": null
+      "motivo": "Ya está dado de alta como «Luis P.»",
+      "aviso": null,
+      "codigo": "conductor_ya_estaba",
+      "aviso_codigo": null,
+      "dato": "Luis P."
     },
     {
       "n": 3,
@@ -28,7 +34,10 @@
       "email": null,
       "estado": "nuevo",
       "motivo": null,
-      "aviso": "Sin móvil: tendrás que copiarle el enlace."
+      "aviso": "Sin móvil: tendrás que copiarle el enlace.",
+      "codigo": null,
+      "aviso_codigo": "sin_movil",
+      "dato": null
     }
   ],
   "nuevos": 2,

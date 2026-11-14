@@ -551,8 +551,8 @@ test.describe('/devolucion-renting', () => {
     await preparar(page)
     await page.goto('/')
     await expect(page.getByTestId('emp-devolucion')).toHaveAttribute('href', RUTA)
-    await expect(page.getByTestId('emp-devolucion')).toContainText('¿Qué te van a cobrar al devolverla?')
-    await expect(page.getByRole('link', { name: '¿Qué te cobra tu renting al devolver?' })).toHaveAttribute('href', RUTA)
+    await expect(page.getByTestId('emp-devolucion')).toContainText('¿Qué te van a cobrar al devolverlo?')
+    await expect(page.getByRole('link', { name: '¿Qué te van a cobrar al devolverlo?', exact: true })).toHaveAttribute('href', RUTA)
   })
 })
 
