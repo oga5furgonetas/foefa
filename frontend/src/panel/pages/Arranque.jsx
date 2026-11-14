@@ -461,7 +461,7 @@ function FilaEspera({ c, empresa, onCambio }) {
   const { t, lang } = useT()
   const a = useAcceso(c, empresa, onCambio)
   const e = a.estado
-  const texto = e === 'abierto' ? t('alta.p4.abrio').replace('{dia}', diaSello(c.acceso?.abierto_dia, lang))
+  const texto = e === 'abierto' ? t('alta.p4.abrio').replace('{dia}', diaSello(c.acceso?.abierto_dia, lang) + (c.acceso?.abierto_hora ? ` · ${c.acceso.abierto_hora}` : ''))
     : e === 'sin_abrir' ? t('alta.acc.chip.sinAbrir') : e === 'caducado' ? t('alta.acc.chip.caducado') : t('alta.acc.sinEnlace')
   return (
     <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-[color:var(--ld-border)] py-3"

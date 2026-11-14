@@ -399,7 +399,7 @@ def test_quitar_el_enlace_corta_la_sesion_y_se_puede_repetir(mundo):
     for _ in range(2):
         r = mundo.http.delete("/api/conductores/d-ana/acceso", headers=_h(_sesion_admin()))
         assert r.status_code == 200 and r.json() == {"ok": True, "acceso": {"estado": "sin_enlace", "creado_dia": None,
-                                                                           "abierto_dia": None, "caduca_dia": None}}
+                                                                           "abierto_dia": None, "abierto_hora": None, "caduca_dia": None}}
     assert _mi_ficha(mundo, sesion).status_code == 401
     assert _canjear(mundo, token, ip="192.0.2.42").status_code == 401
     assert mundo.g["accesos_conductor"].docs == []
@@ -549,7 +549,7 @@ def test_la_lista_de_accesos_dice_el_estado_de_cada_uno_y_ningun_secreto(mundo):
     assert ana["acceso"]["abierto_dia"] == ana["acceso"]["creado_dia"] == hoy
     assert luis["acceso"]["estado"] == "sin_abrir" and luis["email"] == "luis@ejemplo.es" and luis["whatsapp"] is None
     assert luis["acceso"]["caduca_dia"] > luis["acceso"]["creado_dia"]
-    assert rosa["acceso"] == {"estado": "sin_enlace", "creado_dia": None, "abierto_dia": None, "caduca_dia": None}
+    assert rosa["acceso"] == {"estado": "sin_enlace", "creado_dia": None, "abierto_dia": None, "abierto_hora": None, "caduca_dia": None}
     assert cuerpo["cuentas"] == {"sin_enlace": 1, "sin_abrir": 1, "abierto": 1, "caducado": 0}
     for secreto in (sin_abrir, abierto, _sha(sin_abrir), _sha(abierto), _sha(TEL_ANA), "token_hash", "dispositivo"):
         assert secreto not in r.text

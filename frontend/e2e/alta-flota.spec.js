@@ -301,7 +301,7 @@ test('el alta de una flota, de la web a «ha llegado la primera revisión»', as
   for (const c of s.accesos.conductores) {
     const f = espera.getByTestId('alta-espera-conductor').filter({ hasText: c.nombre })
     if (c.acceso.estado === 'abierto') {
-      await expect(f.getByTestId('alta-espera-estado')).toHaveText(`Abrió el enlace · ${selloDia(c.acceso.abierto_dia)}`)
+      await expect(f.getByTestId('alta-espera-estado')).toHaveText(`Abrió el enlace · ${selloDia(c.acceso.abierto_dia)}${c.acceso.abierto_hora ? ` · ${c.acceso.abierto_hora}` : ''}`)
       await expect(f.getByRole('button')).toHaveCount(0)
     } else {
       await expect(f.getByRole('button', { name: c.acceso.estado === 'sin_enlace' ? 'Mandar su acceso' : 'Mandar otra vez' })).toBeVisible()

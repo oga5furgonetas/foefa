@@ -10,6 +10,7 @@
     "estado": "sin_abrir",
     "creado_dia": "2026-11-14",
     "abierto_dia": null,
+    "abierto_hora": null,
     "caduca_dia": "2026-12-14"
   }
 }

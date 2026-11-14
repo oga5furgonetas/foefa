@@ -13630,7 +13630,8 @@ def _no_con_el_enlace(user: dict) -> None:
     enlace no le echaba (la contraseña que se había puesto seguía abriendo)."""
     if user.get("role") == "driver" and (user.get("via") == "enlace" or user.get("lk")):
         raise _Fallo(403, "enlace_sin_contrasena", _ENLACE_SIN_CLAVE)
-_ACCESO_SIN_ENLACE = {"estado": "sin_enlace", "creado_dia": None, "abierto_dia": None, "caduca_dia": None}
+_ACCESO_SIN_ENLACE = {"estado": "sin_enlace", "creado_dia": None, "abierto_dia": None, "abierto_hora": None,
+                      "caduca_dia": None}
 _ACCESO_ESTADOS = ("sin_enlace", "sin_abrir", "abierto", "caducado")
 
 
@@ -13758,7 +13759,7 @@ def _acceso_estado(doc) -> dict:
         caduca = _fecha_utc(doc.get("caduca_at"))
         estado = "sin_abrir" if caduca and caduca > datetime.now(timezone.utc) else "caducado"
     return {"estado": estado, "creado_dia": _alta_local(doc.get("creado_at"))[0],
-            "abierto_dia": _alta_local(abierto)[0],
+            "abierto_dia": _alta_local(abierto)[0], "abierto_hora": _alta_local(abierto)[1],
             "caduca_dia": None if abierto else _alta_local(doc.get("caduca_at"))[0]}
 
 
