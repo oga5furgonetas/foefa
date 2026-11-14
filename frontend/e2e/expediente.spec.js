@@ -355,6 +355,139 @@ test.describe('El expediente en el panel', () => {
     })
   }
 
+  /* EL CALENDARIO A TODO EL ANCHO (tanda de diseño, 14-11): el lado de cada día sale del ancho y de las semanas, con
+     un tope de 22 px. Con un año, una sola fila que llega al borde de la hoja; con un mes, casillas de 22 px y la leyenda
+     al lado (con los días de cada estado), no una mancha en la esquina con la hoja vacía. */
+  const conMeses = (meses) => {
+    const d = copia()
+    const hasta = new Date(Date.UTC(2026, 10, 12))
+    const desde = new Date(Date.UTC(2026, 10 - meses, 13))
+    const n = Math.round((hasta - desde) / 864e5) + 1
+    d.periodo = { desde: desde.toISOString().slice(0, 10), hasta: '2026-11-12', dias: n }
+    d.calendario = Array.from({ length: n }, (_, k) => {
+      const f = new Date(desde.getTime() + k * 864e5)
+      return { fecha: f.toISOString().slice(0, 10), estado: [0, 6].includes(f.getUTCDay()) ? 'sin_revisar' : k % 17 === 3 ? 'golpe' : 'revisada', revisiones: 1 }
+    })
+    return d
+  }
+  const anchoUtil = (page) => page.getByTestId('bloque-calendario').evaluate((s) => {
+    const r = s.getBoundingClientRect()
+    const dias = [...s.querySelectorAll('[data-fecha]')].map((x) => x.getBoundingClientRect())
+    return { izq: r.left, der: r.right, finDias: Math.max(...dias.map((x) => x.right)), lados: [...new Set(dias.map((x) => Math.round(x.width * 10) / 10))] }
+  })
+
+  for (const [meses, imprimir] of [[12, false], [12, true], [6, false]]) {
+    test(`con ${meses} meses${imprimir ? ', al imprimir,' : ''} el calendario llega al borde de la hoja, en una fila y con casillas iguales`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 900 })
+      await abrir(page, { datos: conMeses(meses) })
+      await expect(hoja(page)).toBeVisible()
+      if (imprimir) await page.emulateMedia({ media: 'print' })
+      await expect(page.getByTestId('calendario-fila')).toHaveCount(1)
+      // Medido cuando ya se ha ajustado al ancho de la hoja (el primer pintado es con el del A4).
+      await expect(async () => {
+        const m = await anchoUtil(page)
+        expect(m.lados, 'todas las casillas del mismo lado').toHaveLength(1)
+        expect(m.lados[0]).toBeLessThanOrEqual(22)
+        // Lo que queda a la derecha del último día: menos de 30 px de los ~690 de la hoja (el redondeo y, con medio
+        // año, el tope de 22 px); antes, con un año quedaba un 30 % vacío.
+        expect(m.der - m.finDias).toBeLessThanOrEqual(30)
+        expect(m.finDias).toBeLessThanOrEqual(m.der)
+      }).toPass()
+    })
+  }
+
+  test('en el móvil, un año va en dos filas a todo el ancho, sin salirse, cada una con su año', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await abrir(page, { datos: conMeses(12) })
+    await expect(hoja(page)).toBeVisible()
+    await expect(page.getByTestId('calendario-fila')).toHaveCount(2)
+    await expect(async () => {
+      const m = await anchoUtil(page)
+      expect(m.lados).toHaveLength(1)
+      expect(m.der - m.finDias).toBeLessThanOrEqual(16)
+      expect(m.finDias).toBeLessThanOrEqual(m.der)
+    }).toPass()
+    for (const fila of await page.getByTestId('calendario-fila').all()) {
+      expect((await fila.locator('.exp-cal-mes').allTextContents()).join(' ')).toMatch(/\d{4}/)
+    }
+    expect(await sinDesbordes(page)).toBe(true)
+  })
+
+  test('con un mes, casillas grandes (22 px) y la leyenda al lado, con los días de cada estado', async ({ page }) => {
+    const d = conMeses(1)
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await abrir(page, { datos: d })
+    await expect(hoja(page)).toBeVisible()
+    await expect(page.getByTestId('calendario')).toHaveAttribute('data-lado', '22')
+    const [cal, ley] = [await page.getByTestId('calendario').boundingBox(), await page.getByTestId('leyenda').boundingBox()]
+    expect(ley.x, 'la leyenda va a la derecha del calendario').toBeGreaterThan(cal.x + cal.width)
+    expect(ley.y).toBeLessThan(cal.y + cal.height)
+    const cuenta = (e) => d.calendario.filter((x) => x.estado === e).length
+    for (const e of ['revisada', 'sin_revisar', 'golpe']) {
+      const n = cuenta(e)
+      await expect(page.getByTestId(`dias-${e}`)).toHaveText(n === 1 ? '1 día' : `${n} días`)
+    }
+    // En el móvil no cabe al lado: va debajo, y el calendario no se reparte por todo el ancho (semanas sueltas).
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(async () => {
+      const [c, l] = [await page.getByTestId('calendario').boundingBox(), await page.getByTestId('leyenda').boundingBox()]
+      expect(l.y).toBeGreaterThan(c.y + c.height - 1)
+    }).toPass()
+    const huecos = await page.getByTestId('calendario').evaluate((c) => {
+      const x = [...c.querySelectorAll('.exp-cal-sem')].map((s) => s.getBoundingClientRect().left)
+      return x.slice(1).map((v, i) => Math.round(v - x[i]))
+    })
+    expect(new Set(huecos).size).toBe(1)
+    expect(huecos[0]).toBe(24)
+  })
+
+  /* CÓMO ENTRÓ Y CÓMO ESTÁ HOY, EN UNA FILA (tanda de diseño, 14-11): dos columnas, como «Antes / Con el golpe», cada
+     lado en el mismo sitio de las dos; juntas al imprimir; en el móvil, una debajo de otra. */
+  test('«Cómo entró» y «Cómo está hoy» van en una fila, cada lado a la misma altura, y no se parten al imprimir', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await abrir(page)
+    await expect(hoja(page)).toBeVisible()
+    const [a, b] = [await page.getByTestId('bloque-entro').boundingBox(), await page.getByTestId('bloque-esta').boundingBox()]
+    expect(Math.abs(a.y - b.y)).toBeLessThanOrEqual(1)
+    expect(b.x).toBeGreaterThan(a.x + a.width)
+    const altura = async (bloque) => Object.fromEntries(await page.getByTestId(bloque).locator('figure').evaluateAll((fs) =>
+      fs.map((f) => [f.querySelector('figcaption').textContent, Math.round(f.getBoundingClientRect().top)])))
+    expect(await altura('bloque-entro')).toEqual(await altura('bloque-esta'))
+    // Un lado que solo tiene una de las dos deja su hueco: el resto sigue en su sitio.
+    const d = copia()
+    d.como_esta.fotos = d.como_esta.fotos.filter((f) => f.vista !== 'trasera')
+    await page.unroute('**/api/vehicles/*/antes-del-perito')
+    await page.route('**/api/vehicles/*/antes-del-perito', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(d) }))
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByTestId('bloque-esta').locator('figure')).toHaveCount(3)
+    const [entro, esta] = [await altura('bloque-entro'), await altura('bloque-esta')]
+    for (const k of Object.keys(esta)) expect(esta[k]).toBe(entro[k])
+    await page.emulateMedia({ media: 'print' })
+    expect(await page.getByTestId('entro-esta').evaluate((x) => getComputedStyle(x).breakInside)).toBe('avoid')
+    // En el móvil, una debajo de otra.
+    await page.emulateMedia({ media: 'screen' })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(async () => {
+      const [x, y] = [await page.getByTestId('bloque-entro').boundingBox(), await page.getByTestId('bloque-esta').boundingBox()]
+      expect(y.y).toBeGreaterThan(x.y + x.height - 1)
+    }).toPass()
+    expect(await sinDesbordes(page)).toBe(true)
+  })
+
+  test('el PDF real del fichero sin golpes sale en dos hojas (antes, tres)', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'solo Chromium saca PDF')
+    const d = copia()
+    d.golpes = []
+    Object.assign(d.cuentas, { golpes: 0, atribuibles: 0, ya_estaban: 0, abiertos: 0 })
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await abrir(page, { datos: d })
+    await expect(hoja(page)).toBeVisible()
+    await page.waitForLoadState('networkidle')
+    await page.emulateMedia({ media: 'print' })
+    const pdf = (await page.pdf({ preferCSSPageSize: true, printBackground: true })).toString('latin1')
+    expect(pdf.match(/\/Type\s*\/Page[^s]/g)).toHaveLength(2)
+  })
+
   test('al imprimir en A4, el primer golpe empieza en la hoja 1, debajo del calendario, sin partirse', async ({ page }) => {
     // El ancho de la hoja A4 por dentro (210 − 2 × 14 mm a 96 ppp) y su alto útil (297 − 2 × 14 mm).
     const mm = 96 / 25.4

@@ -1,23 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { diaLocal, isoDia, comoLista } from './formato'
 
 /* «CADA DÍA, DESDE LA PRIMERA REVISIÓN» (14-11-2026): un cuadradito por día, en columnas de semana (de lunes a
    domingo), para que meses de revisiones se lean de un vistazo en vez de en una lista de cien filas. Los fines de
    semana se ven solos como dos filas claras. El estado de cada día lo da el servidor (`calendario`); un día del
    periodo que no venga se pinta como «sin fotos», que es lo único que se puede decir de él.
-   Con muchas semanas, el calendario se parte en FILAS que caben en el ancho de la hoja (medido; si aún no se ha
-   medido, el de un A4), repartidas a partes iguales, y CADA fila lleva sus letras de los días y el mes de su primera
-   semana: una segunda fila sin referencias no se lee.
-   Con más de un año (más semanas de las que caben en una fila con el cuadradito chico), el cuadradito se hace mínimo
-   (6 px y 1 px de hueco): dos o tres años caben en dos filas que miden lo que una fila de un periodo corto, y el primer
-   golpe sigue cabiendo en la hoja 1 al imprimir (comprobado con page.pdf de 1 a 24 meses). */
+   EL TAMAÑO (tanda de diseño, 14-11): el lado de cada día sale del ancho útil y del número de semanas, para que el
+   calendario ocupe la hoja: con un mes, casillas grandes (con un tope de 22 px); con un año, pequeñas pero a todo el
+   ancho. Solo cuando ni con el lado mínimo (7 px) caben todas las semanas en una fila, se parte en FILAS iguales, y
+   CADA fila lleva sus letras de los días y el mes de su primera semana: una segunda fila sin referencias no se lee.
+   El ancho es el medido en pantalla, nunca más que el de un A4, y al imprimir el del A4: la hoja impresa sale igual
+   desde el ordenador que desde el móvil.
+   La leyenda dice cuántos días hay de cada estado; si el calendario es corto (le sobra sitio a la derecha), va a su
+   lado y no debajo, para que no quede una mancha en la esquina con media hoja vacía. */
 
 const ESTADOS = new Set(['revisada', 'sin_revisar', 'golpe'])
 const MAX_DIAS = 3700   // diez años: un periodo más largo es un dato roto, no una furgoneta
-const LADO = { grande: 16, medio: 12, chico: 9, mini: 6 }   // el cuadradito (expediente.css, `--c`)
-const HUECO = { grande: 2, medio: 2, chico: 2, mini: 1 }     // entre semanas y entre días (expediente.css, `--h`)
-const LETRAS = 12 + 6   // la columna de las letras y su separación
+const LADO_MAX = 22     // el cuadradito más grande (un periodo corto)
+const LADO_MIN = 7      // el más chico antes de partir en filas
+const LETRAS = 12 + 6   // la columna de las letras y su separación (expediente.css, .exp-cal-letras y .exp-cal-fila)
 const ANCHO_A4 = 680    // lo que mide por dentro la hoja A4 con 14 mm de margen (≈ 688 px), con holgura
+const LEYENDA = 200     // lo que necesita la leyenda en columna para ir al lado del calendario, con su aire
 
 function semanasDel(desde, hasta, calendario) {
   const a = diaLocal(desde)
@@ -49,14 +53,36 @@ function semanasDel(desde, hasta, calendario) {
   return semanas
 }
 
-/* Las semanas en filas de como mucho `porFila`, todas del mismo largo salvo la última (nada de una última fila con
-   dos semanas sueltas). */
+/* El lado y el hueco de una fila de `porFila` semanas en `util` px: el mayor lado entero que cabe, con el tope. Con
+   cuadraditos chicos (menos de 10 px), el hueco baja a 1 px para que el día siga pesando más que el blanco. */
+function medida(util, porFila) {
+  const lado = (h) => Math.min(LADO_MAX, Math.floor((util + h) / porFila) - h)
+  return lado(2) >= 10 ? { lado: lado(2), hueco: 2 } : { lado: lado(1), hueco: 1 }
+}
+
+/* Cuántas semanas por fila y de qué lado: una sola fila mientras el lado no baje del mínimo; si baja, dos filas
+   iguales, tres… (nada de una última fila con dos semanas sueltas). Con varias filas, el lado baja hasta que todas
+   juntas no midan más que una fila de casillas del tope: dos o tres años ocupan lo mismo que medio año y el primer golpe
+   sigue cabiendo en la hoja 1 al imprimir (las columnas reparten igual el ancho entero). */
+const ALTO_FILA = 14        // el rótulo del mes encima de cada fila
+const ENTRE_FILAS = 10      // expediente.css, .exp-cal (gap)
+const ALTO_MAX = ALTO_FILA + 7 * (LADO_MAX + 2)
+function reparto(semanas, util) {
+  for (let filas = 1; filas <= semanas; filas += 1) {
+    const porFila = Math.ceil(semanas / filas)
+    const m = medida(util, porFila)
+    if (m.lado >= LADO_MIN || porFila === 1) {
+      if (filas === 1) return { ...m, porFila }
+      const porAltura = Math.floor(((ALTO_MAX + ENTRE_FILAS) / filas - ENTRE_FILAS - ALTO_FILA) / 7) - 1
+      return { lado: Math.min(m.lado, Math.max(porAltura, LADO_MIN)), hueco: 1, porFila }
+    }
+  }
+  return { ...medida(util, 1), porFila: 1 }
+}
+
 function enFilas(semanas, porFila) {
-  const n = semanas.length
-  const filas = Math.max(1, Math.ceil(n / Math.max(1, porFila)))
-  const cada = Math.ceil(n / filas)
   const out = []
-  for (let i = 0; i < n; i += cada) out.push(semanas.slice(i, i + cada))
+  for (let i = 0; i < semanas.length; i += porFila) out.push(semanas.slice(i, i + porFila))
   return out
 }
 
@@ -87,8 +113,15 @@ function rotulos(fila, col, texto, util) {
     const anio = r.fecha.getFullYear()
     const conAnio = texto(r.fecha, true)
     const solo = texto(r.fecha, false)
+    // La fila sin año todavía y sin sitio para él antes del siguiente rótulo: el siguiente se quita y el año va aquí
+    // (una fila sin año no se lee; con meses de cuatro semanas en el móvil, «abr 2026» no cabe en una).
+    const k = ultimo ? -1 : out.findIndex((x, q) => q > j && x)
+    const sitio2 = k === -1 ? util - i * col : (k - i) * col - 4
     if (anio !== anioVisto && anchoDe(conAnio) <= sitio) { r.texto = conAnio; anioVisto = anio }
-    // Enero sin sitio para «ene 2025» (el calendario mínimo): el año solo, que es lo que hace falta para leer la fila.
+    else if (anioVisto === null && !ultimo && anchoDe(conAnio) > sitio && anchoDe(conAnio) <= sitio2) {
+      r.texto = conAnio; anioVisto = anio; out[j] = null
+    }
+    // Enero sin sitio para «ene 2025» (el calendario más chico): el año solo, que es lo que hace falta para leer la fila.
     else if (anio !== anioVisto && r.fecha.getMonth() === 0 && anchoDe(String(anio)) <= sitio) { r.texto = String(anio); anioVisto = anio }
     else if (anchoDe(solo) <= sitio || (!r.opcional && !ultimo)) r.texto = solo
     else out[i] = null
@@ -96,9 +129,35 @@ function rotulos(fila, col, texto, util) {
   return out
 }
 
-export default function CalendarioDias({ desde, hasta, calendario, locale, textos }) {
+/* Si la página se está imprimiendo: entonces manda el ancho del A4, no el de la pantalla. `beforeprint` llega antes de
+   maquetar la hoja impresa (por eso el cambio va con flushSync); la consulta de medios cubre a quien imprime sin ese
+   aviso (el PDF que saca un navegador sin ventana). */
+function useImprimiendo() {
+  const [imprimiendo, setImprimiendo] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const poner = (v) => { try { flushSync(() => setImprimiendo(v)) } catch { setImprimiendo(v) } }
+    const antes = () => poner(true)
+    const despues = () => poner(false)
+    let mq = null
+    try { mq = window.matchMedia('print') } catch { /* sin matchMedia */ }
+    const cambio = (e) => setImprimiendo(e.matches)
+    window.addEventListener('beforeprint', antes)
+    window.addEventListener('afterprint', despues)
+    mq?.addEventListener?.('change', cambio)
+    return () => {
+      window.removeEventListener('beforeprint', antes)
+      window.removeEventListener('afterprint', despues)
+      mq?.removeEventListener?.('change', cambio)
+    }
+  }, [])
+  return imprimiendo
+}
+
+export default function CalendarioDias({ desde, hasta, calendario, locale, textos, cuantosDias }) {
   const caja = useRef(null)
   const [ancho, setAncho] = useState(null)
+  const imprimiendo = useImprimiendo()
   const semanas = semanasDel(desde, hasta, calendario)
   const hay = semanas.length > 0
   useEffect(() => {
@@ -120,38 +179,61 @@ export default function CalendarioDias({ desde, hasta, calendario, locale, texto
   const letra = (k) => {
     try { return new Intl.DateTimeFormat(locale, { weekday: 'narrow' }).format(new Date(2026, 10, 9 + k)) } catch { return '' }
   }
-  // El tamaño se elige con el A4 (no con la pantalla), para que la hoja impresa sea la que se ve.
-  const caben = (t) => Math.floor((ANCHO_A4 - LETRAS + HUECO[t]) / (LADO[t] + HUECO[t]))
-  const tam = semanas.length <= 30 ? 'grande' : semanas.length <= 44 ? 'medio' : semanas.length <= caben('chico') ? 'chico' : 'mini'
-  const col = LADO[tam] + HUECO[tam]
-  // El ancho de la hoja en pantalla y en el A4 es casi el mismo; nunca se pasa del A4, para que la hoja impresa no corte.
-  const util = Math.min(ancho || ANCHO_A4, ANCHO_A4) - LETRAS
-  const filas = enFilas(semanas, Math.floor((util + HUECO[tam]) / col))
+  // El ancho del bloque: el medido (nunca más que el A4); al imprimir, el del A4.
+  const total = imprimiendo ? ANCHO_A4 : Math.min(ancho || ANCHO_A4, ANCHO_A4)
+  const util = total - LETRAS
+  const { lado, hueco, porFila } = reparto(semanas.length, util)
+  const col = lado + hueco
+  const filas = enFilas(semanas, porFila)
+  const anchoCal = LETRAS + Math.min(porFila, semanas.length) * col - hueco
+  const alLado = filas.length === 1 && total - anchoCal >= LEYENDA
+  /* Lo que mide de verdad cada columna de semana. Sin llegar al tope, las columnas reparten el ancho entero (el resto
+     del redondeo va a los huecos y la fila llega al borde); con el tope, cada una mide lo suyo y nada más (unas pocas
+     semanas repartidas por toda la hoja se leerían sueltas). */
+  const tope = lado >= LADO_MAX
+  const colReal = tope ? col : util / porFila
   const etiqueta = { revisada: textos.revisada, sin_revisar: textos.sin, golpe: textos.golpe }
+  const cuenta = { revisada: 0, sin_revisar: 0, golpe: 0 }
+  for (const s of semanas) for (const d of s.dias) if (d) cuenta[d.estado] += 1
+  const estilo = {
+    '--n': porFila, '--col': tope ? `${col}px` : 'minmax(0, 1fr)',
+    '--c': `${lado}px`, '--h': `${hueco}px`, '--r': `${lado >= 16 ? 3 : lado >= 10 ? 2 : 1}px`,
+  }
   return (
-    <div className={`exp-cal exp-cal-${tam}`} data-testid="calendario" ref={caja}>
-      {filas.map((fila, f) => {
-        const mes = rotulos(fila, col, fmtMes, util)
-        return (
-          <div className="exp-cal-fila" key={f} data-testid="calendario-fila">
-            <div className="exp-cal-letras" aria-hidden="true">
-              <span />
-              {[0, 1, 2, 3, 4, 5, 6].map((k) => <span key={k}>{k % 2 === 0 && k < 6 ? letra(k) : ''}</span>)}
+    <div className={`exp-cal-bloque${alLado ? ' exp-cal-bloque-lado' : ''}`} ref={caja}>
+      <div className={`exp-cal${lado < 10 ? ' exp-cal-chico' : ''}`} data-testid="calendario" data-lado={lado}
+        style={estilo}>
+        {filas.map((fila, f) => {
+          const mes = rotulos(fila, colReal, fmtMes, util)
+          return (
+            <div className="exp-cal-fila" key={f} data-testid="calendario-fila">
+              <div className="exp-cal-letras" aria-hidden="true">
+                <span />
+                {[0, 1, 2, 3, 4, 5, 6].map((k) => <span key={k}>{k % 2 === 0 && k < 6 ? letra(k) : ''}</span>)}
+              </div>
+              <div className="exp-cal-semanas" role="list">
+                {fila.map((s, i) => (
+                  <div className="exp-cal-sem" key={i} role="listitem">
+                    <span className="exp-cal-mes">{mes[i]?.texto || ''}</span>
+                    {s.dias.map((d, k) => d
+                      ? <i key={k} className={`exp-dia exp-dia-${d.estado}`} data-fecha={d.fecha} data-estado={d.estado}
+                          title={`${fmtDia(d.fecha)} · ${etiqueta[d.estado]}`} />
+                      : <i key={k} className="exp-dia exp-dia-fuera" />)}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="exp-cal-semanas" role="list">
-              {fila.map((s, i) => (
-                <div className="exp-cal-sem" key={i} role="listitem">
-                  <span className="exp-cal-mes">{mes[i]?.texto || ''}</span>
-                  {s.dias.map((d, k) => d
-                    ? <i key={k} className={`exp-dia exp-dia-${d.estado}`} data-fecha={d.fecha} data-estado={d.estado}
-                        title={`${fmtDia(d.fecha)} · ${etiqueta[d.estado]}`} />
-                    : <i key={k} className="exp-dia exp-dia-fuera" />)}
-                </div>
-              ))}
-            </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
+      <ul className="exp-leyenda" data-testid="leyenda">
+        {['revisada', 'sin_revisar', 'golpe'].map((e) => (
+          <li key={e} className={`exp-ley-${e}`}>
+            <span className="exp-ley-t">{etiqueta[e]}</span>
+            {cuantosDias && <span className="exp-ley-n" data-testid={`dias-${e}`}>{cuantosDias(cuenta[e])}</span>}
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

@@ -40,28 +40,39 @@
 .exp-nota { color: var(--e-tinta); }
 
 /* ── El calendario: un cuadradito por día, en columnas de semana ── */
-/* Las medidas casan con CalendarioDias.jsx (LADO, HUECO, LETRAS): con ellas parte el calendario en filas. */
-.exp-cal { --c: 16px; --h: 2px; display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
-.exp-cal-medio { --c: 12px; }
-.exp-cal-chico { --c: 9px; }
-.exp-cal-mini { --c: 6px; --h: 1px; }
-.exp-cal-mini .exp-dia { border-radius: 1px; }
-.exp-cal-mini .exp-cal-letras { font-size: 8px; }
+/* El lado de cada día (`--c`), el hueco (`--h`) y el redondeo (`--r`) los pone CalendarioDias.jsx, que los calcula con
+   el ancho de la hoja y el número de semanas (LADO_MAX, LETRAS): estas son solo las de partida. */
+.exp-cal-bloque { margin-top: 12px; }
+.exp-cal { --c: 16px; --h: 2px; --r: 2px; display: flex; flex-direction: column; gap: 10px; }
+.exp-cal-chico .exp-cal-letras { font-size: 8px; }
 .exp-cal-fila { display: flex; gap: 6px; }
 .exp-cal-letras { flex: none; width: 12px; display: flex; flex-direction: column; gap: var(--h); font-size: 9.5px; color: var(--e-gris); }
 .exp-cal-letras > span { height: var(--c); line-height: var(--c); }
 .exp-cal-letras > span:first-child { height: 14px; }
-.exp-cal-semanas { flex: 1; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 8px var(--h); min-width: 0; }
+/* Las semanas en columnas iguales (`--col`, CalendarioDias.jsx): sin tope, reparten el ancho entero y la fila llega al borde
+   de la hoja; con el tope (pocas semanas), cada una mide su día y su hueco. Las de dos filas caen una debajo de otra. */
+.exp-cal-semanas { flex: 1; display: grid; grid-template-columns: repeat(var(--n, 1), var(--col, minmax(0, 1fr))); min-width: 0; }
 .exp-cal-sem { display: flex; flex-direction: column; gap: var(--h); width: var(--c); }
 .exp-cal-mes { position: relative; height: 14px; font-size: 10px; line-height: 12px; color: var(--e-gris); white-space: nowrap; overflow: visible; }
-.exp-dia { display: block; width: var(--c); height: var(--c); border-radius: 2px; background: var(--e-tinta); }
+.exp-dia { display: block; width: var(--c); height: var(--c); border-radius: var(--r); background: var(--e-tinta); }
 .exp-dia-sin_revisar { background: var(--e-vacio); }
 .exp-dia-golpe { background: var(--e-fallo); }
 .exp-dia-fuera { background: transparent; }
-.exp-leyenda { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 12px; color: var(--e-gris); }
-.exp-leyenda span::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 2px; vertical-align: -1px; background: var(--e-tinta); }
+/* La leyenda, con los días de cada estado en cifras de la casa: debajo, en una línea; al lado de un calendario corto,
+   en lista con reglas, con la primera a la altura del primer día. */
+.exp-leyenda { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 12px 0 0; padding: 0; font-size: 12px; color: var(--e-gris); }
+.exp-leyenda li { display: flex; align-items: baseline; gap: 6px; }
+.exp-leyenda li::before { content: ''; flex: none; width: 10px; height: 10px; border-radius: 2px; align-self: center; background: var(--e-tinta); }
 .exp-leyenda .exp-ley-sin_revisar::before { background: var(--e-vacio); }
 .exp-leyenda .exp-ley-golpe::before { background: var(--e-fallo); }
+.exp-ley-n { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--e-tinta); }
+.exp-cal-bloque-lado { display: flex; align-items: flex-start; gap: 0 44px; }
+.exp-cal-bloque-lado .exp-cal { flex: none; }
+.exp-cal-bloque-lado .exp-leyenda { flex: 0 1 260px; flex-direction: column; flex-wrap: nowrap; gap: 0; margin: 14px 0 0;
+  border-top: 1px solid var(--e-linea); }
+.exp-cal-bloque-lado .exp-leyenda li { display: grid; grid-template-columns: 10px 1fr auto; column-gap: 10px; align-items: baseline;
+  padding: 7px 0; border-bottom: 1px solid var(--e-linea); }
+.exp-cal-bloque-lado .exp-ley-t { color: var(--e-tinta); }
 
 /* ── Cada golpe ── */
 .exp-golpe { margin-top: 18px; padding-top: 2px; }
@@ -93,10 +104,15 @@
 .exp-linea b { font-weight: 600; }
 .exp-motivo { display: block; margin-top: 2px; font-size: 12.5px; color: var(--e-gris); text-wrap: balance; }
 
-/* ── Cómo entró / cómo está ── */
-.exp-galeria { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 8px; margin-top: 10px; }
+/* ── Cómo entró / cómo está hoy: una fila de dos columnas, cada lado en el mismo sitio de las dos ── */
+.exp-dos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 24px; margin-top: 30px; }
+.exp-dos > .exp-seccion { margin-top: 0; min-width: 0; }
+.exp-galeria { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 8px; margin-top: 10px; }
+.exp-galeria-una { grid-template-columns: minmax(0, 1fr); }
 .exp-galeria figure { margin: 0; min-width: 0; }
 .exp-galeria figcaption { margin-top: 4px; font-size: 12px; color: var(--e-gris); }
+.exp-galeria .sello-foto { left: 6px; bottom: 6px; max-width: calc(100% - 12px); font-size: 9.5px; }
+.exp-galeria-una .sello-foto { left: 8px; bottom: 8px; max-width: calc(100% - 16px); font-size: 10.5px; }
 
 /* ── Qué prueba y qué no ── */
 .exp-prueba-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 12px; }
@@ -153,7 +169,8 @@
   .exp-cifras > div:nth-child(3) { padding-left: 0; border-left: 0; }
   .exp-cifras > div:nth-child(n + 3) { border-top: 1px solid var(--e-linea); margin-top: 12px; }
   .exp-cifras dd { font-size: 26px; }
-  .exp-par, .exp-galeria, .exp-prueba-cols { grid-template-columns: 1fr; }
+  .exp-par, .exp-prueba-cols, .exp-dos { grid-template-columns: 1fr; }
+  .exp-dos { row-gap: 30px; }
   .exp-golpe-ya .exp-par { gap: 6px; }
   .exp-foto-sin { min-height: 90px; padding: 20px 12px; }
   .exp-ia .exp-foto-sin { min-height: 0; padding: 8px; }
@@ -184,16 +201,18 @@
   .exp-cifras { margin-top: 14px; }
   .exp-cifras > div { padding-top: 8px; }
   .exp-cifras dd { font-size: 24px; }
-  .exp-seccion { margin-top: 20px; }
+  .exp-seccion, .exp-dos { margin-top: 20px; }
   .exp-golpe { margin-top: 12px; }
   .exp-golpe + .exp-golpe { margin-top: 24px; }
   .exp-lineas { margin-top: 4px; }
   .exp-linea { padding: 4px 0; }
   .exp-leyenda { margin-top: 6px; }
+  .exp-galeria { gap: 8px; }
+  .exp-galeria figcaption { margin-top: 2px; font-size: 11px; }
   .exp-pie-pantalla { display: none; }
   /* Un título nunca se queda solo al pie de una hoja: va con lo primero que tiene debajo. */
   .exp-hoja h2, .exp-golpe-t, .exp-seccion > .exp-sub { break-after: avoid; }
-  .exp-golpe, .exp-galeria figure, .exp-cifras, .exp-prueba, .exp-seccion-cal, .exp-foto, .exp-ia-item { break-inside: avoid; }
+  .exp-golpe, .exp-galeria figure, .exp-dos, .exp-cifras, .exp-prueba, .exp-seccion-cal, .exp-foto, .exp-ia-item { break-inside: avoid; }
   /* El título del anexo y su nota van con el primer posible daño: nunca solos al pie de una hoja. */
   .exp-ia > .exp-sub { break-after: avoid; }
   .exp-ia { margin-top: 26px; }
