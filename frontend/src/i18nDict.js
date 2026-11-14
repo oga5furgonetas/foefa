@@ -506,6 +506,11 @@ export const DICT = {
   'drv.add':          { es: 'Añadir conductor', en: 'Add driver', fr: 'Ajouter chauffeur', de: 'Fahrer hinzufügen', it: 'Aggiungi autista', pt: 'Adicionar motorista' },
   'drv.search':       { es: 'Buscar conductor…', en: 'Search driver…', fr: 'Rechercher chauffeur…', de: 'Fahrer suchen…', it: 'Cerca autista…', pt: 'Pesquisar motorista…' },
   'drv.empty':        { es: 'No hay conductores', en: 'No drivers', fr: 'Aucun chauffeur', de: 'Keine Fahrer', it: 'Nessun autista', pt: 'Sem motoristas' },
+  // Conductores vacío con una sola acción, y las contraseñas plegadas (14-11-2026, ARREGLOS-5 N1 y N2).
+  'drv.importarLista': { es: 'Importar la lista', en: 'Import the list', fr: 'Importer la liste', de: 'Liste importieren', it: 'Importa l’elenco', pt: 'Importar a lista' },
+  'drv.unoAUno':      { es: 'Añadir uno a uno', en: 'Add one by one', fr: 'Ajouter un par un', de: 'Einzeln hinzufügen', it: 'Aggiungi uno alla volta', pt: 'Adicionar um a um' },
+  'drv.masOpciones':  { es: 'Más opciones', en: 'More options', fr: 'Plus d’options', de: 'Weitere Optionen', it: 'Altre opzioni', pt: 'Mais opções' },
+  'drv.masOpcionesAyuda': { es: 'Contraseña inicial de los nuevos y contraseña temporal común', en: 'Starting password for new drivers and shared temporary password', fr: 'Mot de passe initial des nouveaux et mot de passe temporaire commun', de: 'Startpasswort für neue Fahrer und gemeinsames vorläufiges Passwort', it: 'Password iniziale dei nuovi e password temporanea comune', pt: 'Palavra-passe inicial dos novos e palavra-passe temporária comum' },
   // Conductores en el móvil y sus filtros de un toque (11-11-2026, tanda 2, E1 y E2).
   'drv.mas':          { es: 'Más', en: 'More', fr: 'Plus', de: 'Mehr', it: 'Altro', pt: 'Mais' },
   'drv.moviles':      { es: 'Móviles personales', en: 'Personal phones', fr: 'Portables personnels', de: 'Private Handys', it: 'Cellulari personali', pt: 'Telemóveis pessoais' },

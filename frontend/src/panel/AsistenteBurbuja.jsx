@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Sparkles, Send, Loader2, X, Check, Car, UserPlus, FileText, Paperclip, UserX, Wrench, AlertTriangle, Pencil, UserCog, Hammer } from 'lucide-react'
 import { getAiHistorial, enviarMensajeIA, ejecutarAccionIA, subirFichasTecnicasIA, confirmarFichasTecnicasIA } from './api'
 import { getAdmin } from './auth'
@@ -146,6 +147,28 @@ function Tarjeta({ t }) {
   )
 }
 
+/* EL TEMA DEL PANEL, VIVO (14-11-2026, ARREGLOS-5 N3). La burbuja va fuera de <main>: en Mixto le toca la rampa oscura
+   del menú aunque flote sobre la página clara, así que su «tinta» se elige mirando el tema (y cambia si se cambia). */
+function useTemaPanel() {
+  const leer = () => { try { return document.documentElement.getAttribute('data-panel-theme') || '' } catch { return '' } }
+  const [tema, setTema] = useState(leer)
+  useEffect(() => {
+    let obs
+    try {
+      obs = new MutationObserver(() => setTema(leer()))
+      obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-panel-theme'] })
+    } catch { /* sin observador: se queda con el de la carga */ }
+    return () => obs?.disconnect()
+  }, [])
+  return tema
+}
+
+/* LAS PANTALLAS DE LISTA (14-11-2026, ARREGLOS-5 N3 y panel3 n.º 10). Abajo a la derecha, la burbuja quedaba encima de
+   la columna de acciones de la lista (el botón de llamar en el móvil, «Mandar su acceso» en el ordenador). En
+   Conductores y Vehículos va abajo a la IZQUIERDA del contenido, sobre la columna del avatar o del estado, que no son
+   botones: la fila entera abre la ficha. En el ordenador, a la derecha del menú lateral (248 px). */
+const PANTALLAS_DE_LISTA = /^\/panel\/(conductores|vehiculos)\/?$/
+
 export default function AsistenteBurbuja({ center, centers, setCenter, escondida = false, sobreEscribir = false }) {
   // Quien habla se ve de un vistazo: el logo cuando contesta la IA y la foto
   // de perfil cuando escribe la persona. Sin foto, sus iniciales.
@@ -165,6 +188,12 @@ export default function AsistenteBurbuja({ center, centers, setCenter, escondida
   const bottomRef = useRef(null)
   const fileInputRef = useRef(null)
   const sinCentro = !center || center === 'Todos'
+  const { pathname } = useLocation()
+  const enLista = PANTALLAS_DE_LISTA.test(pathname || '')
+  const tema = useTemaPanel()
+  /* En tinta y sin sombra (14-11-2026, ARREGLOS-5 N3): el cian es la acción principal de cada pantalla. De día y en
+     Mixto, tinta oscura sobre la página clara; de noche, la tinta clara de la casa. */
+  const tinta = tema === 'hibrido' ? 'bg-dark-950 text-dark-50 hover:bg-dark-900' : 'bg-dark-50 text-dark-950 hover:bg-dark-100'
 
   useEffect(() => {
     if (!abierto || sinCentro || cargado) return
@@ -265,7 +294,9 @@ export default function AsistenteBurbuja({ center, centers, setCenter, escondida
     // `sobreEscribir` (el Chat, 11-11-2026): en el móvil tapaba el botón de enviar; allí va más arriba, por encima de la
     // caja de escribir, y su ventana es igual de más baja para no salirse por arriba. En el ordenador, donde siempre.
     // `burbuja-asistente`: con una ventana del panel abierta (`.ventana`), index.css la esconde (M6, 14-11-2026).
-    <div className={`burbuja-asistente fixed ${sobreEscribir ? 'bottom-[calc(env(safe-area-inset-bottom,0px)_+_8.5rem)]' : 'bottom-[calc(env(safe-area-inset-bottom,0px)_+_4.25rem)]'} right-4 z-[95] flex-col items-end md:bottom-4 ${
+    <div data-testid="burbuja-asistente" data-lado={enLista ? 'izquierda' : 'derecha'}
+      className={`burbuja-asistente fixed ${sobreEscribir ? 'bottom-[calc(env(safe-area-inset-bottom,0px)_+_8.5rem)]' : 'bottom-[calc(env(safe-area-inset-bottom,0px)_+_4.25rem)]'} ${
+      enLista ? 'left-3 items-start md:left-[264px]' : 'right-4 items-end'} z-[95] flex-col md:bottom-4 ${
       escondida ? 'hidden' : 'flex'}`}>
       {abierto && (
         <div onPaste={pegarImagenes}
@@ -389,8 +420,8 @@ export default function AsistenteBurbuja({ center, centers, setCenter, escondida
 
       <button onClick={() => setAbierto((a) => !a)}
         title={MARCA.ia}
-        className={`relative flex h-12 w-12 items-center justify-center rounded-full shadow-2xl transition ${
-          abierto ? 'bg-dark-800 text-dark-200' : 'bg-brand-500 text-dark-950 hover:bg-brand-400'}`}>
+        className={`relative flex items-center justify-center rounded-full transition-colors ${enLista ? 'h-11 w-11' : 'h-12 w-12'} ${
+          abierto ? 'bg-dark-800 text-dark-200' : tinta}`}>
         {abierto ? <X size={20} /> : <Sparkles size={20} />}
       </button>
     </div>

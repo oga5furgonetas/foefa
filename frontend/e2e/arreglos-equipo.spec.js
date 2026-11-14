@@ -342,6 +342,8 @@ async function conductores(page, { previa, todos = false, generar } = {}) {
   })
   await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('Ana Pérez')).toBeVisible({ timeout: 15000 })
+  // Las contraseñas van plegadas en «Más opciones» desde el 14-11-2026 (ARREGLOS-5 N1): a un toque.
+  await page.getByTestId('mas-opciones').click()
   return { previas, aplicadas, claves }
 }
 
