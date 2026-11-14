@@ -5,7 +5,7 @@ import { useT } from '../../i18n'
 import { useEscape } from '../../lib/useEscape'
 import { crearAccesoConductor, quitarAccesoConductor } from '../api'
 import {
-  rutaRecordada, recordarRuta, olvidarRuta, enlaceCompleto, mensajeAcceso, urlWhatsApp, diaCorto, codigoDe, textoConCodigo,
+  rutaRecordada, recordarRuta, olvidarRuta, enlaceCompleto, mensajeAcceso, urlWhatsApp, diaCorto, diaSello, codigoDe, textoConCodigo,
 } from '../../lib/accesoConductor'
 
 /* «MANDAR SU ACCESO» (14-11-2026, CONTRATO-ALTA §1.3–1.5 y §3.4). Lo usan el arranque de una flota (papel) y la lista
@@ -17,7 +17,9 @@ import {
      entra»: otro navegador, datos borrados, otro móvil). Confirma antes, porque el anterior deja de valer.
    · Los porqués del servidor, por su `codigo` y en el idioma del panel (tercera tanda, A8 y A11).
    La ventana de WhatsApp se abre EN el toque y se le pone la dirección cuando llega el enlace: abrirla después de
-   esperar al servidor la bloquean los navegadores. */
+   esperar al servidor la bloquean los navegadores.
+   Lo que hace (crear, mandar, copiar, renovar, anular) vive en `useAcceso`: la espera de la primera revisión lo usa
+   para su «Mandar otra vez», sin repetir nada (cuarta tanda, C1). */
 
 export const ESTADOS_ACCESO = {
   sin_enlace: 'alta.acc.sinEnlace',
@@ -26,16 +28,22 @@ export const ESTADOS_ACCESO = {
   caducado: 'alta.acc.caducado',
 }
 
-export function textoEstado(t, acceso, idioma = 'es') {
+/** «Abierto el 14 nov». Con `sello`, el día como el sello de las fotos («Abierto el 14 NOV»): así lo dicen el arranque
+    y la ventana del acceso (cuarta tanda, C2 y C3); la lista de Conductores sigue con el de siempre. */
+export function textoEstado(t, acceso, idioma = 'es', { sello = false } = {}) {
   const e = acceso?.estado || 'sin_enlace'
-  return t(ESTADOS_ACCESO[e] || ESTADOS_ACCESO.sin_enlace).replace('{dia}', diaCorto(acceso?.abierto_dia, idioma))
+  const dia = sello ? diaSello(acceso?.abierto_dia, idioma) : diaCorto(acceso?.abierto_dia, idioma)
+  return t(ESTADOS_ACCESO[e] || ESTADOS_ACCESO.sin_enlace).replace('{dia}', dia)
 }
 
+/* El estado va en mono, en su línea y con su color: gris sin mandar, tinta con el enlace creado, verde abierto y ámbar
+   caducado (cuarta tanda, C3). */
 const ESTILO = {
   papel: {
-    estado: 'text-[14px] text-[color:var(--ld-muted)]',
-    abierto: 'text-[14px] font-semibold text-[color:var(--ld-ok)]',
-    caducado: 'text-[14px] font-semibold text-[color:var(--ld-mid)]',
+    estado: 'font-mono text-[13.5px] font-medium text-[color:var(--ld-muted)]',
+    pendiente: 'font-mono text-[13.5px] font-medium text-[color:var(--ld-text)]',
+    abierto: 'font-mono text-[13.5px] font-semibold text-[color:var(--ld-ok)]',
+    caducado: 'font-mono text-[13.5px] font-semibold text-[color:var(--ld-mid)]',
     principal: 'inline-flex h-10 items-center justify-center whitespace-nowrap rounded-[10px] bg-[color:var(--ld-text)] px-3.5 text-[14px] font-bold text-[color:var(--ld-bg)] disabled:opacity-60',
     secundario: 'inline-flex h-10 items-center justify-center whitespace-nowrap rounded-[10px] border-[1.5px] border-[color:var(--ld-border-strong)] px-3.5 text-[14px] font-bold text-[color:var(--ld-text)] hover:border-[color:var(--ld-text)] disabled:opacity-60',
     enlace: 'inline-flex min-h-[40px] items-center text-[14px] font-semibold text-[color:var(--ld-muted)] underline-offset-4 hover:underline',
@@ -46,9 +54,10 @@ const ESTILO = {
     confirmar: 'rounded-[12px] border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-surface)] p-3',
   },
   panel: {
-    estado: 'text-[13px] text-dark-400',
-    abierto: 'text-[13px] font-semibold text-emerald-300',
-    caducado: 'text-[13px] font-semibold text-amber-300',
+    estado: 'font-mono text-[13px] font-medium text-dark-400',
+    pendiente: 'font-mono text-[13px] font-medium text-dark-100',
+    abierto: 'font-mono text-[13px] font-semibold text-emerald-300',
+    caducado: 'font-mono text-[13px] font-semibold text-amber-300',
     principal: 'btn-primary inline-flex min-h-[40px] items-center justify-center px-3.5 text-[13.5px] disabled:opacity-60',
     secundario: 'btn-secondary inline-flex min-h-[40px] items-center justify-center px-3.5 text-[13.5px] disabled:opacity-60',
     enlace: 'inline-flex min-h-[40px] items-center text-[13px] font-semibold text-dark-400 hover:text-dark-200',
@@ -60,10 +69,15 @@ const ESTILO = {
   },
 }
 
-/** El estado de su enlace y lo que se puede hacer con él. `c`: una fila de GET /conductores/accesos. */
-export default function AccesoConductor({ c, empresa, onCambio, variante = 'papel', conQuitar = false }) {
-  const { t, lang } = useT()
+/** La clase del estado de un acceso, por variante («papel» o «panel»). */
+export function claseDeEstado(estado, variante = 'papel') {
   const s = ESTILO[variante] || ESTILO.papel
+  return estado === 'abierto' ? s.abierto : estado === 'caducado' ? s.caducado : estado === 'sin_abrir' ? s.pendiente : s.estado
+}
+
+/** Lo que se puede hacer con el enlace de un conductor. `c`: una fila de GET /conductores/accesos. */
+export function useAcceso(c, empresa, onCambio) {
+  const { t } = useT()
   const [ocupado, setOcupado] = useState('')
   const [error, setError] = useState('')
   const [confirmar, setConfirmar] = useState('')       // el mensaje del 409 «ya_abierto», mientras se decide
@@ -154,52 +168,63 @@ export default function AccesoConductor({ c, empresa, onCambio, variante = 'pape
     } catch (e) { fallo(e) } finally { setOcupado('') }
   }
 
-  const claseEstado = estado === 'abierto' ? s.abierto : estado === 'caducado' ? s.caducado : s.estado
-  const sinAbrirOlvidado = estado === 'sin_abrir' && !rutaRecordada(id)
+  return {
+    estado, id, ocupado, error, confirmar, setConfirmar, copiado, aMano,
+    mandar, copiar, renovar, confirmarRenovar, quitar,
+    sinAbrirOlvidado: estado === 'sin_abrir' && !rutaRecordada(id),
+  }
+}
+
+/** El estado de su enlace y lo que se puede hacer con él. `c`: una fila de GET /conductores/accesos. */
+export default function AccesoConductor({ c, empresa, onCambio, variante = 'papel', conQuitar = false }) {
+  const { t, lang } = useT()
+  const s = ESTILO[variante] || ESTILO.papel
+  const a = useAcceso(c, empresa, onCambio)
+  const { estado, id, ocupado } = a
 
   return (
     <div className="min-w-0" data-testid="acceso-conductor">
-      <p className={claseEstado} data-testid="acceso-estado">{textoEstado(t, c?.acceso, lang)}</p>
-      {confirmar ? (
+      <p className={claseDeEstado(estado, variante)} data-testid="acceso-estado" data-estado={estado}>{textoEstado(t, c?.acceso, lang, { sello: true })}</p>
+      {a.confirmar ? (
         <div className={`mt-2 ${s.confirmar}`} role="alertdialog" aria-label={t('alta.acc.renovar')}>
-          <p className={s.nota}>{confirmar}</p>
+          <p className={s.nota}>{a.confirmar}</p>
           <div className="mt-2.5 flex flex-wrap gap-2">
-            <button type="button" className={s.principal} disabled={!!ocupado} onClick={confirmarRenovar}>{t('alta.acc.renovarSi')}</button>
-            <button type="button" className={s.secundario} disabled={!!ocupado} onClick={() => setConfirmar('')}>{t('alta.cancelar')}</button>
+            <button type="button" className={s.principal} disabled={!!ocupado} onClick={a.confirmarRenovar}>{t('alta.acc.renovarSi')}</button>
+            <button type="button" className={s.secundario} disabled={!!ocupado} onClick={() => a.setConfirmar('')}>{t('alta.cancelar')}</button>
           </div>
         </div>
       ) : estado === 'abierto' ? (
         <>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-            <button type="button" className={s.discreto} disabled={!!ocupado} onClick={renovar}>{t('alta.acc.renovar')}</button>
-            {conQuitar && <button type="button" className={s.enlace} disabled={!!ocupado} onClick={quitar}>{t('alta.acc.quitar')}</button>}
+            <button type="button" className={s.discreto} disabled={!!ocupado} onClick={a.renovar}>{t('alta.acc.renovar')}</button>
+            {conQuitar && <button type="button" className={s.enlace} disabled={!!ocupado} onClick={a.quitar}>{t('alta.acc.quitar')}</button>}
           </div>
           <p className={`mt-1 ${s.nota}`} data-testid="acceso-pista">{t('alta.acc.noEntra')}</p>
         </>
       ) : (
         <>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <button type="button" className={s.principal} disabled={!!ocupado} onClick={() => mandar(false)}>
+            <button type="button" className={s.principal} disabled={!!ocupado} onClick={() => a.mandar(false)}>
               {ocupado === 'wa' ? t('alta.acc.creando') : t('alta.acc.whatsapp')}
             </button>
-            <button type="button" className={s.secundario} disabled={!!ocupado} onClick={() => copiar(false)}>
-              {copiado ? t('alta.acc.copiado') : t('alta.acc.copiar')}
+            <button type="button" className={s.secundario} disabled={!!ocupado} onClick={() => a.copiar(false)}>
+              {a.copiado ? t('alta.acc.copiado') : t('alta.acc.copiar')}
             </button>
             {conQuitar && estado === 'sin_abrir' && (
-              <button type="button" className={s.enlace} disabled={!!ocupado} onClick={quitar}>{t('alta.acc.quitar')}</button>
+              <button type="button" className={s.enlace} disabled={!!ocupado} onClick={a.quitar}>{t('alta.acc.quitar')}</button>
             )}
           </div>
           {!c?.whatsapp && <p className={`mt-1.5 ${s.nota}`}>{t('alta.acc.sinMovil')}</p>}
-          {sinAbrirOlvidado && <p className={`mt-1.5 ${s.nota}`}>{t('alta.acc.otraVez')}</p>}
+          {a.sinAbrirOlvidado && <p className={`mt-1.5 ${s.nota}`}>{t('alta.acc.otraVez')}</p>}
         </>
       )}
-      {aMano && (
+      {a.aMano && (
         <div className="mt-2">
           <label className={s.nota} htmlFor={`enlace-${id}`}>{t('alta.acc.copialoTu')}</label>
-          <input id={`enlace-${id}`} readOnly value={aMano} onFocus={(e) => e.target.select()} className={`mt-1 ${s.caja}`} />
+          <input id={`enlace-${id}`} readOnly value={a.aMano} onFocus={(e) => e.target.select()} className={`mt-1 ${s.caja}`} />
         </div>
       )}
-      {error && <p role="alert" className={`mt-2 ${s.error}`}>{error}</p>}
+      {a.error && <p role="alert" className={`mt-2 ${s.error}`}>{a.error}</p>}
     </div>
   )
 }
@@ -208,6 +233,7 @@ export default function AccesoConductor({ c, empresa, onCambio, variante = 'pape
 export function DialogoAcceso({ c, empresa, onCambio, onCerrar }) {
   const { t } = useT()
   useEscape(onCerrar)
+  const titulo = t('alta.acc.titulo').replace('{nombre}', c.nombre)
   /* Opaca y por ENCIMA de todo (tercera tanda, A11): con `.card` (medio transparente) se leía la lista a través, y dentro
      del contenido del panel la barra de abajo del móvil (z-40) y el botón del asistente (z-95) le tapaban la última
      línea y «Anular el enlace». Va a `body` con un portal, así ningún contexto de apilado de la página la deja debajo,
@@ -218,17 +244,19 @@ export function DialogoAcceso({ c, empresa, onCambio, onCerrar }) {
         className="max-h-[90dvh] w-full max-w-md overflow-y-auto ventana rounded-t-2xl p-5 sm:rounded-2xl"
         style={{ paddingBottom: 'max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))' }}
         onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-[16px] font-semibold text-dark-50">{t('alta.acc.titulo').replace('{nombre}', c.nombre)}</h2>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-dark-400">{t('alta.acc.explica')}</p>
-          </div>
+        {/* Dentro (cuarta tanda, C3): el título a la altura de la X, centrado con ella; debajo, la explicación a todo el
+            ancho; y el estado en mono, en su propia línea, tras una regla fina. */}
+        <div className="-mr-2 -mt-1.5 flex min-h-[40px] items-center justify-between gap-3" data-testid="acceso-cabecera">
+          <h2 className="min-w-0 text-[17px] font-semibold leading-snug text-dark-50">{titulo}</h2>
           <button type="button" onClick={onCerrar} aria-label={t('alta.cerrar')}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-dark-400 hover:bg-dark-800 hover:text-dark-100">
-            <X size={16} />
+            <X size={18} />
           </button>
         </div>
-        <AccesoConductor c={c} empresa={empresa} onCambio={onCambio} variante="panel" conQuitar />
+        <p className="mt-1.5 text-[13px] leading-relaxed text-dark-400">{t('alta.acc.explica')}</p>
+        <div className="mt-4 border-t border-dark-800 pt-4">
+          <AccesoConductor c={c} empresa={empresa} onCambio={onCambio} variante="panel" conQuitar />
+        </div>
       </div>
     </div>,
     document.body,
