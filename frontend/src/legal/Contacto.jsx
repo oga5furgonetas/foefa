@@ -7,7 +7,13 @@ import { COMPANY } from './config'
 import { API_BASE } from '../services/api'
 
 export default function Contacto() {
-  const [form, setForm] = useState({ name: '', company: '', email: '', subject: '', message: '' })
+  // El asunto puede llegar puesto en el enlace (?asunto=…): «Enterprise», «Peritaje» o «Activar plan Pro» desde el aviso
+  // de la prueba del panel (14-11-2026). Hasta ahora el parámetro se mandaba pero aquí no se leía.
+  const [form, setForm] = useState(() => {
+    let subject = ''
+    try { subject = (new URLSearchParams(window.location.search).get('asunto') || '').slice(0, 120) } catch { /* sin URL */ }
+    return { name: '', company: '', email: '', subject, message: '' }
+  })
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
   const [err, setErr] = useState('')
