@@ -510,16 +510,6 @@ export default function PanelLayout() {
           .then((r) => { if (vivo) setWsSinLeer(r.data?.no_leidas || 0) })
           .catch(() => {})
       }
-      // El repaso de hoy (14-11-2026): solo quien puede abrirlo. La propia pantalla lo pone al día al decidir cada lado.
-      if (canSee('repaso') && moduloOk('repaso')) {
-        // Solo el número (/repaso/pendientes = sin_repasar + a_medias de hoy), no el día entero.
-        getRepasoPendientes(center)
-          .then((r) => {
-            const n = r.data?.pendientes
-            if (vivo && typeof n === 'number') setRepasoPend(n)
-          })
-          .catch(() => {})
-      }
     }
     mirar()
     const id = setInterval(mirar, 120000)
@@ -529,7 +519,40 @@ export default function PanelLayout() {
       clearInterval(id)
       document.removeEventListener('visibilitychange', mirar)
     }
-  }, [center]) // eslint-disable-line react-hooks/exhaustive-deps -- `moduloOk` se lee en cada latido; no es motivo para volver a empezar
+  }, [center])
+
+  /* EL NÚMERO DE «REPASO» (14-11-2026), con su propio latido: solo para quien puede abrir esa pantalla, y no antes de
+     saberlo. Mientras `/org/billing` no ha llegado, `modulos` es undefined y `moduloOk` dice que sí a todo (para que
+     el menú no parpadee); por eso aquí se espera a tener la respuesta. Si la empresa no tiene el módulo, o esta
+     persona no lo tiene entre sus permisos (que se refrescan solos, ver abajo), no se pide nada y el número se va.
+     Cuando cambia cualquiera de las dos cosas, el latido se para o vuelve a empezar; al salir del panel, se para.
+     Los permisos también se esperan: los del inicio de sesión pueden ser viejos, y los de verdad llegan con la primera
+     respuesta de /auth/me (`permisosSabidos`, lo pone el efecto de «Permisos frescos», haya ido bien o mal). */
+  const [permisosSabidos, setPermisosSabidos] = useState(false)
+  const puedeRepaso = !!billing && permisosSabidos && moduloOk('repaso') && canSee('repaso')
+  useEffect(() => {
+    if (!puedeRepaso || !isAuthed()) { setRepasoPend(0); return undefined }
+    let vivo = true
+    const mirar = () => {
+      if (!vivo || !isAuthed() || document.hidden) return
+      // Solo el número (/repaso/pendientes = sin_repasar + a_medias de hoy), no el día entero. La propia pantalla
+      // lo pone al día al decidir cada lado. Si falla, se deja el último número bueno.
+      getRepasoPendientes(center)
+        .then((r) => {
+          const n = r.data?.pendientes
+          if (vivo && typeof n === 'number') setRepasoPend(n)
+        })
+        .catch(() => {})
+    }
+    mirar()
+    const id = setInterval(mirar, 120000)
+    document.addEventListener('visibilitychange', mirar)
+    return () => {
+      vivo = false
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', mirar)
+    }
+  }, [center, puedeRepaso])
 
   /* Permisos frescos al abrir el panel.
 
@@ -561,6 +584,7 @@ export default function PanelLayout() {
           if (cambio) setAccesoTick((n) => n + 1)
         })
         .catch(() => {})
+        .finally(() => { if (vivo) setPermisosSabidos(true) })
     }
     mirar()
     /* NO SOLO AL ABRIR. Antes esto corria una vez al montar el panel, asi que

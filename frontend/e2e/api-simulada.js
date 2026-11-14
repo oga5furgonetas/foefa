@@ -54,7 +54,8 @@ function repasoEscritura(metodo, ruta, cuerpo) {
   }
   const v = cuerpo?.veredicto
   const golpe = v !== 'golpe' ? null : {
-    golpe_id: `golpe-simulado-${rev.id}-${k}`, pieza: cuerpo.part,
+    // La pieza va por su clave (CONTRATO, R1 y R2): con una clave de la lista, el nombre es el de la lista.
+    golpe_id: `golpe-simulado-${rev.id}-${k}`, pieza: cuerpo.part, pieza_clave: cuerpo.pieza_clave ?? null,
     // El servidor lo saca con _canon_panel; aquí basta la primera palabra de la pieza.
     panel: String(cuerpo.part || '').split(' ')[0].toLowerCase() || null,
     gravedad: cuerpo.severity, descripcion: cuerpo.description || null, box_2d: cuerpo.box_2d,
@@ -63,7 +64,7 @@ function repasoEscritura(metodo, ruta, cuerpo) {
   return { status: 200, body: {
     ok: true, inspection_id: rev.id,
     lado: { ...lado, veredicto: v, veredicto_por: 'Admin Test', veredicto_at: new Date().toISOString(), golpe },
-    libro: golpe ? { accion: 'nuevo', ledger_id: null, pieza: golpe.pieza, panel: golpe.panel, desde: REPASO_DIA.fecha, golpe_id: golpe.golpe_id } : null,
+    libro: golpe ? { accion: 'nuevo', ledger_id: null, pieza: golpe.pieza, pieza_clave: golpe.pieza_clave, panel: golpe.panel, desde: REPASO_DIA.fecha, golpe_id: golpe.golpe_id } : null,
     estado: estado(decididos + 1), cuentas_revision: cuentas(decididos + 1, golpesOtros + (golpe ? 1 : 0)),
   } }
 }

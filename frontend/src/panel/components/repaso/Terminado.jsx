@@ -1,6 +1,6 @@
 import { ChevronRight } from 'lucide-react'
 import Matricula from '../../../components/Matricula'
-import { nombreLado } from './logica'
+import { nombreLado, nombrePieza } from './logica'
 
 /* «REPASO TERMINADO» (14-11-2026): las cuentas del día y los golpes nuevos, cada uno con un enlace a su revisión para
    volver a mirarlo. Sale cuando no queda ningún lado por decidir. */
@@ -9,7 +9,9 @@ export default function Terminado({ t, esHoy, cuentas, golpes, onAbrir, onRevisa
     <section className="rounded-xl border border-dark-700 bg-dark-900 p-5 md:p-7" data-testid="terminado">
       <h2 className="text-[26px] font-extrabold leading-tight tracking-[-0.03em] text-dark-50">{t('repaso.fin.tit')}</h2>
       <p className="mt-1.5 text-[15px] text-dark-300">
-        {(esHoy ? t('repaso.fin.texto.hoy') : t('repaso.fin.texto.dia')).replace('{n}', String(cuentas.revisiones))}
+        {cuentas.revisiones === 1
+          ? t(esHoy ? 'repaso.fin.texto.hoy.una' : 'repaso.fin.texto.dia.una')
+          : t(esHoy ? 'repaso.fin.texto.hoy' : 'repaso.fin.texto.dia').replace('{n}', String(cuentas.revisiones))}
       </p>
 
       <dl className="mt-5 grid grid-cols-3 border-t-[1.5px] border-dark-50">
@@ -36,7 +38,7 @@ export default function Terminado({ t, esHoy, cuentas, golpes, onAbrir, onRevisa
                 className="flex w-full items-center gap-3 py-3 text-left hover:bg-dark-800/60">
                 <Matricula texto={rev.vehiculo?.matricula} className="shrink-0 text-[13px]" />
                 <span className="min-w-0 flex-1">
-                  <b className="block truncate text-[14.5px] font-semibold text-dark-50">{lado.golpe?.pieza || nombreLado(t, lado)}</b>
+                  <b className="block truncate text-[14.5px] font-semibold text-dark-50">{nombrePieza(t, lado.golpe?.pieza_clave, lado.golpe?.pieza) || nombreLado(t, lado)}</b>
                   <span className="block text-[12.5px] text-dark-400">
                     {nombreLado(t, lado)}{lado.golpe?.gravedad ? ` · ${t(`repaso.grav.${lado.golpe.gravedad}`)}` : ''}
                   </span>

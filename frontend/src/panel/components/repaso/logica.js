@@ -16,8 +16,12 @@ export const nombreLado = (t, lado) => (CLAVE_VISTA[lado?.vista]
   ? t(CLAVE_VISTA[lado.vista])
   : t('repaso.vista.foto').replace('{n}', String(lado?.photo_index ?? '')))
 
-/* LAS PIEZAS QUE SE SUGIEREN SEGÚN EL LADO. El valor va en español a propósito: el servidor decide a qué pieza del
-   libro va cada golpe leyendo el texto (`_canon_panel`) y solo entiende el español. Lo que se enseña es la traducción. */
+/* LAS PIEZAS QUE SE SUGIEREN SEGÚN EL LADO. La pieza viaja por su CLAVE (`pieza_clave`, CONTRATO «Correcciones tras
+   la revisión», R1): el servidor tiene esta misma lista y una prueba suya comprueba que coincide con la de aquí. El
+   nombre en español va también, en `part`, para un servidor que aún no conozca las claves; lo que se enseña en pantalla
+   es siempre la traducción de la clave (`repaso.p.<clave>`). «Otra pieza» (`otra`) lleva el texto que escriba la
+   persona, tal cual. */
+export const PIEZA_OTRA = 'otra'
 export const PIEZAS = {
   paragolpes_del: 'Paragolpes delantero',
   capo: 'Capó',
@@ -187,12 +191,74 @@ export function conLado(dia, revId, lado) {
   }
 }
 
-// Lo que se manda al servidor: la pieza en español si salió de una sugerencia (ver PIEZAS), si no lo escrito.
+/* El nombre de una pieza tal como se enseña: el de su clave en el idioma de quien mira; si no tiene clave (golpes de
+   antes, de «Revisión rápida» o «Otra pieza»), el texto que se guardó, tal cual. */
+export function nombrePieza(t, clave, pieza) {
+  if (clave && clave !== PIEZA_OTRA && Object.prototype.hasOwnProperty.call(PIEZAS, clave)) return t(`repaso.p.${clave}`)
+  return pieza || ''
+}
+
+// ¿Está lo que pide el formulario del golpe? Devuelve la clave del texto de lo que falta, o '' si está todo.
+export function faltaEnGolpe(valor, { sinFoto = false } = {}) {
+  if (sinFoto) return 'repaso.golpe.falta.foto'
+  if (!valor.caja) return 'repaso.golpe.falta.caja'
+  if (!valor.piezaClave || (valor.piezaClave === PIEZA_OTRA && !valor.pieza.trim())) return 'repaso.golpe.falta.pieza'
+  if (!valor.gravedad) return 'repaso.golpe.falta.gravedad'
+  return ''
+}
+
+// Lo que se manda al servidor: la clave de la pieza y su nombre en español, o «otra» con lo que se escribió.
 export function cuerpoGolpe(photoIndex, valor) {
-  const part = valor.piezaClave ? PIEZAS[valor.piezaClave] : valor.pieza.trim()
+  const otra = valor.piezaClave === PIEZA_OTRA
+  const part = otra ? valor.pieza.trim() : PIEZAS[valor.piezaClave]
   const nota = valor.nota.trim()
   return {
-    photo_index: photoIndex, veredicto: 'golpe', part, severity: valor.gravedad, box_2d: valor.caja,
-    ...(nota ? { description: nota } : {}),
+    photo_index: photoIndex, veredicto: 'golpe', pieza_clave: valor.piezaClave, part, severity: valor.gravedad,
+    box_2d: valor.caja, ...(nota ? { description: nota } : {}),
   }
+}
+
+/* LOS ERRORES DEL SERVIDOR, EN EL IDIOMA DE QUIEN MIRA. El servidor contesta en español (`{"detail": "…"}`) y sus
+   mensajes de estas rutas son pocos y fijos (CONTRATO §A, §B.1, §B.2 y R1): cada uno, por su código y su texto, tiene
+   aquí su clave. Uno que no esté en la lista se enseña tal cual, como último recurso. Los que solo pueden salir de un
+   fallo de la propia pantalla (un número mal formado, un veredicto que no existe) se dicen todos igual. */
+const ERRORES = {
+  400: {
+    'La fecha tiene que ser AAAA-MM-DD': 'repaso.err.peticion',
+    'Ese día todavía no ha llegado': 'repaso.err.futuro',
+    'Código de centro inválido': 'repaso.err.peticion',
+    'Falta photo_index': 'repaso.err.peticion',
+    'photo_index debe ser un numero': 'repaso.err.peticion',
+    'El veredicto tiene que ser igual, golpe o no_se_ve': 'repaso.err.peticion',
+    'La gravedad tiene que ser leve, moderado, grave o critico': 'repaso.err.peticion',
+    'Esa foto no es de la carrocería': 'repaso.err.nocarroceria',
+    'Indica la pieza': 'repaso.golpe.falta.pieza',
+    'Esa pieza no es de la carrocería: elige otra': 'repaso.err.piezanocarroceria',
+    'Esa pieza no está en la lista': 'repaso.err.piezanolista',
+    'Dibuja la caja del golpe en la foto': 'repaso.golpe.falta.caja',
+  },
+  403: {
+    'Acceso restringido a administradores': 'repaso.err.soloadmin',
+    'No tienes acceso a ese centro': 'repaso.err.centro',
+    'No tienes acceso a esa revisión': 'repaso.err.revision',
+  },
+  404: {
+    'Revisión no encontrada': 'repaso.err.norevision',
+    'Ese lado no tiene veredicto': 'repaso.err.deshacer.yano',
+  },
+  409: {
+    'Ese lado ya tiene veredicto. Deshazlo antes de cambiarlo.': 'repaso.err.yadecidido',
+    'Ese golpe ya está en el taller o reparado: no se puede deshacer desde aquí.': 'repaso.err.deshacer.taller',
+  },
+  500: {
+    'No se ha podido guardar el golpe. No ha quedado nada a medias: vuelve a marcarlo.': 'repaso.err.golpe500',
+  },
+}
+export function textoDeError(t, e) {
+  if (!e?.response) return e?.code === 'ECONNABORTED' ? t('repaso.err.lento') : t('repaso.err.red')
+  const d = e.response.data?.detail
+  const texto = typeof d === 'string' ? d.trim() : ''
+  const clave = ERRORES[e.response.status]?.[texto]
+  if (clave) return t(clave)
+  return texto || t('repaso.err.servidor')
 }

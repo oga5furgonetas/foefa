@@ -1,18 +1,35 @@
+import { useState } from 'react'
 import Matricula from '../../../components/Matricula'
-import { fechaLarga } from './logica'
+import { fechaLarga, nombrePieza } from './logica'
 
 /* LA COLUMNA DE LA DERECHA DEL REPASO (debajo en el móvil), 14-11-2026.
    Arriba, lo que ya está apuntado en la furgoneta que se mira (golpes confirmados por una persona y sin reparar), para
    no marcar dos veces el mismo golpe. Abajo, las cuentas del día y las furgonetas activas que no tienen revisión. */
 
+/* La foto del golpe, pequeña y entera (la caja tiene que caer sobre el golpe: recortarla la movería). El hueco es fijo
+   para que la lista no baile; la foto va contenida en él, sobre fondo oscuro. */
 function Miniatura({ url, caja }) {
-  if (!url) return <span className="block h-14 w-[76px] shrink-0 rounded-md bg-dark-800" aria-hidden="true" />
+  const [fallo, setFallo] = useState(false)
+  const [nat, setNat] = useState(null)
+  if (!url || fallo) return <span className="block h-[60px] w-20 shrink-0 rounded-md bg-dark-800" aria-hidden="true" />
+  // Dónde cae la imagen dentro del hueco de 80 × 60.
+  let r = { left: 0, top: 0, width: 80, height: 60 }
+  if (nat?.w && nat?.h) {
+    const k = Math.min(80 / nat.w, 60 / nat.h)
+    r = { width: nat.w * k, height: nat.h * k }
+    r.left = (80 - r.width) / 2
+    r.top = (60 - r.height) / 2
+  }
   return (
-    <span className="relative block h-14 w-[76px] shrink-0 overflow-hidden rounded-md bg-dark-800">
-      <img src={url} alt="" className="h-full w-full object-cover" draggable={false} />
-      {caja && caja.length === 4 && (
-        <span className="absolute rounded border-2 border-[#d92d20]"
-          style={{ top: `${caja[0] / 10}%`, left: `${caja[1] / 10}%`, height: `${(caja[2] - caja[0]) / 10}%`, width: `${(caja[3] - caja[1]) / 10}%` }} />
+    <span className="relative block h-[60px] w-20 shrink-0 overflow-hidden rounded-md bg-[#10181a]" data-testid="miniatura">
+      <img src={url} alt="" className="absolute inset-0 h-full w-full object-contain" draggable={false}
+        onLoad={(e) => setNat({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+        onError={() => setFallo(true)} />
+      {nat && caja && caja.length === 4 && (
+        <span className="absolute" style={r}>
+          <span className="absolute rounded-sm border-2 border-[#d92d20]" data-testid="miniatura-caja"
+            style={{ top: `${caja[0] / 10}%`, left: `${caja[1] / 10}%`, height: `${(caja[2] - caja[0]) / 10}%`, width: `${(caja[3] - caja[1]) / 10}%` }} />
+        </span>
       )}
     </span>
   )
@@ -28,12 +45,13 @@ export function YaApuntado({ t, locale, lista, miniatura }) {
       ) : (
         <ul className="mt-2" data-testid="ya-apuntado">
           {lista.map((a, i) => {
-            const m = miniatura(a)
+            // La foto que trae el servidor; si no la trae (uno viejo), la que esté en pantalla.
+            const m = a.foto_url ? { url: a.foto_url, caja: a.box_2d || null } : miniatura(a)
             return (
               <li key={a.golpe_id || a.ledger_id || `${a.panel}-${i}`} className="flex gap-3 border-t border-dark-700 py-3 first:border-t-0">
-                <Miniatura url={m?.url} caja={m?.caja} />
+                <Miniatura key={m?.url || 'sin'} url={m?.url} caja={m?.caja} />
                 <div className="min-w-0">
-                  <b className="block text-[14.5px] font-semibold leading-snug text-dark-50">{a.pieza || a.panel}</b>
+                  <b className="block text-[14.5px] font-semibold leading-snug text-dark-50">{nombrePieza(t, a.pieza_clave, a.pieza) || a.panel}</b>
                   <span className="mt-0.5 block text-[12.5px] text-dark-400">
                     {a.desde ? t('repaso.lat.desde').replace('{fecha}', fechaLarga(a.desde, locale, false)) : ''}
                     {a.gravedad ? `${a.desde ? ' · ' : ''}${t(`repaso.grav.${a.gravedad}`)}` : ''}

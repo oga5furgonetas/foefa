@@ -165,6 +165,16 @@ export const AYUDA = {
     ],
     ojo: 'Las que ya están en el taller no se mandan otra vez. La nota sale de las inspecciones: sin una reciente, «sin datos».',
   },
+  repaso: {
+    que: 'Enterarte del golpe el mismo día que aparece: la foto de hoy de cada lado junto a la anterior del mismo lado, y decides tú.',
+    pasos: [
+      'Ábrelo por la tarde, cuando han llegado las revisiones del día. El número del menú dice cuántas quedan.',
+      'Mira las dos fotos y contesta: «Está igual», «Hay un golpe nuevo» o «No se ve bien». Pasa sola al lado siguiente.',
+      'Si hay golpe, dibuja una caja sobre él en la foto de hoy, elige la pieza y la gravedad, y guárdalo.',
+      'Desde el ordenador va más rápido con el teclado: → está igual, G golpe, N no se ve, Z ampliar.',
+    ],
+    ojo: 'En el expediente de la furgoneta solo salen golpes confirmados por una persona, y estos son los de aquí. Mira «Ya apuntado» antes de marcar un golpe: si ya está, no lo apuntes dos veces. Si te equivocas, «Deshacer» lo quita todo mientras el golpe no esté en el taller ni reparado.',
+  },
   revision: {
     que: 'Confirmar o descartar lo que la IA marca en las fotos. Se equivoca a menudo: decide una persona.',
     pasos: [

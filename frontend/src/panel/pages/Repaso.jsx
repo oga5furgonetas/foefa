@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { Check, ChevronLeft, ChevronRight, EyeOff, Loader2, Undo2 } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Columns2, EyeOff, Loader2, SquareSplitHorizontal, Undo2 } from 'lucide-react'
 import { useT, LANG_LOCALE } from '../../i18n'
 import { getRepasoDia, marcarRepaso, deshacerRepaso } from '../../services/api'
 import Matricula from '../../components/Matricula'
@@ -10,8 +10,8 @@ import FormGolpe from '../components/repaso/FormGolpe'
 import Terminado from '../components/repaso/Terminado'
 import { YaApuntado, ResumenDia } from '../components/repaso/Lateral'
 import {
-  nombreLado, porRepasar, cuentasDelDia, golpesNuevosDelDia, siguienteFoco, primerFoco, ladoVecino,
-  fechaDeSello, sumarDias, fechaLarga, horaDe, hoyLocal, conLado, cuerpoGolpe,
+  nombreLado, nombrePieza, porRepasar, cuentasDelDia, golpesNuevosDelDia, siguienteFoco, primerFoco, ladoVecino,
+  fechaDeSello, sumarDias, fechaLarga, horaDe, hoyLocal, conLado, cuerpoGolpe, textoDeError,
 } from '../components/repaso/logica'
 
 /* EL REPASO DEL DÍA (14-11-2026, «Antes del perito»).
@@ -20,17 +20,20 @@ import {
    de hoy junto a la anterior del mismo lado, y decide él (nadie más) si está igual, si hay un golpe nuevo o si la foto
    no deja verlo. Un toque o una tecla por lado; con 48 furgonetas tiene que salir en unos minutos.
    Lo que se decide aquí es lo único que sale en el expediente de la furgoneta: por eso aquí no hay nada automático.
-   El servidor: `GET /repaso/dia`, `POST` y `DELETE /inspections/{id}/repaso` (CONTRATO «Antes del perito», §A y §B). */
+   El servidor: `GET /repaso/dia`, `POST` y `DELETE /inspections/{id}/repaso` (CONTRATO «Antes del perito», §A y §B).
+
+   Mientras se guarda un veredicto se puede seguir mirando (otro lado, otra furgoneta, otro día): la respuesta solo
+   mueve la pantalla si quien repasa sigue donde pulsó, y si ya está en otro día no toca ese día: dice que se guardó. */
 
 const MODO = 'repaso_modo'
 const leerModo = () => { try { return localStorage.getItem(MODO) === 'deslizador' ? 'deslizador' : 'juntas' } catch { return 'juntas' } }
 const GOLPE_VACIO = { caja: null, pieza: '', piezaClave: null, gravedad: null, nota: '' }
-
-function textoDeError(t, e) {
-  if (!e?.response) return e?.code === 'ECONNABORTED' ? t('repaso.err.lento') : t('repaso.err.red')
-  const d = e.response.data?.detail
-  return typeof d === 'string' && d ? d : t('repaso.err.servidor')
-}
+const conAlgo = (g) => !!g && !!(g.caja || g.piezaClave || g.pieza.trim() || g.gravedad || g.nota.trim())
+// Lo marcado en un lado, en palabras: en un lado sin foto anterior, «igual» es «sin golpes a la vista».
+const textoEstado = (t, veredicto, sinAnterior) => (!veredicto ? t('repaso.est.sinver')
+  : veredicto === 'igual' && sinAnterior ? t('repaso.est.singolpes') : t(`repaso.est.${veredicto}`))
+// Con el foco en un control, las teclas son suyas (una pestaña, un botón, un enlace); salvo donde se diga lo contrario.
+const ES_CONTROL = 'button, a[href], select, summary, [role="tab"], [role="tablist"], [role="button"], [role="slider"]'
 
 function Tecla({ k, children }) {
   return (
@@ -63,13 +66,22 @@ export default function Repaso() {
   const [foco, setFoco] = useState(null)            // { r: id de revisión, k: photo_index } | null
   const [modo, setModo] = useState(leerModo)
   const [golpe, setGolpe] = useState(null)          // el golpe que se está apuntando, o null
+  const [borrador, setBorrador] = useState(null)    // { r, k, valor }: lo apuntado de un golpe que se cerró sin guardar
   const [ampliada, setAmpliada] = useState(false)
   const [ocupado, setOcupado] = useState(false)
   const [aviso, setAviso] = useState(null)          // { tono: 'error' | 'info', texto }
   const [pila, setPila] = useState([])              // lo decidido en esta sesión, para «Deshacer»
+  const [rotas, setRotas] = useState(() => new Set())   // las fotos que no han cargado (por su dirección)
   const diaRef = useRef(null)
   diaRef.current = dia
+  const focoRef = useRef(null)
+  focoRef.current = foco
+  // El día que se está mirando: cambia justo cuando se pide otro día u otro centro.
+  const claveRef = useRef('')
+  claveRef.current = `${fecha || ''}|${center}`
   const pedida = useRef(0)
+  const mesaRef = useRef(null)
+  const lista = useRef(null)
 
   const cargar = useCallback((silencio = false) => {
     const n = ++pedida.current
@@ -96,7 +108,7 @@ export default function Repaso() {
   }, [fecha, center, t])
 
   useEffect(() => {
-    setGolpe(null); setAmpliada(false); setAviso(null); setPila([]); setDia(null); setFoco(null)
+    setGolpe(null); setBorrador(null); setAmpliada(false); setAviso(null); setPila([]); setDia(null); setFoco(null)
     cargar()
   }, [cargar])
 
@@ -112,6 +124,8 @@ export default function Repaso() {
   const lado = rev ? rev.lados.find((l) => l.photo_index === foco.k) || null : null
   const conLados = revs.filter((r) => r.lados?.length)
   const esHoy = !!dia?.es_hoy
+  // Sin la foto de hoy no hay dónde dibujar la caja de un golpe.
+  const hoyRota = !!lado && (!lado.foto_url || rotas.has(lado.foto_url))
 
   // Lo que se enseña de cada foto: la de hoy con la fecha del día y la hora de llegada; la anterior, con la suya.
   const fotoHoy = rev && dia ? { fecha: fechaDeSello(dia.fecha, rev.hora, rev.recibida_at), quien: rev.conductor?.nombre || '' } : null
@@ -132,17 +146,29 @@ export default function Repaso() {
     }
   }, [dia, foco]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const irA = (r, k) => { setGolpe(null); setAmpliada(false); setFoco({ r, k }) }
+  // Tras decidir, el foco del teclado vuelve a la mesa (si estaba en ella o en ninguna parte), para seguir con teclas.
+  const enfocarMesa = () => {
+    const a = document.activeElement
+    if (!a || a === document.body || mesaRef.current?.contains(a)) mesaRef.current?.focus({ preventScroll: true })
+  }
 
-  function aplicarRespuesta(revId, ladoNuevo, libro) {
-    let d = conLado(diaRef.current, revId, ladoNuevo)
+  // Lo apuntado de un golpe sin guardar no se pierde al irse a otro lado: queda como borrador de su lado.
+  const apartarGolpe = () => {
+    if (golpe && conAlgo(golpe) && focoRef.current) setBorrador({ ...focoRef.current, valor: golpe })
+    setGolpe(null)
+  }
+  const irA = (r, k) => { apartarGolpe(); setAmpliada(false); setFoco({ r, k }) }
+
+  function aplicarRespuesta(d0, revId, ladoNuevo, libro) {
+    let d = conLado(d0, revId, ladoNuevo)
     const r = d.revisiones.find((x) => x.id === revId)
     const g = ladoNuevo.golpe
     // El golpe recién apuntado entra en «Ya apuntado» de esa furgoneta (en todas sus revisiones del día).
     if (g && libro && (libro.accion === 'nuevo' || libro.accion === 'sustituye_ia')) {
       const entrada = {
-        ledger_id: libro.ledger_id ?? null, golpe_id: g.golpe_id, pieza: g.pieza, panel: g.panel, gravedad: g.gravedad,
-        desde: d.fecha, inspection_id: revId, vista: ladoNuevo.vista, origen: 'repaso', en_taller: false, de_esta_revision: true,
+        ledger_id: libro.ledger_id ?? null, golpe_id: g.golpe_id, pieza: g.pieza, pieza_clave: g.pieza_clave ?? null,
+        panel: g.panel, gravedad: g.gravedad, desde: d.fecha, inspection_id: revId, vista: ladoNuevo.vista,
+        origen: 'repaso', en_taller: false, de_esta_revision: true, foto_url: ladoNuevo.foto_url ?? null, box_2d: g.box_2d ?? null,
       }
       d = { ...d, revisiones: d.revisiones.map((x) => (x.vehiculo?.id !== r?.vehiculo?.id ? x : {
         ...x, ya_apuntado: [entrada, ...(x.ya_apuntado || []).filter((a) => a.golpe_id !== g.golpe_id)],
@@ -153,24 +179,42 @@ export default function Repaso() {
 
   async function responder(veredicto, cuerpo = null) {
     if (!rev || !lado || ocupado) return
-    setOcupado(true); setAviso(null)
+    const clave = claveRef.current
     const desde = { r: rev.id, k: lado.photo_index }
+    const sinAnterior = !lado.anterior
+    const quePone = { matricula: rev.vehiculo?.matricula, lado: nombreLado(t, lado) }
+    setOcupado(true); setAviso(null)
     try {
       const res = await marcarRepaso(rev.id, cuerpo || { photo_index: lado.photo_index, veredicto })
       const nuevo = res.data?.lado || { veredicto }
       const libro = res.data?.libro || null
-      const d = aplicarRespuesta(rev.id, { ...nuevo, photo_index: lado.photo_index }, libro)
-      setDia(d)
-      setPila((p) => [...p, { r: rev.id, k: lado.photo_index, veredicto: nuevo.veredicto || veredicto, matricula: rev.vehiculo?.matricula, lado: nombreLado(t, lado) }])
-      if (libro?.accion === 'ya_apuntado') {
-        setAviso({ tono: 'info', texto: t('repaso.libro.yaapuntado').replace('{fecha}', libro.desde ? fechaLarga(libro.desde, locale, false) : '—') })
+      const v = nuevo.veredicto || veredicto
+      const d0 = diaRef.current
+      // Quien repasa ya está en otro día (o en otro centro): ese día no se toca; se dice que lo de antes se guardó.
+      if (claveRef.current !== clave || !d0) {
+        setAviso({ tono: 'info', texto: t('repaso.guardado.otrodia').replace('{lado}', quePone.lado)
+          .replace('{matricula}', quePone.matricula || '—').replace('{veredicto}', textoEstado(t, v, sinAnterior)) })
+        return
       }
-      setGolpe(null); setAmpliada(false)
-      setFoco(siguienteFoco(d.revisiones, desde))
+      const d = aplicarRespuesta(d0, desde.r, { ...nuevo, photo_index: desde.k }, libro)
+      setDia(d)
+      setPila((p) => [...p, { ...desde, veredicto: v, sinAnterior, matricula: quePone.matricula, lado: quePone.lado }])
+      if (libro?.accion === 'ya_apuntado') {
+        setAviso({ tono: 'info', texto: t('repaso.libro.yaapuntado').replace('{pieza}', nombrePieza(t, libro.pieza_clave, libro.pieza) || '—') })
+      }
+      setBorrador((b) => (b && b.r === desde.r && b.k === desde.k ? null : b))
+      // Solo se avanza si sigue donde pulsó: si mientras guardaba se fue a otro lado, se queda allí.
+      const f = focoRef.current
+      if (f && f.r === desde.r && f.k === desde.k) {
+        setGolpe(null); setAmpliada(false)
+        setFoco(siguienteFoco(d.revisiones, desde))
+        enfocarMesa()
+      }
     } catch (e) {
       setAviso({ tono: 'error', texto: textoDeError(t, e) })
-      // Otra persona lo ha decidido a la vez: se trae lo que hay ahora.
-      if (e?.response?.status === 409) cargar(true)
+      // Otra persona lo ha decidido a la vez, o la revisión ya no está: se trae lo que hay ahora.
+      const st = e?.response?.status
+      if ((st === 409 || st === 404) && claveRef.current === clave) cargar(true)
     } finally {
       setOcupado(false)
     }
@@ -178,11 +222,13 @@ export default function Repaso() {
 
   async function deshacer(objetivo) {
     if (!objetivo || ocupado) return
+    const clave = claveRef.current
     setOcupado(true); setAviso(null)
     try {
       const res = await deshacerRepaso(objetivo.r, objetivo.k)
       const accion = res.data?.libro?.accion
       let d = diaRef.current
+      if (claveRef.current !== clave || !d) return
       const r0 = d.revisiones.find((x) => x.id === objetivo.r)
       const l0 = r0?.lados.find((x) => x.photo_index === objetivo.k)
       const golpeId = l0?.golpe?.golpe_id
@@ -193,17 +239,30 @@ export default function Repaso() {
       setDia(d)
       setPila((p) => p.filter((x) => !(x.r === objetivo.r && x.k === objetivo.k)))
       irA(objetivo.r, objetivo.k)
+      enfocarMesa()
     } catch (e) {
       setAviso({ tono: 'error', texto: textoDeError(t, e) })
+      /* Otra persona ya lo deshizo (404) o el golpe pasó al taller (409): lo de la pantalla ya no es verdad. Se trae
+         el día como está y ese lado sale de «Lo último», que ya no se puede deshacer desde aquí. */
+      const st = e?.response?.status
+      if ((st === 404 || st === 409) && claveRef.current === clave) {
+        setPila((p) => p.filter((x) => !(x.r === objetivo.r && x.k === objetivo.k)))
+        cargar(true)
+      }
     } finally {
       setOcupado(false)
     }
   }
 
   const abrirGolpe = () => {
-    if (!lado || lado.veredicto || ocupado) return
+    if (!lado || lado.veredicto || ocupado || hoyRota) return
     setAmpliada(false); setAviso(null)
-    setGolpe({ ...GOLPE_VACIO })
+    const b = borrador && foco && borrador.r === foco.r && borrador.k === foco.k ? borrador.valor : null
+    setGolpe(b ? { ...b } : { ...GOLPE_VACIO })
+  }
+  const cancelarGolpe = () => {
+    setGolpe(null)
+    setBorrador((b) => (b && foco && b.r === foco.r && b.k === foco.k ? null : b))
   }
   const elegirModo = (m) => { setModo(m); try { localStorage.setItem(MODO, m) } catch { /* modo privado */ } }
   const ladoAnterior = () => { const v = ladoVecino(rev, lado?.photo_index, -1); if (v) irA(rev.id, v.photo_index) }
@@ -214,27 +273,52 @@ export default function Repaso() {
     if (sig) irA(sig.r, sig.k)
     else setFoco(null)
   }
+  const marcarRota = (url) => setRotas((s) => (s.has(url) ? s : new Set(s).add(url)))
+
+  /* LAS PESTAÑAS DE LOS LADOS, como pide una lista de pestañas: un solo punto de tabulación (la elegida) y las flechas,
+     Inicio y Fin para ir de una a otra. Con el foco en ellas, las flechas son suyas: no deciden nada. */
+  const teclaPestanas = (e) => {
+    if (!rev || !lado) return
+    const lados = rev.lados
+    const i = lados.findIndex((l) => l.photo_index === lado.photo_index)
+    let j = null
+    if (e.key === 'ArrowRight') j = (i + 1) % lados.length
+    else if (e.key === 'ArrowLeft') j = (i - 1 + lados.length) % lados.length
+    else if (e.key === 'Home') j = 0
+    else if (e.key === 'End') j = lados.length - 1
+    if (j === null) return
+    e.preventDefault(); e.stopPropagation()
+    const k = lados[j].photo_index
+    irA(rev.id, k)
+    setTimeout(() => lista.current?.querySelector(`[data-testid="lado-${k}"]`)?.focus(), 0)
+  }
 
   /* EL TECLADO, para quien repasa desde el ordenador: → o Intro, está igual (o al siguiente lado si ya está decidido);
      G, golpe nuevo; N, no se ve; ←, el lado anterior; Z, ampliar; Esc cierra. Nada de esto con Ctrl, Alt o ⌘ (son
-     atajos del navegador) ni mientras se escribe en un campo. */
+     atajos del navegador), ni mientras se escribe en un campo (allí Esc solo suelta el campo), ni con el foco en un
+     botón, una pestaña o un enlace (las teclas son suyas). Con la vista ampliada abierta, solo Esc y Z, que la cierran. */
   useEffect(() => {
     const h = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return
       const el = e.target
       const tag = el?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) {
-        if (e.key === 'Escape' && golpe) { e.preventDefault(); setGolpe(null) }
+      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key
+      if (ampliada) {
+        if (k === 'Escape' || k === 'z') { e.preventDefault(); setAmpliada(false) }
         return
       }
-      if (e.key === 'Escape') {
-        if (ampliada) setAmpliada(false)
-        else if (golpe) setGolpe(null)
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) {
+        if (k === 'Escape') { e.preventDefault(); el.blur() }
+        return
+      }
+      if (k === 'Escape') {
+        if (golpe) { e.preventDefault(); apartarGolpe() }
         return
       }
       if (golpe || !lado || ocupado) return
-      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key
-      if (k === 'ArrowRight' || (k === 'Enter' && tag !== 'BUTTON' && tag !== 'A')) {
+      // En un control solo valen las teclas que no deciden nada (ampliar y abrir el golpe).
+      if (el && el !== document.body && el.closest?.(ES_CONTROL) && !el.closest('[data-atajos]') && k !== 'z' && k !== 'g') return
+      if (k === 'ArrowRight' || k === 'Enter') {
         e.preventDefault()
         if (lado.veredicto) ladoSiguiente()
         else responder('igual')
@@ -245,7 +329,7 @@ export default function Repaso() {
       } else if (k === 'n') {
         if (!lado.veredicto) { e.preventDefault(); responder('no_se_ve') }
       } else if (k === 'z') {
-        e.preventDefault(); setAmpliada((a) => !a)
+        e.preventDefault(); setAmpliada(true)
       }
     }
     document.addEventListener('keydown', h)
@@ -326,9 +410,17 @@ export default function Repaso() {
   const terminado = dia && !foco && conLados.length > 0 && !conLados.some(porRepasar)
   const sinNada = dia && conLados.length === 0
 
+  const avisoEl = aviso && (
+    <p role={aviso.tono === 'error' ? 'alert' : 'status'} data-testid="repaso-aviso"
+      className={`mt-3 border-l-[3px] pl-3 text-sm ${aviso.tono === 'error' ? 'border-ruta-peligro-texto text-ruta-peligro-texto' : 'border-dark-400 text-dark-200'}`}>
+      {aviso.texto}
+    </p>
+  )
+
   // La mesa: la revisión que se mira, el día terminado o el día sin revisiones.
   const ultimo = pila[pila.length - 1]
   let mesa = null
+  let avisoEnMesa = false
   if (!cuerpo && sinNada) {
     mesa = (
       <div className="rounded-xl border border-dark-700 bg-dark-900 p-5 md:p-7" data-testid="repaso-vacio">
@@ -344,6 +436,7 @@ export default function Repaso() {
         onRevisar={() => { const r = conLados[0]; if (r) irA(r.id, r.lados[0].photo_index) }} />
     )
   } else if (!cuerpo && rev && lado) {
+    avisoEnMesa = true
     const sinAnterior = !lado.anterior
     const partida = sinAnterior && !!lado.vista
     const nombre = nombreLado(t, lado)
@@ -354,13 +447,13 @@ export default function Repaso() {
     const idxRev = conLados.findIndex((r) => r.id === rev.id)
 
     mesa = (
-      <div className="min-w-0" data-testid="mesa">
-        {/* La furgoneta: matrícula, modelo, quién la llevaba y cuándo llegó la revisión. */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="min-w-0 focus:outline-none" data-testid="mesa" ref={mesaRef} tabIndex={-1}>
+        {/* La furgoneta: matrícula, modelo, quién la llevaba y cuándo llegó la revisión; a la derecha, el paso. */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 md:flex-nowrap">
           {rev.vehiculo?.matricula
-            ? <Matricula texto={rev.vehiculo.matricula} className="text-[22px]" />
-            : <span className="text-[17px] font-semibold text-dark-50">{t('repaso.sinmatricula')}</span>}
-          <p className="min-w-0 text-[15px] text-dark-400">
+            ? <Matricula texto={rev.vehiculo.matricula} className="shrink-0 text-[22px]" />
+            : <span className="shrink-0 text-[17px] font-semibold text-dark-50">{t('repaso.sinmatricula')}</span>}
+          <p className="order-last w-full min-w-0 text-[15px] text-dark-400 md:order-none md:w-auto md:flex-1">
             {rev.vehiculo?.modelo ? <span>{rev.vehiculo.modelo} · </span> : null}
             {rev.conductor
               ? (rev.conductor.nombre
@@ -370,13 +463,13 @@ export default function Repaso() {
             {rev.hora ? <span> · {t('repaso.recibida').replace('{hora}', rev.hora)}</span> : null}
           </p>
           {conLados.length > 1 && (
-            <div className="ml-auto flex items-center gap-1">
+            <div className="ml-auto flex shrink-0 items-center gap-1" data-testid="paso">
               <button type="button" aria-label={t('repaso.rev.anterior')} title={t('repaso.rev.anterior')}
                 disabled={idxRev <= 0} onClick={() => { const r = conLados[idxRev - 1]; irA(r.id, (r.lados.find((l) => !l.veredicto) || r.lados[0]).photo_index) }}
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-dark-300 hover:bg-dark-800 disabled:opacity-30">
                 <ChevronLeft size={17} />
               </button>
-              <span className="font-mono text-[13px] tabular-nums text-dark-400">
+              <span className="whitespace-nowrap font-mono text-[13px] tabular-nums text-dark-400">
                 {t('repaso.rev.de').replace('{a}', idxRev + 1).replace('{b}', conLados.length)}
               </span>
               <button type="button" aria-label={t('repaso.rev.siguiente')} title={t('repaso.rev.siguiente')}
@@ -388,30 +481,35 @@ export default function Repaso() {
           )}
         </div>
 
-        {/* Los lados, con lo que ya se ha decidido de cada uno. */}
-        <div className="-mx-1 mt-4 flex items-center gap-1.5 overflow-x-auto px-1 pb-1" role="tablist" aria-label={t('repaso.lados')}>
-          {rev.lados.map((l) => {
-            const activo = l.photo_index === lado.photo_index
-            const estado = l.veredicto ? t(`repaso.est.${l.veredicto}`) : t('repaso.est.sinver')
-            return (
-              <button key={l.photo_index} type="button" role="tab" aria-selected={activo}
-                title={estado} aria-label={`${nombreLado(t, l)}: ${estado}`}
-                data-testid={`lado-${l.photo_index}`} data-veredicto={l.veredicto || ''}
-                onClick={() => irA(rev.id, l.photo_index)}
-                className={`flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-semibold transition-colors ${activo
-                  ? 'border-dark-50 bg-dark-50 text-dark-950'
-                  : l.veredicto ? 'border-dark-700 text-dark-400 hover:bg-dark-800' : 'border-ruta-borde/60 bg-dark-900 text-dark-100 hover:bg-dark-800'}`}>
-                <MarcaLado veredicto={l.veredicto} activo={activo} />
-                {nombreLado(t, l)}
-              </button>
-            )
-          })}
+        {/* Los lados, con lo que ya se ha decidido de cada uno; a la derecha, cómo ver las dos fotos. Si no caben en
+            una línea, bajan a la siguiente: no se corta ninguno. */}
+        <div className="mt-4 flex items-start gap-3">
+          <div ref={lista} className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5" role="tablist" aria-label={t('repaso.lados')}
+            onKeyDown={teclaPestanas}>
+            {rev.lados.map((l) => {
+              const activo = l.photo_index === lado.photo_index
+              const estado = textoEstado(t, l.veredicto, !l.anterior)
+              return (
+                <button key={l.photo_index} type="button" role="tab" aria-selected={activo} tabIndex={activo ? 0 : -1}
+                  title={estado} aria-label={`${nombreLado(t, l)}: ${estado}`}
+                  data-testid={`lado-${l.photo_index}`} data-veredicto={l.veredicto || ''}
+                  onClick={() => irA(rev.id, l.photo_index)}
+                  className={`flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-semibold transition-colors ${activo
+                    ? 'border-dark-50 bg-dark-50 text-dark-950'
+                    : l.veredicto ? 'border-dark-700 text-dark-400 hover:bg-dark-800' : 'border-ruta-borde/60 bg-dark-900 text-dark-100 hover:bg-dark-800'}`}>
+                  <MarcaLado veredicto={l.veredicto} activo={activo} />
+                  {nombreLado(t, l)}
+                </button>
+              )
+            })}
+          </div>
           {fotoAntes && !golpe && (
-            <div className="ml-auto hidden shrink-0 items-center rounded-lg border border-dark-700 p-0.5 sm:flex" role="group" aria-label={t('repaso.modo')}>
-              {['juntas', 'deslizador'].map((m) => (
+            <div className="hidden shrink-0 items-center rounded-lg border border-dark-700 p-0.5 sm:flex" role="group" aria-label={t('repaso.modo')}>
+              {[['juntas', Columns2], ['deslizador', SquareSplitHorizontal]].map(([m, Icono]) => (
                 <button key={m} type="button" aria-pressed={modo === m} onClick={() => elegirModo(m)}
-                  className={`h-8 rounded-md px-2.5 text-[13px] font-semibold ${modo === m ? 'bg-dark-800 text-dark-50' : 'text-dark-400 hover:text-dark-100'}`}>
-                  {t(`repaso.modo.${m}`)}
+                  aria-label={t(`repaso.modo.${m}`)} title={t(`repaso.modo.${m}`)}
+                  className={`flex h-8 w-9 items-center justify-center rounded-md ${modo === m ? 'bg-dark-800 text-dark-50' : 'text-dark-400 hover:text-dark-100'}`}>
+                  <Icono size={17} aria-hidden="true" />
                 </button>
               ))}
             </div>
@@ -425,26 +523,25 @@ export default function Repaso() {
               {lado.vista ? t('repaso.sinant.texto') : t('repaso.sinvista.texto')}
             </p>
           )}
-          <Pareja t={t} lado={lado} hoy={fotoHoy} antes={fotoAntes} modo={modo}
+          <Pareja t={t} idioma={lang} lado={lado} hoy={fotoHoy} antes={fotoAntes} modo={modo}
             dibujar={!!golpe} caja={golpe ? golpe.caja : (lado.golpe?.box_2d || null)}
             onCaja={(c) => setGolpe((g) => (g ? { ...g, caja: c } : g))}
+            onFallo={marcarRota}
             onAmpliar={() => setAmpliada(true)} />
+          {hoyRota && !lado.veredicto && (
+            <p className="mt-2.5 text-sm text-dark-300" data-testid="hoy-rota">{t('repaso.foto.fallo.golpe')}</p>
+          )}
         </div>
 
-        {aviso && (
-          <p role={aviso.tono === 'error' ? 'alert' : 'status'} data-testid="repaso-aviso"
-            className={`mt-3 border-l-[3px] pl-3 text-sm ${aviso.tono === 'error' ? 'border-ruta-peligro-texto text-ruta-peligro-texto' : 'border-dark-400 text-dark-200'}`}>
-            {aviso.texto}
-          </p>
-        )}
+        {avisoEl}
 
         {/* Las respuestas. */}
         <div className="mt-4">
           {golpe ? (
-            <FormGolpe t={t} vista={lado.vista} valor={golpe} ocupado={ocupado}
+            <FormGolpe t={t} vista={lado.vista} valor={golpe} ocupado={ocupado} sinFoto={hoyRota}
               titulo={(partida ? t('repaso.golpe.titulo.partida') : t('repaso.golpe.titulo')).replace('{lado}', nombre)}
               onCambio={(c) => setGolpe((g) => ({ ...g, ...c }))}
-              onCancelar={() => setGolpe(null)}
+              onCancelar={cancelarGolpe}
               onGuardar={() => responder('golpe', cuerpoGolpe(lado.photo_index, golpe))} />
           ) : lado.veredicto ? (
             <div className="flex flex-col gap-3 rounded-xl border border-dark-700 bg-dark-900 p-4 sm:flex-row sm:items-center" data-testid="decidido">
@@ -452,7 +549,7 @@ export default function Repaso() {
                 <p>{t(textoHecho).replace('{quien}', quienDecidio || '—').replace('{hora}', horaDecidio || '—')}</p>
                 {lado.golpe && (
                   <p className="mt-1 text-sm text-dark-400">
-                    <b className="font-semibold text-dark-50">{lado.golpe.pieza}</b>
+                    <b className="font-semibold text-dark-50">{nombrePieza(t, lado.golpe.pieza_clave, lado.golpe.pieza)}</b>
                     {lado.golpe.gravedad ? ` · ${t(`repaso.grav.${lado.golpe.gravedad}`)}` : ''}
                     {lado.golpe.descripcion ? ` · ${lado.golpe.descripcion}` : ''}
                     {lado.golpe.ya_estaba ? <span className="block">{t('repaso.hecho.yaestaba')}</span> : null}
@@ -464,7 +561,7 @@ export default function Repaso() {
                   className="flex h-11 items-center gap-2 rounded-xl border border-ruta-borde px-4 text-sm font-semibold text-dark-50 hover:bg-dark-800 disabled:opacity-50">
                   <Undo2 size={15} /> {t('repaso.deshacer')}
                 </button>
-                <button type="button" onClick={ladoSiguiente}
+                <button type="button" onClick={() => { ladoSiguiente(); enfocarMesa() }}
                   className="flex h-11 items-center gap-1.5 rounded-xl bg-dark-50 px-4 text-sm font-semibold text-dark-950">
                   {t('repaso.siguiente')} <ChevronRight size={15} />
                 </button>
@@ -478,8 +575,9 @@ export default function Repaso() {
                   className="h-[52px] rounded-xl px-4 text-[15px] font-semibold text-dark-200 hover:bg-dark-800 disabled:opacity-50 sm:order-1">
                   {t('repaso.btn.nosevee')}
                 </button>
-                <button type="button" onClick={abrirGolpe} disabled={ocupado}
-                  className="h-[52px] whitespace-nowrap rounded-xl border-[1.5px] border-ruta-peligro-texto px-3 text-[15px] sm:px-5 font-bold text-ruta-peligro-texto hover:bg-dark-800 disabled:opacity-50 sm:order-2">
+                <button type="button" onClick={abrirGolpe} disabled={ocupado || hoyRota}
+                  title={hoyRota ? t('repaso.foto.fallo.golpe') : undefined}
+                  className="h-[52px] whitespace-nowrap rounded-xl border-[1.5px] border-ruta-peligro-texto px-3 text-[15px] sm:px-5 font-bold text-ruta-peligro-texto hover:bg-dark-800 disabled:cursor-not-allowed disabled:opacity-50 sm:order-2">
                   {sinAnterior ? t('repaso.btn.tienegolpe') : t('repaso.btn.golpe')}
                 </button>
                 <button type="button" onClick={() => responder('igual')} disabled={ocupado} data-testid="btn-igual"
@@ -500,14 +598,14 @@ export default function Repaso() {
         </div>
 
         {ampliada && (
-          <Ampliar t={t} matricula={rev.vehiculo?.matricula} nombre={nombre} lado={lado} hoy={fotoHoy} antes={fotoAntes}
+          <Ampliar t={t} idioma={lang} matricula={rev.vehiculo?.matricula} nombre={nombre} lado={lado} hoy={fotoHoy} antes={fotoAntes}
             onCerrar={() => setAmpliada(false)} />
         )}
       </div>
     )
   }
 
-  // «Ya apuntado»: la miniatura sale de una foto que esté en pantalla (la de esta revisión o la anterior de ese lado).
+  // «Ya apuntado»: si el servidor no trae la foto del golpe, la de una revisión que esté en pantalla.
   const miniatura = (a) => {
     for (const r of revs) {
       if (r.id !== a.inspection_id) continue
@@ -524,15 +622,16 @@ export default function Repaso() {
     <div className="mx-auto max-w-[1440px]" data-testid="repaso">
       {cabecera}
       {cuerpo || (
-        <div className="mt-5 grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-8">
+        <div className="mt-5 grid gap-6 xl:grid-cols-[minmax(0,1fr)_260px] xl:gap-7 2xl:grid-cols-[minmax(0,1fr)_300px] 2xl:gap-8">
           <div className="min-w-0">
+            {!avisoEnMesa && avisoEl}
             {mesa}
             {/* Deshacer lo último que se decidió en esta sesión, esté donde esté. */}
             {ultimo && !golpe && !(lado && ultimo.r === rev?.id && ultimo.k === lado.photo_index) && (
               <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-dark-400" data-testid="ultimo">
                 <span>
                   {t('repaso.ultimo').replace('{lado}', ultimo.lado).replace('{matricula}', ultimo.matricula || '—')
-                    .replace('{veredicto}', t(`repaso.est.${ultimo.veredicto}`))}
+                    .replace('{veredicto}', textoEstado(t, ultimo.veredicto, ultimo.sinAnterior))}
                 </span>
                 <button type="button" onClick={() => deshacer(ultimo)} disabled={ocupado}
                   className="inline-flex items-center gap-1.5 font-semibold text-dark-100 underline underline-offset-4 hover:text-dark-50 disabled:opacity-50">
@@ -541,7 +640,7 @@ export default function Repaso() {
               </div>
             )}
           </div>
-          <aside className="flex min-w-0 flex-col gap-5 xl:border-l xl:border-dark-700 xl:pl-7">
+          <aside className="flex min-w-0 flex-col gap-5 xl:border-l xl:border-dark-700 xl:pl-6 2xl:pl-7">
             {rev && !terminado && <YaApuntado t={t} locale={locale} lista={rev.ya_apuntado || []} miniatura={miniatura} />}
             <ResumenDia t={t} cuentas={cuentas} esHoy={esHoy} sinRevision={dia?.sin_revision || []} />
             {cuentas.sinLados > 0 && !sinNada && (
