@@ -20,7 +20,9 @@ export const TITULO = `${MARCA.nombre} para empresas con furgonetas · El golpe,
 // El alta de flota (sector «Otra flota») con el plan Esencial, el del «Desde 5 €»: la misma que los botones de la página
 // antes de tocar la calculadora (Empresas.jsx, ALTA_EMPRESA y PLAN_DE_ENTRADA).
 const ALTA = '/registro?sector=otra&plan=operacion'
-export const DESCRIPCION = `Cada conductor fotografía su furgoneta desde el móvil. Tú ves la foto de hoy junto a la anterior del mismo lado y marcas lo que sea nuevo, para arreglarlo antes de que lo vea el perito del renting. Desde ${desde} € por furgoneta y mes, ${DIAS_PRUEBA_EMPRESA} días de prueba sin tarjeta.`
+/* Lo que enseña Google bajo el título: 155 caracteres como mucho (más, y lo corta a media frase). Solo lo que hace el
+   producto y el precio, sin promesas. Lo mide portada.spec.js. */
+export const DESCRIPCION = `Cada conductor fotografía su furgoneta y tú ves la foto de hoy junto a la anterior del mismo lado. Desde ${desde} € por furgoneta al mes, ${DIAS_PRUEBA_EMPRESA} días de prueba.`
 
 export const PASOS = [
   ['El conductor hace cuatro fotos', 'Frontal, trasera y los dos laterales, más los kilómetros. Desde su móvil, a la hora que decida tu empresa: cada conductor, una revisión por furgoneta y día.'],
@@ -61,7 +63,7 @@ export async function servirPortada(context) {
     `<meta property="og:title" content="${esc(TITULO)}" />`,
     `<meta property="og:description" content="${esc(DESCRIPCION)}" />`,
     `<meta property="og:url" content="${base}/" />`,
-    // La tarjeta general de la marca: no hay otra imagen hecha para la portada de empresas.
+    // og.png es la tarjeta de esta portada (en papel, el mismo golpe del lateral derecho que el héroe).
     `<meta property="og:image" content="${base}/og.png" />`,
     `<meta property="og:image:width" content="1200" />`,
     `<meta property="og:image:height" content="630" />`,

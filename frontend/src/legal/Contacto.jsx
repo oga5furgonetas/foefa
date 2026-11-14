@@ -21,7 +21,7 @@ export default function Contacto() {
   async function submit(e) {
     e?.preventDefault()
     setErr('')
-    if (!form.email || !form.email.includes('@')) return setErr(legalEnIngles() ? 'Enter a valid email' : 'Pon un email válido')
+    if (!form.email || !form.email.includes('@')) return setErr(legalEnIngles() ? 'Enter a valid email' : 'Pon un correo válido')
     setBusy(true)
     try {
       // El backend admite name/company/email/plan (lo usamos como "asunto - resumen del mensaje")
@@ -31,8 +31,10 @@ export default function Contacto() {
         body: JSON.stringify({ name: form.name.trim(), company: form.company.trim(), email: form.email.trim(), plan: summary }),
       })
       if (!r.ok) throw new Error('lead failed')
+      // El recibido es el de la página, sin exclamaciones (U6, 14-11-2026): lo que contesta el servidor («¡Recibido!…»)
+      // no se enseña nunca.
       setDone(true)
-    } catch { setErr(legalEnIngles() ? 'The message could not be sent. Try again or email us directly.' : 'No se pudo enviar el mensaje. Inténtalo de nuevo o escríbenos directamente al email.') } finally { setBusy(false) }
+    } catch { setErr(legalEnIngles() ? 'The message could not be sent. Try again or email us directly.' : 'No se pudo enviar el mensaje. Inténtalo de nuevo o escríbenos directamente al correo.') } finally { setBusy(false) }
   }
 
   useIdioma()
@@ -60,7 +62,7 @@ export default function Contacto() {
               <div><label className="label">Nombre</label><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
               <div><label className="label">Empresa</label><input className="input" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} /></div>
             </div>
-            <div><label className="label">Email *</label><input type="email" required className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+            <div><label className="label">Correo *</label><input type="email" required className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
             <div><label className="label">Asunto</label><input className="input" placeholder="Demo / Soporte / Comercial…" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} /></div>
             <div><label className="label">Mensaje</label><textarea rows={5} className="input" value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></div>
             {err && <p role="alert" className="text-sm font-semibold text-[color:var(--ld-warn)]">{err}</p>}

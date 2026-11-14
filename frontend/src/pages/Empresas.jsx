@@ -542,9 +542,9 @@ export default function Empresas() {
     if (k === 'decide') return tx('Una persona de tu oficina. En el repaso del día ve la foto de hoy junto a la anterior del mismo lado y marca lo que sea nuevo, sobre la foto. El expediente de cada furgoneta solo lleva los golpes que ha marcado o confirmado una persona.')
     if (k === 'conductor') return tx('Solo cuando se sabe con seguridad: si entre las dos fotos la llevó una sola persona, en un día o menos, y la foto anterior de ese lado se repasó y estaba igual. Si no, el golpe queda sin conductor atribuible y se dice por qué.')
     if (k === 'datos') return tx('No. Cada empresa tiene su propia base de datos, separada de las de las demás. Y los datos son tuyos: si te vas, te los devolvemos o los borramos, lo que elijas.')
-    if (k === 'instalar') return tx('No. Entran desde el navegador del móvil, con el enlace de tu empresa y su correo.')
+    if (k === 'instalar') return tx('No. Cada uno entra desde el navegador del móvil con su propio enlace, que le mandas por WhatsApp: sin correo, sin contraseña y sin instalar nada.')
     if (k === 'propias') return tx('Sí. La revisión con fotos, el taller, la ITV y los mantenimientos funcionan igual. El proveedor y el fin del renting solo se rellenan si los tienes.')
-    if (k === 'tiempo') return tx('Depende de lo que tardes en tres pasos: crear la cuenta, subir el Excel de furgonetas y el de conductores (antes de guardar ves cómo queda) y mandar a cada conductor el enlace de tu empresa. La primera revisión llega cuando el primer conductor la haga.')
+    if (k === 'tiempo') return tx('Son cuatro pasos y puedes dejarlos a medias: pegas las matrículas, pegas la lista de conductores con su nombre y su móvil, le mandas a cada uno su enlace por WhatsApp y esperas la primera revisión, que llega en cuanto el primero hace sus fotos.')
     return [
       tx('{plan1}: {p1} por vehículo y mes, con un mínimo de {m1} vehículos facturados. {plan2}: {p2} por vehículo y mes, con un mínimo de {m2}. Para flotas grandes, el plan {plan3}, a medida.', {
         plan1: tx(esencial.nombre), p1: euros(Number(esencial.por_vehiculo)), m1: esencial.minimo_vehiculos,
@@ -561,6 +561,13 @@ export default function Empresas() {
     ['01', tx('El conductor hace cuatro fotos'), tx('Frontal, trasera y los dos laterales, más los kilómetros. Desde su móvil, a la hora que decida tu empresa: cada conductor, una revisión por furgoneta y día.'), <RecorteFotos key="r1" lang={lang} />],
     ['02', tx('Tú repasas el día en unos minutos'), tx('Cada foto de hoy aparece junto a la anterior del mismo lado. Si está igual, pasas a la siguiente. Si hay algo nuevo, lo marcas sobre la foto.'), <RecorteRepaso key="r2" />],
     ['03', tx('Cada golpe queda con su día'), tx('Y con quién la llevaba, solo cuando se sabe con seguridad. Cada furgoneta tiene su expediente: cómo entró, qué le ha pasado y cuándo, listo para imprimir.'), <RecorteExpediente key="r3" />],
+  ]
+  /* Los cuatro pasos del arranque, con los verbos de la pantalla (alta.p1-p4 en i18nDict.js). */
+  const ARRANQUE = [
+    [tx('Pegas las matrículas'), tx('Una por línea. Antes de guardar ves cuáles entran y cuáles no.')],
+    [tx('Pegas la lista de conductores'), tx('Nombre y móvil, uno por línea.')],
+    [tx('Le mandas a cada uno su enlace por WhatsApp'), tx('Con un toque entra desde su móvil: sin correo, sin contraseña y sin instalar nada.')],
+    [tx('Ves llegar la primera revisión'), tx('Llega en cuanto el primero hace las fotos de su furgoneta.')],
   ]
 
   return (
@@ -620,7 +627,7 @@ export default function Empresas() {
         <div className="grid gap-8 border-t border-[color:var(--ld-border)] pb-10 pt-14 sm:pt-[72px] lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-16">
           <div>
             <H2>{tx('Así funciona')}</H2>
-            <p className="mt-3.5 text-[0.9688rem] leading-relaxed text-[color:var(--ld-muted)]">{tx('Sin aparatos en la furgoneta ni nada que instalar en la oficina. Los conductores entran desde el móvil con el enlace de tu empresa.')}</p>
+            <p className="mt-3.5 text-[0.9688rem] leading-relaxed text-[color:var(--ld-muted)]">{tx('Sin aparatos en la furgoneta ni nada que instalar en la oficina. Cada conductor entra desde el móvil con su propio enlace, sin correo ni contraseña.')}</p>
           </div>
           <div>
           <ol>
@@ -710,18 +717,30 @@ export default function Empresas() {
         </div>
       </section>
 
-      {/* ── Cierre ── */}
-      <section className={ANCHO}>
-        <div className="grid items-center gap-8 border-t border-[color:var(--ld-border)] py-14 sm:py-[72px] lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-12">
+      {/* ── Cierre: cómo se empieza, tal como es el arranque del panel (/panel/arranque, Arranque.jsx): cuatro pasos y
+          se puede dejar a medias. Cada conductor entra con SU enlace personal (CONTRATO-ALTA §1), sin correo ni contraseña. ── */}
+      <section className={ANCHO} data-testid="emp-arranque">
+        <div className="grid gap-10 border-t border-[color:var(--ld-border)] py-14 sm:py-[72px] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-16">
           <div>
             <H2>{tx('Empieza con tus furgonetas esta semana.')}</H2>
-            <p className="mt-3 max-w-[560px] text-[1.0312rem] leading-relaxed text-[color:var(--ld-muted)]">{tx('Das de alta las matrículas, mandas el enlace a tus conductores y la primera revisión llega en cuanto la hace el primero.')}</p>
+            <p className="mt-3 max-w-[460px] text-[1.0312rem] leading-relaxed text-[color:var(--ld-muted)]">{tx('Son cuatro pasos y puedes dejarlos a medias.')}</p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <a href={alta} onClick={() => medirAccion('emp_probar_cierre')} className={BTN_PRIMARIO} data-testid="emp-probar-cierre">{tx('Probar con mis furgonetas')}</a>
+              {/* Con la demo ya pedida, no se vuelve a ofrecer. */}
+              {!demoPedida && <a href="#demo" onClick={() => medirAccion('emp_demo_cierre')} className={BTN_SECUNDARIO} data-testid="emp-ensenar-cierre">{tx('Que me la enseñen en 15 minutos')}</a>}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <a href={alta} onClick={() => medirAccion('emp_probar_cierre')} className={BTN_PRIMARIO} data-testid="emp-probar-cierre">{tx('Probar con mis furgonetas')}</a>
-            {/* Con la demo ya pedida, no se vuelve a ofrecer. */}
-            {!demoPedida && <a href="#demo" onClick={() => medirAccion('emp_demo_cierre')} className={BTN_SECUNDARIO} data-testid="emp-ensenar-cierre">{tx('Que me la enseñen en 15 minutos')}</a>}
-          </div>
+          <ol className="border-b border-[color:var(--ld-border)]">
+            {ARRANQUE.map(([t, d], i) => (
+              <li key={t} className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-3 border-t border-[color:var(--ld-border)] py-5" data-testid="emp-arranque-paso">
+                <span className="pt-[3px] font-mono text-[0.875rem] font-medium tabular-nums text-[color:var(--ld-muted)]">{String(i + 1).padStart(2, '0')}</span>
+                <div>
+                  <h3 className="text-[1.1875rem] font-bold leading-snug tracking-[-0.01em] text-[color:var(--ld-text)]">{t}</h3>
+                  <p className="mt-1 text-[1rem] leading-relaxed text-[color:var(--ld-text2)]">{d}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
         </div>
         {/* La puerta a la app de reparto: quien reparte por su cuenta tiene su propia página. */}
         <a href="/repartidores" onClick={() => medirAccion('emp_repartidores')} data-testid="emp-repartidores"

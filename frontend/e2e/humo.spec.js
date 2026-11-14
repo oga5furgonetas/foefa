@@ -1862,7 +1862,7 @@ test('Planes · Reparto se cobra por repartidor y el alta del súper lo propone 
   await page.getByRole('link', { name: 'Empezar la prueba de 14 días' }).last().click()
   await expect(page).toHaveURL(/registro\?sector=supermercado&plan=reparto/)
   await expect(page.getByText('Plan elegido')).toBeVisible()
-  await expect(page.getByText(/60€\/mes · con 5 repartidores activos/)).toBeVisible()
+  await expect(page.getByText(/60 € al mes · con 5 repartidores activos/)).toBeVisible()
 
   // Entrando por el alta, el súper elige entre Reparto (destacado) y Pro.
   await page.goto('/registro?sector=supermercado', { waitUntil: 'domcontentloaded' })
