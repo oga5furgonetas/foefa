@@ -23,6 +23,9 @@ export const H1 = 'ld-titular text-[36px] leading-[1.02] text-[color:var(--ld-te
 export const H2 = 'ld-titular text-[26px] leading-[1.08] text-[color:var(--ld-text)] [text-wrap:balance] sm:text-[32px]'
 export const ETIQUETA = 'text-[13px] font-semibold text-[color:var(--ld-muted)]'
 export const ENLACE_TEXTO = 'font-semibold text-[color:var(--ld-accent)] underline underline-offset-[3px] hover:no-underline'
+/* Un enlace que se repite en cada fila («Cambiar»): gris y sin subrayar; se subraya y pasa a tinta al pasar por encima
+   o con el teclado. Así la lista no se llena de subrayados. */
+export const ENLACE_CALLADO = 'font-semibold text-[color:var(--ld-muted)] underline-offset-[3px] hover:text-[color:var(--ld-text)] hover:underline focus-visible:text-[color:var(--ld-text)] focus-visible:underline'
 
 /* «pág. 7», en mono y en el cian de texto. */
 export function Pag({ n, className = '' }) {
@@ -37,7 +40,7 @@ export function Vigencia({ doc, className = '' }) {
   if (!VIGENCIA[doc]) return null
   return (
     <p className={`flex gap-2.5 text-[13.5px] leading-snug text-[color:var(--ld-text2)] ${className}`} data-testid="dev-vigencia">
-      <span aria-hidden="true" className="mt-[6px] inline-block h-2 w-2 shrink-0 rounded-full bg-[color:var(--ld-ambar)]" />{VIGENCIA[doc]}
+      <span aria-hidden="true" className="mt-[6px] inline-block h-2 w-2 shrink-0 rounded-full bg-[color:var(--ld-ambar)] [-webkit-print-color-adjust:exact] [print-color-adjust:exact]" />{VIGENCIA[doc]}
     </p>
   )
 }
@@ -71,7 +74,7 @@ export function BaseCobro({ b, doc, que = null, className = '' }) {
 export function CondicionCobro({ texto, className = '' }) {
   return (
     <p className={`flex gap-2.5 text-[14px] leading-snug text-[color:var(--ld-text2)] ${className}`} data-testid="dev-condicion-cobro">
-      <span aria-hidden="true" className="mt-[6px] inline-block h-2 w-2 shrink-0 rounded-full bg-[color:var(--ld-ambar)]" />{texto}
+      <span aria-hidden="true" className="mt-[6px] inline-block h-2 w-2 shrink-0 rounded-full bg-[color:var(--ld-ambar)] [-webkit-print-color-adjust:exact] [print-color-adjust:exact]" />{texto}
     </p>
   )
 }

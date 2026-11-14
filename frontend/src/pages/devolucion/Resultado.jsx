@@ -9,10 +9,18 @@ import { useState } from 'react'
 import { DOCUMENTOS, aceptaDe, aparteDe, cobraDe, cobroDe, companiaDe, noAceptaDe, paginaCobroDe, paginasDe, resumen, sinTolerancia, titularDe, vozDe } from '../../lib/guiasRenting'
 import { BTN_PRIMARIO, BTN_SECUNDARIO } from '../portadaComun'
 import { MARCA } from '../../marca'
-import { BaseCobro, CondicionCobro, ENLACE_TEXTO, Fuente, Mandanosla, Pag, PuertaFds, Vigencia, avisoDe, etiquetaPaso, textoAcepta, textoNoAcepta, zonaNombre } from './comun'
+import { BaseCobro, CondicionCobro, ENLACE_CALLADO, ENLACE_TEXTO, Fuente, Mandanosla, Pag, PuertaFds, Vigencia, avisoDe, etiquetaPaso, textoAcepta, textoNoAcepta, zonaNombre } from './comun'
 
 const CONSEJO_REVISAR = /luz natural|seco|al revisarlo|revisar el coche limpio/i
 const hoy = () => new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })
+
+/* Ir a un bloque del resultado sin tocar el # (el # es el estado del recorrido: un ancla lo rompería). */
+const irA = (id) => {
+  const el = document.getElementById(id)
+  if (!el) return
+  const quieto = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  el.scrollIntoView({ behavior: quieto ? 'auto' : 'smooth', block: 'start' })
+}
 
 function Item({ titulo, nota, children, onCambiar, etiqueta, testid }) {
   return (
@@ -20,7 +28,7 @@ function Item({ titulo, nota, children, onCambiar, etiqueta, testid }) {
       <div className="flex items-start justify-between gap-3">
         <p className="text-[15.5px] font-bold leading-snug text-[color:var(--ld-text)]">{titulo}{nota && <span className="font-semibold text-[color:var(--ld-muted)]"> · {nota}</span>}</p>
         {onCambiar && (
-          <button type="button" onClick={onCambiar} aria-label={`Cambiar la respuesta: ${etiqueta}`} className={`${ENLACE_TEXTO} -my-2 inline-flex min-h-[44px] shrink-0 items-center text-[13.5px] print:hidden`} data-testid="dev-cambiar">Cambiar</button>
+          <button type="button" onClick={onCambiar} aria-label={`Cambiar la respuesta: ${etiqueta}`} className={`${ENLACE_CALLADO} -my-2 inline-flex min-h-[44px] shrink-0 items-center text-[13.5px] print:hidden`} data-testid="dev-cambiar">Cambiar</button>
         )}
       </div>
       <div className="mt-1 space-y-1.5 text-[14px] leading-snug text-[color:var(--ld-text2)]">{children}</div>
@@ -29,15 +37,48 @@ function Item({ titulo, nota, children, onCambiar, etiqueta, testid }) {
 }
 
 /* La nota del paso (la póliza de VWFS, la zona A, el testigo de BMW…): va también en el resultado. */
-const NotaPaso = ({ p }) => (p.nota ? <p className="flex gap-2.5" data-testid="dev-nota-resultado"><span aria-hidden="true" className="mt-[6px] inline-block h-2 w-2 shrink-0 rounded-full bg-[color:var(--ld-ambar)]" />{p.nota}</p> : null)
+const NotaPaso = ({ p }) => (p.nota ? <p className="flex gap-2.5" data-testid="dev-nota-resultado"><span aria-hidden="true" className="mt-[6px] inline-block h-2 w-2 shrink-0 rounded-full bg-[color:var(--ld-ambar)] [-webkit-print-color-adjust:exact] [print-color-adjust:exact]" />{p.nota}</p> : null)
 
 function Bloque({ titulo, cuenta, children, pie, testid }) {
   return (
-    <section className="mt-9 [break-inside:avoid-page]" data-testid={testid}>
-      <h3 className="flex items-baseline justify-between gap-3 text-[18px] font-bold tracking-[-0.01em] text-[color:var(--ld-text)]">{titulo}{cuenta != null && <span className="font-mono text-[14px] font-medium text-[color:var(--ld-muted)]">{cuenta}</span>}</h3>
+    <section id={testid} className="mt-9 scroll-mt-6 [break-inside:avoid-page]" data-testid={testid}>
+      <h3 className="flex items-baseline justify-between gap-3 text-[18px] font-bold tracking-[-0.01em] text-[color:var(--ld-text)] [break-after:avoid]">{titulo}{cuenta != null && <span className="font-mono text-[14px] font-medium tabular-nums text-[color:var(--ld-muted)]">{cuenta}</span>}</h3>
       <ul className="mt-2.5 border-b border-[color:var(--ld-border)]">{children}</ul>
       {pie}
     </section>
+  )
+}
+
+/* Un bloque largo que en pantalla va plegado (lo que has contestado que no: ocho zonas densas que no suman nada a la
+   cifra) y en papel va desplegado: lo que se imprime o se guarda en PDF lleva todo. */
+function BloquePlegado({ titulo, cuenta, resumenPlegado, abierto, onAbrir, children, testid }) {
+  const id = `${testid}-contenido`
+  return (
+    <section id={testid} className="mt-9 scroll-mt-6" data-testid={testid}>
+      <h3 className="text-[18px] font-bold tracking-[-0.01em] text-[color:var(--ld-text)] [break-after:avoid]">
+        <button type="button" onClick={onAbrir} aria-expanded={abierto} aria-controls={id} data-testid={`${testid}-plegar`}
+          className="group flex min-h-[52px] w-full items-center justify-between gap-3 border-b border-[color:var(--ld-border)] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ld-text)] print:min-h-0 print:border-0">
+          <span>{titulo}</span>
+          <span className="flex shrink-0 items-baseline gap-3">
+            <span className="font-mono text-[14px] font-medium tabular-nums text-[color:var(--ld-muted)]">{cuenta}</span>
+            <span aria-hidden="true" className={`text-[22px] font-normal leading-none text-[color:var(--ld-muted)] transition-transform group-hover:text-[color:var(--ld-text)] print:hidden ${abierto ? 'rotate-45' : ''}`}>+</span>
+          </span>
+        </button>
+      </h3>
+      {!abierto && <p className="mt-2.5 text-[14px] leading-snug text-[color:var(--ld-muted)] [text-wrap:pretty] print:hidden" data-testid={`${testid}-resumen`}>{resumenPlegado}</p>}
+      <ul id={id} className={`border-b border-[color:var(--ld-border)] ${abierto ? '' : 'hidden print:block'}`}>{children}</ul>
+    </section>
+  )
+}
+
+/* Los dos botones del resultado: arriba, junto a la cifra, y otra vez al final. */
+function Acciones({ onMandar, donde, className = '' }) {
+  const sufijo = donde === 'arriba' ? '-arriba' : ''
+  return (
+    <div className={`grid gap-2.5 sm:grid-cols-2 print:hidden ${className}`}>
+      <button type="button" onClick={() => window.print()} className={`${BTN_PRIMARIO} w-full`} data-testid={`dev-imprimir${sufijo}`}>Guardar o imprimir</button>
+      <button type="button" onClick={onMandar} className={`${BTN_SECUNDARIO} w-full`} data-testid={`dev-mandar${sufijo}`}>Mandárselo a alguien</button>
+    </div>
   )
 }
 
@@ -46,7 +87,8 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
   const c = companiaDe(compania)
   const v = vozDe(c)
   const n = v.plural ? 'n' : ''
-  const [copiado, setCopiado] = useState('')
+  const [copiado, setCopiado] = useState({ texto: '', donde: '' })
+  const [noAbierto, setNoAbierto] = useState(false)
   const cuentas = resumen(pasos, respuestas)
   const { factura, fuera, sinCriterio, no, noSe, cifra } = cuentas
   const consejos = (d.proceso.recomendaciones_antes_de_devolver || []).filter((t) => CONSEJO_REVISAR.test(t))
@@ -69,8 +111,15 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
   const condiciones = [...new Set(bases.map(({ b }) => b.condicion).filter(Boolean))]
   const juntar = (l) => l.map((t, k) => (k ? t.charAt(0).toLowerCase() + t.slice(1) : t)).join(', ').replace(/, ([^,]*)$/, ' y $1')
   const titular = titularDe(pasos, cuentas, v)
-  const partes = [[factura, `que ${v.su} dice${n} que se factura${factura.length === 1 ? '' : 'n'}`], [fuera, `que no acepta${n}`], [sinCriterio, 'que no dice si se cobra'],
-    [noSe, 'sin saber todavía'], [no, 'que has contestado que no']].filter(([l]) => l.length).map(([l, t]) => `${l.length} ${t}`)
+  // El desglose, una fila por bloque: la cuenta, lo que es, y a qué bloque lleva.
+  const partes = [[factura, `que ${v.su} dice${n} que se factura${factura.length === 1 ? '' : 'n'}`, 'dev-factura'], [fuera, `que no acepta${n}`, 'dev-fuera'],
+    [sinCriterio, 'que no dice si se cobra', 'dev-sin-criterio'], [noSe, 'sin saber todavía', 'dev-nose-lista'], [no, 'que has contestado que no', 'dev-no-lista']]
+    .filter(([l]) => l.length).map(([l, texto, ancla]) => ({ cuenta: l.length, texto, ancla }))
+  const ir = (ancla) => () => {
+    if (ancla === 'dev-no-lista') setNoAbierto(true)
+    // Después de pintar el bloque desplegado.
+    window.requestAnimationFrame(() => irA(ancla))
+  }
   const cambiar = (i) => () => onCambiar(i)
   // Lo que no se ha preguntado de una zona contestada con «No», en tres grupos que no se mezclan: lo que no acepta sea
   // del tamaño que sea, lo que acepta solo hasta un límite (nunca «tampoco acepta» de algo que acepta en parte) y lo
@@ -89,14 +138,17 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
     return grupos.map(([que, primero, despues], k) => ({ que, dice: k === 0 ? `Sin preguntar, en esta zona ${primero}` : `Y ${despues}` }))
   }
 
-  async function mandar() {
+  const mandar = (donde) => async () => {
     const url = window.location.href
     const titulo = `Lo que ${v.su} de ${c.nombre} no da por bueno`
     try {
       if (navigator.share) { await navigator.share({ title: titulo, url }); return }
     } catch (e) { if (e && e.name === 'AbortError') return }
-    try { await navigator.clipboard.writeText(url); setCopiado('Enlace copiado. Pégalo donde quieras.') } catch { setCopiado(`Copia este enlace: ${url}`) }
+    try { await navigator.clipboard.writeText(url); setCopiado({ texto: 'Enlace copiado. Pégalo donde quieras.', donde }) } catch { setCopiado({ texto: `Copia este enlace: ${url}`, donde }) }
   }
+  const aviso = (donde, testid, className) => (
+    <p role="status" aria-live="polite" className={`break-all text-[13.5px] text-[color:var(--ld-ok)] print:hidden ${className}`} data-testid={testid}>{copiado.donde === donde ? copiado.texto : ''}</p>
+  )
 
   return (
     <div className="mx-auto max-w-[760px] pb-10 pt-6 sm:pt-10" data-testid="dev-resultado">
@@ -112,9 +164,26 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
         <b className={`ld-titular text-[72px] leading-[0.82] tabular-nums ${cifra ? 'text-[color:var(--ld-warn)]' : 'text-[color:var(--ld-text)]'}`} data-testid="dev-cifra">{cifra}</b>
         <h2 className="pb-1 text-[18px] font-semibold leading-tight text-[color:var(--ld-text)] sm:text-[20px]" data-testid="dev-titular">{titular}</h2>
       </div>
-      <p className="mt-3 text-[14.5px] text-[color:var(--ld-muted)]" data-testid="dev-desglose">De {pasos.length} preguntas: {partes.join(', ')}.</p>
+      {/* El desglose: una fila por bloque, que lleva a él. Las dos que suman la cifra, en su color. Si todo cae en un
+          solo bloque y es el de la cifra, no se repite. */}
+      {!(partes.length === 1 && partes[0].cuenta === cifra) && <div className="mt-6 border-t border-[color:var(--ld-border)]" data-testid="dev-desglose">
+        <p className="pt-3 text-[13px] text-[color:var(--ld-muted)]">De {pasos.length} preguntas</p>
+        <ul className="mt-1 grid sm:grid-cols-2 sm:gap-x-8">
+          {partes.map(({ cuenta, texto, ancla }) => (
+            <li key={ancla} className="border-b border-[color:var(--ld-border)]">
+              <button type="button" onClick={ir(ancla)} data-testid="dev-desglose-fila"
+                className="group flex min-h-[44px] w-full items-baseline gap-3 py-2.5 text-left text-[14.5px] leading-snug text-[color:var(--ld-text2)] hover:text-[color:var(--ld-text)] print:min-h-0 print:py-1.5">
+                <span className={`w-5 shrink-0 text-right font-mono text-[15px] font-semibold tabular-nums ${ancla === 'dev-factura' || ancla === 'dev-fuera' ? 'text-[color:var(--ld-warn)]' : 'text-[color:var(--ld-text)]'}`}>{cuenta}</span>
+                <span className="underline-offset-[3px] group-hover:underline">{texto}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>}
       <Vigencia doc={doc} className="mt-4" />
       {c.tipo === 'alquiler' && c.aviso && <p className="mt-4 border-l-[3px] border-[color:var(--ld-ambar)] pl-3 text-[14px] leading-snug text-[color:var(--ld-text2)]" data-testid="dev-alquiler">{c.aviso}</p>}
+      <Acciones onMandar={mandar('arriba')} donde="arriba" className="mt-6" />
+      {aviso('arriba', 'dev-copiado-arriba', 'mt-2 min-h-[20px]')}
 
       {factura.length > 0 && (
         <Bloque titulo={`Lo que ${v.su} dice${n} que se factura`} cuenta={factura.length} testid="dev-factura"
@@ -171,7 +240,8 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
         </Bloque>
       )}
       {no.length > 0 && (
-        <Bloque titulo="Lo que has contestado que no" cuenta={no.length} testid="dev-no-lista">
+        <BloquePlegado titulo="Lo que has contestado que no" cuenta={no.length} testid="dev-no-lista" abierto={noAbierto} onAbrir={() => setNoAbierto((a) => !a)}
+          resumenPlegado={`${no.length === 1 ? '1 pregunta' : `${no.length} preguntas`}: ${juntar(no.map(({ p }) => etiquetaPaso(p)))}. Ábrelo para ver cada una.`}>
           {no.map(({ p, i }) => {
             const lista = (rs) => rs.map((r, k) => <span key={r.indice}>{r.dano.charAt(0).toLowerCase() + r.dano.slice(1)} (<Pag n={paginasDe(r)} className="text-[11.5px]" />){k < rs.length - 1 ? '; ' : '.'}</span>)
             return (
@@ -186,7 +256,7 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
               </Item>
             )
           })}
-        </Bloque>
+        </BloquePlegado>
       )}
       {aparte.length > 0 && (
         <Bloque titulo={`Más cosas que pide${n} ${v.su}`} testid="dev-aparte">
@@ -214,11 +284,8 @@ export default function Resultado({ vehiculo, compania, doc, pasos, respuestas, 
       <p className="mt-8 border-l-[3px] border-[color:var(--ld-ambar)] pl-3 text-[15px] font-semibold leading-snug text-[color:var(--ld-text)]" data-testid="dev-aviso">{avisoDe(c)}</p>
       <Fuente doc={doc} className="mt-4" />
 
-      <div className="mt-8 grid gap-2.5 sm:grid-cols-2 print:hidden">
-        <button type="button" onClick={() => window.print()} className={`${BTN_PRIMARIO} w-full`} data-testid="dev-imprimir">Guardar o imprimir</button>
-        <button type="button" onClick={mandar} className={`${BTN_SECUNDARIO} w-full`} data-testid="dev-mandar">Mandárselo a alguien</button>
-      </div>
-      <p role="status" aria-live="polite" className="mt-2 min-h-[20px] break-all text-[13.5px] text-[color:var(--ld-ok)] print:hidden" data-testid="dev-copiado">{copiado}</p>
+      <Acciones onMandar={mandar('abajo')} donde="abajo" className="mt-8" />
+      {aviso('abajo', 'dev-copiado', 'mt-2 min-h-[20px]')}
       <p className="mt-1 text-[13.5px] text-[color:var(--ld-muted)] print:hidden">El resultado va en el propio enlace: no se guarda en nuestros servidores. Si lo mandas, queda donde lo mandes.</p>
       <div className="mt-5 flex flex-wrap gap-x-6 gap-y-1 text-[14.5px] print:hidden">
         <button type="button" onClick={onEmpezar} className={`${ENLACE_TEXTO} min-h-[44px]`} data-testid="dev-otro">Empezar con otro vehículo</button>
