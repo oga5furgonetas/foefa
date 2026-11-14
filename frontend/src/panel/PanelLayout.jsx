@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { aislarSesion, haySesionPrevia, volverASesionPrevia, getAdmin, isAuthed, isSuperAdmin, isCenterManager, logout, canSee, decodeToken, getVisibleCenters, SIEMPRE_VISIBLES, guardarAccesoFresco, esPlataforma, actualizarMiFoto } from './auth'
 import { getMe, contarPeticionesPendientes, contarCandidatosNuevos, contarConversacionesSinLeer, subirFotoAdmin } from './api'
-import { getRepasoDia } from '../services/api'
+import { getRepasoPendientes } from '../services/api'
 import { pushSupported, isPushEnabled, enablePush, disablePush } from '../lib/push'
 import TrialBanner from './TrialBanner'
 import CommandPalette from './CommandPalette'
@@ -512,10 +512,11 @@ export default function PanelLayout() {
       }
       // El repaso de hoy (14-11-2026): solo quien puede abrirlo. La propia pantalla lo pone al día al decidir cada lado.
       if (canSee('repaso') && moduloOk('repaso')) {
-        getRepasoDia(null, center)
+        // Solo el número (/repaso/pendientes = sin_repasar + a_medias de hoy), no el día entero.
+        getRepasoPendientes(center)
           .then((r) => {
-            const c = r.data?.cuentas
-            if (vivo && c && typeof c === 'object') setRepasoPend((Number(c.sin_repasar) || 0) + (Number(c.a_medias) || 0))
+            const n = r.data?.pendientes
+            if (vivo && typeof n === 'number') setRepasoPend(n)
           })
           .catch(() => {})
       }

@@ -10,27 +10,32 @@ export const PLANES_EMPRESA = [
   {
     clave: 'operacion', nombre: 'Esencial', para: 'Una delegación',
     por_vehiculo: 5, minimo_vehiculos: 10, color: '#64748b',
+    /* Los textos de cada plan, LETRA A LETRA los de /billing/planes (server.py, 14-11-2026: sin prometer la IA). Lo
+       comprueba backend/tests/test_verdad2_textos.py. */
     incluye: [
       'Vehículos, documentos y vencimientos (ITV, seguro, renting)',
-      'Inspección diaria con fotos y daños detectados por IA',
+      'Revisión diaria con fotos de cada lado desde el móvil del conductor',
+      'Repaso del día: cada foto junto a la anterior del mismo lado, y quien repasa apunta cada golpe',
+      'Expediente de cada furgoneta con los golpes confirmados, su foto y su fecha',
       'Incidencias, talleres y órdenes de reparación con su coste',
       'Conductores y su portal en el móvil',
       'Chat interno, importar de Excel y avisos por correo',
       'Usuarios y conductores ilimitados',
     ],
-    no_incluye: ['Quién causa los golpes', 'Qué furgoneta lleva cada uno', 'Cuadrante, turnos y días libres', 'Informe pericial firmado', 'Varias delegaciones'],
+    no_incluye: ['Quién llevaba la furgoneta cuando apareció cada golpe', 'Qué furgoneta lleva cada uno', 'Cuadrante, turnos y días libres', 'Informe firmado de la revisión en PDF', 'Varias delegaciones'],
   },
   {
     clave: 'completo', nombre: 'Pro', para: 'Varias delegaciones y la operación diaria',
     por_vehiculo: 9, minimo_vehiculos: 20, recomendado: true, color: '#fb923c',
     incluye: [
       'Todo lo de Esencial, con delegaciones ilimitadas y un jefe por delegación',
-      'Revisión rápida de daños y quién causa los golpes',
+      'Quién llevaba la furgoneta cuando apareció cada golpe',
+      'Revisión rápida, solo en las cuentas con la IA activa: compara cada foto con la anterior del mismo lado y marca lo que parece nuevo. Se equivoca a menudo, así que cada marca la confirma una persona',
       'Qué furgoneta lleva cada uno: asignación y furgonetas fijas',
       'Cuadrante con motor, turnos y días libres desde el móvil',
       'Plantilla de salida, checklist de apertura y cierre, aparcamiento',
       'Incorporaciones, empleo y contactos',
-      'Informe pericial firmado, sin límite, para reclamar al renting o al seguro',
+      'Informe firmado de la revisión en PDF, con sus fotos, su fecha y su código de comprobación, sin límite',
       'Exportar a Excel',
     ],
     no_incluye: [],
@@ -52,7 +57,7 @@ export const PLANES_EMPRESA = [
 /* REPARTO (06-10-2026): el súper o el distribuidor compra el reparto por REPARTIDOR, no la flota por
    furgoneta: tiene 2–4 furgonetas por tienda y con Esencial (mínimo 10) pagaba furgonetas que no
    existen. 12 € por repartidor activo al mes (el que tuvo pedidos), mínimo 3, furgonetas incluidas.
-   Si quieren lo de Pro (quién causa los golpes, cuadrante), ese es Pro por vehículo + la app a 6 €. */
+   Si quieren lo de Pro (quién llevaba la furgoneta en cada golpe, cuadrante), ese es Pro por vehículo + la app a 6 €. */
 export const PLAN_REPARTO = {
   clave: 'reparto', nombre: 'Reparto', para: 'Súper y distribución: por repartidor, furgonetas incluidas',
   por_repartidor: 12, minimo_repartidores: 3, color: '#22c55e', sectores: ['supermercado', 'distribucion'],
@@ -62,10 +67,10 @@ export const PLAN_REPARTO = {
     'Navegación con voz, prueba de entrega con foto y cobro a la entrega',
     'Enlace de seguimiento para el cliente',
     'La oficina ve el progreso y dónde va cada repartidor en jornada',
-    'Vuestras furgonetas incluidas: fichas, ITV y seguro, inspección con fotos e IA, taller',
+    'Vuestras furgonetas incluidas: fichas, ITV y seguro, revisión con fotos y repaso del día, taller',
     'Tiendas o almacenes y usuarios sin límite',
   ],
-  no_incluye: ['Quién causa los golpes, cuadrante y asignación (eso es Pro, por vehículo)'],
+  no_incluye: ['Quién llevaba la furgoneta en cada golpe, cuadrante y asignación (eso es Pro, por vehículo)'],
 }
 
 /* Los días de prueba de una cuenta de empresa, sin tarjeta (server.py: `PLAN_TARIFAS[…]["dias_prueba"] or 14` en el

@@ -521,7 +521,9 @@ async def test_el_pdf_solo_llama_a_la_ia_si_se_pide(demo, monkeypatch, boxes, es
     # El resumen de las tres cajas sigue saliendo.
     for rotulo in ("SEVERIDAD", "COSTE ESTIMADO", "LEVE", "90 EUR"):
         assert rotulo in texto, rotulo
-    assert ("LOCALIZACION DE DA" in texto) == bool(esperadas)
+    # «LOCALIZACION DE DAÑOS (IA)» hasta el 14-11-2026: ahora dice que son posibles daños que marca la IA.
+    assert ("OS QUE MARCA LA IA" in texto) == bool(esperadas)       # el PDF escapa la Ñ y los paréntesis
+    assert "Informe de peritaje IA" not in texto and "Peritaje IA" not in texto
 
 
 # ── Los dos PDF que salen del producto con lo que dicen de la firma (r3, 14-11-2026) ──
@@ -570,14 +572,15 @@ def test_el_informe_pericial_sale_y_dice_lo_que_hace_la_firma():
                                      [dict(_GOLPE_PDF, confidence=0.3)])
     assert pdf.startswith(b"%PDF")
     frases = _frases_del_pdf(pdf)
-    for nueva in ("Revisión firmada con cadena de custodia",
+    for nueva in ("Informe de la revisión firmada", "Revisión firmada con su código de comprobación",
+                  "Las cajas las marca la IA, que se equivoca a menudo",
                   "El código de la firma se calcula con las direcciones de estas fotos y queda encadenado con el de la firma anterior.",
                   "Cada daño incluido tiene confianza", "50 %, caja delimitada y gravedad.",
-                  "no entran en el peritaje (el motivo va en cada fila)",
+                  "no entran en el informe (el motivo va en cada fila)",
                   "Código de la firma", "Código de la firma anterior", "Comprueba este código",
                   "introduce el código en el verificador público"):
         assert nueva in frases, nueva
-    for vieja in _VIEJAS:
+    for vieja in _VIEJAS + ("peritaje", "Peritaje", "cadena de custodia", "dos modelos", "La IA detectó"):
         assert vieja not in frases, vieja
 
 

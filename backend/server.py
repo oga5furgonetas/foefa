@@ -1377,7 +1377,7 @@ MODULOS_PANEL = [
     {"clave": "vehiculos", "nombre": "Vehiculos", "grupo": "Flota", "que": "Fichas de las furgonetas"},
     # «Antes del perito» (14-11-2026): una persona repasa la foto de hoy de cada lado junto a la anterior.
     {"clave": "repaso", "nombre": "Repaso", "grupo": "Flota", "que": "La foto de hoy junto a la anterior del mismo lado"},
-    {"clave": "revision", "nombre": "Revision rapida", "grupo": "Flota", "que": "Validar los daños que ve la IA"},
+    {"clave": "revision", "nombre": "Revision rapida", "grupo": "Flota", "que": "Confirmar o quitar los posibles daños que marca la IA"},
     {"clave": "inspecciones", "nombre": "Inspecciones", "grupo": "Flota", "que": "Fotos de cada dia"},
     {"clave": "incidencias", "nombre": "Incidencias", "grupo": "Flota", "que": "Golpes y averias"},
     {"clave": "talleres", "nombre": "Talleres", "grupo": "Flota", "que": "Agenda de talleres"},
@@ -1392,7 +1392,8 @@ MODULOS_PANEL = [
     {"clave": "contactos", "nombre": "Contactos", "grupo": "Equipo", "que": "Agenda de telefonos"},
     {"clave": "conversaciones", "nombre": "Conversaciones", "grupo": "Equipo", "que": "WhatsApp con conductores y talleres"},
     {"clave": "origen-danos", "nombre": "Origen de daños", "grupo": "Sistema", "que": "Quien llevaba la furgoneta cuando aparecio cada golpe"},
-    {"clave": "ia-peritaje", "nombre": "IA Peritaje", "grupo": "Sistema", "que": "Informes periciales con IA"},
+    # Decía «Informes periciales con IA» (14-11-2026): la IA marca posibles daños y alguien los confirma o los quita.
+    {"clave": "ia-peritaje", "nombre": "IA Peritaje", "grupo": "Sistema", "que": "Repasar a mano las cajas que marca la IA en las fotos"},
     {"clave": "configuracion", "nombre": "Configuracion", "grupo": "Sistema", "que": "Ajustes de la empresa"},
 ]
 _MODULOS_CLAVES = [m["clave"] for m in MODULOS_PANEL]
@@ -6023,7 +6024,7 @@ async def billing_planes(pais: str = ""):
                 "Usuarios y conductores ilimitados",
             ],
             "no_incluye": ["Quién llevaba la furgoneta cuando apareció cada golpe", "Qué furgoneta lleva cada uno",
-                           "Cuadrante, turnos y días libres", "Informe pericial firmado",
+                           "Cuadrante, turnos y días libres", "Informe firmado de la revisión en PDF",
                            "Varias delegaciones"],
         },
         "completo": {
@@ -6036,8 +6037,10 @@ async def billing_planes(pais: str = ""):
                 "Cuadrante con motor, turnos y días libres desde el móvil",
                 "Plantilla de salida, checklist de apertura y cierre, aparcamiento",
                 "Incorporaciones, empleo y contactos",
-                # `forensics` va en Pro sin límite (PLAN_LIMITS): ya no es complemento.
-                "Informe pericial firmado, sin límite, para reclamar al renting o al seguro",
+                # `forensics` va en Pro sin límite (PLAN_LIMITS): ya no es complemento. Decía «Informe pericial
+                # firmado… para reclamar al renting o al seguro» (14-11-2026, segunda pasada): ni es un peritaje ni
+                # sabemos qué acepta cada renting. Lo que hay: la firma, el PDF con sus fotos y su fecha, y el código.
+                "Informe firmado de la revisión en PDF, con sus fotos, su fecha y su código de comprobación, sin límite",
                 "Exportar a Excel",
             ],
             "no_incluye": [],
@@ -14410,7 +14413,8 @@ async def upload_inspection_photos(
         elif ia_danos:
             await db.inspections.update_one(
                 {"id": inspection.id},
-                {"$set": {"analysis_status": "plan_disabled", "analysis_error": "IA no incluida en tu plan"}}
+                # Decía «IA no incluida en tu plan» (14-11-2026): no se enseña como algo que falta.
+                {"$set": {"analysis_status": "plan_disabled", "analysis_error": "Revisión guardada sin análisis automático de fotos"}}
             )
 
         # Lanzar detección YOLO en background (no bloquea la respuesta al usuario)
@@ -15671,6 +15675,35 @@ async def _repaso_revision(inspection_id: str, user: dict) -> dict:
     return insp
 
 
+async def _repaso_consulta_dia(user: dict, fecha: str, centro: str) -> tuple:
+    """(consulta de las revisiones del día, consulta de las furgonetas activas) con las reglas de centro de la cola de
+    «Revisión rápida». La usan /repaso/dia y /repaso/pendientes: así las dos cuentan lo mismo."""
+    sub = _filtro_centro(user, centro or None)
+    q: dict = {"deleted": {"$ne": True}, "created_at": _rango_dia_negocio(fecha)}
+    qv: dict = {"status": "active"}
+    if sub:
+        vids = await db.vehicles.distinct("id", sub)
+        dids = await db.drivers.distinct("id", sub)
+        q["$or"] = [{"vehicle_id": {"$in": vids}}, {"driver_id": {"$in": dids}}]
+        qv.update(sub)
+    return q, qv
+
+
+@api_router.get("/repaso/pendientes")
+async def repaso_pendientes(center: Optional[str] = None, user: dict = Depends(require_admin)):
+    """El número del menú «Repaso» (14-11-2026): revisiones de HOY con fotos de carrocería que no están repasadas del
+    todo, la misma cuenta que `sin_repasar + a_medias` de /repaso/dia. Barata: ni fotos anteriores, ni libro, ni
+    fichas; el panel la pide cada 2 minutos y antes pedía el día entero solo para pintar este número."""
+    hoy = _dia_negocio()
+    q, _qv = await _repaso_consulta_dia(user, hoy, (center or "").strip())
+    pendientes = 0
+    # Los mismos campos que /repaso/dia (lo que necesita `_repaso_estado`), sin buscar las anteriores.
+    async for r in db.inspections.find(q, _REPASO_CAMPOS):
+        if _repaso_estado(r)[0] in ("sin_repasar", "a_medias"):
+            pendientes += 1
+    return {"fecha": hoy, "pendientes": pendientes}
+
+
 @api_router.get("/repaso/dia")
 async def repaso_del_dia(fecha: Optional[str] = None, center: Optional[str] = None,
                          user: dict = Depends(require_admin)):
@@ -15689,15 +15722,7 @@ async def repaso_del_dia(fecha: Optional[str] = None, center: Optional[str] = No
         # Si no, «furgonetas sin revisión» sería la flota entera.
         raise HTTPException(status_code=400, detail="Ese día todavía no ha llegado")
     centro = (center or "").strip()
-    sub = _filtro_centro(user, centro or None)
-
-    q: dict = {"deleted": {"$ne": True}, "created_at": _rango_dia_negocio(fecha)}
-    qv: dict = {"status": "active"}
-    if sub:
-        vids = await db.vehicles.distinct("id", sub)
-        dids = await db.drivers.distinct("id", sub)
-        q["$or"] = [{"vehicle_id": {"$in": vids}}, {"driver_id": {"$in": dids}}]
-        qv.update(sub)
+    q, qv = await _repaso_consulta_dia(user, fecha, centro)
     revs = await db.inspections.find(q, _REPASO_CAMPOS).sort("created_at", 1).to_list(2000)
     revs.sort(key=lambda r: str(r.get("created_at") or ""))
 
@@ -15725,6 +15750,23 @@ async def repaso_del_dia(fecha: Optional[str] = None, center: Optional[str] = No
         async for e in db.vehicle_damage_ledger.find(
                 {"vehicle_id": {"$in": vids_rev}, "status": "open", "source": "human"}):
             libro.setdefault(e.get("vehicle_id"), []).append(e)
+    # La foto y la caja con las que se marcó cada golpe ya apuntado (14-11-2026, para la miniatura): las entradas del
+    # repaso guardan `photo_index` y `box_2d`; la foto sale de su revisión. Las de «Revisión rápida» no las guardan:
+    # null (no se adivinan).
+    fotos_de: dict = {}
+    ids_marca = sorted({e.get("first_seen_inspection") for es in libro.values() for e in es
+                        if isinstance(e.get("photo_index"), int) and isinstance(e.get("first_seen_inspection"), str)})
+    if ids_marca:
+        async for i in db.inspections.find({"id": {"$in": ids_marca}, "deleted": {"$ne": True}},
+                                           {"_id": 0, "id": 1, "photos": 1}):
+            fotos_de[i.get("id")] = i
+
+    def _marca_de(e) -> tuple:
+        pi = e.get("photo_index")
+        rev = fotos_de.get(e.get("first_seen_inspection"))
+        foto = _repaso_foto(rev, pi) if rev and isinstance(pi, int) and not isinstance(pi, bool) else None
+        return (foto, _repaso_caja(e.get("box_2d"))) if foto else (None, None)   # una caja sin su foto no sirve
+
     fichas = await _repaso_fichas(
         [r.get("driver_id") for r in revs]
         + [prev.get("driver_id") for h in previas for prev, _j in h.values()]
@@ -15767,6 +15809,7 @@ async def repaso_del_dia(fecha: Optional[str] = None, center: Optional[str] = No
                 "origen": "repaso" if e.get("origen") == "repaso" else "revision_rapida",
                 "en_taller": bool(e.get("orden_id")),
                 "de_esta_revision": e.get("first_seen_inspection") == r.get("id"),
+                "foto_url": _marca_de(e)[0], "box_2d": _marca_de(e)[1],
             } for e in apuntados],
         })
     cuentas["furgonetas_activas"] = len(activas)
@@ -16655,7 +16698,7 @@ async def sign_inspection(inspection_id: str, data: SignInspectionRequest, reque
         raise HTTPException(status_code=404, detail="Inspección no encontrada")
     if insp.get("forensic_signed"):
         raise HTTPException(status_code=409,
-                            detail="Esta inspección ya está firmada (cadena de custodia cerrada)")
+                            detail="Esta revisión ya está firmada")
 
     # Autorización: admin puede firmar cualquiera. Conductor solo la suya.
     if user.get("role") == "driver":
@@ -17042,7 +17085,7 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
     buf = _io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=15*mm, leftMargin=15*mm,
                             topMargin=15*mm, bottomMargin=15*mm,
-                            title=f"Peritaje técnico {insp.get('id','')[:8]}",
+                            title=f"Revisión firmada {insp.get('id','')[:8]}",
                             author=f"{MARCA}")
     styles = getSampleStyleSheet()
     h1 = ParagraphStyle("H1", parent=styles["Heading1"], fontSize=18, textColor=colors.HexColor("#0b1220"))
@@ -17056,10 +17099,13 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
     story = []
 
     # Cabecera
-    story.append(Paragraph("Peritaje técnico de inspección", h1))
+    # Rótulos (14-11-2026, segunda pasada): decía «Peritaje técnico de inspección», «cadena de custodia», «Resumen del
+    # peritaje IA», «daño confirmado por dos modelos» y «Daños incluidos en el peritaje». Lo que hay de verdad: la
+    # revisión, sus fotos, su fecha, una firma y un código que se comprueba en /verify. La IA marca posibles daños.
+    story.append(Paragraph("Informe de la revisión firmada", h1))
     # Sin «hash inmutable» (14-11-2026): el código se calcula al firmar y se puede comprobar que está registrado, que es
     # lo que hace /verify; «inmutable» prometía más de lo que el sistema comprueba.
-    story.append(Paragraph(f"Revisión firmada con cadena de custodia · {MARCA}", small))
+    story.append(Paragraph(f"Revisión firmada con su código de comprobación · {MARCA}", small))
     story.append(Spacer(1, 5*mm))
 
     # Bloque datos
@@ -17104,16 +17150,17 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
 
     # Resumen ejecutivo si hay
     if analysis.get("executive_summary"):
-        story.append(Paragraph("Resumen del peritaje IA", h2))
+        story.append(Paragraph("Resumen que escribe la IA (sin confirmar)", h2))
         story.append(Paragraph((analysis.get("executive_summary") or "")[:1500], body))
 
     # Fotos con cajas
     photos_valid = [b for b in photo_bytes_list if b]
     if photos_valid:
-        story.append(Paragraph("Evidencia fotográfica con daños marcados", h2))
-        msg = (f"{len(photos_valid)} fotos analizadas. "
-               f"<b>Borde sólido</b> = daño confirmado por dos modelos (Gemini+YOLO/SAM). "
-               f"<b>Borde discontinuo</b> = detectado por Gemini sin confirmación geométrica (caja aproximada, marcado con ~). "
+        story.append(Paragraph("Fotos de la revisión con los posibles daños marcados", h2))
+        msg = (f"{len(photos_valid)} fotos. Las cajas las marca la IA, que se equivoca a menudo: un daño solo está "
+               f"confirmado cuando lo dice una persona. "
+               f"<b>Borde sólido</b> = los dos detectores automáticos (Gemini y YOLO/SAM) marcan la misma zona. "
+               f"<b>Borde discontinuo</b> = solo lo marca Gemini (caja aproximada, con ~). "
                # Decía «El hash de cada imagen está sellado en la cadena de custodia» (14-11-2026): no es así. El código
                # de la firma (`_canonical_inspection_payload`) lleva las DIRECCIONES de las fotos, no su contenido.
                f"El código de la firma se calcula con las direcciones de estas fotos y queda encadenado con el de la firma anterior.")
@@ -17142,10 +17189,10 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
             ]))
             story.append(tg)
 
-    # Tabla de daños incluidos en el peritaje
+    # Tabla de daños incluidos en el informe
     if damages_incluidos:
         story.append(Spacer(1, 4*mm))
-        story.append(Paragraph(f"Daños incluidos en el peritaje ({len(damages_incluidos)})", h2))
+        story.append(Paragraph(f"Posibles daños incluidos en el informe ({len(damages_incluidos)})", h2))
         # Decía «cumple los criterios de veracidad» (14-11-2026): son umbrales (_filter_damages_for_peritaje), no
         # una prueba de que el golpe sea real.
         story.append(Paragraph("Cada daño incluido tiene confianza ≥ 50 %, caja delimitada y gravedad.", small))
@@ -17176,7 +17223,7 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
     if damages_sugeridos:
         story.append(Spacer(1, 4*mm))
         story.append(Paragraph(f"Sugerencias no incluidas ({len(damages_sugeridos)})", h2))
-        story.append(Paragraph("La IA detectó estos posibles daños, pero no entran en el peritaje (el motivo va en cada fila). Revisión humana recomendada.", small))
+        story.append(Paragraph("Estos posibles daños no entran en el informe (el motivo va en cada fila). Que los mire una persona.", small))
         story.append(Spacer(1, 2*mm))
         tdata2 = [["Pieza", "Severidad", "Confianza", "Motivo de exclusión"]]
         for d in damages_sugeridos[:20]:
@@ -17206,7 +17253,7 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
 
     # Sección de firma + cadena
     story.append(PageBreak())
-    story.append(Paragraph("Firma electrónica y cadena de custodia", h2))
+    story.append(Paragraph("La firma y su código de comprobación", h2))
     sig_rows = [
         ["Firmado por", sig.get("signed_by_name", "—")],
         ["Fecha de firma", (sig.get("signed_at") or "")[:19].replace("T", " ")],
@@ -17251,7 +17298,8 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
     # Disclaimer legal honesto
     story.append(Spacer(1, 8*mm))
     story.append(Paragraph(
-        "<b>Aviso:</b> este documento es evidencia técnica con cadena de custodia hash, NO una firma "
+        "<b>Aviso:</b> este documento es el registro de una revisión, con su fecha, sus fotos y un código de "
+        f"comprobación que queda en el registro de {MARCA}; NO es una firma "
         f"electrónica avanzada conforme al reglamento eIDAS. {MARCA} no presta servicios de asesoría "
         "jurídica. La validez probatoria del documento dependerá de la valoración que haga el "
         "destinatario o, en su caso, la autoridad competente.", small))
@@ -17399,7 +17447,7 @@ async def forensic_pdf(inspection_id: str, _=Depends(require_admin)):
     if not insp:
         raise HTTPException(status_code=404, detail="Inspección no encontrada")
     if not insp.get("forensic_signed"):
-        raise HTTPException(status_code=409, detail="Esta inspección aún no está firmada. Fírmala antes de generar el peritaje.")
+        raise HTTPException(status_code=409, detail="Esta revisión aún no está firmada. Fírmala antes de generar el informe.")
     sig = await db.forensic_signatures.find_one({"inspection_id": inspection_id}, {"_id": 0})
     if not sig:
         raise HTTPException(status_code=500, detail="Firma marcada pero no encontrada (estado inconsistente).")
@@ -17456,7 +17504,7 @@ async def forensic_pdf(inspection_id: str, _=Depends(require_admin)):
     )
     fn_plate = re.sub(r"[^A-Za-z0-9]", "", (vehicle.get("license_plate") or "INSP"))
     fn_date = (sig.get("signed_at") or "")[:10]
-    filename = f"peritaje-{fn_plate}-{fn_date}.pdf"
+    filename = f"revision-firmada-{fn_plate}-{fn_date}.pdf"
     from starlette.responses import Response
     return Response(
         content=pdf_bytes, media_type="application/pdf",
@@ -17475,12 +17523,15 @@ async def verify_hash_public(content_hash: str, request: Request):
                       detail="Demasiadas verificaciones esta hora.")
     h = (content_hash or "").strip().lower()
     if len(h) != 64 or not re.match(r"^[0-9a-f]+$", h):
-        raise HTTPException(status_code=400, detail="Hash inválido (debe ser SHA-256 hex de 64 caracteres).")
+        raise HTTPException(status_code=400, detail="El código de comprobación tiene 64 caracteres: números y letras de la a a la f.")
 
     # Localiza el tenant donde vive este hash (índice global creado al firmar).
+    # Textos (14-11-2026): los mismos que la página /verify («código de comprobación», «registro de …»); decía «Hash
+    # no encontrado…» y «Evidencia técnica con cadena de custodia hash».
     idx = await global_db.forensic_index.find_one({"content_hash": h}, {"_id": 0})
     if not idx:
-        return {"valid": False, "error": "Hash no encontrado. Puede que no exista o que se firmara antes de junio 2026."}
+        return {"valid": False, "error": (f"Este código no está en el registro de informes firmados de {MARCA}. Puede "
+                                          "que esté mal copiado o que el informe se firmara antes de junio de 2026.")}
 
     # Carga el cliente de Mongo del tenant correcto.
     tenant_db = client[idx["db_name"]]
@@ -17504,7 +17555,8 @@ async def verify_hash_public(content_hash: str, request: Request):
         "inspection_date": insp.get("created_at"),
         "vehicle_plate_masked": _mask_plate(vehicle.get("license_plate", "")),
         "has_next_in_chain": bool(next_sig),
-        "disclaimer": "Evidencia técnica con cadena de custodia hash. No constituye firma electrónica avanzada eIDAS.",
+        "disclaimer": (f"Esto solo dice que el código está en el registro de {MARCA}: no vuelve a calcularlo ni compara "
+                       "el PDF que tienes delante. No es una firma electrónica avanzada eIDAS."),
     }
 
 
@@ -21252,9 +21304,10 @@ async def send_telegram_damage_alert(plate, driver_name, analysis, photo_urls, i
     try:
         _sev = (getattr(analysis, "severity", None)
                 or (analysis.get("severity") if isinstance(analysis, dict) else "") or "")
+        # Decía «Daño {grave}» y «nueva inspección con daño» (14-11-2026): es lo que marca la IA, sin confirmar.
         await push_center_event(
-            center or "", f"🚨 Daño {_sev} · {center or ''}".strip(),
-            f"{plate}: nueva inspección con daño, revísala", url="/panel/revision")
+            center or "", f"🚨 Posible daño {_sev} · {center or ''}".strip(),
+            f"{plate}: la IA marca un posible daño; que lo mire una persona", url="/panel/revision")
     except Exception as _pe:
         logger.debug(f"push daño: {_pe}")
     try:
@@ -21280,14 +21333,18 @@ async def send_telegram_damage_alert(plate, driver_name, analysis, photo_urls, i
 
         lines = []
         center_tag = f" [{center_display}]" if center_display else ""
-        lines.append(f"{head_emoji} <b>PERITAJE — DAÑOS DETECTADOS{center_tag}</b>")
+        # Textos de la oficina (14-11-2026): decía «PERITAJE — DAÑOS DETECTADOS», «Conductor» junto a «DAÑOS NUEVOS»
+        # y «Sin daños nuevos respecto al peritaje anterior». Es lo que MARCA la IA, que se equivoca a menudo: lo
+        # decide una persona, y quien hizo la revisión no es quien dio el golpe.
+        lines.append(f"{head_emoji} <b>Posibles daños en una revisión{center_tag}</b>")
+        lines.append("La IA marca posibles daños y se equivoca a menudo: que lo mire una persona.")
         lines.append("")
         if center_display:
             lines.append(f"🏢 <b>Centro:</b> {center_display}")
         lines.append(f"🚗 <b>Matrícula:</b> {plate}")
-        lines.append(f"👤 <b>Conductor:</b> {driver_name}")
-        lines.append(f"{_severity_emoji(sev)} <b>Severidad:</b> {sev.upper()}")
-        lines.append(f"💶 <b>Coste estimado:</b> {analysis.total_estimated_cost:.0f} €")
+        lines.append(f"👤 <b>Hizo la revisión:</b> {driver_name}")
+        lines.append(f"{_severity_emoji(sev)} <b>Gravedad según la IA:</b> {sev.upper()}")
+        lines.append(f"💶 <b>Coste estimado por la IA (sin contrastar):</b> {analysis.total_estimated_cost:.0f} €")
 
         # Aviso anti-fraude si la matrícula leída no coincide
         detected = (analysis.detected_plate or "").replace(" ", "").upper()
@@ -21303,14 +21360,14 @@ async def send_telegram_damage_alert(plate, driver_name, analysis, photo_urls, i
         # Daños nuevos
         lines.append("")
         if nuevos:
-            lines.append(f"<b>🆕 DAÑOS NUEVOS ({len(nuevos)}):</b>")
+            lines.append(f"<b>🆕 Posibles daños nuevos ({len(nuevos)}):</b>")
             for i, d in enumerate(nuevos[:10], 1):
                 loc = f" [{d.location_hint}]" if getattr(d, "location_hint", "") else ""
                 lines.append(f"{i}. <b>{d.part}</b>{loc} — {d.severity}")
                 if d.description:
                     lines.append(f"   {d.description}")
         else:
-            lines.append("Sin daños nuevos respecto al peritaje anterior.")
+            lines.append("La IA no marca daños nuevos respecto a la revisión anterior.")
 
         # Enlaces a las fotos — etiquetadas por zona (orden del portal conductor)
         zonas = ["Frontal", "Trasera", "Lateral izquierdo", "Lateral derecho",
@@ -21524,15 +21581,18 @@ async def send_daily_inspection_summary():
                     lines.append(f"• {drv} — {slot.get('vehicle_plate', '—')}")
                 if len(missing) > 15:
                     lines.append(f"• …y {len(missing) - 15} más")
-            lines.append(f"   🟢 {sev_counts['sin']} sin daños · 🟡 {sev_counts['leve']} leves · 🔴 {sev_counts['grave']} graves")
+            # Decía «sin daños · leves · graves» y «N daño(s) nuevo(s) hoy» con el conductor al lado (14-11-2026): es
+            # lo que marca la IA, sin confirmar, y el del cuadrante es quien la llevaba, no quien dio el golpe.
+            lines.append(f"   Según la IA: 🟢 {sev_counts['sin']} sin marcas · 🟡 {sev_counts['leve']} leves · "
+                         f"🔴 {sev_counts['grave']} graves")
             lines.append("")
 
-            # DAÑOS NUEVOS
+            # POSIBLES DAÑOS NUEVOS (los marca la IA; los confirma una persona)
             if danos:
-                lines.append(f"🔨 <b>{len(danos)} daño(s) nuevo(s) hoy</b>")
+                lines.append(f"🔨 <b>{len(danos)} posible(s) daño(s) nuevo(s) hoy, sin confirmar</b>")
                 for plate, part, sev, quien in danos[:8]:
                     ico = "🔴" if sev in ("grave", "critico", "crítico") else "🟡"
-                    lines.append(f"{ico} {plate} — {part}" + (f" · {quien}" if quien else ""))
+                    lines.append(f"{ico} {plate} — {part}" + (f" · la llevaba {quien}" if quien else ""))
                 if len(danos) > 8:
                     lines.append(f"• …y {len(danos) - 8} más")
                 lines.append("")
@@ -21972,13 +22032,14 @@ async def send_weekly_summary():
             f"📊 <b>RESUMEN SEMANAL</b> ({week_start_d} – {week_end_d})",
             "",
             f"📸 Inspecciones: <b>{len(insps)}</b>" + (f" de {total_slots} asignaciones ({round(len(insps)/total_slots*100)}%)" if total_slots else ""),
-            f"💶 Daños nuevos detectados: <b>{round(total_eur):,} €</b>".replace(",", "."),
+            # Decía «Daños nuevos detectados: X €» (14-11-2026): son los que marca la IA, sin confirmar, con SU estimación.
+            f"💶 Posibles daños nuevos que marca la IA (estimación sin contrastar): <b>{round(total_eur):,} €</b>".replace(",", "."),
         ]
         if worst:
             lines.append("")
-            lines.append("🚨 <b>Furgonetas con más daños nuevos:</b>")
+            lines.append("🚨 <b>Furgonetas con más posibles daños nuevos (sin confirmar):</b>")
             for vid, cnt in worst:
-                lines.append(f"  • {plates.get(vid, '?')} — {cnt} daño(s)")
+                lines.append(f"  • {plates.get(vid, '?')} — {cnt} posible(s) daño(s)")
         if top3_txt:
             lines.append("")
             lines.append("🏆 <b>Top scoring del mes:</b>")
@@ -30028,6 +30089,50 @@ async def migrar_permiso_cuadrante():
         logger.error("Migración del permiso de Cuadrante: %s", e)
 
 
+def _modulos_con_repaso(modulos) -> Optional[list]:
+    """La lista propia de módulos con «repaso» puesto justo después de «vehiculos» (o al final si no está), o None si
+    no toca: no es una lista, no tiene «inspecciones» (sin revisiones no hay nada que repasar) o ya tiene «repaso»."""
+    if not isinstance(modulos, list) or "inspecciones" not in modulos or "repaso" in modulos:
+        return None
+    nueva = list(modulos)
+    if "vehiculos" in nueva:
+        nueva.insert(nueva.index("vehiculos") + 1, "repaso")
+    else:
+        nueva.append("repaso")
+    return nueva
+
+
+async def _migrar_repaso_a_listas_propias() -> dict:
+    """«Repaso» (14-11-2026) entra en el estándar, pero una empresa con su lista de módulos propia no lo recibe (la lista
+    se respeta tal cual: test_empresas_producto.py), y la empresa del dueño, la que más lo usa, tiene lista propia. Se
+    le añade UNA sola vez a cada empresa con lista propia que tenga «inspecciones» y no tenga «repaso». La marca en
+    `app_meta` hace que no se repita: si el super-admin se lo quita después, no vuelve en el siguiente arranque."""
+    marca = "migracion_modulo_repaso"
+    if await global_db.app_meta.find_one({"_id": marca}):
+        return {"hecha_antes": True, "empresas": 0}
+    cambiadas = []
+    orgs = await global_db.organizations.find({"modulos": {"$exists": True}}, {"_id": 0, "id": 1, "modulos": 1}).to_list(None)
+    for o in orgs:
+        nueva = _modulos_con_repaso(o.get("modulos"))
+        if nueva is None or not o.get("id"):
+            continue
+        await global_db.organizations.update_one({"id": o["id"]}, {"$set": {"modulos": nueva}})
+        cambiadas.append(o["id"])
+    await global_db.app_meta.update_one(
+        {"_id": marca}, {"$set": {"en": datetime.now(timezone.utc).isoformat(), "empresas": cambiadas}}, upsert=True)
+    return {"hecha_antes": False, "empresas": len(cambiadas)}
+
+
+@app.on_event("startup")
+async def migrar_modulo_repaso():
+    try:
+        r = await _migrar_repaso_a_listas_propias()
+        if not r["hecha_antes"]:
+            logger.info("Módulo Repaso: añadido a %d empresas con lista de módulos propia", r["empresas"])
+    except Exception as e:                                       # noqa: BLE001
+        logger.error("Migración del módulo Repaso: %s", e)
+
+
 @api_router.post("/drivers/{driver_id}/traslado")
 async def programar_traslado(driver_id: str, data: dict = Body(...), user: dict = Depends(require_admin)):
     """Deja programado que esta ficha pasa a otro centro un día. Si ese día ya
@@ -32159,7 +32264,7 @@ async def _process_single_inspection(vehicle_id, driver_id, photo_urls, photos_b
         plate = vehicle.get("license_plate") if vehicle else vehicle_id
         alert = Alert(
             vehicle_id=vehicle_id, inspection_id=inspection.id,
-            title=f"Daños detectados en {plate}",
+            title=f"Posibles daños en {plate}",   # decía «Daños detectados en…» (14-11-2026): lo marca la IA
             description=analysis.executive_summary,
             severity="critical" if analysis.severity == "critico" else "high"
         )
@@ -34680,7 +34785,9 @@ async def inspection_pdf(inspection_id: str, boxes: int = 0, _=Depends(require_a
     c.drawString(28*mm, H-18*mm, f"{MARCA}")
     c.setFont("Helvetica", 9)
     c.setFillColor(colors.HexColor("#9aa0aa"))
-    c.drawRightString(W-15*mm, H-16*mm, "Informe de peritaje IA")
+    # Rótulos del informe (14-11-2026): decía «Informe de peritaje IA», «LOCALIZACION DE DAÑOS (IA)», «DAÑOS
+    # DETECTADOS» y «Peritaje IA». La IA marca posibles daños y se equivoca a menudo; lo decide una persona.
+    c.drawRightString(W-15*mm, H-16*mm, "Informe de la revisión")
 
     y = H - 38*mm
     # --- Datos vehículo ---
@@ -34771,7 +34878,7 @@ async def inspection_pdf(inspection_id: str, boxes: int = 0, _=Depends(require_a
                     c.showPage(); y = H - 25*mm
                 c.setFillColor(colors.HexColor("#888888"))
                 c.setFont("Helvetica", 8)
-                c.drawString(15*mm, y, "LOCALIZACION DE DAÑOS (IA)")
+                c.drawString(15*mm, y, "POSIBLES DAÑOS QUE MARCA LA IA (SIN CONFIRMAR: SE EQUIVOCA A MENUDO)")
                 y -= 5*mm
                 # Imagen anotada (más grande, centrada)
                 aimg = ImageReader(_io.BytesIO(annotated))
@@ -34807,7 +34914,7 @@ async def inspection_pdf(inspection_id: str, boxes: int = 0, _=Depends(require_a
     if damages:
         c.setFillColor(colors.HexColor("#888888"))
         c.setFont("Helvetica", 8)
-        c.drawString(15*mm, y, "DAÑOS DETECTADOS")
+        c.drawString(15*mm, y, "DAÑOS APUNTADOS EN LA REVISIÓN (LOS DE LA IA SON POSIBLES, SIN CONFIRMAR)")
         y -= 6*mm
         for d in damages[:12]:
             if y < 30*mm:
@@ -34847,13 +34954,13 @@ async def inspection_pdf(inspection_id: str, boxes: int = 0, _=Depends(require_a
     # --- Pie ---
     c.setFillColor(colors.HexColor("#aaaaaa"))
     c.setFont("Helvetica", 7)
-    c.drawCentredString(W/2, 12*mm, f"Generado por {MARCA} - Peritaje IA - Documento orientativo")
+    c.drawCentredString(W/2, 12*mm, f"Generado por {MARCA} - Informe de la revisión - Documento orientativo")
 
     c.showPage()
     c.save()
     buf.seek(0)
     return Response(content=buf.read(), media_type="application/pdf",
-                    headers={"Content-Disposition": f"inline; filename=peritaje_{plate.replace(' ','')}_{fecha}.pdf"})
+                    headers={"Content-Disposition": f"inline; filename=revision_{plate.replace(' ','')}_{fecha}.pdf"})
 
 
 # =========================
@@ -44333,7 +44440,7 @@ _DEFAULT_DRIVER_OFFER = {
     "id": f"ref-{MARCA.lower()}",
     "emoji": "🎁",
     "title": "¿Conoces otra empresa que sufra con sus vehículos?",
-    "description": f"Recomiéndale {MARCA}: revisiones con IA desde el móvil, como las tuyas.",
+    "description": f"Recomiéndale {MARCA}: revisiones con foto desde el móvil, como las tuyas.",   # sin «con IA» (14-11-2026)
     "cta": "Ver cómo funciona",
     "url": f"{_PORTAL_BASE_FRONT}/?utm_source=driver-portal&utm_medium=referral",
 }
@@ -49770,8 +49877,9 @@ correo, DNI o dirección — «cámbiale el teléfono a Juan Pérez por el
 Inspecciones: las fotos que hacen los conductores al coger/dejar furgoneta.
 Puedes preguntar por las últimas de una furgoneta — "últimas inspecciones de
 la 1234ABC" — y te digo fecha y gravedad de cada una.
-Revisión rápida: aquí se valida lo que ve la IA — es lo ÚNICO que la hace
-mejorar. Botones: acierto, no existe, "sí pero no ahí" (el daño es real pero
+Revisión rápida (solo en las cuentas con la IA activa): la IA marca posibles
+daños y se equivoca a menudo; aquí una persona confirma o quita cada marca, y
+solo vale lo que confirma una persona. Botones: acierto, no existe, "sí pero no ahí" (el daño es real pero
 el recuadro está mal puesto), "no se ve" (la foto no permite juzgarlo).
 Incidencias: partes de golpes/averías con foto; desde una se abre una orden
 de taller sin volver a escribir nada. Puedes abrir el parte tú por el chat

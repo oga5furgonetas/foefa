@@ -149,7 +149,14 @@
           "vista": "lateral_izq",
           "origen": "repaso",
           "en_taller": false,
-          "de_esta_revision": true
+          "de_esta_revision": true,
+          "foto_url": "/demo/van-lateral-golpe-puerta.jpg",
+          "box_2d": [
+            410,
+            220,
+            640,
+            470
+          ]
         },
         {
           "ledger_id": null,
@@ -162,7 +169,9 @@
           "vista": null,
           "origen": "revision_rapida",
           "en_taller": false,
-          "de_esta_revision": false
+          "de_esta_revision": false,
+          "foto_url": null,
+          "box_2d": null
         }
       ]
     },

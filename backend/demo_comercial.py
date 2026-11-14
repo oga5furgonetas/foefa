@@ -165,7 +165,10 @@ def generar(ahora=None, semilla=2026):
                     if sev != "leve":
                         incidencias.append({
                             "id": f"dn-inc{len(incidencias)}", "vehicle_id": v["id"], "driver_id": cond["id"],
-                            "created_by_name": "IA de inspección", "title": f"{pieza}: golpe nuevo",
+                            # Decía «IA de inspección» y «golpe nuevo» (14-11-2026): es un aviso automático sin
+                            # confirmar; lo decide una persona.
+                            "created_by_name": "Aviso automático (sin confirmar)",
+                            "title": f"{pieza}: posible golpe nuevo",
                             "description": desc, "severity": sev,
                             "status": "open" if atras < 10 else "resolved", "photos": [], "notes": "",
                             "created_at": cuando.isoformat(), "updated_at": cuando.isoformat(),

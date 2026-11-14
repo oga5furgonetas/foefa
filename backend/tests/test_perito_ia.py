@@ -273,4 +273,4 @@ async def test_los_planes_no_prometen_la_ia(monkeypatch):
                           for x in con_ia)
     por = {p["clave"]: p for p in r["planes"]}
     assert any("Repaso del día" in x for x in por["operacion"]["incluye"])
-    assert any("pericial" in x for x in por["completo"]["incluye"])          # lo que ya comprobaba test_precios
+    assert any("Informe firmado de la revisión" in x for x in por["completo"]["incluye"])          # lo que ya comprobaba test_precios
