@@ -5,7 +5,8 @@ import { useT } from '../../i18n'
 import { getAltaEstado } from '../api'
 import { datosDeSesion } from '../../services/api'
 import Matricula from '../../components/Matricula'
-import { diaCorto } from '../../lib/accesoConductor'
+import { diaSello } from '../../lib/accesoConductor'
+import { selloDeFecha } from '../../lib/sello'
 
 /* «SIGUE CON EL ARRANQUE» EN EL INICIO (14-11-2026, CONTRATO-ALTA §0.15 y §3). Mientras falte algún paso (lo dice
    GET /alta/estado, con los datos de verdad, sin marcas guardadas) el inicio lleva al arranque, al paso en que se
@@ -77,7 +78,7 @@ export default function EntradaArranque() {
           <h2 className="text-[17px] font-semibold text-dark-50">{t('alta.p4.llego')}</h2>
           <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-dark-300">
             {llego.furgoneta?.matricula && <Matricula texto={llego.furgoneta.matricula} className="text-[13px]" />}
-            <span>{t('alta.p4.recibida').replace('{dia}', diaCorto(llego.dia, lang)).replace('{hora}', llego.hora || '')}</span>
+            <span>{t('alta.p4.recibidaEn')} · <span className="font-mono tabular-nums">{selloDeFecha(llego.recibida_at, { idioma: lang }) || [diaSello(llego.dia, lang, { anio: true }), llego.hora].filter(Boolean).join(' · ')}</span></span>
           </p>
         </div>
         <Link to="/panel/repaso" className="btn-primary inline-flex min-h-[44px] items-center gap-1.5 px-4 text-[14px]">

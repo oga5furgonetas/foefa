@@ -26,6 +26,11 @@ const CONDUCTORES = fx('alta-conductores.json')
 /* La pantalla dice cada porqué por su código, sin el punto final con que lo escribe el servidor. */
 const sinPunto = (s) => String(s).replace(/\.$/, '')
 const FOTOS_DIR = process.env.FOTOS_ALTA || ''
+/* «2026-11-14» → «14 NOV»: el día con el sello de la casa, como lo dicen el arranque y la ventana del acceso (C2). */
+const selloDia = (iso, lang = 'es') => {
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
+  return `${String(d).padStart(2, '0')} ${new Intl.DateTimeFormat(lang, { month: 'short' }).format(new Date(y, m - 1, d)).replace(/\./g, '').toUpperCase().slice(0, 4)}`
+}
 
 /* «2026-11-14» → «14 nov»: el día como lo dice ahora todo el arranque, igual que el sello de las fotos (A11). */
 const diaDe = (iso, lang = 'es') => {
@@ -184,7 +189,10 @@ test('el alta de una flota, de la web a «ha llegado la primera revisión»', as
   // 2 · Paso 1: las matrículas, con una repetida y una que no lo parece; se dice antes de guardar.
   await expect(page).toHaveURL(/\/panel\/arranque$/)
   await expect(page.getByRole('heading', { name: 'Tus furgonetas' })).toBeVisible()
-  await expect(page.getByText('Paso 1 de 4')).toBeVisible()
+  // Sin «Paso 1 de 4» encima del título: lo dice la barra, con el paso en curso en tinta (cuarta tanda, C2).
+  await expect(page.getByText(/Paso \d de 4/)).toHaveCount(0)
+  await expect(page.getByTestId('alta-barra')).toHaveCount(4)
+  await expect(page.getByTestId('alta-barra').first()).toHaveAttribute('data-cual', 'actual')
   const pegadas = FURGONETAS.lineas.map((l) => l.texto).join('\n')
   await page.getByTestId('alta-furgonetas-texto').fill(pegadas)
   await page.getByRole('button', { name: 'Revisar', exact: true }).click()
@@ -230,7 +238,9 @@ test('el alta de una flota, de la web a «ha llegado la primera revisión»', as
   const sinMovil = ACCESOS.conductores.find((c) => !c.whatsapp)
   const abierto = ACCESOS.conductores.find((c) => c.acceso.estado === 'abierto')
   await expect(fila(conMovil).getByTestId('acceso-estado')).toHaveText('Sin mandar')
-  await expect(fila(abierto).getByTestId('acceso-estado')).toHaveText(`Abierto el ${diaDe(abierto.acceso.abierto_dia)}`)
+  // El estado, con el día como el sello de las fotos («14 NOV») y en mono (cuarta tanda, C2 y C3).
+  await expect(fila(abierto).getByTestId('acceso-estado')).toHaveText(`Abierto el ${selloDia(abierto.acceso.abierto_dia)}`)
+  await expect(fila(abierto).getByTestId('acceso-estado')).toHaveClass(/font-mono/)
   await expect(fila(abierto).getByRole('button', { name: 'Mandar por WhatsApp' })).toHaveCount(0)
   // Junto a «Abierto el…», qué hacer si dice que no le entra (A4).
   await expect(fila(abierto).getByTestId('acceso-pista')).toHaveText(DICT['alta.acc.noEntra'].es)
@@ -280,11 +290,23 @@ test('el alta de una flota, de la web a «ha llegado la primera revisión»', as
   await expect(page.getByRole('heading', { name: 'La primera revisión' })).toBeVisible()
   await expect(page.getByText('Esta pantalla se pone sola en cuanto llegue. No hace falta recargar.')).toBeVisible()
   await expect(page.getByText(/rueda de repuesto/)).toBeVisible()
-  // La espera no es una página en blanco (A11): que está mirando, quién ha abierto su enlace, qué hacer si no llega.
-  await expect(page.getByTestId('alta-esperando')).toContainText(/Comprobado a las \d{2}:\d{2}:\d{2}/)
+  // La espera no es una página en blanco (A11 y C1): que está mirando y hace cuánto, las cuatro fotos que van a llegar,
+  // cada conductor con su enlace y «Mandar otra vez», qué hacer si no llega.
+  await expect(page.getByTestId('alta-comprobado')).toHaveText(/^Comprobado hace \d+ s$/)
+  await expect(page.getByTestId('alta-comprobado')).toHaveClass(/font-mono/)
+  await expect(page.getByTestId('alta-fotos-vacias').locator('[data-vacia]')).toHaveCount(4)
+  await expect(page.getByTestId('alta-fotos-vacias').locator('figcaption')).toHaveText(['Frontal', 'Trasera', 'Lateral izquierdo', 'Lateral derecho'])
   const espera = page.getByTestId('alta-espera-accesos')
-  await expect(espera).toContainText(`Han abierto su enlace (${s.accesos.conductores.filter((c) => c.acceso.estado === 'abierto').length})`)
-  await expect(espera).toContainText('Aún sin abrir')
+  await expect(espera.getByTestId('alta-espera-conductor')).toHaveCount(s.accesos.conductores.length)
+  for (const c of s.accesos.conductores) {
+    const f = espera.getByTestId('alta-espera-conductor').filter({ hasText: c.nombre })
+    if (c.acceso.estado === 'abierto') {
+      await expect(f.getByTestId('alta-espera-estado')).toHaveText(`Abrió el enlace · ${selloDia(c.acceso.abierto_dia)}`)
+      await expect(f.getByRole('button')).toHaveCount(0)
+    } else {
+      await expect(f.getByRole('button', { name: c.acceso.estado === 'sin_enlace' ? 'Mandar su acceso' : 'Mandar otra vez' })).toBeVisible()
+    }
+  }
   await expect(page.getByRole('heading', { name: 'Si no llega' })).toBeVisible()
   await expect(page.getByText(DICT['alta.p4.paso2'].es)).toBeVisible()
   await foto(page, `07-esperando-${info.project.name}`)
@@ -298,7 +320,10 @@ test('el alta de una flota, de la web a «ha llegado la primera revisión»', as
   expect(s.estadoPedidos).toBeGreaterThan(antes)
   const rev = page.getByTestId('alta-revision')
   await expect(rev.getByTestId('matricula')).toHaveText(new RegExp(REVISION.furgoneta.matricula.replace(' ', '\\s*')))
-  await expect(rev.getByTestId('alta-recibida')).toHaveText(`Recibida en el servidor el ${diaDe(REVISION.dia)} a las ${REVISION.hora}`)
+  // La fecha con el sello de la casa (C2): «Recibida en el servidor · 14 NOV 2026 · 09:31».
+  await expect(rev.getByTestId('alta-recibida')).toHaveText(`Recibida en el servidor${selloDia(REVISION.dia)} ${REVISION.dia.slice(0, 4)} · ${REVISION.hora}`)
+  // Las fotos llegan a las mismas casillas de la espera, con el lado en la esquina (como «Antes»/«Hoy»).
+  await expect(rev.locator('figcaption').first()).toHaveCSS('position', 'absolute')
   await expect(rev.getByText(`Hecha por ${REVISION.conductor.nombre}`)).toBeVisible()
   await expect(rev.locator('img')).toHaveCount(REVISION.fotos.length)
   await expect(rev.getByTestId('sello-foto')).toHaveCount(REVISION.fotos.length)

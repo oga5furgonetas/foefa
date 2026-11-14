@@ -4,7 +4,7 @@ import { useT } from '../../i18n'
 import { useTitulo } from '../../lib/titulo'
 import { API_BASE, DRIVER_TOKEN_KEY, ENLACE_CADUCADO } from '../../services/api'
 import { BTN_PRIMARIO, BTN_SECUNDARIO } from '../portadaComun'
-import { MarcoEntrada, TITULO, TEXTO, ERROR, AVISO, ENLACE } from '../entradaComun'
+import { MarcoEntrada, TITULO, TEXTO, ERROR, AVISO, ENLACE, ABAJO } from '../entradaComun'
 
 /* ENTRAR CON EL ENLACE PERSONAL (14-11-2026, CONTRATO-ALTA §1.6–1.9). El dueño le manda a cada conductor, por su
    WhatsApp, un enlace `/c#<token>`. Con un toque en «Entrar» queda dentro de su portal: sin correo, sin contraseña y sin
@@ -130,7 +130,7 @@ export default function EntrarConEnlace() {
         <section className="flex flex-1 flex-col" aria-labelledby="c-titulo">
           <h1 id="c-titulo" className={TITULO}>{t('alta.c.titulo')}</h1>
           <p role="alert" className={`mt-4 ${AVISO}`}>{t('alta.c.avisoPanel')}</p>
-          <div className="mt-auto flex flex-col gap-3 pt-10">
+          <div className={`flex flex-col gap-3 ${ABAJO}`}>
             <a href="/panel" className={`${BTN_PRIMARIO} w-full`}>{t('alta.c.noAbrir')}</a>
             <button type="button" className={`${BTN_SECUNDARIO} w-full`} onClick={() => setAvisoPanel(false)}>{t('alta.c.abrirIgual')}</button>
           </div>
@@ -140,7 +140,7 @@ export default function EntrarConEnlace() {
           <h1 id="c-titulo" className={TITULO}>{t(error.titulo || 'alta.c.noEntra')}</h1>
           <p role="alert" className={`mt-3 ${TEXTO}`} data-testid="c-error">{error.texto}</p>
           {/* La salida es pedir el enlace a su empresa (lo dice el texto). Entrar con correo es para quien lo tiene. */}
-          <div className="mt-auto pt-10">
+          <div className={ABAJO}>
             <a href="/conductor" className={ENLACE}>{t('alta.dr.tengoCorreo')}</a>
           </div>
         </section>
@@ -149,7 +149,7 @@ export default function EntrarConEnlace() {
           <h1 id="c-titulo" className={TITULO}>{t('alta.c.titulo')}</h1>
           <p className={`mt-3 ${TEXTO}`}>{t('alta.c.sub')}</p>
           {error && <p role="alert" className={`mt-4 ${ERROR}`} data-testid="c-error">{error.texto}</p>}
-          <div className="mt-auto pt-10">
+          <div className={ABAJO}>
             <button type="button" className={`${BTN_PRIMARIO} w-full`} disabled={ocupado} onClick={entrar}>
               {ocupado ? t('alta.c.entrando') : t('alta.c.entrar')}
             </button>

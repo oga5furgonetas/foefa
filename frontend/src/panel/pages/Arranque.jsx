@@ -5,14 +5,15 @@ import { useT, LANG_LOCALE } from '../../i18n'
 import { useTitulo } from '../../lib/titulo'
 import { isAuthed } from '../auth'
 import { getAltaEstado, altaFurgonetas, altaConductores, getAccesosConductores } from '../api'
-import AccesoConductor from '../components/AccesoConductor'
+import AccesoConductor, { useAcceso, claseDeEstado } from '../components/AccesoConductor'
 import Matricula from '../../components/Matricula'
 import SelloFoto from '../../components/SelloFoto'
 import { BTN_PRIMARIO, BTN_SECUNDARIO, LogoMarca } from '../../pages/portadaComun'
+import { DESACTIVADO, nocheElegida } from '../../pages/entradaComun'
 import { MARCA } from '../../marca'
-import { diaCorto, codigoDe, textoConCodigo } from '../../lib/accesoConductor'
+import { diaSello, codigoDe, textoConCodigo } from '../../lib/accesoConductor'
+import { selloDeFecha } from '../../lib/sello'
 import { verTelefono } from '../../lib/telefono'
-import { temaEfectivo } from '../../lib/tema'
 
 /* EL ARRANQUE DE UNA FLOTA (14-11-2026, «Una flota empieza sola en diez minutos»; CONTRATO-ALTA §3).
    De «Cuenta creada» a «ha llegado la primera revisión», en una sola pantalla y cuatro pasos: tus furgonetas, tus
@@ -29,6 +30,7 @@ const PASOS = [
   { id: 'revision', titulo: 'alta.p4.titulo' },
 ]
 const VISTAS = { frontal: 'alta.vista.frontal', trasera: 'alta.vista.trasera', lateral_izq: 'alta.vista.izq', lateral_der: 'alta.vista.der' }
+const ORDEN_VISTAS = ['frontal', 'trasera', 'lateral_izq', 'lateral_der']
 const CADA_REVISION_MS = 5000
 const CADA_ACCESOS_MS = 15000
 
@@ -36,7 +38,7 @@ const ANCHO = 'mx-auto w-full max-w-[760px] px-4 sm:px-8'
 const TITULAR = 'text-[30px] font-extrabold leading-[1.08] tracking-[-0.03em] sm:text-[38px]'
 const TEXTO = 'text-[17px] leading-relaxed text-[color:var(--ld-text2)]'
 const GRIS = 'text-[14px] text-[color:var(--ld-muted)]'
-const CAMPO = 'w-full rounded-[12px] border-[1.5px] border-[color:var(--ld-border-strong)] bg-[color:var(--ld-surface)] px-3.5 py-3 text-[16px] text-[color:var(--ld-text)] placeholder:text-[color:var(--ld-muted)] focus:border-[color:var(--ld-text)] focus:outline-none'
+const CAMPO = 'w-full rounded-[12px] border-[1.5px] border-[color:var(--ld-border-strong)] bg-[color:var(--ld-surface)] px-3.5 py-3 text-[16px] text-[color:var(--ld-text)] placeholder:text-[color:var(--ld-muted)] focus:border-[color:var(--ld-text)] focus:outline-none focus-visible:ring-0'
 const ERROR = 'text-[15px] font-semibold text-[color:var(--ld-warn)]'
 
 /* Los porqués del servidor, por su `codigo` y en el idioma del panel (tercera tanda, A11 y CONTRATO R12); sin código, su
@@ -202,7 +204,7 @@ function PasoFurgonetas({ estado, sede, setSede, onCambio, onSeguir }) {
           </>
         ) : (
           <>
-            <button type="button" className={BTN_PRIMARIO} disabled>{t('alta.revisar')}</button>
+            <button type="button" className={`${BTN_PRIMARIO} ${DESACTIVADO}`} disabled>{t('alta.revisar')}</button>
             <Link to="/panel/importaciones?t=furgonetas" className={BTN_SECUNDARIO}>{t('alta.excel')}</Link>
           </>
         )}
@@ -354,7 +356,7 @@ function PasoConductores({ estado, sede, setSede, onCambio, onSeguir }) {
           </>
         ) : (
           <>
-            <button type="button" className={BTN_PRIMARIO} disabled>{t('alta.revisar')}</button>
+            <button type="button" className={`${BTN_PRIMARIO} ${DESACTIVADO}`} disabled>{t('alta.revisar')}</button>
             <Link to="/panel/importaciones?t=conductores" className={BTN_SECUNDARIO}>{t('alta.excel')}</Link>
           </>
         )}
@@ -418,12 +420,75 @@ function PasoAcceso({ estado, onSeguir, onAtras }) {
 }
 
 /* ── 4 · La primera revisión ────────────────────────────────────────────────────────────────────────────────── */
-/* LA ESPERA (tercera tanda, A11): no una página en blanco. Dice que está mirando (y cuándo miró por última vez), quién
-   ha abierto ya su enlace y quién no, qué hacer si no llega y cómo volver a «Dales acceso». La lista de quién lo ha
-   abierto se pide al entrar y cada 15 s mientras se ve, como en el paso 3. */
-function Espera({ comprobado, onAcceso }) {
+/* LAS CUATRO FOTOS (cuarta tanda, C1 y C2), en una rejilla de 2×2, la MISMA en la espera y en «Ha llegado»: en la espera,
+   cuatro casillas vacías (borde de puntos de 1 px y el nombre del lado en gris) que dicen qué va a llegar; al llegar,
+   las fotos ocupan esas mismas casillas, con el lado en la esquina de arriba (como «Antes»/«Hoy» en el repaso) y el
+   sello de llegada abajo. */
+function CuatroFotos({ fotos, fecha, testid }) {
   const { t, lang } = useT()
+  const llenas = Array.isArray(fotos) && fotos.length > 0
+  const casillas = llenas ? fotos : ORDEN_VISTAS.map((v) => ({ photo_index: v, vista: v, url: null }))
+  return (
+    <ul className="grid grid-cols-2 gap-2.5" data-testid={testid}>
+      {casillas.map((f) => {
+        const lado = t(VISTAS[f.vista] || 'alta.vista.otra')
+        return (
+          <li key={f.photo_index}>
+            {f.url ? (
+              <figure className="relative aspect-[4/3] overflow-hidden rounded-[10px] bg-[color:var(--ld-hueco)]">
+                <img src={f.url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                <figcaption className="pointer-events-none absolute left-2 top-2 max-w-[calc(100%-1rem)] truncate rounded bg-white px-2 py-1 text-[13px] font-bold leading-none text-[#10181a]">
+                  {lado}
+                </figcaption>
+                <SelloFoto fecha={fecha} corto idioma={lang} />
+              </figure>
+            ) : (
+              <figure className="flex aspect-[4/3] items-center justify-center rounded-[10px] border border-dotted border-[color:var(--ld-muted)]" data-vacia="si">
+                <figcaption className="px-2 text-center text-[14px] text-[color:var(--ld-muted)]">{lado}</figcaption>
+              </figure>
+            )}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+/* Un conductor en la espera: su nombre, en qué está su enlace (en mono, con su color) y, si aún no lo ha abierto,
+   «Mandar otra vez» (o «Mandar su acceso», si nunca se le mandó), que hace lo mismo que «Mandar por WhatsApp» en «Dales
+   acceso»: si el enlace de esta pestaña sigue sin abrir, el mismo; si no, uno nuevo. */
+function FilaEspera({ c, empresa, onCambio }) {
+  const { t, lang } = useT()
+  const a = useAcceso(c, empresa, onCambio)
+  const e = a.estado
+  const texto = e === 'abierto' ? t('alta.p4.abrio').replace('{dia}', diaSello(c.acceso?.abierto_dia, lang))
+    : e === 'sin_abrir' ? t('alta.acc.chip.sinAbrir') : e === 'caducado' ? t('alta.acc.chip.caducado') : t('alta.acc.sinEnlace')
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-[color:var(--ld-border)] py-3"
+      data-testid="alta-espera-conductor" data-estado={e}>
+      <div className="min-w-0">
+        <p className="truncate text-[16px] font-semibold">{c.nombre}</p>
+        <p className={claseDeEstado(e)} data-testid="alta-espera-estado">{texto}</p>
+      </div>
+      {e !== 'abierto' && (
+        <button type="button" disabled={!!a.ocupado} onClick={() => a.mandar(false)}
+          className="inline-flex min-h-[44px] items-center text-[15px] font-semibold text-[color:var(--ld-text)] underline decoration-[color:var(--ld-border-strong)] underline-offset-4 hover:decoration-[color:var(--ld-text)] disabled:opacity-60">
+          {a.ocupado === 'wa' ? t('alta.acc.creando') : t(e === 'sin_enlace' ? 'alta.acc.mandar' : 'alta.p4.mandarOtra')}
+        </button>
+      )}
+      {(a.error || a.confirmar) && <p role="alert" className="w-full text-[13.5px] font-semibold text-[color:var(--ld-warn)]">{a.error || a.confirmar}</p>}
+    </li>
+  )
+}
+
+/* LA ESPERA (tercera tanda, A11; cuarta, C1): no una página en blanco. Dice que está mirando y hace cuánto miró (cuenta
+   sola, segundo a segundo: es la señal de que esto está vivo, sin animaciones), las cuatro fotos que van a llegar, cada
+   conductor con su enlace y «Mandar otra vez», qué hacer si no llega y cómo volver a «Dales acceso». La lista de
+   conductores se pide al entrar y cada 15 s mientras se ve, como en el paso 3. */
+function Espera({ comprobado, empresa, onAcceso }) {
+  const { t } = useT()
   const [accesos, setAccesos] = useState(null)
+  const [ahora, setAhora] = useState(() => Date.now())
   useEffect(() => {
     let vivo = true
     const cargar = () => {
@@ -434,34 +499,44 @@ function Espera({ comprobado, onAcceso }) {
     const id = setInterval(cargar, CADA_ACCESOS_MS)
     return () => { vivo = false; clearInterval(id) }
   }, [])
-  const abiertos = (accesos || []).filter((c) => c.acceso?.estado === 'abierto')
-  const faltan = (accesos || []).filter((c) => c.acceso?.estado !== 'abierto')
-  const nombres = (xs) => xs.map((c) => c.nombre).join(', ')
-  const hora = comprobado ? comprobado.toLocaleTimeString(LANG_LOCALE[lang] || 'es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''
+  useEffect(() => {
+    const id = setInterval(() => setAhora(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const cambia = (id, acceso) => setAccesos((xs) => (xs || []).map((c) => (c.driver_id === id ? { ...c, acceso } : c)))
+  const lista = accesos || []
+  const abiertos = lista.filter((c) => c.acceso?.estado === 'abierto').length
+  const hace = comprobado ? Math.max(0, Math.round((ahora - comprobado.getTime()) / 1000)) : null
+  const textoHace = hace == null ? ''
+    : hace < 60 ? t('alta.p4.haceS').replace('{n}', hace) : t('alta.p4.haceMin').replace('{n}', Math.floor(hace / 60))
   return (
     <>
       <p className={`mt-3 ${TEXTO}`}>{t('alta.p4.espera')}</p>
-      <p className={`mt-4 flex items-center gap-2.5 ${GRIS}`} data-testid="alta-esperando">
-        <span className="relative inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-[color:var(--ld-ok)]" aria-hidden="true" />
-        <span>{t('alta.p4.mirando')}{hora && <> {t('alta.p4.comprobado')} <span className="font-mono tabular-nums">{hora}</span></>}</span>
-      </p>
+      <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1" data-testid="alta-esperando">
+        <p className={`flex items-center gap-2.5 ${GRIS}`}>
+          <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-[color:var(--ld-ok)]" aria-hidden="true" />
+          {t('alta.p4.mirando')}
+        </p>
+        {textoHace && <p className="font-mono text-[13.5px] tabular-nums text-[color:var(--ld-muted)]" data-testid="alta-comprobado">{textoHace}</p>}
+      </div>
 
-      {accesos && accesos.length > 0 && (
-        <dl className="mt-7 border-t border-[color:var(--ld-border)] text-[16px]" data-testid="alta-espera-accesos">
-          <div className="grid gap-1 border-b border-[color:var(--ld-border)] py-3 sm:grid-cols-[14rem_1fr] sm:gap-6">
-            <dt className="font-semibold">{t('alta.p4.abiertos').replace('{n}', abiertos.length)}</dt>
-            <dd className="text-[color:var(--ld-text2)]">{abiertos.length ? nombres(abiertos) : t('alta.p4.nadieAun')}</dd>
+      <div className="mt-6">
+        <CuatroFotos testid="alta-fotos-vacias" />
+      </div>
+
+      {lista.length > 0 && (
+        <section className="mt-10" aria-labelledby="alta-espera-titulo">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 id="alta-espera-titulo" className="text-[19px] font-bold tracking-[-0.01em]">{t('alta.p2.titulo')}</h2>
+            <p className={GRIS}>{t('alta.p3.cuenta').replace('{n}', abiertos).replace('{total}', lista.length)}</p>
           </div>
-          {faltan.length > 0 && (
-            <div className="grid gap-1 border-b border-[color:var(--ld-border)] py-3 sm:grid-cols-[14rem_1fr] sm:gap-6">
-              <dt className="font-semibold">{t('alta.p4.sinAbrir').replace('{n}', faltan.length)}</dt>
-              <dd className="text-[color:var(--ld-text2)]">{nombres(faltan)}</dd>
-            </div>
-          )}
-        </dl>
+          <ul className="mt-3 border-t border-[color:var(--ld-border)]" data-testid="alta-espera-accesos">
+            {lista.map((c) => <FilaEspera key={c.driver_id} c={c} empresa={empresa} onCambio={(a) => cambia(c.driver_id, a)} />)}
+          </ul>
+        </section>
       )}
 
-      <h2 className="mt-9 text-[19px] font-bold tracking-[-0.01em]">{t('alta.p4.siNoLlega')}</h2>
+      <h2 className="mt-10 text-[19px] font-bold tracking-[-0.01em]">{t('alta.p4.siNoLlega')}</h2>
       <ol className="mt-3 space-y-2.5 text-[16px] leading-relaxed text-[color:var(--ld-text2)]">
         {['alta.p4.paso1', 'alta.p4.paso2', 'alta.p4.paso3'].map((k, i) => (
           <li key={k} className="flex gap-3">
@@ -480,13 +555,15 @@ function Espera({ comprobado, onAcceso }) {
 function PasoRevision({ estado, primera, comprobado, onRepasar, onAcceso }) {
   const { t, lang } = useT()
   const r = estado.revision
-  if (!r) return <Espera comprobado={comprobado} onAcceso={onAcceso} />
+  if (!r) return <Espera comprobado={comprobado} empresa={estado.empresa} onAcceso={onAcceso} />
   const fotos = Array.isArray(r.fotos) ? r.fotos : []
   const conductor = r.conductor?.nombre
   const datos = [
     typeof r.km === 'number' && t('alta.p4.km').replace('{km}', r.km.toLocaleString(LANG_LOCALE[lang] || 'es-ES')),
     typeof r.combustible_pct === 'number' && t('alta.p4.deposito').replace('{pct}', r.combustible_pct),
   ].filter(Boolean)
+  // La fecha con el sello de la casa («14 NOV 2026 · 09:31»), como en las fotos (cuarta tanda, C2).
+  const sello = selloDeFecha(r.recibida_at, { idioma: lang }) || [diaSello(r.dia, lang, { anio: true }), r.hora].filter(Boolean).join(' · ')
   return (
     <div data-testid="alta-revision">
       <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -494,29 +571,20 @@ function PasoRevision({ estado, primera, comprobado, onRepasar, onAcceso }) {
         {r.furgoneta?.modelo && <span className="text-[17px] text-[color:var(--ld-muted)]">{r.furgoneta.modelo}</span>}
       </div>
       <div className="mt-5 border-t border-[color:var(--ld-border)] text-[16px]">
-        <p className="border-b border-[color:var(--ld-border)] py-2.5 text-[color:var(--ld-muted)]" data-testid="alta-recibida">
-          {t('alta.p4.recibida').replace('{dia}', diaCorto(r.dia, lang)).replace('{hora}', r.hora || '')}
+        <p className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-[color:var(--ld-border)] py-2.5" data-testid="alta-recibida">
+          <span className="text-[color:var(--ld-muted)]">{t('alta.p4.recibidaEn')}</span>
+          <span className="font-mono text-[15px] tabular-nums">{sello}</span>
         </p>
-        <p className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-[color:var(--ld-border)] py-2.5">
+        <p className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-[color:var(--ld-border)] py-2.5">
           <span className="font-semibold">{conductor ? t('alta.p4.hechaPor').replace('{nombre}', conductor) : t('alta.p4.sinConductor')}</span>
           {datos.length > 0 && <span className="text-[15px] tabular-nums text-[color:var(--ld-muted)]">{datos.join(' · ')}</span>}
         </p>
       </div>
-      {/* Cada foto dice qué lado es (debajo) y cuándo llegó (su sello): cuatro sellos iguales no decían cuál era cuál. */}
+      {/* Cada foto dice qué lado es (en su esquina) y cuándo llegó (su sello): cuatro sellos iguales no decían cuál era cuál. */}
       {fotos.length > 0 && (
-        <ul className="mt-5 grid grid-cols-2 gap-x-2.5 gap-y-4" data-testid="alta-fotos">
-          {fotos.map((f) => (
-            <li key={f.photo_index}>
-              <figure>
-                <div className="relative aspect-[4/3] overflow-hidden rounded-[10px] bg-[color:var(--ld-hueco)]">
-                  <img src={f.url} alt={t(VISTAS[f.vista] || 'alta.vista.otra')} loading="lazy" className="h-full w-full object-cover" />
-                  <SelloFoto fecha={r.recibida_at} corto idioma={lang} />
-                </div>
-                <figcaption className="mt-1.5 text-[14px] font-semibold">{t(VISTAS[f.vista] || 'alta.vista.otra')}</figcaption>
-              </figure>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-6">
+          <CuatroFotos fotos={fotos} fecha={r.recibida_at} testid="alta-fotos" />
+        </div>
       )}
       <div className="mt-7 flex flex-wrap gap-3">
         <button type="button" className={BTN_PRIMARIO} onClick={onRepasar}>{t(primera ? 'alta.p4.repasarla' : 'alta.p4.repasar')}</button>
@@ -539,8 +607,9 @@ export default function Arranque() {
   const esperando = useRef(false)
   const [llegoAhora, setLlegoAhora] = useState(false)
   const [comprobado, setComprobado] = useState(null)   // cuándo se miró por última vez (la espera lo enseña)
-  // El panel en noche, el arranque también: sin el salto de un papel blanco en mitad de un panel oscuro.
-  const [tema] = useState(() => (temaEfectivo() === 'dark' ? 'dark' : 'light'))
+  /* El panel en noche, el arranque también: sin el salto de un papel blanco en mitad de un panel oscuro. Y si en el
+     panel no se ha elegido nada pero se eligió la noche en la web (el pie de /registro), también (cuarta tanda, C5). */
+  const [tema] = useState(() => (nocheElegida() ? 'dark' : 'light'))
 
   const cargar = useCallback(() => getAltaEstado()
     .then((r) => {
@@ -606,7 +675,9 @@ export default function Arranque() {
                   <button type="button" onClick={() => ir(n)} aria-current={actual ? 'step' : undefined}
                     aria-label={`${n} · ${t(p.titulo)}${hecho(i) ? ` · ${t('alta.hecho')}` : ''}`}
                     className="group block w-full min-h-[44px] text-left">
-                    <span className={`block h-[5px] rounded-full ${hecho(i) ? 'bg-[color:var(--ld-text)]' : actual ? 'bg-[color:var(--ld-muted)]' : 'bg-[color:var(--ld-hueco)]'}`} />
+                    {/* El paso en curso, en tinta; los hechos, en tinta al 40 %; los que faltan, hueco (cuarta tanda, C2). */}
+                    <span data-testid="alta-barra" data-cual={actual ? 'actual' : hecho(i) ? 'hecho' : 'falta'}
+                      className={`block h-[5px] rounded-full ${actual ? 'bg-[color:var(--ld-text)]' : hecho(i) ? 'bg-[color:var(--ld-text)] opacity-40' : 'bg-[color:var(--ld-hueco)]'}`} />
                     <span className={`mt-2 flex items-center gap-1.5 text-[13.5px] ${actual ? 'font-bold text-[color:var(--ld-text)]' : 'text-[color:var(--ld-muted)] group-hover:text-[color:var(--ld-text)]'}`}>
                       {hecho(i) ? <Check size={14} aria-label={t('alta.hecho')} className="shrink-0 text-[color:var(--ld-ok)]" /> : <span className="font-mono tabular-nums">{n}</span>}
                       {/* En el móvil, solo el número (el nombre del paso va en el título de debajo). */}
@@ -628,9 +699,9 @@ export default function Arranque() {
         )}
 
         {estado && paso && (
-          <section className="mt-8 sm:mt-10" aria-labelledby="alta-titulo">
-            <p className="font-mono text-[13.5px] tabular-nums text-[color:var(--ld-muted)]">{t('alta.pasoDe').replace('{n}', paso)}</p>
-            <h1 id="alta-titulo" className={`mt-1 ${TITULAR}`}>{titulo}</h1>
+          <section className="mt-9 sm:mt-12" aria-labelledby="alta-titulo">
+            {/* Sin «Paso 1 de 4» encima: ya lo dice la barra (cuarta tanda, C2). */}
+            <h1 id="alta-titulo" className={TITULAR}>{titulo}</h1>
             {paso === 1 && <PasoFurgonetas estado={estado} sede={sede} setSede={setSede} onCambio={cargar} onSeguir={() => ir(2)} />}
             {paso === 2 && <PasoConductores estado={estado} sede={sede} setSede={setSede} onCambio={cargar} onSeguir={() => ir(3)} />}
             {paso === 3 && <PasoAcceso estado={estado} onSeguir={() => ir(4)} onAtras={() => ir(2)} />}

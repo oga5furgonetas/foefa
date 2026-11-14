@@ -7,6 +7,7 @@ import { useT } from '../../i18n'
 import { BTN_PRIMARIO } from '../portadaComun'
 import {
   MarcoEntrada, TITULO, TEXTO, NOTA, ETIQUETA, CAMPO, CAMPO_CODIGO, ENLACE, FUERTE, ERROR, AVISO, AVISO_TITULO, AVISO_TEXTO,
+  DESACTIVADO, ABAJO, ENLACE_NOTA,
 } from '../entradaComun'
 
 /* LA ENTRADA DEL CONDUCTOR CON SU CORREO (14-11-2026; tercera tanda, A9).
@@ -141,7 +142,7 @@ export default function DriverLogin({ onLogin }) {
         <section className="flex flex-1 flex-col" aria-labelledby="dr-titulo">
           <h1 id="dr-titulo" className={TITULO}>{t('alta.dr.enlaceTitulo')}</h1>
           <p className={`mt-3 ${TEXTO}`} data-testid="dr-enlace-caducado">{t('alta.dr.enlaceTexto')}</p>
-          <div className="mt-auto pt-10">
+          <div className={ABAJO}>
             <button type="button" className={ENLACE} onClick={() => setVerFormulario(true)}>{t('alta.dr.tengoCorreo')}</button>
           </div>
         </section>
@@ -197,7 +198,7 @@ export default function DriverLogin({ onLogin }) {
                 onChange={(e) => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setError('') }}
                 autoComplete="one-time-code" autoFocus />
               {error && <p role="alert" className={`mt-4 ${ERROR}`} data-testid="dr-error">{error}</p>}
-              <button type="submit" disabled={busy || code.length !== 6} className={`mt-6 ${BTN_PRIMARIO} w-full`}>
+              <button type="submit" disabled={busy || code.length !== 6} className={`mt-6 ${BTN_PRIMARIO} ${busy ? '' : DESACTIVADO} w-full`}>
                 {busy ? <>{Girando} {t('dr.verificando')}</> : t('alta.dr.entrar')}
               </button>
               <div className="mt-3 flex flex-col items-center">
@@ -208,10 +209,12 @@ export default function DriverLogin({ onLogin }) {
             </form>
           )}
 
-          <p className={`mt-10 border-t border-[color:var(--ld-border)] pt-4 ${NOTA}`}>
-            {t('dr.soloRegistrados')} {t('dr.problemas')}
-          </p>
-          <a href="/login" className={ENLACE}>{t('dr.eresAdmin')}</a>
+          {/* Debajo, en voz baja: nada aquí compite con «Entrar» (cuarta tanda, C4). La entrada de la oficina, un enlace
+              de texto normal, sin flecha ni negrita. */}
+          <div className={`mt-10 border-t border-[color:var(--ld-border)] pt-4 ${NOTA}`}>
+            <p>{t('dr.soloRegistrados')} {t('dr.problemas')}</p>
+            <a href="/login" className={ENLACE_NOTA}>{t('dr.eresAdmin')}</a>
+          </div>
         </>
       )}
     </MarcoEntrada>

@@ -44,6 +44,20 @@ export function diaCorto(iso, idioma = 'es') {
   return mes ? `${Number(m[3])} ${mes}` : `${m[3]}-${m[2]}`
 }
 
+/** «2026-11-14» → «14 NOV»: el día con el sello de la casa (`lib/sello.js`, el de las fotos), para el arranque y la
+    ventana del acceso (cuarta tanda, C2). Con `anio`, «14 NOV 2026». El servidor solo da el día en que se abrió el
+    enlace, no la hora: por eso aquí no hay hora. */
+export function diaSello(iso, idioma = 'es', { anio = false } = {}) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!m) return ''
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  let mes
+  try { mes = new Intl.DateTimeFormat(idioma, { month: 'short' }).format(d) } catch { mes = '' }
+  mes = String(mes || '').replace(/\./g, '').toUpperCase().slice(0, 4)
+  if (!mes) return `${m[3]}-${m[2]}`
+  return `${m[3]} ${mes}${anio ? ` ${m[1]}` : ''}`
+}
+
 /* LOS PORQUÉS DEL SERVIDOR, EN EL IDIOMA DE LA PANTALLA (tercera tanda, A11 y CONTRATO R12). Las rutas del alta y del
    enlace mandan, además del texto en español, un `codigo` corto y fijo: con él se dice en el idioma del panel
    (`alta.cod.<codigo>` en i18nDict.js). Un código que esta pantalla aún no conoce, o un servidor que no lo manda: el
