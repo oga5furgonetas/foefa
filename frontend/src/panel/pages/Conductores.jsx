@@ -11,7 +11,7 @@ import {
   Loader2, Search, Plus, X, Pencil, UserCheck, FileSpreadsheet, Phone, Mail, IdCard, Car,
   MapPin, FileText, Building2, Save, Camera, Trophy, TrendingUp, TrendingDown, Minus, Flame,
   BarChart2, ChevronDown, ChevronUp, AlertCircle, Lock, LockOpen, Eye, EyeOff, ShieldCheck,
-  Share2, Smartphone, ArrowRightLeft, KeyRound, MoreHorizontal, UserMinus, RotateCcw,
+  Share2, Smartphone, ArrowRightLeft, KeyRound, MoreHorizontal, UserMinus, RotateCcw, Check,
 } from 'lucide-react'
 import {
   getDrivers, createDriver, updateDriver, deleteDriver, uploadDriverPhoto, programarTraslado, cancelarTraslado,
@@ -45,7 +45,9 @@ const FALTAS = [
   { id: 'centro', clave: 'drv.f.sinCentro', falta: (d) => sinCentro(d) },
   { id: 'correo', clave: 'drv.f.sinCorreo', falta: (d) => !String(d?.email || '').trim() },
   { id: 'reparto', clave: 'drv.f.sinId', falta: (d) => !String(d?.transporter_id || '').trim(), soloReparto: true },
-  { id: 'acceso', clave: 'drv.f.sinAcceso', falta: (d, cuentas) => !cuentas.includes(d.id), soloCuentas: true },
+  /* Con acceso es quien tiene contraseña O ya ha abierto su enlace personal en su teléfono (tercera tanda, A11): el que
+     entra con el enlace no tiene cuenta con contraseña, y contarlo «sin acceso» mandaba a buscar a quien ya entra. */
+  { id: 'acceso', clave: 'drv.f.sinAcceso', falta: (d, cuentas, _app, accesos) => !cuentas.includes(d.id) && accesos?.[d.id]?.acceso?.estado !== 'abierto', soloCuentas: true },
   // Quién no tiene la app de Android (11-11-2026, tanda 3, equipo-5): solo si el servidor ha dicho quién la tiene.
   // No es «sin acceso» (eso es la cuenta con contraseña): se puede tener cuenta y usar solo la web.
   { id: 'app', clave: 'drv.f.sinApp', falta: (d, _cuentas, app) => !app?.conductores?.[d.id], soloApp: true },
@@ -1024,32 +1026,41 @@ function bajaTexto(d) {
 }
 
 /* «MANDAR SU ACCESO», POR FILA (14-11-2026, CONTRATO-ALTA §1). El estado de su enlace personal en corto; al tocarlo, la
-   ventana con «Mandar por WhatsApp», «Copiar enlace» o «Renovar» (components/AccesoConductor). Sin datos del servidor
-   (uno viejo sin la ruta) no sale. */
+   ventana con «Mandar por WhatsApp», «Copiar enlace» o «Mandar uno nuevo» (components/AccesoConductor). Sin datos del
+   servidor (uno viejo sin la ruta) no sale.
+   QUIÉN HA ENTRADO, DE UN VISTAZO (tercera tanda, A11): con sesenta conductores el color tiene que separar a los que ya
+   entran de los que faltan. Verde con su marca: ha abierto su enlace. Neutro: entra con su contraseña, o el enlace está
+   mandado y sin abrir. Con el color de acción, solo lo que pide hacer algo: mandarle el acceso a quien no tiene ninguno.
+   Caducado, en ámbar: hay que mandarlo otra vez. */
 const CHIP_ACCESO = {
   sin_enlace: 'alta.acc.mandar', sin_abrir: 'alta.acc.chip.sinAbrir', abierto: 'alta.acc.chip.abierto', caducado: 'alta.acc.chip.caducado',
 }
-function BotonAcceso({ fila, onAcceso, movil = false }) {
-  const { t } = useT()
+function BotonAcceso({ fila, onAcceso, conClave = false, movil = false }) {
+  const { t, lang } = useT()
   if (!fila || !onAcceso) return null
   const e = fila.acceso?.estado || 'sin_enlace'
-  const texto = t(CHIP_ACCESO[e] || CHIP_ACCESO.sin_enlace).replace('{dia}', diaCorto(fila.acceso?.abierto_dia))
+  const clave = e === 'sin_enlace' && conClave ? 'alta.acc.chip.conClave' : (CHIP_ACCESO[e] || CHIP_ACCESO.sin_enlace)
+  const texto = t(clave).replace('{dia}', diaCorto(fila.acceso?.abierto_dia, lang))
   const tono = e === 'abierto' ? 'border-emerald-500/30 text-emerald-300'
-    : e === 'sin_enlace' || e === 'caducado' ? 'border-brand-500/40 text-brand-300' : 'border-dark-700 text-dark-300'
+    : e === 'caducado' ? 'border-amber-500/40 text-amber-300'
+      : e === 'sin_enlace' && !conClave ? 'border-brand-500/40 text-brand-300' : 'border-dark-700 text-dark-300'
   return (
-    <button type="button" data-testid="boton-acceso" title={textoEstado(t, fila.acceso)}
+    <button type="button" data-testid="boton-acceso" data-estado={e === 'sin_enlace' && conClave ? 'con_clave' : e}
+      title={textoEstado(t, fila.acceso, lang)}
       onClick={(ev) => { ev.stopPropagation(); onAcceso(fila) }}
-      className={`whitespace-nowrap rounded-full border px-2.5 text-[11.5px] font-semibold hover:bg-white/[0.04] ${tono} ${movil ? 'my-auto mr-1.5 min-h-[36px]' : 'py-1'}`}>
+      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 text-[11.5px] font-semibold hover:bg-white/[0.04] ${tono} ${movil ? 'my-auto mr-1.5 min-h-[36px]' : 'py-1'}`}>
+      {e === 'abierto' && <Check size={12} aria-hidden="true" />}
+      {e === 'sin_enlace' && conClave && <Lock size={11} aria-hidden="true" />}
       {texto}
     </button>
   )
 }
 
-function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deBaja = false, appInfo = null, onAbrir, acceso = null, onAcceso = null }) {
+function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deBaja = false, appInfo = null, onAbrir, acceso = null, accesos = null, onAcceso = null }) {
   const { t } = useT()
   // De una baja no se dice lo que le falta: no se va a completar (11-11-2026, equipo-6).
   const faltan = deBaja ? [] : faltasQueCuentan({ conIdReparto, cuentasOk, appOk: !!appInfo })
-    .filter((f) => f.id !== 'centro' && f.falta(d, accounts, appInfo))
+    .filter((f) => f.id !== 'centro' && f.falta(d, accounts, appInfo, accesos))
   const tel = String(d.phone || '').replace(/[^\d+]/g, '')
   return (
     <li className={`flex items-stretch border-b border-dark-800/50 last:border-0 ${deBaja ? 'opacity-70' : ''}`}>
@@ -1086,7 +1097,7 @@ function TarjetaConductor({ d, accounts, cuentasOk, conIdReparto, datoOrden, deB
           </span>
         </span>
       </button>
-      {!deBaja && <BotonAcceso fila={acceso} onAcceso={onAcceso} movil />}
+      {!deBaja && <BotonAcceso fila={acceso} onAcceso={onAcceso} conClave={accounts.includes(d.id)} movil />}
       {/* El número se lee en la tarjeta; el botón redondo llama. Así el nombre tiene casi todo el ancho. */}
       {tel ? (
         <a href={`tel:${tel}`} aria-label={`${t('drv.llamar')} ${verTelefono(d.phone)}`} title={t('drv.llamar')}
@@ -1205,7 +1216,7 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
         {filas.map((d) => (
           <TarjetaConductor key={d.id} d={d} accounts={accounts} cuentasOk={cuentasOk} conIdReparto={conIdReparto}
             datoOrden={datoOrden} deBaja={deBaja} appInfo={appInfo} onAbrir={onAbrir}
-            acceso={accesos?.[d.id] || null} onAcceso={onAcceso} />
+            acceso={accesos?.[d.id] || null} accesos={accesos} onAcceso={onAcceso} />
         ))}
       </ul>
       </>
@@ -1266,9 +1277,10 @@ function TablaConductores({ list, accounts, cuentasOk = false, conIdReparto = fa
                   </td>
                   <td className="whitespace-nowrap px-2 py-1 text-center">
                     {/* El candado: tiene contraseña. El botón: su enlace personal (14-11-2026). */}
-                    {hasAcc ? <Lock size={11} className="mr-1.5 inline text-lime-400" title="Tiene acceso al portal" />
-                            : !accesos?.[d.id] && <span className="text-dark-700">—</span>}
-                    {!deBaja && <BotonAcceso fila={accesos?.[d.id]} onAcceso={onAcceso} />}
+                    {/* Sin datos del enlace (servidor viejo), el candado de siempre; con ellos, lo dice la etiqueta. */}
+                    {!accesos?.[d.id] && (hasAcc ? <Lock size={11} className="mr-1.5 inline text-lime-400" title="Tiene acceso al portal" />
+                      : <span className="text-dark-700">—</span>)}
+                    {!deBaja && <BotonAcceso fila={accesos?.[d.id]} onAcceso={onAcceso} conClave={hasAcc} />}
                   </td>
                   {appInfo && <td className="whitespace-nowrap px-2 py-1"><CeldaApp info={appInfo.conductores?.[d.id]} ultima={appInfo.ultima} /></td>}
                 </tr>
@@ -1381,10 +1393,10 @@ export default function Conductores() {
 
   // Los filtros de un toque, contados sobre lo que deja el buscador: el número es lo que se ve al pulsarlo.
   const faltas = useMemo(() => (enBajas ? [] : faltasQueCuentan({ conIdReparto, cuentasOk, appOk: !!appInfo }))
-    .map((f) => ({ ...f, n: list.filter((d) => f.falta(d, accounts, appInfo)).length })),
-  [list, accounts, conIdReparto, cuentasOk, enBajas, appInfo])
+    .map((f) => ({ ...f, n: list.filter((d) => f.falta(d, accounts, appInfo, accesos)).length })),
+  [list, accounts, conIdReparto, cuentasOk, enBajas, appInfo, accesos])
   const filtroVivo = faltas.find((f) => f.id === filtro) || null
-  const vistos = filtroVivo ? list.filter((d) => filtroVivo.falta(d, accounts, appInfo)) : list
+  const vistos = filtroVivo ? list.filter((d) => filtroVivo.falta(d, accounts, appInfo, accesos)) : list
   const conChipBajas = enBajas || (Array.isArray(bajas) && bajas.length > 0)
   /* El chip «Bajas (N)»: con los filtros y también cuando no hay ningún activo o la búsqueda no casa con nadie (segunda
      revisión, F12): una nave que se ha quedado sin activos tiene que poder llegar a sus bajas para reactivarlas. */

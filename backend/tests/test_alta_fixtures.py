@@ -29,7 +29,9 @@ from base_de_mentira import Col
 from test_alta_enlace import TEL_ANA, _h, _sesion_admin, montar_mundo
 
 RAIZ = Path(__file__).resolve().parents[2]
-FIXTURES = RAIZ / "frontend" / "e2e" / "fixtures"
+# FIXTURES_DIR: para sacar los ejemplos a otra carpeta sin tocar los de la web (quien trabaja solo en el servidor, con
+# las pantallas cambiando a la vez en la misma copia, 14-11-2026); se comparan y se escriben allí.
+FIXTURES = Path(os.environ["FIXTURES_DIR"]) if os.environ.get("FIXTURES_DIR") else RAIZ / "frontend" / "e2e" / "fixtures"
 TOKEN_EJEMPLO = "9f2c4e6a8b0d1f3e5a7c9e1b3d5f7a9c2e4b6d8f0a1c3e5b7d9f1a3c5e7b9d0f"
 SESION_EJEMPLO = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ejemplo-de-sesion-de-conductor.firma"
 LATERAL, FRONTAL = "/demo/van-lateral.jpg", "/demo/van-frontal.jpg"

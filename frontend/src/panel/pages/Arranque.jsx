@@ -5,12 +5,15 @@ import { useT, LANG_LOCALE } from '../../i18n'
 import { useTitulo } from '../../lib/titulo'
 import { isAuthed } from '../auth'
 import { getAltaEstado, altaFurgonetas, altaConductores, getAccesosConductores } from '../api'
+import { api } from '../../services/api'
 import AccesoConductor from '../components/AccesoConductor'
 import Matricula from '../../components/Matricula'
 import SelloFoto from '../../components/SelloFoto'
 import { BTN_PRIMARIO, BTN_SECUNDARIO, LogoMarca } from '../../pages/portadaComun'
 import { MARCA } from '../../marca'
-import { diaCorto } from '../../lib/accesoConductor'
+import { diaCorto, codigoDe, textoConCodigo } from '../../lib/accesoConductor'
+import { verTelefono } from '../../lib/telefono'
+import { temaEfectivo } from '../../lib/tema'
 
 /* EL ARRANQUE DE UNA FLOTA (14-11-2026, «Una flota empieza sola en diez minutos»; CONTRATO-ALTA §3).
    De «Cuenta creada» a «ha llegado la primera revisión», en una sola pantalla y cuatro pasos: tus furgonetas, tus
@@ -37,11 +40,29 @@ const GRIS = 'text-[14px] text-[color:var(--ld-muted)]'
 const CAMPO = 'w-full rounded-[12px] border-[1.5px] border-[color:var(--ld-border-strong)] bg-[color:var(--ld-surface)] px-3.5 py-3 text-[16px] text-[color:var(--ld-text)] placeholder:text-[color:var(--ld-muted)] focus:border-[color:var(--ld-text)] focus:outline-none'
 const ERROR = 'text-[15px] font-semibold text-[color:var(--ld-warn)]'
 
+/* Los porqués del servidor, por su `codigo` y en el idioma del panel (tercera tanda, A11 y CONTRATO R12); sin código, su
+   texto tal cual. */
 function textoDeError(t, e) {
   if (!e?.response) return t('alta.err.red')
   const d = e.response.data?.detail
-  return typeof d === 'string' && d ? d : t('alta.err.servidor')
+  return textoConCodigo(t, codigoDe(e.response.data), typeof d === 'string' && d ? d : t('alta.err.servidor'), { nombre: e.response.data?.dato })
 }
+
+/* Lo que dice cada línea revisada, igual: por su código y, si no lo trae (o le falta un dato para decirlo), el texto
+   del servidor. `dato`: el nombre con el que ya está dado de alta, o el trozo de móvil que no se entiende
+   (CONTRATO-ALTA, «Códigos»). */
+const motivoDe = (t, l) => textoConCodigo(t, l.codigo, l.motivo || '', { nombre: l.dato, movil: l.dato })
+const avisoDe = (t, l) => textoConCodigo(t, l.aviso_codigo, l.aviso || '')
+
+/* Una línea con letras y cifras que no tiene forma de matrícula («Furgo 1», «VAN 12»): el servidor la manda `dudosa`
+   y no entra salvo que se confirme (A11). Las confirmadas vuelven `nueva` con `confirmada: true`. */
+const esRara = (l) => l.estado === 'dudosa' || (l.estado !== 'nueva' && l.codigo === 'matricula_dudosa')
+
+/* Guardar con las confirmadas: el cuerpo de siempre más `confirmadas` (los textos tal como se pegaron). Va aquí y no en
+   panel/api.js porque solo lo usa este paso; sin confirmadas, la llamada de siempre. */
+const guardarFurgonetas = (texto, sede, guardar, confirmadas) => (confirmadas.length
+  ? api.post('/alta/furgonetas', { texto, center: sede || null, guardar: !!guardar, confirmadas })
+  : altaFurgonetas(texto, sede, guardar))
 
 /* La sede, solo si la empresa tiene varias: sin ella el servidor no sabría dónde darlas de alta. */
 function Sede({ centros, valor, onCambio, etiqueta }) {
@@ -83,23 +104,27 @@ function PasoFurgonetas({ estado, sede, setSede, onCambio, onSeguir }) {
   const [guardadas, setGuardadas] = useState(null)
   const [ocupado, setOcupado] = useState('')
   const [error, setError] = useState('')
+  const [siSon, setSiSon] = useState([])           // las «raras» que la persona confirma que sí son matrículas
   const tiene = estado.furgonetas || 0
 
   const enviar = async (guardar) => {
     setError(''); setOcupado(guardar ? 'guardar' : 'revisar')
     try {
-      const { data } = await altaFurgonetas(texto, sede, guardar)
+      const { data } = await guardarFurgonetas(texto, sede, guardar, guardar ? siSon : [])
       if (guardar) {
         setGuardadas((data.creadas || []).length)
-        setTexto(''); setVista(null)
+        setTexto(''); setVista(null); setSiSon([])
         onCambio()
       } else {
-        setVista(data); setGuardadas(null)
+        setVista(data); setGuardadas(null); setSiSon([])
       }
     } catch (e) { setError(textoDeError(t, e)) } finally { setOcupado('') }
   }
 
-  const nuevas = vista?.nuevas || 0
+  const lineas = Array.isArray(vista?.lineas) ? vista.lineas : []
+  const raras = lineas.filter(esRara)
+  const confirmadas = raras.filter((l) => siSon.includes(l.texto)).length
+  const nuevas = (vista?.nuevas || 0) + confirmadas
   return (
     <>
       <p className={`mt-3 ${TEXTO}`}>{t('alta.p1.sub')}</p>
@@ -117,18 +142,38 @@ function PasoFurgonetas({ estado, sede, setSede, onCambio, onSeguir }) {
 
       {vista && (
         <>
-          <Lineas lineas={vista.lineas || []} pinta={(l) => (
+          <Lineas lineas={lineas.filter((l) => !esRara(l))} pinta={(l) => (
             <>
               <span className="min-w-0 flex-1">
                 {l.matricula ? <Matricula texto={l.matricula} className="text-[15px]" /> : <span className="break-all font-mono text-[15px]">{l.texto}</span>}
               </span>
               <span className={`shrink-0 text-right text-[14px] font-semibold ${claseEstado(l.estado)}`}>
-                {l.estado === 'nueva' ? t('alta.p1.nueva') : l.motivo}
+                {l.estado === 'nueva' ? t('alta.p1.nueva') : motivoDe(t, l)}
               </span>
             </>
           )} />
+          {raras.length > 0 && (
+            <fieldset className="mt-7" data-testid="alta-raras">
+              <legend className="text-[17px] font-bold">{t('alta.p1.rarasTitulo')}</legend>
+              <p className={`mt-1 ${GRIS}`}>{t('alta.p1.rarasSub')}</p>
+              <ul className="mt-3 border-t border-[color:var(--ld-border)]">
+                {raras.map((l) => (
+                  <li key={l.n} className="border-b border-[color:var(--ld-border)]">
+                    <label className="flex min-h-[48px] cursor-pointer items-center gap-3 py-2">
+                      <span className="w-7 shrink-0 font-mono text-[13px] tabular-nums text-[color:var(--ld-muted)]">{l.n}</span>
+                      <span className="min-w-0 flex-1 break-all font-mono text-[15px]">{l.texto}</span>
+                      <span className="shrink-0 text-[14px] font-semibold">{t('alta.p1.rarasSi')}</span>
+                      <input type="checkbox" className="h-5 w-5 shrink-0 accent-[color:var(--ld-text)]"
+                        checked={siSon.includes(l.texto)}
+                        onChange={(e) => setSiSon((xs) => (e.target.checked ? [...xs, l.texto] : xs.filter((x) => x !== l.texto)))} />
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </fieldset>
+          )}
           <p className={`mt-3 ${GRIS}`} data-testid="alta-resumen">
-            {t('alta.p1.resumen').replace('{nuevas}', nuevas).replace('{ya}', vista.ya_estaban || 0).replace('{mal}', vista.errores || 0)}
+            {t('alta.p1.resumen').replace('{nuevas}', nuevas).replace('{ya}', vista.ya_estaban || 0).replace('{mal}', lineas.filter((l) => l.estado === 'error' && !esRara(l)).length)}
           </p>
         </>
       )}
@@ -206,8 +251,19 @@ function PasoConductores({ estado, sede, setSede, onCambio, onSeguir }) {
   }
 
   const nuevos = vista?.nuevos || 0
+  /* Pestañas de verdad (A11): cada una dice qué panel lleva, solo la elegida entra con el tabulador y las flechas
+     cambian de una a otra, como en cualquier lista de pestañas. */
+  const elegir = (id) => { setModo(id); cambiar() }
+  const flechas = (e) => {
+    if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) return
+    e.preventDefault()
+    const id = e.key === 'Home' ? 'filas' : e.key === 'End' ? 'pegar' : modo === 'filas' ? 'pegar' : 'filas'
+    elegir(id)
+    document.getElementById(`alta-pestana-${id}`)?.focus()
+  }
   const pestana = (id, k) => (
-    <button type="button" role="tab" aria-selected={modo === id} onClick={() => { setModo(id); cambiar() }}
+    <button type="button" role="tab" id={`alta-pestana-${id}`} aria-selected={modo === id} aria-controls="alta-panel-conductores"
+      tabIndex={modo === id ? 0 : -1} onClick={() => elegir(id)} onKeyDown={flechas}
       className={`min-h-[44px] border-b-2 px-1 text-[15px] font-semibold ${modo === id
         ? 'border-[color:var(--ld-text)] text-[color:var(--ld-text)]' : 'border-transparent text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)]'}`}>
       {t(k)}
@@ -226,6 +282,7 @@ function PasoConductores({ estado, sede, setSede, onCambio, onSeguir }) {
         {pestana('pegar', 'alta.p2.pegar')}
       </div>
 
+      <div role="tabpanel" id="alta-panel-conductores" aria-labelledby={`alta-pestana-${modo}`}>
       {modo === 'filas' ? (
         <div className="mt-4 space-y-3">
           {filas.map((f, i) => (
@@ -249,6 +306,7 @@ function PasoConductores({ estado, sede, setSede, onCambio, onSeguir }) {
           placeholder={'Ana López, 612 345 678\nLuis Pérez, 698 765 432, luis@ejemplo.es'}
           className={`mt-4 ${CAMPO} leading-relaxed`} />
       )}
+      </div>
 
       {vista && (
         <>
@@ -257,12 +315,12 @@ function PasoConductores({ estado, sede, setSede, onCambio, onSeguir }) {
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[16px] font-semibold">{l.nombre || l.texto}</span>
                 <span className="block truncate text-[13.5px] text-[color:var(--ld-muted)]">
-                  {[l.movil && <span key="m" className="font-mono">{l.movil}</span>, l.email].filter(Boolean).reduce((a, x, i) => (i ? [...a, ' · ', x] : [x]), [])}
+                  {[l.movil && <span key="m" className="font-mono">{verTelefono(l.movil)}</span>, l.email].filter(Boolean).reduce((a, x, i) => (i ? [...a, ' · ', x] : [x]), [])}
                 </span>
-                {l.aviso && <span className="block text-[13.5px] text-[color:var(--ld-mid)]">{l.aviso}</span>}
+                {(l.aviso || l.aviso_codigo) && <span className="block text-[13.5px] text-[color:var(--ld-mid)]">{avisoDe(t, l)}</span>}
               </span>
               <span className={`max-w-[48%] shrink-0 text-right text-[14px] font-semibold ${claseEstado(l.estado)}`}>
-                {l.estado === 'nuevo' ? t('alta.p2.nuevo') : l.motivo}
+                {l.estado === 'nuevo' ? t('alta.p2.nuevo') : motivoDe(t, l)}
               </span>
             </>
           )} />
@@ -346,7 +404,7 @@ function PasoAcceso({ estado, onSeguir, onAtras }) {
               <li key={c.driver_id} className="grid gap-2 border-b border-[color:var(--ld-border)] py-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] sm:gap-6" data-testid="alta-conductor">
                 <div className="min-w-0">
                   <p className="truncate text-[17px] font-bold">{c.nombre}</p>
-                  <p className={`truncate text-[13.5px] text-[color:var(--ld-muted)] ${c.movil ? 'font-mono' : ''}`}>{c.movil || t('alta.p3.sinMovil')}</p>
+                  <p className={`truncate text-[13.5px] text-[color:var(--ld-muted)] ${c.movil ? 'font-mono' : ''}`}>{c.movil ? verTelefono(c.movil) : t('alta.p3.sinMovil')}</p>
                 </div>
                 <AccesoConductor c={c} empresa={datos.empresa || estado.empresa} onCambio={(a) => cambia(c.driver_id, a)} />
               </li>
@@ -364,17 +422,69 @@ function PasoAcceso({ estado, onSeguir, onAtras }) {
 }
 
 /* ── 4 · La primera revisión ────────────────────────────────────────────────────────────────────────────────── */
-function PasoRevision({ estado, primera, onRepasar }) {
+/* LA ESPERA (tercera tanda, A11): no una página en blanco. Dice que está mirando (y cuándo miró por última vez), quién
+   ha abierto ya su enlace y quién no, qué hacer si no llega y cómo volver a «Dales acceso». La lista de quién lo ha
+   abierto se pide al entrar y cada 15 s mientras se ve, como en el paso 3. */
+function Espera({ comprobado, onAcceso }) {
+  const { t, lang } = useT()
+  const [accesos, setAccesos] = useState(null)
+  useEffect(() => {
+    let vivo = true
+    const cargar = () => {
+      if (document.visibilityState !== 'visible') return
+      getAccesosConductores().then((r) => { if (vivo && Array.isArray(r?.data?.conductores)) setAccesos(r.data.conductores) }).catch(() => {})
+    }
+    cargar()
+    const id = setInterval(cargar, CADA_ACCESOS_MS)
+    return () => { vivo = false; clearInterval(id) }
+  }, [])
+  const abiertos = (accesos || []).filter((c) => c.acceso?.estado === 'abierto')
+  const faltan = (accesos || []).filter((c) => c.acceso?.estado !== 'abierto')
+  const nombres = (xs) => xs.map((c) => c.nombre).join(', ')
+  const hora = comprobado ? comprobado.toLocaleTimeString(LANG_LOCALE[lang] || 'es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''
+  return (
+    <>
+      <p className={`mt-3 ${TEXTO}`}>{t('alta.p4.espera')}</p>
+      <p className={`mt-4 flex items-center gap-2.5 ${GRIS}`} data-testid="alta-esperando">
+        <span className="relative inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-[color:var(--ld-ok)]" aria-hidden="true" />
+        <span>{t('alta.p4.mirando')}{hora && <> {t('alta.p4.comprobado')} <span className="font-mono tabular-nums">{hora}</span></>}</span>
+      </p>
+
+      {accesos && accesos.length > 0 && (
+        <dl className="mt-7 border-t border-[color:var(--ld-border)] text-[16px]" data-testid="alta-espera-accesos">
+          <div className="grid gap-1 border-b border-[color:var(--ld-border)] py-3 sm:grid-cols-[14rem_1fr] sm:gap-6">
+            <dt className="font-semibold">{t('alta.p4.abiertos').replace('{n}', abiertos.length)}</dt>
+            <dd className="text-[color:var(--ld-text2)]">{abiertos.length ? nombres(abiertos) : t('alta.p4.nadieAun')}</dd>
+          </div>
+          {faltan.length > 0 && (
+            <div className="grid gap-1 border-b border-[color:var(--ld-border)] py-3 sm:grid-cols-[14rem_1fr] sm:gap-6">
+              <dt className="font-semibold">{t('alta.p4.sinAbrir').replace('{n}', faltan.length)}</dt>
+              <dd className="text-[color:var(--ld-text2)]">{nombres(faltan)}</dd>
+            </div>
+          )}
+        </dl>
+      )}
+
+      <h2 className="mt-9 text-[19px] font-bold tracking-[-0.01em]">{t('alta.p4.siNoLlega')}</h2>
+      <ol className="mt-3 space-y-2.5 text-[16px] leading-relaxed text-[color:var(--ld-text2)]">
+        {['alta.p4.paso1', 'alta.p4.paso2', 'alta.p4.paso3'].map((k, i) => (
+          <li key={k} className="flex gap-3">
+            <span className="w-5 shrink-0 font-mono text-[14px] leading-[1.7] tabular-nums text-[color:var(--ld-muted)]">{i + 1}</span>
+            <span>{t(k)}</span>
+          </li>
+        ))}
+      </ol>
+      <div className="mt-7 flex flex-wrap gap-3">
+        <button type="button" className={BTN_SECUNDARIO} onClick={onAcceso} data-testid="alta-volver-acceso">{t('alta.p4.volverAcceso')}</button>
+      </div>
+    </>
+  )
+}
+
+function PasoRevision({ estado, primera, comprobado, onRepasar, onAcceso }) {
   const { t, lang } = useT()
   const r = estado.revision
-  if (!r) {
-    return (
-      <>
-        <p className={`mt-3 ${TEXTO}`}>{t('alta.p4.espera')}</p>
-        <p className={`mt-4 ${GRIS}`} data-testid="alta-esperando">{t('alta.p4.mirando')}</p>
-      </>
-    )
-  }
+  if (!r) return <Espera comprobado={comprobado} onAcceso={onAcceso} />
   const fotos = Array.isArray(r.fotos) ? r.fotos : []
   const conductor = r.conductor?.nombre
   const datos = [
@@ -389,19 +499,25 @@ function PasoRevision({ estado, primera, onRepasar }) {
       </div>
       <div className="mt-5 border-t border-[color:var(--ld-border)] text-[16px]">
         <p className="border-b border-[color:var(--ld-border)] py-2.5 text-[color:var(--ld-muted)]" data-testid="alta-recibida">
-          {t('alta.p4.recibida').replace('{dia}', diaCorto(r.dia)).replace('{hora}', r.hora || '')}
+          {t('alta.p4.recibida').replace('{dia}', diaCorto(r.dia, lang)).replace('{hora}', r.hora || '')}
         </p>
         <p className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-[color:var(--ld-border)] py-2.5">
           <span className="font-semibold">{conductor ? t('alta.p4.hechaPor').replace('{nombre}', conductor) : t('alta.p4.sinConductor')}</span>
           {datos.length > 0 && <span className="text-[15px] tabular-nums text-[color:var(--ld-muted)]">{datos.join(' · ')}</span>}
         </p>
       </div>
+      {/* Cada foto dice qué lado es (debajo) y cuándo llegó (su sello): cuatro sellos iguales no decían cuál era cuál. */}
       {fotos.length > 0 && (
-        <ul className="mt-5 grid grid-cols-2 gap-2.5">
+        <ul className="mt-5 grid grid-cols-2 gap-x-2.5 gap-y-4" data-testid="alta-fotos">
           {fotos.map((f) => (
-            <li key={f.photo_index} className="relative aspect-[4/3] overflow-hidden rounded-[10px] bg-[color:var(--ld-hueco)]">
-              <img src={f.url} alt={t(VISTAS[f.vista] || 'alta.vista.otra')} loading="lazy" className="h-full w-full object-cover" />
-              <SelloFoto fecha={r.recibida_at} corto idioma={lang} />
+            <li key={f.photo_index}>
+              <figure>
+                <div className="relative aspect-[4/3] overflow-hidden rounded-[10px] bg-[color:var(--ld-hueco)]">
+                  <img src={f.url} alt={t(VISTAS[f.vista] || 'alta.vista.otra')} loading="lazy" className="h-full w-full object-cover" />
+                  <SelloFoto fecha={r.recibida_at} corto idioma={lang} />
+                </div>
+                <figcaption className="mt-1.5 text-[14px] font-semibold">{t(VISTAS[f.vista] || 'alta.vista.otra')}</figcaption>
+              </figure>
             </li>
           ))}
         </ul>
@@ -426,12 +542,15 @@ export default function Arranque() {
   // ¿Se estaba esperando cuando llegó? Entonces es «la primera»; si al abrir ya había varias, es «la última».
   const esperando = useRef(false)
   const [llegoAhora, setLlegoAhora] = useState(false)
+  const [comprobado, setComprobado] = useState(null)   // cuándo se miró por última vez (la espera lo enseña)
+  // El panel en noche, el arranque también: sin el salto de un papel blanco en mitad de un panel oscuro.
+  const [tema] = useState(() => (temaEfectivo() === 'dark' ? 'dark' : 'light'))
 
   const cargar = useCallback(() => getAltaEstado()
     .then((r) => {
       const d = r.data
       if (!d || !Array.isArray(d.pasos)) throw new Error('forma')
-      setEstado(d); setError('')
+      setEstado(d); setError(''); setComprobado(new Date())
       if (d.revision && esperando.current) setLlegoAhora(true)
       esperando.current = !d.revision
       setPaso((p) => p ?? (d.paso_actual || 4))
@@ -467,7 +586,7 @@ export default function Arranque() {
     : paso ? t(PASOS[paso - 1].titulo) : ''
 
   return (
-    <div role="main" className="ld-root min-h-screen overflow-x-clip font-sans text-[17px] leading-normal antialiased" data-theme="light" data-testid="arranque">
+    <div role="main" className="ld-root min-h-screen overflow-x-clip font-sans text-[17px] leading-normal antialiased" data-theme={tema} data-testid="arranque">
       <nav className="border-b border-[color:var(--ld-border)]">
         <div className={`${ANCHO} flex h-[64px] items-center justify-between gap-3`}>
           <span className="inline-flex items-center gap-2.5">
@@ -519,7 +638,7 @@ export default function Arranque() {
             {paso === 1 && <PasoFurgonetas estado={estado} sede={sede} setSede={setSede} onCambio={cargar} onSeguir={() => ir(2)} />}
             {paso === 2 && <PasoConductores estado={estado} sede={sede} setSede={setSede} onCambio={cargar} onSeguir={() => ir(3)} />}
             {paso === 3 && <PasoAcceso estado={estado} onSeguir={() => ir(4)} onAtras={() => ir(2)} />}
-            {paso === 4 && <PasoRevision estado={estado} primera={primera} onRepasar={() => navigate('/panel/repaso')} />}
+            {paso === 4 && <PasoRevision estado={estado} primera={primera} comprobado={comprobado} onRepasar={() => navigate('/panel/repaso')} onAcceso={() => ir(3)} />}
             {error && estado && <p role="alert" className={`mt-4 ${ERROR}`}>{error}</p>}
           </section>
         )}

@@ -16,7 +16,7 @@ const SIN_LECTOR = {
   servicio_caido: true, sin_lector: true,
 }
 
-async function abrirRevision(page, { odometro, validar = { valid: true, checked: false } }) {
+async function abrirRevision(page, { odometro, validar = { valid: true, checked: false }, ficha = {}, pedidas = null }) {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
   const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
   await page.addInitScript((t) => {
@@ -27,9 +27,9 @@ async function abrirRevision(page, { odometro, validar = { valid: true, checked:
   }, token)
   await simularApi(page, 'vacio')
   await page.route(/\/api\/vehicles\/portal/, (r) => r.fulfill({ json: { vehicles: [VEHICULO], puede_auditar: true, motivo: null } }))
-  await page.route(/\/api\/auth\/me\/assigned-vehicle/, (r) => r.fulfill({ json: {} }))
-  await page.route(/\/api\/inspections\/validate-photo/, (r) => r.fulfill({ json: validar }))
-  await page.route(/\/api\/vehicles\/v1\/odometer-photo/, (r) => r.fulfill({ json: odometro }))
+  await page.route(/\/api\/auth\/me\/assigned-vehicle/, (r) => r.fulfill({ json: ficha }))
+  await page.route(/\/api\/inspections\/validate-photo/, (r) => { pedidas?.push('validar'); return r.fulfill({ json: validar }) })
+  await page.route(/\/api\/vehicles\/v1\/odometer-photo/, (r) => { pedidas?.push('cuentakilometros'); return r.fulfill({ json: odometro }) })
   await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: /Hacer la auditoría/ }).click()
   await page.getByRole('button', { name: /1234 ABC/ }).click()
@@ -86,4 +86,79 @@ test('control: una foto revisada de verdad (checked: true) sí lo dice', async (
   await abrirRevision(page, { odometro: SIN_LECTOR, validar: { valid: true, checked: true, detected_plate: '1234ABC' } })
   await page.locator('input[type=file]').nth(0).setInputFiles(FOTO)
   await expect(page.getByText('✅ Foto revisada')).toBeVisible()
+})
+
+/* ── UNA EMPRESA SIN LECTOR AUTOMÁTICO (tercera tanda, A10 / CONTRATO R9) ─────────────────────────────────────────
+   La ficha del portal (GET /auth/me/assigned-vehicle) lo dice con `sin_ia: true`, con furgoneta asignada o sin ella.
+   Entonces la revisión no nombra la IA en ningún momento (ni antes, ni mientras sube cada foto), no pregunta a nadie
+   por las fotos ni por los km, pide los km a mano desde el principio y dice «Foto guardada». La revisión del panel2
+   (hallazgo 1, dado la vuelta) veía «LA IA LEE LOS KM AUTOMÁTICAMENTE», «Verificando IA…» y «La IA está leyendo…». */
+const SIN_IA = { assigned: false, vehicle: null, sin_ia: true }
+const TEXTOS_IA = /\bIA\b|Verificando|leyendo|automátic|lector|Foto revisada|Foto capturada/i
+
+for (const [nombre, ficha] of [['sin furgoneta asignada', SIN_IA],
+  ['con su furgoneta de hoy', { assigned: true, vehicle: { ...VEHICULO, mileage: 48210 }, center: 'NORTE', already_inspected: false, sin_ia: true }]]) {
+  test(`sin IA (${nombre}): ni una palabra de la IA, ninguna lectura, los km a mano desde el principio`, async ({ page }, info) => {
+    if (info.project.name === 'movil') await page.setViewportSize({ width: 390, height: 844 })
+    const pedidas = []
+    // Con la foto tardando, para ver qué dice MIENTRAS (antes salía «Verificando IA…»).
+    await abrirRevision(page, { odometro: SIN_LECTOR, ficha, pedidas })
+    // Antes de hacer nada: ni «la IA lee los km», y el campo de los km ya está.
+    expect(await textoVisible(page)).not.toMatch(TEXTOS_IA)
+    const aMano = page.getByTestId('odo-a-mano')
+    await expect(aMano).toContainText('Escribe los kilómetros que marca el cuadro.')
+    if (ficha.vehicle) await expect(aMano).toContainText('La última vez marcaba 48.210 km.')
+    if (process.env.FOTOS_CONDUCTOR) await page.screenshot({ path: `${process.env.FOTOS_CONDUCTOR}/sin-ia-antes-${info.project.name}.png`, fullPage: true })
+    // Las cuatro fotos y la del cuadro: guardadas sin preguntar a nadie.
+    for (let i = 0; i < 4; i++) {
+      await page.locator('input[type=file]').nth(i).setInputFiles(FOTO)
+      await expect(page.getByText('Foto guardada').first()).toBeVisible()
+      expect(await textoVisible(page)).not.toMatch(TEXTOS_IA)
+    }
+    await page.locator('input[type=file]').nth(4).setInputFiles(FOTO)
+    await expect(page.getByText('Escribe los km abajo')).toBeVisible()
+    expect(await textoVisible(page)).not.toMatch(TEXTOS_IA)
+    expect(pedidas).toEqual([])
+    // Los km, y el depósito: ya se puede seguir.
+    await aMano.locator('input').fill('48300')
+    await expect(page.getByText('48.300 km', { exact: true })).toBeVisible()
+    await page.locator('input[type=file]').nth(5).setInputFiles(FOTO)
+    await page.getByRole('button', { name: '½' }).click()
+    await expect(page.getByRole('button', { name: /Continuar al checklist/ })).toBeVisible()
+    if (process.env.FOTOS_CONDUCTOR) await page.screenshot({ path: `${process.env.FOTOS_CONDUCTOR}/sin-ia-lista-${info.project.name}.png`, fullPage: true })
+    expect(await textoVisible(page)).not.toMatch(TEXTOS_IA)
+    expect(pedidas).toEqual([])
+  })
+}
+
+test('sin IA: lo que se envía lleva los km a mano y la foto del cuadro', async ({ page }) => {
+  await abrirRevision(page, { odometro: SIN_LECTOR, ficha: SIN_IA })
+  const subidas = []
+  await page.route(/\/api\/inspections\/upload/, (r) => {
+    subidas.push(r.request().postData() || '')
+    return r.fulfill({ json: { id: 'i9', analysis: null, analysis_status: 'sin_ia' } })
+  })
+  for (let i = 0; i < 6; i++) await page.locator('input[type=file]').nth(i).setInputFiles(FOTO)
+  await page.getByTestId('odo-a-mano').locator('input').fill('48300')
+  await page.getByRole('button', { name: '¾' }).click()
+  await page.getByRole('button', { name: /Continuar al checklist/ }).click()
+  await page.getByRole('button', { name: /Sí, la lleva/ }).click()
+  await page.getByRole('button', { name: /Revisar y enviar/ }).click()
+  await page.getByRole('button', { name: /Enviar inspección/ }).click()
+  await expect.poll(() => subidas.length).toBe(1)
+  expect(subidas[0]).toContain('"odometer_km":48300')
+  expect(subidas[0]).toContain('"odometer_manual":true')
+  expect(subidas[0]).toContain('filename="odometro.jpg"')
+})
+
+test('control: con `sin_ia: false` la revisión es la de siempre (pregunta por cada foto y lee el cuadro)', async ({ page }) => {
+  const pedidas = []
+  await abrirRevision(page, { odometro: SIN_LECTOR, ficha: { assigned: false, vehicle: null, sin_ia: false }, pedidas })
+  await expect(page.getByText(/la IA lee los km automáticamente/i)).toBeVisible()
+  await expect(page.getByTestId('odo-a-mano')).toHaveCount(0)
+  await page.locator('input[type=file]').nth(0).setInputFiles(FOTO)
+  await expect(page.getByText('📷 Foto capturada')).toBeVisible()
+  await page.locator('input[type=file]').nth(4).setInputFiles(FOTO)
+  await expect(page.getByTestId('odo-aviso')).toContainText('Escribe los kilómetros que marca el cuadro.')
+  expect(pedidas).toEqual(['validar', 'cuentakilometros'])
 })

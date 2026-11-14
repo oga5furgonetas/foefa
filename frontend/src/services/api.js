@@ -33,9 +33,53 @@ export function tokenActual() {
   return localStorage.getItem('flota_token') || ''
 }
 
+/* Lo que lleva dentro una sesión (el JWT), sin comprobar la firma: eso lo hace el servidor. null si no se lee. */
+export function datosDeSesion(token) {
+  try {
+    const p = String(token || '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(p), (c) => c.charCodeAt(0))))
+  } catch { return null }
+}
+
+/* «ESTE ACCESO YA NO VALE» (14-11-2026, tercera tanda, A3). Quien entró con el enlace personal (`via: "enlace"` en su
+   sesión) casi nunca tiene correo: si su sesión se corta (el dueño renovó o anuló el enlace) o caduca, no se le puede
+   mandar a «vuelve a entrar con tu correo». Esta marca, en el teléfono, le dice a la pantalla de entrada que le pida
+   el enlace a su empresa. Se quita en cuanto entra otra vez, con el enlace o con su correo. */
+export const ENLACE_CADUCADO = 'fds_dr_enlace_caducado'
+
+/* LA WEB RENUEVA SOLA LA SESIÓN DEL CONDUCTOR (A3), como la app de Android: con `POST /auth/renovar` y a partir del
+   quinto día (le quedan menos de 25 de los 30), una vez al día como mucho. Si falla (sin red, el enlace ya no vale, un
+   conductor sin cuenta), no se molesta a nadie: la sesión sigue como estaba y, si de verdad está cortada, lo dirá la
+   siguiente petición. Va con `fetch`, fuera de axios: un 401 de la renovación no puede echarle del portal. */
+const RENOVAR_CUANDO_QUEDAN_MS = 25 * 864e5
+const RENOVADO_EL = 'fds_dr_renovado_el'
+let renovando = false
+export function renovarSesionConductorSiToca() {
+  if (renovando || !enPortalConductor()) return
+  try {
+    const token = localStorage.getItem(DRIVER_TOKEN_KEY)
+    const p = datosDeSesion(token)
+    if (!p || p.role !== 'driver' || p.demo || p.imp || !p.exp) return
+    const queda = p.exp * 1000 - Date.now()
+    if (queda <= 0 || queda > RENOVAR_CUANDO_QUEDAN_MS) return
+    if (Date.now() - Number(localStorage.getItem(RENOVADO_EL) || 0) < 864e5) return
+    localStorage.setItem(RENOVADO_EL, String(Date.now()))
+    renovando = true
+    fetch(`${API_BASE}/auth/renovar`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        // Solo si sigue siendo la misma sesión (no ha salido ni ha entrado otro mientras tanto).
+        if (j?.access_token && localStorage.getItem(DRIVER_TOKEN_KEY) === token) localStorage.setItem(DRIVER_TOKEN_KEY, j.access_token)
+      })
+      .catch(() => { /* sin molestar */ })
+      .finally(() => { renovando = false })
+  } catch { renovando = false }
+}
+
 api.interceptors.request.use((config) => {
   const token = tokenActual()
   if (token) config.headers.Authorization = `Bearer ${token}`
+  renovarSesionConductorSiToca()
   return config
 })
 
@@ -119,6 +163,11 @@ api.interceptors.response.use(
       && !url.includes('/auth/driver-lookup')
       && !url.includes('/auth/driver-code/verify')
       && !url.includes('/auth/change-my-password')) {
+      // ¿Entró con su enlace personal? Entonces lo que hay que decirle es que pida el enlace otra vez (A3).
+      const sesion = datosDeSesion(localStorage.getItem(DRIVER_TOKEN_KEY) || localStorage.getItem('flota_token'))
+      if (sesion && (sesion.via === 'enlace' || sesion.lk)) {
+        try { localStorage.setItem(ENLACE_CADUCADO, '1') } catch { /* modo privado */ }
+      }
       localStorage.removeItem(DRIVER_TOKEN_KEY)
       localStorage.removeItem('flota_token')
       // Y TAMBIÉN su ficha. Sin esto el portal cree que sigue dentro —la ficha
