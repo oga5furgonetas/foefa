@@ -596,24 +596,33 @@ export default function Repaso() {
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
-                <button type="button" onClick={() => responder('no_se_ve')} disabled={ocupado}
-                  title={t('repaso.nosevee.ayuda')}
-                  className="h-[52px] rounded-xl px-4 text-[15px] font-semibold text-dark-200 hover:bg-dark-800 disabled:opacity-50 sm:order-1">
-                  {t('repaso.btn.nosevee')}
-                </button>
-                <button type="button" onClick={abrirGolpe} disabled={ocupado || hoyRota}
-                  title={hoyRota ? t('repaso.foto.fallo.golpe') : undefined}
-                  className={`h-[52px] whitespace-nowrap rounded-xl border-[1.5px] px-3 text-[15px] font-bold disabled:cursor-not-allowed sm:order-2 sm:px-5 ${hoyRota
-                    ? 'border-dark-800 bg-dark-800 text-dark-400'
-                    : 'border-ruta-peligro-texto text-ruta-peligro-texto hover:bg-dark-800 disabled:opacity-50'}`}>
-                  {sinAnterior ? t('repaso.btn.tienegolpe') : t('repaso.btn.golpe')}
-                </button>
-                <button type="button" onClick={() => responder('igual')} disabled={ocupado} data-testid="btn-igual"
-                  className="order-first col-span-2 flex h-[52px] items-center justify-center gap-2 rounded-xl bg-brand-400 px-6 text-[15px] font-bold text-brand-tinta disabled:opacity-60 sm:order-3">
-                  {ocupado && <Loader2 size={16} className="animate-spin" />}
-                  {sinAnterior ? t('repaso.btn.singolpes') : t('repaso.btn.igual')}
-                </button>
+              {/* E6 (tanda 5): el repaso se hace de pie con el móvil, cuatro lados por furgoneta. Con la barra de abajo
+                  del panel (móvil y tableta, < md), las tres acciones van fijas justo encima de ella, con el fondo de
+                  superficie y una regla de 1 px arriba: siempre a mano, sin bajar en cada lado. Lo de debajo no se
+                  queda tapado: al final de la pantalla hay un hueco de su alto. Con el formulario del golpe abierto o
+                  el lado ya decidido no hay barra (el formulario va en su sitio, y el campo de la nota sube solo por
+                  encima del teclado). En el ordenador, como estaba. */}
+              <div className="max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(53px+env(safe-area-inset-bottom,0px))] max-md:z-30 max-md:border-t max-md:border-dark-700 max-md:bg-dark-900 max-md:px-4 max-md:py-2.5"
+                data-testid="acciones">
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
+                  <button type="button" onClick={() => responder('no_se_ve')} disabled={ocupado}
+                    title={t('repaso.nosevee.ayuda')}
+                    className="h-11 rounded-xl px-4 text-[15px] font-semibold text-dark-200 hover:bg-dark-800 disabled:opacity-50 sm:order-1 sm:h-[52px]">
+                    {t('repaso.btn.nosevee')}
+                  </button>
+                  <button type="button" onClick={abrirGolpe} disabled={ocupado || hoyRota}
+                    title={hoyRota ? t('repaso.foto.fallo.golpe') : undefined}
+                    className={`h-11 whitespace-nowrap rounded-xl border-[1.5px] px-3 text-[15px] font-bold disabled:cursor-not-allowed sm:order-2 sm:h-[52px] sm:px-5 ${hoyRota
+                      ? 'border-dark-800 bg-dark-800 text-dark-400'
+                      : 'border-ruta-peligro-texto text-ruta-peligro-texto hover:bg-dark-800 disabled:opacity-50'}`}>
+                    {sinAnterior ? t('repaso.btn.tienegolpe') : t('repaso.btn.golpe')}
+                  </button>
+                  <button type="button" onClick={() => responder('igual')} disabled={ocupado} data-testid="btn-igual"
+                    className="order-first col-span-2 flex h-[52px] items-center justify-center gap-2 rounded-xl bg-brand-400 px-6 text-[15px] font-bold text-brand-tinta disabled:opacity-60 sm:order-3">
+                    {ocupado && <Loader2 size={16} className="animate-spin" />}
+                    {sinAnterior ? t('repaso.btn.singolpes') : t('repaso.btn.igual')}
+                  </button>
+                </div>
               </div>
               <div className="hidden flex-wrap items-center gap-x-4 gap-y-1.5 text-[12.5px] text-dark-400 md:flex sm:justify-end" data-testid="teclas">
                 <Tecla k="→">{sinAnterior ? t('repaso.teclas.singolpes') : t('repaso.teclas.igual')}</Tecla>
@@ -647,6 +656,9 @@ export default function Repaso() {
     return null
   }
 
+  // La fila de las tres acciones va fija sobre la barra de abajo en el móvil (E6): solo con un lado por decidir.
+  const barraAbajo = !cuerpo && !sinNada && !terminado && !!rev && !!lado && !lado.veredicto && !golpe
+
   return (
     <div className="mx-auto max-w-[1440px]" data-testid="repaso">
       {cabecera}
@@ -677,6 +689,14 @@ export default function Repaso() {
             )}
           </aside>
         </div>
+      )}
+      {/* El hueco del alto de la fila fija (E6), para que lo último de la pantalla pueda subir por encima de ella; y,
+          mientras está, la burbuja del asistente no se pone encima de sus botones (en el móvil iba justo ahí). */}
+      {barraAbajo && (
+        <>
+          <div className="h-[126px] md:hidden" aria-hidden="true" data-testid="hueco-acciones" />
+          <style>{'@media (max-width: 767.98px) { .burbuja-asistente { display: none !important; } }'}</style>
+        </>
       )}
     </div>
   )

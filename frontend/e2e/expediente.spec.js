@@ -396,6 +396,32 @@ test.describe('El expediente en el panel', () => {
     })
   }
 
+  /* E3 (tanda 5): con un año, cada mes lleva su rótulo. Antes, el año del primero («nov 2025») no cabía antes del
+     siguiente y se quitaba diciembre. Al imprimir y en pantalla, y sin rótulos montados. */
+  for (const imprimir of [false, true]) {
+    test(`con 12 meses${imprimir ? ', al imprimir,' : ''} cada mes tiene su rótulo, diciembre también`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 900 })
+      await abrir(page, { datos: conMeses(12) })
+      await expect(hoja(page)).toBeVisible()
+      if (imprimir) await page.emulateMedia({ media: 'print' })
+      await expect(async () => {
+        const rotulos = (await page.locator('.exp-cal-mes').allTextContents()).filter(Boolean)
+        expect(rotulos.map((r) => r.split(' ')[0])).toEqual(['nov', 'dic', 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov'])
+        expect(rotulos.join(' ')).toMatch(/2025/)
+        expect(rotulos.join(' ')).toMatch(/2026/)
+      }).toPass()
+      const solapes = await page.locator('.exp-cal-mes').evaluateAll((s) => {
+        const r = s.filter((x) => x.textContent).map((x) => {
+          const rango = document.createRange(); rango.selectNodeContents(x)
+          const c = rango.getBoundingClientRect()
+          return [c.left, c.right]
+        })
+        return r.slice(1).filter((x, i) => x[0] < r[i][1]).length
+      })
+      expect(solapes).toBe(0)
+    })
+  }
+
   test('en el móvil, un año va en dos filas a todo el ancho, sin salirse, cada una con su año', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await abrir(page, { datos: conMeses(12) })
@@ -623,7 +649,8 @@ test.describe('El expediente en el panel', () => {
     await expect(items).toHaveCount(2)
     // El primero: la pieza como la dijo la IA (sin traducir ni poner mayúscula), la fecha, las dos fotos y la caja a trazos.
     await expect(items.nth(0).locator('.exp-ia-texto')).toHaveText('puerta trasera izq · en la revisión del 10 de noviembre de 2026')
-    await expect(items.nth(0).locator('figcaption')).toHaveText(['Antes, el 7 nov 2026', 'Lo que marca la IA'])
+    // La fecha de la foto anterior, en el formato de las de los golpes (E3, tanda 5): antes, «7 nov 2026».
+    await expect(items.nth(0).locator('figcaption')).toHaveText(['Antes, el 7 de noviembre de 2026', 'Lo que marca la IA'])
     await expect(items.nth(0).locator('img')).toHaveCount(2)
     await expect(items.nth(0).getByTestId('caja-ia')).toHaveCount(1)
     expect(await items.nth(0).getByTestId('caja-ia').getAttribute('style')).toContain('top: 60%')
@@ -650,8 +677,59 @@ test.describe('El expediente en el panel', () => {
     // Al imprimir, una pareja de fotos nunca se parte entre dos hojas, y la nota no se queda sola al pie.
     await page.emulateMedia({ media: 'print' })
     expect(await items.nth(0).evaluate((i) => getComputedStyle(i).breakInside)).toBe('avoid')
-    expect(await anexo.locator('.exp-sub').evaluate((i) => getComputedStyle(i).breakAfter)).toBe('avoid')
+    expect(await anexo.locator('.exp-sub').first().evaluate((i) => getComputedStyle(i).breakAfter)).toBe('avoid')
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  /* E1 (tanda 5): el anexo es para el dueño, no para el perito. En pantalla sale siempre; en PAPEL, solo si se marca la
+     casilla junto a «Imprimir» (desmarcada al entrar y sin recordarse). Se mira en el PDF real: con 12 posibles daños
+     el anexo ocupa hojas enteras, así que con la casilla el PDF tiene más hojas, y sin ella las mismas que sin anexo. */
+  test('el anexo de la IA no sale en el PDF salvo que se marque la casilla, que no se recuerda', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'solo Chromium saca PDF')
+    // Tras mirar el modo impresión se vuelve con `media: null`, no 'screen': con 'screen' fijado, el PDF saldría con los
+    // estilos de pantalla (y el anexo dentro).
+    const hojas = async () => (await page.pdf({ preferCSSPageSize: true, printBackground: true })).toString('latin1').match(/\/Type\s*\/Page[^s]/g).length
+    // Con todas las fotos ya cargadas: una foto que llega tarde cambia el alto de la hoja y, con él, las hojas del PDF.
+    const listo = async () => {
+      await expect(hoja(page)).toBeVisible()
+      await page.waitForLoadState('networkidle')
+      await page.waitForFunction(() => [...document.querySelectorAll('[data-testid="expediente"] img')].every((i) => i.complete))
+    }
+    // Sin anexo: no hay casilla.
+    const limpio = copia(); limpio.posibles_ia = []; limpio.posibles_ia_mas = 0
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await abrir(page, { datos: limpio })
+    await listo()
+    await expect(page.getByTestId('imprimir-ia')).toHaveCount(0)
+    const sinAnexo = await hojas()
+    // Con 12 posibles daños: la casilla, desmarcada; el anexo, en pantalla con su aviso, y fuera del papel.
+    const d = copia()
+    d.posibles_ia = Array.from({ length: 12 }, (_, i) => ({ ...POSIBLES[0], inspeccion_id: `insp-ia-${i}` }))
+    await page.unroute('**/api/vehicles/*/antes-del-perito')
+    await page.route('**/api/vehicles/*/antes-del-perito', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(d) }))
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await listo()
+    const casilla = page.getByTestId('imprimir-ia')
+    await expect(casilla).not.toBeChecked()
+    await expect(page.getByText('Incluir en el papel los posibles daños que marca la IA, sin confirmar')).toBeVisible()
+    await expect(page.getByTestId('bloque-posibles-ia')).toBeVisible()
+    await expect(page.getByTestId('ia-fuera-papel')).toBeVisible()
+    expect(await hojas(), 'sin la casilla, el PDF no lleva el anexo').toBe(sinAnexo)
+    await page.emulateMedia({ media: 'print' })
+    await expect(page.getByTestId('bloque-posibles-ia')).toBeHidden()
+    await page.emulateMedia({ media: null })
+    // Marcada: el anexo va en el papel (sin el aviso, que es de pantalla) y el PDF crece.
+    await casilla.check()
+    await expect(page.getByTestId('ia-fuera-papel')).toHaveCount(0)
+    expect(await hojas(), 'con la casilla, el PDF lleva el anexo').toBeGreaterThan(sinAnexo)
+    await page.emulateMedia({ media: 'print' })
+    await expect(page.getByTestId('bloque-posibles-ia')).toBeVisible()
+    await page.emulateMedia({ media: null })
+    // No se recuerda: al volver a entrar, desmarcada otra vez.
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await listo()
+    await expect(page.getByTestId('imprimir-ia')).not.toBeChecked()
+    expect(await hojas()).toBe(sinAnexo)
   })
 
   test('sin posibles daños de la IA (lista vacía o sin el campo), no hay anexo', async ({ page }) => {
@@ -874,8 +952,37 @@ test.describe('El ejemplo público', () => {
     if (browserName === 'chromium') {
       const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true })
       expect(pdf.subarray(0, 5).toString()).toBe('%PDF-')
+      // E2 (tanda 5): cabe en dos hojas (antes, tres, con la tercera solo para «Qué prueba»).
+      expect(pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g)).toHaveLength(2)
       if (FOTOS) fs.writeFileSync(path.join(FOTOS, `ejemplo-${test.info().project.name}.pdf`), pdf)
     }
+  })
+
+  /* E2 (tanda 5): con un solo lado, «Cómo entró» y «Cómo está hoy» pintan su foto del tamaño de su celda de la rejilla
+     2×2 (media columna), no a todo el ancho de la columna. */
+  test('con un solo lado, cada foto de «Cómo entró / Cómo está hoy» mide media columna', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.goto('/expediente-ejemplo', { waitUntil: 'networkidle' })
+    for (const b of ['bloque-entro', 'bloque-esta']) {
+      const [col, fig] = [await page.getByTestId(b).boundingBox(), await page.getByTestId(b).locator('figure').boundingBox()]
+      expect(fig.width).toBeLessThan(col.width / 2 + 1)
+      expect(fig.width).toBeGreaterThan(col.width / 2 - 12)
+    }
+  })
+
+  /* E4 (tanda 5): el ejemplo es coherente consigo mismo. Un golpe sin reparar no desaparece: toda foto de ese lado
+     posterior al golpe (las anteriores de otros golpes y «Cómo está hoy») enseña la foto con ese golpe. */
+  test('un golpe sin reparar sigue en todas las fotos posteriores de su lado', () => {
+    const CON_PUERTA = ['/demo/van-lateral-golpe-puerta.jpg', '/demo/van-lateral-golpe-puerta-aleta.jpg']
+    const puerta = EXPEDIENTE_EJEMPLO.golpes.find((g) => g.pieza_clave === EJEMPLO_HEROE.piezaClave)
+    expect(puerta.reparacion.estado).not.toBe('reparado')
+    expect(CON_PUERTA).toContain(puerta.foto_url)
+    const fotos = [
+      ...EXPEDIENTE_EJEMPLO.golpes.flatMap((g) => [{ ...g }, g.anterior ? { ...g.anterior, vista: g.vista } : null]),
+      ...EXPEDIENTE_EJEMPLO.como_entro.fotos, ...EXPEDIENTE_EJEMPLO.como_esta.fotos,
+    ].filter((f) => f && f.vista === puerta.vista && f.foto_url && f.recibida_at > puerta.recibida_at)
+    expect(fotos.length, 'hay fotos de ese lado después del golpe').toBeGreaterThan(1)
+    for (const f of fotos) expect(CON_PUERTA, `${f.fecha} ${f.hora}`).toContain(f.foto_url)
   })
 
   test('en 390 px, sin desbordes', async ({ page }) => {

@@ -117,7 +117,15 @@ function rotulos(fila, col, texto, util) {
     // (una fila sin año no se lee; con meses de cuatro semanas en el móvil, «abr 2026» no cabe en una).
     const k = ultimo ? -1 : out.findIndex((x, q) => q > j && x)
     const sitio2 = k === -1 ? util - i * col : (k - i) * col - 4
+    // El sitio del siguiente rótulo, por si el año puede ir en él (E3, tanda 5: así no se quita ningún mes).
+    const sitioSig = ultimo ? 0 : k === -1 ? util - j * col : (k - j) * col - 4
     if (anio !== anioVisto && anchoDe(conAnio) <= sitio) { r.texto = conAnio; anioVisto = anio }
+    /* El primer rótulo de la fila sin sitio para su año, pero con sitio sin él, y el siguiente con sitio para el suyo:
+       este va sin año y el año va en el siguiente. Antes se quitaba el siguiente mes («nov 2025 · ene 2026»: faltaba
+       diciembre); ahora se leen todos («nov · dic 2025 · ene 2026»). */
+    else if (anioVisto === null && !ultimo && anchoDe(solo) <= sitio && anchoDe(texto(out[j].fecha, true)) <= sitioSig) {
+      r.texto = solo
+    }
     else if (anioVisto === null && !ultimo && anchoDe(conAnio) > sitio && anchoDe(conAnio) <= sitio2) {
       r.texto = conAnio; anioVisto = anio; out[j] = null
     }

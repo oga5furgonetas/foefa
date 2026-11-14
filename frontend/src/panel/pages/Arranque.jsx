@@ -142,10 +142,12 @@ function PasoFurgonetas({ estado, sede, setSede, onCambio, onSeguir }) {
         <>
           <Lineas lineas={lineas.filter((l) => !esRara(l))} pinta={(l) => (
             <>
+              {/* Lo pegado parte por palabras, nunca letra a letra («Matrí / cula» a 390 px, E5); el porqué de la derecha
+                  se queda con un 58 % como mucho y se parte en líneas, así a la izquierda siempre cabe una palabra. */}
               <span className="min-w-0 flex-1">
-                {l.matricula ? <Matricula texto={l.matricula} className="text-[15px]" /> : <span className="break-all font-mono text-[15px]">{l.texto}</span>}
+                {l.matricula ? <Matricula texto={l.matricula} className="text-[15px]" /> : <span className="break-words font-mono text-[15px]">{l.texto}</span>}
               </span>
-              <span className={`shrink-0 text-right text-[14px] font-semibold ${claseEstado(l.estado)}`}>
+              <span className={`min-w-0 max-w-[58%] text-right text-[14px] font-semibold ${claseEstado(l.estado)}`}>
                 {l.estado === 'nueva' ? t('alta.p1.nueva') : motivoDe(t, l)}
               </span>
             </>
@@ -159,7 +161,7 @@ function PasoFurgonetas({ estado, sede, setSede, onCambio, onSeguir }) {
                   <li key={l.n} className="border-b border-[color:var(--ld-border)]">
                     <label className="flex min-h-[48px] cursor-pointer items-center gap-3 py-2">
                       <span className="w-7 shrink-0 font-mono text-[13px] tabular-nums text-[color:var(--ld-muted)]">{l.n}</span>
-                      <span className="min-w-0 flex-1 break-all font-mono text-[15px]">{l.texto}</span>
+                      <span className="min-w-0 flex-1 break-words font-mono text-[15px]">{l.texto}</span>
                       <span className="shrink-0 text-[14px] font-semibold">{t('alta.p1.rarasSi')}</span>
                       <input type="checkbox" className="h-5 w-5 shrink-0 accent-[color:var(--ld-text)]"
                         checked={siSon.includes(l.texto)}
@@ -424,12 +426,13 @@ function PasoAcceso({ estado, onSeguir, onAtras }) {
    cuatro casillas vacías (borde de puntos de 1 px y el nombre del lado en gris) que dicen qué va a llegar; al llegar,
    las fotos ocupan esas mismas casillas, con el lado en la esquina de arriba (como «Antes»/«Hoy» en el repaso) y el
    sello de llegada abajo. */
-function CuatroFotos({ fotos, fecha, testid }) {
+function CuatroFotos({ fotos, fecha, testid, fila = false }) {
   const { t, lang } = useT()
   const llenas = Array.isArray(fotos) && fotos.length > 0
   const casillas = llenas ? fotos : ORDEN_VISTAS.map((v) => ({ photo_index: v, vista: v, url: null }))
+  // `fila` (la espera, E5): en el ordenador, las cuatro en una fila, para que en un portátil se vea todo sin bajar.
   return (
-    <ul className="grid grid-cols-2 gap-2.5" data-testid={testid}>
+    <ul className={`grid grid-cols-2 gap-2.5${fila ? ' md:grid-cols-4' : ''}`} data-testid={testid}>
       {casillas.map((f) => {
         const lado = t(VISTAS[f.vista] || 'alta.vista.otra')
         return (
@@ -485,7 +488,7 @@ function FilaEspera({ c, empresa, onCambio }) {
    sola, segundo a segundo: es la señal de que esto está vivo, sin animaciones), las cuatro fotos que van a llegar, cada
    conductor con su enlace y «Mandar otra vez», qué hacer si no llega y cómo volver a «Dales acceso». La lista de
    conductores se pide al entrar y cada 15 s mientras se ve, como en el paso 3. */
-function Espera({ comprobado, empresa, onAcceso }) {
+function Espera({ comprobado, empresa, onAcceso, error }) {
   const { t } = useT()
   const [accesos, setAccesos] = useState(null)
   const [ahora, setAhora] = useState(() => Date.now())
@@ -518,23 +521,28 @@ function Espera({ comprobado, empresa, onAcceso }) {
           {t('alta.p4.mirando')}
         </p>
         {textoHace && <p className="font-mono text-[13.5px] tabular-nums text-[color:var(--ld-muted)]" data-testid="alta-comprobado">{textoHace}</p>}
+        {/* Sin conexión, el aviso va aquí, junto a «Comprobado hace…» (E5): al fondo de la página no se veía. */}
+        {error && <p role="alert" className={`w-full ${ERROR}`} data-testid="alta-espera-error">{error}</p>}
       </div>
 
-      <div className="mt-6">
-        <CuatroFotos testid="alta-fotos-vacias" />
+      {/* En el móvil, como estaba: las cuatro casillas y debajo los conductores. En el ordenador (E5), los conductores
+          arriba (es lo único con lo que se puede hacer algo mientras tanto) y las cuatro casillas en una fila. */}
+      <div className="flex flex-col">
+        {lista.length > 0 && (
+          <section className="mt-10 md:mt-7" aria-labelledby="alta-espera-titulo">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <h2 id="alta-espera-titulo" className="text-[19px] font-bold tracking-[-0.01em]">{t('alta.p2.titulo')}</h2>
+              <p className={GRIS}>{t('alta.p3.cuenta').replace('{n}', abiertos).replace('{total}', lista.length)}</p>
+            </div>
+            <ul className="mt-3 border-t border-[color:var(--ld-border)]" data-testid="alta-espera-accesos">
+              {lista.map((c) => <FilaEspera key={c.driver_id} c={c} empresa={empresa} onCambio={(a) => cambia(c.driver_id, a)} />)}
+            </ul>
+          </section>
+        )}
+        <div className="order-first mt-6 md:order-none md:mt-9">
+          <CuatroFotos testid="alta-fotos-vacias" fila />
+        </div>
       </div>
-
-      {lista.length > 0 && (
-        <section className="mt-10" aria-labelledby="alta-espera-titulo">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <h2 id="alta-espera-titulo" className="text-[19px] font-bold tracking-[-0.01em]">{t('alta.p2.titulo')}</h2>
-            <p className={GRIS}>{t('alta.p3.cuenta').replace('{n}', abiertos).replace('{total}', lista.length)}</p>
-          </div>
-          <ul className="mt-3 border-t border-[color:var(--ld-border)]" data-testid="alta-espera-accesos">
-            {lista.map((c) => <FilaEspera key={c.driver_id} c={c} empresa={empresa} onCambio={(a) => cambia(c.driver_id, a)} />)}
-          </ul>
-        </section>
-      )}
 
       <h2 className="mt-10 text-[19px] font-bold tracking-[-0.01em]">{t('alta.p4.siNoLlega')}</h2>
       <ol className="mt-3 space-y-2.5 text-[16px] leading-relaxed text-[color:var(--ld-text2)]">
@@ -552,10 +560,10 @@ function Espera({ comprobado, empresa, onAcceso }) {
   )
 }
 
-function PasoRevision({ estado, primera, comprobado, onRepasar, onAcceso }) {
+function PasoRevision({ estado, primera, comprobado, onRepasar, onAcceso, error }) {
   const { t, lang } = useT()
   const r = estado.revision
-  if (!r) return <Espera comprobado={comprobado} empresa={estado.empresa} onAcceso={onAcceso} />
+  if (!r) return <Espera comprobado={comprobado} empresa={estado.empresa} onAcceso={onAcceso} error={error} />
   const fotos = Array.isArray(r.fotos) ? r.fotos : []
   const conductor = r.conductor?.nombre
   const datos = [
@@ -705,8 +713,9 @@ export default function Arranque() {
             {paso === 1 && <PasoFurgonetas estado={estado} sede={sede} setSede={setSede} onCambio={cargar} onSeguir={() => ir(2)} />}
             {paso === 2 && <PasoConductores estado={estado} sede={sede} setSede={setSede} onCambio={cargar} onSeguir={() => ir(3)} />}
             {paso === 3 && <PasoAcceso estado={estado} onSeguir={() => ir(4)} onAtras={() => ir(2)} />}
-            {paso === 4 && <PasoRevision estado={estado} primera={primera} comprobado={comprobado} onRepasar={() => navigate('/panel/repaso')} onAcceso={() => ir(3)} />}
-            {error && estado && <p role="alert" className={`mt-4 ${ERROR}`}>{error}</p>}
+            {paso === 4 && <PasoRevision estado={estado} primera={primera} comprobado={comprobado} onRepasar={() => navigate('/panel/repaso')} onAcceso={() => ir(3)} error={error} />}
+            {/* En la espera, el aviso va arriba, junto a «Comprobado hace…» (lo pinta Espera). */}
+            {error && estado && !enEspera && <p role="alert" className={`mt-4 ${ERROR}`}>{error}</p>}
           </section>
         )}
       </div>

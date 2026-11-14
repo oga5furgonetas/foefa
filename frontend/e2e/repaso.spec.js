@@ -428,6 +428,69 @@ test('Repaso · a 390 px no hay nada que se salga de lado', async ({ page, baseU
   expect(await sobra()).toBeLessThanOrEqual(0)
 })
 
+/* E6 (tanda 5): el repaso se hace de pie con el móvil. Con la barra de abajo del panel, las tres acciones van fijas
+   justo encima de ella (regla de 1 px arriba, fondo de superficie): a la vista sin bajar, también tras bajar; nada queda
+   tapado para siempre (hay un hueco al final); con el formulario del golpe abierto no hay fila fija y el campo de la
+   nota puede quedar por encima de la barra. */
+for (const ancho of [360, 390]) {
+  test(`Repaso · a ${ancho} px las tres acciones están siempre a mano, encima de la barra de abajo`, async ({ page, baseURL }) => {
+    await page.setViewportSize({ width: ancho, height: ancho === 360 ? 740 : 844 })
+    await abrir(page, dia(baseURL))
+    await expect(botonIgual(page)).toBeVisible()
+    // La entrada de la pantalla (0,32 s, con un transform en <main>) acaba antes de medir: durante ella, lo fijo va con <main>.
+    await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'))
+    const medir = () => page.evaluate(() => {
+      const nav = [...document.querySelectorAll('nav')].find((n) => getComputedStyle(n).position === 'fixed' && n.getBoundingClientRect().top > innerHeight / 2)
+      const barra = document.querySelector('[data-testid="acciones"]').getBoundingClientRect()
+      const botones = [...document.querySelectorAll('[data-testid="acciones"] button')].map((b) => b.getBoundingClientRect())
+      return {
+        navTop: nav.getBoundingClientRect().top, barraTop: barra.top, barraBottom: barra.bottom,
+        dentro: botones.every((b) => b.top >= barra.top && b.bottom <= barra.bottom && b.left >= 0 && b.right <= innerWidth),
+        alto: Math.min(...botones.map((b) => b.height)),
+        regla: getComputedStyle(document.querySelector('[data-testid="acciones"]')).borderTopWidth,
+      }
+    })
+    for (const bajar of [0, 500, 5000]) {
+      if (bajar) { await page.mouse.wheel(0, bajar); await page.waitForTimeout(250) }
+      const m = await medir()
+      expect(m.barraBottom, `pegada encima de la barra de abajo (bajando ${bajar})`).toBeCloseTo(m.navTop, 0)
+      expect(m.dentro).toBe(true)
+      expect(m.alto).toBeGreaterThanOrEqual(44)
+      expect(m.regla).toBe('1px')
+    }
+    // Abajo del todo, lo último de la pantalla queda por encima de la fila fija (no tapado para siempre).
+    const ultimo = await page.evaluate(() => {
+      const r = [...document.querySelectorAll('aside > *')].at(-1).getBoundingClientRect()
+      return r.bottom - document.querySelector('[data-testid="acciones"]').getBoundingClientRect().top
+    })
+    expect(ultimo).toBeLessThanOrEqual(0)
+    // Las tres siguen funcionando desde ahí: «Está igual · siguiente» pasa al siguiente lado.
+    await botonIgual(page).click()
+    await expect(tab(page, 2)).toHaveAttribute('aria-selected', 'true')
+    // Con el formulario del golpe abierto, no hay fila fija; la nota, desplazada a la vista, queda encima de la barra.
+    await page.getByRole('button', { name: 'Hay un golpe nuevo' }).click()
+    await expect(page.getByTestId('form-golpe')).toBeVisible()
+    await expect(page.getByTestId('acciones')).toHaveCount(0)
+    const nota = page.locator('#repaso-nota')
+    await nota.focus()
+    await nota.scrollIntoViewIfNeeded()
+    const n = await nota.evaluate((el) => {
+      const nav = [...document.querySelectorAll('nav')].find((x) => getComputedStyle(x).position === 'fixed' && x.getBoundingClientRect().top > innerHeight / 2)
+      return { abajo: el.getBoundingClientRect().bottom, navTop: nav.getBoundingClientRect().top }
+    })
+    expect(n.abajo).toBeLessThanOrEqual(n.navTop)
+  })
+}
+
+test('Repaso · en el ordenador, las acciones van en su sitio (sin fila fija)', async ({ page, baseURL, isMobile }) => {
+  test.skip(isMobile, 'el ordenador')
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await abrir(page, dia(baseURL))
+  await expect(botonIgual(page)).toBeVisible()
+  expect(await page.getByTestId('acciones').evaluate((x) => getComputedStyle(x).position)).toBe('static')
+  await expect(page.getByTestId('hueco-acciones')).toBeHidden()
+})
+
 test('Repaso · el número del menú baja al repasar', async ({ page, baseURL, isMobile }) => {
   await abrir(page, dia(baseURL, { esHoy: true }))
   await expect(page.getByTestId('mesa')).toBeVisible()

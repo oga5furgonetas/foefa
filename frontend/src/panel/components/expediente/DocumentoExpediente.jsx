@@ -4,7 +4,7 @@ import Matricula from '../../../components/Matricula'
 import { selloDeFecha } from '../../../lib/sello'
 import CalendarioDias from './CalendarioDias'
 import FotoConCaja from './FotoConCaja'
-import { momento, fechaLarga, fechaCorta, numero, euros, comoLista } from './formato'
+import { momento, fechaLarga, numero, euros, comoLista } from './formato'
 import './expediente.css'
 
 /* EL EXPEDIENTE DEL VEHÍCULO (14-11-2026, «Antes del perito»): el documento que el dueño de una flota imprime, o
@@ -22,7 +22,9 @@ import './expediente.css'
      las fechas y el número de página (expediente.css y el <style> de abajo, con los textos en su idioma);
    - lo ÚNICO de la IA es el anexo del final (`posibles_ia`, CONTRATO R8), y solo si trae algo: lo que marcó y nadie ha
      confirmado ni descartado, en pequeño y en gris, sin conductor, sin gravedad, sin coste y fuera de toda cifra y del
-     calendario. Se dice que no está confirmado. El ejemplo público no lo lleva. */
+     calendario. Se dice que no está confirmado. El ejemplo público no lo lleva. Es para el dueño, no para el perito
+     (tanda 5, E1): en pantalla sale siempre; en PAPEL, solo con `iaEnPapel` (la casilla junto a «Imprimir»). Sus
+     fechas, en el mismo formato que las de los golpes (E3). */
 
 const VISTAS = ['frontal', 'trasera', 'lateral_izq', 'lateral_der']
 
@@ -40,7 +42,7 @@ function Linea({ etiqueta, children, testid }) {
   )
 }
 
-export default function DocumentoExpediente({ datos, empresa }) {
+export default function DocumentoExpediente({ datos, empresa, iaEnPapel = false }) {
   const { t, lang } = useT()
   const locale = LANG_LOCALE[lang] || 'es-ES'
   const marca = MARCA.nombre
@@ -262,16 +264,20 @@ export default function DocumentoExpediente({ datos, empresa }) {
                 ? <p className="exp-nota">{hayRevisiones ? t('exp.sinFotos') : t('exp.periodo.nada')}</p>
                 : <p className="exp-sub">{sub}</p>}
               {fotos.length > 0 && (
-                <div className={`exp-galeria${vistasJuntas.length === 1 ? ' exp-galeria-una' : ''}`}>
+                /* Cada lado, siempre del tamaño de su celda de la rejilla 2×2, también cuando solo hay uno (E2, tanda 5):
+                   una foto sola a todo el ancho de la columna empujaba «Qué prueba» a una tercera hoja. */
+                <div className="exp-galeria" data-lados={vistasJuntas.length}>
                   {vistasJuntas.map((k) => {
                     const f = fotos.find((x) => x.vista === k)
                     // El lado que esta columna no tiene deja su hueco: así cada lado cae en el mismo sitio de las dos.
                     if (!f) return <div key={k} className="exp-galeria-hueco" aria-hidden="true" />
                     return (
                       <figure key={`${f.vista}-${f.inspection_id}-${f.photo_index}`}>
+                        {/* El lado, en la esquina de la foto, como «Antes» y «Con el golpe» (E2, tanda 5: una línea
+                            menos por foto, y así «Qué prueba» entra en la hoja); el pie queda para los lectores. */}
                         <FotoConCaja src={f.foto_url} alt={`${vista(f.vista)} · ${largo(f.fecha)}`} sello={sello(f)}
-                          rota={t('exp.fotoRota')} idioma={lang} />
-                        <figcaption>{vista(f.vista)}</figcaption>
+                          etiqueta={vista(f.vista)} rota={t('exp.fotoRota')} idioma={lang} />
+                        <figcaption className="exp-oculto">{vista(f.vista)}</figcaption>
                       </figure>
                     )
                   })}
@@ -297,9 +303,11 @@ export default function DocumentoExpediente({ datos, empresa }) {
       </section>
 
       {posiblesIA.length > 0 && (
-        <section className="exp-seccion exp-ia" data-testid="bloque-posibles-ia">
+        <section className={`exp-seccion exp-ia${iaEnPapel ? '' : ' exp-no-imprimir'}`} data-testid="bloque-posibles-ia"
+          data-en-papel={iaEnPapel ? 'si' : 'no'}>
           <h2>{t('exp.ia.t')}</h2>
           <p className="exp-sub">{t('exp.ia.nota')}</p>
+          {!iaEnPapel && <p className="exp-sub exp-ia-fuera" data-testid="ia-fuera-papel">{t('exp.ia.fueraPapel')}</p>}
           {posiblesIA.map((p, i) => (
             <div className="exp-ia-item" key={`${p.inspeccion_id || ''}-${i}`} data-testid="posible-ia">
               <p className="exp-ia-texto">
@@ -311,7 +319,7 @@ export default function DocumentoExpediente({ datos, empresa }) {
                   <figure>
                     <FotoConCaja src={p.anterior.foto_url} alt={`${vista(p.vista)} · ${largo(p.anterior.fecha)}`}
                       rota={t('exp.fotoRota')} idioma={lang} />
-                    <figcaption>{fechaCorta(p.anterior.fecha, locale) ? t('exp.ia.antes').replace('{f}', fechaCorta(p.anterior.fecha, locale)) : t('exp.g.fotoAntes')}</figcaption>
+                    <figcaption>{largo(p.anterior.fecha) ? t('exp.ia.antes').replace('{f}', largo(p.anterior.fecha)) : t('exp.g.fotoAntes')}</figcaption>
                   </figure>
                 )}
                 <figure>
