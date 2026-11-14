@@ -83,7 +83,9 @@ export default function Verify() {
             <div className="mb-4 flex items-center gap-3">
               <ShieldCheck size={32} className="text-emerald-400" />
               <div>
-                <div className="text-xl font-bold text-emerald-200">Peritaje auténtico</div>
+                {/* «Firma registrada», no «Peritaje auténtico» (14-11-2026): esta página comprueba que el código existe en
+                    el registro de firmas; no vuelve a calcularlo ni compara el PDF que tengas delante. */}
+                <div className="text-xl font-bold text-emerald-200">Firma registrada</div>
                 <div className="text-xs text-dark-400">Hash registrado en la cadena de custodia de {MARCA.nombre}.</div>
               </div>
             </div>
@@ -96,7 +98,7 @@ export default function Verify() {
               <Item label="Hash siguiente" value={data.has_next_in_chain ? 'sí (cadena continuada)' : 'no (última firma)'} />
             </dl>
             <div className="mt-5 border-t border-emerald-500/20 pt-4 text-xs text-dark-400">
-              <b className="text-dark-200">Hash verificado:</b>
+              <b className="text-dark-200">Código de la firma:</b>
               <code className="mt-1 block break-all text-[11px] text-emerald-300">{data.hash}</code>
             </div>
             {data.disclaimer && (

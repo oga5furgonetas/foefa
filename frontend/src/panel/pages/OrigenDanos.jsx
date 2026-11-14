@@ -60,8 +60,10 @@ function hayPareja(d) {
 function FotoGolpe({ d }) {
   return (
     <figure className="m-0">
+      {/* La foto ENTERA (14-11-2026): con `object-cover` la miniatura recortaba los lados y un golpe en la trasera o en
+          el morro quedaba fuera de la prueba. */}
       <img src={d.foto_golpe} alt="" loading="lazy"
-        className="h-36 w-full rounded-lg border border-orange-500/40 object-cover" />
+        className="h-36 w-full rounded-lg border border-orange-500/40 bg-black/20 object-contain" />
       <figcaption className="mt-1 text-[11px] text-orange-300">
         Con el golpe el <span className="cifra">{fechaEs(d.aparecio)}</span>
       </figcaption>
@@ -74,7 +76,7 @@ function Prueba({ d }) {
     <div className="grid grid-cols-2 gap-2">
       <figure className="m-0">
         <img src={d.foto_limpia} alt="" loading="lazy"
-          className="h-36 w-full rounded-lg border border-dark-700 object-cover" />
+          className="h-36 w-full rounded-lg border border-dark-700 bg-black/20 object-contain" />
         <figcaption className="mt-1 text-[11px] text-dark-500">
           {/* Con el mismo formato que «Con el golpe el …» (14-11-2026, M7): salía en ISO, 2026-11-12. */}
           Limpia el <span className="cifra text-dark-400">{fechaEs(d.foto_limpia_fecha)}</span>

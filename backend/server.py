@@ -16091,7 +16091,9 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
 
     # Cabecera
     story.append(Paragraph("Peritaje técnico de inspección", h1))
-    story.append(Paragraph(f"Cadena de custodia con hash inmutable · {MARCA}", small))
+    # Sin «hash inmutable» (14-11-2026): el código se calcula al firmar y se puede comprobar que está registrado, que es
+    # lo que hace /verify; «inmutable» prometía más de lo que el sistema comprueba.
+    story.append(Paragraph(f"Revisión firmada con cadena de custodia · {MARCA}", small))
     story.append(Spacer(1, 5*mm))
 
     # Bloque datos
@@ -16146,7 +16148,9 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
         msg = (f"{len(photos_valid)} fotos analizadas. "
                f"<b>Borde sólido</b> = daño confirmado por dos modelos (Gemini+YOLO/SAM). "
                f"<b>Borde discontinuo</b> = detectado por Gemini sin confirmación geométrica (caja aproximada, marcado con ~). "
-               f"El hash de cada imagen está sellado en la cadena de custodia.")
+               # Decía «El hash de cada imagen está sellado en la cadena de custodia» (14-11-2026): no es así. El código
+               # de la firma (`_canonical_inspection_payload`) lleva las DIRECCIONES de las fotos, no su contenido.
+               f"El código de la firma se calcula con las direcciones de estas fotos y queda encadenado con el de la firma anterior.")
         story.append(Paragraph(msg, small))
         story.append(Spacer(1, 3*mm))
         thumbs = []
