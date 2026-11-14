@@ -1,36 +1,50 @@
 import { useEffect, useRef, useState } from 'react'
 import SelloFoto from '../../../components/SelloFoto'
 
-/* UNA FOTO DEL REPASO, ENTERA (14-11-2026). La furgoneta no se recorta nunca: la foto va «contenida» en su marco y
-   todo lo que va encima (el rótulo «Antes»/«Hoy», el sello de fecha y la caja del golpe) se coloca sobre la imagen de
-   verdad, no sobre el marco. Para eso se mide dónde ha quedado la imagen dentro del marco: sin medirlo, el sello caería
-   en la franja vacía de los lados y la caja de un golpe no coincidiría con el golpe.
+/* UNA FOTO DEL REPASO, ENTERA (14-11-2026). La furgoneta no se recorta nunca.
+
+   En la mesa (`ajuste="foto"`, el de siempre) el marco toma la forma de la propia foto: ocupa todo el ancho que tiene
+   y la altura que le toca, así que no quedan franjas grises dentro de un marco fijo. Solo si la foto es tan alta que no
+   cabría en la pantalla (una vertical del móvil) se limita la altura y el marco se estrecha con ella, centrado. Hasta
+   que la foto llega se reserva un 4:3, que es lo que hace casi cualquier móvil.
+
+   En la vista ampliada (`ajuste="marco"`) es al revés: el marco lo pone quien la usa y la foto va «contenida» dentro.
+   En los dos casos, lo que va encima (el rótulo «Antes»/«Hoy», el sello de fecha y la caja del golpe) se coloca sobre
+   la imagen de verdad: se mide dónde ha quedado dentro del marco.
 
    Con `dibujar`, se arrastra sobre la foto para marcar el golpe: devuelve `[ymin, xmin, ymax, xmax]` de 0 a 1000, como
-   `box_2d` en el resto de FDS. */
+   `box_2d` en el resto de FDS. Si la foto no carga, avisa con `onFallo` (sin foto no hay dónde dibujar). */
+const PROPORCION_PREVIA = 4 / 3
+
 export default function Foto({
-  url, rotulo, oscuro = false, fecha, quien, caja = null, dibujar = false, onCaja, onAbrir, alt = '',
-  textoAbrir = '', textoFallo = '', textoDibuja = '', marcoCls = 'aspect-[4/3]', testId,
+  url, rotulo, oscuro = false, fecha, quien, idioma = 'es', caja = null, dibujar = false, onCaja, onAbrir, onFallo,
+  alt = '', textoAbrir = '', textoFallo = '', ajuste = 'foto', altoMax = 0.68, marcoCls = '', testId,
 }) {
+  const fuera = useRef(null)
   const marco = useRef(null)
   const [nat, setNat] = useState(null)
   const [tam, setTam] = useState(null)
+  const [hueco, setHueco] = useState(null)          // { w: ancho disponible, alto: altura máxima } (ajuste «foto»)
   const [fallo, setFallo] = useState(false)
   const [trazo, setTrazo] = useState(null)
 
+  // El tamaño del marco (para saber dónde cae la imagen) y, en la mesa, el ancho que hay para la foto.
   useEffect(() => {
     const el = marco.current
+    const fu = fuera.current
     if (!el) return undefined
-    const medir = () => setTam({ w: el.clientWidth, h: el.clientHeight })
-    medir()
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', medir)
-      return () => window.removeEventListener('resize', medir)
+    const medir = () => {
+      setTam({ w: el.clientWidth, h: el.clientHeight })
+      if (fu) setHueco({ w: fu.clientWidth, alto: Math.max(220, Math.round(window.innerHeight * altoMax)) })
     }
+    medir()
+    window.addEventListener('resize', medir)
+    if (typeof ResizeObserver === 'undefined') return () => window.removeEventListener('resize', medir)
     const ro = new ResizeObserver(medir)
     ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
+    if (fu) ro.observe(fu)
+    return () => { ro.disconnect(); window.removeEventListener('resize', medir) }
+  }, [altoMax])
 
   // Dónde queda la imagen dentro del marco (lo mismo que hace `object-fit: contain`).
   let rect = null
@@ -39,6 +53,20 @@ export default function Foto({
     const w = nat.w * k
     const h = nat.h * k
     rect = { left: (tam.w - w) / 2, top: (tam.h - h) / 2, width: w, height: h }
+  }
+
+  // En la mesa, el marco con la forma de la foto.
+  let estiloMarco
+  if (ajuste === 'foto') {
+    const p = !fallo && nat?.w && nat?.h ? nat.w / nat.h : PROPORCION_PREVIA
+    if (hueco?.w) {
+      let w = hueco.w
+      let h = w / p
+      if (h > hueco.alto) { h = hueco.alto; w = h * p }
+      estiloMarco = { width: Math.round(w), height: Math.round(h) }
+    } else {
+      estiloMarco = { width: '100%', aspectRatio: String(p) }
+    }
   }
 
   const punto = (e) => {
@@ -77,7 +105,7 @@ export default function Foto({
       ? { top: caja[0] / 10, left: caja[1] / 10, height: (caja[2] - caja[0]) / 10, width: (caja[3] - caja[1]) / 10 }
       : null
 
-  const capa = rect && (
+  const capa = rect && !fallo && (
     <div
       className={`absolute ${dibujar ? 'cursor-crosshair touch-none' : 'pointer-events-none'}`}
       style={rect}
@@ -100,17 +128,13 @@ export default function Foto({
           data-testid={testId ? `${testId}-caja` : undefined}
         />
       )}
-      {dibujar && !vista && textoDibuja && (
-        <span className="pointer-events-none absolute inset-x-0 top-1/2 mx-auto w-max max-w-[90%] -translate-y-1/2 rounded bg-[#10181a]/85 px-3 py-2 text-center text-[13px] font-semibold text-white">
-          {textoDibuja}
-        </span>
-      )}
-      <SelloFoto fecha={fecha} quien={quien} />
+      {/* El sello no se corta nunca: en una foto estrecha baja a dos líneas. */}
+      <SelloFoto fecha={fecha} quien={quien} idioma={idioma} className="!whitespace-normal" />
     </div>
   )
 
   const imagen = fallo ? (
-    <span className="absolute inset-0 flex items-center justify-center px-4 text-center text-sm text-dark-400">{textoFallo}</span>
+    <span className="absolute inset-0 flex items-center justify-center px-4 text-center text-sm text-dark-400" data-testid={testId ? `${testId}-fallo` : undefined}>{textoFallo}</span>
   ) : (
     <img
       src={url}
@@ -118,14 +142,17 @@ export default function Foto({
       draggable={false}
       className="absolute inset-0 h-full w-full select-none object-contain"
       onLoad={(e) => setNat({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-      onError={() => setFallo(true)}
+      onError={() => { setFallo(true); onFallo?.(url) }}
     />
   )
 
-  return (
-    <div ref={marco} className={`relative w-full overflow-hidden rounded-xl bg-dark-800 ${marcoCls}`} data-testid={testId}>
+  const elMarco = (
+    <div ref={marco} style={estiloMarco}
+      className={`relative overflow-hidden rounded-xl bg-dark-800 ${ajuste === 'foto' ? 'mx-auto max-w-full' : 'w-full'} ${
+        dibujar && !fallo ? 'outline-dashed outline-2 outline-offset-2 outline-dark-400' : ''} ${marcoCls}`}
+      data-testid={testId}>
       {onAbrir && !dibujar && !fallo ? (
-        <button type="button" onClick={onAbrir} aria-label={textoAbrir}
+        <button type="button" onClick={onAbrir} aria-label={textoAbrir} data-atajos=""
           className="absolute inset-0 block h-full w-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400">
           {imagen}
         </button>
@@ -133,4 +160,6 @@ export default function Foto({
       {capa}
     </div>
   )
+
+  return ajuste === 'foto' ? <div ref={fuera} className="w-full min-w-0">{elMarco}</div> : elMarco
 }
