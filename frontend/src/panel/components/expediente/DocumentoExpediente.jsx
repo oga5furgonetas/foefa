@@ -52,6 +52,8 @@ export default function DocumentoExpediente({ datos, empresa }) {
   const yaEstaban = golpes.filter((g) => g.ya_estaba)
   const fotosEntro = comoLista(datos?.como_entro?.fotos).filter((f) => f && VISTAS.includes(f.vista))
   const fotosEsta = comoLista(datos?.como_esta?.fotos).filter((f) => f && VISTAS.includes(f.vista))
+  // Los lados que salen en «Cómo entró» o en «Cómo está hoy», en su orden: cada uno ocupa el mismo sitio en las dos.
+  const vistasJuntas = VISTAS.filter((k) => fotosEntro.some((f) => f.vista === k) || fotosEsta.some((f) => f.vista === k))
   const hayRevisiones = Boolean(periodo.desde && periodo.hasta)
   const posiblesIA = comoLista(datos?.posibles_ia).filter((p) => p && typeof p === 'object')
   const posiblesMas = typeof datos?.posibles_ia_mas === 'number' && datos.posibles_ia_mas > 0 ? datos.posibles_ia_mas : 0
@@ -190,12 +192,8 @@ export default function DocumentoExpediente({ datos, empresa }) {
         <section className="exp-seccion exp-seccion-cal" data-testid="bloque-calendario">
           <h2>{t('exp.cal.t')}</h2>
           <CalendarioDias desde={periodo.desde} hasta={periodo.hasta} calendario={datos?.calendario} locale={locale}
-            textos={{ revisada: t('exp.cal.revisada'), sin: t('exp.cal.sin'), golpe: t('exp.cal.golpe') }} />
-          <div className="exp-leyenda">
-            <span className="exp-ley-revisada">{t('exp.cal.revisada')}</span>
-            <span className="exp-ley-sin_revisar">{t('exp.cal.sin')}</span>
-            <span className="exp-ley-golpe">{t('exp.cal.golpe')}</span>
-          </div>
+            textos={{ revisada: t('exp.cal.revisada'), sin: t('exp.cal.sin'), golpe: t('exp.cal.golpe') }}
+            cuantosDias={(n) => (n === 1 ? t('exp.dias1') : t('exp.diasN').replace('{n}', numero(n, locale)))} />
         </section>
       )}
 
@@ -250,27 +248,38 @@ export default function DocumentoExpediente({ datos, empresa }) {
         ))}
       </section>
 
-      {[
-        ['entro', fotosEntro, t('exp.entro.t'), t(fotosEntro.length === 1 ? 'exp.entro.sub1' : 'exp.entro.sub')],
-        ['esta', fotosEsta, t('exp.esta.t'), t(fotosEsta.length === 1 ? 'exp.esta.sub1' : 'exp.esta.sub')],
-      ]
-        .map(([clave, fotos, h, sub]) => (
-          <section className="exp-seccion" key={clave} data-testid={`bloque-${clave}`}>
-            <h2>{h}</h2>
-            {fotos.length === 0
-              ? <p className="exp-nota">{hayRevisiones ? t('exp.sinFotos') : t('exp.periodo.nada')}</p>
-              : <p className="exp-sub">{sub}</p>}
-            <div className="exp-galeria">
-              {[...fotos].sort((a, b) => VISTAS.indexOf(a.vista) - VISTAS.indexOf(b.vista)).map((f) => (
-                <figure key={`${f.vista}-${f.inspection_id}-${f.photo_index}`}>
-                  <FotoConCaja src={f.foto_url} alt={`${vista(f.vista)} · ${largo(f.fecha)}`} sello={sello(f)}
-                    rota={t('exp.fotoRota')} idioma={lang} />
-                  <figcaption>{vista(f.vista)}</figcaption>
-                </figure>
-              ))}
-            </div>
-          </section>
-        ))}
+      {/* Cómo entró y cómo está hoy, en una fila de dos columnas (como «Antes / Con el golpe»): cada lado en el mismo
+          sitio de las dos, para compararlos de un vistazo, y una hoja menos al imprimir. Las dos van juntas en la hoja. */}
+      <div className="exp-dos" data-testid="entro-esta">
+        {[
+          ['entro', fotosEntro, t('exp.entro.t'), t(fotosEntro.length === 1 ? 'exp.entro.sub1' : 'exp.entro.sub')],
+          ['esta', fotosEsta, t('exp.esta.t'), t(fotosEsta.length === 1 ? 'exp.esta.sub1' : 'exp.esta.sub')],
+        ]
+          .map(([clave, fotos, h, sub]) => (
+            <section className="exp-seccion" key={clave} data-testid={`bloque-${clave}`}>
+              <h2>{h}</h2>
+              {fotos.length === 0
+                ? <p className="exp-nota">{hayRevisiones ? t('exp.sinFotos') : t('exp.periodo.nada')}</p>
+                : <p className="exp-sub">{sub}</p>}
+              {fotos.length > 0 && (
+                <div className={`exp-galeria${vistasJuntas.length === 1 ? ' exp-galeria-una' : ''}`}>
+                  {vistasJuntas.map((k) => {
+                    const f = fotos.find((x) => x.vista === k)
+                    // El lado que esta columna no tiene deja su hueco: así cada lado cae en el mismo sitio de las dos.
+                    if (!f) return <div key={k} className="exp-galeria-hueco" aria-hidden="true" />
+                    return (
+                      <figure key={`${f.vista}-${f.inspection_id}-${f.photo_index}`}>
+                        <FotoConCaja src={f.foto_url} alt={`${vista(f.vista)} · ${largo(f.fecha)}`} sello={sello(f)}
+                          rota={t('exp.fotoRota')} idioma={lang} />
+                        <figcaption>{vista(f.vista)}</figcaption>
+                      </figure>
+                    )
+                  })}
+                </div>
+              )}
+            </section>
+          ))}
+      </div>
 
       <section className="exp-seccion exp-prueba" data-testid="bloque-prueba">
         <h2>{t('exp.prueba.t')}</h2>
