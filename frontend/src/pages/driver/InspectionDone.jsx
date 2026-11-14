@@ -8,7 +8,10 @@ import { sinPagos } from '../../lib/plataforma'
    conductor está usando, porque firmar algo que no entiendes no vale nada. */
 
 function SeverityBadge({ severity }) {
+  const { t } = useT()
   const s = (severity || '').toLowerCase()
+  // La gravedad, en el idioma del conductor; un valor que no conocemos sale tal cual.
+  const nombre = { leve: t('dr.sev.leve'), moderado: t('dr.sev.moderado'), grave: t('dr.sev.grave'), critico: t('dr.sev.critico') }[s]
   const cls =
     s === 'grave' || s === 'critico'
       ? 'bg-red-500/15 text-red-400 border-red-500/30'
@@ -17,7 +20,7 @@ function SeverityBadge({ severity }) {
         : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
   return (
     <span className={`inline-flex items-center rounded-full border px-3 py-0.5 text-xs font-bold uppercase tracking-wider ${cls}`}>
-      {severity || '—'}
+      {nombre || severity || '—'}
     </span>
   )
 }
@@ -130,17 +133,18 @@ export default function InspectionDone({ result, onNew, onLogout }) {
           <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400/20 to-brand-500/20 ring-4 ring-brand-500/20">
             <CheckCircle2 size={44} className="text-emerald-400" />
           </div>
-          <h2 className="mb-1 text-2xl font-black text-dark-50">Inspección enviada</h2>
-          <p className="mb-1 text-sm text-dark-400">Tu administrador recibirá la inspección y podrá firmarla desde el panel.</p>
+          {/* «Revisión», como en el portal y en la pantalla de la revisión (tanda 6): aquí decía «Inspección enviada». */}
+          <h2 className="mb-1 text-2xl font-black text-dark-50">{t('dr.enviada')}</h2>
+          <p className="mb-1 text-sm text-dark-400">{t('dr.enviadaSub')}</p>
           {analysis && (
             <div className="my-5 overflow-hidden rounded-2xl border border-dark-800 bg-dark-900">
               <div className="grid grid-cols-2 divide-x divide-dark-800">
                 <div className="p-4 text-center">
-                  <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-dark-500">Severidad</p>
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-dark-500">{t('dr.severidad')}</p>
                   <SeverityBadge severity={analysis.severity} />
                 </div>
                 <div className="p-4 text-center">
-                  <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-dark-500">Daños</p>
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-dark-500">{t('dr.danos')}</p>
                   <span className="text-xl font-black text-dark-100">{analysis.total_damages_count ?? 0}</span>
                 </div>
               </div>
@@ -173,8 +177,8 @@ export default function InspectionDone({ result, onNew, onLogout }) {
           <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-brand-400/20 to-brand-600/20 ring-4 ring-brand-500/20">
             <CheckCircle2 size={38} className="text-brand-400" />
           </div>
-          <h2 className="text-xl font-black text-dark-50">Inspección completada</h2>
-          <p className="mt-0.5 text-xs text-dark-500">Firma electrónica para validar el informe</p>
+          <h2 className="text-xl font-black text-dark-50">{t('dr.completada')}</h2>
+          <p className="mt-0.5 text-xs text-dark-500">{t('dr.firmaSub')}</p>
         </div>
 
         {/* Resumen de análisis */}
@@ -182,11 +186,11 @@ export default function InspectionDone({ result, onNew, onLogout }) {
           <div className="mb-4 overflow-hidden rounded-2xl border border-dark-800 bg-dark-900">
             <div className="grid grid-cols-2 divide-x divide-dark-800">
               <div className="p-4 text-center">
-                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-dark-500">Severidad IA</p>
+                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-dark-500">{t('dr.severidadIa')}</p>
                 <SeverityBadge severity={analysis.severity} />
               </div>
               <div className="p-4 text-center">
-                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-dark-500">Daños</p>
+                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-dark-500">{t('dr.danos')}</p>
                 <span className="text-xl font-black text-dark-100">{analysis.total_damages_count ?? 0}</span>
               </div>
             </div>
@@ -197,7 +201,7 @@ export default function InspectionDone({ result, onNew, onLogout }) {
         <div className="rounded-2xl border border-dark-800 bg-dark-900/80 p-5 backdrop-blur-sm">
           <div className="mb-3 flex items-center gap-2">
             <FileSignature size={16} className="text-brand-400" />
-            <span className="text-sm font-bold text-dark-100">Declaración de firma</span>
+            <span className="text-sm font-bold text-dark-100">{t('dr.declTitulo')}</span>
           </div>
 
           <div className="mb-4 rounded-xl border border-dark-800 bg-dark-950/60 p-3 text-xs leading-relaxed text-dark-400">
@@ -211,7 +215,7 @@ export default function InspectionDone({ result, onNew, onLogout }) {
               {accepted && <Check size={12} className="text-white" />}
               <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="sr-only" />
             </div>
-            <span className="text-sm text-dark-300">Acepto la declaración y firmo electrónicamente.</span>
+            <span className="text-sm text-dark-300">{t('dr.acepto')}</span>
           </label>
 
           {err && (
@@ -227,14 +231,14 @@ export default function InspectionDone({ result, onNew, onLogout }) {
             className="btn-primary mb-3 flex w-full items-center justify-center gap-2 py-3.5 text-sm font-bold disabled:opacity-50"
           >
             {signing ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-            {signing ? 'Firmando…' : 'Firmar electrónicamente'}
+            {signing ? t('dr.firmando') : t('dr.firmar')}
           </button>
 
           <button
             onClick={() => setSkipped(true)}
             className="w-full text-center text-xs text-dark-500 transition hover:text-dark-400"
           >
-            Continuar sin firma — mi administrador la firmará
+            {t('dr.sinFirma')}
           </button>
         </div>
       </div>

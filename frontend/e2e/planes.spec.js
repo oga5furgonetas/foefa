@@ -186,8 +186,11 @@ test('tanda 5 · las cifras de «Complementos», en Plex Mono tabular; el resto 
   await expect(precios).toHaveCount(COMPLEMENTOS.length)
   for (const p of await precios.all()) {
     const r = await p.evaluate((e) => {
-      const sueltas = [...e.childNodes].filter((n) => n.nodeType === 3 && /\d/.test(n.textContent)).map((n) => n.textContent)
-      const cifras = [...e.querySelectorAll('span')].map((s) => [s.textContent, getComputedStyle(s).fontFamily, getComputedStyle(s).fontVariantNumeric])
+      // Todos los trozos de texto, también los de dentro de la «cola» que no se parte (tanda 6, «Meta + 20 %»).
+      const textos = []
+      for (let w = document.createTreeWalker(e, NodeFilter.SHOW_TEXT), n = w.nextNode(); n; n = w.nextNode()) textos.push(n)
+      const sueltas = textos.filter((n) => /\d/.test(n.textContent) && !n.parentElement.classList.contains('font-mono')).map((n) => n.textContent)
+      const cifras = [...e.querySelectorAll('span:not([data-cola])')].map((s) => [s.textContent, getComputedStyle(s).fontFamily, getComputedStyle(s).fontVariantNumeric])
       return { sueltas, cifras, letra: getComputedStyle(e).fontFamily }
     })
     expect(r.sueltas, 'ninguna cifra fuera de su pieza mono').toEqual([])
@@ -223,5 +226,34 @@ for (const ancho of [360, 390]) {
     const fuera = await page.evaluate((w) => [...document.querySelectorAll('[data-testid="planes"] *')]
       .filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.right > w + 0.5 }).map((e) => `${e.tagName}.${String(e.className).slice(0, 30)}`), ancho)
     expect(fuera, fuera.join(' | ')).toEqual([])
+  })
+}
+
+/* TANDA 6: «+ 20 %» no cae solo en una línea. La frase es letra a letra la del servidor; lo que se mide es dónde parte:
+   la cifra, su «+» y su «%» van en la misma línea que la palabra de antes («Meta»), en los dos anchos y en dos idiomas. */
+for (const ancho of [1280, 390]) {
+  test(`tanda 6 · a ${ancho} px «+ 20 %» va con la palabra de antes, no solo en una línea`, async ({ page }) => {
+    await page.setViewportSize({ width: ancho, height: 900 })
+    await simularApi(page, 'vacio')
+    for (const l of ['es', 'pt']) {
+      await page.addInitScript((x) => { try { localStorage.setItem('fds_idioma', x) } catch { /* nada */ } }, l)
+      await page.goto('/planes', { waitUntil: 'domcontentloaded' })
+      await page.evaluate(() => document.fonts.ready)
+      const wa = page.getByTestId('complemento-precio').filter({ hasText: 'Meta' })
+      await expect(wa).toHaveCount(1)
+      const frase = COMPLEMENTOS.find((c) => c.clave === 'whatsapp').precio
+      await expect(wa).toHaveText(l === 'es' ? frase : DIC[frase][ORDEN.indexOf(l)])
+      const r = await wa.evaluate((e) => {
+        const cola = e.querySelector('[data-cola]')
+        const rg = document.createRange()
+        rg.selectNodeContents(cola)
+        // Las líneas de verdad: la cifra en mono tiene otra caja que la letra de la casa, así que se agrupan por media línea.
+        const alto = parseFloat(getComputedStyle(e).lineHeight)
+        const tops = [...rg.getClientRects()].filter((x) => x.width > 0).map((x) => x.top).sort((a, b) => a - b)
+        return { cola: cola.textContent, lineas: tops.filter((t, i) => i === 0 || t - tops[i - 1] > alto / 2).length }
+      })
+      expect(r.cola).toMatch(/^Meta\s+\+\s*20\s*%$/)
+      expect(r.lineas, `${l}: «${r.cola}» partido`).toBe(1)
+    }
   })
 }

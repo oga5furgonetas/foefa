@@ -7,48 +7,52 @@ import {
   getAssignedVehicle, readOdometer, uploadInspection, validatePhoto,
 } from '../../services/api'
 import { compressImage } from '../../lib/compressImage'
-import { useT } from '../../i18n'
+import { useT, LANG_LOCALE } from '../../i18n'
 import { useToast } from '../../lib/toast'
 import { pushSupported, isPushEnabled, enablePush } from '../../lib/push'
-import { sinPagos } from '../../lib/plataforma'
 
+/* Lo que se ve, por su clave del diccionario, en el idioma del conductor (tanda 6: con el móvil en inglés salían «Frontal»,
+   «Neumáticos», «Malo»… en español). `label` es el nombre en español que se ENVÍA (checklist_photo_items): no cambia. */
 const PHOTO_SLOTS = [
-  { id: 'frontal',      label: 'Frontal',            icon: '⬆', required: true },
-  { id: 'trasera',      label: 'Trasera',             icon: '⬇', required: true },
-  { id: 'lateral_izq',  label: 'Lateral izquierdo',  icon: '◀', required: true },
-  { id: 'lateral_der',  label: 'Lateral derecho',     icon: '▶', required: true },
+  { id: 'frontal',      clave: 'dr.lado.frontal', icon: '⬆', required: true },
+  { id: 'trasera',      clave: 'dr.lado.trasera', icon: '⬇', required: true },
+  { id: 'lateral_izq',  clave: 'dr.lado.izq',     icon: '◀', required: true },
+  { id: 'lateral_der',  clave: 'dr.lado.der',     icon: '▶', required: true },
 ]
 
 const CHECKLIST = [
-  { id: 'neumaticos', label: 'Neumáticos',      emoji: '🛞' },
-  { id: 'luces',      label: 'Luces',           emoji: '💡' },
-  { id: 'chapa',      label: 'Chapa/Carrocería', emoji: '🔧' },
-  { id: 'puertas',    label: 'Puertas',         emoji: '🚪' },
-  { id: 'espejos',    label: 'Espejos',         emoji: '🪞' },
-  { id: 'interior',   label: 'Interior',        emoji: '🪑' },
-  { id: 'combustible',label: 'Combustible',     emoji: '⛽' },
-  { id: 'limpieza',   label: 'Limpieza',        emoji: '🧹' },
+  { id: 'neumaticos', label: 'Neumáticos',      clave: 'dr.ck.neumaticos',  emoji: '🛞' },
+  { id: 'luces',      label: 'Luces',           clave: 'dr.ck.luces',       emoji: '💡' },
+  { id: 'chapa',      label: 'Chapa/Carrocería', clave: 'dr.ck.chapa',      emoji: '🔧' },
+  { id: 'puertas',    label: 'Puertas',         clave: 'dr.ck.puertas',     emoji: '🚪' },
+  { id: 'espejos',    label: 'Espejos',         clave: 'dr.ck.espejos',     emoji: '🪞' },
+  { id: 'interior',   label: 'Interior',        clave: 'dr.ck.interior',    emoji: '🪑' },
+  { id: 'combustible',label: 'Combustible',     clave: 'dr.ck.combustible', emoji: '⛽' },
+  { id: 'limpieza',   label: 'Limpieza',        clave: 'dr.ck.limpieza',    emoji: '🧹' },
 ]
 
 const CHECK_STATES = [
-  { id: 'ok',     label: 'OK',     cls: 'bg-emerald-500/20 border-emerald-500/60 text-emerald-400' },
-  { id: 'regular',label: 'Regular',cls: 'bg-amber-500/20 border-amber-500/60 text-amber-400' },
-  { id: 'malo',   label: 'Malo',   cls: 'bg-red-500/20 border-red-500/60 text-red-400' },
-  { id: 'danado', label: '⚠ Daño', cls: 'bg-red-500/20 border-red-500/60 text-red-400' },
+  { id: 'ok',     clave: null,             cls: 'bg-emerald-500/20 border-emerald-500/60 text-emerald-400' },
+  { id: 'regular',clave: 'dr.ck.regular',  cls: 'bg-amber-500/20 border-amber-500/60 text-amber-400' },
+  { id: 'malo',   clave: 'dr.ck.malo',     cls: 'bg-red-500/20 border-red-500/60 text-red-400' },
+  { id: 'danado', clave: 'dr.ck.dano',     cls: 'bg-red-500/20 border-red-500/60 text-red-400' },
 ]
+// «OK» es igual en todos los idiomas; «⚠ Daño» lleva su aviso delante.
+const nombreEstado = (st, t) => (st.id === 'ok' ? 'OK' : st.id === 'danado' ? `⚠ ${t(st.clave)}` : t(st.clave))
 
 const STEPS = [
-  { label: 'Vehículo', short: '1' },
-  { label: 'Fotos',    short: '2' },
-  { label: 'Checklist',short: '3' },
-  { label: 'Enviar',   short: '4' },
+  { clave: 'dr.paso.vehiculo',  short: '1' },
+  { clave: 'dr.paso.fotos',     short: '2' },
+  { clave: 'dr.paso.checklist', short: '3' },
+  { clave: 'dr.paso.enviar',    short: '4' },
 ]
 
 function StepBar({ step }) {
+  const { t } = useT()
   return (
     <div className="flex items-center gap-0 px-4 py-4">
       {STEPS.map((s, i) => (
-        <div key={s.label} className="flex flex-1 items-center">
+        <div key={s.clave} className="flex flex-1 items-center">
           <div className="flex flex-col items-center gap-1">
             <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-all ${
               i < step  ? 'bg-brand-500 text-brand-tinta' :
@@ -57,7 +61,7 @@ function StepBar({ step }) {
             }`}>
               {i < step ? <Check size={13} /> : s.short}
             </div>
-            <span className={`text-[9px] font-medium ${i === step ? 'text-brand-400' : 'text-dark-500'}`}>{s.label}</span>
+            <span className={`text-[9px] font-medium ${i === step ? 'text-brand-400' : 'text-dark-500'}`}>{t(s.clave)}</span>
           </div>
           {i < STEPS.length - 1 && (
             <div className={`mx-1 mb-4 h-px flex-1 transition-all ${i < step ? 'bg-brand-500' : 'bg-dark-800'}`} />
@@ -70,7 +74,7 @@ function StepBar({ step }) {
 
 export default function InspectionFlow({ driver, vehicles, onComplete, onLogout, onShifts, onBack }) {
   const toast = useToast()
-  const { t } = useT()
+  const { t, lang } = useT()
   const [step, setStep] = useState(0)
   const [vehicleId, setVehicleId] = useState('')
   const [photos, setPhotos] = useState({})
@@ -113,9 +117,9 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
     setPushBusy(true)
     try {
       const r = await enablePush()
-      if (r === 'ok') { setPushOn(true); toast.success('🔔 Avisos activados en este móvil') }
-      else if (r === 'denied') toast.error('Notificaciones bloqueadas: actívalas en ajustes del navegador')
-      else toast.error('No se pudieron activar los avisos')
+      if (r === 'ok') { setPushOn(true); toast.success(`🔔 ${t('dr.push.ok')}`) }
+      else if (r === 'denied') toast.error(t('dr.push.bloq'))
+      else toast.error(t('dr.push.error'))
     } finally { setPushBusy(false) }
   }
   const odoRef = useRef(null)
@@ -168,16 +172,16 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
     try {
       const r = await validatePhoto(vehicleId, slotId, blob)
       if (r.data?.valid === false) {
-        setPhotoErrors((errs) => ({ ...errs, [slotId]: r.data.reason || 'Foto no válida. Repítela.' }))
-        toast.error(`❌ ${r.data.reason || 'Foto rechazada'}`)
+        setPhotoErrors((errs) => ({ ...errs, [slotId]: r.data.reason || t('dr.fotoNoValida') }))
+        toast.error(`❌ ${r.data.reason || t('dr.fotoRechazada')}`)
         setValidating(null)
         return
       }
       setPhotoErrors((errs) => { const next = { ...errs }; delete next[slotId]; return next })
       setPhotos((p) => ({ ...p, [slotId]: blob }))
       // «Revisada» solo si alguien la ha mirado de verdad (`checked`); si no, solo se dice que está hecha, sin el verde.
-      if (r.data?.checked) toast.success('✅ Foto revisada')
-      else toast.info('📷 Foto capturada')
+      if (r.data?.checked) toast.success(`✅ ${t('dr.fotoRevisada')}`)
+      else toast.info(`📷 ${t('dr.fotoCapturada')}`)
     } catch {
       setPhotos((p) => ({ ...p, [slotId]: blob }))
     }
@@ -202,7 +206,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
       if (d.aceptada && d.km > 0) {
         // Lectura fiable: se guarda y NO se puede tocar a mano.
         setOdoPhoto(blob); setOdoKm(d.km); setOdoBloqueado(false)
-        toast.success(`✅ ${d.km.toLocaleString()} km leídos`)
+        toast.success(`✅ ${t('dr.odo.leidos').replace('{km}', d.km.toLocaleString())}`)
       } else {
         // La foto no vale. Se guarda como prueba, pero sin km: hasta que no
         // haya un número válido no se puede enviar la auditoría.
@@ -213,16 +217,16 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
           setOdoSinLector(true)
           setOdoError(t('dr.odo.escribeKm'))
         } else {
-          setOdoError(d.motivo || 'No se pudo leer el cuentakilómetros.')
-          toast.error(d.servicio_caido ? '⚠️ Lector no disponible — pon los km a mano'
-                                       : '❌ Los km no se han podido leer')
+          setOdoError(d.motivo || t('dr.odo.noLeido'))
+          toast.error(d.servicio_caido ? `⚠️ ${t('dr.odo.lectorNo')}`
+                                       : `❌ ${t('dr.odo.noLeidos')}`)
         }
       }
     } catch {
       // Un fallo de red NO puede colar una auditoría sin km.
       setOdoPhoto(blob); setOdoBloqueado(true); setOdoServicioCaido(true)
       setOdoError(t('dr.lectorCaido'))
-      toast.error('⚠️ Lector no disponible — pon los km a mano')
+      toast.error(`⚠️ ${t('dr.odo.lectorNo')}`)
     }
     setOdoBusy(false)
   }
@@ -305,7 +309,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
       for (let attempt = 1; ; attempt++) {
         try {
           if (!navigator.onLine) {
-            toast.error('Sin conexión — esperando a recuperarla…')
+            toast.error(t('dr.sinConexion'))
             await new Promise((resolve) => {
               const onBack = () => { window.removeEventListener('online', onBack); resolve() }
               window.addEventListener('online', onBack)
@@ -317,7 +321,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
         } catch (err) {
           const status = err?.response?.status
           if ((status >= 400 && status < 500) || attempt >= 3) throw err
-          toast.error(`Fallo de conexión — reintentando (${attempt}/3)…`)
+          toast.error(t('dr.reintentando').replace('{n}', attempt))
           await new Promise((resolve) => setTimeout(resolve, attempt * 3000))
         }
       }
@@ -326,7 +330,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
       onComplete(r.data)
     } catch (err) {
       const detail = err?.response?.data?.detail
-      toast.error(`Error: ${typeof detail === 'string' ? detail : err.message}`)
+      toast.error(t('dr.error').replace('{e}', typeof detail === 'string' ? detail : err.message))
     } finally {
       window.removeEventListener('beforeunload', guard)
       setSending(false)
@@ -338,7 +342,9 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
   const photosOk = Object.keys(photos).length
   // Los km que tenía apuntados (de la lista del portal o de su furgoneta de hoy): solo de referencia, no son un tope.
   const kmAnteriores = Number(selectedVehicle?.mileage || (assigned?.vehicle?.id === vehicleId ? assigned.vehicle.mileage : 0) || 0)
-  const today = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
+  // «Sábado, 14 de noviembre», como en el portal: solo la primera en mayúscula (con `capitalize` salía «14 De Noviembre») y
+  // en el idioma del conductor (tanda 6).
+  const today = (() => { const s = new Date().toLocaleDateString(LANG_LOCALE[lang] || 'es-ES', { weekday: 'long', day: 'numeric', month: 'long' }); return s.charAt(0).toUpperCase() + s.slice(1) })()
 
   return (
     <div className="min-h-[100dvh] bg-dark-950">
@@ -370,13 +376,13 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
             {!driver.photo_url && (
               <p className="text-xs font-semibold text-dark-300">{driver.name}</p>
             )}
-            <p className="text-[10px] capitalize text-dark-500">{today} · {driver.center}</p>
+            <p className="text-[10px] text-dark-500">{today} · {driver.center}</p>
           </div>
           {/* Volver al inicio del portal. Ahora que hay una pantalla de inicio,
               sin esto la auditoría era un callejón sin salida: para salir de
               ella había que cerrar sesión. */}
           {onBack && (
-            <button onClick={onBack} className="btn-ghost p-1.5 text-dark-500" title="Volver">
+            <button onClick={onBack} className="btn-ghost p-1.5 text-dark-500" title={t('dr.sh.back')}>
               <ArrowLeft size={15} />
             </button>
           )}
@@ -421,7 +427,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                     </p>
                     {assigned.already_inspected && (
                       <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400">
-                        <Check size={10} /> Ya revisada hoy
+                        <Check size={10} /> {t('dr.yaRevisada')}
                       </span>
                     )}
                   </div>
@@ -462,16 +468,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
               </div>
             )}
 
-            {/* Incentivos (no salen en la app de iPhone, 09-11-2026: allí no se anuncian premios ni promociones) */}
-            {!sinPagos() && <div className="flex items-start gap-3 rounded-2xl border border-amber-500/15 bg-amber-500/5 p-4">
-              <span className="text-lg">🏆</span>
-              <div>
-                <p className="text-xs font-bold text-amber-400">Próximamente: incentivos para conductores</p>
-                <p className="mt-0.5 text-[11px] text-dark-500">
-                  Cada mes premiaremos a quienes mantengan su furgoneta en perfecto estado y con sus revisiones al día.
-                </p>
-              </div>
-            </div>}
+            {/* Aquí iba «Próximamente: incentivos para conductores», con un 🏆: prometía algo que no existe (tanda 6, fuera). */}
           </div>
         )}
 
@@ -481,7 +478,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
             <div>
               <div className="mb-0.5 flex items-center gap-2">
                 <span className="font-mono text-sm font-bold text-brand-400">{selectedVehicle?.license_plate}</span>
-                {photosOk > 0 && <span className="text-[10px] text-dark-500">{photosOk + (odoPhoto ? 1 : 0) + (fuelPhoto ? 1 : 0)} / 6 fotos</span>}
+                {photosOk > 0 && <span className="text-[10px] text-dark-500">{t('dr.nFotos').replace('{n}', photosOk + (odoPhoto ? 1 : 0) + (fuelPhoto ? 1 : 0))}</span>}
               </div>
               <h2 className="text-lg font-bold text-dark-50">{t('dr.fotosObl')}</h2>
               <p className="text-xs text-dark-500">{t('dr.iaVerifica')}</p>
@@ -513,7 +510,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                       </>
                     ) : photos[slot.id] ? (
                       <>
-                        <img src={getBlobUrl(photos[slot.id])} className="absolute inset-0 h-full w-full object-cover" alt={slot.label} />
+                        <img src={getBlobUrl(photos[slot.id])} className="absolute inset-0 h-full w-full object-cover" alt={t(slot.clave)} />
                         <div className="absolute inset-0 bg-black/20" />
                         <div className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 shadow-lg">
                           <Check size={13} className="text-white" />
@@ -521,14 +518,14 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                         {/* Sin IA, «Foto guardada» va en la propia casilla, en una pastilla oscura que se lee sobre cualquier foto. */}
                         <span className={`absolute bottom-2 text-center text-[10px] font-bold text-white ${sinIa
                           ? 'left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-black/65 px-2 py-0.5' : 'left-0 right-0 drop-shadow'}`}>
-                          {slot.label}
+                          {t(slot.clave)}
                           {sinIa && <span className="block font-semibold" data-testid={`foto-guardada-${slot.id}`}>{t('dr.fotoGuardada')}</span>}
                         </span>
                       </>
                     ) : (
                       <>
                         <Camera size={22} className={photoErrors[slot.id] ? 'text-red-400' : 'text-dark-500'} />
-                        <span className="text-[11px] font-semibold text-dark-400">{slot.label}</span>
+                        <span className="text-[11px] font-semibold text-dark-400">{t(slot.clave)}</span>
                         <span className="text-[9px] font-bold uppercase tracking-wider text-brand-500">{t('dr.required')}</span>
                       </>
                     )}
@@ -618,21 +615,20 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                       <div className={odoSinLector ? 'mt-2' : 'mt-3 border-t border-amber-500/20 pt-2.5'}>
                         {!odoSinLector && (
                           <p className="text-[10px] font-bold uppercase tracking-wider text-amber-400/80">
-                            O escribe los km a mano
+                            {t('dr.odo.oAMano')}
                           </p>
                         )}
                         <p className={`mt-0.5 text-[10px] leading-snug ${odoSinLector ? 'text-dark-400' : 'text-amber-300/70'}`}>
                           {odoLimites ? (<>
-                            Esta furgoneta tenía <b>{odoLimites.actual.toLocaleString()} km</b>.
-                            {' '}Solo se admite entre {odoLimites.min.toLocaleString()} y{' '}
-                            {odoLimites.max.toLocaleString()} km
-                            {odoLimites.dias > 1 ? ` (${odoLimites.dias} días sin registrar)` : ''}.
-                          </>) : 'El lector no ha contestado: escribe los km que marca el cuadro. La oficina los revisará.'}
+                            {t('dr.odo.tenia').split('{km}')[0]}<b>{odoLimites.actual.toLocaleString()} km</b>{t('dr.odo.tenia').split('{km}')[1]}
+                            {' '}{t('dr.odo.rango').replace('{min}', odoLimites.min.toLocaleString()).replace('{max}', odoLimites.max.toLocaleString())}
+                            {odoLimites.dias > 1 ? ` ${t('dr.odo.dias').replace('{n}', odoLimites.dias)}` : ''}.
+                          </>) : t('dr.odo.sinRespuesta')}
                         </p>
                         <input
                           type="tel" inputMode="numeric" value={odoManual}
                           onChange={(e) => setOdoManual(e.target.value.replace(/\D/g, '').slice(0, 7))}
-                          placeholder={odoLimites ? `${odoLimites.actual.toLocaleString()}` : 'km del cuadro'}
+                          placeholder={odoLimites ? `${odoLimites.actual.toLocaleString()}` : t('dr.odo.kmCuadro')}
                           className={`mt-2 w-full rounded-lg border-2 bg-dark-900/60 px-3 py-2.5 text-center text-lg font-black tabular-nums text-dark-50 outline-none ${
                             odoManual === '' ? (odoSinLector ? 'border-dark-700' : 'border-amber-500/30')
                               : odoManualValido ? 'border-emerald-500/60' : 'border-red-500/60'
@@ -641,14 +637,14 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                         {odoManual !== '' && !odoManualValido && (
                           <p className="mt-1.5 text-[10px] font-semibold leading-snug text-red-300">
                             {odoManualNum < odoLim.min
-                              ? `No puede ser menor que los ${odoLim.min.toLocaleString()} km que ya tiene registrados.`
-                              : `Son demasiados km de golpe. El máximo es ${odoLim.max.toLocaleString()}.`}
-                            {' '}Si de verdad marca eso, avisa a tu responsable.
+                              ? t('dr.odo.menor').replace('{km}', odoLim.min.toLocaleString())
+                              : t('dr.odo.mayor').replace('{km}', odoLim.max.toLocaleString())}
+                            {' '}{t('dr.odo.avisa')}
                           </p>
                         )}
                         {odoManualValido && (
                           <p className="mt-1.5 text-[10px] font-semibold text-emerald-300">
-                            ✓ {odoManualNum.toLocaleString()} km — listo para enviar
+                            ✓ {t('dr.odo.listo').replace('{km}', odoManualNum.toLocaleString())}
                           </p>
                         )}
                       </div>
@@ -701,7 +697,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
 
             {allRequiredPhotos ? (
               <button onClick={() => setStep(2)} className="btn-primary flex w-full items-center justify-center gap-2 py-3.5 text-sm">
-                Continuar al checklist <ChevronRight size={16} />
+                {t('dr.aChecklist')} <ChevronRight size={16} />
               </button>
             ) : (
               <div className="rounded-xl border border-dark-800 bg-dark-900/50 p-3 text-center text-xs text-dark-500">
@@ -733,7 +729,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                   }`}>
                     <div className="mb-3 flex items-center justify-between">
                       <span className="text-sm font-semibold text-dark-100">
-                        {item.emoji} {item.label}
+                        {item.emoji} {t(item.clave)}
                       </span>
                       <div>
                         <input
@@ -753,7 +749,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                           }`}
                         >
                           <Camera size={11} />
-                          {hasPhoto ? 'Foto ✓' : needsPhoto ? 'Foto ← OBLIGATORIA' : 'Foto'}
+                          {hasPhoto ? `${t('dr.ck.foto')} ✓` : needsPhoto ? t('dr.ck.fotoObl') : t('dr.ck.foto')}
                         </button>
                       </div>
                     </div>
@@ -766,7 +762,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                             state === st.id ? st.cls : 'border-dark-700 text-dark-500 hover:border-dark-500 hover:text-dark-300'
                           }`}
                         >
-                          {st.label}
+                          {nombreEstado(st, t)}
                         </button>
                       ))}
                     </div>
@@ -807,7 +803,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                         : 'border-dark-700 text-dark-400 hover:border-brand-500/40 hover:text-brand-400'
                     }`}
                   >
-                    <Camera size={11} /> {ruedaPhoto ? 'Foto ✓' : 'Foto'}
+                    <Camera size={11} /> {ruedaPhoto ? `${t('dr.ck.foto')} ✓` : t('dr.ck.foto')}
                   </button>
                 </div>
               </div>
@@ -847,7 +843,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
               className="btn-primary flex w-full items-center justify-center gap-2 py-3.5 text-sm disabled:opacity-60"
             >
               {missingDamagePhotos.length > 0
-                ? `Faltan ${missingDamagePhotos.length} foto(s) de daños`
+                ? t('dr.faltanN').replace('{n}', missingDamagePhotos.length)
                 : !rueda
                   ? t('dr.spare.req')
                   : <>{t('dr.review')} <ChevronRight size={16} /></>}
@@ -883,12 +879,12 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                   <span className="text-dark-400">{t('dr.kilometros')}</span>
                   <span className={`font-bold ${odoKmFinal > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                     {odoKmFinal > 0
-                      ? `${odoKmFinal.toLocaleString()} km ✓${!odoKm ? ' (a mano)' : ''}`
-                      : '— faltan los km'}
+                      ? `${odoKmFinal.toLocaleString()} km ✓${!odoKm ? ` ${t('dr.aMano')}` : ''}`
+                      : t('dr.faltanKm')}
                   </span>
                 </div>
                 <div className="flex justify-between py-2.5 text-sm">
-                  <span className="text-dark-400">Ítems revisados</span>
+                  <span className="text-dark-400">{t('dr.ck.items')}</span>
                   <span className="font-semibold text-dark-100">{Object.keys(checklist).length} / {CHECKLIST.length}</span>
                 </div>
                 {Object.keys(checklist).length > 0 && (
@@ -900,7 +896,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                           state === 'regular' ? 'bg-amber-500/15 text-amber-400' :
                                                 'bg-red-500/15 text-red-400'
                         }`}>
-                          {CHECKLIST.find(c => c.id === id)?.emoji} {CHECKLIST.find(c => c.id === id)?.label}
+                          {CHECKLIST.find(c => c.id === id)?.emoji} {t(CHECKLIST.find(c => c.id === id)?.clave || id)}
                           {checklistPhotos[id] ? ' 📷' : ''}
                         </span>
                       ))}
@@ -932,7 +928,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
               {sending ? (
                 <><Loader2 size={18} className="animate-spin" /> {t('dr.enviando')}</>
               ) : (
-                <><Shield size={18} /> Enviar revisión</>
+                <><Shield size={18} /> {t('dr.enviarRev')}</>
               )}
             </button>
 

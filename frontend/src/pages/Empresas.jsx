@@ -666,9 +666,10 @@ export default function Empresas() {
       </section>
 
       {/* ── De dónde sale: las cifras de la casa ── */}
-      {/* Desde 1280 px, la columna del título a 500 (tanda 5, U8): en 440, en alemán («Es entstand nicht im Büro…») caía en tres líneas. */}
+      {/* La columna del título a 500 en todo el ordenador (tanda 6; en la 5, solo desde 1280): en 440, en alemán («Es
+          entstand nicht im Büro…») caía en tres líneas entre 1024 y 1279 px. */}
       <section className="bg-[color:var(--ld-banda)] text-[color:var(--ld-banda-texto)]" data-testid="emp-nave">
-        <div className={`${ANCHO} grid items-end gap-10 py-14 sm:py-[76px] lg:grid-cols-[440px_minmax(0,1fr)] lg:gap-16 xl:grid-cols-[500px_minmax(0,1fr)]`}>
+        <div className={`${ANCHO} grid items-end gap-10 py-14 sm:py-[76px] lg:grid-cols-[500px_minmax(0,1fr)] lg:gap-16`}>
           <div>
             <h2 className="ld-titular text-[1.875rem] leading-[1.06] [text-wrap:balance] sm:text-[2.5rem]">{tx('No salió de una oficina. Salió de una nave.')}</h2>
             <p className="mt-4 max-w-[430px] text-[1.0625rem] leading-relaxed text-[color:var(--ld-banda-suave)]">
@@ -733,24 +734,26 @@ export default function Empresas() {
       {/* ── Cierre: cómo se empieza, tal como es el arranque del panel (/panel/arranque, Arranque.jsx): cuatro pasos y
           se puede dejar a medias. Cada conductor entra con SU enlace personal (CONTRATO-ALTA §1), sin correo ni contraseña. ── */}
       <section className={ANCHO} data-testid="emp-arranque">
-        {/* El cierre en el ordenador (tanda 5, U6 y U8): en la columna del título (5/12) ni los dos botones cabían en una
-            fila (salían apilados, de dos anchos) ni el título en dos líneas. Ahora el título va a todo el ancho; debajo, la
-            frase a la izquierda y, a la derecha, los cuatro pasos y los dos botones en una fila: se lee el título, los pasos
-            y la acción. En el móvil, como antes: el título, la frase, los botones y los pasos. */}
-        <div className={`grid gap-x-10 gap-y-8 border-t border-[color:var(--ld-border)] py-14 sm:py-[72px] lg:gap-y-10 ${COLUMNAS}`}>
-          <div className="lg:contents">
-            <H2 className="lg:col-span-2 lg:row-start-1">{tx('Empieza con tus furgonetas esta semana.')}</H2>
-            <p className="mt-3 max-w-[460px] text-[1.0312rem] leading-relaxed text-[color:var(--ld-muted)] lg:col-start-1 lg:row-start-2 lg:mt-0 lg:pt-5">{tx('Son cuatro pasos y puedes dejarlos a medias.')}</p>
+        {/* El cierre en el ordenador (tanda 6): se lee de arriba abajo, sin huecos. El título y su frase juntos; debajo,
+            los cuatro pasos en una fila de cuatro columnas, cada uno con su regla encima; y debajo, a la izquierda, los dos
+            botones. (En la tanda 5 la frase se quedaba sola en una columna vacía y los botones caían abajo a la derecha.)
+            En el móvil, como antes: el título, la frase, los botones y los pasos. */}
+        <div className="grid gap-y-8 border-t border-[color:var(--ld-border)] py-14 sm:py-[72px] lg:gap-y-10">
+          <div className="lg:row-start-1">
+            <H2>{tx('Empieza con tus furgonetas esta semana.')}</H2>
+            <p className="mt-3 max-w-[460px] text-[1.0312rem] leading-relaxed text-[color:var(--ld-muted)]">{tx('Son cuatro pasos y puedes dejarlos a medias.')}</p>
           </div>
-          <div className="flex flex-wrap gap-3 lg:col-start-2 lg:row-start-3" data-testid="emp-cierre-botones">
+          <div className="flex flex-wrap gap-3 lg:row-start-3" data-testid="emp-cierre-botones">
             <a href={alta} onClick={() => medirAccion('emp_probar_cierre')} className={`${BTN_PRIMARIO} w-full sm:w-auto`} data-testid="emp-probar-cierre">{tx('Probar con mis furgonetas')}</a>
             {/* Con la demo ya pedida, no se vuelve a ofrecer. */}
             {!demoPedida && <a href="#demo" onClick={() => medirAccion('emp_demo_cierre')} className={`${BTN_SECUNDARIO} w-full sm:w-auto`} data-testid="emp-ensenar-cierre">{tx('Que me la enseñen en 15 minutos')}</a>}
           </div>
-          <ol className="border-b border-[color:var(--ld-border)] lg:col-start-2 lg:row-start-2">
+          {/* En el ordenador, el número encima del título de cada paso: en una columna de la cuarta parte, al lado le
+              quitaba el ancho que necesita «Le mandas a cada uno su enlace por WhatsApp». */}
+          <ol className="border-b border-[color:var(--ld-border)] lg:row-start-2 lg:grid lg:grid-cols-4 lg:gap-x-8 lg:border-b-0">
             {ARRANQUE.map(([t, d], i) => (
-              <li key={t} className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-3 border-t border-[color:var(--ld-border)] py-5" data-testid="emp-arranque-paso">
-                <span className="pt-[3px] font-mono text-[0.875rem] font-medium tabular-nums text-[color:var(--ld-muted)]">{String(i + 1).padStart(2, '0')}</span>
+              <li key={t} className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-3 border-t border-[color:var(--ld-border)] py-5 lg:grid-cols-1 lg:content-start lg:gap-y-3 lg:pb-0" data-testid="emp-arranque-paso">
+                <span className="pt-[3px] font-mono text-[0.875rem] font-medium tabular-nums text-[color:var(--ld-muted)] lg:pt-0">{String(i + 1).padStart(2, '0')}</span>
                 <div>
                   <h3 className="text-[1.1875rem] font-bold leading-snug tracking-[-0.01em] text-[color:var(--ld-text)]">{t}</h3>
                   <p className="mt-1 text-[1rem] leading-relaxed text-[color:var(--ld-text2)]">{d}</p>

@@ -56,8 +56,13 @@ function enMono(texto) {
 /* Las cifras de una frase de precio («150 € de alta + … + 20 %»), en Plex Mono tabular como las de arriba (tanda 5, U6);
    el resto de la frase, en la letra de la casa. Va sobre el texto ya traducido: «€150» o «150 €», da igual. */
 function cifrasEnMono(texto) {
-  return String(texto).split(/(\d+(?:[.,]\d+)*)/).map((t, i) => (i % 2
-    ? <span key={i} className="font-mono font-medium tabular-nums text-[color:var(--ld-text)]">{t}</span> : t))
+  const trozos = (s, k = '') => String(s).split(/(\d+(?:[.,]\d+)*)/).map((t, i) => (i % 2
+    ? <span key={k + i} className="font-mono font-medium tabular-nums text-[color:var(--ld-text)]">{t}</span> : t))
+  /* «+ 20 %» al final no cae solo en una línea (tanda 6): la palabra de antes, el «+», la cifra y el «%» van juntos, sin
+     partirse (solo con CSS: la frase es letra a letra la del servidor). */
+  const m = String(texto).match(/^(.*?)(\S+\s+\+\s*\d+(?:[.,]\d+)*\s*%)$/s)
+  if (!m) return trozos(texto)
+  return [...trozos(m[1], 'a'), <span key="cola" className="whitespace-nowrap" data-cola="">{trozos(m[2], 'b')}</span>]
 }
 
 /* Lo que lleva un plan y lo que no: dos listas con reglas, sin ✓ ni ✕ (lo que no lleva va aparte y en gris). */
